@@ -66,13 +66,14 @@ export default async function ItemPage({
           catalogItemId={item.id}
           backlogs={userBacklogs.map((b) => ({ id: b.id, name: b.name }))}
         />
-        {/* G4 wires the real link-out */}
-        <button
-          disabled
-          className="w-full rounded-full border border-neutral-700 py-3.5 font-semibold opacity-40"
+        <a
+          href={`/api/links/resolve?catalogItemId=${item.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full rounded-full border border-neutral-600 py-3.5 text-center font-semibold hover:border-neutral-300"
         >
-          {item.mediaType === "album" ? "Escuchar en tu app" : "Ver en…"} (G4)
-        </button>
+          {item.mediaType === "album" ? "Escuchar en tu app" : "Ver en…"}
+        </a>
       </div>
 
       <Attribution source={item.source} mediaType={item.mediaType} />
