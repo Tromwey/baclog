@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/auth";
 
-export default function Home() {
-  // M1: the card prototype is the whole app
-  redirect("/prototype");
+export default async function Home() {
+  const user = await getCurrentUser();
+  redirect(user ? "/backlogs" : "/login");
 }

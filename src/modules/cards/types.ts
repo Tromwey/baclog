@@ -11,6 +11,8 @@ export interface CardItem {
   genre: string;
   mood: string;
   status: ItemStatus;
+  /** Custom user status label (F2.8) — renderers prefer it over STATUS_LABEL */
+  statusLabelOverride?: string;
   /** 1–5, only meaningful when status is "completed" */
   rating?: number;
 }

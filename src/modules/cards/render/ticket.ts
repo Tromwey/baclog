@@ -7,7 +7,7 @@ import {
   type MediaType,
 } from "../types";
 import { MONO, OSWALD } from "./fonts";
-import { clampRating, truncateToWidth, wrapText } from "./util";
+import { clampRating, footerUrl, truncateToWidth, wrapText } from "./util";
 
 const BG: Record<MediaType, string> = {
   film: "#7a2e2b",
@@ -98,7 +98,7 @@ export function drawTicket(
   ctx.translate(tx + 90, perfY - 110);
   ctx.rotate(-0.04);
   ctx.font = OSWALD(56, 600);
-  const label = STATUS_LABEL[item.status];
+  const label = (item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase();
   const w = ctx.measureText(label).width;
   ctx.strokeStyle = CREAM;
   ctx.lineWidth = 6;
@@ -130,5 +130,5 @@ export function drawTicket(
   ctx.font = MONO(42, true);
   ctx.fillStyle = CREAM;
   ctx.textAlign = "center";
-  ctx.fillText(`baclog.app/${backlog.username}`, CARD_WIDTH / 2, ty + th - 90);
+  ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, ty + th - 90);
 }

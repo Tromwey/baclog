@@ -1,0 +1,43 @@
+import { notFound } from "next/navigation";
+import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
+import { toCardBacklog } from "@/modules/cards/adapter";
+import { getBacklogItems } from "@/modules/backlog/queries";
+import { CardGenerator } from "./card-generator";
+
+export default async function CardPage({
+  params,
+}: {
+  params: Promise<{ backlogId: string }>;
+}) {
+  const { backlogId } = await params;
+  let backlog, user;
+  try {
+    ({ backlog, user } = await assertOwnsBacklog(backlogId));
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof UnauthorizedError) {
+      notFound();
+    }
+    throw err;
+  }
+
+  const items = await getBacklogItems(backlog.id);
+  if (items.length === 0) notFound(); // ticket style needs at least one item
+
+  const cardBacklog = toCardBacklog(
+    backlog.name,
+    backlog.vibe,
+    user.username,
+    items,
+  );
+
+  return (
+    <CardGenerator
+      backlog={cardBacklog}
+      publicUrl={
+        user.username && user.isPublic
+          ? `https://baclog.app/${user.username}`
+          : null
+      }
+    />
+  );
+}

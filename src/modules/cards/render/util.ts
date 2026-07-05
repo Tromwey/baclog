@@ -58,6 +58,11 @@ export function wrapText(
   );
 }
 
+/** Share footer: unclaimed usernames fall back to the bare domain. */
+export function footerUrl(username: string): string {
+  return username ? `baclog.app/${username}` : "baclog.app";
+}
+
 /** Rating comes from data we don't control in M2+ — clamp to a 0–5 integer. */
 export function clampRating(rating: number): number {
   return Math.min(5, Math.max(0, Math.round(rating)));
