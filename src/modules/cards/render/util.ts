@@ -20,6 +20,20 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+/** Trim with ellipsis until the text fits maxWidth in the current ctx.font. */
+export function truncateToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return `${t}…`;
+}
+
 export function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -38,9 +52,18 @@ export function wrapText(
     }
   }
   if (line) lines.push(line);
-  return lines;
+  // A single word can exceed maxWidth on its own — ellipsize it in place
+  return lines.map((l) =>
+    ctx.measureText(l).width > maxWidth ? truncateToWidth(ctx, l, maxWidth) : l,
+  );
+}
+
+/** Rating comes from data we don't control in M2+ — clamp to a 0–5 integer. */
+export function clampRating(rating: number): number {
+  return Math.min(5, Math.max(0, Math.round(rating)));
 }
 
 export function stars(rating: number): string {
-  return "★".repeat(rating) + "☆".repeat(5 - rating);
+  const r = clampRating(rating);
+  return "★".repeat(r) + "☆".repeat(5 - r);
 }

@@ -6,7 +6,8 @@ import {
   type CardItem,
   type MediaType,
 } from "../types";
-import { wrapText } from "./util";
+import { MONO, OSWALD } from "./fonts";
+import { clampRating, truncateToWidth, wrapText } from "./util";
 
 const BG: Record<MediaType, string> = {
   film: "#7a2e2b",
@@ -20,11 +21,6 @@ const TICKET_FACE: Record<MediaType, string> = {
 };
 const CREAM = "#f5ecd9";
 const CREAM_SOFT = "rgba(245, 236, 217, 0.65)";
-
-const OSWALD = (size: number, weight = 600) =>
-  `${weight} ${size}px "Oswald", sans-serif`;
-const MONO = (size: number, bold = false) =>
-  `${bold ? "700" : "400"} ${size}px "Space Mono", monospace`;
 
 export function drawTicket(
   ctx: CanvasRenderingContext2D,
@@ -60,7 +56,7 @@ export function drawTicket(
   ctx.textAlign = "right";
   ctx.font = MONO(40);
   ctx.fillStyle = CREAM_SOFT;
-  ctx.fillText(`Nº ${String(item.year).padStart(4, "0")}`, tx + tw - 70, ty + 120);
+  ctx.fillText(`Nº ${item.year}`, tx + tw - 70, ty + 120);
 
   ctx.strokeStyle = CREAM_SOFT;
   ctx.lineWidth = 4;
@@ -73,9 +69,12 @@ export function drawTicket(
   ctx.textAlign = "left";
   ctx.fillStyle = CREAM;
   ctx.font = OSWALD(120, 700);
-  const allLines = wrapText(ctx, item.title.toUpperCase(), tw - 140);
+  const titleMax = tw - 140;
+  const allLines = wrapText(ctx, item.title.toUpperCase(), titleMax);
   const lines = allLines.slice(0, 2);
-  if (allLines.length > 2) lines[1] = `${lines[1].slice(0, -1)}…`;
+  if (allLines.length > 2) {
+    lines[1] = truncateToWidth(ctx, `${lines[1]} ${allLines[2]}`, titleMax);
+  }
   let y = ty + 380;
   for (const line of lines) {
     ctx.fillText(line, tx + 70, y);
@@ -88,13 +87,10 @@ export function drawTicket(
 
   // Stars + stamp anchor upward from the perforation, so they never collide
   if (item.status === "completed" && item.rating) {
+    const r = clampRating(item.rating);
     ctx.fillStyle = CREAM;
-    ctx.font = OSWALD(84, 500);
-    ctx.fillText(
-      "★ ".repeat(item.rating) + "☆ ".repeat(5 - item.rating),
-      tx + 70,
-      perfY - 240,
-    );
+    ctx.font = OSWALD(84, 600);
+    ctx.fillText("★ ".repeat(r) + "☆ ".repeat(5 - r), tx + 70, perfY - 240);
   }
 
   // Status stamp — rotated stroked box, like an ink stamp

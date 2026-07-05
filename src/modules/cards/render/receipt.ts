@@ -5,7 +5,8 @@ import {
   TYPE_LABEL,
   type CardBacklog,
 } from "../types";
-import { hashString, mulberry32, stars } from "./util";
+import { MONO } from "./fonts";
+import { hashString, mulberry32, stars, truncateToWidth } from "./util";
 
 const PAPER = "#faf7f0";
 const INK = "#1c1a17";
@@ -14,9 +15,6 @@ const INK_SOFT = "#6b6459";
 const MAX_ITEMS = 6;
 const ITEM_STEP = 124;
 const BARCODE_TOP = 1560;
-
-const MONO = (size: number, bold = false) =>
-  `${bold ? "700" : "400"} ${size}px "Space Mono", monospace`;
 
 function zigzagEdge(
   ctx: CanvasRenderingContext2D,
@@ -65,7 +63,11 @@ export function drawReceipt(
   ctx.fillText("*  B A C L O G  *", CARD_WIDTH / 2, 240);
 
   ctx.font = MONO(72, true);
-  ctx.fillText(backlog.name.toUpperCase(), CARD_WIDTH / 2, 360);
+  ctx.fillText(
+    truncateToWidth(ctx, backlog.name.toUpperCase(), CARD_WIDTH - pad * 2),
+    CARD_WIDTH / 2,
+    360,
+  );
 
   const date = new Date()
     .toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
@@ -85,11 +87,11 @@ export function drawReceipt(
   for (const item of shown) {
     ctx.fillStyle = INK;
     ctx.font = MONO(44, true);
-    let title = item.title.toUpperCase();
-    while (ctx.measureText(title).width > CARD_WIDTH - pad * 2 && title.length > 4) {
-      title = `${title.slice(0, -2)}…`;
-    }
-    ctx.fillText(title, pad, y);
+    ctx.fillText(
+      truncateToWidth(ctx, item.title.toUpperCase(), CARD_WIDTH - pad * 2),
+      pad,
+      y,
+    );
 
     ctx.fillStyle = INK_SOFT;
     ctx.font = MONO(34);

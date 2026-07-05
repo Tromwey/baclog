@@ -31,7 +31,7 @@ export default function RootLayout({
         {/* eslint-disable-next-line @next/next/no-page-custom-font -- app-router root layout loads fonts app-wide; rule targets pages/_document */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Oswald:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Oswald:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap"
         />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>

@@ -4,14 +4,12 @@ import { drawReceipt } from "./receipt";
 import { drawTicket } from "./ticket";
 
 export { CARD_HEIGHT, CARD_WIDTH } from "../types";
+export { CARD_FONTS } from "./fonts";
 
-export const CARD_FONTS = [
-  '700 16px "Space Mono"',
-  '400 16px "Space Mono"',
-  '700 16px "Oswald"',
-  '400 16px "Archivo Black"',
-];
-
+/**
+ * Invariant: `ticketItem` must be a real item (the ticket style renders a
+ * single item). M2's generator must not offer card export for empty backlogs.
+ */
 export function drawCard(
   ctx: CanvasRenderingContext2D,
   style: CardStyle,

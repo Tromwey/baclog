@@ -44,3 +44,4 @@ next-env.d.ts
 .obsidian/
 .claude/
 .env.local
+.env*.local

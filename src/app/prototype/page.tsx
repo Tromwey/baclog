@@ -22,6 +22,14 @@ export default function PrototypePage() {
   const [ticketIndex, setTicketIndex] = useState(0);
   const [fontsReady, setFontsReady] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
   // ?alt=1 renders a second hardcoded backlog — proves the pattern style is
   // deterministic per backlog (F1.4). Safe as lazy init: no SSR markup
   // depends on the chosen backlog (the canvas only draws client-side).
@@ -34,11 +42,20 @@ export default function PrototypePage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(CARD_FONTS.map((f) => document.fonts.load(f)))
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setFontsReady(true);
-      });
+    // fonts.load() resolves with no matches if it runs before the Google
+    // Fonts stylesheet is parsed — retry until check() passes (or time out
+    // and draw with fallbacks rather than showing a skeleton forever).
+    (async () => {
+      const deadline = Date.now() + 6000;
+      do {
+        await Promise.all(
+          CARD_FONTS.map((f) => document.fonts.load(f)),
+        ).catch(() => {});
+        if (CARD_FONTS.every((f) => document.fonts.check(f))) break;
+        await new Promise((r) => setTimeout(r, 200));
+      } while (!cancelled && Date.now() < deadline);
+      if (!cancelled) setFontsReady(true);
+    })();
     return () => {
       cancelled = true;
     };
@@ -77,9 +94,11 @@ export default function PrototypePage() {
       a.href = url;
       a.download = file.name;
       a.click();
-      URL.revokeObjectURL(url);
+      // Downloads start async in Safari/Firefox — revoking now aborts them
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setToast("Tarjeta descargada (1080×1920)");
-      setTimeout(() => setToast(null), 2500);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 2500);
     }, "image/png");
   }, [style]);
 

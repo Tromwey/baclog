@@ -1,9 +1,6 @@
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog } from "../types";
-import { hashString, mulberry32 } from "./util";
-
-const ARCHIVO = (size: number) => `400 ${size}px "Archivo Black", sans-serif`;
-const MONO = (size: number, bold = false) =>
-  `${bold ? "700" : "400"} ${size}px "Space Mono", monospace`;
+import { ARCHIVO, MONO } from "./fonts";
+import { hashString, mulberry32, truncateToWidth } from "./util";
 
 /**
  * Deterministic generative field seeded by the backlog's genres+years+moods
@@ -23,7 +20,9 @@ export function drawPattern(
   // Genre mix → base hue · year spread → density · moods → dominant shape
   const baseHue = seed % 360;
   const years = backlog.items.map((i) => i.year);
-  const spread = Math.max(...years) - Math.min(...years);
+  // Empty backlog: Math.max(...[]) is -Infinity — degrade to spread 0
+  const spread =
+    years.length > 0 ? Math.max(...years) - Math.min(...years) : 0;
   const shapeCount = 56 + Math.min(spread, 12) * 4 + (seed % 16);
   const moodHash = hashString(backlog.items.map((i) => i.mood).join(","));
   const dominant = moodHash % 3; // 0 arcs · 1 bars · 2 dots
@@ -81,11 +80,11 @@ export function drawPattern(
   ctx.fillText("*  B A C L O G  *", CARD_WIDTH / 2, panelY + 110);
 
   ctx.font = ARCHIVO(96);
-  let name = backlog.name.toUpperCase();
-  while (ctx.measureText(name).width > CARD_WIDTH - 160 && name.length > 4) {
-    name = `${name.slice(0, -2)}…`;
-  }
-  ctx.fillText(name, CARD_WIDTH / 2, panelY + 260);
+  ctx.fillText(
+    truncateToWidth(ctx, backlog.name.toUpperCase(), CARD_WIDTH - 160),
+    CARD_WIDTH / 2,
+    panelY + 260,
+  );
 
   const date = new Date()
     .toLocaleDateString("en-US", { month: "short", year: "numeric" })
