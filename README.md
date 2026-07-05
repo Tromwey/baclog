@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Baclog
 
-## Getting Started
+Tus obsesiones — películas, series y música — en backlogs compartibles como tarjetas 9:16.
 
-First, run the development server:
+**PWA mobile-first** · Next.js (App Router) en Vercel · Neon Postgres + Drizzle · Auth.js v5 (email OTP, sin contraseñas).
+
+## Correr localmente
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local   # y llena las vars de abajo
+pnpm exec drizzle-kit migrate
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+En dev, los códigos OTP se imprimen en la consola del server (`[dev-mailer] OTP para …`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables de entorno
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Var | Requerida | Notas |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Neon pooled connection string |
+| `DATABASE_URL_UNPOOLED` | migraciones | Conexión directa para drizzle-kit |
+| `AUTH_SECRET` | ✅ | `openssl rand -base64 32` |
+| `TMDB_API_KEY` | opcional | Sin ella el catálogo de cine/series usa **fixtures** (la interfaz `VideoCatalog` intercambia la implementación sin tocar código) |
+| `RESEND_API_KEY` | opcional | Sin ella el OTP va a consola. Con ella, emails reales vía Resend |
+| `ODESLI_API_KEY` | opcional | Free tier keyless por default |
 
-## Learn More
+## Los 5 módulos (`src/modules/`)
 
-To learn more about Next.js, take a look at the following resources:
+Límites de monolito modular (ADR-010): extraer después es extracción, no rewrite.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **`catalog`** — búsqueda TMDB + iTunes, caché de metadatos en Postgres (`refreshed_at` ≤ 3 meses), imágenes siempre hotlinked (nunca proxeadas)
+- **`backlog`** — backlogs, ítems, estados, rating, eras mensuales (derivadas en lectura); `public.ts` = la única vía de lectura sin sesión (gateada por `isPublic`)
+- **`links`** — deep links lazy: Odesli (música) + TMDB watch/providers (video) cacheados en `media_links`; fallback de búsqueda = nunca un tap muerto
+- **`cards`** — render 100% client-side de tarjetas 1080×1920 (receipt/ticket/patrón); `CardItem` no tiene campo de imagen: los PNG exportados no pueden contener artwork (ADR-008)
+- **`recs`** — sugerencias content-based (TMDB /similar o match por género), presentadas como IA
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Seguridad
 
-## Deploy on Vercel
+- **Autorización en capa de app** (`src/authz`): todo acceso a datos de usuario pasa por `assertUser` / `assertOwnsBacklog` / `assertOwnsBacklogItem` — filtran por `userId` dentro del query y responden 404 (nunca confirman existencia ajena).
+- Privacidad (Pilar 4): solo email + nombre visible + año de nacimiento (gate <13, jamás se muestra ni serializa). Borrar cuenta = cascade total. Backlogs privados por default; página pública es opt-in explícito.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Docs
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+La fuente de verdad del producto vive en el vault de Obsidian del proyecto (requerimientos, ADRs, roadmap, pantallas).

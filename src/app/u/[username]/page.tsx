@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicProfile } from "@/modules/backlog/public";
+import { ReportButton } from "./report-button";
 
 export const revalidate = 300;
 
@@ -85,6 +86,9 @@ export default async function PublicProfilePage({
         >
           Crea tu Baclog
         </Link>
+        <div className="mt-6">
+          <ReportButton username={profile.username} />
+        </div>
       </footer>
     </main>
   );
