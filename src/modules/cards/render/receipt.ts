@@ -6,7 +6,7 @@ import {
   type CardBacklog,
 } from "../types";
 import { MONO } from "./fonts";
-import { hashString, mulberry32, stars, truncateToWidth } from "./util";
+import { footerUrl, hashString, mulberry32, stars, truncateToWidth } from "./util";
 
 const PAPER = "#faf7f0";
 const INK = "#1c1a17";
@@ -98,7 +98,7 @@ export function drawReceipt(
     const rating =
       item.status === "completed" && item.rating ? `  ${stars(item.rating)}` : "";
     ctx.fillText(
-      `  ${TYPE_LABEL[item.type]} · ${STATUS_LABEL[item.status]}${rating}`,
+      `  ${TYPE_LABEL[item.type]} · ${(item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase()}${rating}`,
       pad,
       y + 52,
     );
@@ -142,7 +142,7 @@ export function drawReceipt(
 
   ctx.textAlign = "center";
   ctx.font = MONO(40, true);
-  ctx.fillText(`baclog.app/${backlog.username}`, CARD_WIDTH / 2, CARD_HEIGHT - 180);
+  ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, CARD_HEIGHT - 180);
   ctx.font = MONO(30);
   ctx.fillStyle = INK_SOFT;
   ctx.fillText("THANK YOU FOR OBSESSING WITH US", CARD_WIDTH / 2, CARD_HEIGHT - 120);

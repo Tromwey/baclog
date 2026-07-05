@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { addItemAction } from "@/app/actions/backlog-item-actions";
+import { extractPalette } from "@/modules/cards/palette";
 
 interface BacklogOption {
   id: string;
@@ -12,9 +13,11 @@ interface BacklogOption {
 
 export function AddToBacklog({
   catalogItemId,
+  posterUrl,
   backlogs,
 }: {
   catalogItemId: string;
+  posterUrl: string | null;
   backlogs: BacklogOption[];
 }) {
   const router = useRouter();
@@ -25,7 +28,13 @@ export function AddToBacklog({
 
   async function addTo(backlogId: string) {
     setBusy(true);
-    const res = await addItemAction({ backlogId, catalogItemId });
+    // F2.15: palette extracted on-device at save time; [] on CORS failure
+    const paletteHex = posterUrl ? await extractPalette(posterUrl) : [];
+    const res = await addItemAction({
+      backlogId,
+      catalogItemId,
+      paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+    });
     setBusy(false);
     setOpen(false);
     if ("id" in res || res.error === "duplicate") {
@@ -40,7 +49,12 @@ export function AddToBacklog({
     const res = await createBacklogAction({ name: newName });
     const newId = "id" in res ? res.id : null;
     if (newId) {
-      await addItemAction({ backlogId: newId, catalogItemId });
+      const paletteHex = posterUrl ? await extractPalette(posterUrl) : [];
+      await addItemAction({
+        backlogId: newId,
+        catalogItemId,
+        paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+      });
       setAdded(newId);
       setOpen(false);
     }

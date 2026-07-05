@@ -35,7 +35,17 @@ export default async function BacklogDetailPage({
             {backlog.vibe ? ` · ${backlog.vibe}` : ""}
           </p>
         </div>
-        <BacklogMenu backlogId={backlog.id} currentName={backlog.name} />
+        <div className="flex shrink-0 items-center gap-2">
+          {items.length > 0 && (
+            <Link
+              href={`/backlogs/${backlog.id}/card`}
+              className="rounded-full bg-neutral-100 px-4 py-1.5 text-sm font-semibold text-neutral-900"
+            >
+              Tarjeta
+            </Link>
+          )}
+          <BacklogMenu backlogId={backlog.id} currentName={backlog.name} />
+        </div>
       </header>
 
       {items.length === 0 ? (

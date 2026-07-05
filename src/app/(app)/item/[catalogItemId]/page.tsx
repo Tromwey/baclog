@@ -64,6 +64,7 @@ export default async function ItemPage({
       <div className="mt-6 space-y-2">
         <AddToBacklog
           catalogItemId={item.id}
+          posterUrl={item.posterUrl}
           backlogs={userBacklogs.map((b) => ({ id: b.id, name: b.name }))}
         />
         <a

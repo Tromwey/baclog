@@ -1,6 +1,6 @@
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog } from "../types";
 import { ARCHIVO, MONO } from "./fonts";
-import { hashString, mulberry32, truncateToWidth } from "./util";
+import { footerUrl, hashString, mulberry32, truncateToWidth } from "./util";
 
 /**
  * Deterministic generative field seeded by the backlog's genres+years+moods
@@ -102,5 +102,5 @@ export function drawPattern(
   ctx.fillRect(0, CARD_HEIGHT - 170, CARD_WIDTH, 170);
   ctx.fillStyle = "#f4f1ea";
   ctx.font = MONO(42, true);
-  ctx.fillText(`baclog.app/${backlog.username}`, CARD_WIDTH / 2, CARD_HEIGHT - 68);
+  ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, CARD_HEIGHT - 68);
 }
