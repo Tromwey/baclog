@@ -85,6 +85,8 @@ export const verificationTokens = pgTable(
     identifier: text("identifier").notNull(),
     token: text("token").notNull(),
     expires: timestamp("expires", { mode: "date" }).notNull(),
+    /** Failed verification attempts — token invalidated at the cap */
+    attempts: smallint("attempts").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.identifier, t.token] })],
 );

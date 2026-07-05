@@ -1,0 +1,1 @@
+ALTER TABLE "verificationToken" ADD COLUMN "attempts" smallint DEFAULT 0 NOT NULL;

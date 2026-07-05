@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomInt } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, verificationTokens } from "@/db/schema";
 import { sendOtpEmail } from "./mailer";
@@ -51,10 +51,15 @@ export async function issueOtp(email: string): Promise<void> {
   await sendOtpEmail(normalized, code);
 }
 
+/** Wrong-code guesses allowed before the live code is invalidated. */
+const MAX_ATTEMPTS = 5;
+
 /**
  * Single-use verification: deletes the token on success, returns the
  * (found-or-created) user. Returns null on mismatch/expiry — Auth.js then
- * refuses the sign-in.
+ * refuses the sign-in. Each miss burns an attempt; at MAX_ATTEMPTS the
+ * code dies (kills 6-digit brute force — the attacker gets 5 guesses per
+ * issued code, not 10^6).
  */
 export async function verifyOtp(email: string, code: string) {
   const normalized = email.trim().toLowerCase();
@@ -68,7 +73,23 @@ export async function verifyOtp(email: string, code: string) {
       ),
     )
     .limit(1);
-  if (!row || row.expires < new Date()) return null;
+  if (!row) {
+    // Wrong code: burn an attempt on this email's live token (if any)
+    await db
+      .update(verificationTokens)
+      .set({ attempts: sql`${verificationTokens.attempts} + 1` })
+      .where(eq(verificationTokens.identifier, normalized));
+    await db
+      .delete(verificationTokens)
+      .where(
+        and(
+          eq(verificationTokens.identifier, normalized),
+          gte(verificationTokens.attempts, MAX_ATTEMPTS),
+        ),
+      );
+    return null;
+  }
+  if (row.expires < new Date() || row.attempts >= MAX_ATTEMPTS) return null;
 
   await db
     .delete(verificationTokens)
