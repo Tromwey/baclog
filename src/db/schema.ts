@@ -46,6 +46,19 @@ export const reportReasonEnum = pgEnum("report_reason", [
   "illegal_content",
   "other",
 ]);
+export const deviceClassEnum = pgEnum("device_class", [
+  "ios",
+  "android",
+  "desktop",
+  "other",
+]);
+export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
+  "session_view",
+  "public_profile_view",
+  "public_backlog_view",
+  "public_item_view",
+  "card_share",
+]);
 
 // ---------- Auth.js tables (Drizzle adapter, OTP flow — no passwords) ----------
 
@@ -70,6 +83,10 @@ export const users = pgTable(
     /** F2.17 — null means not claimed; public page requires it + isPublic */
     username: varchar("username", { length: 30 }),
     isPublic: boolean("is_public").notNull().default(false),
+    /** F3.2 — first ~100 accounts + manually-seeded curators */
+    isFounder: boolean("is_founder").notNull().default(false),
+    /** F3.2 — organic first-100 get a rank; seeded curators keep it null */
+    founderRank: integer("founder_rank"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -271,6 +288,107 @@ export const reports = pgTable(
   (t) => [index("report_target_user_id_idx").on(t.targetUserId)],
 );
 
+// ---------- growth module (F3.1 waitlist + referrals) ----------
+
+export const waitlistEntries = pgTable(
+  "waitlist_entry",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    /** Pre-signup identity — minimal PII (Pilar 4) */
+    email: text("email").notNull(),
+    /** Opaque shareable code (not derived from name/email) */
+    referralCode: varchar("referral_code", { length: 12 }).notNull(),
+    referredByEntryId: text("referred_by_entry_id"),
+    /** Monotonic arrival order — base queue position before referral boosts */
+    sequence: integer("sequence").notNull(),
+    /** Confirmed referred signups; denormalized for cheap ranking */
+    referralCount: integer("referral_count").notNull().default(0),
+    /** Set once the entrant creates a real account */
+    convertedUserId: text("converted_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    convertedAt: timestamp("converted_at", { mode: "date" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("waitlist_entry_email_unique").on(t.email),
+    uniqueIndex("waitlist_entry_referral_code_unique").on(t.referralCode),
+    index("waitlist_entry_referred_by_idx").on(t.referredByEntryId),
+    index("waitlist_entry_sequence_idx").on(t.sequence),
+  ],
+);
+
+export const waitlistReferrals = pgTable(
+  "waitlist_referral",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    referrerEntryId: text("referrer_entry_id")
+      .notNull()
+      .references(() => waitlistEntries.id, { onDelete: "cascade" }),
+    refereeEntryId: text("referee_entry_id")
+      .notNull()
+      .references(() => waitlistEntries.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // One credit per referee, ever — the anti-gaming guard
+    uniqueIndex("waitlist_referral_referee_unique").on(t.refereeEntryId),
+    index("waitlist_referral_referrer_idx").on(t.referrerEntryId),
+  ],
+);
+
+// ---------- backlog module (F3.3 monthly recap idempotency) ----------
+
+export const recapSends = pgTable(
+  "recap_send",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "2026-07" — era.ts key format */
+    eraKey: varchar("era_key", { length: 7 }).notNull(),
+    emailSentAt: timestamp("email_sent_at", { mode: "date" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // THE idempotency key: at most one recap per (user, era), ever
+    uniqueIndex("recap_send_user_era_unique").on(t.userId, t.eraKey),
+    index("recap_send_era_key_idx").on(t.eraKey),
+  ],
+);
+
+// ---------- analytics module (F3.4) ----------
+
+export const analyticsEvents = pgTable(
+  "analytics_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    eventType: analyticsEventTypeEnum("event_type").notNull(),
+    /** Null for anonymous viewer events */
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** public_* events only — whose profile was viewed, never who viewed it */
+    targetUsername: varchar("target_username", { length: 30 }),
+    /** ISO 3166-1 alpha-2 from x-vercel-ip-country — coarse, never raw IP */
+    country: varchar("country", { length: 2 }),
+    /** Coarse bucket from User-Agent — raw UA never stored */
+    device: deviceClassEnum("device").notNull().default("other"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("analytics_event_type_created_idx").on(t.eventType, t.createdAt),
+    index("analytics_event_country_idx").on(t.country),
+  ],
+);
+
 // ---------- relations ----------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -296,4 +414,18 @@ export const backlogItemsRelations = relations(backlogItems, ({ one }) => ({
 
 export const catalogItemsRelations = relations(catalogItems, ({ many }) => ({
   links: many(mediaLinks),
+}));
+
+export const waitlistEntriesRelations = relations(
+  waitlistEntries,
+  ({ one }) => ({
+    convertedUser: one(users, {
+      fields: [waitlistEntries.convertedUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const recapSendsRelations = relations(recapSends, ({ one }) => ({
+  user: one(users, { fields: [recapSends.userId], references: [users.id] }),
 }));

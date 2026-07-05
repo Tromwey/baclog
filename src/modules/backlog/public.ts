@@ -15,6 +15,7 @@ const publicUser = {
   id: users.id,
   name: users.name,
   username: users.username,
+  isFounder: users.isFounder,
 };
 
 export async function getPublicProfile(username: string) {
@@ -72,6 +73,7 @@ export async function getPublicProfile(username: string) {
   return {
     displayName: user.name ?? user.username ?? "",
     username: user.username!,
+    isFounder: user.isFounder,
     backlogs: lists.map((l) => ({
       ...l,
       coverUrls: covers.get(l.id) ?? [],

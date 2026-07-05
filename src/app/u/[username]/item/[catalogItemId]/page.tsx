@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   getPublicCatalogItem,
   getPublicProfile,
 } from "@/modules/backlog/public";
+import { captureView } from "@/modules/analytics/capture";
 
-export const revalidate = 300;
+// Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
 export async function generateMetadata({
   params,
@@ -43,6 +45,12 @@ export default async function PublicItemPage({
     getPublicCatalogItem(catalogItemId),
   ]);
   if (!profile || !item) notFound();
+
+  captureView({
+    eventType: "public_item_view",
+    targetUsername: username,
+    headers: await headers(),
+  });
 
   const resolve = (extra: string) =>
     `/api/links/resolve?catalogItemId=${item.id}${extra}`;

@@ -64,6 +64,13 @@ export function CardGenerator({
   const share = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // F3.4 — fire-and-forget share signal (keepalive survives navigation)
+    fetch("/api/analytics/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventType: "card_share" }),
+      keepalive: true,
+    }).catch(() => {});
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const file = new File([blob], `baclog-${style}.png`, {

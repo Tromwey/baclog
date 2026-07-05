@@ -3,6 +3,8 @@ import { createHash, randomInt } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, verificationTokens } from "@/db/schema";
+import { convertOnSignup } from "@/modules/growth/waitlist";
+import { assignFounderIfEligible } from "@/modules/growth/founder";
 import { sendOtpEmail } from "./mailer";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -105,6 +107,14 @@ export async function verifyOtp(email: string, code: string) {
       .insert(users)
       .values({ email: normalized, emailVerified: new Date() })
       .returning();
+    // One-time-at-account-creation hooks (F3.1 waitlist link + F3.2 badge).
+    // Best-effort: a failure here must not block sign-in.
+    try {
+      await assignFounderIfEligible(user.id);
+      await convertOnSignup(normalized, user.id);
+    } catch (err) {
+      console.error("[otp] post-signup hooks failed:", err);
+    }
   } else if (!user.emailVerified) {
     await db
       .update(users)
