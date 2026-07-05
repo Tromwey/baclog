@@ -1,0 +1,113 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { createBacklogAction } from "@/app/actions/backlog-actions";
+import { addItemAction } from "@/app/actions/backlog-item-actions";
+
+interface BacklogOption {
+  id: string;
+  name: string;
+}
+
+export function AddToBacklog({
+  catalogItemId,
+  backlogs,
+}: {
+  catalogItemId: string;
+  backlogs: BacklogOption[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
+
+  async function addTo(backlogId: string) {
+    setBusy(true);
+    const res = await addItemAction({ backlogId, catalogItemId });
+    setBusy(false);
+    setOpen(false);
+    if ("id" in res || res.error === "duplicate") {
+      setAdded(backlogId);
+      router.refresh();
+    }
+  }
+
+  async function createAndAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const res = await createBacklogAction({ name: newName });
+    const newId = "id" in res ? res.id : null;
+    if (newId) {
+      await addItemAction({ backlogId: newId, catalogItemId });
+      setAdded(newId);
+      setOpen(false);
+    }
+    setBusy(false);
+  }
+
+  if (added) {
+    return (
+      <button
+        onClick={() => router.push(`/backlogs/${added}`)}
+        className="w-full rounded-full bg-emerald-700 py-3.5 font-semibold text-white"
+      >
+        ✓ Agregado — ver backlog
+      </button>
+    );
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900"
+      >
+        Agregar a un backlog
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-20 flex items-end justify-center bg-black/60"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-neutral-800 bg-neutral-900 p-5 pb-8"
+          >
+            <h2 className="font-semibold">¿A cuál backlog?</h2>
+            {backlogs.map((b) => (
+              <button
+                key={b.id}
+                disabled={busy}
+                onClick={() => addTo(b.id)}
+                className="block w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-left hover:border-neutral-400 disabled:opacity-40"
+              >
+                {b.name}
+              </button>
+            ))}
+            <form onSubmit={createAndAdd} className="flex gap-2 pt-1">
+              <input
+                value={newName}
+                maxLength={60}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={
+                  backlogs.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
+                }
+                className="min-w-0 flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-neutral-400"
+              />
+              <button
+                type="submit"
+                disabled={busy || !newName.trim()}
+                className="rounded-xl bg-neutral-100 px-4 font-semibold text-neutral-900 disabled:opacity-40"
+              >
+                Crear
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

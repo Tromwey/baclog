@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
+import { getBacklogsForUser } from "@/modules/backlog/queries";
 import { getCatalogItem } from "@/modules/catalog/cache";
+import { AddToBacklog } from "./add-to-backlog";
 import { Attribution } from "./attribution";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -14,9 +16,12 @@ export default async function ItemPage({
 }: {
   params: Promise<{ catalogItemId: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { catalogItemId } = await params;
-  const item = await getCatalogItem(catalogItemId);
+  const [item, userBacklogs] = await Promise.all([
+    getCatalogItem(catalogItemId),
+    getBacklogsForUser(user.id),
+  ]);
   if (!item) notFound();
 
   return (
@@ -56,14 +61,12 @@ export default async function ItemPage({
         </p>
       )}
 
-      {/* G3 wires the real add-to-backlog flow; G4 wires link-out */}
       <div className="mt-6 space-y-2">
-        <button
-          disabled
-          className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900 opacity-40"
-        >
-          Agregar a un backlog (G3)
-        </button>
+        <AddToBacklog
+          catalogItemId={item.id}
+          backlogs={userBacklogs.map((b) => ({ id: b.id, name: b.name }))}
+        />
+        {/* G4 wires the real link-out */}
         <button
           disabled
           className="w-full rounded-full border border-neutral-700 py-3.5 font-semibold opacity-40"

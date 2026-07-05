@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
+import { BottomNav } from "./bottom-nav";
 
 /**
  * Session gate for the whole authenticated tree. Row-level ownership is
@@ -13,5 +14,10 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   if (!user.name) redirect("/onboarding");
-  return <>{children}</>;
+  return (
+    <div className="pb-16">
+      {children}
+      <BottomNav />
+    </div>
+  );
 }
