@@ -1,0 +1,78 @@
+import { notFound } from "next/navigation";
+import { requireUser } from "@/auth";
+import { getCatalogItem } from "@/modules/catalog/cache";
+import { Attribution } from "./attribution";
+
+const TYPE_LABEL: Record<string, string> = {
+  film: "Película",
+  series: "Serie",
+  album: "Álbum",
+};
+
+export default async function ItemPage({
+  params,
+}: {
+  params: Promise<{ catalogItemId: string }>;
+}) {
+  await requireUser();
+  const { catalogItemId } = await params;
+  const item = await getCatalogItem(catalogItemId);
+  if (!item) notFound();
+
+  return (
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-16 pt-6 text-neutral-100">
+      <div className="flex gap-4">
+        {item.posterUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
+          <img
+            src={item.posterUrl}
+            alt={`Portada de ${item.title}`}
+            className="h-44 w-30 shrink-0 rounded-xl object-cover shadow-lg"
+          />
+        ) : (
+          <div className="flex h-44 w-30 shrink-0 items-center justify-center rounded-xl bg-neutral-800 text-3xl">
+            {item.mediaType === "album" ? "♫" : "▶"}
+          </div>
+        )}
+        <div className="min-w-0 pt-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            {TYPE_LABEL[item.mediaType]}
+          </p>
+          <h1 className="mt-1 text-xl font-bold leading-tight">{item.title}</h1>
+          <p className="mt-1 text-sm text-neutral-400">
+            {[item.byline, item.year].filter(Boolean).join(" · ")}
+          </p>
+          {item.sourceRating != null && item.sourceRating > 0 && (
+            <p className="mt-2 text-sm text-neutral-300">
+              ★ {item.sourceRating.toFixed(1)}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {item.synopsis && (
+        <p className="mt-5 text-sm leading-relaxed text-neutral-300">
+          {item.synopsis}
+        </p>
+      )}
+
+      {/* G3 wires the real add-to-backlog flow; G4 wires link-out */}
+      <div className="mt-6 space-y-2">
+        <button
+          disabled
+          className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900 opacity-40"
+        >
+          Agregar a un backlog (G3)
+        </button>
+        <button
+          disabled
+          className="w-full rounded-full border border-neutral-700 py-3.5 font-semibold opacity-40"
+        >
+          {item.mediaType === "album" ? "Escuchar en tu app" : "Ver en…"} (G4)
+        </button>
+      </div>
+
+      <Attribution source={item.source} mediaType={item.mediaType} />
+    </main>
+  );
+}
