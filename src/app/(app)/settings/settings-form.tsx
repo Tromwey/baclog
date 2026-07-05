@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import {
+  claimUsernameAction,
   deleteAccountAction,
   setPreferredServiceAction,
+  setPublicAction,
   updateDisplayNameAction,
 } from "@/app/actions/account-actions";
 
@@ -19,16 +21,41 @@ export function SettingsForm({
   initialName,
   initialService,
   email,
+  initialUsername,
+  initialIsPublic,
 }: {
   initialName: string;
   initialService: ServiceId | null;
   email: string;
+  initialUsername: string | null;
+  initialIsPublic: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [service, setService] = useState<ServiceId | null>(initialService);
   const [saved, setSaved] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [username, setUsername] = useState(initialUsername ?? "");
+  const [claimed, setClaimed] = useState<string | null>(initialUsername);
+  const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+
+  async function claim(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setUsernameError(null);
+    const res = await claimUsernameAction(username);
+    setBusy(false);
+    const claimedName = "username" in res ? res.username : null;
+    if (claimedName) {
+      setClaimed(claimedName);
+      setIsPublic(true);
+    } else {
+      setUsernameError(
+        res.error === "taken" ? "Ese username ya existe." : "Username inválido (3-30: a-z, 0-9, _ .)",
+      );
+    }
+  }
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +113,72 @@ export function SettingsForm({
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-neutral-400">
+          Página pública
+        </h2>
+        {claimed ? (
+          <div className="mt-3 space-y-3">
+            <p className="text-sm">
+              <span className="text-neutral-400">Tu página: </span>
+              <a
+                href={`/u/${claimed}`}
+                className="font-mono underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                baclog.app/{claimed}
+              </a>
+            </p>
+            <label className="flex items-center justify-between rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3">
+              <span className="text-sm">Perfil visible públicamente</span>
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={async (e) => {
+                  const next = e.target.checked;
+                  setIsPublic(next);
+                  await setPublicAction(next);
+                }}
+                className="h-5 w-5 accent-neutral-100"
+              />
+            </label>
+            <p className="text-xs text-neutral-500">
+              Privado por default: solo lo que actives aquí se puede ver.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={claim} className="mt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-neutral-500">baclog.app/</span>
+              <input
+                value={username}
+                maxLength={30}
+                onChange={(e) =>
+                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
+                }
+                placeholder="tunombre"
+                className="min-w-0 flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2.5 font-mono outline-none focus:border-neutral-400"
+                aria-label="Username"
+              />
+              <button
+                type="submit"
+                disabled={busy || username.length < 3}
+                className="rounded-xl bg-neutral-100 px-4 py-2.5 text-sm font-semibold text-neutral-900 disabled:opacity-40"
+              >
+                Reclamar
+              </button>
+            </div>
+            {usernameError && (
+              <p className="text-xs text-red-400">{usernameError}</p>
+            )}
+            <p className="text-xs text-neutral-500">
+              Opt-in explícito: sin username, nada tuyo es público.
+            </p>
+          </form>
+        )}
       </section>
 
       <section className="border-t border-neutral-800 pt-6">

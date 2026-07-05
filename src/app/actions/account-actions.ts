@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -83,6 +84,43 @@ export async function updateDisplayNameAction(name: string) {
     .update(users)
     .set({ name: parsed.data })
     .where(eq(users.id, user.id));
+  return { ok: true as const };
+}
+
+const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
+const RESERVED = new Set([
+  "admin", "api", "app", "baclog", "backlogs", "blocked", "item", "login",
+  "onboarding", "prototype", "search", "settings", "u", "verify", "www",
+]);
+
+/** F2.17 — claiming implies opting in to a public page (toggleable). */
+export async function claimUsernameAction(username: string) {
+  const user = await assertUser();
+  const normalized = username.trim().toLowerCase();
+  if (!USERNAME_RE.test(normalized) || RESERVED.has(normalized)) {
+    return { error: "invalid" as const };
+  }
+  try {
+    await db
+      .update(users)
+      .set({ username: normalized, isPublic: true })
+      .where(eq(users.id, user.id));
+  } catch {
+    // unique index violation — someone owns it
+    return { error: "taken" as const };
+  }
+  revalidatePath(`/u/${normalized}`, "layout");
+  return { ok: true as const, username: normalized };
+}
+
+export async function setPublicAction(isPublic: boolean) {
+  const user = await assertUser();
+  await db
+    .update(users)
+    .set({ isPublic: Boolean(isPublic) })
+    .where(eq(users.id, user.id));
+  // Privacy must be immediate — bust the ISR cache for the public tree
+  if (user.username) revalidatePath(`/u/${user.username}`, "layout");
   return { ok: true as const };
 }
 

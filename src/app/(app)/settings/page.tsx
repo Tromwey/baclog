@@ -10,6 +10,8 @@ export default async function SettingsPage() {
         initialName={user.name ?? ""}
         initialService={user.preferredService}
         email={user.email}
+        initialUsername={user.username}
+        initialIsPublic={user.isPublic}
       />
     </main>
   );
