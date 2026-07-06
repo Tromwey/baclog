@@ -19,6 +19,10 @@ export const env = {
   get AUTH_SECRET() {
     return required("AUTH_SECRET");
   },
+  /** Vercel Cron bearer token — protects /api/cron/* (F3.3) */
+  get CRON_SECRET() {
+    return required("CRON_SECRET");
+  },
   /** Optional: fixtures when absent (launch dep, founder-provided) */
   TMDB_API_KEY: process.env.TMDB_API_KEY,
   /** Optional: console mailer when absent (launch dep, founder-provided) */

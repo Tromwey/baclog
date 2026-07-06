@@ -91,6 +91,7 @@ const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
 const RESERVED = new Set([
   "admin", "api", "app", "baclog", "backlogs", "blocked", "item", "login",
   "onboarding", "prototype", "search", "settings", "u", "verify", "www",
+  "waitlist", "recap", "analytics", "cron", "marketing",
 ]);
 
 /** F2.17 — claiming implies opting in to a public page (toggleable). */

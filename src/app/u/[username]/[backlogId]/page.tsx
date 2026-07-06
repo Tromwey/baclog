@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublicBacklog } from "@/modules/backlog/public";
+import { captureView } from "@/modules/analytics/capture";
 
-export const revalidate = 300;
+// Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
 const STATUS_LABEL: Record<string, string> = {
   on_my_radar: "On my radar",
@@ -39,6 +41,12 @@ export default async function PublicBacklogPage({
   const { username, backlogId } = await params;
   const data = await getPublicBacklog(username, backlogId);
   if (!data) notFound();
+
+  captureView({
+    eventType: "public_backlog_view",
+    targetUsername: username,
+    headers: await headers(),
+  });
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-20 pt-8 text-neutral-100">

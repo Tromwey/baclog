@@ -3,10 +3,15 @@ import { env } from "@/lib/env";
 
 /**
  * Email transport seam (launch dep: founder provides RESEND_API_KEY).
- * Console transport keeps the full OTP flow buildable/testable today;
- * Resend swaps in behind the same function with zero call-site changes.
+ * Console transport keeps flows buildable/testable today; Resend swaps in
+ * behind the same function with zero call-site changes.
  */
-export async function sendOtpEmail(email: string, code: string): Promise<void> {
+async function send(
+  to: string,
+  subject: string,
+  text: string,
+  devLabel: string,
+): Promise<void> {
   if (env.RESEND_API_KEY) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -16,9 +21,9 @@ export async function sendOtpEmail(email: string, code: string): Promise<void> {
       },
       body: JSON.stringify({
         from: "Baclog <auth@baclog.app>",
-        to: [email],
-        subject: `${code} es tu código de Baclog`,
-        text: `Tu código de acceso es ${code}. Expira en 10 minutos.`,
+        to: [to],
+        subject,
+        text,
       }),
     });
     if (!res.ok) {
@@ -26,5 +31,23 @@ export async function sendOtpEmail(email: string, code: string): Promise<void> {
     }
     return;
   }
-  console.log(`[dev-mailer] OTP para ${email}: ${code}`);
+  console.log(`[dev-mailer] ${devLabel} para ${to}: ${text}`);
+}
+
+export function sendOtpEmail(email: string, code: string): Promise<void> {
+  return send(
+    email,
+    `${code} es tu código de Baclog`,
+    `Tu código de acceso es ${code}. Expira en 10 minutos.`,
+    "OTP",
+  );
+}
+
+/** F3.3 — monthly recap notification. */
+export function sendRecapEmail(
+  email: string,
+  recap: { label: string; totalItems: number; completedCount: number },
+): Promise<void> {
+  const body = `Tu ${recap.label} en Baclog: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Abre la app para ver y compartir tu tarjeta del mes.`;
+  return send(email, `Tu ${recap.label} está lista ✦`, body, "RECAP");
 }
