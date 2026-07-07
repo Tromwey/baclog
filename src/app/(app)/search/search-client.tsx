@@ -54,7 +54,7 @@ export function SearchClient() {
   }, [query, tab]);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-16 pt-6 text-neutral-100">
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
       <input
         type="search"
         autoFocus
@@ -70,7 +70,7 @@ export function SearchClient() {
           }
         }}
         placeholder="Busca películas, series, álbumes…"
-        className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 outline-none focus:border-neutral-400"
+        className="w-full rounded-xl border border-line bg-surface-1 px-4 py-3 outline-none focus:border-accent"
         aria-label="Búsqueda universal"
       />
 
@@ -84,8 +84,8 @@ export function SearchClient() {
             }}
             className={`rounded-full px-3.5 py-1.5 text-sm ${
               tab === t.id
-                ? "bg-neutral-100 font-semibold text-neutral-900"
-                : "bg-neutral-800 text-neutral-300"
+                ? "bg-accent font-semibold text-bg"
+                : "bg-surface-2 text-text-2"
             }`}
           >
             {t.label}
@@ -98,7 +98,7 @@ export function SearchClient() {
           Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-20 animate-pulse rounded-xl bg-neutral-900"
+              className="h-20 animate-pulse rounded-xl bg-surface-1"
             />
           ))}
         {state === "error" && (
@@ -107,7 +107,7 @@ export function SearchClient() {
           </p>
         )}
         {state === "done" && results.length === 0 && (
-          <p className="py-8 text-center text-sm text-neutral-500">
+          <p className="py-8 text-center text-sm text-text-3">
             Nada por aquí. Prueba otro nombre.
           </p>
         )}
@@ -115,7 +115,7 @@ export function SearchClient() {
           <Link
             key={r.catalogItemId}
             href={`/item/${r.catalogItemId}`}
-            className="flex items-center gap-3 rounded-xl bg-neutral-900 p-2.5 hover:bg-neutral-800"
+            className="flex items-center gap-3 rounded-xl bg-surface-1 p-2.5 hover:bg-surface-2"
           >
             {r.posterUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
@@ -126,13 +126,13 @@ export function SearchClient() {
                 loading="lazy"
               />
             ) : (
-              <div className="flex h-16 w-12 items-center justify-center rounded-md bg-neutral-800 text-lg">
+              <div className="flex h-16 w-12 items-center justify-center rounded-md bg-surface-2 text-lg">
                 {r.mediaType === "album" ? "♫" : "▶"}
               </div>
             )}
             <div className="min-w-0">
               <p className="truncate font-medium">{r.title}</p>
-              <p className="truncate text-sm text-neutral-400">
+              <p className="truncate text-sm text-text-2">
                 {[TYPE_BADGE[r.mediaType], r.year, r.byline]
                   .filter(Boolean)
                   .join(" · ")}

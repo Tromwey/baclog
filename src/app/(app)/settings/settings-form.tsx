@@ -74,20 +74,20 @@ export function SettingsForm({
   return (
     <div className="mt-6 space-y-8">
       <section>
-        <h2 className="text-sm font-semibold text-neutral-400">Cuenta</h2>
-        <p className="mt-1 text-sm text-neutral-500">{email}</p>
+        <h2 className="text-sm font-semibold text-text-2">Cuenta</h2>
+        <p className="mt-1 text-sm text-text-3">{email}</p>
         <form onSubmit={saveName} className="mt-3 flex gap-2">
           <input
             value={name}
             maxLength={50}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2.5 outline-none focus:border-neutral-400"
+            className="flex-1 rounded-xl border border-line bg-surface-1 px-4 py-2.5 outline-none focus:border-accent"
             aria-label="Nombre visible"
           />
           <button
             type="submit"
             disabled={busy || !name.trim()}
-            className="rounded-xl bg-neutral-100 px-4 font-medium text-neutral-900 disabled:opacity-40"
+            className="rounded-xl bg-accent px-4 font-medium text-bg disabled:opacity-40"
           >
             {saved ? "✓" : "Guardar"}
           </button>
@@ -95,7 +95,7 @@ export function SettingsForm({
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-neutral-400">
+        <h2 className="text-sm font-semibold text-text-2">
           Tu app de música
         </h2>
         <div className="mt-3 space-y-2">
@@ -105,8 +105,8 @@ export function SettingsForm({
               onClick={() => pickService(s.id)}
               className={`w-full rounded-xl border px-4 py-3 text-left ${
                 service === s.id
-                  ? "border-neutral-100 bg-neutral-800 font-semibold"
-                  : "border-neutral-700 bg-neutral-900"
+                  ? "border-accent bg-surface-2 font-semibold"
+                  : "border-line bg-surface-1"
               }`}
             >
               {s.label}
@@ -116,13 +116,13 @@ export function SettingsForm({
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-neutral-400">
+        <h2 className="text-sm font-semibold text-text-2">
           Página pública
         </h2>
         {claimed ? (
           <div className="mt-3 space-y-3">
             <p className="text-sm">
-              <span className="text-neutral-400">Tu página: </span>
+              <span className="text-text-2">Tu página: </span>
               <a
                 href={`/u/${claimed}`}
                 className="font-mono underline"
@@ -132,7 +132,7 @@ export function SettingsForm({
                 baclog.app/{claimed}
               </a>
             </p>
-            <label className="flex items-center justify-between rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3">
+            <label className="flex items-center justify-between rounded-xl border border-line bg-surface-1 px-4 py-3">
               <span className="text-sm">Perfil visible públicamente</span>
               <input
                 type="checkbox"
@@ -142,17 +142,17 @@ export function SettingsForm({
                   setIsPublic(next);
                   await setPublicAction(next);
                 }}
-                className="h-5 w-5 accent-neutral-100"
+                className="h-5 w-5 accent-accent"
               />
             </label>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-text-3">
               Privado por default: solo lo que actives aquí se puede ver.
             </p>
           </div>
         ) : (
           <form onSubmit={claim} className="mt-3 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-500">baclog.app/</span>
+              <span className="text-sm text-text-3">baclog.app/</span>
               <input
                 value={username}
                 maxLength={30}
@@ -160,13 +160,13 @@ export function SettingsForm({
                   setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
                 }
                 placeholder="tunombre"
-                className="min-w-0 flex-1 rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2.5 font-mono outline-none focus:border-neutral-400"
+                className="min-w-0 flex-1 rounded-xl border border-line bg-surface-1 px-3 py-2.5 font-mono outline-none focus:border-accent"
                 aria-label="Username"
               />
               <button
                 type="submit"
                 disabled={busy || username.length < 3}
-                className="rounded-xl bg-neutral-100 px-4 py-2.5 text-sm font-semibold text-neutral-900 disabled:opacity-40"
+                className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-40"
               >
                 Reclamar
               </button>
@@ -174,18 +174,18 @@ export function SettingsForm({
             {usernameError && (
               <p className="text-xs text-red-400">{usernameError}</p>
             )}
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-text-3">
               Opt-in explícito: sin username, nada tuyo es público.
             </p>
           </form>
         )}
       </section>
 
-      <section className="border-t border-neutral-800 pt-6">
+      <section className="border-t border-line pt-6">
         <h2 className="text-sm font-semibold text-red-400">Zona peligrosa</h2>
         {confirmingDelete ? (
           <div className="mt-3 space-y-2 rounded-xl border border-red-900 bg-red-950/40 p-4">
-            <p className="text-sm text-neutral-200">
+            <p className="text-sm text-text">
               Esto borra tu cuenta y todos tus backlogs. No hay vuelta atrás.
             </p>
             <div className="flex gap-2">
@@ -201,7 +201,7 @@ export function SettingsForm({
               </button>
               <button
                 onClick={() => setConfirmingDelete(false)}
-                className="rounded-xl border border-neutral-700 px-4 py-2"
+                className="rounded-xl border border-line px-4 py-2"
               >
                 Cancelar
               </button>

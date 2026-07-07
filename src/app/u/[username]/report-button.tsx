@@ -28,7 +28,7 @@ export function ReportButton({ username }: { username: string }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-neutral-600 underline hover:text-neutral-400"
+        className="text-xs text-text-3 underline hover:text-text-2"
       >
         Reportar perfil
       </button>
@@ -39,7 +39,7 @@ export function ReportButton({ username }: { username: string }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-neutral-800 bg-neutral-900 p-5 pb-8"
+            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-line bg-surface-1 p-5 pb-8"
           >
             {sent ? (
               <p className="py-4 text-center text-sm">
@@ -53,7 +53,7 @@ export function ReportButton({ username }: { username: string }) {
                     key={r.id}
                     disabled={busy}
                     onClick={() => report(r.id)}
-                    className="block w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-left text-sm hover:border-neutral-400 disabled:opacity-40"
+                    className="block w-full rounded-xl border border-line bg-bg px-4 py-3 text-left text-sm hover:border-accent disabled:opacity-40"
                   >
                     {r.label}
                   </button>

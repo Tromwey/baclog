@@ -8,17 +8,24 @@ import {
   drawCard,
 } from "@/modules/cards/render";
 import type { CardStyle } from "@/modules/cards/types";
+import {
+  DoubleFeaturePreview,
+  SAMPLE_DOUBLE_FEATURE,
+} from "@/modules/cards/double-feature";
 import { ALT_BACKLOG, DEMO_BACKLOG } from "./data";
 
-const STYLES: { id: CardStyle; label: string }[] = [
+type LabStyle = CardStyle | "double-feature";
+
+const STYLES: { id: LabStyle; label: string }[] = [
   { id: "receipt", label: "Receipt" },
   { id: "ticket", label: "Ticket" },
   { id: "pattern", label: "Patrón" },
+  { id: "double-feature", label: "Double Feature" },
 ];
 
 export default function PrototypePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [style, setStyle] = useState<CardStyle>("receipt");
+  const [style, setStyle] = useState<LabStyle>("receipt");
   const [ticketIndex, setTicketIndex] = useState(0);
   const [fontsReady, setFontsReady] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -61,8 +68,10 @@ export default function PrototypePage() {
     };
   }, []);
 
+  const isDoubleFeature = style === "double-feature";
+
   useEffect(() => {
-    if (!fontsReady) return;
+    if (!fontsReady || isDoubleFeature) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     drawCard(
@@ -71,7 +80,7 @@ export default function PrototypePage() {
       backlog,
       backlog.items[ticketIndex % backlog.items.length],
     );
-  }, [style, ticketIndex, fontsReady, backlog]);
+  }, [style, ticketIndex, fontsReady, backlog, isDoubleFeature]);
 
   const share = useCallback(() => {
     const canvas = canvasRef.current;
@@ -105,23 +114,23 @@ export default function PrototypePage() {
   const item = backlog.items[ticketIndex % backlog.items.length];
 
   return (
-    <main className="flex min-h-dvh flex-col items-center bg-neutral-950 px-4 pb-8 pt-6 text-neutral-100">
+    <main className="flex min-h-dvh flex-col items-center bg-bg px-4 pb-8 pt-6 text-text">
       <header className="mb-4 text-center">
         <h1 className="font-mono text-lg font-bold tracking-[0.35em]">
           BACLOG
         </h1>
-        <p className="text-xs text-neutral-400">card lab · prototipo M1</p>
+        <p className="text-xs text-text-2">card lab · prototipo M1</p>
       </header>
 
-      <div className="mb-4 flex rounded-full bg-neutral-800 p-1 text-sm">
+      <div className="mb-4 flex rounded-full bg-surface-2 p-1 text-sm">
         {STYLES.map((s) => (
           <button
             key={s.id}
             onClick={() => setStyle(s.id)}
             className={`rounded-full px-4 py-1.5 transition-colors ${
               style === s.id
-                ? "bg-neutral-100 font-semibold text-neutral-900"
-                : "text-neutral-300"
+                ? "bg-accent font-semibold text-bg"
+                : "text-text-2"
             }`}
           >
             {s.label}
@@ -130,14 +139,24 @@ export default function PrototypePage() {
       </div>
 
       <div className="relative w-full max-w-[340px]">
-        <canvas
-          ref={canvasRef}
-          width={CARD_WIDTH}
-          height={CARD_HEIGHT}
-          className="aspect-[9/16] w-full rounded-xl shadow-2xl shadow-black/60"
-        />
-        {!fontsReady && (
-          <div className="absolute inset-0 animate-pulse rounded-xl bg-neutral-800" />
+        {isDoubleFeature ? (
+          <DoubleFeaturePreview
+            data={SAMPLE_DOUBLE_FEATURE}
+            width={340}
+            className="w-full"
+          />
+        ) : (
+          <>
+            <canvas
+              ref={canvasRef}
+              width={CARD_WIDTH}
+              height={CARD_HEIGHT}
+              className="aspect-[9/16] w-full rounded-xl shadow-2xl shadow-black/60"
+            />
+            {!fontsReady && (
+              <div className="absolute inset-0 animate-pulse rounded-xl bg-surface-2" />
+            )}
+          </>
         )}
       </div>
 
@@ -145,7 +164,7 @@ export default function PrototypePage() {
         <div className="mt-3 flex w-full max-w-[340px] items-center justify-between text-sm">
           <button
             aria-label="Ítem anterior"
-            className="rounded-full bg-neutral-800 px-4 py-2"
+            className="rounded-full bg-surface-2 px-4 py-2"
             onClick={() =>
               setTicketIndex(
                 (i) =>
@@ -156,10 +175,10 @@ export default function PrototypePage() {
           >
             ◄
           </button>
-          <span className="truncate px-3 text-neutral-300">{item.title}</span>
+          <span className="truncate px-3 text-text-2">{item.title}</span>
           <button
             aria-label="Ítem siguiente"
-            className="rounded-full bg-neutral-800 px-4 py-2"
+            className="rounded-full bg-surface-2 px-4 py-2"
             onClick={() =>
               setTicketIndex((i) => (i + 1) % backlog.items.length)
             }
@@ -169,16 +188,18 @@ export default function PrototypePage() {
         </div>
       )}
 
-      <button
-        onClick={share}
-        disabled={!fontsReady}
-        className="mt-5 w-full max-w-[340px] rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900 transition-opacity disabled:opacity-40"
-      >
-        Compartir tarjeta
-      </button>
+      {!isDoubleFeature && (
+        <button
+          onClick={share}
+          disabled={!fontsReady}
+          className="mt-5 w-full max-w-[340px] rounded-full bg-accent py-3.5 font-semibold text-bg transition-opacity disabled:opacity-40"
+        >
+          Compartir tarjeta
+        </button>
+      )}
 
       {toast && (
-        <p className="mt-3 rounded-full bg-neutral-800 px-4 py-2 text-xs text-neutral-300">
+        <p className="mt-3 rounded-full bg-surface-2 px-4 py-2 text-xs text-text-2">
           {toast}
         </p>
       )}

@@ -26,7 +26,7 @@ export function SuggestionRail({
 
   return (
     <section className="mt-8">
-      <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-neutral-500">
+      <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-text-3">
         ✨ Sugerencias IA para este backlog
       </h2>
       <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
@@ -42,7 +42,7 @@ export function SuggestionRail({
                   loading="lazy"
                 />
               ) : (
-                <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-neutral-800 text-xl">
+                <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-surface-2 text-xl">
                   {s.mediaType === "album" ? "♫" : "▶"}
                 </div>
               )}
@@ -50,13 +50,13 @@ export function SuggestionRail({
                 onClick={() => add(s.catalogItemId)}
                 disabled={addedIds.has(s.catalogItemId)}
                 aria-label={`Agregar ${s.title}`}
-                className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 font-bold text-neutral-900 shadow disabled:bg-emerald-600 disabled:text-white"
+                className="absolute bottom-1.5 right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-accent font-bold text-bg shadow disabled:bg-completed disabled:text-white"
               >
                 {addedIds.has(s.catalogItemId) ? "✓" : "+"}
               </button>
             </div>
             <p className="mt-1 truncate text-xs">{s.title}</p>
-            <p className="truncate text-[10px] text-neutral-500">
+            <p className="truncate text-[10px] text-text-3">
               {[s.byline, s.year].filter(Boolean).join(" · ")}
             </p>
           </div>

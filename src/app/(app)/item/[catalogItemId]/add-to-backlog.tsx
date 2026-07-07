@@ -76,7 +76,7 @@ export function AddToBacklog({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900"
+        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
       >
         Agregar a un backlog
       </button>
@@ -88,7 +88,7 @@ export function AddToBacklog({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-neutral-800 bg-neutral-900 p-5 pb-8"
+            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-line bg-surface-1 p-5 pb-8"
           >
             <h2 className="font-semibold">¿A cuál backlog?</h2>
             {backlogs.map((b) => (
@@ -96,7 +96,7 @@ export function AddToBacklog({
                 key={b.id}
                 disabled={busy}
                 onClick={() => addTo(b.id)}
-                className="block w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-left hover:border-neutral-400 disabled:opacity-40"
+                className="block w-full rounded-xl border border-line bg-bg px-4 py-3 text-left hover:border-accent disabled:opacity-40"
               >
                 {b.name}
               </button>
@@ -109,12 +109,12 @@ export function AddToBacklog({
                 placeholder={
                   backlogs.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
                 }
-                className="min-w-0 flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-neutral-400"
+                className="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 outline-none focus:border-accent"
               />
               <button
                 type="submit"
                 disabled={busy || !newName.trim()}
-                className="rounded-xl bg-neutral-100 px-4 font-semibold text-neutral-900 disabled:opacity-40"
+                className="rounded-xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
               >
                 Crear
               </button>

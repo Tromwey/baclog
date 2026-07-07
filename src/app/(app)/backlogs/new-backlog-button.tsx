@@ -28,7 +28,7 @@ export function NewBacklogButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="rounded-full bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-900"
+        className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-bg"
       >
         + Nuevo
       </button>
@@ -40,7 +40,7 @@ export function NewBacklogButton() {
           <form
             onSubmit={create}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md space-y-3 rounded-t-2xl border-t border-neutral-800 bg-neutral-900 p-5 pb-8"
+            className="w-full max-w-md space-y-3 rounded-t-2xl border-t border-line bg-surface-1 p-5 pb-8"
           >
             <h2 className="font-semibold">Nuevo backlog</h2>
             <input
@@ -50,19 +50,19 @@ export function NewBacklogButton() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Nombre (ej. Summer Era)"
-              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-neutral-400"
+              className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none focus:border-accent"
             />
             <input
               maxLength={80}
               value={vibe}
               onChange={(e) => setVibe(e.target.value)}
               placeholder="Vibe (opcional)"
-              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 outline-none focus:border-neutral-400"
+              className="w-full rounded-xl border border-line bg-bg px-4 py-3 outline-none focus:border-accent"
             />
             <button
               type="submit"
               disabled={busy || !name.trim()}
-              className="w-full rounded-full bg-neutral-100 py-3 font-semibold text-neutral-900 disabled:opacity-40"
+              className="w-full rounded-full bg-accent py-3 font-semibold text-bg disabled:opacity-40"
             >
               {busy ? "Creando…" : "Crear"}
             </button>
