@@ -1,5 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { env } from "@/lib/env";
 
 /**
@@ -55,7 +56,7 @@ export interface CrossMediaProposal {
 }
 
 export interface CrossMediaRecProvider {
-  readonly id: "fixture" | "llm";
+  readonly id: "fixture" | "anthropic" | "gemini";
   propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null>;
 }
 
@@ -160,10 +161,11 @@ class FixtureProvider implements CrossMediaRecProvider {
 // ============================================================
 
 /**
- * Cheap/fast current Claude model with prompt caching (see the claude-api
- * skill). Adaptive thinking on; the stable system prompt is cached so only the
- * per-seed metadata is billed fresh each call. Only item metadata crosses this
- * boundary — never user PII (Pilar 4).
+ * Anthropic's premium tier ($5/$25 per MTok — NOT a budget model, ~5× Haiku).
+ * Kept as the high-quality option; the free-tier Gemini provider (below) is the
+ * cost-aligned default when its key is set (ADR-009: align LLM cost with the
+ * metered gate). The stable system prompt is cached so only per-seed metadata
+ * is billed fresh. Only item metadata crosses this boundary — never PII.
  */
 const LLM_MODEL = "claude-opus-4-8";
 
@@ -231,8 +233,62 @@ function clamp(s: unknown, max: number): string {
   return typeof s === "string" ? s.slice(0, max).trim() : "";
 }
 
+/**
+ * The fenced, injection-safe user turn (Pilar 4: metadata only). The system
+ * prompt flags the <seed> block as data, never instructions.
+ */
+function seedUserContent(seed: CrossMediaSeed): string {
+  const block = JSON.stringify({
+    title: seed.title,
+    mediaType: seed.mediaType,
+    byline: seed.byline,
+    year: seed.year,
+    genre: seed.genre,
+  });
+  return `<seed>${block}</seed>\nRecomienda el cross-media para este seed.`;
+}
+
+/**
+ * Shared post-processing for both real providers (Anthropic + Gemini): enforce
+ * the cross-media direction (album ↔ non-album), clamp every field, and drop
+ * anything malformed. A crafted title can at worst fail here or fail to ground
+ * later — it can never inject a fake, addable item.
+ */
+function finalizeProposal(
+  seed: CrossMediaSeed,
+  raw: Record<string, unknown>,
+): CrossMediaProposal | null {
+  const targetMediaType = raw.targetMediaType;
+  if (
+    targetMediaType !== "album" &&
+    targetMediaType !== "film" &&
+    targetMediaType !== "series"
+  ) {
+    return null;
+  }
+  // Enforce the direction scope defensively even if the model drifts.
+  if (seed.mediaType === "album" && targetMediaType === "album") return null;
+  if (seed.mediaType !== "album" && targetMediaType !== "album") return null;
+
+  const targetTitle = clamp(raw.targetTitle, 200);
+  if (!targetTitle) return null;
+
+  const narrative = (raw.narrative ?? {}) as Record<string, unknown>;
+  return {
+    targetTitle,
+    targetMediaType,
+    targetByline: clamp(raw.targetByline, 120) || null,
+    narrative: {
+      hookEyebrow: clamp(narrative.hookEyebrow, 120),
+      hookTitle: clamp(narrative.hookTitle, 240),
+      resultEyebrow: clamp(narrative.resultEyebrow, 120),
+      closer: clamp(narrative.closer, 200),
+    },
+  };
+}
+
 class LlmProvider implements CrossMediaRecProvider {
-  readonly id = "llm" as const;
+  readonly id = "anthropic" as const;
   private client: Anthropic;
 
   constructor(apiKey: string) {
@@ -240,93 +296,117 @@ class LlmProvider implements CrossMediaRecProvider {
   }
 
   async propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null> {
-    // Only metadata crosses the boundary (Pilar 4). User-influenced strings go
-    // in a fenced data block that the system prompt flags as non-instructions.
-    const seedBlock = JSON.stringify({
-      title: seed.title,
-      mediaType: seed.mediaType,
-      byline: seed.byline,
-      year: seed.year,
-      genre: seed.genre,
-    });
-
     let message: Anthropic.Message;
     try {
       message = await this.client.messages.create({
         model: LLM_MODEL,
         max_tokens: 1024,
-        thinking: { type: "adaptive" },
+        // Short structured tool call — thinking DISABLED (accepted on
+        // opus-4-8) so reasoning can't eat the token budget and truncate the
+        // forced tool_use (review finding); also cheaper/faster.
+        thinking: { type: "disabled" },
         system: [
           {
             type: "text",
             text: SYSTEM_PROMPT,
-            // Stable prefix cached across every generation — only the per-seed
-            // block below is billed fresh.
+            // Stable prefix cached across generations — only the per-seed block
+            // is billed fresh.
             cache_control: { type: "ephemeral" },
           },
         ],
         tools: [proposalTool],
         tool_choice: { type: "tool", name: "cross_media_reco" },
-        messages: [
-          {
-            role: "user",
-            content: `<seed>${seedBlock}</seed>\nRecomienda el cross-media para este seed.`,
-          },
-        ],
+        messages: [{ role: "user", content: seedUserContent(seed) }],
       });
     } catch (err) {
-      console.error("[crossmedia] LLM provider failed:", err);
+      console.error("[crossmedia] Anthropic provider failed:", err);
       return null;
     }
 
     const block = message.content.find((b) => b.type === "tool_use");
     if (!block || block.type !== "tool_use") return null;
-    const out = block.input as Record<string, unknown>;
-    const narrative = (out.narrative ?? {}) as Record<string, unknown>;
-
-    const targetMediaType = out.targetMediaType;
-    if (
-      targetMediaType !== "album" &&
-      targetMediaType !== "film" &&
-      targetMediaType !== "series"
-    ) {
-      return null;
-    }
-    // Enforce the direction scope defensively even if the model drifts.
-    if (seed.mediaType === "album" && targetMediaType === "album") return null;
-    if (seed.mediaType !== "album" && targetMediaType !== "album") return null;
-
-    const targetTitle = clamp(out.targetTitle, 200);
-    if (!targetTitle) return null;
-
-    return {
-      targetTitle,
-      targetMediaType,
-      targetByline: clamp(out.targetByline, 120) || null,
-      narrative: {
-        hookEyebrow: clamp(narrative.hookEyebrow, 120),
-        hookTitle: clamp(narrative.hookTitle, 240),
-        resultEyebrow: clamp(narrative.resultEyebrow, 120),
-        closer: clamp(narrative.closer, 200),
-      },
-    };
+    return finalizeProposal(seed, block.input as Record<string, unknown>);
   }
 }
 
 // ============================================================
-// Selection — real key swaps in with no other code change
+// Gemini provider — Google free tier (the low-cost option)
+// ============================================================
+
+/** Free-tier Gemini Flash by default; override with GEMINI_MODEL. */
+const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.0-flash";
+
+class GeminiProvider implements CrossMediaRecProvider {
+  readonly id = "gemini" as const;
+  private client: GoogleGenAI;
+
+  constructor(apiKey: string) {
+    this.client = new GoogleGenAI({ apiKey });
+  }
+
+  async propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null> {
+    // Same boundary as the Anthropic provider: only item metadata crosses
+    // (Pilar 4), fenced in <seed> that the system prompt flags as data. Output
+    // is JSON, then parsed + clamped + grounded downstream (hallucination guard).
+    let text: string | undefined;
+    try {
+      const res = await this.client.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: seedUserContent(seed),
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          maxOutputTokens: 1024,
+          temperature: 0.8,
+        },
+      });
+      text = res.text;
+    } catch (err) {
+      console.error("[crossmedia] Gemini provider failed:", err);
+      return null;
+    }
+    if (!text) return null;
+
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      console.error("[crossmedia] Gemini returned non-JSON output");
+      return null;
+    }
+    return finalizeProposal(seed, raw);
+  }
+}
+
+// ============================================================
+// Selection — real keys swap in with no other code change
 // ============================================================
 
 let cached: CrossMediaRecProvider | null = null;
 
 /**
- * The active provider: real Claude when ANTHROPIC_API_KEY is set, else the
- * deterministic fixture. Mirrors how the catalog picks TMDB vs. fixtures.
+ * The active provider. CROSSMEDIA_PROVIDER forces one ("gemini" | "anthropic"
+ * | "fixture"); otherwise auto: Gemini if its key is set (free tier, the
+ * cost-aligned default per ADR-009), else Anthropic, else the deterministic
+ * fixture (build/test never blocks on a key).
  */
 export function crossMediaProvider(): CrossMediaRecProvider {
   if (cached) return cached;
-  cached = env.ANTHROPIC_API_KEY
-    ? new LlmProvider(env.ANTHROPIC_API_KEY)
-    : new FixtureProvider();
+  cached = pickProvider();
   return cached;
+}
+
+function pickProvider(): CrossMediaRecProvider {
+  const forced = env.CROSSMEDIA_PROVIDER?.toLowerCase();
+  if (forced === "fixture") return new FixtureProvider();
+  if (forced === "gemini" && env.GEMINI_API_KEY) {
+    return new GeminiProvider(env.GEMINI_API_KEY);
+  }
+  if (forced === "anthropic" && env.ANTHROPIC_API_KEY) {
+    return new LlmProvider(env.ANTHROPIC_API_KEY);
+  }
+  // Auto: prefer the free Gemini tier, then Anthropic, then the fixture.
+  if (env.GEMINI_API_KEY) return new GeminiProvider(env.GEMINI_API_KEY);
+  if (env.ANTHROPIC_API_KEY) return new LlmProvider(env.ANTHROPIC_API_KEY);
+  return new FixtureProvider();
 }

@@ -89,10 +89,9 @@ export async function getCrossMediaReco(
   const cachedReco = await readCache(seedCatalogItemId);
   if (cachedReco) return cachedReco;
 
-  // 2) Meter: enforce the per-user monthly cap BEFORE spending a generation.
+  // 2) Meter CHECK (read-only): block before generating if already at the cap.
   //    Cache hits above never reach here, so re-viewing a cached reco is free.
-  const withinCap = await tryChargeGeneration(userId);
-  if (!withinCap) return null;
+  if ((await remainingGenerations(userId)) <= 0) return null;
 
   // 3) Provider proposes (fixture or real LLM). Only metadata crosses.
   const provider = crossMediaProvider();
@@ -104,14 +103,20 @@ export async function getCrossMediaReco(
     genre: seed.genre,
   };
   const proposal = await provider.propose(seedMeta);
+  // A transient failure (429/network) or unusable output returns null WITHOUT
+  // charging — the user isn't penalized for a generation that never happened.
   if (!proposal) return null;
 
-  // 4) GROUNDING (mandatory): resolve the proposed title against the catalog.
+  // 4) Charge the meter now that a real generation was produced (race-safe
+  //    upsert with a cap guard; a concurrent pair may exceed by one — soft cap).
+  await tryChargeGeneration(userId);
+
+  // 5) GROUNDING (mandatory): resolve the proposed title against the catalog.
   //    Only a real, addable catalog_item is surfaced (LLMs hallucinate titles).
   const grounded = await groundProposal(proposal);
   if (!grounded) return null;
 
-  // 5) Persist the grounded reco keyed by seed (idempotent on the unique index).
+  // 6) Persist the grounded reco keyed by seed (idempotent on the unique index).
   const [row] = await db
     .insert(crossMediaRecs)
     .values({

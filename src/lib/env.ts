@@ -30,9 +30,17 @@ export const env = {
   /** Optional: Odesli keyless free tier when absent */
   ODESLI_API_KEY: process.env.ODESLI_API_KEY,
   /**
-   * Optional (F3.5.5): when absent, the cross-media reco engine uses the
-   * deterministic FIXTURE provider (build/test never blocks on the key). When
-   * present, the real Claude LLM provider swaps in with no other code change.
+   * Optional (F3.5.5): the cross-media reco engine has three providers behind
+   * one interface — deterministic FIXTURE (default, no key: build/test never
+   * blocks), Anthropic Claude, and Google Gemini (free tier). Provider is
+   * chosen by CROSSMEDIA_PROVIDER, else auto: Gemini if its key is set (free),
+   * else Anthropic, else fixture. Real keys swap in with no other code change.
    */
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  /** Optional (F3.5.5): Google Gemini free-tier key — the low-cost provider */
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  /** Optional: override the Gemini model (default gemini-2.0-flash, free tier) */
+  GEMINI_MODEL: process.env.GEMINI_MODEL,
+  /** Optional: force a provider — "gemini" | "anthropic" | "fixture" */
+  CROSSMEDIA_PROVIDER: process.env.CROSSMEDIA_PROVIDER,
 };
