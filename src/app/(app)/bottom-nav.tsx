@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, LayoutGrid, Search, Settings, Sparkles } from "lucide-react";
+import { Clapperboard, LayoutGrid, Search, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+// Recap is a MONTHLY moment (the F3.3 "tu era de {mes}" ritual, delivered by
+// the day-1 email → /recap), not a constant destination — so it has no
+// permanent tab here. Recommendations live in their own home, "Para ti".
 const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/backlogs", label: "Backlogs", icon: LayoutGrid },
   { href: "/search", label: "Buscar", icon: Search },
   { href: "/para-ti", label: "Para ti", icon: Clapperboard },
-  { href: "/recap", label: "Recap", icon: Sparkles },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 

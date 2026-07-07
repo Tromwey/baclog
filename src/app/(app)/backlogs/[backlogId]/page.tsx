@@ -3,10 +3,8 @@ import { notFound } from "next/navigation";
 import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
 import { deriveEras } from "@/modules/backlog/era";
 import { getBacklogItems } from "@/modules/backlog/queries";
-import { getSuggestionsForBacklog } from "@/modules/recs/similar";
 import { BacklogMenu } from "./backlog-menu";
 import { ItemRow } from "./item-row";
-import { SuggestionRail } from "./suggestion-rail";
 
 export default async function BacklogDetailPage({
   params,
@@ -26,7 +24,6 @@ export default async function BacklogDetailPage({
 
   const items = await getBacklogItems(backlog.id);
   const eras = deriveEras(items);
-  const suggestions = await getSuggestionsForBacklog(backlog.id);
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
@@ -76,10 +73,6 @@ export default async function BacklogDetailPage({
             </section>
           ))}
         </div>
-      )}
-
-      {items.length > 0 && (
-        <SuggestionRail backlogId={backlog.id} suggestions={suggestions} />
       )}
     </main>
   );

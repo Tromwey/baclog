@@ -50,6 +50,12 @@ export interface CrossMediaDiscoveryProps {
   defaultBacklog: { id: string; name: string } | null;
   /** Recent backlogs for the "Cambiar" picker (seed's home flagged). */
   backlogs: DiscoveryBacklog[];
+  /**
+   * "panel" (default) = a self-contained bordered card, for embedding under
+   * other content. "page" = full-bleed, chrome-free — the content IS the
+   * screen, for the /para-ti destination (F3.5.6, avoids screen-in-a-screen).
+   */
+  variant?: "panel" | "page";
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -62,6 +68,7 @@ type Status = "pending" | "accepted" | "dismissed";
 
 export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
   const { seed, reco, narrative, username, defaultBacklog } = props;
+  const isPage = props.variant === "page";
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -225,12 +232,20 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
   const dismissed = status === "dismissed";
 
   return (
-    <section className="relative mt-8 overflow-hidden rounded-[var(--r-lg)] border border-line bg-surface-1 p-5">
-      <div aria-hidden className="bl-grain !opacity-[0.05]" />
+    <section
+      className={
+        isPage
+          ? "relative"
+          : "relative mt-8 overflow-hidden rounded-[var(--r-lg)] border border-line bg-surface-1 p-5"
+      }
+    >
+      {!isPage && <div aria-hidden className="bl-grain !opacity-[0.05]" />}
 
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-2">
-        Descubrimiento
-      </p>
+      {!isPage && (
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-2">
+          Descubrimiento
+        </p>
+      )}
 
       {/* Hook */}
       <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-accent">

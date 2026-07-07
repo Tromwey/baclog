@@ -59,38 +59,43 @@ export default async function ParaTiPage() {
         </>
       ) : (
         <>
-          <div className="mt-2 space-y-4">
+          <div className="mt-8 divide-y divide-line">
             {feed.items.map((it) => (
-              <CrossMediaDiscovery
+              <div
                 key={it.seed.catalogItemId}
-                seed={{
-                  catalogItemId: it.seed.catalogItemId,
-                  title: it.seed.title,
-                  type: it.seed.type,
-                  byline: it.seed.byline,
-                  year: it.seed.year,
-                  posterUrl: it.seed.posterUrl,
-                }}
-                reco={{
-                  catalogItemId: it.reco.targetCatalogItemId,
-                  title: it.reco.targetTitle,
-                  type: it.reco.targetMediaType,
-                  byline: it.reco.targetByline,
-                  year: it.reco.targetYear,
-                  posterUrl: it.reco.targetPosterUrl,
-                }}
-                narrative={it.reco.narrative}
-                username={user.username ?? ""}
-                defaultBacklog={it.defaultBacklog}
-                backlogs={pickerBase.map(
-                  (b): DiscoveryBacklog => ({
-                    id: b.id,
-                    name: b.name,
-                    itemCount: b.itemCount,
-                    isSeedHome: b.id === it.defaultBacklog.id,
-                  }),
-                )}
-              />
+                className="py-10 first:pt-0 last:pb-0"
+              >
+                <CrossMediaDiscovery
+                  variant="page"
+                  seed={{
+                    catalogItemId: it.seed.catalogItemId,
+                    title: it.seed.title,
+                    type: it.seed.type,
+                    byline: it.seed.byline,
+                    year: it.seed.year,
+                    posterUrl: it.seed.posterUrl,
+                  }}
+                  reco={{
+                    catalogItemId: it.reco.targetCatalogItemId,
+                    title: it.reco.targetTitle,
+                    type: it.reco.targetMediaType,
+                    byline: it.reco.targetByline,
+                    year: it.reco.targetYear,
+                    posterUrl: it.reco.targetPosterUrl,
+                  }}
+                  narrative={it.reco.narrative}
+                  username={user.username ?? ""}
+                  defaultBacklog={it.defaultBacklog}
+                  backlogs={pickerBase.map(
+                    (b): DiscoveryBacklog => ({
+                      id: b.id,
+                      name: b.name,
+                      itemCount: b.itemCount,
+                      isSeedHome: b.id === it.defaultBacklog.id,
+                    }),
+                  )}
+                />
+              </div>
             ))}
           </div>
           <DiscoverMore remaining={feed.remaining} cap={feed.cap} />

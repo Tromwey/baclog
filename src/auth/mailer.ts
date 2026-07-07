@@ -48,6 +48,8 @@ export function sendRecapEmail(
   email: string,
   recap: { label: string; totalItems: number; completedCount: number },
 ): Promise<void> {
-  const body = `Tu ${recap.label} en Baclog: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Abre la app para ver y compartir tu tarjeta del mes.`;
+  // Recap has no permanent nav tab (it's a monthly moment) — this link is its
+  // in-app entry point, so the ritual stays reachable without a constant tab.
+  const body = `Tu ${recap.label} en Baclog: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Ve y comparte tu tarjeta del mes: https://baclog.app/recap`;
   return send(email, `Tu ${recap.label} está lista ✦`, body, "RECAP");
 }
