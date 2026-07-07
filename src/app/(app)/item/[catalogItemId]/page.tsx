@@ -30,8 +30,17 @@ export default async function ItemPage({
   // F3.5.5 — a cross-media reco surfaces only on a LOVED item (obsessing over,
   // or completed ★≥4). Everything downstream (grounding, cap, cache) is inside
   // getCrossMediaReco; it returns null when nothing eligible/groundable exists.
+  // Guarded: if the F3.5.5 tables aren't migrated yet in an environment (deploy
+  // ahead of migration), degrade to no discovery rather than break the page.
   const loves = await userLovesItem(user.id, catalogItemId);
-  const reco = loves ? await getCrossMediaReco(catalogItemId, user.id) : null;
+  let reco: Awaited<ReturnType<typeof getCrossMediaReco>> = null;
+  if (loves) {
+    try {
+      reco = await getCrossMediaReco(catalogItemId, user.id);
+    } catch (err) {
+      console.error("[item] cross-media reco unavailable:", err);
+    }
+  }
   const defaultBacklog = reco
     ? await defaultBacklogForSeed(catalogItemId)
     : null;
