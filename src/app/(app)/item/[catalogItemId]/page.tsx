@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
-import { getBacklogsForUser } from "@/modules/backlog/queries";
+import { getBacklogsForUser, userLovesItem } from "@/modules/backlog/queries";
 import { getCatalogItem } from "@/modules/catalog/cache";
+import { getCrossMediaReco } from "@/modules/recs/crossmedia";
+import { defaultBacklogForSeed } from "@/app/actions/crossmedia-actions";
 import { AddToBacklog } from "./add-to-backlog";
 import { Attribution } from "./attribution";
+import { CrossMediaDiscovery, type DiscoveryBacklog } from "./cross-media-discovery";
 
 const TYPE_LABEL: Record<string, string> = {
   film: "Película",
@@ -23,6 +26,23 @@ export default async function ItemPage({
     getBacklogsForUser(user.id),
   ]);
   if (!item) notFound();
+
+  // F3.5.5 — a cross-media reco surfaces only on a LOVED item (obsessing over,
+  // or completed ★≥4). Everything downstream (grounding, cap, cache) is inside
+  // getCrossMediaReco; it returns null when nothing eligible/groundable exists.
+  const loves = await userLovesItem(user.id, catalogItemId);
+  const reco = loves ? await getCrossMediaReco(catalogItemId, user.id) : null;
+  const defaultBacklog = reco
+    ? await defaultBacklogForSeed(catalogItemId)
+    : null;
+  const discoveryBacklogs: DiscoveryBacklog[] = userBacklogs
+    .slice(0, 8)
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      itemCount: b.itemCount,
+      isSeedHome: b.id === defaultBacklog?.backlogId,
+    }));
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
@@ -80,6 +100,35 @@ export default async function ItemPage({
       </div>
 
       <Attribution source={item.source} mediaType={item.mediaType} />
+
+      {reco && (
+        <CrossMediaDiscovery
+          seed={{
+            catalogItemId: item.id,
+            title: item.title,
+            type: item.mediaType,
+            byline: item.byline,
+            year: item.year,
+            posterUrl: item.posterUrl,
+          }}
+          reco={{
+            catalogItemId: reco.targetCatalogItemId,
+            title: reco.targetTitle,
+            type: reco.targetMediaType,
+            byline: reco.targetByline,
+            year: reco.targetYear,
+            posterUrl: reco.targetPosterUrl,
+          }}
+          narrative={reco.narrative}
+          username={user.username ?? ""}
+          defaultBacklog={
+            defaultBacklog
+              ? { id: defaultBacklog.backlogId, name: defaultBacklog.backlogName }
+              : null
+          }
+          backlogs={discoveryBacklogs}
+        />
+      )}
     </main>
   );
 }

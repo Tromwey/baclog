@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { CARD_HEIGHT, CARD_WIDTH, type DoubleFeatureData } from "../types";
+import { CARD_HEIGHT, CARD_WIDTH, type DoubleFeatureData, type DoubleFeatureWork } from "../types";
 import { auraColors, discFace, normalizePalette } from "./palette-utils";
 
 /**
@@ -48,22 +48,34 @@ function Grain({ opacity = 0.08, strong = false }: { opacity?: number; strong?: 
   );
 }
 
-const SIDE_A_LABEL: Record<string, string> = { film: "FILM", series: "SERIES", album: "MUSIC" };
+/** Media-type → disc shape (album = vinyl, film/series = film reel). */
+type DiscShape = "reel" | "vinyl";
+const DISC_SHAPE: Record<string, DiscShape> = { film: "reel", series: "reel", album: "vinyl" };
+/** Media-type → mono side label (album reads MUSIC; video reads FILM/SERIES). */
+const SIDE_LABEL: Record<string, string> = { film: "FILM", series: "SERIES", album: "MUSIC" };
+
+/** Layout follows the SIDE (A left / B right), independent of disc shape. */
+const SIDE_POS: Record<"A" | "B", CSSProperties> = {
+  A: { left: 36, top: 60, transform: "rotate(-7deg)" },
+  B: { right: 26, top: 150, transform: "rotate(8deg)" },
+};
 
 /** Side A — film reel disc (generative, palette-driven, with reel perforations). */
 function ReelDisc({
   face,
   title,
   year,
+  side,
   sideLabel,
 }: {
   face: string;
   title: string;
   year?: number;
+  side: "A" | "B";
   sideLabel: string;
 }) {
   return (
-    <div style={{ position: "absolute", left: 36, top: 60, transform: "rotate(-7deg)", width: 380, height: 380 }}>
+    <div style={{ position: "absolute", ...SIDE_POS[side], width: 380, height: 380 }}>
       <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle at 36% 30%,#2c211c,#0f0b0a 72%)", boxShadow: "0 30px 60px rgba(0,0,0,.6),inset 0 0 0 3px #000" }} />
       <div style={{ position: "absolute", inset: 16, borderRadius: "50%", background: "repeating-conic-gradient(from 0deg,rgba(217,200,179,.14) 0 3.4deg,transparent 3.4deg 9deg)" }} />
       <div style={{ position: "absolute", inset: 58, borderRadius: "50%", overflow: "hidden", background: face }}>
@@ -76,15 +88,27 @@ function ReelDisc({
         {year != null && <div style={{ fontFamily: FONT.mono, fontSize: 12, letterSpacing: ".16em", color: C.text2, marginTop: 2 }}>{year}</div>}
       </div>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: 15, height: 15, margin: "-7px 0 0 -7px", borderRadius: "50%", background: "#0c0a09", boxShadow: "0 0 0 3px rgba(255,255,255,.05)" }} />
-      <div style={{ position: "absolute", left: 20, bottom: -2, fontFamily: FONT.mono, fontSize: 18, letterSpacing: ".14em", color: "#9DB06E" }}>A · {sideLabel}</div>
+      <div style={{ position: "absolute", ...(side === "A" ? { left: 20 } : { right: 20 }), bottom: -2, fontFamily: FONT.mono, fontSize: 18, letterSpacing: ".14em", color: side === "A" ? "#9DB06E" : C.accent }}>{side} · {sideLabel}</div>
     </div>
   );
 }
 
 /** Side B — vinyl disc (generative, palette-driven, with groove + sheen). */
-function VinylDisc({ face, title, creator }: { face: string; title: string; creator?: string }) {
+function VinylDisc({
+  face,
+  title,
+  creator,
+  side,
+  sideLabel,
+}: {
+  face: string;
+  title: string;
+  creator?: string;
+  side: "A" | "B";
+  sideLabel: string;
+}) {
   return (
-    <div style={{ position: "absolute", right: 26, top: 150, transform: "rotate(8deg)", width: 400, height: 400 }}>
+    <div style={{ position: "absolute", ...SIDE_POS[side], width: 400, height: 400 }}>
       <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden", background: face }}>
         <Grain opacity={0.22} strong />
       </div>
@@ -96,8 +120,27 @@ function VinylDisc({ face, title, creator }: { face: string; title: string; crea
         {creator && <div style={{ fontFamily: FONT.mono, fontSize: 11, letterSpacing: ".16em", color: C.text2, marginTop: 2 }}>{creator.toUpperCase()}</div>}
       </div>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: 15, height: 15, margin: "-7px 0 0 -7px", borderRadius: "50%", background: C.bg }} />
-      <div style={{ position: "absolute", right: 24, bottom: 6, fontFamily: FONT.mono, fontSize: 18, letterSpacing: ".14em", color: "#efe9df" }}>B · MUSIC</div>
+      <div style={{ position: "absolute", ...(side === "B" ? { right: 24 } : { left: 24 }), bottom: 6, fontFamily: FONT.mono, fontSize: 18, letterSpacing: ".14em", color: side === "B" ? "#efe9df" : "#9DB06E" }}>{side} · {sideLabel}</div>
     </div>
+  );
+}
+
+/** Pick the disc shape by media type: album → vinyl, film/series → reel. */
+function Disc({
+  work,
+  face,
+  side,
+}: {
+  work: DoubleFeatureWork;
+  face: string;
+  side: "A" | "B";
+}) {
+  const shape = DISC_SHAPE[work.type] ?? "reel";
+  const sideLabel = SIDE_LABEL[work.type] ?? work.type.toUpperCase();
+  return shape === "vinyl" ? (
+    <VinylDisc face={face} title={work.title} creator={work.creator} side={side} sideLabel={sideLabel} />
+  ) : (
+    <ReelDisc face={face} title={work.title} year={work.year} side={side} sideLabel={sideLabel} />
   );
 }
 
@@ -144,13 +187,8 @@ export function DoubleFeatureCard({ data }: { data: DoubleFeatureData }) {
       {/* Objects: two generative discs + giant lima "×" behind */}
       <div style={{ position: "relative", height: 600, marginTop: "auto" }}>
         <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", fontFamily: FONT.display, fontWeight: 800, fontSize: 520, lineHeight: 1, color: "rgba(216,255,62,.08)", letterSpacing: "-.04em" }}>×</div>
-        <ReelDisc
-          face={seedFace}
-          title={seed.title}
-          year={seed.year}
-          sideLabel={SIDE_A_LABEL[seed.type] ?? "FILM"}
-        />
-        <VinylDisc face={recoFace} title={reco.title} creator={reco.creator} />
+        <Disc work={seed} face={seedFace} side="A" />
+        <Disc work={reco} face={recoFace} side="B" />
       </div>
 
       {/* Per-work metadata */}

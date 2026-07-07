@@ -29,4 +29,10 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   /** Optional: Odesli keyless free tier when absent */
   ODESLI_API_KEY: process.env.ODESLI_API_KEY,
+  /**
+   * Optional (F3.5.5): when absent, the cross-media reco engine uses the
+   * deterministic FIXTURE provider (build/test never blocks on the key). When
+   * present, the real Claude LLM provider swaps in with no other code change.
+   */
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
 };

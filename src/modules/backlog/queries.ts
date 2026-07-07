@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems } from "@/db/schema";
 
@@ -59,6 +59,32 @@ export async function getBacklogsForUser(userId: string) {
 export type BacklogItemWithCatalog = Awaited<
   ReturnType<typeof getBacklogItems>
 >[number];
+
+/**
+ * F3.5.5 — does this user "love" this catalog item? A loved seed is the
+ * trigger for a cross-media reco. Loved = the user is obsessing over it, or
+ * completed it with a strong rating (≥4). Scoped to the user in the query.
+ */
+export async function userLovesItem(
+  userId: string,
+  catalogItemId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ status: backlogItems.status, rating: backlogItems.rating })
+    .from(backlogItems)
+    .where(
+      and(
+        eq(backlogItems.userId, userId),
+        eq(backlogItems.catalogItemId, catalogItemId),
+      ),
+    )
+    .orderBy(desc(backlogItems.statusChangedAt))
+    .limit(1);
+  if (!row) return false;
+  if (row.status === "obsessing_over") return true;
+  if (row.status === "completed" && (row.rating ?? 0) >= 4) return true;
+  return false;
+}
 
 /** Caller must have verified ownership (assertOwnsBacklog) first. */
 export async function getBacklogItems(backlogId: string) {

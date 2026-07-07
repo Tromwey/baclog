@@ -19,6 +19,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const profile = await getPublicProfile((await params).username);
   if (!profile) return {};
+  // OG image = the first backlog's first cover, so the primary share
+  // destination previews with an image (consistent with backlog/page.tsx).
+  const firstPoster = profile.backlogs
+    .flatMap((b) => b.coverUrls)
+    .find(Boolean);
   return {
     title: `${profile.displayName} · Baclog`,
     description: `Los backlogs de ${profile.displayName} — películas, series y música.`,
@@ -26,6 +31,7 @@ export async function generateMetadata({
       title: `${profile.displayName} en Baclog`,
       description: `${profile.backlogs.length} backlogs de obsesiones.`,
       type: "profile",
+      ...(firstPoster ? { images: [firstPoster] } : {}),
     },
   };
 }
