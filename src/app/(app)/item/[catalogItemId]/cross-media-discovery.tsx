@@ -277,7 +277,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
           <p className="mt-0.5">{[seed.byline, seed.year].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="flex-1 text-right">
-          <p className="tracking-[0.14em] text-accent">B · {TYPE_LABEL[reco.type]} · NUEVO</p>
+          <p className="tracking-[0.14em] text-accent">B · {TYPE_LABEL[reco.type]}</p>
           <p className="mt-1 font-serif text-[15px] italic tracking-normal text-text">
             {reco.title}
           </p>

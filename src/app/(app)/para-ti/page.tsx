@@ -7,6 +7,7 @@ import {
   type DiscoveryBacklog,
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
 import { DiscoverMore } from "./discover-more";
+import { FeatureAura } from "./feature-aura";
 
 /**
  * F3.5.6 — Recommendations as a first-class destination. The Double Feature is
@@ -32,15 +33,22 @@ export default async function ParaTiPage() {
 
   const backlogs = await getBacklogsForUser(user.id);
   const pickerBase = backlogs.slice(0, 8);
+  const primary = feed?.items[0];
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-24 pt-8 text-text">
+    <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg px-4 pb-24 pt-8 text-text">
+      {primary && (
+        <FeatureAura
+          seedPosterUrl={primary.seed.posterUrl}
+          recoPosterUrl={primary.reco.targetPosterUrl}
+        />
+      )}
       <header>
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
           Para ti
         </p>
         <h1 className="mt-2 font-display text-[30px] font-bold leading-tight tracking-[-0.01em] text-text">
-          Tus double features
+          Tu próxima obsesión
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-text-2">
           Conexiones cross-media hechas de lo que amas. Cada una es una tarjeta

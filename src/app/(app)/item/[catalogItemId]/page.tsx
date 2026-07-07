@@ -112,7 +112,7 @@ export default async function ItemPage({
               Para ti
             </p>
             <p className="mt-1 font-display text-lg font-bold leading-tight text-text">
-              Hay un double feature esperándote
+              Hay una conexión esperándote
             </p>
             <p className="mt-1 text-sm leading-snug text-text-2">
               Amaste esto — te armamos una conexión cross-media lista para
