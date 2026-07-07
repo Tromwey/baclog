@@ -54,19 +54,23 @@ export function FeatureAura({
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden transition-opacity duration-700"
       style={{ opacity: colors ? 1 : 0 }}
     >
+      {/* Dual aura à la the Double Feature design: a broad top-center glow from
+          Side A and a broad bottom-center glow from Side B, each punchy at the
+          edge, darkening through a shaded mid-stop, then transparent. The dark
+          middle is what keeps the discs + narrative legible. */}
       <div
-        className="absolute inset-x-0 top-0 h-[60%]"
+        className="absolute inset-0"
         style={{
           background: colors
-            ? `radial-gradient(125% 92% at 50% 0%, ${aura(colors.top, 0.46)}, ${aura(colors.top, 0.16)} 40%, transparent 70%)`
+            ? `radial-gradient(100% 62% at 50% 0%, ${bright(colors.top)} 0%, ${shade(colors.top)} 30%, transparent 68%)`
             : undefined,
         }}
       />
       <div
-        className="absolute inset-x-0 bottom-0 h-[66%]"
+        className="absolute inset-0"
         style={{
           background: colors
-            ? `radial-gradient(125% 92% at 50% 92%, ${aura(colors.bottom, 0.46)}, ${aura(colors.bottom, 0.16)} 42%, transparent 72%)`
+            ? `radial-gradient(100% 62% at 50% 100%, ${bright(colors.bottom)} 0%, ${shade(colors.bottom)} 30%, transparent 68%)`
             : undefined,
         }}
       />
@@ -99,12 +103,24 @@ function pickVibrant(hexes: string[]): HSL | null {
   return first ? { h: first.h, s: Math.max(0.25, first.s), l: 0.5 } : null;
 }
 
-/** Clamp a color into a range that stays visible over the near-black bg. */
-function aura(c: HSL, alpha: number): string {
+/** Bright source stop — the vivid color at the aura's origin (the edge). */
+function bright(c: HSL): string {
   return hslToRgba(
-    { h: c.h, s: Math.max(0.45, c.s), l: Math.min(0.6, Math.max(0.44, c.l)) },
-    alpha,
+    { h: c.h, s: Math.max(0.55, c.s), l: clamp(c.l, 0.46, 0.6) },
+    0.82,
   );
+}
+
+/** Shaded mid stop — a darkened tone so the screen's middle stays legible. */
+function shade(c: HSL): string {
+  return hslToRgba(
+    { h: c.h, s: Math.max(0.45, c.s), l: clamp(c.l, 0.46, 0.6) * 0.42 },
+    0.5,
+  );
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
 }
 
 function rotate(c: HSL, deg: number): HSL {
