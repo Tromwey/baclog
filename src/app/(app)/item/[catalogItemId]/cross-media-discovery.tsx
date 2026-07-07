@@ -86,19 +86,25 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
   const accept = useCallback(async () => {
     if (busy) return;
     setBusy(true);
-    const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
-    const res = await acceptRecoAction({
-      seedCatalogItemId: seed.catalogItemId,
-      targetCatalogItemId: reco.catalogItemId,
-      paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
-    });
-    setBusy(false);
-    if ("error" in res) return;
-    setStatus("accepted");
-    setAddedTo(res.backlogName);
-    setSel(res.backlogId);
-    setToast(true);
-    router.refresh();
+    try {
+      const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
+      const res = await acceptRecoAction({
+        seedCatalogItemId: seed.catalogItemId,
+        targetCatalogItemId: reco.catalogItemId,
+        paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+      });
+      if ("error" in res) return;
+      setStatus("accepted");
+      setAddedTo(res.backlogName);
+      setSel(res.backlogId);
+      setToast(true);
+      router.refresh();
+    } catch {
+      // Action threw (e.g. expired session, FK violation) — swallow so the
+      // buttons re-enable via finally instead of getting stuck disabled.
+    } finally {
+      setBusy(false);
+    }
   }, [busy, reco.catalogItemId, reco.posterUrl, seed.catalogItemId, router]);
 
   const dismiss = useCallback(() => {
@@ -176,33 +182,43 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
   const applySheet = useCallback(async () => {
     if (!sel || busy) return;
     setBusy(true);
-    const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
-    const res = await acceptRecoToBacklogAction({
-      backlogId: sel,
-      targetCatalogItemId: reco.catalogItemId,
-      paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
-    });
-    setBusy(false);
-    if ("error" in res) return;
-    setStatus("accepted");
-    setAddedTo(res.backlogName);
-    setToast(true);
-    setSheetOpen(false);
-    router.refresh();
+    try {
+      const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
+      const res = await acceptRecoToBacklogAction({
+        backlogId: sel,
+        targetCatalogItemId: reco.catalogItemId,
+        paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+      });
+      if ("error" in res) return;
+      setStatus("accepted");
+      setAddedTo(res.backlogName);
+      setToast(true);
+      setSheetOpen(false);
+      router.refresh();
+    } catch {
+      // Action threw — re-enable via finally rather than stay stuck disabled.
+    } finally {
+      setBusy(false);
+    }
   }, [sel, busy, reco.catalogItemId, reco.posterUrl, router]);
 
   const createBacklog = useCallback(async () => {
     const name = newName.trim();
     if (!name || busy) return;
     setBusy(true);
-    const res = await createBacklogAction({ name });
-    setBusy(false);
-    if ("error" in res) return;
-    const b: DiscoveryBacklog = { id: res.id, name, itemCount: 0 };
-    setBacklogs((prev) => [b, ...prev]);
-    setSel(res.id);
-    setCreating(false);
-    setNewName("");
+    try {
+      const res = await createBacklogAction({ name });
+      if ("error" in res) return;
+      const b: DiscoveryBacklog = { id: res.id, name, itemCount: 0 };
+      setBacklogs((prev) => [b, ...prev]);
+      setSel(res.id);
+      setCreating(false);
+      setNewName("");
+    } catch {
+      // Action threw — re-enable via finally rather than stay stuck disabled.
+    } finally {
+      setBusy(false);
+    }
   }, [newName, busy]);
 
   const accepted = status === "accepted";

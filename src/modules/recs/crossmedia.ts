@@ -107,9 +107,11 @@ export async function getCrossMediaReco(
   // charging — the user isn't penalized for a generation that never happened.
   if (!proposal) return null;
 
-  // 4) Charge the meter now that a real generation was produced (race-safe
-  //    upsert with a cap guard; a concurrent pair may exceed by one — soft cap).
-  await tryChargeGeneration(userId);
+  // 4) Charge the meter — this is the HARD cap enforcement (the step-2 read is
+  //    only a fast pre-check that can race across the provider round-trip). The
+  //    guarded upsert returns false when already at the cap; if so, discard this
+  //    over-cap generation rather than deliver it.
+  if (!(await tryChargeGeneration(userId))) return null;
 
   // 5) GROUNDING (mandatory): resolve the proposed title against the catalog.
   //    Only a real, addable catalog_item is surfaced (LLMs hallucinate titles).
