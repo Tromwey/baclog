@@ -20,7 +20,7 @@ const STYLES: { id: LabStyle; label: string }[] = [
   { id: "receipt", label: "Receipt" },
   { id: "ticket", label: "Ticket" },
   { id: "pattern", label: "Patrón" },
-  { id: "double-feature", label: "Double Feature" },
+  { id: "double-feature", label: "Conexión" },
 ];
 
 export default function PrototypePage() {

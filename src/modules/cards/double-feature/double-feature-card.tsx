@@ -174,7 +174,7 @@ export function DoubleFeatureCard({ data }: { data: DoubleFeatureData }) {
 
       {/* Header */}
       <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontFamily: FONT.mono, textTransform: "uppercase", letterSpacing: ".16em", fontSize: 22, color: C.text2 }}>
-        <span>baclog · double feature</span>
+        <span>baclog · una conexión</span>
         {editionLabel && <span>{editionLabel}</span>}
       </div>
 
@@ -235,7 +235,7 @@ export function DoubleFeatureCard({ data }: { data: DoubleFeatureData }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 24 }}>
           <div>
-            <div style={{ fontFamily: FONT.mono, fontSize: 14, letterSpacing: ".16em", color: C.text3, textTransform: "uppercase" }}>arma tu double feature en</div>
+            <div style={{ fontFamily: FONT.mono, fontSize: 14, letterSpacing: ".16em", color: C.text3, textTransform: "uppercase" }}>arma la tuya en</div>
             <div style={{ fontFamily: FONT.display, fontWeight: 800, fontSize: 36, letterSpacing: "-.01em", color: C.text, marginTop: 5 }}>
               baclog.app<span style={{ color: C.accent }}>/{username}</span>
             </div>

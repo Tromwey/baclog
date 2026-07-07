@@ -53,7 +53,7 @@ export function drawDoubleFeature(
   ctx.textAlign = "left";
   ctx.fillStyle = C.text2;
   ctx.font = MONO(30, true);
-  ctx.fillText("BACLOG · DOUBLE FEATURE", 64, 130);
+  ctx.fillText("BACLOG · UNA CONEXIÓN", 64, 130);
   if (edition != null) {
     ctx.textAlign = "right";
     ctx.fillText(`Nº ${String(edition).padStart(3, "0")}`, CARD_WIDTH - 64, 130);
@@ -150,7 +150,7 @@ export function drawDoubleFeature(
   // Watermark / CTA
   ctx.fillStyle = C.text3;
   ctx.font = MONO(26, true);
-  ctx.fillText("ARMA TU DOUBLE FEATURE EN", 64, CARD_HEIGHT - 120);
+  ctx.fillText("ARMA LA TUYA EN", 64, CARD_HEIGHT - 120);
   ctx.fillStyle = C.text;
   ctx.font = DISPLAY(52, 800);
   const url = footerUrl(username);
