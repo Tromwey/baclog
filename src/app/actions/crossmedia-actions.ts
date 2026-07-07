@@ -5,6 +5,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { assertUser } from "@/authz";
 import { db } from "@/db";
 import { backlogItems, backlogs } from "@/db/schema";
+import {
+  generateNextUncachedReco,
+  type DiscoverResult,
+} from "@/modules/recs/crossmedia";
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -133,6 +137,29 @@ export async function acceptRecoToBacklogAction(input: {
 
   revalidatePath(`/backlogs/${backlog.id}`);
   return { backlogId: backlog.id, backlogName: backlog.name };
+}
+
+/**
+ * F3.5.6 — "descubre otra conexión" on /para-ti. Generates ONE new pairing for
+ * the next uncached loved seed (the engine enforces the monthly cap + grounding),
+ * then revalidates so the feed re-reads cache-first (no extra generation on the
+ * refresh). AUTHZ: assertUser gates it; the engine only ever sees item metadata
+ * (Pilar 4) and the userId for the meter — never sent to the LLM.
+ */
+export async function discoverNextRecoAction(): Promise<{
+  result: DiscoverResult;
+}> {
+  const user = await assertUser();
+  let result: DiscoverResult;
+  try {
+    result = await generateNextUncachedReco(user.id);
+  } catch (err) {
+    // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
+    console.error("[crossmedia] discover next failed:", err);
+    result = "failed";
+  }
+  revalidatePath("/para-ti");
+  return { result };
 }
 
 /** Default target, creating "Descubrimientos" as the terminal fallback. */

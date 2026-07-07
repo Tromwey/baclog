@@ -7,6 +7,7 @@ import {
   crossMediaRecUsage,
 } from "@/db/schema";
 import { unifiedSearch } from "@/modules/catalog/search";
+import { getLovedSeeds, type LovedSeed } from "@/modules/backlog/queries";
 import {
   crossMediaProvider,
   type CrossMediaProposal,
@@ -257,6 +258,124 @@ function toReco(
     provider: providerId,
     cached,
   };
+}
+
+/* ============================================================
+   F3.5.6 — /para-ti feed: the cross-media reco as a first-class destination.
+   Reuses this same engine (readCache · getCrossMediaReco · remainingGenerations)
+   over the user's LOVED seeds, so the cap, per-seed cache, grounding, and
+   provider selection stay exactly as shipped for the item page.
+   ============================================================ */
+
+/** One Double Feature in the feed: a loved seed + its grounded reco. */
+export interface CrossMediaFeedItem {
+  seed: {
+    catalogItemId: string;
+    title: string;
+    type: "film" | "series" | "album";
+    byline: string | null;
+    year: number | null;
+    /** Real cover for in-app display ONLY (ADR-008: never in the export). */
+    posterUrl: string | null;
+  };
+  reco: CrossMediaReco;
+  /** The seed's home backlog — the default accept target (its Side A backlog). */
+  defaultBacklog: { id: string; name: string };
+}
+
+export interface CrossMediaFeed {
+  items: CrossMediaFeedItem[];
+  /** Remaining monthly generations (meter display). */
+  remaining: number;
+  cap: number;
+  /** False → the user has no eligible loved items yet (clean empty state). */
+  hasLovedItems: boolean;
+}
+
+function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
+  return {
+    seed: {
+      catalogItemId: seed.catalogItemId,
+      title: seed.title,
+      type: seed.mediaType,
+      byline: seed.byline,
+      year: seed.year,
+      posterUrl: seed.posterUrl,
+    },
+    reco,
+    defaultBacklog: { id: seed.backlogId, name: seed.backlogName },
+  };
+}
+
+/**
+ * Build the /para-ti feed. CACHE-FIRST: every already-generated pairing is free
+ * to show (re-visits never charge). To satisfy "renders ≥1 from loved items" on
+ * a first visit, spends AT MOST ONE generation — on the most-recent loved seed —
+ * and only when under the cap. That single bounded attempt keeps a first load
+ * from bursting the meter; more pairings come from the explicit "discover
+ * another" action (generateNextUncachedReco).
+ */
+export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed> {
+  const cap = MONTHLY_GENERATION_CAP;
+  const seeds = await getLovedSeeds(userId);
+  if (seeds.length === 0) {
+    return {
+      items: [],
+      remaining: await remainingGenerations(userId),
+      cap,
+      hasLovedItems: false,
+    };
+  }
+
+  const items: CrossMediaFeedItem[] = [];
+  for (const seed of seeds) {
+    const reco = await readCache(seed.catalogItemId);
+    if (reco) items.push(toFeedItem(seed, reco));
+  }
+
+  // Nothing cached yet → one bounded generation so the page is never empty for
+  // a user who has loved items and meter left.
+  if (items.length === 0 && (await remainingGenerations(userId)) > 0) {
+    const reco = await getCrossMediaReco(seeds[0].catalogItemId, userId);
+    if (reco) items.push(toFeedItem(seeds[0], reco));
+  }
+
+  return {
+    items,
+    remaining: await remainingGenerations(userId),
+    cap,
+    hasLovedItems: true,
+  };
+}
+
+/** Outcome of an explicit "discover another connection" request. */
+export type DiscoverResult = "generated" | "cap_reached" | "no_more" | "failed";
+
+/**
+ * User-initiated generation for the /para-ti "discover another" button. Finds
+ * the first loved seed with no cached pairing and spends ONE generation on it
+ * (getCrossMediaReco enforces cap + grounding). Bounded to a single seed per
+ * call so the meter only moves on deliberate taps.
+ */
+export async function generateNextUncachedReco(
+  userId: string,
+): Promise<DiscoverResult> {
+  const seeds = await getLovedSeeds(userId);
+  if (seeds.length === 0) return "no_more";
+
+  let nextUncached: LovedSeed | null = null;
+  for (const seed of seeds) {
+    const cached = await readCache(seed.catalogItemId);
+    if (!cached) {
+      nextUncached = seed;
+      break;
+    }
+  }
+  if (!nextUncached) return "no_more";
+  if ((await remainingGenerations(userId)) <= 0) return "cap_reached";
+
+  const reco = await getCrossMediaReco(nextUncached.catalogItemId, userId);
+  return reco ? "generated" : "failed";
 }
 
 /** Remaining generations this month for a user (for UI / meter display). */

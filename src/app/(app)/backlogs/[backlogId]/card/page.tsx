@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
 import { toCardBacklog } from "@/modules/cards/adapter";
 import { getBacklogItems } from "@/modules/backlog/queries";
-import { CardGenerator } from "./card-generator";
+import { CardExporter } from "@/components/card-exporter";
 
 export default async function CardPage({
   params,
@@ -30,9 +30,14 @@ export default async function CardPage({
     items,
   );
 
+  // F3.5.7 — sharing a BACKLOG exports the RECEIPT (the typographic list of its
+  // items), directly, with no generic style picker.
   return (
-    <CardGenerator
+    <CardExporter
       backlog={cardBacklog}
+      style="receipt"
+      eyebrow={cardBacklog.name}
+      subtitle="tu backlog, como recibo"
       publicUrl={
         user.username && user.isPublic
           ? `https://baclog.app/${user.username}`

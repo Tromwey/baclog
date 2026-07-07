@@ -1,8 +1,25 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
 import { buildLatestRecap } from "@/modules/backlog/recap";
-import { CardGenerator } from "@/app/(app)/backlogs/[backlogId]/card/card-generator";
+import { CardExporter } from "@/components/card-exporter";
 
+const ES_MONTHS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "2026-07" → "tu era de julio" (sistema-diseno §7 · F3.3 "tu era de {mes}"). */
+function esEraLabel(eraKey: string): string {
+  const month = ES_MONTHS[Number(eraKey.slice(5)) - 1] ?? "este mes";
+  return `tu era de ${month}`;
+}
+
+/**
+ * F3.5.7 — a backlog's monthly ERA exports the PATTERN card as the monthly
+ * compilation ("tu era de {mes}"). This is the SAME F3.3 recap ritual (the
+ * recap cron on day 1 drives users here) — not a second monthly-recap
+ * mechanism: the pattern card IS the era recap.
+ */
 export default async function RecapPage() {
   const user = await requireUser();
   const recap = await buildLatestRecap(user.id, user.username);
@@ -27,26 +44,23 @@ export default async function RecapPage() {
     );
   }
 
+  const label = esEraLabel(recap.eraKey);
+
   return (
-    <div className="bg-bg">
-      <div className="mx-auto w-full max-w-md px-4 pt-8 text-center text-text">
-        <p className="font-mono text-xs font-bold uppercase tracking-widest text-amber-300">
-          ✦ Tu {recap.label}
-        </p>
-        <p className="mt-1 text-sm text-text-2">
-          {recap.totalItems} obsesiones · {recap.completedCount} completadas
-          {recap.topGenre ? ` · ${recap.topGenre}` : ""}
-        </p>
-      </div>
-      {/* Reuses the exact M2 card generator (receipt/ticket/pattern + share) */}
-      <CardGenerator
-        backlog={recap.cardBacklog}
-        publicUrl={
-          user.username && user.isPublic
-            ? `https://baclog.app/${user.username}`
-            : null
-        }
-      />
-    </div>
+    // The pattern card renders the era's items as its generative field; the
+    // Spanish era label becomes the card title (email/cron path untouched).
+    <CardExporter
+      backlog={{ ...recap.cardBacklog, name: label }}
+      style="pattern"
+      eyebrow={label}
+      subtitle={`${recap.totalItems} obsesiones · ${recap.completedCount} completadas${
+        recap.topGenre ? ` · ${recap.topGenre}` : ""
+      }`}
+      publicUrl={
+        user.username && user.isPublic
+          ? `https://baclog.app/${user.username}`
+          : null
+      }
+    />
   );
 }
