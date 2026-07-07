@@ -51,7 +51,7 @@ export function FeatureAura({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden transition-opacity duration-700"
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden transition-opacity duration-700"
       style={{ opacity: colors ? 1 : 0 }}
     >
       <div
@@ -63,10 +63,10 @@ export function FeatureAura({
         }}
       />
       <div
-        className="absolute inset-x-0 bottom-0 h-[60%]"
+        className="absolute inset-x-0 bottom-0 h-[66%]"
         style={{
           background: colors
-            ? `radial-gradient(125% 92% at 50% 100%, ${aura(colors.bottom, 0.46)}, ${aura(colors.bottom, 0.16)} 40%, transparent 70%)`
+            ? `radial-gradient(125% 92% at 50% 92%, ${aura(colors.bottom, 0.46)}, ${aura(colors.bottom, 0.16)} 42%, transparent 72%)`
             : undefined,
         }}
       />

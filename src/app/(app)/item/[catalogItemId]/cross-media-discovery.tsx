@@ -56,6 +56,12 @@ export interface CrossMediaDiscoveryProps {
    * screen, for the /para-ti destination (F3.5.6, avoids screen-in-a-screen).
    */
   variant?: "panel" | "page";
+  /**
+   * When provided (the /para-ti queue), the × advances to the next pairing
+   * instead of showing a local "descartado" state — the discovery IS the
+   * screen, so dismissing moves the whole screen forward.
+   */
+  onDismiss?: () => void;
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -256,15 +262,26 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       </p>
 
       {/* Discs with REAL covers (in-app artwork allowed) */}
-      <div className="relative mt-6 flex items-center justify-center">
+      <div
+        className={`relative flex items-center justify-center ${isPage ? "mt-10" : "mt-6"}`}
+      >
         <span
           aria-hidden
-          className="pointer-events-none absolute font-display text-[130px] font-extrabold leading-none text-accent/[0.08]"
+          className={`pointer-events-none absolute font-display font-extrabold leading-none text-accent/[0.08] ${
+            isPage ? "text-[200px]" : "text-[130px]"
+          }`}
         >
           ×
         </span>
-        <Cover work={seed} rotate="-rotate-6" z="z-20" />
-        <Cover work={reco} rotate="rotate-6" z="z-10" faded={dismissed} className="-ml-4" />
+        <Cover work={seed} rotate="-rotate-6" z="z-20" big={isPage} />
+        <Cover
+          work={reco}
+          rotate="rotate-6"
+          z="z-10"
+          faded={dismissed}
+          big={isPage}
+          className={isPage ? "-ml-6" : "-ml-4"}
+        />
       </div>
 
       {/* Per-work metadata */}
@@ -309,7 +326,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       <div className="mt-4 flex items-center gap-2.5">
         <button
           aria-label="Descartar"
-          onClick={dismiss}
+          onClick={props.onDismiss ?? dismiss}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-lg text-text-2 transition-colors hover:border-text-3 disabled:opacity-40"
           disabled={busy}
         >
@@ -494,19 +511,22 @@ function Cover({
   rotate,
   z,
   faded,
+  big,
   className,
 }: {
   work: DiscoveryWork;
   rotate: string;
   z: string;
   faded?: boolean;
+  /** Larger disc for the full-screen /para-ti layout. */
+  big?: boolean;
   className?: string;
 }) {
   return (
     <div
-      className={`relative ${z} ${rotate} ${className ?? ""} h-32 w-32 shrink-0 rounded-full transition-opacity ${
-        faded ? "opacity-30" : ""
-      }`}
+      className={`relative ${z} ${rotate} ${className ?? ""} ${
+        big ? "h-44 w-44" : "h-32 w-32"
+      } shrink-0 rounded-full transition-opacity ${faded ? "opacity-30" : ""}`}
       style={{ boxShadow: "0 14px 30px rgba(0,0,0,0.5)" }}
     >
       <div className="absolute inset-2 overflow-hidden rounded-full bg-surface-2">
