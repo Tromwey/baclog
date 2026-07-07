@@ -54,23 +54,23 @@ export function FeatureAura({
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden transition-opacity duration-700"
       style={{ opacity: colors ? 1 : 0 }}
     >
-      {/* Dual aura à la the Double Feature design: a broad top-center glow from
-          Side A and a broad bottom-center glow from Side B, each punchy at the
-          edge, darkening through a shaded mid-stop, then transparent. The dark
-          middle is what keeps the discs + narrative legible. */}
+      {/* Exact dual gradient from "Double Feature - Final" (frame 1d, in-app):
+          Side A from the top-left (22% 0%, ~50% tall), Side B from the
+          bottom-right (80% 100%, ~54% tall) — each an OPAQUE source color →
+          a darker shade of it → the bg/transparent. Strong + diagonal. */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-x-0 top-0 h-1/2"
         style={{
           background: colors
-            ? `radial-gradient(100% 62% at 50% 0%, ${bright(colors.top)} 0%, ${shade(colors.top)} 30%, transparent 68%)`
+            ? `radial-gradient(120% 88% at 22% 0%, ${src(colors.top)} 0%, ${shade(colors.top)} 34%, #0B0B0D 74%)`
             : undefined,
         }}
       />
       <div
-        className="absolute inset-0"
+        className="absolute inset-x-0 bottom-0 h-[54%]"
         style={{
           background: colors
-            ? `radial-gradient(100% 62% at 50% 100%, ${bright(colors.bottom)} 0%, ${shade(colors.bottom)} 30%, transparent 68%)`
+            ? `radial-gradient(120% 82% at 80% 100%, ${src(colors.bottom)} 0%, ${shade(colors.bottom)} 32%, rgba(11,11,13,0) 70%)`
             : undefined,
         }}
       />
@@ -103,19 +103,16 @@ function pickVibrant(hexes: string[]): HSL | null {
   return first ? { h: first.h, s: Math.max(0.25, first.s), l: 0.5 } : null;
 }
 
-/** Bright source stop — the vivid color at the aura's origin (the edge). */
-function bright(c: HSL): string {
-  return hslToRgba(
-    { h: c.h, s: Math.max(0.55, c.s), l: clamp(c.l, 0.46, 0.6) },
-    0.82,
-  );
+/** Opaque source stop — the vivid color at the aura's origin (matches the design). */
+function src(c: HSL): string {
+  return hslToRgba({ h: c.h, s: Math.max(0.5, c.s), l: clamp(c.l, 0.42, 0.54) }, 1);
 }
 
-/** Shaded mid stop — a darkened tone so the screen's middle stays legible. */
+/** Darker shade stop — same hue, ~half lightness (e.g. #C7462F → #5a231a). */
 function shade(c: HSL): string {
   return hslToRgba(
-    { h: c.h, s: Math.max(0.45, c.s), l: clamp(c.l, 0.46, 0.6) * 0.42 },
-    0.5,
+    { h: c.h, s: Math.max(0.45, c.s * 0.92), l: clamp(c.l, 0.42, 0.54) * 0.46 },
+    1,
   );
 }
 
