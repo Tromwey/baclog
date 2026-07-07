@@ -1,26 +1,170 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Baclog design system — F3.5.1
+   Source of truth: requerimientos/sistema-diseno.md §2–§4.
+   Tokens live here as CSS variables and are surfaced to Tailwind
+   utilities via @theme (semantic names, not scattered hex).
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Base */
+  --bg: #0b0b0d; /* near-black frío — NOT Material's #121212 */
+  --surface-1: #141417; /* cards */
+  --surface-2: #1c1c21; /* raised / hover */
+  --surface-3: #26262c; /* inputs, chips */
+  --line: #2e2e36; /* hairlines / dividers */
+
+  /* Texto */
+  --text: #f4f3ee; /* off-white cálido — NOT pure #fff */
+  --text-2: #a9a8b2; /* secondary — mauve-grey */
+  --text-3: #6c6b76; /* tertiary / metadata / watermark */
+
+  /* Firma (lima) */
+  --accent: #d8ff3e; /* CTA primario, activos, focus, marca */
+  --accent-press: #c2e82f; /* pressed */
+  --accent-soft: #d8ff3e1a; /* glow / focus ring / selección */
+
+  /* Hot (rojo) — estado + celebración, uso escaso */
+  --hot: #ff2d55;
+  --hot-soft: #ff2d5522;
+
+  /* Hues de estado (mayormente como puntos/tints) */
+  --radar: #7aa2ff; /* On my radar */
+  --obsessing: #ff2d55; /* Obsessing over */
+  --completed: #d8ff3e; /* Completed */
+
+  /* Gradiente firma (rugoso, con grano — nunca glossy) */
+  --grad-aura: radial-gradient(
+    120% 120% at 20% 0%,
+    #ff2d55 0%,
+    #7a1b4a 40%,
+    #0b0b0d 78%
+  );
+
+  /* Radios — redondeado, no burbuja */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-full: 999px;
+
+  /* Spacing 4pt */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* Glass — SOLO acento sobre fondo controlado */
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(20px) saturate(140%);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+
+  /* Sombras — glow, no drop */
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --shadow-accent: 0 0 24px var(--accent-soft);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 420ms;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Space Mono", ui-monospace, monospace;
+  /* Colors → Tailwind utilities (bg-bg, text-text, border-line, …) */
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-press: var(--accent-press);
+  --color-hot: var(--hot);
+  --color-radar: var(--radar);
+  --color-obsessing: var(--obsessing);
+  --color-completed: var(--completed);
+
+  /* Radii */
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: var(--r-full);
+
+  /* Fonts — next/font sets these CSS vars on <html> (see layout.tsx).
+     Space Mono is loaded as a real document font for the canvas cards,
+     so it also stays available as a plain family name. */
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-hanken), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-space-mono), "Space Mono", ui-monospace, monospace;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    background: var(--bg);
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+
+  /* Accent focus ring on interactive elements */
+  :where(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Signature aura + grain, reusable across public surfaces and cards.
+   Grain is the "analog artifact" detail (sistema-diseno §5) that separates
+   posteable from AI-slop; it never carries information, only texture. */
+.bl-aura {
+  background: var(--grad-aura);
+}
+
+.bl-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 130px 130px;
+}
+
+@keyframes bl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bl-rise {
+    animation: bl-rise var(--dur-base) var(--ease-out) both;
+  }
 }

@@ -8,11 +8,24 @@ import {
   drawCard,
 } from "@/modules/cards/render";
 import type { CardBacklog, CardStyle } from "@/modules/cards/types";
+import {
+  DoubleFeaturePreview,
+  SAMPLE_DOUBLE_FEATURE,
+} from "@/modules/cards/double-feature";
+import { Button, MonoMeta } from "@/components/ui";
 
-const STYLES: { id: CardStyle; label: string }[] = [
+/**
+ * "double-feature" is a preview-only lane in this group: it renders the ⭐
+ * cross-media SHARE card with sample data so the style is visible + reviewable.
+ * The F3.5.5 agent feeds real seed×reco data and wires its PNG export.
+ */
+type GeneratorStyle = CardStyle | "double-feature";
+
+const STYLES: { id: GeneratorStyle; label: string }[] = [
   { id: "receipt", label: "Receipt" },
   { id: "ticket", label: "Ticket" },
   { id: "pattern", label: "Patrón" },
+  { id: "double-feature", label: "Double Feature" },
 ];
 
 /** F2.14/F2.16 — the M1 generator fed with real backlog data. */
@@ -24,11 +37,12 @@ export function CardGenerator({
   publicUrl: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [style, setStyle] = useState<CardStyle>("receipt");
+  const [style, setStyle] = useState<GeneratorStyle>("receipt");
   const [ticketIndex, setTicketIndex] = useState(0);
   const [fontsReady, setFontsReady] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDoubleFeature = style === "double-feature";
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +64,7 @@ export function CardGenerator({
   }, []);
 
   useEffect(() => {
-    if (!fontsReady) return;
+    if (!fontsReady || isDoubleFeature) return;
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx) return;
     drawCard(
@@ -59,7 +73,7 @@ export function CardGenerator({
       backlog,
       backlog.items[ticketIndex % backlog.items.length],
     );
-  }, [style, ticketIndex, fontsReady, backlog]);
+  }, [style, ticketIndex, fontsReady, backlog, isDoubleFeature]);
 
   const share = useCallback(() => {
     const canvas = canvasRef.current;
@@ -103,23 +117,21 @@ export function CardGenerator({
   const item = backlog.items[ticketIndex % backlog.items.length];
 
   return (
-    <main className="flex min-h-dvh flex-col items-center bg-neutral-950 px-4 pb-8 pt-6 text-neutral-100">
+    <main className="flex min-h-dvh flex-col items-center bg-bg px-4 pb-8 pt-6 text-text">
       <header className="mb-4 text-center">
-        <h1 className="font-mono text-sm font-bold tracking-[0.3em]">
-          {backlog.name.toUpperCase()}
-        </h1>
-        <p className="text-xs text-neutral-400">elige estilo y comparte</p>
+        <MonoMeta className="text-text-2">{backlog.name}</MonoMeta>
+        <p className="mt-1 text-xs text-text-3">elige estilo y comparte</p>
       </header>
 
-      <div className="mb-4 flex rounded-full bg-neutral-800 p-1 text-sm">
+      <div className="mb-4 flex flex-wrap justify-center gap-1 rounded-full bg-surface-2 p-1 text-sm">
         {STYLES.map((s) => (
           <button
             key={s.id}
             onClick={() => setStyle(s.id)}
             className={`rounded-full px-4 py-1.5 transition-colors ${
               style === s.id
-                ? "bg-neutral-100 font-semibold text-neutral-900"
-                : "text-neutral-300"
+                ? "bg-accent font-semibold text-bg"
+                : "text-text-2 hover:text-text"
             }`}
           >
             {s.label}
@@ -128,14 +140,24 @@ export function CardGenerator({
       </div>
 
       <div className="relative w-full max-w-[340px]">
-        <canvas
-          ref={canvasRef}
-          width={CARD_WIDTH}
-          height={CARD_HEIGHT}
-          className="aspect-[9/16] w-full rounded-xl shadow-2xl shadow-black/60"
-        />
-        {!fontsReady && (
-          <div className="absolute inset-0 animate-pulse rounded-xl bg-neutral-800" />
+        {isDoubleFeature ? (
+          <DoubleFeaturePreview
+            data={{ ...SAMPLE_DOUBLE_FEATURE, username: backlog.username || "tu" }}
+            width={340}
+            className="w-full"
+          />
+        ) : (
+          <>
+            <canvas
+              ref={canvasRef}
+              width={CARD_WIDTH}
+              height={CARD_HEIGHT}
+              className="aspect-[9/16] w-full rounded-[var(--r-lg)] shadow-[var(--shadow-card)]"
+            />
+            {!fontsReady && (
+              <div className="absolute inset-0 animate-pulse rounded-[var(--r-lg)] bg-surface-2" />
+            )}
+          </>
         )}
       </div>
 
@@ -143,7 +165,7 @@ export function CardGenerator({
         <div className="mt-3 flex w-full max-w-[340px] items-center justify-between text-sm">
           <button
             aria-label="Ítem anterior"
-            className="rounded-full bg-neutral-800 px-4 py-2"
+            className="rounded-full bg-surface-2 px-4 py-2 text-text"
             onClick={() =>
               setTicketIndex(
                 (i) => (i - 1 + backlog.items.length) % backlog.items.length,
@@ -152,10 +174,12 @@ export function CardGenerator({
           >
             ◄
           </button>
-          <span className="truncate px-3 text-neutral-300">{item.title}</span>
+          <span className="truncate px-3 font-serif italic text-text-2">
+            {item.title}
+          </span>
           <button
             aria-label="Ítem siguiente"
-            className="rounded-full bg-neutral-800 px-4 py-2"
+            className="rounded-full bg-surface-2 px-4 py-2 text-text"
             onClick={() => setTicketIndex((i) => (i + 1) % backlog.items.length)}
           >
             ►
@@ -163,21 +187,30 @@ export function CardGenerator({
         </div>
       )}
 
-      <button
-        onClick={share}
-        disabled={!fontsReady}
-        className="mt-5 w-full max-w-[340px] rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900 transition-opacity disabled:opacity-40"
-      >
-        Compartir tarjeta
-      </button>
-      {!publicUrl && (
-        <p className="mt-2 max-w-[340px] text-center text-xs text-neutral-500">
-          Reclama tu username en Ajustes para que tu link viaje con la tarjeta.
+      {isDoubleFeature ? (
+        <p className="mt-5 max-w-[340px] text-center text-xs text-text-3">
+          Vista previa del estilo Double Feature. Se activa con una
+          recomendación cross-media real desde el descubrimiento.
         </p>
+      ) : (
+        <>
+          <Button
+            onClick={share}
+            disabled={!fontsReady}
+            className="mt-5 w-full max-w-[340px]"
+          >
+            Compartir tarjeta
+          </Button>
+          {!publicUrl && (
+            <p className="mt-2 max-w-[340px] text-center text-xs text-text-3">
+              Reclama tu username en Ajustes para que tu link viaje con la tarjeta.
+            </p>
+          )}
+        </>
       )}
 
       {toast && (
-        <p className="mt-3 rounded-full bg-neutral-800 px-4 py-2 text-xs text-neutral-300">
+        <p className="mt-3 rounded-full bg-surface-2 px-4 py-2 text-xs text-text-2">
           {toast}
         </p>
       )}

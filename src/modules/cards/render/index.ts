@@ -5,6 +5,7 @@ import { drawTicket } from "./ticket";
 
 export { CARD_HEIGHT, CARD_WIDTH } from "../types";
 export { CARD_FONTS } from "./fonts";
+export { drawDoubleFeature } from "./double-feature";
 
 /**
  * Invariant: `ticketItem` must be a real item (the ticket style renders a

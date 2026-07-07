@@ -11,7 +11,7 @@ export function Attribution({
   mediaType: string;
 }) {
   return (
-    <footer className="mt-10 space-y-1 border-t border-neutral-800 pt-4 text-[11px] leading-relaxed text-neutral-500">
+    <footer className="mt-10 space-y-1 border-t border-line pt-4 text-[11px] leading-relaxed text-text-3">
       {source === "tmdb" && (
         <p>
           Datos e imágenes de{" "}

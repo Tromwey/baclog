@@ -20,15 +20,15 @@ export default async function AnalyticsDashboard() {
   ]);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-20 pt-8 text-neutral-100">
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-20 pt-8 text-text">
       <h1 className="text-xl font-bold">Analytics · señal ADR-000</h1>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-400">
+        <h2 className="mb-2 text-sm font-semibold text-text-2">
           Viewers vs usuarios por país
         </h2>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-500">
+          <thead className="text-left text-xs text-text-3">
             <tr>
               <th className="py-1">Audiencia</th>
               <th>País</th>
@@ -37,7 +37,7 @@ export default async function AnalyticsDashboard() {
           </thead>
           <tbody>
             {split.map((r, i) => (
-              <tr key={i} className="border-t border-neutral-800">
+              <tr key={i} className="border-t border-line">
                 <td className="py-1.5">{r.audience}</td>
                 <td>{r.country ?? "—"}</td>
                 <td className="text-right font-mono">{r.count}</td>
@@ -45,7 +45,7 @@ export default async function AnalyticsDashboard() {
             ))}
             {split.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-4 text-center text-neutral-500">
+                <td colSpan={3} className="py-4 text-center text-text-3">
                   Sin datos todavía.
                 </td>
               </tr>
@@ -55,11 +55,11 @@ export default async function AnalyticsDashboard() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-400">
+        <h2 className="mb-2 text-sm font-semibold text-text-2">
           País × dispositivo
         </h2>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-500">
+          <thead className="text-left text-xs text-text-3">
             <tr>
               <th className="py-1">País</th>
               <th>Dispositivo</th>
@@ -68,7 +68,7 @@ export default async function AnalyticsDashboard() {
           </thead>
           <tbody>
             {geo.map((r, i) => (
-              <tr key={i} className="border-t border-neutral-800">
+              <tr key={i} className="border-t border-line">
                 <td className="py-1.5">{r.country ?? "—"}</td>
                 <td>{r.device}</td>
                 <td className="text-right font-mono">{r.count}</td>

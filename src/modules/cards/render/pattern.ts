@@ -1,6 +1,13 @@
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog } from "../types";
-import { ARCHIVO, MONO } from "./fonts";
-import { footerUrl, hashString, mulberry32, truncateToWidth } from "./util";
+import { DISPLAY, MONO } from "./fonts";
+import {
+  CARD_TOKENS,
+  drawGrain,
+  footerUrl,
+  hashString,
+  mulberry32,
+  truncateToWidth,
+} from "./util";
 
 /**
  * Deterministic generative field seeded by the backlog's genres+years+moods
@@ -75,13 +82,13 @@ export function drawPattern(
   ctx.fillRect(0, panelY, CARD_WIDTH, panelH);
 
   ctx.textAlign = "center";
-  ctx.fillStyle = "#f4f1ea";
+  ctx.fillStyle = CARD_TOKENS.text;
   ctx.font = MONO(40, true);
   ctx.fillText("*  B A C L O G  *", CARD_WIDTH / 2, panelY + 110);
 
-  ctx.font = ARCHIVO(96);
+  ctx.font = DISPLAY(92, 800);
   ctx.fillText(
-    truncateToWidth(ctx, backlog.name.toUpperCase(), CARD_WIDTH - 160),
+    truncateToWidth(ctx, backlog.name, CARD_WIDTH - 160),
     CARD_WIDTH / 2,
     panelY + 260,
   );
@@ -97,10 +104,12 @@ export function drawPattern(
     panelY + 350,
   );
 
-  // Footer band
+  // Footer band + watermark — always bottom-center (sistema-diseno §5)
   ctx.fillStyle = "rgba(10, 8, 14, 0.85)";
   ctx.fillRect(0, CARD_HEIGHT - 170, CARD_WIDTH, 170);
-  ctx.fillStyle = "#f4f1ea";
+  ctx.fillStyle = CARD_TOKENS.text;
   ctx.font = MONO(42, true);
   ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, CARD_HEIGHT - 68);
+
+  drawGrain(ctx, CARD_WIDTH, CARD_HEIGHT, 0.06, seed);
 }

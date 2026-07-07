@@ -6,11 +6,22 @@ import {
   type CardBacklog,
 } from "../types";
 import { MONO } from "./fonts";
-import { footerUrl, hashString, mulberry32, stars, truncateToWidth } from "./util";
+import {
+  CARD_TOKENS,
+  drawGrain,
+  footerUrl,
+  hashString,
+  mulberry32,
+  stars,
+  truncateToWidth,
+} from "./util";
 
-const PAPER = "#faf7f0";
-const INK = "#1c1a17";
-const INK_SOFT = "#6b6459";
+// sistema-diseno §5 — "papel negro --bg, tinta off-white". Black receipt
+// paper, warm off-white ink; the toothed edge & grain keep it analog.
+const PAPER = CARD_TOKENS.bg; // #0B0B0D
+const INK = CARD_TOKENS.text; // #F4F3EE
+const INK_SOFT = CARD_TOKENS.text3; // #6C6B76
+const EDGE = "#050506"; // slightly darker than paper, for the toothed border
 // Vertical budget: items must end by y≈1470 so the fixed barcode/footer zone never collides
 const MAX_ITEMS = 6;
 const ITEM_STEP = 124;
@@ -31,7 +42,7 @@ function zigzagEdge(
   ctx.lineTo(CARD_WIDTH, pointUp ? y + tooth : y - tooth);
   ctx.lineTo(0, pointUp ? y + tooth : y - tooth);
   ctx.closePath();
-  ctx.fillStyle = "#111009";
+  ctx.fillStyle = EDGE;
   ctx.fill();
 }
 
@@ -140,10 +151,14 @@ export function drawReceipt(
     x += w + 10;
   }
 
+  // Watermark — always bottom-center (sistema-diseno §5)
   ctx.textAlign = "center";
+  ctx.fillStyle = INK;
   ctx.font = MONO(40, true);
   ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, CARD_HEIGHT - 180);
   ctx.font = MONO(30);
   ctx.fillStyle = INK_SOFT;
   ctx.fillText("THANK YOU FOR OBSESSING WITH US", CARD_WIDTH / 2, CARD_HEIGHT - 120);
+
+  drawGrain(ctx, CARD_WIDTH, CARD_HEIGHT, 0.05, hashString(backlog.name));
 }

@@ -36,12 +36,12 @@ export function PositionCard({
 
   return (
     <div className="mt-8 space-y-4">
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-        <p className="text-sm text-neutral-400">
+      <div className="rounded-2xl border border-line bg-surface-1 p-6">
+        <p className="text-sm text-text-2">
           {alreadyJoined ? "Ya estabas en la fila" : "¡Estás dentro!"}
         </p>
         <p className="mt-1 font-mono text-4xl font-bold">#{position}</p>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-text-3">
           {referralCount > 0
             ? `${referralCount} ${referralCount === 1 ? "invitado" : "invitados"} · cada uno te sube 3 lugares`
             : "Invita gente y sube 3 lugares por cada uno"}
@@ -50,11 +50,11 @@ export function PositionCard({
 
       <button
         onClick={share}
-        className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900"
+        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
       >
         {copied ? "Link copiado ✓" : "Invitar y subir en la fila"}
       </button>
-      <p className="break-all text-xs text-neutral-600">{link}</p>
+      <p className="break-all text-xs text-text-3">{link}</p>
     </div>
   );
 }

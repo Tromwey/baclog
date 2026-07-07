@@ -24,22 +24,22 @@ export function BacklogMenu({
       <button
         onClick={() => setMode(mode === "closed" ? "menu" : "closed")}
         aria-label="Opciones del backlog"
-        className="rounded-full bg-neutral-900 px-3 py-1.5 text-neutral-400"
+        className="rounded-full bg-surface-1 px-3 py-1.5 text-text-2"
       >
         ⋯
       </button>
 
       {mode === "menu" && (
-        <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 text-sm shadow-xl">
+        <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-xl border border-line bg-surface-1 text-sm shadow-xl">
           <button
             onClick={() => setMode("rename")}
-            className="block w-full px-4 py-2.5 text-left hover:bg-neutral-800"
+            className="block w-full px-4 py-2.5 text-left hover:bg-surface-2"
           >
             Renombrar
           </button>
           <button
             onClick={() => setMode("delete")}
-            className="block w-full px-4 py-2.5 text-left text-red-400 hover:bg-neutral-800"
+            className="block w-full px-4 py-2.5 text-left text-red-400 hover:bg-surface-2"
           >
             Borrar
           </button>
@@ -47,13 +47,13 @@ export function BacklogMenu({
       )}
 
       {mode === "rename" && (
-        <div className="absolute right-0 top-10 z-20 w-64 space-y-2 rounded-xl border border-neutral-800 bg-neutral-900 p-3 shadow-xl">
+        <div className="absolute right-0 top-10 z-20 w-64 space-y-2 rounded-xl border border-line bg-surface-1 p-3 shadow-xl">
           <input
             autoFocus
             value={name}
             maxLength={60}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-400"
+            className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
           />
           <div className="flex gap-2">
             <button
@@ -64,13 +64,13 @@ export function BacklogMenu({
                   setMode("closed");
                 })
               }
-              className="flex-1 rounded-lg bg-neutral-100 py-2 text-sm font-semibold text-neutral-900 disabled:opacity-40"
+              className="flex-1 rounded-lg bg-accent py-2 text-sm font-semibold text-bg disabled:opacity-40"
             >
               Guardar
             </button>
             <button
               onClick={() => setMode("closed")}
-              className="rounded-lg border border-neutral-700 px-3 text-sm"
+              className="rounded-lg border border-line px-3 text-sm"
             >
               ✕
             </button>
@@ -79,7 +79,7 @@ export function BacklogMenu({
       )}
 
       {mode === "delete" && (
-        <div className="absolute right-0 top-10 z-20 w-64 space-y-2 rounded-xl border border-red-900 bg-neutral-900 p-3 shadow-xl">
+        <div className="absolute right-0 top-10 z-20 w-64 space-y-2 rounded-xl border border-red-900 bg-surface-1 p-3 shadow-xl">
           <p className="text-sm">¿Borrar este backlog y todo su contenido?</p>
           <div className="flex gap-2">
             <button
@@ -93,7 +93,7 @@ export function BacklogMenu({
             </button>
             <button
               onClick={() => setMode("closed")}
-              className="rounded-lg border border-neutral-700 px-3 text-sm"
+              className="rounded-lg border border-line px-3 text-sm"
             >
               ✕
             </button>

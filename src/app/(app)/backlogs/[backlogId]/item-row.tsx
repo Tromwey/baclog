@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  on_my_radar: "bg-neutral-800 text-neutral-300",
+  on_my_radar: "bg-surface-2 text-text-2",
   obsessing_over: "bg-fuchsia-900/60 text-fuchsia-200",
   completed: "bg-emerald-900/60 text-emerald-200",
   custom: "bg-sky-900/60 text-sky-200",
@@ -48,7 +48,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
   }
 
   return (
-    <div className="rounded-xl bg-neutral-900 p-2.5">
+    <div className="rounded-xl bg-surface-1 p-2.5">
       <div className="flex items-center gap-3">
         <Link href={`/item/${item.catalogItemId}`} className="shrink-0">
           {item.posterUrl ? (
@@ -60,7 +60,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
               loading="lazy"
             />
           ) : (
-            <div className="flex h-16 w-12 items-center justify-center rounded-md bg-neutral-800">
+            <div className="flex h-16 w-12 items-center justify-center rounded-md bg-surface-2">
               {item.mediaType === "album" ? "♫" : "▶"}
             </div>
           )}
@@ -69,7 +69,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
           <Link href={`/item/${item.catalogItemId}`}>
             <p className="truncate font-medium">{item.title}</p>
           </Link>
-          <p className="truncate text-xs text-neutral-500">
+          <p className="truncate text-xs text-text-3">
             {[item.byline, item.year].filter(Boolean).join(" · ")}
           </p>
           <button
@@ -86,14 +86,14 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
           }
           disabled={pending}
           aria-label={`Quitar ${item.title}`}
-          className="px-1 text-neutral-600 hover:text-neutral-300"
+          className="px-1 text-text-3 hover:text-text-2"
         >
           ✕
         </button>
       </div>
 
       {picking && (
-        <div className="mt-2 space-y-2 border-t border-neutral-800 pt-2">
+        <div className="mt-2 space-y-2 border-t border-line pt-2">
           <div className="flex flex-wrap gap-1.5">
             {(["on_my_radar", "obsessing_over", "completed"] as const).map(
               (s) => (
@@ -101,7 +101,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
                   key={s}
                   onClick={() => pick(s)}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${STATUS_STYLE[s]} ${
-                    item.status === s ? "ring-1 ring-neutral-400" : ""
+                    item.status === s ? "ring-1 ring-accent" : ""
                   }`}
                 >
                   {STATUS_LABEL[s]}
@@ -115,12 +115,12 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
               onChange={(e) => setCustomDraft(e.target.value)}
               maxLength={30}
               placeholder="Estado propio…"
-              className="min-w-0 flex-1 rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs outline-none focus:border-neutral-400"
+              className="min-w-0 flex-1 rounded-full border border-line bg-bg px-3 py-1.5 text-xs outline-none focus:border-accent"
             />
             <button
               onClick={pickCustom}
               disabled={!customDraft.trim()}
-              className="rounded-full bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 disabled:opacity-40"
+              className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-40"
             >
               OK
             </button>
@@ -129,7 +129,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
       )}
 
       {item.status === "completed" && (
-        <div className="mt-2 flex gap-1 border-t border-neutral-800 pt-2">
+        <div className="mt-2 flex gap-1 border-t border-line pt-2">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
@@ -139,7 +139,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
               }
               aria-label={`${n} estrellas`}
               className={`text-lg ${
-                (item.rating ?? 0) >= n ? "text-amber-300" : "text-neutral-700"
+                (item.rating ?? 0) >= n ? "text-amber-300" : "text-line"
               }`}
             >
               ★

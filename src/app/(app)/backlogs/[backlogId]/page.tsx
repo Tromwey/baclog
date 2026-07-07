@@ -29,11 +29,11 @@ export default async function BacklogDetailPage({
   const suggestions = await getSuggestionsForBacklog(backlog.id);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-16 pt-6 text-neutral-100">
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold">{backlog.name}</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-text-3">
             {items.length} {items.length === 1 ? "ítem" : "ítems"}
             {backlog.vibe ? ` · ${backlog.vibe}` : ""}
           </p>
@@ -42,7 +42,7 @@ export default async function BacklogDetailPage({
           {items.length > 0 && (
             <Link
               href={`/backlogs/${backlog.id}/card`}
-              className="rounded-full bg-neutral-100 px-4 py-1.5 text-sm font-semibold text-neutral-900"
+              className="rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-bg"
             >
               Tarjeta
             </Link>
@@ -53,10 +53,10 @@ export default async function BacklogDetailPage({
 
       {items.length === 0 ? (
         <div className="mt-16 text-center">
-          <p className="text-neutral-400">Este backlog está vacío.</p>
+          <p className="text-text-2">Este backlog está vacío.</p>
           <Link
             href="/search"
-            className="mt-3 inline-block rounded-full bg-neutral-100 px-5 py-2.5 text-sm font-semibold text-neutral-900"
+            className="mt-3 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg"
           >
             Buscar algo que agregar
           </Link>
@@ -65,7 +65,7 @@ export default async function BacklogDetailPage({
         <div className="mt-4 space-y-6">
           {eras.map((era) => (
             <section key={era.key}>
-              <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-neutral-500">
+              <h2 className="mb-2 font-mono text-xs font-bold uppercase tracking-widest text-text-3">
                 {era.label}
               </h2>
               <div className="space-y-2">

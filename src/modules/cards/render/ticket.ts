@@ -6,8 +6,15 @@ import {
   type CardItem,
   type MediaType,
 } from "../types";
-import { MONO, OSWALD } from "./fonts";
-import { clampRating, footerUrl, truncateToWidth, wrapText } from "./util";
+import { DISPLAY, MONO, SANS, SERIF } from "./fonts";
+import {
+  clampRating,
+  drawGrain,
+  footerUrl,
+  hashString,
+  truncateToWidth,
+  wrapText,
+} from "./util";
 
 const BG: Record<MediaType, string> = {
   film: "#7a2e2b",
@@ -65,12 +72,12 @@ export function drawTicket(
   ctx.lineTo(tx + tw - 70, ty + 170);
   ctx.stroke();
 
-  // Title — flows from the top, max 2 lines
+  // Title — Instrument Serif italic (the emotional voice), max 2 lines
   ctx.textAlign = "left";
   ctx.fillStyle = CREAM;
-  ctx.font = OSWALD(120, 700);
+  ctx.font = SERIF(118);
   const titleMax = tw - 140;
-  const allLines = wrapText(ctx, item.title.toUpperCase(), titleMax);
+  const allLines = wrapText(ctx, item.title, titleMax);
   const lines = allLines.slice(0, 2);
   if (allLines.length > 2) {
     lines[1] = truncateToWidth(ctx, `${lines[1]} ${allLines[2]}`, titleMax);
@@ -78,18 +85,18 @@ export function drawTicket(
   let y = ty + 380;
   for (const line of lines) {
     ctx.fillText(line, tx + 70, y);
-    y += 132;
+    y += 126;
   }
 
-  ctx.font = OSWALD(48, 400);
+  ctx.font = SANS(46, 500);
   ctx.fillStyle = CREAM_SOFT;
-  ctx.fillText(`${item.year} · ${item.byline.toUpperCase()}`, tx + 70, y - 32);
+  ctx.fillText(`${item.year} · ${item.byline}`, tx + 70, y - 32);
 
   // Stars + stamp anchor upward from the perforation, so they never collide
   if (item.status === "completed" && item.rating) {
     const r = clampRating(item.rating);
     ctx.fillStyle = CREAM;
-    ctx.font = OSWALD(84, 600);
+    ctx.font = DISPLAY(80, 700);
     ctx.fillText("★ ".repeat(r) + "☆ ".repeat(5 - r), tx + 70, perfY - 240);
   }
 
@@ -97,7 +104,7 @@ export function drawTicket(
   ctx.save();
   ctx.translate(tx + 90, perfY - 110);
   ctx.rotate(-0.04);
-  ctx.font = OSWALD(56, 600);
+  ctx.font = MONO(48, true);
   const label = (item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase();
   const w = ctx.measureText(label).width;
   ctx.strokeStyle = CREAM;
@@ -127,8 +134,11 @@ export function drawTicket(
   ctx.fillStyle = CREAM_SOFT;
   ctx.fillText(`ROW: ${backlog.name.toUpperCase()}`, tx + 70, perfY + 180);
 
+  // Watermark — always bottom-center (growth watermark, sistema-diseno §5)
   ctx.font = MONO(42, true);
   ctx.fillStyle = CREAM;
   ctx.textAlign = "center";
   ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, ty + th - 90);
+
+  drawGrain(ctx, CARD_WIDTH, CARD_HEIGHT, 0.05, hashString(item.title));
 }

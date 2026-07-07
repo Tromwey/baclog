@@ -5,6 +5,7 @@ import {
   chooseServiceAndFinishAction,
   completeOnboardingAction,
 } from "@/app/actions/account-actions";
+import { AuraBackdrop, Button } from "@/components/ui";
 
 const SERVICES = [
   { id: "spotify", label: "Spotify" },
@@ -43,76 +44,83 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-neutral-950 px-6 text-neutral-100">
-      <h1 className="font-mono text-2xl font-bold tracking-[0.35em]">BACLOG</h1>
+    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
+      <AuraBackdrop height="45%" />
+      <div className="relative flex w-full max-w-sm flex-col items-center">
+        <h1 className="font-mono text-xl font-bold uppercase tracking-[0.35em] text-accent">
+          Baclog
+        </h1>
 
-      {step === 1 ? (
-        <form onSubmit={submitProfile} className="mt-10 w-full max-w-sm space-y-4">
-          <div>
-            <label className="block text-sm text-neutral-300" htmlFor="name">
-              ¿Cómo te llamamos?
-            </label>
-            <input
-              id="name"
-              required
-              maxLength={50}
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Tu nombre visible"
-              className="mt-2 w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 outline-none focus:border-neutral-400"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-neutral-300" htmlFor="birthYear">
-              Año de nacimiento
-            </label>
-            <input
-              id="birthYear"
-              required
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              value={birthYear}
-              onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))}
-              placeholder="2004"
-              className="mt-2 w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 outline-none focus:border-neutral-400"
-            />
-            <p className="mt-1 text-xs text-neutral-500">
-              Solo para verificar tu edad. Nunca se muestra.
+        {step === 1 ? (
+          <form onSubmit={submitProfile} className="mt-10 w-full space-y-4">
+            <div>
+              <label className="block text-sm text-text-2" htmlFor="name">
+                ¿Cómo te llamamos?
+              </label>
+              <input
+                id="name"
+                required
+                maxLength={50}
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Tu nombre visible"
+                className="mt-2 w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-text-2" htmlFor="birthYear">
+                Año de nacimiento
+              </label>
+              <input
+                id="birthYear"
+                required
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))}
+                placeholder="2004"
+                className="mt-2 w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+              />
+              <p className="mt-1 text-xs text-text-3">
+                Solo para verificar tu edad. Nunca se muestra.
+              </p>
+            </div>
+            <Button
+              type="submit"
+              disabled={busy || !name || birthYear.length !== 4}
+              className="w-full"
+            >
+              {busy ? "Guardando…" : "Continuar"}
+            </Button>
+            {error && (
+              <p className="text-sm text-hot">
+                Revisa los datos e intenta de nuevo.
+              </p>
+            )}
+          </form>
+        ) : (
+          <div className="mt-10 w-full space-y-3">
+            <p className="text-sm text-text-2">
+              ¿Dónde escuchas música? Cada álbum se abrirá ahí.
+            </p>
+            {SERVICES.map((s) => (
+              <button
+                key={s.id}
+                disabled={busy}
+                onClick={() => pickService(s.id)}
+                className="w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3.5 text-left font-medium text-text transition-colors hover:border-accent disabled:opacity-40"
+              >
+                {s.label}
+              </button>
+            ))}
+            <p className="pt-1 text-xs text-text-3">
+              Puedes cambiarlo cuando quieras en Ajustes.
             </p>
           </div>
-          <button
-            type="submit"
-            disabled={busy || !name || birthYear.length !== 4}
-            className="w-full rounded-full bg-neutral-100 py-3.5 font-semibold text-neutral-900 disabled:opacity-40"
-          >
-            {busy ? "Guardando…" : "Continuar"}
-          </button>
-          {error && (
-            <p className="text-sm text-red-400">Revisa los datos e intenta de nuevo.</p>
-          )}
-        </form>
-      ) : (
-        <div className="mt-10 w-full max-w-sm space-y-3">
-          <p className="text-sm text-neutral-300">
-            ¿Dónde escuchas música? Cada álbum se abrirá ahí.
-          </p>
-          {SERVICES.map((s) => (
-            <button
-              key={s.id}
-              disabled={busy}
-              onClick={() => pickService(s.id)}
-              className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3.5 text-left font-medium hover:border-neutral-400 disabled:opacity-40"
-            >
-              {s.label}
-            </button>
-          ))}
-          <p className="pt-1 text-xs text-neutral-500">
-            Puedes cambiarlo cuando quieras en Ajustes.
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </main>
   );
 }

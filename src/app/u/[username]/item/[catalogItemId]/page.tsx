@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft, Music, Play } from "lucide-react";
 import {
   getPublicCatalogItem,
   getPublicProfile,
 } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
+import { AuraBackdrop, Button, MonoMeta } from "@/components/ui";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -56,80 +58,90 @@ export default async function PublicItemPage({
     `/api/links/resolve?catalogItemId=${item.id}${extra}`;
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-neutral-950 px-4 pb-20 pt-8 text-neutral-100">
-      <Link
-        href={`/u/${username}`}
-        className="text-sm text-neutral-400 hover:text-neutral-200"
-      >
-        ← @{profile.username}
-      </Link>
+    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
+      <AuraBackdrop height="260px" />
 
-      <div className="mt-4 flex gap-4">
-        {item.posterUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-          <img
-            src={item.posterUrl}
-            alt={`Portada de ${item.title}`}
-            className="h-44 w-30 shrink-0 rounded-xl object-cover shadow-lg"
-          />
-        ) : (
-          <div className="flex h-44 w-30 shrink-0 items-center justify-center rounded-xl bg-neutral-800 text-3xl">
-            {item.mediaType === "album" ? "♫" : "▶"}
-          </div>
-        )}
-        <div className="min-w-0 pt-1">
-          <h1 className="text-xl font-bold leading-tight">{item.title}</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            {[item.byline, item.year].filter(Boolean).join(" · ")}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-6 space-y-2">
-        {item.mediaType === "album" ? (
-          <>
-            <a
-              href={resolve("&service=spotify")}
-              className="block w-full rounded-full bg-[#1db954] py-3 text-center font-semibold text-black"
-            >
-              Escuchar en Spotify
-            </a>
-            <a
-              href={resolve("&service=apple_music")}
-              className="block w-full rounded-full bg-[#fa2d48] py-3 text-center font-semibold text-white"
-            >
-              Escuchar en Apple Music
-            </a>
-            <a
-              href={resolve("&service=youtube_music")}
-              className="block w-full rounded-full bg-[#ff0000] py-3 text-center font-semibold text-white"
-            >
-              Escuchar en YouTube Music
-            </a>
-          </>
-        ) : (
-          <a
-            href={resolve("")}
-            className="block w-full rounded-full bg-neutral-100 py-3 text-center font-semibold text-neutral-900"
-          >
-            Ver dónde streamear
-          </a>
-        )}
-      </div>
-
-      <footer className="mt-12 text-center">
+      <main className="relative px-5 pb-32 pt-8">
         <Link
-          href="/login"
-          className="inline-block rounded-full border border-neutral-600 px-6 py-3 font-semibold"
+          href={`/u/${username}`}
+          className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-[0.08em] text-text-2 transition-colors hover:text-text"
         >
-          Crea tu Baclog
+          <ChevronLeft size={14} /> @{profile.username}
         </Link>
-        <p className="mt-6 text-[11px] text-neutral-600">
-          {item.mediaType === "album"
-            ? "Datos y portadas de Apple Music"
-            : "Datos e imágenes de TMDB · Disponibilidad por JustWatch"}
+
+        <div className="bl-rise mt-5 flex gap-4">
+          {item.posterUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
+            <img
+              src={item.posterUrl}
+              alt={`Portada de ${item.title}`}
+              className="h-44 w-30 shrink-0 rounded-[var(--r-md)] object-cover shadow-[var(--shadow-card)]"
+            />
+          ) : (
+            <div className="flex h-44 w-30 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-surface-2 text-text-3">
+              {item.mediaType === "album" ? (
+                <Music size={30} />
+              ) : (
+                <Play size={30} />
+              )}
+            </div>
+          )}
+          <div className="min-w-0 pt-1">
+            <h1 className="font-serif text-2xl italic leading-tight text-text">
+              {item.title}
+            </h1>
+            <MonoMeta className="mt-2 block normal-case tracking-normal text-text-2">
+              {[item.byline, item.year].filter(Boolean).join(" · ")}
+            </MonoMeta>
+          </div>
+        </div>
+
+        <div className="mt-7 space-y-2.5">
+          {item.mediaType === "album" ? (
+            <>
+              <a
+                href={resolve("&service=spotify")}
+                className="block w-full rounded-full bg-[#1db954] py-3.5 text-center font-sans font-semibold text-black transition-transform active:scale-[0.97]"
+              >
+                Escuchar en Spotify
+              </a>
+              <a
+                href={resolve("&service=apple_music")}
+                className="block w-full rounded-full bg-[#fa2d48] py-3.5 text-center font-sans font-semibold text-white transition-transform active:scale-[0.97]"
+              >
+                Escuchar en Apple Music
+              </a>
+              <a
+                href={resolve("&service=youtube_music")}
+                className="block w-full rounded-full bg-[#ff0000] py-3.5 text-center font-sans font-semibold text-white transition-transform active:scale-[0.97]"
+              >
+                Escuchar en YouTube Music
+              </a>
+            </>
+          ) : (
+            <Button href={resolve("")} className="w-full">
+              Ver dónde streamear
+            </Button>
+          )}
+        </div>
+
+        <p className="mt-8 text-center">
+          <MonoMeta className="text-[10px] text-text-3">
+            {item.mediaType === "album"
+              ? "Datos y portadas de Apple Music"
+              : "Datos e imágenes de TMDB · Disponibilidad por JustWatch"}
+          </MonoMeta>
         </p>
-      </footer>
-    </main>
+      </main>
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md px-5 pb-5">
+        <Button
+          href="/login"
+          className="pointer-events-auto w-full shadow-[0_0_30px_var(--accent-soft)]"
+        >
+          Crea tu Baclog →
+        </Button>
+      </div>
+    </div>
   );
 }

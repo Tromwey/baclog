@@ -1,3 +1,51 @@
+/**
+ * Design-system tokens for the canvas cards (sistema-diseno §2). Kept as
+ * literals here because the renderers run on a raw <canvas> where CSS
+ * variables aren't available.
+ */
+export const CARD_TOKENS = {
+  bg: "#0B0B0D",
+  surface1: "#141417",
+  surface2: "#1C1C21",
+  line: "#2E2E36",
+  text: "#F4F3EE",
+  text2: "#A9A8B2",
+  text3: "#6C6B76",
+  accent: "#D8FF3E",
+  hot: "#FF2D55",
+  radar: "#7AA2FF",
+} as const;
+
+/**
+ * Grain + paper-tooth overlay (sistema-diseno §5): the analog-artifact detail
+ * that separates "posteable" from AI slop. Deterministic per seed so the same
+ * card always grains identically. `opacity` ~0.05–0.08. Draws monochrome
+ * speckle scaled to the current canvas; call LAST so it sits over everything.
+ */
+export function drawGrain(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  opacity = 0.06,
+  seed = 1,
+) {
+  const rand = mulberry32(seed);
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.globalCompositeOperation = "overlay";
+  // Sparse light/dark speckle — cheap fractal-noise stand-in on <canvas>
+  const step = 3;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const n = rand();
+      if (n < 0.5) continue;
+      ctx.fillStyle = n > 0.75 ? "#ffffff" : "#000000";
+      ctx.fillRect(x, y, step, step);
+    }
+  }
+  ctx.restore();
+}
+
 /** Deterministic 32-bit string hash (FNV-1a). */
 export function hashString(input: string): number {
   let h = 0x811c9dc5;

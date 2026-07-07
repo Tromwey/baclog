@@ -364,6 +364,73 @@ export const recapSends = pgTable(
   ],
 );
 
+// ---------- recs module (F3.5.5 cross-media Double Feature) ----------
+
+/**
+ * Cache of generated cross-media recos, keyed by the seed catalog_item. One
+ * row per (seed → grounded target) pairing so an identical seed never pays for
+ * a second LLM generation (ADR-009: each generation costs — cache first). The
+ * target is a REAL catalog_item resolved against search (grounding), so the
+ * FK guarantees the reco is addable + link-outable. Narrative fields are the
+ * LLM-authored prose the Double Feature card renders.
+ */
+export const crossMediaRecs = pgTable(
+  "cross_media_rec",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    seedCatalogItemId: text("seed_catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    /** Grounded reco — a real catalog_item (never a hallucinated title) */
+    targetCatalogItemId: text("target_catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    /** Card narrative (LLM-authored, grounded). Mirrors DoubleFeatureData.narrative. */
+    hookEyebrow: text("hook_eyebrow").notNull(),
+    hookTitle: text("hook_title").notNull(),
+    resultEyebrow: text("result_eyebrow").notNull(),
+    closer: text("closer"),
+    /** "fixture" | "llm" — which provider produced this row (observability) */
+    provider: text("provider").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // One cached reco per seed — the cache key that gates re-generation
+    uniqueIndex("cross_media_rec_seed_unique").on(t.seedCatalogItemId),
+    index("cross_media_rec_target_idx").on(t.targetCatalogItemId),
+  ],
+);
+
+/**
+ * Per-user monthly generation meter for cross-media recos (ADR-009: free tier
+ * = N metered generations/month; aligns LLM cost with the gate). One row per
+ * (user, month); the count is only bumped on a real LLM generation, never on a
+ * cache hit. eraKey format "2026-07" matches recap_send.
+ */
+export const crossMediaRecUsage = pgTable(
+  "cross_media_rec_usage",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "2026-07" — era.ts key format */
+    eraKey: varchar("era_key", { length: 7 }).notNull(),
+    /** LLM generations charged this month (cache hits do NOT count) */
+    generations: integer("generations").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // THE meter key: at most one counter row per (user, month)
+    uniqueIndex("cross_media_rec_usage_user_era_unique").on(t.userId, t.eraKey),
+  ],
+);
+
 // ---------- analytics module (F3.4) ----------
 
 export const analyticsEvents = pgTable(
@@ -428,4 +495,15 @@ export const waitlistEntriesRelations = relations(
 
 export const recapSendsRelations = relations(recapSends, ({ one }) => ({
   user: one(users, { fields: [recapSends.userId], references: [users.id] }),
+}));
+
+export const crossMediaRecsRelations = relations(crossMediaRecs, ({ one }) => ({
+  seed: one(catalogItems, {
+    fields: [crossMediaRecs.seedCatalogItemId],
+    references: [catalogItems.id],
+  }),
+  target: one(catalogItems, {
+    fields: [crossMediaRecs.targetCatalogItemId],
+    references: [catalogItems.id],
+  }),
 }));
