@@ -5,10 +5,14 @@ import { and, desc, eq } from "drizzle-orm";
 import { assertUser } from "@/authz";
 import { db } from "@/db";
 import { backlogItems, backlogs } from "@/db/schema";
+import { DISCOVERIES } from "@/modules/backlog/default-target";
 import {
   generateNextUncachedReco,
+  getCrossMediaFeed,
+  type CrossMediaFeed,
   type DiscoverResult,
 } from "@/modules/recs/crossmedia";
+import type { DoubleFeatureData } from "@/modules/cards/types";
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -24,8 +28,6 @@ import {
  * userId-scoped queries. The reco target is a real catalog_item (grounded), so
  * adding it is the same trusted insert as the existing add-to-backlog picker.
  */
-
-const DISCOVERIES = "Descubrimientos";
 
 export interface AcceptResult {
   backlogId: string;
@@ -158,8 +160,78 @@ export async function discoverNextRecoAction(): Promise<{
     console.error("[crossmedia] discover next failed:", err);
     result = "failed";
   }
-  revalidatePath("/para-ti");
+  revalidatePath("/descubrir");
   return { result };
+}
+
+/**
+ * F3.5.6 (M3.5 nav) — the flattened cross-media feed for the "Recomiéndame"
+ * path of /descubrir. Wraps getCrossMediaFeed (still cache-first + at most one
+ * fresh generation, cap-enforced) and maps its pairings to a serializable list
+ * the client renders as rows; tapping a row opens the full A→B connection.
+ * Deliberately NOT fetched by the page — it runs only on an explicit tap.
+ */
+export interface DiscoverWork {
+  catalogItemId: string;
+  title: string;
+  type: "film" | "series" | "album";
+  byline: string | null;
+  year: number | null;
+  posterUrl: string | null;
+}
+
+export interface DiscoverItem {
+  seed: DiscoverWork;
+  reco: DiscoverWork;
+  narrative: DoubleFeatureData["narrative"];
+  defaultBacklog: { id: string; name: string };
+}
+
+export type DiscoverFeedResult =
+  | { kind: "unavailable" }
+  | { kind: "no_loved" }
+  | { kind: "pending"; remaining: number; cap: number }
+  | { kind: "ready"; items: DiscoverItem[]; remaining: number; cap: number };
+
+export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
+  const user = await assertUser();
+
+  let feed: CrossMediaFeed | null = null;
+  try {
+    feed = await getCrossMediaFeed(user.id);
+  } catch (err) {
+    // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
+    console.error("[descubrir] cross-media feed unavailable:", err);
+    return { kind: "unavailable" };
+  }
+  if (!feed) return { kind: "unavailable" };
+  if (!feed.hasLovedItems) return { kind: "no_loved" };
+
+  const items: DiscoverItem[] = feed.items.map((it) => ({
+    seed: {
+      catalogItemId: it.seed.catalogItemId,
+      title: it.seed.title,
+      type: it.seed.type,
+      byline: it.seed.byline,
+      year: it.seed.year,
+      posterUrl: it.seed.posterUrl,
+    },
+    reco: {
+      catalogItemId: it.reco.targetCatalogItemId,
+      title: it.reco.targetTitle,
+      type: it.reco.targetMediaType,
+      byline: it.reco.targetByline,
+      year: it.reco.targetYear,
+      posterUrl: it.reco.targetPosterUrl,
+    },
+    narrative: it.reco.narrative,
+    defaultBacklog: it.defaultBacklog,
+  }));
+
+  if (items.length === 0) {
+    return { kind: "pending", remaining: feed.remaining, cap: feed.cap };
+  }
+  return { kind: "ready", items, remaining: feed.remaining, cap: feed.cap };
 }
 
 /** Default target, creating "Descubrimientos" as the terminal fallback. */

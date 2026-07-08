@@ -44,6 +44,10 @@ export const viewport: Viewport = {
   themeColor: "#0B0B0D",
   width: "device-width",
   initialScale: 1,
+  // Let content extend into the safe areas so env(safe-area-inset-*) resolves
+  // to real values — the floating dock/header math depends on it (default
+  // "auto" leaves those insets at 0).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

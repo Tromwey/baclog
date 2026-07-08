@@ -7,6 +7,7 @@ import {
   isLovedEntry,
 } from "@/modules/backlog/queries";
 import { getCatalogItem } from "@/modules/catalog/cache";
+import { BackButton } from "@/components/ui";
 import { AddToBacklog } from "./add-to-backlog";
 import { Attribution } from "./attribution";
 
@@ -36,7 +37,8 @@ export default async function ItemPage({
   const loved = isLovedEntry(entry);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
+    <main className="mx-auto min-h-dvh w-full max-w-md px-4 pb-dock-clearance pt-6 text-text">
+      <BackButton className="mb-4" />
       <div className="flex gap-4">
         {item.posterUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
@@ -79,6 +81,7 @@ export default async function ItemPage({
           catalogItemId={item.id}
           posterUrl={item.posterUrl}
           backlogs={userBacklogs.map((b) => ({ id: b.id, name: b.name }))}
+          inBacklogName={entry?.backlogName ?? null}
         />
         <a
           href={`/api/links/resolve?catalogItemId=${item.id}`}
@@ -104,7 +107,7 @@ export default async function ItemPage({
       {/* F3.5.6 — light teaser to the reco home (only when this item is loved) */}
       {loved && (
         <Link
-          href="/para-ti"
+          href="/descubrir"
           className="mt-8 flex items-center justify-between gap-4 rounded-[var(--r-lg)] border border-line bg-surface-1 p-5 transition-colors hover:border-accent"
         >
           <div className="min-w-0">

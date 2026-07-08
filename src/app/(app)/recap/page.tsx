@@ -26,7 +26,7 @@ export default async function RecapPage() {
 
   if (!recap) {
     return (
-      <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-8 text-text">
+      <main className="mx-auto min-h-dvh w-full max-w-md px-4 pb-dock-clearance pt-8 text-text">
         <h1 className="text-xl font-bold">Tu recap</h1>
         <div className="mt-16 text-center">
           <p className="text-text-2">Todavía no hay nada que recapitular.</p>
@@ -34,7 +34,7 @@ export default async function RecapPage() {
             Agrega ítems y marca estados — tu era del mes aparece aquí.
           </p>
           <Link
-            href="/search"
+            href="/descubrir"
             className="mt-4 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg"
           >
             Buscar algo que agregar

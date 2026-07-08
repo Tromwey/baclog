@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { extractPalette } from "@/modules/cards/palette";
 
 /**
- * F3.5.6 — the /para-ti screen's dual aura: the top is tinted by Side A (the
- * loved seed), the bottom by Side B (the reco), mirroring the Double Feature
- * card's two auras (double-feature.ts `radialAura`). Colors are extracted
- * on-device (ADR-008: only colors cross, never the artwork).
+ * The connection overlay's dual aura (M3.5, moved from /para-ti): the top is
+ * tinted by Side A (the loved seed), the bottom by Side B (the reco), mirroring
+ * the Double Feature card. Colors are extracted on-device (ADR-008: only colors
+ * cross, never the artwork).
  *
  * Two constraints shape this:
  *  - We pick the most VIBRANT palette entry, not the most frequent — poster
@@ -54,10 +54,6 @@ export function FeatureAura({
       className="pointer-events-none absolute inset-0 z-0 overflow-hidden transition-opacity duration-700"
       style={{ opacity: colors ? 1 : 0 }}
     >
-      {/* Exact dual gradient from "Double Feature - Final" (frame 1d, in-app):
-          Side A from the top-left (22% 0%, ~50% tall), Side B from the
-          bottom-right (80% 100%, ~54% tall) — each an OPAQUE source color →
-          a darker shade of it → the bg/transparent. Strong + diagonal. */}
       <div
         className="absolute inset-x-0 top-0 h-1/2"
         style={{
@@ -98,17 +94,14 @@ function pickVibrant(hexes: string[]): HSL | null {
     }
   }
   if (best && bestScore > 0.06) return best;
-  // Near-grayscale poster: lift the dominant color into a visible range.
   const first = hexes[0] ? hexToHsl(hexes[0]) : null;
   return first ? { h: first.h, s: Math.max(0.25, first.s), l: 0.5 } : null;
 }
 
-/** Opaque source stop — the vivid color at the aura's origin (matches the design). */
 function src(c: HSL): string {
   return hslToRgba({ h: c.h, s: Math.max(0.5, c.s), l: clamp(c.l, 0.42, 0.54) }, 1);
 }
 
-/** Darker shade stop — same hue, ~half lightness (e.g. #C7462F → #5a231a). */
 function shade(c: HSL): string {
   return hslToRgba(
     { h: c.h, s: Math.max(0.45, c.s * 0.92), l: clamp(c.l, 0.42, 0.54) * 0.46 },

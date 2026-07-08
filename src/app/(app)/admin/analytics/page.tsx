@@ -20,7 +20,7 @@ export default async function AnalyticsDashboard() {
   ]);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-20 pt-8 text-text">
+    <main className="mx-auto min-h-dvh w-full max-w-md px-4 pb-dock-clearance pt-8 text-text">
       <h1 className="text-xl font-bold">Analytics · señal ADR-000</h1>
 
       <section className="mt-6">

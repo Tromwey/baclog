@@ -1,0 +1,372 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { ChevronLeft, Search as SearchIcon, Sparkles } from "lucide-react";
+import {
+  discoverNextRecoAction,
+  getDiscoverFeedAction,
+  type DiscoverFeedResult,
+} from "@/app/actions/crossmedia-actions";
+import {
+  CrossMediaDiscovery,
+  type DiscoveryBacklog,
+} from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
+import type { MediaType } from "@/modules/catalog/types";
+import { AuraField } from "@/components/ui";
+import { Pills } from "./pills";
+import { SearchPanel } from "./search-panel";
+import { FeatureAura } from "./feature-aura";
+
+type Mode = "entry" | "loading" | "ai" | "search";
+
+/**
+ * F3.5.6 (M3.5 nav) — Descubrir merges Buscar + Para ti behind one editorial
+ * entry: pick types, then "Recomiéndame" (the cross-media engine, cache-first)
+ * or "Buscar" (the shipped search). "Recomiéndame" opens the Double Feature
+ * screen itself — one narrative pairing at a time; the × walks to the next
+ * (free from cache, then one generation when the cache runs out).
+ */
+export function DescubrirScreen({
+  username,
+  backlogs,
+  totalTitles,
+  loadingColors,
+}: {
+  username: string;
+  backlogs: DiscoveryBacklog[];
+  totalTitles: number;
+  /** User ADN palette — only for the loading screen's full-bleed aura. */
+  loadingColors: string[];
+}) {
+  const [mode, setMode] = useState<Mode>("entry");
+  const [pills, setPills] = useState<Record<MediaType, boolean>>({
+    film: true,
+    series: true,
+    album: true,
+  });
+  const [feed, setFeed] = useState<DiscoverFeedResult | null>(null);
+  const [aiIndex, setAiIndex] = useState(0);
+  // The Buscar button's on-screen rect at tap time — the search bar morphs
+  // (FLIP) up from here, so it "rises into" the bar instead of popping in.
+  const [searchFrom, setSearchFrom] = useState<DOMRect | null>(null);
+  const [pending, start] = useTransition();
+
+  const togglePill = (t: MediaType) =>
+    setPills((p) => ({ ...p, [t]: !p[t] }));
+
+  const openSearch = (e: React.MouseEvent) => {
+    setSearchFrom(e.currentTarget.getBoundingClientRect());
+    setMode("search");
+  };
+
+  const recomendar = () => {
+    setMode("loading");
+    start(async () => {
+      // Hold the loading screen (its own aura) for a beat even on a cache hit,
+      // so the "distilling your vibe" moment reads instead of flashing by.
+      const [res] = await Promise.all([
+        getDiscoverFeedAction(),
+        new Promise((r) => setTimeout(r, 1100)),
+      ]);
+      setFeed(res);
+      setAiIndex(0);
+      setMode("ai");
+    });
+  };
+
+  const readyItems = feed && feed.kind === "ready" ? feed.items : [];
+
+  // The × / "otra conexión": walk cached pairings for free, then spend ONE
+  // generation when they run out (the engine still enforces the monthly cap).
+  const next = () => {
+    if (aiIndex < readyItems.length - 1) {
+      setAiIndex(aiIndex + 1);
+      return;
+    }
+    const landOn = readyItems.length;
+    start(async () => {
+      await discoverNextRecoAction();
+      const res = await getDiscoverFeedAction();
+      setFeed(res);
+      setAiIndex(landOn);
+    });
+  };
+
+  return (
+    <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden text-text">
+      {mode === "entry" && (
+        <Entry
+          pills={pills}
+          onToggle={togglePill}
+          onRecomendar={recomendar}
+          onSearch={openSearch}
+          totalTitles={totalTitles}
+          pending={pending}
+        />
+      )}
+
+      {mode === "loading" && <Loading colors={loadingColors} />}
+
+      {mode === "ai" && (
+        <AiResults
+          feed={feed}
+          index={aiIndex}
+          username={username}
+          backlogs={backlogs}
+          pending={pending}
+          onBack={() => setMode("entry")}
+          onNext={next}
+        />
+      )}
+
+      {mode === "search" && (
+        <SearchPanel
+          selected={pills}
+          onToggle={togglePill}
+          fromRect={searchFrom}
+          onBack={() => setMode("entry")}
+        />
+      )}
+    </main>
+  );
+}
+
+function Entry({
+  pills,
+  onToggle,
+  onRecomendar,
+  onSearch,
+  totalTitles,
+  pending,
+}: {
+  pills: Record<MediaType, boolean>;
+  onToggle: (t: MediaType) => void;
+  onRecomendar: () => void;
+  onSearch: (e: React.MouseEvent) => void;
+  totalTitles: number;
+  pending: boolean;
+}) {
+  return (
+    <div className="relative z-10 flex min-h-dvh flex-col px-[22px] pb-dock-clearance pt-[calc(56px+env(safe-area-inset-top))]">
+      <div className="font-serif text-[40px] italic leading-[1.03]">
+        ¿Qué te
+        <br />
+        apetece hoy?
+      </div>
+      <p className="mt-3 max-w-[30ch] text-[13.5px] leading-[1.5] text-text-2">
+        Afina por tipo si quieres, y deja que Baclog te recomiende algo, o
+        búscalo tú mismo.
+      </p>
+
+      <div className="flex-1" />
+
+      <div className="mb-[11px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
+        Afinar por tipo
+      </div>
+      <Pills selected={pills} onToggle={onToggle} />
+
+      <button
+        onClick={onRecomendar}
+        disabled={pending}
+        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg shadow-[0_8px_24px_rgba(216,255,62,0.22)] transition-transform active:scale-[0.98] disabled:opacity-60"
+      >
+        <Sparkles size={19} /> Recomiéndame
+      </button>
+      <div className="my-[10px] text-center font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
+        Destilado de tus {totalTitles} títulos · sin spoilers
+      </div>
+      <button
+        onClick={onSearch}
+        className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-transparent px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:border-text-3"
+      >
+        <SearchIcon size={17} /> Buscar
+      </button>
+    </div>
+  );
+}
+
+const LOADING_MESSAGES = [
+  "Leyendo tu perfil…",
+  "Cruzando tus títulos…",
+  "Destilando tu vibe…",
+];
+// A richer palette so the "distilling" moment glows even for sparse profiles —
+// this is the one screen with its own full-bleed background for emphasis.
+const LOADING_ADN = ["#C7462F", "#3A5A9B", "#9B4DCA", "#E8B23A", "#7AA2FF"];
+
+function Loading({ colors }: { colors: string[] }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(
+      () => setI((x) => (x + 1) % LOADING_MESSAGES.length),
+      1600,
+    );
+    return () => clearInterval(t);
+  }, []);
+
+  const aura = Array.from(new Set([...colors, ...LOADING_ADN]));
+
+  return (
+    <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-8 text-center">
+      {/* This screen's own emphatic aura, full-bleed (not just the top band). */}
+      <AuraField variant="ambient" colors={aura} seed={13} />
+      <div className="absolute top-[calc(52px+env(safe-area-inset-top))] font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
+        Baclog · Descubrir
+      </div>
+      <div className="relative font-serif text-[26px] italic text-text">
+        {LOADING_MESSAGES[i]}
+      </div>
+    </div>
+  );
+}
+
+function AiResults({
+  feed,
+  index,
+  username,
+  backlogs,
+  pending,
+  onBack,
+  onNext,
+}: {
+  feed: DiscoverFeedResult | null;
+  index: number;
+  username: string;
+  backlogs: DiscoveryBacklog[];
+  pending: boolean;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  if (!feed || feed.kind === "unavailable") {
+    return (
+      <EmptyState
+        onBack={onBack}
+        title="Los descubrimientos están calentando motores."
+        body="Estamos afinando las recomendaciones cross-media. Vuelve en un momento — mientras tanto, sigue amando cosas."
+      />
+    );
+  }
+  if (feed.kind === "no_loved") {
+    return (
+      <EmptyState
+        onBack={onBack}
+        title="Todavía no amas nada — al menos no en el registro."
+        body="Marca algo como obsessing over o califícalo ★★★★+ al completarlo, y volvemos con una conexión que no veías venir."
+      />
+    );
+  }
+  if (feed.kind === "pending") {
+    return (
+      <EmptyState
+        onBack={onBack}
+        title={
+          feed.remaining <= 0
+            ? "Se te acabaron los descubrimientos del mes."
+            : "Estamos afinando tu próxima conexión."
+        }
+        body={
+          feed.remaining <= 0
+            ? "Tu gusto no descansa, pero el medidor sí. Volvemos el mes que viene."
+            : "Dale al botón para que busquemos la pareja cross-media de algo que amas."
+        }
+        action={
+          feed.remaining > 0 ? (
+            <button
+              onClick={onNext}
+              disabled={pending}
+              className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
+            >
+              {pending ? "Buscando…" : "Descúbreme una"}
+            </button>
+          ) : undefined
+        }
+      />
+    );
+  }
+
+  // The Double Feature IS this screen — one narrative pairing at a time.
+  const cur = feed.items[Math.min(index, feed.items.length - 1)];
+  const perSeedBacklogs = backlogs.map((b) => ({
+    ...b,
+    isSeedHome: b.id === cur.defaultBacklog.id,
+  }));
+
+  return (
+    <div className="relative z-10 flex min-h-dvh flex-col px-4 pb-dock-clearance pt-[calc(16px+env(safe-area-inset-top))]">
+      <FeatureAura
+        key={cur.seed.catalogItemId}
+        seedPosterUrl={cur.seed.posterUrl}
+        recoPosterUrl={cur.reco.posterUrl}
+      />
+      <div className="relative z-30 flex items-center justify-between">
+        <BackButton onClick={onBack} />
+        <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-text-2">
+          Tu descubrimiento
+        </span>
+        <span className="font-mono text-[10px] tracking-[0.1em] text-text-3">
+          {feed.remaining}/{feed.cap}
+        </span>
+      </div>
+      <div className="relative z-10 flex-1 pt-2">
+        <CrossMediaDiscovery
+          key={cur.seed.catalogItemId}
+          variant="page"
+          seed={cur.seed}
+          reco={cur.reco}
+          narrative={cur.narrative}
+          username={username}
+          defaultBacklog={cur.defaultBacklog}
+          backlogs={perSeedBacklogs}
+          onDismiss={onNext}
+        />
+        {pending && (
+          <p className="mt-4 text-center text-sm text-text-2">
+            Buscando otra conexión…
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({
+  onBack,
+  title,
+  body,
+  action,
+}: {
+  onBack: () => void;
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="relative z-10 min-h-dvh">
+      <div className="px-4 pt-[calc(48px+env(safe-area-inset-top))]">
+        <BackButton onClick={onBack} />
+      </div>
+      <div className="flex flex-col items-center px-8 pt-[18vh] text-center">
+        <p className="mb-6 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
+          Descubrir
+        </p>
+        <p className="font-serif text-xl italic text-text">{title}</p>
+        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-text-2">
+          {body}
+        </p>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Volver"
+      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-text transition-colors hover:border-text-3"
+    >
+      <ChevronLeft size={19} />
+    </button>
+  );
+}

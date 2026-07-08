@@ -27,11 +27,15 @@ export async function getBacklogsForUser(userId: string) {
 
   if (rows.length === 0) return [];
 
-  // Up to 4 cover posters per backlog, newest first
+  // Up to 4 cover posters + up to 6 ADN colors + up to 14 items (for the shelf
+  // zoom's clickable list) per backlog, newest first.
   const covers = await db
     .select({
       backlogId: backlogItems.backlogId,
       posterUrl: catalogItems.posterUrl,
+      paletteHex: backlogItems.paletteHex,
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
       addedAt: backlogItems.addedAt,
     })
     .from(backlogItems)
@@ -45,16 +49,114 @@ export async function getBacklogsForUser(userId: string) {
     .orderBy(desc(backlogItems.addedAt));
 
   const coverMap = new Map<string, string[]>();
+  const paletteMap = new Map<string, string[]>();
+  const itemMap = new Map<string, { catalogItemId: string; title: string }[]>();
   for (const c of covers) {
-    if (!c.posterUrl) continue;
-    const list = coverMap.get(c.backlogId) ?? [];
-    if (list.length < 4) {
-      list.push(c.posterUrl);
-      coverMap.set(c.backlogId, list);
+    if (c.posterUrl) {
+      const list = coverMap.get(c.backlogId) ?? [];
+      if (list.length < 4) {
+        list.push(c.posterUrl);
+        coverMap.set(c.backlogId, list);
+      }
+    }
+    // ADN = the dominant color of each item, one per item, deduped.
+    const hex = c.paletteHex?.[0];
+    if (hex) {
+      const list = paletteMap.get(c.backlogId) ?? [];
+      if (
+        list.length < 6 &&
+        !list.some((h) => h.toLowerCase() === hex.toLowerCase())
+      ) {
+        list.push(hex);
+        paletteMap.set(c.backlogId, list);
+      }
+    }
+    if (c.title) {
+      const list = itemMap.get(c.backlogId) ?? [];
+      if (list.length < 14) {
+        list.push({ catalogItemId: c.catalogItemId, title: c.title });
+        itemMap.set(c.backlogId, list);
+      }
     }
   }
 
-  return rows.map((r) => ({ ...r, coverUrls: coverMap.get(r.id) ?? [] }));
+  return rows.map((r) => ({
+    ...r,
+    coverUrls: coverMap.get(r.id) ?? [],
+    // Lima-only fallback so a backlog with no extracted palette still auras.
+    paletteHex: paletteMap.get(r.id) ?? ["#D8FF3E"],
+    items: itemMap.get(r.id) ?? [],
+  }));
+}
+
+export interface UserStats {
+  totalItems: number;
+  totalBacklogs: number;
+  obsesiones: number;
+}
+
+/**
+ * Profile stats (M3.5). Both counts scan by the denormalized backlogItems.userId
+ * (no join) — same trust model as getBacklogsForUser. "Guardadas (horas)" from
+ * the mock needs runtime we don't store yet, so the third stat is "obsesiones".
+ */
+export async function getUserStats(userId: string): Promise<UserStats> {
+  const [itemAgg, backlogAgg] = await Promise.all([
+    db
+      .select({
+        totalItems: sql<number>`count(*)::int`,
+        obsesiones: sql<number>`(count(*) filter (where ${backlogItems.status} = 'obsessing_over'))::int`,
+      })
+      .from(backlogItems)
+      .where(eq(backlogItems.userId, userId)),
+    db
+      .select({ totalBacklogs: sql<number>`count(*)::int` })
+      .from(backlogs)
+      .where(eq(backlogs.userId, userId)),
+  ]);
+
+  return {
+    totalItems: itemAgg[0]?.totalItems ?? 0,
+    totalBacklogs: backlogAgg[0]?.totalBacklogs ?? 0,
+    obsesiones: itemAgg[0]?.obsesiones ?? 0,
+  };
+}
+
+/** Dominant hex of each row (paletteHex[0]), deduped, capped at `limit`. */
+function dominantHexes(
+  rows: { paletteHex: string[] | null }[],
+  limit: number,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const hex = r.paletteHex?.[0];
+    if (!hex) continue;
+    const key = hex.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hex);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * The user's ADN palette (M3.5) — up to `limit` distinct dominant colors across
+ * their most-recent items, for the profile orb aura. [] when nothing has an
+ * extracted palette yet → AuraField falls back to lima-only.
+ */
+export async function getUserPalette(
+  userId: string,
+  limit = 6,
+): Promise<string[]> {
+  const rows = await db
+    .select({ paletteHex: backlogItems.paletteHex })
+    .from(backlogItems)
+    .where(eq(backlogItems.userId, userId))
+    .orderBy(desc(backlogItems.addedAt))
+    .limit(40);
+  return dominantHexes(rows, limit);
 }
 
 export type BacklogItemWithCatalog = Awaited<

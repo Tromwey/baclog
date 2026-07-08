@@ -2,6 +2,15 @@ export type MediaType = "film" | "series" | "album";
 
 export type SearchTab = MediaType | "all";
 
+/** Canonical media order + Spanish UPPERCASE badges (mono-meta voice). One
+ * source of truth for the badges shared across search, recos, and the item page. */
+export const MEDIA_TYPES: MediaType[] = ["film", "series", "album"];
+export const MEDIA_TYPE_LABEL: Record<MediaType, string> = {
+  film: "PELÍCULA",
+  series: "SERIE",
+  album: "ÁLBUM",
+};
+
 /** Normalized result shape — the app never sees raw TMDB/iTunes payloads. */
 export interface ExternalItem {
   source: "tmdb" | "itunes";

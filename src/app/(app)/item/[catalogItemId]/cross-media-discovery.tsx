@@ -15,6 +15,7 @@ import {
 } from "@/modules/cards/render";
 import type { DoubleFeatureData } from "@/modules/cards/types";
 import { extractPalette } from "@/modules/cards/palette";
+import { MEDIA_TYPE_LABEL } from "@/modules/catalog/types";
 
 /**
  * F3.5.5 in-app discovery (FRAME B). Surfaces one cross-media reco on a loved
@@ -63,12 +64,6 @@ export interface CrossMediaDiscoveryProps {
    */
   onDismiss?: () => void;
 }
-
-const TYPE_LABEL: Record<string, string> = {
-  film: "PELÍCULA",
-  series: "SERIE",
-  album: "ÁLBUM",
-};
 
 type Status = "pending" | "accepted" | "dismissed";
 
@@ -287,14 +282,14 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       {/* Per-work metadata */}
       <div className="mt-4 flex items-start justify-between gap-4 font-mono text-[10px] tracking-[0.06em] text-text-2">
         <div className="flex-1">
-          <p className="tracking-[0.14em] text-text-3">A · {TYPE_LABEL[seed.type]}</p>
+          <p className="tracking-[0.14em] text-text-3">A · {MEDIA_TYPE_LABEL[seed.type]}</p>
           <p className="mt-1 font-serif text-[15px] not-italic italic tracking-normal text-text">
             {seed.title}
           </p>
           <p className="mt-0.5">{[seed.byline, seed.year].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="flex-1 text-right">
-          <p className="tracking-[0.14em] text-accent">B · {TYPE_LABEL[reco.type]}</p>
+          <p className="tracking-[0.14em] text-accent">B · {MEDIA_TYPE_LABEL[reco.type]}</p>
           <p className="mt-1 font-serif text-[15px] italic tracking-normal text-text">
             {reco.title}
           </p>

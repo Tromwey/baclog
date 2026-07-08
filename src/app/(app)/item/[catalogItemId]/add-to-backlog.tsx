@@ -15,10 +15,13 @@ export function AddToBacklog({
   catalogItemId,
   posterUrl,
   backlogs,
+  inBacklogName,
 }: {
   catalogItemId: string;
   posterUrl: string | null;
   backlogs: BacklogOption[];
+  /** The backlog this item already lives in, if any — flips the CTA. */
+  inBacklogName?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -74,12 +77,28 @@ export function AddToBacklog({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
-      >
-        Agregar a un backlog
-      </button>
+      {inBacklogName ? (
+        // Already logged — the primary "add" would lie. Offer adding to ANOTHER
+        // backlog as a quieter, honest action, and show where it already lives.
+        <>
+          <button
+            onClick={() => setOpen(true)}
+            className="w-full rounded-full border border-line py-3.5 font-semibold text-text transition-colors hover:border-accent"
+          >
+            Agregar a otro backlog
+          </button>
+          <p className="text-center text-xs text-text-3">
+            Ya en <span className="text-text-2">{inBacklogName}</span>
+          </p>
+        </>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
+        >
+          Agregar a un backlog
+        </button>
+      )}
 
       {open && (
         <div

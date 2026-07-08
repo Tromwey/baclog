@@ -89,9 +89,9 @@ export async function updateDisplayNameAction(name: string) {
 
 const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
 const RESERVED = new Set([
-  "admin", "api", "app", "baclog", "backlogs", "blocked", "item", "login",
-  "onboarding", "prototype", "search", "settings", "u", "verify", "www",
-  "waitlist", "recap", "analytics", "cron", "marketing",
+  "admin", "api", "app", "baclog", "backlogs", "blocked", "descubrir", "item",
+  "login", "onboarding", "perfil", "prototype", "search", "settings", "u",
+  "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
 ]);
 
 /** F2.17 — claiming implies opting in to a public page (toggleable). */
@@ -133,6 +133,16 @@ export async function setPublicAction(isPublic: boolean) {
 export async function deleteAccountAction() {
   const user = await assertUser();
   await db.delete(users).where(eq(users.id, user.id));
+  await signOut({ redirect: false });
+  redirect("/login");
+}
+
+/**
+ * Plain sign-out (M3.5 Perfil). No confirmation, no assertUser — signing out
+ * shouldn't depend on a valid session. Two-step like deleteAccountAction:
+ * clear the JWT cookie, then redirect (signOut's own redirect isn't trusted).
+ */
+export async function signOutAction() {
   await signOut({ redirect: false });
   redirect("/login");
 }

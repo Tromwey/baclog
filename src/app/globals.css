@@ -72,6 +72,10 @@
   --dur-fast: 120ms;
   --dur-base: 220ms;
   --dur-slow: 420ms;
+
+  /* Floating nav dock — bottom clearance for scrollable pages sitting under
+     the dock (dock height + gap + iOS home indicator). */
+  --dock-clearance: calc(130px + env(safe-area-inset-bottom, 0px));
 }
 
 @theme inline {
@@ -107,6 +111,9 @@
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Spacing → generates the `pb-dock-clearance` utility for the floating dock. */
+  --spacing-dock-clearance: var(--dock-clearance);
 }
 
 @layer base {
@@ -166,5 +173,164 @@
 @media (prefers-reduced-motion: no-preference) {
   .bl-rise {
     animation: bl-rise var(--dur-base) var(--ease-out) both;
+  }
+}
+
+/* ADN aura — animated "lava-lamp" light blobs (see components/ui/aura-field).
+   The technique (soft radial blob + slow drift + gentle pulse, screen-blended)
+   is the signature light that threads Discover/Profile; the grain over it keeps
+   it from reading as smooth AI-slop. Animation lives on classes (not inline
+   style) so the reduced-motion override below can win via !important. */
+@keyframes bl-aura-beam {
+  0%,
+  100% {
+    opacity: 0.32;
+    transform: scale(0.88);
+  }
+  50% {
+    opacity: 0.76;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes bl-aura-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(7%, -6%);
+  }
+  45% {
+    transform: translate(-6%, 5%);
+  }
+  70% {
+    transform: translate(5%, 8%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.bl-aura-beam {
+  animation: bl-aura-beam var(--aura-p-dur, 4s) ease-in-out infinite;
+  animation-delay: var(--aura-p-delay, 0s);
+}
+
+.bl-aura-drift {
+  animation: bl-aura-drift var(--aura-d-dur, 10s) ease-in-out infinite;
+  animation-delay: var(--aura-d-delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-aura-beam,
+  .bl-aura-drift {
+    animation: none !important;
+    transform: none !important;
+    opacity: 0.55;
+  }
+}
+
+/* Glass surface (sistema-diseno §4) — accent only, over bg/aura, never full
+   layout. Reuses the canonical --glass-* tokens (shared with StatusChip). */
+.bl-glass {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass-bg);
+  border: var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Backlog shelf → detail "zoom" (M3.5): the card scales up into a full
+   overlay, the backlog's ADN aura blooms, and the content rises in. */
+@keyframes bl-zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bl-zoom-aura {
+  from {
+    opacity: 0.25;
+    transform: scale(1.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bl-zoom-content {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bl-zoom-in {
+    animation: bl-zoom-in 0.5s cubic-bezier(0.55, 0, 0.2, 1) both;
+  }
+  .bl-zoom-aura {
+    animation: bl-zoom-aura 0.75s cubic-bezier(0.5, 0, 0.15, 1) both;
+  }
+  .bl-zoom-content {
+    animation: bl-zoom-content 0.55s ease both;
+  }
+}
+
+/* Carousel-style page transitions between the 3 nav destinations (M3.5). The
+   persistent aura + dock live in the layout and stay put; only the page content
+   (in template.tsx) slides. No fill-mode: the end state equals the natural
+   (no-transform) state, so nothing lingers to trap fixed overlays. */
+@keyframes bl-slide-r {
+  from {
+    opacity: 0;
+    transform: translateX(8%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bl-slide-l {
+  from {
+    opacity: 0;
+    transform: translateX(-8%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bl-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bl-slide-r {
+    animation: bl-slide-r 0.35s cubic-bezier(0.7, 0, 0.2, 1);
+  }
+  .bl-slide-l {
+    animation: bl-slide-l 0.35s cubic-bezier(0.7, 0, 0.2, 1);
+  }
+  .bl-fade-in {
+    animation: bl-fade-in 0.28s ease;
   }
 }

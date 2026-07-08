@@ -26,7 +26,7 @@ export default async function BacklogDetailPage({
   const eras = deriveEras(items);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg px-4 pb-16 pt-6 text-text">
+    <main className="mx-auto min-h-dvh w-full max-w-md px-4 pb-dock-clearance pt-6 text-text">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold">{backlog.name}</h1>
@@ -52,7 +52,7 @@ export default async function BacklogDetailPage({
         <div className="mt-16 text-center">
           <p className="text-text-2">Este backlog está vacío.</p>
           <Link
-            href="/search"
+            href="/descubrir"
             className="mt-3 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg"
           >
             Buscar algo que agregar
