@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "beta": "sh scripts/deploy-beta.sh",
+    "ship": "vercel --prod"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
