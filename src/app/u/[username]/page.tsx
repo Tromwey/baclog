@@ -110,7 +110,7 @@ export default async function PublicProfilePage({
               {profile.backlogs.length === 1 ? "backlog" : "backlogs"}
             </StatusChip>
             <StatusChip tone="obsessing" glass>
-              {totalItems} obsesiones
+              {totalItems} {totalItems === 1 ? "obsesión" : "obsesiones"}
             </StatusChip>
           </div>
         </header>

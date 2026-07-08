@@ -56,7 +56,9 @@ export function SearchPanel({
   );
   // catalogItemId -> the created backlogItem row id, so tapping ✓ can remove it.
   const [added, setAdded] = useState<Record<string, string>>({});
-  const [adding, setAdding] = useState(false);
+  // catalogItemIds with an add/remove in flight. A Set (not one shared flag) so
+  // each row owns its pending state — adding item A never touches B's button.
+  const [pending, setPending] = useState<Set<string>>(() => new Set());
   // Session target backlog — shown + changeable so adds aren't a mystery.
   const [options, setOptions] = useState<DiscoveryBacklog[]>(backlogs);
   const [target, setTarget] = useState<Target | null>(
@@ -128,23 +130,33 @@ export function SearchPanel({
       ? results
       : results.filter((r) => selected[r.mediaType]);
 
+  // Flip a single row's pending flag, leaving every other row untouched.
+  const setRowPending = (id: string, on: boolean) =>
+    setPending((p) => {
+      const next = new Set(p);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
   // Tap ＋ to add to the target backlog; tap ✓ to remove it again (undo).
   const toggle = async (r: CatalogSearchResult) => {
-    if (adding) return;
-    const existingItemId = added[r.catalogItemId];
+    const id = r.catalogItemId;
+    if (pending.has(id)) return; // ignore repeat taps on THIS row while in flight
+    const existingItemId = added[id];
     if (!existingItemId && !target) {
       // No target chosen yet (e.g. user has no backlogs) → pick/create one first.
       setPickerOpen(true);
       return;
     }
-    setAdding(true);
+    setRowPending(id, true);
     try {
       if (existingItemId) {
         await removeItemAction(existingItemId);
         setAdded((a) => {
           const next: Record<string, string> = {};
           for (const [k, v] of Object.entries(a)) {
-            if (k !== r.catalogItemId) next[k] = v;
+            if (k !== id) next[k] = v;
           }
           return next;
         });
@@ -152,19 +164,21 @@ export function SearchPanel({
         const paletteHex = r.posterUrl ? await extractPalette(r.posterUrl) : [];
         const res = await addItemAction({
           backlogId: target.id,
-          catalogItemId: r.catalogItemId,
+          catalogItemId: id,
           paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
         });
         const itemId = "id" in res ? res.id : null;
         if (itemId) {
-          setAdded((a) => ({ ...a, [r.catalogItemId]: itemId }));
+          setAdded((a) => ({ ...a, [id]: itemId }));
         }
         // duplicate/invalid → leave unmarked (it's already in the backlog)
       }
     } catch {
-      // swallow — button re-enables via finally
+      // Add/remove failed: don't fake success. The row falls back to its prior
+      // state (idle ＋ if it wasn't added), and clearing pending re-enables the
+      // tap — a failed add is retryable, never stuck mid-state.
     } finally {
-      setAdding(false);
+      setRowPending(id, false);
     }
   };
 
@@ -282,7 +296,7 @@ export function SearchPanel({
             </div>
             <AddButton
               added={!!added[r.catalogItemId]}
-              busy={adding}
+              busy={pending.has(r.catalogItemId)}
               label={r.title}
               onClick={(e) => {
                 e.stopPropagation();

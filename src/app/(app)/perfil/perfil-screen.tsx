@@ -40,9 +40,9 @@ export function PerfilScreen({
 
       {/* Stats */}
       <div className="mt-[26px] flex overflow-hidden rounded-[22px] bl-glass">
-        <Stat value={stats.totalItems} label="TÍTULOS" divider />
-        <Stat value={stats.totalBacklogs} label="BACKLOGS" divider />
-        <Stat value={stats.obsesiones} label="OBSESIONES" />
+        <Stat value={stats.totalItems} label={stats.totalItems === 1 ? "TÍTULO" : "TÍTULOS"} divider />
+        <Stat value={stats.totalBacklogs} label={stats.totalBacklogs === 1 ? "BACKLOG" : "BACKLOGS"} divider />
+        <Stat value={stats.obsesiones} label={stats.obsesiones === 1 ? "OBSESIÓN" : "OBSESIONES"} />
       </div>
 
       {/* Ajustes */}
