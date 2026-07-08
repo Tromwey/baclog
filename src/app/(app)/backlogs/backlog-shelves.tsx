@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AuraField } from "@/components/ui";
+import { pad, ShelfCard, shelfSeed } from "./backlog-shelf-card";
 
 export interface Shelf {
   id: string;
@@ -33,15 +34,12 @@ export function BacklogShelves({ shelves }: { shelves: Shelf[] }) {
             onClick={() => setOpen(sh)}
             className="mt-4 block w-full text-left"
           >
-            <div className="relative flex h-28 flex-col items-center justify-center overflow-hidden rounded-[26px] border border-white/10 bg-bg px-5 text-center">
-              <AuraField variant="shelf" colors={sh.paletteHex} seed={seed(sh.id)} />
-              <div className="relative font-serif text-[29px] italic leading-[1.04] text-text [text-shadow:0_2px_16px_rgba(0,0,0,0.6)]">
-                {sh.name}
-              </div>
-              <div className="relative mt-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text/80 [text-shadow:0_1px_10px_rgba(0,0,0,0.65)]">
-                {meta(sh)}
-              </div>
-            </div>
+            <ShelfCard
+              name={sh.name}
+              itemCount={sh.itemCount}
+              paletteHex={sh.paletteHex}
+              seed={shelfSeed(sh.id)}
+            />
           </button>
         ))}
       </div>
@@ -58,7 +56,7 @@ function ShelfDetail({ shelf, onClose }: { shelf: Shelf; onClose: () => void }) 
     >
       <div className="relative h-80 overflow-hidden">
         <div className="bl-zoom-aura absolute inset-0">
-          <AuraField variant="ambient" colors={shelf.paletteHex} seed={seed(shelf.id)} />
+          <AuraField variant="ambient" colors={shelf.paletteHex} seed={shelfSeed(shelf.id)} />
         </div>
         <div
           className="absolute inset-0"
@@ -132,15 +130,6 @@ function ShelfDetail({ shelf, onClose }: { shelf: Shelf; onClose: () => void }) 
     </div>
   );
 }
-
-/** Deterministic seed from the backlog id, so the aura is stable per backlog. */
-function seed(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-const pad = (n: number) => String(n).padStart(2, "0");
 
 const meta = (sh: Shelf) =>
   `${pad(sh.itemCount)} ${sh.itemCount === 1 ? "TÍTULO" : "TÍTULOS"}`;

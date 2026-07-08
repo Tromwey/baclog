@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { assertOwnsBacklog, assertOwnsBacklogItem } from "@/authz";
 import { db } from "@/db";
@@ -37,7 +37,22 @@ export async function addItemAction(input: {
     .returning({ id: backlogItems.id });
 
   revalidatePath(`/backlogs/${backlog.id}`);
-  return row ? { id: row.id } : { error: "duplicate" as const };
+  if (row) return { id: row.id };
+
+  // Already in this backlog — return the EXISTING row's id so the caller can
+  // still mark it as added / allow removal (the Descubrir search toggle relies
+  // on this; an opaque "duplicate" left the ＋ stuck and un-undoable).
+  const [existing] = await db
+    .select({ id: backlogItems.id })
+    .from(backlogItems)
+    .where(
+      and(
+        eq(backlogItems.backlogId, backlog.id),
+        eq(backlogItems.catalogItemId, input.catalogItemId),
+      ),
+    )
+    .limit(1);
+  return existing ? { id: existing.id } : { error: "invalid" as const };
 }
 
 const STATUSES: ItemStatus[] = [

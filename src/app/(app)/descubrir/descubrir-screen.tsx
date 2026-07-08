@@ -124,6 +124,7 @@ export function DescubrirScreen({
           selected={pills}
           onToggle={togglePill}
           fromRect={searchFrom}
+          backlogs={backlogs}
           onBack={() => setMode("entry")}
         />
       )}

@@ -3,6 +3,7 @@ import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
+import { dominantHexes, groupDominantHexes } from "./palette";
 
 /**
  * All reads here are scoped by userId in the query itself — callers pass
@@ -49,7 +50,6 @@ export async function getBacklogsForUser(userId: string) {
     .orderBy(desc(backlogItems.addedAt));
 
   const coverMap = new Map<string, string[]>();
-  const paletteMap = new Map<string, string[]>();
   const itemMap = new Map<string, { catalogItemId: string; title: string }[]>();
   for (const c of covers) {
     if (c.posterUrl) {
@@ -57,18 +57,6 @@ export async function getBacklogsForUser(userId: string) {
       if (list.length < 4) {
         list.push(c.posterUrl);
         coverMap.set(c.backlogId, list);
-      }
-    }
-    // ADN = the dominant color of each item, one per item, deduped.
-    const hex = c.paletteHex?.[0];
-    if (hex) {
-      const list = paletteMap.get(c.backlogId) ?? [];
-      if (
-        list.length < 6 &&
-        !list.some((h) => h.toLowerCase() === hex.toLowerCase())
-      ) {
-        list.push(hex);
-        paletteMap.set(c.backlogId, list);
       }
     }
     if (c.title) {
@@ -79,6 +67,8 @@ export async function getBacklogsForUser(userId: string) {
       }
     }
   }
+  // ADN = each backlog's distinct dominant colors (one per item).
+  const paletteMap = groupDominantHexes(covers, (c) => c.backlogId, 6);
 
   return rows.map((r) => ({
     ...r,
@@ -120,25 +110,6 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     totalBacklogs: backlogAgg[0]?.totalBacklogs ?? 0,
     obsesiones: itemAgg[0]?.obsesiones ?? 0,
   };
-}
-
-/** Dominant hex of each row (paletteHex[0]), deduped, capped at `limit`. */
-function dominantHexes(
-  rows: { paletteHex: string[] | null }[],
-  limit: number,
-): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const r of rows) {
-    const hex = r.paletteHex?.[0];
-    if (!hex) continue;
-    const key = hex.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(hex);
-    if (out.length >= limit) break;
-  }
-  return out;
 }
 
 /**

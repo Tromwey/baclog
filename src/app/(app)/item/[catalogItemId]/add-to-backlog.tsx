@@ -40,7 +40,7 @@ export function AddToBacklog({
     });
     setBusy(false);
     setOpen(false);
-    if ("id" in res || res.error === "duplicate") {
+    if ("id" in res) {
       setAdded(backlogId);
       router.refresh();
     }

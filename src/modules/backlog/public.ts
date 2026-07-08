@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, users } from "@/db/schema";
+import { dominantHexes, groupDominantHexes } from "./palette";
 
 /**
  * THE deliberate authz exception (see src/authz): these queries run with
@@ -45,6 +46,7 @@ export async function getPublicProfile(username: string) {
           .select({
             backlogId: backlogItems.backlogId,
             posterUrl: catalogItems.posterUrl,
+            paletteHex: backlogItems.paletteHex,
           })
           .from(backlogItems)
           .innerJoin(
@@ -62,21 +64,28 @@ export async function getPublicProfile(username: string) {
 
   const covers = new Map<string, string[]>();
   for (const c of coverRows) {
-    if (!c.posterUrl) continue;
-    const list = covers.get(c.backlogId) ?? [];
-    if (list.length < 4) {
-      list.push(c.posterUrl);
-      covers.set(c.backlogId, list);
+    if (c.posterUrl) {
+      const list = covers.get(c.backlogId) ?? [];
+      if (list.length < 4) {
+        list.push(c.posterUrl);
+        covers.set(c.backlogId, list);
+      }
     }
   }
+  // Per-backlog ADN (each shelf's aura) + the owner aggregate (hero aura).
+  const backlogPalettes = groupDominantHexes(coverRows, (c) => c.backlogId, 6);
+  const palette = dominantHexes(coverRows, 6);
 
   return {
     displayName: user.name ?? user.username ?? "",
     username: user.username!,
     isFounder: user.isFounder,
+    // Lima fallback so an owner with no extracted palette still auras.
+    palette: palette.length > 0 ? palette : ["#D8FF3E"],
     backlogs: lists.map((l) => ({
       ...l,
       coverUrls: covers.get(l.id) ?? [],
+      paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
     })),
   };
 }

@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Search as SearchIcon } from "lucide-react";
-import { addToDefaultBacklogAction } from "@/app/actions/discover-add-actions";
+import { Check, ChevronDown, ChevronLeft, Search as SearchIcon } from "lucide-react";
+import {
+  addItemAction,
+  removeItemAction,
+} from "@/app/actions/backlog-item-actions";
+import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { extractPalette } from "@/modules/cards/palette";
+import type { DiscoveryBacklog } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
 import {
   MEDIA_TYPES,
   MEDIA_TYPE_LABEL,
@@ -15,22 +27,25 @@ import {
 import { AddButton } from "./add-button";
 import { Pills } from "./pills";
 
+type Target = { id: string; name: string };
+
 /**
- * The "Buscar" path of Descubrir — the shipped /search behavior (cross-media,
- * type-filterable, debounced) re-housed as a state inside the merged
- * destination, with a native input and an inline one-tap ＋ that adds to the
- * user's default backlog (no seed → addToDefaultBacklogAction).
+ * The "Buscar" path of Descubrir. Adds go to a VISIBLE, changeable target
+ * backlog (no more silent "default" when the user has several), and the ＋
+ * toggles: tap again to remove — you can undo a mis-add without leaving.
  */
 export function SearchPanel({
   selected,
   onToggle,
   fromRect,
+  backlogs,
   onBack,
 }: {
   selected: Record<MediaType, boolean>;
   onToggle: (t: MediaType) => void;
   /** The Buscar button's rect at tap time — the bar FLIPs up from here. */
   fromRect: DOMRect | null;
+  backlogs: DiscoveryBacklog[];
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -39,11 +54,17 @@ export function SearchPanel({
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
     "idle",
   );
-  const [added, setAdded] = useState<Record<string, boolean>>({});
-  // Single-flight lock: only one add in flight at a time, so two quick taps on
-  // a brand-new user can't both race resolveOrCreateDefaultBacklog and create
-  // duplicate "Descubrimientos" backlogs (no unique index on (user_id, name)).
+  // catalogItemId -> the created backlogItem row id, so tapping ✓ can remove it.
+  const [added, setAdded] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
+  // Session target backlog — shown + changeable so adds aren't a mystery.
+  const [options, setOptions] = useState<DiscoveryBacklog[]>(backlogs);
+  const [target, setTarget] = useState<Target | null>(
+    backlogs[0] ? { id: backlogs[0].id, name: backlogs[0].name } : null,
+  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -107,21 +128,64 @@ export function SearchPanel({
       ? results
       : results.filter((r) => selected[r.mediaType]);
 
-  const add = async (r: CatalogSearchResult) => {
-    if (added[r.catalogItemId] || adding) return;
+  // Tap ＋ to add to the target backlog; tap ✓ to remove it again (undo).
+  const toggle = async (r: CatalogSearchResult) => {
+    if (adding) return;
+    const existingItemId = added[r.catalogItemId];
+    if (!existingItemId && !target) {
+      // No target chosen yet (e.g. user has no backlogs) → pick/create one first.
+      setPickerOpen(true);
+      return;
+    }
     setAdding(true);
-    setAdded((a) => ({ ...a, [r.catalogItemId]: true }));
     try {
-      const paletteHex = r.posterUrl ? await extractPalette(r.posterUrl) : [];
-      const res = await addToDefaultBacklogAction({
-        catalogItemId: r.catalogItemId,
-        paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
-      });
-      if ("error" in res) setAdded((a) => ({ ...a, [r.catalogItemId]: false }));
+      if (existingItemId) {
+        await removeItemAction(existingItemId);
+        setAdded((a) => {
+          const next: Record<string, string> = {};
+          for (const [k, v] of Object.entries(a)) {
+            if (k !== r.catalogItemId) next[k] = v;
+          }
+          return next;
+        });
+      } else if (target) {
+        const paletteHex = r.posterUrl ? await extractPalette(r.posterUrl) : [];
+        const res = await addItemAction({
+          backlogId: target.id,
+          catalogItemId: r.catalogItemId,
+          paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+        });
+        const itemId = "id" in res ? res.id : null;
+        if (itemId) {
+          setAdded((a) => ({ ...a, [r.catalogItemId]: itemId }));
+        }
+        // duplicate/invalid → leave unmarked (it's already in the backlog)
+      }
     } catch {
-      setAdded((a) => ({ ...a, [r.catalogItemId]: false }));
+      // swallow — button re-enables via finally
     } finally {
       setAdding(false);
+    }
+  };
+
+  const createAndSelect = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name || creating) return;
+    setCreating(true);
+    try {
+      const res = await createBacklogAction({ name });
+      const id = "id" in res ? res.id : null;
+      if (id) {
+        setOptions((o) => [{ id, name, itemCount: 0 }, ...o]);
+        setTarget({ id, name });
+        setNewName("");
+        setPickerOpen(false);
+      }
+    } catch {
+      // swallow
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -161,6 +225,18 @@ export function SearchPanel({
       <div className="mt-3.5">
         <Pills selected={selected} onToggle={onToggle} />
       </div>
+
+      {/* Target backlog — visible + changeable, so adds go somewhere you chose. */}
+      <button
+        onClick={() => setPickerOpen(true)}
+        className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-line bg-surface-2 py-1.5 pl-3.5 pr-3 text-[12.5px] transition-colors hover:border-text-3"
+      >
+        <span className="shrink-0 text-text-3">Agregando a</span>
+        <span className="truncate font-semibold text-accent">
+          {target?.name ?? "elige un backlog"}
+        </span>
+        <ChevronDown size={14} className="shrink-0 text-text-3" />
+      </button>
 
       <div className="mt-4 flex-1 space-y-1">
         {state === "loading" &&
@@ -210,12 +286,77 @@ export function SearchPanel({
               label={r.title}
               onClick={(e) => {
                 e.stopPropagation();
-                add(r);
+                toggle(r);
               }}
             />
           </div>
         ))}
       </div>
+
+      {pickerOpen &&
+        createPortal(
+          // Portaled to <body> so it escapes the content wrapper and sits above
+          // the dock. Centered glass, matching the rest of the M3.5 interface.
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-[2px]"
+            onClick={() => setPickerOpen(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bl-rise relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.07] p-5 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
+            >
+              <div aria-hidden className="bl-grain" />
+              <div className="relative">
+                <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
+                  Agregar a…
+                </h2>
+                <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto">
+                  {options.map((b) => {
+                    const on = target?.id === b.id;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          setTarget({ id: b.id, name: b.name });
+                          setPickerOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors ${
+                          on
+                            ? "border-accent/40 bg-accent-soft text-accent"
+                            : "border-white/10 bg-black/25 text-text hover:border-white/25"
+                        }`}
+                      >
+                        <span className="truncate font-medium">{b.name}</span>
+                        {on && <Check size={16} className="shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <form onSubmit={createAndSelect} className="mt-3 flex gap-2">
+                  <input
+                    value={newName}
+                    maxLength={60}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder={
+                      options.length === 0
+                        ? "Tu primer backlog…"
+                        : "Nuevo backlog…"
+                    }
+                    className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 outline-none placeholder:text-text-3 focus:border-accent"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creating || !newName.trim()}
+                    className="shrink-0 rounded-2xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
+                  >
+                    Crear
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

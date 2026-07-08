@@ -5,7 +5,6 @@ import { and, desc, eq } from "drizzle-orm";
 import { assertUser } from "@/authz";
 import { db } from "@/db";
 import { backlogItems, backlogs } from "@/db/schema";
-import { DISCOVERIES } from "@/modules/backlog/default-target";
 import {
   generateNextUncachedReco,
   getCrossMediaFeed,
@@ -28,6 +27,8 @@ import type { DoubleFeatureData } from "@/modules/cards/types";
  * userId-scoped queries. The reco target is a real catalog_item (grounded), so
  * adding it is the same trusted insert as the existing add-to-backlog picker.
  */
+
+const DISCOVERIES = "Descubrimientos";
 
 export interface AcceptResult {
   backlogId: string;
