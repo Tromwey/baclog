@@ -151,18 +151,27 @@ export async function acceptRecoToBacklogAction(input: {
  */
 export async function discoverNextRecoAction(): Promise<{
   result: DiscoverResult;
+  /**
+   * The seed the fresh pairing was generated for (set only on
+   * `result === "generated"`). The client locates that item in the re-read feed
+   * and lands on it, instead of assuming the new pairing was appended last.
+   */
+  seedCatalogItemId: string | null;
 }> {
   const user = await assertUser();
   let result: DiscoverResult;
+  let seedCatalogItemId: string | null = null;
   try {
-    result = await generateNextUncachedReco(user.id);
+    const gen = await generateNextUncachedReco(user.id);
+    result = gen.result;
+    seedCatalogItemId = gen.seedCatalogItemId;
   } catch (err) {
     // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
     console.error("[crossmedia] discover next failed:", err);
     result = "failed";
   }
   revalidatePath("/descubrir");
-  return { result };
+  return { result, seedCatalogItemId };
 }
 
 /**
@@ -192,7 +201,11 @@ export type DiscoverFeedResult =
   | { kind: "unavailable" }
   | { kind: "no_loved" }
   | { kind: "pending"; remaining: number; cap: number }
-  | { kind: "ready"; items: DiscoverItem[]; remaining: number; cap: number };
+  | { kind: "ready"; items: DiscoverItem[]; remaining: number; cap: number }
+  // Transient generation failure (provider 429/network/unusable output) on a
+  // first-load generation with nothing to show — retryable, distinct from the
+  // quiet `pending` empty. The UI surfaces a retry affordance for this.
+  | { kind: "failed" };
 
 export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
   const user = await assertUser();
@@ -230,6 +243,9 @@ export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
   }));
 
   if (items.length === 0) {
+    // A transient failure on the bounded first-load generation is retryable;
+    // keep it distinct from the quiet "still warming up / cap reached" pending.
+    if (feed.generationFailed) return { kind: "failed" };
     return { kind: "pending", remaining: feed.remaining, cap: feed.cap };
   }
   return { kind: "ready", items, remaining: feed.remaining, cap: feed.cap };

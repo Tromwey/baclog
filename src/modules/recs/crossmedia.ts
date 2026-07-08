@@ -51,6 +51,22 @@ export interface CrossMediaReco {
   cached: boolean;
 }
 
+/**
+ * Outcome of resolving a single reco. Splits the two things that used to both
+ * collapse to `null`:
+ *   - `ok`     — a grounded, addable reco (cached or freshly generated).
+ *   - `empty`  — a LEGITIMATE no-result: ineligible seed, cap reached, or the
+ *                proposal didn't ground to a real catalog item. Nothing to retry.
+ *   - `failed` — a TRANSIENT generation failure (provider 429/network/timeout or
+ *                unusable output). Retryable, and it NEVER charges the meter.
+ * The UI surfaces `failed` with a retry affordance; `empty` keeps its existing
+ * quiet copy.
+ */
+export type RecoResult =
+  | { status: "ok"; reco: CrossMediaReco }
+  | { status: "empty" }
+  | { status: "failed" };
+
 /** "2026-07" — matches recap_send / era.ts. */
 function eraKey(now = new Date()): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -59,9 +75,12 @@ function eraKey(now = new Date()): string {
 type SeedRow = typeof catalogItems.$inferSelect;
 
 /**
- * Get the cross-media reco for a loved seed item. Returns null when the seed
- * isn't eligible (books/games), the reco can't be grounded, or the user is
- * over their monthly cap with nothing cached.
+ * Get the cross-media reco for a loved seed item.
+ *
+ * Returns a discriminated {@link RecoResult} so callers can tell a TRANSIENT
+ * generation failure (`failed` — provider 429/network/unusable output) apart
+ * from a LEGITIMATE empty (`empty` — ineligible seed, cap reached with nothing
+ * cached, or a proposal that didn't ground). A `failed` never charges the meter.
  *
  * @param seedCatalogItemId the catalog_item the user loved
  * @param userId            for the per-user monthly meter ONLY (never sent to the LLM)
@@ -69,13 +88,13 @@ type SeedRow = typeof catalogItems.$inferSelect;
 export async function getCrossMediaReco(
   seedCatalogItemId: string,
   userId: string,
-): Promise<CrossMediaReco | null> {
+): Promise<RecoResult> {
   const [seed] = await db
     .select()
     .from(catalogItems)
     .where(eq(catalogItems.id, seedCatalogItemId))
     .limit(1);
-  if (!seed) return null;
+  if (!seed) return { status: "empty" };
 
   // Direction scope: only cine/series/album have a catalog (books/games out).
   if (
@@ -83,16 +102,16 @@ export async function getCrossMediaReco(
     seed.mediaType !== "series" &&
     seed.mediaType !== "album"
   ) {
-    return null;
+    return { status: "empty" };
   }
 
   // 1) Cache by seed — an identical seed never pays for a second generation.
   const cachedReco = await readCache(seedCatalogItemId);
-  if (cachedReco) return cachedReco;
+  if (cachedReco) return { status: "ok", reco: cachedReco };
 
   // 2) Meter CHECK (read-only): block before generating if already at the cap.
   //    Cache hits above never reach here, so re-viewing a cached reco is free.
-  if ((await remainingGenerations(userId)) <= 0) return null;
+  if ((await remainingGenerations(userId)) <= 0) return { status: "empty" };
 
   // 3) Provider proposes (fixture or real LLM). Only metadata crosses.
   const provider = crossMediaProvider();
@@ -103,21 +122,23 @@ export async function getCrossMediaReco(
     year: seed.year,
     genre: seed.genre,
   };
-  const proposal = await provider.propose(seedMeta);
-  // A transient failure (429/network) or unusable output returns null WITHOUT
-  // charging — the user isn't penalized for a generation that never happened.
-  if (!proposal) return null;
+  const outcome = await provider.propose(seedMeta);
+  // A transient failure (429/network) or unusable output → `failed`, returned
+  // BEFORE the charge below so the user is never penalized for a generation that
+  // never happened. This is distinct from the `empty` cases (no reco to show).
+  if (!outcome.ok) return { status: "failed" };
+  const proposal = outcome.proposal;
 
   // 4) Charge the meter — this is the HARD cap enforcement (the step-2 read is
   //    only a fast pre-check that can race across the provider round-trip). The
   //    guarded upsert returns false when already at the cap; if so, discard this
   //    over-cap generation rather than deliver it.
-  if (!(await tryChargeGeneration(userId))) return null;
+  if (!(await tryChargeGeneration(userId))) return { status: "empty" };
 
   // 5) GROUNDING (mandatory): resolve the proposed title against the catalog.
   //    Only a real, addable catalog_item is surfaced (LLMs hallucinate titles).
   const grounded = await groundProposal(proposal);
-  if (!grounded) return null;
+  if (!grounded) return { status: "empty" };
 
   // 6) Persist the grounded reco keyed by seed (idempotent on the unique index).
   const [row] = await db
@@ -135,9 +156,12 @@ export async function getCrossMediaReco(
     .returning();
 
   // A concurrent request may have won the insert — fall back to the cached row.
-  if (!row) return (await readCache(seedCatalogItemId)) ?? null;
+  if (!row) {
+    const cached = await readCache(seedCatalogItemId);
+    return cached ? { status: "ok", reco: cached } : { status: "empty" };
+  }
 
-  return toReco(proposal, grounded, provider.id, false);
+  return { status: "ok", reco: toReco(proposal, grounded, provider.id, false) };
 }
 
 /** Read a cached reco (with its grounded target) for a seed, if any. */
@@ -290,6 +314,13 @@ export interface CrossMediaFeed {
   cap: number;
   /** False → the user has no eligible loved items yet (clean empty state). */
   hasLovedItems: boolean;
+  /**
+   * True when the single bounded first-load generation hit a TRANSIENT failure
+   * (provider error / unusable output) and produced nothing — distinct from a
+   * legitimate empty (nothing cached yet, or cap reached). Only ever set when
+   * `items` is empty.
+   */
+  generationFailed: boolean;
 }
 
 function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
@@ -324,6 +355,7 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
       remaining: await remainingGenerations(userId),
       cap,
       hasLovedItems: false,
+      generationFailed: false,
     };
   }
 
@@ -334,10 +366,13 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
   }
 
   // Nothing cached yet → one bounded generation so the page is never empty for
-  // a user who has loved items and meter left.
+  // a user who has loved items and meter left. A transient provider failure is
+  // flagged (not swallowed) so the UI can offer a retry instead of a dead end.
+  let generationFailed = false;
   if (items.length === 0 && (await remainingGenerations(userId)) > 0) {
-    const reco = await getCrossMediaReco(seeds[0].catalogItemId, userId);
-    if (reco) items.push(toFeedItem(seeds[0], reco));
+    const res = await getCrossMediaReco(seeds[0].catalogItemId, userId);
+    if (res.status === "ok") items.push(toFeedItem(seeds[0], res.reco));
+    else if (res.status === "failed") generationFailed = true;
   }
 
   return {
@@ -345,10 +380,16 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
     remaining: await remainingGenerations(userId),
     cap,
     hasLovedItems: true,
+    generationFailed,
   };
 }
 
-/** Outcome of an explicit "discover another connection" request. */
+/**
+ * Outcome of an explicit "discover another connection" request.
+ * `failed` means a TRANSIENT generation failure (retryable) — NOT a legitimate
+ * empty. A proposal that generated but didn't ground reports `no_more` (there's
+ * no connection to show), so only real provider errors trigger the retry UI.
+ */
 export type DiscoverResult = "generated" | "cap_reached" | "no_more" | "failed";
 
 /**
@@ -356,12 +397,17 @@ export type DiscoverResult = "generated" | "cap_reached" | "no_more" | "failed";
  * the first loved seed with no cached pairing and spends ONE generation on it
  * (getCrossMediaReco enforces cap + grounding). Bounded to a single seed per
  * call so the meter only moves on deliberate taps.
+ *
+ * Returns the `seedCatalogItemId` it generated for on `result === "generated"`
+ * (null otherwise) so the caller can land on exactly that pairing after a
+ * cache-first re-read — getCrossMediaFeed orders items by seed, not append
+ * order, so a positional guess would land on the wrong one.
  */
 export async function generateNextUncachedReco(
   userId: string,
-): Promise<DiscoverResult> {
+): Promise<{ result: DiscoverResult; seedCatalogItemId: string | null }> {
   const seeds = await getLovedSeeds(userId);
-  if (seeds.length === 0) return "no_more";
+  if (seeds.length === 0) return { result: "no_more", seedCatalogItemId: null };
 
   let nextUncached: LovedSeed | null = null;
   for (const seed of seeds) {
@@ -371,11 +417,17 @@ export async function generateNextUncachedReco(
       break;
     }
   }
-  if (!nextUncached) return "no_more";
-  if ((await remainingGenerations(userId)) <= 0) return "cap_reached";
+  if (!nextUncached) return { result: "no_more", seedCatalogItemId: null };
+  if ((await remainingGenerations(userId)) <= 0)
+    return { result: "cap_reached", seedCatalogItemId: null };
 
-  const reco = await getCrossMediaReco(nextUncached.catalogItemId, userId);
-  return reco ? "generated" : "failed";
+  const res = await getCrossMediaReco(nextUncached.catalogItemId, userId);
+  if (res.status === "ok")
+    return { result: "generated", seedCatalogItemId: nextUncached.catalogItemId };
+  if (res.status === "failed") return { result: "failed", seedCatalogItemId: null };
+  // `empty` here = generated but didn't ground (or a rare cap race): no reco to
+  // show, but not a retryable error — keep the quiet "nothing more" path.
+  return { result: "no_more", seedCatalogItemId: null };
 }
 
 /** Remaining generations this month for a user (for UI / meter display). */

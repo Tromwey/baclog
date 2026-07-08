@@ -55,9 +55,21 @@ export interface CrossMediaProposal {
   };
 }
 
+/**
+ * A provider outcome. Either a PROPOSAL to ground, or a TRANSIENT failure —
+ * provider 429/network/timeout, or unusable/malformed output. The caller must
+ * treat `{ ok: false }` as "try again", NOT as "no connection found", and it
+ * must NOT charge the meter for it (see crossmedia.ts). A provider never
+ * signals a "legitimate empty": whether a proposal yields a real, addable reco
+ * is decided downstream by GROUNDING, not here.
+ */
+export type ProposalOutcome =
+  | { ok: true; proposal: CrossMediaProposal }
+  | { ok: false; error: "transient" };
+
 export interface CrossMediaRecProvider {
   readonly id: "fixture" | "anthropic" | "gemini";
-  propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null>;
+  propose(seed: CrossMediaSeed): Promise<ProposalOutcome>;
 }
 
 // ============================================================
@@ -150,9 +162,9 @@ const FIXTURE_FALLBACK: CrossMediaProposal = {
 class FixtureProvider implements CrossMediaRecProvider {
   readonly id = "fixture" as const;
 
-  async propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null> {
+  async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
     const hit = FIXTURE_PAIRINGS.find((p) => p.match(seed));
-    return hit ? hit.proposal : FIXTURE_FALLBACK;
+    return { ok: true, proposal: hit ? hit.proposal : FIXTURE_FALLBACK };
   }
 }
 
@@ -295,7 +307,7 @@ class LlmProvider implements CrossMediaRecProvider {
     this.client = new Anthropic({ apiKey });
   }
 
-  async propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null> {
+  async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
     let message: Anthropic.Message;
     try {
       message = await this.client.messages.create({
@@ -320,12 +332,15 @@ class LlmProvider implements CrossMediaRecProvider {
       });
     } catch (err) {
       console.error("[crossmedia] Anthropic provider failed:", err);
-      return null;
+      return { ok: false, error: "transient" };
     }
 
+    // No forced tool_use block, or output that can't be finalized, is a
+    // transient/unusable result — retryable, never a "no connection" verdict.
     const block = message.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return null;
-    return finalizeProposal(seed, block.input as Record<string, unknown>);
+    if (!block || block.type !== "tool_use") return { ok: false, error: "transient" };
+    const proposal = finalizeProposal(seed, block.input as Record<string, unknown>);
+    return proposal ? { ok: true, proposal } : { ok: false, error: "transient" };
   }
 }
 
@@ -333,8 +348,8 @@ class LlmProvider implements CrossMediaRecProvider {
 // Gemini provider — Google free tier (the low-cost option)
 // ============================================================
 
-/** Free-tier Gemini Flash by default; override with GEMINI_MODEL. */
-const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.0-flash";
+/** Gemini 2.5 Flash-Lite by default (low-cost); override with GEMINI_MODEL. */
+const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 class GeminiProvider implements CrossMediaRecProvider {
   readonly id = "gemini" as const;
@@ -344,10 +359,12 @@ class GeminiProvider implements CrossMediaRecProvider {
     this.client = new GoogleGenAI({ apiKey });
   }
 
-  async propose(seed: CrossMediaSeed): Promise<CrossMediaProposal | null> {
+  async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
     // Same boundary as the Anthropic provider: only item metadata crosses
     // (Pilar 4), fenced in <seed> that the system prompt flags as data. Output
     // is JSON, then parsed + clamped + grounded downstream (hallucination guard).
+    // Every failure below (429/network, empty, non-JSON, unusable) is transient
+    // and retryable — none of them is a legitimate "no connection".
     let text: string | undefined;
     try {
       const res = await this.client.models.generateContent({
@@ -363,18 +380,19 @@ class GeminiProvider implements CrossMediaRecProvider {
       text = res.text;
     } catch (err) {
       console.error("[crossmedia] Gemini provider failed:", err);
-      return null;
+      return { ok: false, error: "transient" };
     }
-    if (!text) return null;
+    if (!text) return { ok: false, error: "transient" };
 
     let raw: Record<string, unknown>;
     try {
       raw = JSON.parse(text) as Record<string, unknown>;
     } catch {
       console.error("[crossmedia] Gemini returned non-JSON output");
-      return null;
+      return { ok: false, error: "transient" };
     }
-    return finalizeProposal(seed, raw);
+    const proposal = finalizeProposal(seed, raw);
+    return proposal ? { ok: true, proposal } : { ok: false, error: "transient" };
   }
 }
 
