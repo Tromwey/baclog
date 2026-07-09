@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, LogOut, Pencil, Share2 } from "lucide-react";
 import { AuraField } from "@/components/ui";
 import { signOutAction } from "@/app/actions/account-actions";
+import { plural } from "@/lib/plural";
 import type { UserStats } from "@/modules/backlog/queries";
 
 /**
@@ -40,9 +41,9 @@ export function PerfilScreen({
 
       {/* Stats */}
       <div className="mt-[26px] flex overflow-hidden rounded-[22px] bl-glass">
-        <Stat value={stats.totalItems} label={stats.totalItems === 1 ? "TÍTULO" : "TÍTULOS"} divider />
-        <Stat value={stats.totalBacklogs} label={stats.totalBacklogs === 1 ? "BACKLOG" : "BACKLOGS"} divider />
-        <Stat value={stats.obsesiones} label={stats.obsesiones === 1 ? "OBSESIÓN" : "OBSESIONES"} />
+        <Stat value={stats.totalItems} label={plural(stats.totalItems, "TÍTULO", "TÍTULOS")} divider />
+        <Stat value={stats.totalBacklogs} label={plural(stats.totalBacklogs, "BACKLOG", "BACKLOGS")} divider />
+        <Stat value={stats.obsesiones} label={plural(stats.obsesiones, "OBSESIÓN", "OBSESIONES")} />
       </div>
 
       {/* Ajustes */}

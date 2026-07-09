@@ -1,4 +1,5 @@
 import { AuraField } from "@/components/ui";
+import { plural } from "@/lib/plural";
 
 /** Deterministic seed from the backlog id, so the aura is stable per backlog. */
 export function shelfSeed(id: string): number {
@@ -34,7 +35,7 @@ export function ShelfCard({
         {name}
       </div>
       <div className="relative mt-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text/80 [text-shadow:0_1px_10px_rgba(0,0,0,0.65)]">
-        {pad(itemCount)} {itemCount === 1 ? "título" : "títulos"}
+        {pad(itemCount)} {plural(itemCount, "título", "títulos")}
       </div>
     </div>
   );

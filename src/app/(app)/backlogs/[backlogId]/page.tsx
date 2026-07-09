@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
 import { deriveEras } from "@/modules/backlog/era";
 import { getBacklogItems } from "@/modules/backlog/queries";
+import { plural } from "@/lib/plural";
 import { BacklogMenu } from "./backlog-menu";
 import { ItemRow } from "./item-row";
 
@@ -31,7 +32,7 @@ export default async function BacklogDetailPage({
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold">{backlog.name}</h1>
           <p className="text-sm text-text-3">
-            {items.length} {items.length === 1 ? "ítem" : "ítems"}
+            {items.length} {plural(items.length, "ítem", "ítems")}
             {backlog.vibe ? ` · ${backlog.vibe}` : ""}
           </p>
         </div>

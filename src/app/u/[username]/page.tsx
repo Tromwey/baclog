@@ -6,6 +6,7 @@ import { Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/auth";
 import { getPublicProfile } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
+import { plural } from "@/lib/plural";
 import {
   AuraField,
   BackButton,
@@ -107,10 +108,10 @@ export default async function PublicProfilePage({
           <div className="mt-4 flex flex-wrap gap-2">
             <StatusChip tone="completed" glass>
               {profile.backlogs.length}{" "}
-              {profile.backlogs.length === 1 ? "backlog" : "backlogs"}
+              {plural(profile.backlogs.length, "backlog", "backlogs")}
             </StatusChip>
             <StatusChip tone="obsessing" glass>
-              {totalItems} {totalItems === 1 ? "obsesión" : "obsesiones"}
+              {totalItems} {plural(totalItems, "obsesión", "obsesiones")}
             </StatusChip>
           </div>
         </header>

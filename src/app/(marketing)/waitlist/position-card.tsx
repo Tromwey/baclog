@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { plural } from "@/lib/plural";
 
 export function PositionCard({
   position,
@@ -43,7 +44,7 @@ export function PositionCard({
         <p className="mt-1 font-mono text-4xl font-bold">#{position}</p>
         <p className="mt-1 text-xs text-text-3">
           {referralCount > 0
-            ? `${referralCount} ${referralCount === 1 ? "invitado" : "invitados"} · cada uno te sube 3 lugares`
+            ? `${referralCount} ${plural(referralCount, "invitado", "invitados")} · cada uno te sube 3 lugares`
             : "Invita gente y sube 3 lugares por cada uno"}
         </p>
       </div>

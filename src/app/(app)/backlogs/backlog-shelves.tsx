@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AuraField } from "@/components/ui";
+import { plural } from "@/lib/plural";
 import { pad, ShelfCard, shelfSeed } from "./backlog-shelf-card";
 
 export interface Shelf {
@@ -132,4 +133,4 @@ function ShelfDetail({ shelf, onClose }: { shelf: Shelf; onClose: () => void }) 
 }
 
 const meta = (sh: Shelf) =>
-  `${pad(sh.itemCount)} ${sh.itemCount === 1 ? "TÍTULO" : "TÍTULOS"}`;
+  `${pad(sh.itemCount)} ${plural(sh.itemCount, "TÍTULO", "TÍTULOS")}`;

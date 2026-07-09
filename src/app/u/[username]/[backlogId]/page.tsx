@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Music, Play } from "lucide-react";
 import { getPublicBacklog } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
+import { plural } from "@/lib/plural";
 import { AuraBackdrop, Button, MonoMeta } from "@/components/ui";
 import type { ChipTone } from "@/components/ui";
 
@@ -78,7 +79,7 @@ export default async function PublicBacklogPage({
             {data.backlogName}
           </h1>
           <MonoMeta className="mt-2 block">
-            {data.items.length} {data.items.length === 1 ? "ítem" : "ítems"}
+            {data.items.length} {plural(data.items.length, "ítem", "ítems")}
             {data.vibe ? ` · ${data.vibe}` : ""}
           </MonoMeta>
         </header>
