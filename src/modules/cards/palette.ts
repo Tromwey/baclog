@@ -3,6 +3,15 @@
  * protectable expression (ADR-008): we store 4-6 hex values, never the
  * artwork. Requires the CDN to allow CORS (mzstatic and image.tmdb.org
  * do); a tainted canvas or any failure degrades to [] silently.
+ *
+ * F3.6.1: ranks buckets by vividness (chroma) × coverage, not raw pixel count.
+ * Pure frequency favored whatever covered the most area — usually a dark or
+ * washed-out background — over the striking accent color a cover is actually
+ * memorable for. Chroma (max−min channel) is a cheap saturation proxy that
+ * naturally scores near-black/near-white/gray areas low without a separate
+ * lightness penalty, while still counting a dark-but-saturated color (e.g. a
+ * deep red logo in shadow) as vivid. Weighting by coverage keeps a single
+ * stray/noise pixel from outranking a color that's actually present.
  */
 export async function extractPalette(posterUrl: string): Promise<string[]> {
   try {
@@ -39,13 +48,29 @@ export async function extractPalette(posterUrl: string): Promise<string[]> {
       buckets.set(key, acc);
     }
 
-    return [...buckets.values()]
-      .sort((a, b) => b.n - a.n)
+    const averaged = [...buckets.values()].map((b) => {
+      const r = Math.round(b.r / b.n);
+      const g = Math.round(b.g / b.n);
+      const bl = Math.round(b.b / b.n);
+      const chroma = Math.max(r, g, bl) - Math.min(r, g, bl);
+      return { r, g, b: bl, n: b.n, chroma };
+    });
+
+    // Grayscale/monochrome art (b&w stills, some vinyl sleeves): every bucket's
+    // chroma is ~0, so chroma×count collapses to all-zero and .sort() would
+    // fall back to Map insertion (raster-scan) order instead of a meaningful
+    // ranking. Fall back to pure coverage in that case — there's no vivid
+    // color to prefer, so "most common" is the best available signal.
+    const maxChroma = Math.max(0, ...averaged.map((c) => c.chroma));
+    const score = maxChroma < 8 ? (c: (typeof averaged)[number]) => c.n : (c: (typeof averaged)[number]) => c.chroma * c.n;
+
+    return averaged
+      .sort((a, b) => score(b) - score(a))
       .slice(0, 5)
       .map(
-        (b) =>
-          `#${[b.r, b.g, b.b]
-            .map((c) => Math.round(c / b.n).toString(16).padStart(2, "0"))
+        (c) =>
+          `#${[c.r, c.g, c.b]
+            .map((v) => v.toString(16).padStart(2, "0"))
             .join("")}`,
       );
   } catch {

@@ -1,10 +1,19 @@
 "use client";
 
-import { AuraField } from "./aura-field";
+import { AuraField, LIMA } from "./aura-field";
 
-// No signed-in user on the auth screens → a fixed brand ADN set
-// (AuraField forces lima first). Defined once, shared by login/verify/onboarding.
-export const AUTH_ADN = ["#C7462F", "#3A5A9B", "#9B4DCA", "#E8B23A", "#7AA2FF"];
+// No signed-in user on the auth screens → a fixed brand ADN set. There's no
+// real content to evolve with here, so lima is included explicitly (AuraField
+// no longer auto-injects it — F3.6.1, content-driven auras only). Defined
+// once, shared by login/verify/onboarding.
+export const AUTH_ADN = [
+  LIMA,
+  "#C7462F",
+  "#3A5A9B",
+  "#9B4DCA",
+  "#E8B23A",
+  "#7AA2FF",
+];
 
 // The shared aura + radial-fade overlay behind the auth screens. Only the
 // per-screen `seed` varies (login=21, verify=34, onboarding=47).

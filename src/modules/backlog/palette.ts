@@ -1,10 +1,22 @@
+import { z } from "zod";
+
 /**
  * ADN palette aggregation — one source of truth for "take up to N distinct
  * dominant colors, most-recent-first". The dominant color of an item is its
- * paletteHex[0] (extractPalette orders by frequency). Rows are expected to be
+ * paletteHex[0] (extractPalette ranks by vividness — F3.6.1). Rows are expected to be
  * ordered newest-first by the caller. The cap is product-visible (the ADN
  * aura), so keep it here, not scattered.
  */
+
+/**
+ * Shared validation for a backlogItems.paletteHex array — used by both
+ * addItemAction (backlog-item-actions.ts) and updateItemPaletteAction
+ * (palette-backfill-actions.ts). Lives here, NOT in either "use server" action
+ * file — a "use server" file may only export async functions.
+ */
+export const paletteHexSchema = z
+  .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
+  .max(6);
 
 /** Distinct dominant hexes across rows, deduped case-insensitively, capped. */
 export function dominantHexes(

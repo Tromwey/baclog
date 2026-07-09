@@ -11,18 +11,23 @@ import type { CSSProperties } from "react";
  * here. Animation lives on the .bl-aura-* classes (globals.css) so the
  * reduced-motion override can win.
  *
- * Lima (--accent) is ALWAYS blob 0 — the fixed brand signal (sistema-diseno
- * §2). Callers pass only their extracted colors; the component forces lima in
- * front and falls back to lima-only when the palette is empty.
+ * Content-driven (F3.6.1): the aura renders ONLY the caller's extracted
+ * palette — no forced brand color. Lima (--accent) is the EMPTY-palette
+ * fallback only (a backlog/user with no extracted colors yet still auras
+ * lima-only), never mixed into a real palette. This was previously "lima
+ * always blob 0", but with `mixBlendMode: screen` a bright, saturated lima
+ * visually swamps the (often darker/muted) real cover-art colors — the aura
+ * always read as green regardless of actual content. Dropping the forced
+ * lima lets the aura genuinely evolve with what's in the backlog(s).
  */
 
 /** Brand signal — kept in sync with --accent (no CSS var access in this math). */
-const LIMA = "#D8FF3E";
+export const LIMA = "#D8FF3E";
 
 export type AuraVariant = "ambient" | "orb" | "left" | "shelf";
 
 export interface AuraFieldProps {
-  /** Extracted hex colors; the component prepends lima itself. */
+  /** Extracted hex colors; falls back to lima-only when empty (no forced mix-in otherwise). */
   colors: string[];
   /** Deterministic integer — same seed + colors ⇒ same layout every render. */
   seed: number;
@@ -129,8 +134,7 @@ export function AuraField({
   variant = "ambient",
   className = "",
 }: AuraFieldProps) {
-  const rest = colors.filter((c) => c.toLowerCase() !== LIMA.toLowerCase());
-  const palette = [LIMA, ...rest];
+  const palette = colors.length > 0 ? colors : [LIMA];
   const cfg = VARIANTS[variant];
 
   return (

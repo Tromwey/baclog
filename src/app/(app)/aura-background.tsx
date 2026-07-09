@@ -8,7 +8,9 @@ import { AuraField } from "@/components/ui";
  * per page — so it stays put across navigations; only the page content/text
  * transitions over it. Its reach is route-controlled: on /descubrir it bleeds
  * to mid-screen (fade off); everywhere else a fade cuts it just below the
- * header. Colors = lima + the user's extracted palette.
+ * header. Colors = the user's extracted palette across all their backlogs
+ * (F3.6.1 — content-driven, no forced lima; AuraField falls back to lima-only
+ * when the user has no extracted colors yet).
  */
 export function AuraBackground({ colors }: { colors: string[] }) {
   const pathname = usePathname();
