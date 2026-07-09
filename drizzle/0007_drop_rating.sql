@@ -1,0 +1,1 @@
+ALTER TABLE "backlog_item" DROP COLUMN "rating";

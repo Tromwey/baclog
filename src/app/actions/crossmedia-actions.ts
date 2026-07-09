@@ -8,6 +8,7 @@ import { backlogItems, backlogs } from "@/db/schema";
 import {
   generateNextUncachedReco,
   getCrossMediaFeed,
+  getCrossMediaRecId,
   type CrossMediaFeed,
   type DiscoverResult,
 } from "@/modules/recs/crossmedia";
@@ -84,7 +85,11 @@ export async function acceptRecoAction(input: {
 }): Promise<AcceptResult | { error: "invalid" }> {
   const user = await assertUser();
 
-  const target = await resolveTargetBacklog(user.id, input.seedCatalogItemId);
+  // Independent lookups (different tables, no data dependency) — run in parallel.
+  const [target, sourceCrossMediaRecId] = await Promise.all([
+    resolveTargetBacklog(user.id, input.seedCatalogItemId),
+    getCrossMediaRecId(input.seedCatalogItemId, input.targetCatalogItemId),
+  ]);
 
   await db
     .insert(backlogItems)
@@ -92,6 +97,7 @@ export async function acceptRecoAction(input: {
       backlogId: target.backlogId,
       userId: user.id,
       catalogItemId: input.targetCatalogItemId,
+      sourceCrossMediaRecId,
       paletteHex:
         input.paletteHex && input.paletteHex.length > 0
           ? input.paletteHex.slice(0, 6)
@@ -111,16 +117,21 @@ export async function acceptRecoAction(input: {
  */
 export async function acceptRecoToBacklogAction(input: {
   backlogId: string;
+  seedCatalogItemId: string;
   targetCatalogItemId: string;
   paletteHex?: string[];
 }): Promise<AcceptResult | { error: "invalid" | "not_found" }> {
   const user = await assertUser();
 
-  const [backlog] = await db
-    .select({ id: backlogs.id, name: backlogs.name })
-    .from(backlogs)
-    .where(and(eq(backlogs.id, input.backlogId), eq(backlogs.userId, user.id)))
-    .limit(1);
+  // Independent lookups (different tables, no data dependency) — run in parallel.
+  const [[backlog], sourceCrossMediaRecId] = await Promise.all([
+    db
+      .select({ id: backlogs.id, name: backlogs.name })
+      .from(backlogs)
+      .where(and(eq(backlogs.id, input.backlogId), eq(backlogs.userId, user.id)))
+      .limit(1),
+    getCrossMediaRecId(input.seedCatalogItemId, input.targetCatalogItemId),
+  ]);
   if (!backlog) return { error: "not_found" };
 
   await db
@@ -129,6 +140,7 @@ export async function acceptRecoToBacklogAction(input: {
       backlogId: backlog.id,
       userId: user.id,
       catalogItemId: input.targetCatalogItemId,
+      sourceCrossMediaRecId,
       paletteHex:
         input.paletteHex && input.paletteHex.length > 0
           ? input.paletteHex.slice(0, 6)

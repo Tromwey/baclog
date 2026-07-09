@@ -19,9 +19,15 @@ import {
 export const mediaTypeEnum = pgEnum("media_type", ["film", "series", "album"]);
 export const itemStatusEnum = pgEnum("item_status", [
   "on_my_radar",
-  "obsessing_over",
+  "in_progress",
   "completed",
   "custom",
+]);
+/** No me gusta / me gusta / me obsesiona — applies regardless of `status` (F3.6). */
+export const itemReactionEnum = pgEnum("item_reaction", [
+  "disliked",
+  "liked",
+  "obsessed",
 ]);
 export const preferredServiceEnum = pgEnum("preferred_service", [
   "spotify",
@@ -223,8 +229,18 @@ export const backlogItems = pgTable(
     status: itemStatusEnum("status").notNull().default("on_my_radar"),
     /** Only meaningful when status = 'custom' (F2.8) */
     customStatusLabel: text("custom_status_label"),
-    /** 1–5, only meaningful when status = 'completed' (F2.9) */
-    rating: smallint("rating"),
+    /** No me gusta / me gusta / me obsesiona — applies in ANY status (F3.6), not gated on 'completed'. */
+    reaction: itemReactionEnum("reaction"),
+    /**
+     * Provenance (F3.6): set when this item was accepted from a cross-media
+     * AI reco, so ratings can be joined back to the prompt_version/model that
+     * produced it. Null for organically-added items. `set null` (not cascade)
+     * so pruning a cache row never deletes a user's real backlog item.
+     */
+    sourceCrossMediaRecId: text("source_cross_media_rec_id").references(
+      () => crossMediaRecs.id,
+      { onDelete: "set null" },
+    ),
     /** F2.15 — 4-6 hex colors extracted on-device at save time */
     paletteHex: text("palette_hex").array(),
     addedAt: timestamp("added_at").notNull().defaultNow(),
@@ -234,6 +250,9 @@ export const backlogItems = pgTable(
   (t) => [
     index("backlog_item_backlog_id_idx").on(t.backlogId),
     index("backlog_item_user_id_idx").on(t.userId),
+    index("backlog_item_source_cross_media_rec_id_idx").on(
+      t.sourceCrossMediaRecId,
+    ),
     uniqueIndex("backlog_item_unique_per_backlog").on(
       t.backlogId,
       t.catalogItemId,
@@ -435,6 +454,47 @@ export const crossMediaRecUsage = pgTable(
   (t) => [
     // THE meter key: at most one counter row per (user, month)
     uniqueIndex("cross_media_rec_usage_user_era_unique").on(t.userId, t.eraKey),
+  ],
+);
+
+/**
+ * Structured "why" feedback (F3.6) on a cross-media-sourced backlog item's
+ * reaction — chips, not free text, so it's aggregable by promptVersion/model
+ * without another LLM pass. One row per backlog item (upsert on re-submit —
+ * there's one live reaction and one live "why" per item, no history needed).
+ */
+export const crossMediaRecoFeedback = pgTable(
+  "cross_media_reco_feedback",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    backlogItemId: text("backlog_item_id")
+      .notNull()
+      .references(() => backlogItems.id, { onDelete: "cascade" }),
+    /** Denormalized from backlogItems.userId — cheap ownership, no join. */
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * Denormalized from backlogItems.sourceCrossMediaRecId so aggregating by
+     * promptVersion/model is one join (→ cross_media_rec), not two.
+     */
+    crossMediaRecId: text("cross_media_rec_id")
+      .notNull()
+      .references(() => crossMediaRecs.id, { onDelete: "cascade" }),
+    /** Tag slugs (see crossmedia-feedback-actions.ts) — validated app-side, not a DB enum. */
+    reasons: text("reasons").array().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cross_media_reco_feedback_backlog_item_unique").on(
+      t.backlogItemId,
+    ),
+    index("cross_media_reco_feedback_cross_media_rec_idx").on(
+      t.crossMediaRecId,
+    ),
   ],
 );
 

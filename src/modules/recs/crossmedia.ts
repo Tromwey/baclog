@@ -221,6 +221,30 @@ async function readCache(seedCatalogItemId: string): Promise<CrossMediaReco | nu
 }
 
 /**
+ * Resolve a cached rec's own row id for a (seed, target) pair, for provenance
+ * stamping (F3.6: backlogItems.sourceCrossMediaRecId). Server-side lookup, not
+ * client-threaded — crossMediaRecs is a shared, non-user-scoped cache, so an id
+ * handed up by the client couldn't be trusted without re-validating against
+ * this same pair anyway. Cheap: seedCatalogItemId already has a unique index.
+ */
+export async function getCrossMediaRecId(
+  seedCatalogItemId: string,
+  targetCatalogItemId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ id: crossMediaRecs.id })
+    .from(crossMediaRecs)
+    .where(
+      and(
+        eq(crossMediaRecs.seedCatalogItemId, seedCatalogItemId),
+        eq(crossMediaRecs.targetCatalogItemId, targetCatalogItemId),
+      ),
+    )
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Atomically bump the user's monthly generation counter, returning false if
  * the bump would exceed the cap (ADR-009 abuse/cost guard). Uses an upsert with
  * a guarded increment so it's race-safe under concurrent requests.

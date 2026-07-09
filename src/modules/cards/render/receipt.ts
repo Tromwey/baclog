@@ -12,7 +12,7 @@ import {
   footerUrl,
   hashString,
   mulberry32,
-  stars,
+  reactionGlyph,
   truncateToWidth,
 } from "./util";
 
@@ -106,10 +106,10 @@ export function drawReceipt(
 
     ctx.fillStyle = INK_SOFT;
     ctx.font = MONO(34);
-    const rating =
-      item.status === "completed" && item.rating ? `  ${stars(item.rating)}` : "";
+    const glyph = reactionGlyph(item.reaction);
+    const reaction = glyph ? `  ${glyph}` : "";
     ctx.fillText(
-      `  ${TYPE_LABEL[item.type]} · ${(item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase()}${rating}`,
+      `  ${TYPE_LABEL[item.type]} · ${(item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase()}${reaction}`,
       pad,
       y + 52,
     );

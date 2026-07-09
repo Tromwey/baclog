@@ -8,10 +8,10 @@ import {
 } from "../types";
 import { DISPLAY, MONO, SANS, SERIF } from "./fonts";
 import {
-  clampRating,
   drawGrain,
   footerUrl,
   hashString,
+  reactionGlyph,
   truncateToWidth,
   wrapText,
 } from "./util";
@@ -92,12 +92,12 @@ export function drawTicket(
   ctx.fillStyle = CREAM_SOFT;
   ctx.fillText(`${item.year} · ${item.byline}`, tx + 70, y - 32);
 
-  // Stars + stamp anchor upward from the perforation, so they never collide
-  if (item.status === "completed" && item.rating) {
-    const r = clampRating(item.rating);
+  // Reaction glyph + stamp anchor upward from the perforation, so they never collide
+  const glyph = reactionGlyph(item.reaction);
+  if (glyph) {
     ctx.fillStyle = CREAM;
     ctx.font = DISPLAY(80, 700);
-    ctx.fillText("★ ".repeat(r) + "☆ ".repeat(5 - r), tx + 70, perfY - 240);
+    ctx.fillText(glyph, tx + 70, perfY - 240);
   }
 
   // Status stamp — rotated stroked box, like an ink stamp

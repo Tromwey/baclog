@@ -116,7 +116,7 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       id: backlogItems.id,
       status: backlogItems.status,
       customStatusLabel: backlogItems.customStatusLabel,
-      rating: backlogItems.rating,
+      reaction: backlogItems.reaction,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       byline: catalogItems.byline,

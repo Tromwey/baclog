@@ -6,13 +6,11 @@ import { z } from "zod";
 import { assertOwnsBacklog, assertOwnsBacklogItem } from "@/authz";
 import { db } from "@/db";
 import { backlogItems, itemStatusEnum } from "@/db/schema";
+import { paletteHexSchema } from "@/modules/backlog/palette";
 
 type ItemStatus = (typeof itemStatusEnum.enumValues)[number];
 
-const paletteSchema = z
-  .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
-  .max(6)
-  .optional();
+const paletteSchema = paletteHexSchema.optional();
 
 export async function addItemAction(input: {
   backlogId: string;
@@ -57,7 +55,7 @@ export async function addItemAction(input: {
 
 const STATUSES: ItemStatus[] = [
   "on_my_radar",
-  "obsessing_over",
+  "in_progress",
   "completed",
   "custom",
 ];
@@ -80,8 +78,6 @@ export async function setStatusAction(
     .set({
       status,
       customStatusLabel: label ? label.data : null,
-      // Rating only makes sense on completed items
-      ...(status !== "completed" ? { rating: null } : {}),
       statusChangedAt: new Date(),
     })
     .where(eq(backlogItems.id, item.id));
@@ -89,15 +85,23 @@ export async function setStatusAction(
   return { ok: true as const };
 }
 
-export async function setRatingAction(backlogItemId: string, rating: number) {
+const REACTIONS = ["disliked", "liked", "obsessed"] as const;
+export type ItemReaction = (typeof REACTIONS)[number];
+
+/**
+ * No me gusta / me gusta / me obsesiona (F3.6) — applies regardless of the
+ * item's status (obsession can strike mid-consumption, not just on completion).
+ */
+export async function setReactionAction(
+  backlogItemId: string,
+  reaction: ItemReaction,
+) {
   const { item } = await assertOwnsBacklogItem(backlogItemId);
-  const parsed = z.number().int().min(1).max(5).safeParse(rating);
-  if (!parsed.success || item.status !== "completed") {
-    return { error: "invalid" as const };
-  }
+  const parsed = z.enum(REACTIONS).safeParse(reaction);
+  if (!parsed.success) return { error: "invalid" as const };
   await db
     .update(backlogItems)
-    .set({ rating: parsed.data })
+    .set({ reaction: parsed.data })
     .where(eq(backlogItems.id, item.id));
   revalidatePath(`/backlogs/${item.backlogId}`);
   return { ok: true as const };

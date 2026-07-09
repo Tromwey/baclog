@@ -3,10 +3,10 @@ import type { CardBacklog, CardItem, ItemStatus } from "./types";
 
 const STATUS_MAP: Record<string, ItemStatus> = {
   on_my_radar: "on-my-radar",
-  obsessing_over: "obsessing-over",
+  in_progress: "in-progress",
   completed: "completed",
   // Custom statuses render their own label via statusLabelOverride
-  custom: "obsessing-over",
+  custom: "in-progress",
 };
 
 /**
@@ -36,7 +36,7 @@ export function toCardBacklog(
           i.status === "custom"
             ? (i.customStatusLabel ?? undefined)
             : undefined,
-        rating: i.rating ?? undefined,
+        reaction: i.reaction ?? undefined,
       }),
     ),
   };

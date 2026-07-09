@@ -277,7 +277,7 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         title="Todavía no amas nada — al menos no en el registro."
-        body="Marca algo como obsessing over o califícalo ★★★★+ al completarlo, y volvemos con una conexión que no veías venir."
+        body="Reacciona con 'me gusta' o 'me obsesiona' a algo, y volvemos con una conexión que no veías venir."
       />
     );
   }

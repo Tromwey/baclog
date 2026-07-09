@@ -2,22 +2,20 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import {
-  removeItemAction,
-  setRatingAction,
-  setStatusAction,
-} from "@/app/actions/backlog-item-actions";
+import { removeItemAction, setStatusAction } from "@/app/actions/backlog-item-actions";
+import { CrossMediaFeedback } from "@/components/cross-media-feedback";
+import { ReactionPicker } from "@/components/reaction-picker";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
 
 const STATUS_LABEL: Record<string, string> = {
   on_my_radar: "On my radar",
-  obsessing_over: "Obsessing over",
+  in_progress: "In progress",
   completed: "Completed",
 };
 
 const STATUS_STYLE: Record<string, string> = {
   on_my_radar: "bg-surface-2 text-text-2",
-  obsessing_over: "bg-fuchsia-900/60 text-fuchsia-200",
+  in_progress: "bg-fuchsia-900/60 text-fuchsia-200",
   completed: "bg-emerald-900/60 text-emerald-200",
   custom: "bg-sky-900/60 text-sky-200",
 };
@@ -25,6 +23,7 @@ const STATUS_STYLE: Record<string, string> = {
 export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
   const [picking, setPicking] = useState(false);
   const [customDraft, setCustomDraft] = useState("");
+  const [reaction, setReaction] = useState(item.reaction);
   const [pending, startTransition] = useTransition();
 
   const statusLabel =
@@ -32,9 +31,13 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
       ? (item.customStatusLabel ?? "Custom")
       : STATUS_LABEL[item.status];
 
-  function pick(status: "on_my_radar" | "obsessing_over" | "completed") {
+  function pick(status: "on_my_radar" | "in_progress" | "completed") {
     setPicking(false);
-    startTransition(() => setStatusAction(item.id, status).then(() => {}));
+    startTransition(() =>
+      setStatusAction(item.id, status)
+        .then(() => {})
+        .catch(() => {}),
+    );
   }
 
   function pickCustom() {
@@ -43,7 +46,9 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
     setPicking(false);
     setCustomDraft("");
     startTransition(() =>
-      setStatusAction(item.id, "custom", label).then(() => {}),
+      setStatusAction(item.id, "custom", label)
+        .then(() => {})
+        .catch(() => {}),
     );
   }
 
@@ -82,7 +87,11 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
         </div>
         <button
           onClick={() =>
-            startTransition(() => removeItemAction(item.id).then(() => {}))
+            startTransition(() =>
+              removeItemAction(item.id)
+                .then(() => {})
+                .catch(() => {}),
+            )
           }
           disabled={pending}
           aria-label={`Quitar ${item.title}`}
@@ -95,7 +104,7 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
       {picking && (
         <div className="mt-2 space-y-2 border-t border-line pt-2">
           <div className="flex flex-wrap gap-1.5">
-            {(["on_my_radar", "obsessing_over", "completed"] as const).map(
+            {(["on_my_radar", "in_progress", "completed"] as const).map(
               (s) => (
                 <button
                   key={s}
@@ -128,23 +137,25 @@ export function ItemRow({ item }: { item: BacklogItemWithCatalog }) {
         </div>
       )}
 
-      {item.status === "completed" && (
-        <div className="mt-2 flex gap-1 border-t border-line pt-2">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              disabled={pending}
-              onClick={() =>
-                startTransition(() => setRatingAction(item.id, n).then(() => {}))
-              }
-              aria-label={`${n} estrellas`}
-              className={`text-lg ${
-                (item.rating ?? 0) >= n ? "text-amber-300" : "text-line"
-              }`}
-            >
-              ★
-            </button>
-          ))}
+      {/* Reacción — no me gusta / me gusta / me obsesiona. Aplica en cualquier
+          status: la obsesión puede surgir antes de terminar algo. */}
+      <div className="mt-2 border-t border-line pt-2">
+        <ReactionPicker
+          backlogItemId={item.id}
+          reaction={reaction}
+          variant="tinted"
+          onChange={setReaction}
+        />
+      </div>
+
+      {reaction && item.sourceCrossMediaRecId && (
+        <div className="mt-2 border-t border-line pt-2">
+          <CrossMediaFeedback
+            backlogItemId={item.id}
+            reaction={reaction}
+            sourceCrossMediaRecId={item.sourceCrossMediaRecId}
+            variant="plain"
+          />
         </div>
       )}
     </div>

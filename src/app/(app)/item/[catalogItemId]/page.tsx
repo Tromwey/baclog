@@ -10,6 +10,7 @@ import { getCatalogItem } from "@/modules/catalog/cache";
 import { BackButton } from "@/components/ui";
 import { AddToBacklog } from "./add-to-backlog";
 import { Attribution } from "./attribution";
+import { ItemStatusControls } from "./item-status-controls";
 
 const TYPE_LABEL: Record<string, string> = {
   film: "Película",
@@ -101,6 +102,8 @@ export default async function ItemPage({
           </Link>
         )}
       </div>
+
+      {entry && <ItemStatusControls entry={entry} />}
 
       <Attribution source={item.source} mediaType={item.mediaType} />
 

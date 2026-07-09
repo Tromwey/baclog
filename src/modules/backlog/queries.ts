@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
@@ -95,7 +95,7 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     db
       .select({
         totalItems: sql<number>`count(*)::int`,
-        obsesiones: sql<number>`(count(*) filter (where ${backlogItems.status} = 'obsessing_over'))::int`,
+        obsesiones: sql<number>`(count(*) filter (where ${backlogItems.reaction} = 'obsessed'))::int`,
       })
       .from(backlogItems)
       .where(eq(backlogItems.userId, userId)),
@@ -149,7 +149,8 @@ export async function getUserCatalogEntry(
       id: backlogItems.id,
       status: backlogItems.status,
       customStatusLabel: backlogItems.customStatusLabel,
-      rating: backlogItems.rating,
+      reaction: backlogItems.reaction,
+      sourceCrossMediaRecId: backlogItems.sourceCrossMediaRecId,
       paletteHex: backlogItems.paletteHex,
       addedAt: backlogItems.addedAt,
       statusChangedAt: backlogItems.statusChangedAt,
@@ -177,18 +178,18 @@ export async function getUserCatalogEntry(
   return row ?? null;
 }
 
+/** No me gusta / me gusta / me obsesiona — the only "loved" values (F3.6). */
+export const LOVED_REACTIONS = ["liked", "obsessed"] as const;
+
 /**
- * F3.5.5/6 — "loved" = the trigger for a cross-media reco: obsessing over, or
- * completed with a strong rating (≥4). Kept as a pure predicate so both the
- * item page and getLovedSeeds share one definition of "loved".
+ * F3.5.5/6 — "loved" = the trigger for a cross-media reco. Reaction-only:
+ * applies regardless of status, since obsession can strike mid-consumption.
+ * Kept as a pure predicate so both the item page and getLovedSeeds share one
+ * definition of "loved".
  */
-export function isLovedEntry(
-  entry: { status: string; rating: number | null } | null,
-): boolean {
+export function isLovedEntry(entry: { reaction: string | null } | null): boolean {
   if (!entry) return false;
-  if (entry.status === "obsessing_over") return true;
-  if (entry.status === "completed" && (entry.rating ?? 0) >= 4) return true;
-  return false;
+  return entry.reaction === "liked" || entry.reaction === "obsessed";
 }
 
 export interface LovedSeed {
@@ -232,16 +233,16 @@ export async function getLovedSeeds(
     .where(
       and(
         eq(backlogItems.userId, userId),
-        or(
-          eq(backlogItems.status, "obsessing_over"),
-          and(
-            eq(backlogItems.status, "completed"),
-            gte(backlogItems.rating, 4),
-          ),
-        ),
+        inArray(backlogItems.reaction, LOVED_REACTIONS),
       ),
     )
-    .orderBy(desc(backlogItems.statusChangedAt));
+    // "obsessed" is a deliberate highlight ("this is what I want known about
+    // me first"), not just a stronger "liked" — it should anchor the next
+    // reco ahead of whatever was merely touched most recently.
+    .orderBy(
+      desc(sql`(${backlogItems.reaction} = 'obsessed')`),
+      desc(backlogItems.statusChangedAt),
+    );
 
   const seen = new Set<string>();
   const seeds: LovedSeed[] = [];
@@ -261,7 +262,8 @@ export async function getBacklogItems(backlogId: string) {
       id: backlogItems.id,
       status: backlogItems.status,
       customStatusLabel: backlogItems.customStatusLabel,
-      rating: backlogItems.rating,
+      reaction: backlogItems.reaction,
+      sourceCrossMediaRecId: backlogItems.sourceCrossMediaRecId,
       paletteHex: backlogItems.paletteHex,
       addedAt: backlogItems.addedAt,
       statusChangedAt: backlogItems.statusChangedAt,

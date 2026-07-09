@@ -110,7 +110,7 @@ export default async function PublicProfilePage({
               {profile.backlogs.length}{" "}
               {plural(profile.backlogs.length, "backlog", "backlogs")}
             </StatusChip>
-            <StatusChip tone="obsessing" glass>
+            <StatusChip tone="obsessed" glass>
               {totalItems} {plural(totalItems, "obsesión", "obsesiones")}
             </StatusChip>
           </div>

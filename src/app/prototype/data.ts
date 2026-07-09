@@ -13,7 +13,7 @@ export const DEMO_BACKLOG: CardBacklog = {
       genre: "sci-fi",
       mood: "epic",
       status: "completed",
-      rating: 5,
+      reaction: "obsessed",
     },
     {
       title: "Challengers",
@@ -22,7 +22,8 @@ export const DEMO_BACKLOG: CardBacklog = {
       year: 2024,
       genre: "drama",
       mood: "tension",
-      status: "obsessing-over",
+      status: "in-progress",
+      reaction: "obsessed",
     },
     {
       title: "BRAT",
@@ -32,7 +33,7 @@ export const DEMO_BACKLOG: CardBacklog = {
       genre: "hyperpop",
       mood: "chaotic",
       status: "completed",
-      rating: 5,
+      reaction: "obsessed",
     },
     {
       title: "Hit Me Hard and Soft",
@@ -41,7 +42,8 @@ export const DEMO_BACKLOG: CardBacklog = {
       year: 2024,
       genre: "alt-pop",
       mood: "dreamy",
-      status: "obsessing-over",
+      status: "in-progress",
+      reaction: "obsessed",
     },
     {
       title: "The Bear",
@@ -77,7 +79,7 @@ export const ALT_BACKLOG: CardBacklog = {
       genre: "romance",
       mood: "melancholy",
       status: "completed",
-      rating: 4,
+      reaction: "liked",
     },
     {
       title: "SOS",
@@ -86,7 +88,8 @@ export const ALT_BACKLOG: CardBacklog = {
       year: 2022,
       genre: "r&b",
       mood: "moody",
-      status: "obsessing-over",
+      status: "in-progress",
+      reaction: "obsessed",
     },
     {
       title: "Severance",

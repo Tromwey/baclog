@@ -1,6 +1,8 @@
 export type MediaType = "film" | "series" | "album";
 
-export type ItemStatus = "on-my-radar" | "obsessing-over" | "completed";
+export type ItemStatus = "on-my-radar" | "in-progress" | "completed";
+
+export type ItemReaction = "disliked" | "liked" | "obsessed";
 
 export interface CardItem {
   title: string;
@@ -13,8 +15,8 @@ export interface CardItem {
   status: ItemStatus;
   /** Custom user status label (F2.8) — renderers prefer it over STATUS_LABEL */
   statusLabelOverride?: string;
-  /** 1–5, only meaningful when status is "completed" */
-  rating?: number;
+  /** No me gusta / me gusta / me obsesiona — applies regardless of status (F3.6) */
+  reaction?: ItemReaction;
 }
 
 export interface CardBacklog {
@@ -94,7 +96,7 @@ export interface DoubleFeatureData {
 
 export const STATUS_LABEL: Record<ItemStatus, string> = {
   "on-my-radar": "ON MY RADAR",
-  "obsessing-over": "OBSESSING OVER",
+  "in-progress": "IN PROGRESS",
   completed: "COMPLETED",
 };
 

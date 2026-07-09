@@ -111,12 +111,15 @@ export function footerUrl(username: string): string {
   return username ? `baclog.app/${username}` : "baclog.app";
 }
 
-/** Rating comes from data we don't control in M2+ — clamp to a 0–5 integer. */
-export function clampRating(rating: number): number {
-  return Math.min(5, Math.max(0, Math.round(rating)));
-}
-
-export function stars(rating: number): string {
-  const r = clampRating(rating);
-  return "★".repeat(r) + "☆".repeat(5 - r);
+/**
+ * Reaction glyph for the ticket/receipt — no me gusta renders nothing (no
+ * negative signal on a shareable card), me gusta/me obsesiona get a single
+ * vs. doubled mark (F3.6, replaces the old 1-5★ rating row).
+ */
+export function reactionGlyph(
+  reaction: "disliked" | "liked" | "obsessed" | undefined,
+): string {
+  if (reaction === "obsessed") return "★ ★";
+  if (reaction === "liked") return "★";
+  return "";
 }

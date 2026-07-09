@@ -13,19 +13,24 @@ import type { ChipTone } from "@/components/ui";
 
 const STATUS_LABEL: Record<string, string> = {
   on_my_radar: "On my radar",
-  obsessing_over: "Obsessing over",
+  in_progress: "In progress",
   completed: "Completed",
 };
 const STATUS_TONE: Record<string, ChipTone> = {
   on_my_radar: "radar",
-  obsessing_over: "obsessing",
+  in_progress: "progress",
   completed: "completed",
 };
 const TONE_DOT: Record<ChipTone, string> = {
   radar: "bg-radar",
-  obsessing: "bg-obsessing",
+  progress: "bg-obsessing",
   completed: "bg-completed",
+  obsessed: "bg-obsessing",
   neutral: "bg-text-3",
+};
+const REACTION_LABEL: Record<string, string> = {
+  liked: "Me gusta",
+  obsessed: "Me obsesiona",
 };
 
 export async function generateMetadata({
@@ -129,7 +134,9 @@ export default async function PublicBacklogPage({
                       className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`}
                     />
                     {label}
-                    {item.rating ? ` · ${"★".repeat(item.rating)}` : ""}
+                    {item.reaction && REACTION_LABEL[item.reaction]
+                      ? ` · ${REACTION_LABEL[item.reaction]}`
+                      : ""}
                   </span>
                 </div>
               </Link>

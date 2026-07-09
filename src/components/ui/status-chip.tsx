@@ -6,12 +6,18 @@ import type { ReactNode } from "react";
  * a paint. `tone` maps to the status hues; `glass` uses the aura-safe glass
  * treatment for the public hero ribbon.
  */
-export type ChipTone = "radar" | "obsessing" | "completed" | "neutral";
+export type ChipTone =
+  | "radar"
+  | "progress"
+  | "completed"
+  | "obsessed"
+  | "neutral";
 
 const DOT: Record<ChipTone, string> = {
   radar: "bg-radar",
-  obsessing: "bg-obsessing",
+  progress: "bg-obsessing",
   completed: "bg-completed",
+  obsessed: "bg-obsessing",
   neutral: "bg-text-3",
 };
 

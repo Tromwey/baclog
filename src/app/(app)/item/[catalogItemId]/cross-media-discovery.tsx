@@ -194,6 +194,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
       const res = await acceptRecoToBacklogAction({
         backlogId: sel,
+        seedCatalogItemId: seed.catalogItemId,
         targetCatalogItemId: reco.catalogItemId,
         paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
       });
@@ -208,7 +209,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
     } finally {
       setBusy(false);
     }
-  }, [sel, busy, reco.catalogItemId, reco.posterUrl, router]);
+  }, [sel, busy, reco.catalogItemId, reco.posterUrl, seed.catalogItemId, router]);
 
   const createBacklog = useCallback(async () => {
     const name = newName.trim();
