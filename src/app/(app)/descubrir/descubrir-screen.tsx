@@ -12,7 +12,7 @@ import {
   type DiscoveryBacklog,
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
 import type { MediaType } from "@/modules/catalog/types";
-import { AuraField } from "@/components/ui";
+import { AuraField, AUTH_ADN } from "@/components/ui";
 import { Pills } from "./pills";
 import { SearchPanel } from "./search-panel";
 import { FeatureAura } from "./feature-aura";
@@ -217,10 +217,6 @@ const LOADING_MESSAGES = [
   "Cruzando tus títulos…",
   "Destilando tu vibe…",
 ];
-// A richer palette so the "distilling" moment glows even for sparse profiles —
-// this is the one screen with its own full-bleed background for emphasis.
-const LOADING_ADN = ["#C7462F", "#3A5A9B", "#9B4DCA", "#E8B23A", "#7AA2FF"];
-
 function Loading({ colors }: { colors: string[] }) {
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -231,7 +227,10 @@ function Loading({ colors }: { colors: string[] }) {
     return () => clearInterval(t);
   }, []);
 
-  const aura = Array.from(new Set([...colors, ...LOADING_ADN]));
+  // A richer fixed palette (shared with the auth screens) so the "distilling"
+  // moment glows even for sparse profiles — this is the one screen with its own
+  // full-bleed background for emphasis.
+  const aura = Array.from(new Set([...colors, ...AUTH_ADN]));
 
   return (
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-8 text-center">

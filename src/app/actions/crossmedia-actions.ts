@@ -206,12 +206,12 @@ export type DiscoverFeedResult =
   // first-load generation with nothing to show — retryable, distinct from the
   // quiet `pending` empty. The UI surfaces a retry affordance for this.
   | { kind: "failed" }
-  // A user-initiated "descubre otra" that SPENT a generation but whose proposal
-  // didn't ground to a real catalog item (ADR-009 charges the LLM call regardless
-  // of grounding). Retryable, but the copy is explicit that an intento was spent
-  // — distinct from the no-charge `failed` and the quiet `pending`. Only ever set
-  // client-side from discoverNextRecoAction's `spent_no_match` result; the
-  // first-load feed never produces it.
+  // A generation was SPENT but its proposal didn't ground to a real catalog item
+  // (ADR-009 charges the LLM call regardless of grounding). Retryable, but the
+  // copy is explicit that an intento was spent — distinct from the no-charge
+  // `failed` and the quiet `pending`. Set either client-side from
+  // discoverNextRecoAction's `spent_no_match` result OR here on first load when
+  // the bounded generation charged but missed (feed.spentNoMatch).
   | { kind: "spent_no_match" };
 
 export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
@@ -253,6 +253,9 @@ export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
     // A transient failure on the bounded first-load generation is retryable;
     // keep it distinct from the quiet "still warming up / cap reached" pending.
     if (feed.generationFailed) return { kind: "failed" };
+    // A charged-but-ungrounded first-load generation: surface that an intento was
+    // spent (same as the "descubre otra" path), not the silent pending empty.
+    if (feed.spentNoMatch) return { kind: "spent_no_match" };
     return { kind: "pending", remaining: feed.remaining, cap: feed.cap };
   }
   return { kind: "ready", items, remaining: feed.remaining, cap: feed.cap };

@@ -339,6 +339,14 @@ export interface CrossMediaFeed {
    * `items` is empty.
    */
   generationFailed: boolean;
+  /**
+   * True when the single bounded first-load generation WAS charged (ADR-009 bills
+   * the LLM call) but its proposal didn't ground to a real catalog item — a
+   * discovery spent with nothing to show. Distinct from `generationFailed` (a
+   * no-charge transient error) and from a quiet empty. Only ever set when `items`
+   * is empty.
+   */
+  spentNoMatch: boolean;
 }
 
 function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
@@ -374,6 +382,7 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
       cap,
       hasLovedItems: false,
       generationFailed: false,
+      spentNoMatch: false,
     };
   }
 
@@ -385,12 +394,16 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
 
   // Nothing cached yet → one bounded generation so the page is never empty for
   // a user who has loved items and meter left. A transient provider failure is
-  // flagged (not swallowed) so the UI can offer a retry instead of a dead end.
+  // flagged (not swallowed) so the UI can offer a retry instead of a dead end;
+  // likewise a charged-but-ungrounded miss (spent_no_match) is surfaced, not
+  // swallowed into the quiet pending empty.
   let generationFailed = false;
+  let spentNoMatch = false;
   if (items.length === 0 && (await remainingGenerations(userId)) > 0) {
     const res = await getCrossMediaReco(seeds[0].catalogItemId, userId);
     if (res.status === "ok") items.push(toFeedItem(seeds[0], res.reco));
     else if (res.status === "failed") generationFailed = true;
+    else if (res.status === "spent_no_match") spentNoMatch = true;
   }
 
   return {
@@ -399,6 +412,7 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
     cap,
     hasLovedItems: true,
     generationFailed,
+    spentNoMatch,
   };
 }
 
