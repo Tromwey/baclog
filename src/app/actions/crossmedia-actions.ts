@@ -205,7 +205,14 @@ export type DiscoverFeedResult =
   // Transient generation failure (provider 429/network/unusable output) on a
   // first-load generation with nothing to show — retryable, distinct from the
   // quiet `pending` empty. The UI surfaces a retry affordance for this.
-  | { kind: "failed" };
+  | { kind: "failed" }
+  // A user-initiated "descubre otra" that SPENT a generation but whose proposal
+  // didn't ground to a real catalog item (ADR-009 charges the LLM call regardless
+  // of grounding). Retryable, but the copy is explicit that an intento was spent
+  // — distinct from the no-charge `failed` and the quiet `pending`. Only ever set
+  // client-side from discoverNextRecoAction's `spent_no_match` result; the
+  // first-load feed never produces it.
+  | { kind: "spent_no_match" };
 
 export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
   const user = await assertUser();

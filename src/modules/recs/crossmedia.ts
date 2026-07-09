@@ -52,19 +52,30 @@ export interface CrossMediaReco {
 }
 
 /**
- * Outcome of resolving a single reco. Splits the two things that used to both
- * collapse to `null`:
- *   - `ok`     — a grounded, addable reco (cached or freshly generated).
- *   - `empty`  — a LEGITIMATE no-result: ineligible seed, cap reached, or the
- *                proposal didn't ground to a real catalog item. Nothing to retry.
- *   - `failed` — a TRANSIENT generation failure (provider 429/network/timeout or
- *                unusable output). Retryable, and it NEVER charges the meter.
- * The UI surfaces `failed` with a retry affordance; `empty` keeps its existing
+ * Outcome of resolving a single reco. Splits apart what used to collapse to
+ * `null`:
+ *   - `ok`             — a grounded, addable reco (cached or freshly generated).
+ *   - `empty`          — a LEGITIMATE no-result that NEVER charged the meter:
+ *                        ineligible seed, cap reached (pre-charge check or the
+ *                        cap-race guard), or a concurrent insert we couldn't
+ *                        re-read. Nothing to retry, nothing was spent.
+ *   - `spent_no_match` — the meter WAS charged (ADR-009: the LLM call is billed
+ *                        regardless of grounding) and the provider returned a
+ *                        usable proposal, but its title didn't ground to a real
+ *                        catalog item. A discovery was spent with nothing to
+ *                        show — surfaced (not silent) so the user knows, and a
+ *                        re-roll may ground.
+ *   - `failed`         — a TRANSIENT generation failure (provider 429/network/
+ *                        timeout or unusable output). Retryable, and it NEVER
+ *                        charges the meter.
+ * The UI surfaces `failed` and `spent_no_match` with a retry affordance (the
+ * latter being explicit that an intento was spent); `empty` keeps its existing
  * quiet copy.
  */
 export type RecoResult =
   | { status: "ok"; reco: CrossMediaReco }
   | { status: "empty" }
+  | { status: "spent_no_match" }
   | { status: "failed" };
 
 /** "2026-07" — matches recap_send / era.ts. */
@@ -137,8 +148,12 @@ export async function getCrossMediaReco(
 
   // 5) GROUNDING (mandatory): resolve the proposed title against the catalog.
   //    Only a real, addable catalog_item is surfaced (LLMs hallucinate titles).
+  //    We already CHARGED above (step 4, ADR-009 — the LLM call cost money), so a
+  //    grounding miss here is `spent_no_match`, NOT `empty`: a discovery was
+  //    spent with nothing to show. Surfacing it (vs. the old silent `empty`) lets
+  //    the UI tell the user and offer a re-roll that may ground.
   const grounded = await groundProposal(proposal);
-  if (!grounded) return { status: "empty" };
+  if (!grounded) return { status: "spent_no_match" };
 
   // 6) Persist the grounded reco keyed by seed (idempotent on the unique index).
   const [row] = await db
@@ -386,11 +401,21 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
 
 /**
  * Outcome of an explicit "discover another connection" request.
- * `failed` means a TRANSIENT generation failure (retryable) — NOT a legitimate
- * empty. A proposal that generated but didn't ground reports `no_more` (there's
- * no connection to show), so only real provider errors trigger the retry UI.
+ *   - `failed`         — a TRANSIENT generation failure (retryable), NEVER charged.
+ *   - `spent_no_match` — a generation WAS charged but its proposal didn't ground
+ *                        to a real catalog item (ADR-009 charges the LLM call
+ *                        regardless). Retryable, but the UI is explicit that an
+ *                        intento was spent — distinct from the quiet `no_more`.
+ *   - `no_more`        — nothing left to generate (all seeds cached, no seeds, or
+ *                        a rare cap-race that charged nothing): a quiet dead end.
+ *   - `cap_reached`    — the monthly meter is exhausted (nothing generated).
  */
-export type DiscoverResult = "generated" | "cap_reached" | "no_more" | "failed";
+export type DiscoverResult =
+  | "generated"
+  | "cap_reached"
+  | "no_more"
+  | "spent_no_match"
+  | "failed";
 
 /**
  * User-initiated generation for the /para-ti "discover another" button. Finds
@@ -425,8 +450,14 @@ export async function generateNextUncachedReco(
   if (res.status === "ok")
     return { result: "generated", seedCatalogItemId: nextUncached.catalogItemId };
   if (res.status === "failed") return { result: "failed", seedCatalogItemId: null };
-  // `empty` here = generated but didn't ground (or a rare cap race): no reco to
-  // show, but not a retryable error — keep the quiet "nothing more" path.
+  // Charged, proposal ok, but grounding missed → surface it (not silent) so the
+  // user learns a discovery was spent; a re-roll may ground. Distinct from both
+  // the no-charge `failed` and the quiet `no_more`.
+  if (res.status === "spent_no_match")
+    return { result: "spent_no_match", seedCatalogItemId: null };
+  // `empty` here = a rare cap race that charged nothing (the pre-check at the top
+  // saw meter left, the guarded upsert then found the cap full): no reco to show,
+  // not a retryable error — keep the quiet "nothing more" path.
   return { result: "no_more", seedCatalogItemId: null };
 }
 
