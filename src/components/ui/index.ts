@@ -4,5 +4,6 @@ export { StatusChip, type ChipTone } from "./status-chip";
 export { MonoMeta } from "./mono-meta";
 export { AuraBackdrop } from "./aura";
 export { AuraField, type AuraVariant } from "./aura-field";
+export { AuthAuraBackdrop, AUTH_ADN } from "./auth-aura-backdrop";
 export { ScreenHeader } from "./screen-header";
 export { BackButton } from "./back-button";

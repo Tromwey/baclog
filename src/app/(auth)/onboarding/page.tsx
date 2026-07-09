@@ -5,11 +5,7 @@ import {
   chooseServiceAndFinishAction,
   completeOnboardingAction,
 } from "@/app/actions/account-actions";
-import { AuraField, Button } from "@/components/ui";
-
-// Onboarding runs right after sign-in, before any items exist — use the same
-// fixed brand ADN as login/verify (AuraField forces lima first).
-const LOGIN_ADN = ["#C7462F", "#3A5A9B", "#9B4DCA", "#E8B23A", "#7AA2FF"];
+import { AuthAuraBackdrop, Button } from "@/components/ui";
 
 const SERVICES = [
   { id: "spotify", label: "Spotify" },
@@ -49,21 +45,7 @@ export default function OnboardingPage() {
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
-      <AuraField
-        variant="ambient"
-        colors={LOGIN_ADN}
-        seed={47}
-        className="!opacity-[0.5]"
-      />
-      {/* Keep the form legible over the aura. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 50%, transparent 0%, rgba(11,11,13,0.55) 62%, #0B0B0D 100%)",
-        }}
-      />
+      <AuthAuraBackdrop seed={47} />
       <div className="relative flex w-full max-w-sm flex-col items-center">
         <h1 className="font-mono text-xl font-bold uppercase tracking-[0.35em] text-accent">
           Baclog
