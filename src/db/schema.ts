@@ -394,6 +394,13 @@ export const crossMediaRecs = pgTable(
     closer: text("closer"),
     /** "fixture" | "llm" — which provider produced this row (observability) */
     provider: text("provider").notNull(),
+    /**
+     * v1 = crude "0.1" baseline prompt; bump CURRENT_PROMPT_VERSION when the
+     * prompt is polished so stale rows can be invalidated/regenerated later.
+     */
+    promptVersion: integer("prompt_version").notNull().default(1),
+    /** The model/provider that produced the row (e.g. "gemini-2.5-flash-lite", "fixture") — observability. */
+    model: text("model"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [

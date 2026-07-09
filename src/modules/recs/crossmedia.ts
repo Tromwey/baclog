@@ -10,6 +10,7 @@ import { unifiedSearch } from "@/modules/catalog/search";
 import { getLovedSeeds, type LovedSeed } from "@/modules/backlog/queries";
 import {
   crossMediaProvider,
+  CURRENT_PROMPT_VERSION,
   type CrossMediaProposal,
   type CrossMediaSeed,
 } from "./crossmedia-provider";
@@ -166,6 +167,8 @@ export async function getCrossMediaReco(
       resultEyebrow: proposal.narrative.resultEyebrow,
       closer: proposal.narrative.closer,
       provider: provider.id,
+      promptVersion: CURRENT_PROMPT_VERSION,
+      model: provider.model,
     })
     .onConflictDoNothing({ target: crossMediaRecs.seedCatalogItemId })
     .returning();

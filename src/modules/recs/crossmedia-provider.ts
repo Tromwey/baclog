@@ -67,8 +67,19 @@ export type ProposalOutcome =
   | { ok: true; proposal: CrossMediaProposal }
   | { ok: false; error: "transient" };
 
+/**
+ * The prompt "generation" every freshly-cached reco is stamped with
+ * (cross_media_rec.prompt_version). v1 = the crude "0.1" baseline prompt below.
+ * Bump this when the prompt is polished so a future invalidation pass can find
+ * and regenerate rows produced by an older prompt. Stamping only for now — no
+ * read-side staleness check reads it yet.
+ */
+export const CURRENT_PROMPT_VERSION = 1;
+
 export interface CrossMediaRecProvider {
   readonly id: "fixture" | "anthropic" | "gemini";
+  /** Model/provider label stamped onto cached rows for observability. */
+  readonly model: string;
   propose(seed: CrossMediaSeed): Promise<ProposalOutcome>;
 }
 
@@ -161,6 +172,7 @@ const FIXTURE_FALLBACK: CrossMediaProposal = {
 
 class FixtureProvider implements CrossMediaRecProvider {
   readonly id = "fixture" as const;
+  readonly model = "fixture";
 
   async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
     const hit = FIXTURE_PAIRINGS.find((p) => p.match(seed));
@@ -301,6 +313,7 @@ function finalizeProposal(
 
 class LlmProvider implements CrossMediaRecProvider {
   readonly id = "anthropic" as const;
+  readonly model = LLM_MODEL;
   private client: Anthropic;
 
   constructor(apiKey: string) {
@@ -353,6 +366,7 @@ const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 class GeminiProvider implements CrossMediaRecProvider {
   readonly id = "gemini" as const;
+  readonly model = GEMINI_MODEL;
   private client: GoogleGenAI;
 
   constructor(apiKey: string) {
