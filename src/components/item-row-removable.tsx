@@ -48,7 +48,11 @@ export function ItemRowRemovable({
       if (Math.abs(raw) < 8) return;
       dragging.current = true;
       setSnapping(false); // follow the finger 1:1 while dragging
-      e.currentTarget.setPointerCapture(e.pointerId);
+      // Capture so moves outside the element still track; guard because it can
+      // throw (e.g. InvalidStateError) and must never abort the drag handler.
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
     }
     setDx(Math.max(-REVEAL, Math.min(0, raw + startDx.current)));
   }
@@ -75,19 +79,8 @@ export function ItemRowRemovable({
 
   return (
     <div
-      className={`relative overflow-hidden ${
-        removing ? "pointer-events-none opacity-40" : ""
-      }`}
+      className="relative overflow-hidden"
     >
-      <button
-        type="button"
-        onClick={remove}
-        aria-label="Quitar de este backlog"
-        tabIndex={open ? 0 : -1}
-        className="absolute inset-y-0 right-0 flex w-[92px] items-center justify-center bg-hot font-mono text-[10px] uppercase tracking-[0.08em] text-white"
-      >
-        Quitar
-      </button>
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -98,19 +91,35 @@ export function ItemRowRemovable({
           transition: snapping ? "transform 180ms ease" : "none",
           touchAction: "pan-y",
         }}
-        className="relative bg-bg"
+        className={`flex ${removing ? "pointer-events-none opacity-40" : ""}`}
       >
-        <ItemRowReadonly {...row} />
-        {open && (
-          // Tap the revealed row to close it instead of following the row link.
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={() => settle(false)}
-            className="absolute inset-0 z-10"
-          />
-        )}
+        {/* Row content stays transparent so the backlog aura shows through and
+            fades progressively — an opaque fill here cut the aura (regression). */}
+        <div className="w-full flex-none">
+          <ItemRowReadonly {...row} />
+        </div>
+        {/* The Quitar action rides just off the right edge (clipped by the outer
+            overflow-hidden) until the swipe slides the whole track left to reveal
+            it — a translating track, so no opaque cover is needed over the aura. */}
+        <button
+          type="button"
+          onClick={remove}
+          aria-label="Quitar de este backlog"
+          tabIndex={open ? 0 : -1}
+          className="flex w-[92px] flex-none items-center justify-center bg-hot font-mono text-[10px] uppercase tracking-[0.08em] text-white"
+        >
+          Quitar
+        </button>
       </div>
+      {open && (
+        // Tap the revealed row (left of the action) to close it.
+        <button
+          type="button"
+          aria-label="Cerrar"
+          onClick={() => settle(false)}
+          className="absolute inset-y-0 left-0 right-[92px] z-10"
+        />
+      )}
     </div>
   );
 }
