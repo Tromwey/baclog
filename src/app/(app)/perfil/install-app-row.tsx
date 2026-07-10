@@ -113,14 +113,10 @@ function InstructionSheet({
             Safari.
           </>,
           <>
-            Elige{" "}
-            <b className="font-semibold text-text">
-              «Añadir a pantalla de inicio»
-            </b>
-            .
+            Elige <b className="font-semibold text-text">«Agregar a Inicio»</b>.
           </>,
           <>
-            Toca <b className="font-semibold text-text">Añadir</b> — Baclog vive
+            Toca <b className="font-semibold text-text">Agregar</b> — Baclog vive
             en tu inicio, a pantalla completa.
           </>,
         ]
