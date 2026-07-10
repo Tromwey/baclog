@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { assertOwnsBacklogItem } from "@/authz";
+import { assertOwnsUserItem } from "@/authz";
 import { db } from "@/db";
 import { crossMediaRecoFeedback } from "@/db/schema";
 import { ALL_REASONS } from "@/modules/recs/feedback-reasons";
@@ -13,7 +13,9 @@ import { ALL_REASONS } from "@/modules/recs/feedback-reasons";
  * Chips, not free text, so it's aggregable by promptVersion/model without
  * another LLM pass. Only shown/accepted for items with sourceCrossMediaRecId
  * set — organic adds don't get this (they already feed taste signal for free
- * via getLovedSeeds, no extra UI needed).
+ * via getLovedSeeds, no extra UI needed). Provenance + feedback are per-TITLE
+ * now (F3.7): keyed on the catalog item → the caller's user_item, one live "why"
+ * per title.
  *
  * The reason tag lists live in modules/recs/feedback-reasons.ts, NOT here — a
  * "use server" file may only export async functions, so any plain constant
@@ -22,10 +24,10 @@ import { ALL_REASONS } from "@/modules/recs/feedback-reasons";
  * action-validate.js — this WAS a bug in an earlier version of this file).
  */
 export async function submitCrossMediaFeedbackAction(
-  backlogItemId: string,
+  catalogItemId: string,
   reasons: string[],
 ): Promise<{ ok: true } | { error: "invalid" | "not_eligible" }> {
-  const { item } = await assertOwnsBacklogItem(backlogItemId);
+  const { item } = await assertOwnsUserItem(catalogItemId);
   if (!item.sourceCrossMediaRecId) return { error: "not_eligible" as const };
 
   const parsed = z.array(z.enum(ALL_REASONS)).min(1).max(8).safeParse(reasons);
@@ -34,16 +36,16 @@ export async function submitCrossMediaFeedbackAction(
   await db
     .insert(crossMediaRecoFeedback)
     .values({
-      backlogItemId: item.id,
+      userItemId: item.id,
       userId: item.userId,
       crossMediaRecId: item.sourceCrossMediaRecId,
       reasons: parsed.data,
     })
     .onConflictDoUpdate({
-      target: crossMediaRecoFeedback.backlogItemId,
+      target: crossMediaRecoFeedback.userItemId,
       set: { reasons: sql`excluded.reasons`, updatedAt: sql`now()` },
     });
 
-  revalidatePath(`/backlogs/${item.backlogId}`);
+  revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }

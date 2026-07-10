@@ -86,13 +86,15 @@ export default async function ItemPage({
   }`;
 
   return (
-    // key: add-to-backlog's router.refresh() can swap `entry` (none → logged,
-    // or a different backlogItemId) — remount the provider (and ProgressGesture
-    // below) so client state re-seeds instead of pointing at a stale entry.
+    // key: add-to-backlog's router.refresh() can swap `entry` (none → logged) —
+    // remount the provider (and ProgressGesture below) so client state re-seeds
+    // instead of pointing at a stale entry. State is per-title, so mutations key
+    // on the catalog item, not the user_item id.
     <ItemReactionProvider
       key={entry?.id ?? "none"}
-      backlogItemId={entry?.id ?? null}
-      initialReaction={entry?.reaction ?? null}
+      catalogItemId={entry ? item.id : null}
+      initialVerdict={entry?.verdict ?? null}
+      initialObsessed={entry?.obsessed ?? false}
     >
       <main className="relative mx-auto min-h-dvh w-full max-w-md pb-44 text-text">
         <HideDock />
@@ -134,7 +136,7 @@ export default async function ItemPage({
                 </svg>
               </Link>
               <ItemMoreMenu
-                backlogItemId={entry.id}
+                catalogItemId={item.id}
                 sourceCrossMediaRecId={entry.sourceCrossMediaRecId}
               />
             </div>
@@ -198,7 +200,7 @@ export default async function ItemPage({
           <div className="relative mt-3.5 space-y-3 px-5">
             <RecoReasoningPanel narrative={narrative} />
             <RecoFeedback
-              backlogItemId={entry.id}
+              catalogItemId={item.id}
               sourceCrossMediaRecId={entry.sourceCrossMediaRecId}
             />
           </div>
@@ -224,6 +226,7 @@ export default async function ItemPage({
             <AddToBacklog
               catalogItemId={item.id}
               posterUrl={item.posterUrl}
+              existingPaletteHex={item.paletteHex}
               backlogs={userBacklogs}
               inBacklogName={entry?.backlogName ?? null}
             />
@@ -241,9 +244,8 @@ export default async function ItemPage({
             {entry && (
               <ProgressGesture
                 key={entry.id}
-                backlogItemId={entry.id}
+                catalogItemId={item.id}
                 initialStatus={entry.status}
-                customStatusLabel={entry.customStatusLabel}
               />
             )}
           </div>

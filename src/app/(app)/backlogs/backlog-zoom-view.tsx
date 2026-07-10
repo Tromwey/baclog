@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { assertOwnsBacklog } from "@/authz";
 import { AuraField, EMPTY_SHELF_AURA } from "@/components/ui";
-import { ItemRowReadonly } from "@/components/item-row-readonly";
+import { ItemRowRemovable } from "@/components/item-row-removable";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { plural } from "@/lib/plural";
 import { getBacklogItems } from "@/modules/backlog/queries";
@@ -118,13 +118,15 @@ export function BacklogZoomView({
       {hasItems ? (
         <div className={`relative mt-[18px] ${content}`}>
           {items.map((item, i) => (
-            <ItemRowReadonly
+            <ItemRowRemovable
               key={item.id}
+              backlogItemId={item.id}
               index={i + 1}
               catalogItemId={item.catalogItemId}
               title={item.title}
               mediaType={item.mediaType}
-              reaction={item.reaction}
+              verdict={item.verdict}
+              obsessed={item.obsessed}
               sourceCrossMediaRecId={item.sourceCrossMediaRecId}
             />
           ))}

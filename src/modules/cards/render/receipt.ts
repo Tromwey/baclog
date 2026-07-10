@@ -109,7 +109,7 @@ export function drawReceipt(
     const glyph = reactionGlyph(item.reaction);
     const reaction = glyph ? `  ${glyph}` : "";
     ctx.fillText(
-      `  ${TYPE_LABEL[item.type]} · ${(item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase()}${reaction}`,
+      `  ${TYPE_LABEL[item.type]} · ${STATUS_LABEL[item.status].toUpperCase()}${reaction}`,
       pad,
       y + 52,
     );

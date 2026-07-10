@@ -181,7 +181,8 @@ export default async function LensPage({
                   catalogItemId={item.catalogItemId}
                   title={item.title}
                   mediaType={item.mediaType}
-                  reaction={item.reaction}
+                  verdict={item.verdict}
+                  obsessed={item.obsessed}
                   sourceCrossMediaRecId={item.sourceCrossMediaRecId}
                 />
               ))}

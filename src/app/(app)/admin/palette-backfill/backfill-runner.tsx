@@ -31,7 +31,7 @@ export function BackfillRunner() {
 
     for (const target of targets) {
       const hexes = await extractPalette(target.posterUrl);
-      const res = await updateItemPaletteAction(target.backlogItemId, hexes);
+      const res = await updateItemPaletteAction(target.catalogItemId, hexes);
       if ("error" in res) failCount++;
       setDone((d) => d + 1);
     }

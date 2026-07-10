@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getCurrentUser, type CurrentUser } from "@/auth/session";
 import { db } from "@/db";
-import { backlogItems, backlogs } from "@/db/schema";
+import { backlogItems, backlogs, userItems } from "@/db/schema";
 import { NotFoundError, UnauthorizedError } from "./errors";
 
 export { NotFoundError, UnauthorizedError } from "./errors";
@@ -37,6 +37,10 @@ export async function assertOwnsBacklog(backlogId: string) {
   return { user, backlog };
 }
 
+/**
+ * Membership gate — for per-backlog mutations keyed on a backlog_item row id
+ * (e.g. "quitar de ESTE backlog" from the shelf). Returns the membership row.
+ */
 export async function assertOwnsBacklogItem(backlogItemId: string) {
   const user = await assertUser();
   const [item] = await db
@@ -44,6 +48,27 @@ export async function assertOwnsBacklogItem(backlogItemId: string) {
     .from(backlogItems)
     .where(
       and(eq(backlogItems.id, backlogItemId), eq(backlogItems.userId, user.id)),
+    )
+    .limit(1);
+  if (!item) throw new NotFoundError("Item not found");
+  return { user, item };
+}
+
+/**
+ * Per-TITLE state gate — for mutations that belong to the title, not a backlog
+ * (status, verdict, obsession, provenance). Resolves the caller's single
+ * user_item for a catalog item; NotFound if the title isn't in their library.
+ */
+export async function assertOwnsUserItem(catalogItemId: string) {
+  const user = await assertUser();
+  const [item] = await db
+    .select()
+    .from(userItems)
+    .where(
+      and(
+        eq(userItems.catalogItemId, catalogItemId),
+        eq(userItems.userId, user.id),
+      ),
     )
     .limit(1);
   if (!item) throw new NotFoundError("Item not found");

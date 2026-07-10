@@ -13,9 +13,7 @@ export interface CardItem {
   genre: string;
   mood: string;
   status: ItemStatus;
-  /** Custom user status label (F2.8) — renderers prefer it over STATUS_LABEL */
-  statusLabelOverride?: string;
-  /** No me gusta / me gusta / me obsesiona — applies regardless of status (F3.6) */
+  /** Single card glyph derived from the two axes (F3.7): obsessed → ★★, liked → ★. */
   reaction?: ItemReaction;
 }
 

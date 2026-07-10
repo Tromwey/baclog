@@ -5,8 +5,7 @@ const STATUS_MAP: Record<string, ItemStatus> = {
   on_my_radar: "on-my-radar",
   in_progress: "in-progress",
   completed: "completed",
-  // Custom statuses render their own label via statusLabelOverride
-  custom: "in-progress",
+  // F2.8 'custom' is retired; a stray legacy value falls back to on-my-radar.
 };
 
 /**
@@ -32,11 +31,9 @@ export function toCardBacklog(
         genre: i.genre ?? "misc",
         mood: vibe ?? i.genre ?? "vibe",
         status: STATUS_MAP[i.status] ?? "on-my-radar",
-        statusLabelOverride:
-          i.status === "custom"
-            ? (i.customStatusLabel ?? undefined)
-            : undefined,
-        reaction: i.reaction ?? undefined,
+        // Two independent axes → one card glyph (F3.7): obsession (★★) outranks
+        // a verdict (★ liked / nothing for disliked, via reactionGlyph).
+        reaction: i.obsessed ? "obsessed" : (i.verdict ?? undefined),
       }),
     ),
   };

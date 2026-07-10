@@ -29,11 +29,6 @@ const TONE_DOT: Record<ChipTone, string> = {
   obsessed: "bg-obsessing",
   neutral: "bg-text-3",
 };
-const REACTION_LABEL: Record<string, string> = {
-  liked: "Me gusta",
-  obsessed: "Me obsesiona",
-};
-
 export async function generateMetadata({
   params,
 }: {
@@ -111,14 +106,16 @@ export default async function PublicBacklogPage({
 
         <div className="mt-6 space-y-2">
           {data.items.map((item) => {
-            const tone: ChipTone =
-              item.status === "custom"
-                ? "neutral"
-                : STATUS_TONE[item.status] ?? "neutral";
-            const label =
-              item.status === "custom"
-                ? item.customStatusLabel
-                : STATUS_LABEL[item.status];
+            const tone: ChipTone = STATUS_TONE[item.status] ?? "neutral";
+            const label = STATUS_LABEL[item.status];
+            // F3.7: obsession (public real-time) wins the caption; else a
+            // settled "me gusta" (the query only exposes a verdict once
+            // completed). "No me gusta" is never surfaced publicly.
+            const reactionLabel = item.obsessed
+              ? "Me obsesiona"
+              : item.verdict === "liked"
+                ? "Me gusta"
+                : null;
             return (
               <Link
                 key={item.id}
@@ -154,9 +151,7 @@ export default async function PublicBacklogPage({
                       className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`}
                     />
                     {label}
-                    {item.reaction && REACTION_LABEL[item.reaction]
-                      ? ` · ${REACTION_LABEL[item.reaction]}`
-                      : ""}
+                    {reactionLabel ? ` · ${reactionLabel}` : ""}
                   </span>
                 </div>
               </Link>

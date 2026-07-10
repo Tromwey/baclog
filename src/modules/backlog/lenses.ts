@@ -1,7 +1,7 @@
 import "server-only";
 import { desc, eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { backlogItems, backlogs, catalogItems } from "@/db/schema";
+import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
 
 /**
@@ -20,7 +20,8 @@ export interface LensItem {
   catalogItemId: string;
   title: string;
   mediaType: MediaType;
-  reaction: "disliked" | "liked" | "obsessed" | null;
+  verdict: "disliked" | "liked" | null;
+  obsessed: boolean;
   sourceCrossMediaRecId: string | null;
   paletteHex: string[] | null;
 }
@@ -44,10 +45,12 @@ export async function getLensItems(
   userId: string,
   kind: LensKind,
 ): Promise<LensGroup[]> {
+  // State (obsessed/status) is per-title (user_item); a title in two shelves
+  // legitimately appears under both "De X" groups (membership is per-backlog).
   const filter =
     kind === "obsessed"
-      ? eq(backlogItems.reaction, "obsessed")
-      : eq(backlogItems.status, kind);
+      ? eq(userItems.obsessed, true)
+      : eq(userItems.status, kind);
 
   const rows = await db
     .select({
@@ -57,12 +60,20 @@ export async function getLensItems(
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       mediaType: catalogItems.mediaType,
-      reaction: backlogItems.reaction,
-      sourceCrossMediaRecId: backlogItems.sourceCrossMediaRecId,
-      paletteHex: backlogItems.paletteHex,
+      verdict: userItems.verdict,
+      obsessed: userItems.obsessed,
+      sourceCrossMediaRecId: userItems.sourceCrossMediaRecId,
+      paletteHex: catalogItems.paletteHex,
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
     .innerJoin(backlogs, eq(backlogItems.backlogId, backlogs.id))
     .where(and(eq(backlogItems.userId, userId), filter))
     .orderBy(desc(backlogs.createdAt), desc(backlogItems.addedAt));

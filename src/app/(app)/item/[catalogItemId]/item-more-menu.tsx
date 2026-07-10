@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   hideRecoProvenanceAction,
-  removeItemAction,
+  removeFromLibraryAction,
 } from "@/app/actions/backlog-item-actions";
 import { useItemReaction } from "./reaction-state";
 
@@ -16,23 +16,27 @@ import { useItemReaction } from "./reaction-state";
  * #p3), not in here. Portaled to <body> so it escapes the (app) content
  * wrapper's stacking context (see new-backlog-button.tsx).
  *
- * Reaction is a single field: picking a verdict while obsessed REPLACES the
- * obsession — the shared context keeps the big gesture in sync (and owns the
- * optimistic write via mutateReaction).
+ * Verdict is INDEPENDENT from obsession now (F3.7): picking me gusta / no me
+ * gusta never touches the obsession gesture. The shared context owns the
+ * optimistic write via mutateVerdict. Everything here keys on the catalog item
+ * (state is per-title). "Quitar de mi biblioteca" is the nuke-all remove (per
+ * backlog removal lives on the shelf row); it two-tap confirms since it's
+ * destructive across every backlog.
  */
 export function ItemMoreMenu({
-  backlogItemId,
+  catalogItemId,
   sourceCrossMediaRecId,
 }: {
-  backlogItemId: string;
+  catalogItemId: string;
   sourceCrossMediaRecId: string | null;
 }) {
-  const { reaction, mutateReaction, recoHidden, setRecoHidden } =
+  const { verdict, mutateVerdict, recoHidden, setRecoHidden } =
     useItemReaction();
   const router = useRouter();
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
   const [, startTransition] = useTransition();
   const open = pos !== null;
 
@@ -40,6 +44,7 @@ export function ItemMoreMenu({
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
     setError(null);
+    setArmed(false);
     setPos({ top: r.bottom + 8, right: window.innerWidth - r.right });
   }
   const close = () => setPos(null);
@@ -58,21 +63,26 @@ export function ItemMoreMenu({
       window.removeEventListener("scroll", onScroll, { capture: true });
   }, [open]);
 
-  function pickVerdict(verdict: "liked" | "disliked") {
+  function pickVerdict(choice: "liked" | "disliked") {
     setError(null);
-    const next = reaction === verdict ? null : verdict;
+    const next = verdict === choice ? null : choice; // re-tap clears
     // Optimistic set + persist + safe revert live in the shared context.
     startTransition(async () => {
-      const ok = await mutateReaction(next);
+      const ok = await mutateVerdict(next);
       if (!ok) setError("No se pudo guardar tu reacción.");
     });
   }
 
-  function removeFromBacklog() {
+  function removeFromLibrary() {
+    // First tap arms (destructive: removes from EVERY backlog); second confirms.
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
-        await removeItemAction(backlogItemId);
+        await removeFromLibraryAction(catalogItemId);
         close();
         // Entry becomes null → the logged-only controls vanish; the page
         // itself stays valid (it's keyed on the catalog item).
@@ -87,7 +97,7 @@ export function ItemMoreMenu({
     setRecoHidden(true); // optimistic — the panel/eyebrow vanish immediately
     close();
     startTransition(() =>
-      hideRecoProvenanceAction(backlogItemId)
+      hideRecoProvenanceAction(catalogItemId)
         .then((res) => {
           if ("error" in res) setRecoHidden(false);
         })
@@ -126,21 +136,21 @@ export function ItemMoreMenu({
             >
               <button
                 role="menuitemradio"
-                aria-checked={reaction === "liked"}
+                aria-checked={verdict === "liked"}
                 onClick={() => pickVerdict("liked")}
                 className={rowCls}
               >
                 Me gusta
-                <StateDot active={reaction === "liked"} />
+                <StateDot active={verdict === "liked"} />
               </button>
               <button
                 role="menuitemradio"
-                aria-checked={reaction === "disliked"}
+                aria-checked={verdict === "disliked"}
                 onClick={() => pickVerdict("disliked")}
                 className={rowCls}
               >
                 No me gusta
-                <StateDot active={reaction === "disliked"} />
+                <StateDot active={verdict === "disliked"} />
               </button>
               {sourceCrossMediaRecId && !recoHidden && (
                 <button role="menuitem" onClick={hideReco} className={rowCls}>
@@ -149,10 +159,10 @@ export function ItemMoreMenu({
               )}
               <button
                 role="menuitem"
-                onClick={removeFromBacklog}
+                onClick={removeFromLibrary}
                 className={`${rowBase} text-hot`}
               >
-                Quitar del backlog
+                {armed ? "Toca de nuevo para confirmar" : "Quitar de mi biblioteca"}
               </button>
               {error && (
                 <p className="px-3.5 pb-2 pt-1 text-xs text-red-400">{error}</p>

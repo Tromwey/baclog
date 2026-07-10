@@ -105,7 +105,7 @@ export function drawTicket(
   ctx.translate(tx + 90, perfY - 110);
   ctx.rotate(-0.04);
   ctx.font = MONO(48, true);
-  const label = (item.statusLabelOverride ?? STATUS_LABEL[item.status]).toUpperCase();
+  const label = STATUS_LABEL[item.status].toUpperCase();
   const w = ctx.measureText(label).width;
   ctx.strokeStyle = CREAM;
   ctx.lineWidth = 6;

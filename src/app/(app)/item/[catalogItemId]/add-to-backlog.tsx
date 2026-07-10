@@ -20,11 +20,14 @@ interface BacklogOption {
 export function AddToBacklog({
   catalogItemId,
   posterUrl,
+  existingPaletteHex,
   backlogs,
   inBacklogName,
 }: {
   catalogItemId: string;
   posterUrl: string | null;
+  /** Cached cover palette (catalog_item) — present ⇒ skip on-device extraction. */
+  existingPaletteHex?: string[] | null;
   backlogs: BacklogOption[];
   /** The backlog this item already lives in, if any — flips the copy. */
   inBacklogName?: string | null;
@@ -35,10 +38,13 @@ export function AddToBacklog({
   const [busy, setBusy] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
 
+  // Palette is cover-derived + cached on catalog_item; extract on-device only
+  // when this title has none yet ([] on CORS failure).
+  const needsPalette = !existingPaletteHex || existingPaletteHex.length === 0;
+
   async function addTo(backlogId: string) {
     setBusy(true);
-    // F2.15: palette extracted on-device at save time; [] on CORS failure
-    const paletteHex = posterUrl ? await extractPalette(posterUrl) : [];
+    const paletteHex = needsPalette && posterUrl ? await extractPalette(posterUrl) : [];
     const res = await addItemAction({
       backlogId,
       catalogItemId,
@@ -58,7 +64,7 @@ export function AddToBacklog({
     const res = await createBacklogAction({ name: newName });
     const newId = "id" in res ? res.id : null;
     if (newId) {
-      const paletteHex = posterUrl ? await extractPalette(posterUrl) : [];
+      const paletteHex = needsPalette && posterUrl ? await extractPalette(posterUrl) : [];
       await addItemAction({
         backlogId: newId,
         catalogItemId,

@@ -64,6 +64,34 @@
       "when": 1783613129497,
       "tag": "0008_reaction_changed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783661366630,
+      "tag": "0009_expand_verdict_obsessed",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783661489451,
+      "tag": "0010_contract_drop_reaction",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783704149998,
+      "tag": "0011_expand_user_item",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783705173336,
+      "tag": "0012_contract_backlog_item_state",
+      "breakpoints": true
     }
   ]
 }

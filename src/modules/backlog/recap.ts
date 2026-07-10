@@ -1,7 +1,7 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { backlogItems, catalogItems } from "@/db/schema";
+import { catalogItems, userItems } from "@/db/schema";
 import { toCardBacklog } from "@/modules/cards/adapter";
 import type { CardBacklog } from "@/modules/cards/types";
 import { deriveEras } from "./era";
@@ -39,20 +39,23 @@ export interface MonthlyRecap {
  * toCardBacklog (so the same receipt/ticket/pattern renderers draw it).
  * Returns null when the user had no activity that month (skip silently).
  */
-/** backlogItems.userId is denormalized — one query for all backlogs' items. */
+/**
+ * One row per TITLE (user_item) so the recap counts a title filed in two
+ * backlogs ONCE. State from user_item, palette from the shared catalog_item.
+ */
 async function fetchUserItems(
   userId: string,
 ): Promise<BacklogItemWithCatalog[]> {
   return db
     .select({
-      id: backlogItems.id,
-      status: backlogItems.status,
-      customStatusLabel: backlogItems.customStatusLabel,
-      reaction: backlogItems.reaction,
-      sourceCrossMediaRecId: backlogItems.sourceCrossMediaRecId,
-      paletteHex: backlogItems.paletteHex,
-      addedAt: backlogItems.addedAt,
-      statusChangedAt: backlogItems.statusChangedAt,
+      id: userItems.id,
+      status: userItems.status,
+      verdict: userItems.verdict,
+      obsessed: userItems.obsessed,
+      sourceCrossMediaRecId: userItems.sourceCrossMediaRecId,
+      paletteHex: catalogItems.paletteHex,
+      addedAt: userItems.addedAt,
+      statusChangedAt: userItems.statusChangedAt,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       byline: catalogItems.byline,
@@ -61,10 +64,10 @@ async function fetchUserItems(
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
     })
-    .from(backlogItems)
-    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-    .where(eq(backlogItems.userId, userId))
-    .orderBy(desc(backlogItems.addedAt));
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(eq(userItems.userId, userId))
+    .orderBy(desc(userItems.addedAt));
 }
 
 function recapFromEra(

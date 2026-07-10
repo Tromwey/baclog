@@ -9,7 +9,7 @@ import { z } from "zod";
  */
 
 /**
- * Shared validation for a backlogItems.paletteHex array — used by both
+ * Shared validation for a catalog_item.paletteHex array — used by both
  * addItemAction (backlog-item-actions.ts) and updateItemPaletteAction
  * (palette-backfill-actions.ts). Lives here, NOT in either "use server" action
  * file — a "use server" file may only export async functions.

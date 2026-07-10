@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, Search as SearchIcon } from "lucide-react";
 import {
   addItemAction,
-  removeItemAction,
+  removeMembershipAction,
 } from "@/app/actions/backlog-item-actions";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { extractPalette } from "@/modules/cards/palette";
@@ -152,7 +152,7 @@ export function SearchPanel({
     setRowPending(id, true);
     try {
       if (existingItemId) {
-        await removeItemAction(existingItemId);
+        await removeMembershipAction(existingItemId);
         setAdded((a) => {
           const next: Record<string, string> = {};
           for (const [k, v] of Object.entries(a)) {
@@ -161,7 +161,11 @@ export function SearchPanel({
           return next;
         });
       } else if (target) {
-        const paletteHex = r.posterUrl ? await extractPalette(r.posterUrl) : [];
+        // Palette is cover-derived + cached on catalog_item; only extract when
+        // this title has none yet (the result carries the cached one).
+        const needsPalette = !r.paletteHex || r.paletteHex.length === 0;
+        const paletteHex =
+          needsPalette && r.posterUrl ? await extractPalette(r.posterUrl) : [];
         const res = await addItemAction({
           backlogId: target.id,
           catalogItemId: id,

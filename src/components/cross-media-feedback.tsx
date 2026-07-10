@@ -10,20 +10,23 @@ import {
 
 /**
  * F3.6 — structured "why" feedback ("¿por qué?" chips) on a cross-media-sourced
- * item's reaction. Only renders when the item actually came from an AI reco
- * (sourceCrossMediaRecId set) and has a reaction to explain. Rendered on the
- * item detail page (via reco-reasoning-panel.tsx's RecoFeedback wrapper, which
- * feeds it the live optimistic reaction) — reaction editing lives ONLY there
- * (HANDOFF §2), so backlog rows no longer mount it. Chips speak the reasoning
- * panel's mono chip language (mock #p3).
+ * item's reaction. Only renders when the item came from an AI reco
+ * (sourceCrossMediaRecId set) AND there is some reaction to explain — either a
+ * verdict or an obsession (the two independent axes, F3.7). Rendered on the item
+ * detail page (via reco-reasoning-panel.tsx's RecoFeedback wrapper, which feeds
+ * it the live optimistic axes) — reaction editing lives ONLY there (HANDOFF §2),
+ * so backlog rows no longer mount it. Chips speak the reasoning panel's mono
+ * chip language (mock #p3).
  */
 export function CrossMediaFeedback({
-  backlogItemId,
-  reaction,
+  catalogItemId,
+  verdict,
+  obsessed,
   sourceCrossMediaRecId,
 }: {
-  backlogItemId: string;
-  reaction: string | null;
+  catalogItemId: string;
+  verdict: string | null;
+  obsessed: boolean;
   sourceCrossMediaRecId: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -31,20 +34,25 @@ export function CrossMediaFeedback({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // Reset any in-progress selection when the reaction itself changes — this
-  // component stays mounted across reaction switches (all 3 reaction values
-  // are truthy), so without this a tag picked under one reaction could ride
-  // along and get submitted under a different one.
-  const [lastReaction, setLastReaction] = useState(reaction);
-  if (reaction !== lastReaction) {
-    setLastReaction(reaction);
+  // Reset any in-progress selection when EITHER axis changes — this component
+  // stays mounted across verdict/obsession switches, so without this a tag
+  // picked under one state (e.g. positive chips while liked) could ride along
+  // and get submitted after the verdict flips to disliked.
+  const [lastVerdict, setLastVerdict] = useState(verdict);
+  const [lastObsessed, setLastObsessed] = useState(obsessed);
+  if (verdict !== lastVerdict || obsessed !== lastObsessed) {
+    setLastVerdict(verdict);
+    setLastObsessed(obsessed);
     setSelectedReasons([]);
     setOpen(false);
   }
 
-  if (!reaction || !sourceCrossMediaRecId) return null;
+  if ((!verdict && !obsessed) || !sourceCrossMediaRecId) return null;
 
-  const reasonOptions = reaction === "disliked" ? NEGATIVE_REASONS : POSITIVE_REASONS;
+  // Negative chips only when the sole signal is a "no me gusta" verdict; an
+  // obsession (even alongside a disliked verdict) is a positive signal.
+  const reasonOptions =
+    verdict === "disliked" && !obsessed ? NEGATIVE_REASONS : POSITIVE_REASONS;
 
   function toggleReason(tag: string) {
     setSelectedReasons((prev) =>
@@ -55,7 +63,7 @@ export function CrossMediaFeedback({
   function submit() {
     setError(null);
     startTransition(() =>
-      submitCrossMediaFeedbackAction(backlogItemId, selectedReasons)
+      submitCrossMediaFeedbackAction(catalogItemId, selectedReasons)
         .then((res) => {
           if ("error" in res) {
             setError("No se pudo enviar tu feedback.");

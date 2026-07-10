@@ -64,6 +64,7 @@ export async function unifiedSearch(
       byline: catalogItems.byline,
       year: catalogItems.year,
       posterUrl: catalogItems.posterUrl,
+      paletteHex: catalogItems.paletteHex,
     });
 
   // Preserve upstream relevance order (rows come back in insert order, but
@@ -80,6 +81,7 @@ export async function unifiedSearch(
       byline: r.byline,
       year: r.year,
       posterUrl: r.posterUrl,
+      paletteHex: r.paletteHex ?? null,
     }));
 }
 

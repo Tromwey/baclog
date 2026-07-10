@@ -39,6 +39,9 @@ export interface CatalogSearchResult {
   byline: string | null;
   year: number | null;
   posterUrl: string | null;
+  /** Cached cover palette (catalog_item) — present ⇒ the client skips on-device
+   *  re-extraction on add; null ⇒ extract once and persist. */
+  paletteHex: string[] | null;
 }
 
 /** The film/series search surface — real TMDB or fixtures (launch dep). */

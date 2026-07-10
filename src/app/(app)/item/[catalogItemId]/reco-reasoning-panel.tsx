@@ -102,17 +102,18 @@ export function RecoEyebrow({ seedTitle }: { seedTitle: string }) {
  * shared context (it self-gates on reaction && sourceCrossMediaRecId).
  */
 export function RecoFeedback({
-  backlogItemId,
+  catalogItemId,
   sourceCrossMediaRecId,
 }: {
-  backlogItemId: string;
+  catalogItemId: string;
   sourceCrossMediaRecId: string | null;
 }) {
-  const { reaction, recoHidden } = useItemReaction();
+  const { verdict, obsessed, recoHidden } = useItemReaction();
   return (
     <CrossMediaFeedback
-      backlogItemId={backlogItemId}
-      reaction={reaction}
+      catalogItemId={catalogItemId}
+      verdict={verdict}
+      obsessed={obsessed}
       sourceCrossMediaRecId={recoHidden ? null : sourceCrossMediaRecId}
     />
   );

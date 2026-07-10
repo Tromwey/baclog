@@ -13,6 +13,7 @@ import {
   type DiscoverResult,
 } from "@/modules/recs/crossmedia";
 import type { DoubleFeatureData } from "@/modules/cards/types";
+import { ensureMembership } from "./backlog-item-actions";
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -58,7 +59,8 @@ export async function defaultBacklogForSeed(seedCatalogItemId: string): Promise<
         eq(backlogItems.catalogItemId, seedCatalogItemId),
       ),
     )
-    .orderBy(desc(backlogItems.statusChangedAt))
+    // Most recently added-to-a-backlog wins (status now lives on user_item).
+    .orderBy(desc(backlogItems.addedAt))
     .limit(1);
   if (seedHome) return { backlogId: seedHome.backlogId, backlogName: seedHome.name };
 
@@ -91,21 +93,13 @@ export async function acceptRecoAction(input: {
     getCrossMediaRecId(input.seedCatalogItemId, input.targetCatalogItemId),
   ]);
 
-  await db
-    .insert(backlogItems)
-    .values({
-      backlogId: target.backlogId,
-      userId: user.id,
-      catalogItemId: input.targetCatalogItemId,
-      sourceCrossMediaRecId,
-      paletteHex:
-        input.paletteHex && input.paletteHex.length > 0
-          ? input.paletteHex.slice(0, 6)
-          : null,
-    })
-    .onConflictDoNothing({
-      target: [backlogItems.backlogId, backlogItems.catalogItemId],
-    });
+  await ensureMembership({
+    userId: user.id,
+    backlogId: target.backlogId,
+    catalogItemId: input.targetCatalogItemId,
+    paletteHex: input.paletteHex?.slice(0, 6) ?? null,
+    sourceCrossMediaRecId,
+  });
 
   revalidatePath(`/backlogs/${target.backlogId}`);
   return target;
@@ -134,21 +128,13 @@ export async function acceptRecoToBacklogAction(input: {
   ]);
   if (!backlog) return { error: "not_found" };
 
-  await db
-    .insert(backlogItems)
-    .values({
-      backlogId: backlog.id,
-      userId: user.id,
-      catalogItemId: input.targetCatalogItemId,
-      sourceCrossMediaRecId,
-      paletteHex:
-        input.paletteHex && input.paletteHex.length > 0
-          ? input.paletteHex.slice(0, 6)
-          : null,
-    })
-    .onConflictDoNothing({
-      target: [backlogItems.backlogId, backlogItems.catalogItemId],
-    });
+  await ensureMembership({
+    userId: user.id,
+    backlogId: backlog.id,
+    catalogItemId: input.targetCatalogItemId,
+    paletteHex: input.paletteHex?.slice(0, 6) ?? null,
+    sourceCrossMediaRecId,
+  });
 
   revalidatePath(`/backlogs/${backlog.id}`);
   return { backlogId: backlog.id, backlogName: backlog.name };

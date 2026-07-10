@@ -24,7 +24,8 @@ export interface ItemRowReadonlyProps {
   catalogItemId: string;
   title: string;
   mediaType: MediaType;
-  reaction: "disliked" | "liked" | "obsessed" | null;
+  verdict: "disliked" | "liked" | null;
+  obsessed: boolean;
   sourceCrossMediaRecId: string | null;
 }
 
@@ -33,7 +34,8 @@ export function ItemRowReadonly({
   catalogItemId,
   title,
   mediaType,
-  reaction,
+  verdict,
+  obsessed,
   sourceCrossMediaRecId,
 }: ItemRowReadonlyProps) {
   return (
@@ -49,7 +51,8 @@ export function ItemRowReadonly({
           {pad(index)}
         </span>
         <ItemSignalGlyph
-          reaction={reaction}
+          verdict={verdict}
+          obsessed={obsessed}
           sourceCrossMediaRecId={sourceCrossMediaRecId}
         />
         <span className="flex min-w-0 flex-1 items-baseline gap-2">

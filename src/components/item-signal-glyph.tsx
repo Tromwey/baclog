@@ -6,13 +6,17 @@ import { FLAME_PATH, GLYPH_VIEWBOX, SPARKLE_PATH } from "./glyph-paths";
  * Presentational and server-safe (no hooks, no handlers) — rows never edit
  * inline; editing lives only in the item detail.
  *
- * Matrix (procedencia × reacción):
+ * Reaction is two independent axes now (F3.7): the `obsessed` flag and the
+ * `verdict` (me gusta / no me gusta). The flame WINS whenever obsessed, even if
+ * a verdict is also set; otherwise the dot/sparkle is driven by the verdict.
  *
- * |               | manual            | recomendado (IA)              |
- * |---------------|-------------------|-------------------------------|
- * | sin reacción  | nada (slot vacío) | destello gris                 |
- * | me gusta      | punto gris        | destello blanco               |
- * | me obsesiona  | llama roja        | llama roja + destello ember   |
+ * Matrix (procedencia × señal):
+ *
+ * |                    | manual            | recomendado (IA)              |
+ * |--------------------|-------------------|-------------------------------|
+ * | sin señal          | nada (slot vacío) | destello gris                 |
+ * | me gusta (verdict) | punto gris        | destello blanco               |
+ * | me obsesiona       | llama roja        | llama roja + destello ember   |
  *
  * `disliked` renders as no-reaction on purpose — rows don't surface
  * negativity; the verdict lives in the detail's ⋯ menu.
@@ -20,7 +24,7 @@ import { FLAME_PATH, GLYPH_VIEWBOX, SPARKLE_PATH } from "./glyph-paths";
  * The sparkle is drawn ~12% larger than the dot/flame to equalize optical
  * mass (a 4-point star reads smaller than its bounding box, HANDOFF §3) —
  * capped so it fills, but never overflows, the fixed slot (mock #p2 draws it
- * 16–17px in an 18px cell). The empty manual/no-reaction case still occupies
+ * 16–17px in an 18px cell). The empty manual/no-signal case still occupies
  * the fixed-width slot so row columns stay aligned.
  */
 
@@ -34,7 +38,10 @@ const GRAY = "#6C6B76"; // punto / destello gris
 const SPARKLE_SCALE = 1.125;
 
 export interface ItemSignalGlyphProps {
-  reaction: "disliked" | "liked" | "obsessed" | null;
+  /** me gusta / no me gusta — independent from obsession; disliked shows nothing. */
+  verdict: "disliked" | "liked" | null;
+  /** The obsession flag — wins over any verdict (renders the flame). */
+  obsessed: boolean;
   /** Non-null = the item was accepted from a cross-media AI reco. */
   sourceCrossMediaRecId: string | null;
   /** Base glyph size in px (flame/sparkle-before-compensation). Default 16. */
@@ -42,7 +49,8 @@ export interface ItemSignalGlyphProps {
 }
 
 export function ItemSignalGlyph({
-  reaction,
+  verdict,
+  obsessed,
   sourceCrossMediaRecId,
   size = 16,
 }: ItemSignalGlyphProps) {
@@ -51,7 +59,7 @@ export function ItemSignalGlyph({
   const sparkleSize = Math.round(size * SPARKLE_SCALE);
 
   let glyph: ReactNode = null;
-  if (reaction === "obsessed") {
+  if (obsessed) {
     glyph = (
       <span className="relative inline-flex items-center justify-center">
         <svg
@@ -77,7 +85,7 @@ export function ItemSignalGlyph({
         )}
       </span>
     );
-  } else if (reaction === "liked" && !fromAI) {
+  } else if (verdict === "liked" && !fromAI) {
     glyph = (
       <span
         className="rounded-full"
@@ -89,20 +97,20 @@ export function ItemSignalGlyph({
       />
     );
   } else if (fromAI) {
-    // liked + AI → white sparkle · no reaction (or disliked) + AI → gray sparkle
+    // liked + AI → white sparkle · no verdict (or disliked) + AI → gray sparkle
     glyph = (
       <svg
         width={sparkleSize}
         height={sparkleSize}
         viewBox={GLYPH_VIEWBOX}
-        fill={reaction === "liked" ? WHITE : GRAY}
+        fill={verdict === "liked" ? WHITE : GRAY}
         aria-hidden
       >
         <path d={SPARKLE_PATH} />
       </svg>
     );
   }
-  // manual + no reaction (or disliked) → empty slot, width preserved
+  // manual + no verdict (or disliked) → empty slot, width preserved
 
   return (
     <span

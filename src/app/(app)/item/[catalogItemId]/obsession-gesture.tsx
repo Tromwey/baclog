@@ -16,17 +16,18 @@ import { useItemReaction } from "./reaction-state";
 const HOT_AURA = ["#FF2D55", "#7A1B4A", "#C7462F", "#FF7A98"];
 
 export function ObsessionGesture() {
-  const { reaction, mutateReaction } = useItemReaction();
+  const { obsessed, mutateObsessed } = useItemReaction();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const active = reaction === "obsessed";
+  const active = obsessed;
 
   function toggle() {
     setError(null);
-    const next = active ? null : "obsessed";
-    // Optimistic set + persist + safe revert live in the shared context.
+    // Independent of the verdict now (F3.7): toggling obsession never touches
+    // me gusta / no me gusta. Optimistic set + persist + safe revert live in
+    // the shared context.
     startTransition(async () => {
-      const ok = await mutateReaction(next);
+      const ok = await mutateObsessed(!active);
       if (!ok) setError("No se pudo guardar tu reacción.");
     });
   }

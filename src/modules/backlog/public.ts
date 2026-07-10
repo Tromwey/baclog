@@ -1,7 +1,13 @@
 import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { backlogItems, backlogs, catalogItems, users } from "@/db/schema";
+import {
+  backlogItems,
+  backlogs,
+  catalogItems,
+  userItems,
+  users,
+} from "@/db/schema";
 import { dominantHexes, groupDominantHexes } from "./palette";
 
 /**
@@ -46,7 +52,7 @@ export async function getPublicProfile(username: string) {
           .select({
             backlogId: backlogItems.backlogId,
             posterUrl: catalogItems.posterUrl,
-            paletteHex: backlogItems.paletteHex,
+            paletteHex: catalogItems.paletteHex,
           })
           .from(backlogItems)
           .innerJoin(
@@ -114,16 +120,17 @@ export async function getPublicBacklog(username: string, backlogId: string) {
   const items = await db
     .select({
       id: backlogItems.id,
-      status: backlogItems.status,
-      customStatusLabel: backlogItems.customStatusLabel,
-      // F3.6.2: only expose a SETTLED verdict (liked/disliked) publicly once
-      // the item is completed — a mid-consumption verdict is a live behavioral
-      // signal. EXCEPTION (handoff §1): "obsessed" IS the public real-time
-      // "obsessing over" signal by design, so it always shows. Gated at the
-      // query layer, not display.
-      reaction: sql<
+      status: userItems.status,
+      // F3.7 — two independent axes with different public rules (handoff §1):
+      // `obsessed` IS the public real-time "obsessing over" signal, so it always
+      // shows. A `verdict` (me gusta / no me gusta) is a SETTLED judgement, only
+      // exposed once the item is completed — a mid-consumption verdict is a live
+      // behavioral signal. Both gated at the query layer, not display. State is
+      // per-title (user_item), so it reads identically across the owner's shelves.
+      obsessed: userItems.obsessed,
+      verdict: sql<
         string | null
-      >`case when ${backlogItems.reaction} = 'obsessed' or ${backlogItems.status} = 'completed' then ${backlogItems.reaction} else null end`,
+      >`case when ${userItems.status} = 'completed' then ${userItems.verdict} else null end`,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       byline: catalogItems.byline,
@@ -131,11 +138,18 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
       // Cover-art colors only (nothing user-identifying) — feeds the backlog's
-      // ADN aura on the public page via dominantHexes below.
-      paletteHex: backlogItems.paletteHex,
+      // ADN aura on the public page via dominantHexes below. Shared catalog row.
+      paletteHex: catalogItems.paletteHex,
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
     .where(eq(backlogItems.backlogId, row.backlogId))
     .orderBy(desc(backlogItems.addedAt));
 

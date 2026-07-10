@@ -21,14 +21,20 @@ export const itemStatusEnum = pgEnum("item_status", [
   "on_my_radar",
   "in_progress",
   "completed",
+  // @deprecated F2.8 custom status — retired in the item-flow redesign (no UI
+  // adds it anymore; existing rows were folded into `in_progress` in migration
+  // 0009). The VALUE is kept only because removing an enum member requires
+  // recreating the type (not worth it). Never set it.
   "custom",
 ]);
-/** No me gusta / me gusta / me obsesiona — applies regardless of `status` (F3.6). */
-export const itemReactionEnum = pgEnum("item_reaction", [
-  "disliked",
-  "liked",
-  "obsessed",
-]);
+/**
+ * Veredicto — me gusta / no me gusta (F3.7 followup). An INDEPENDENT axis from
+ * `obsessed`: a verdict is a considered judgement, obsession is a free
+ * real-time signal. They were briefly merged in F3.6 (one `reaction` field),
+ * which made picking a verdict silently un-light an obsession — split back
+ * apart in 0009. Nullable column = sin veredicto.
+ */
+export const itemVerdictEnum = pgEnum("item_verdict", ["disliked", "liked"]);
 export const preferredServiceEnum = pgEnum("preferred_service", [
   "spotify",
   "apple_music",
@@ -168,6 +174,14 @@ export const catalogItems = pgTable(
     synopsis: text("synopsis"),
     /** Hotlinked TMDB/mzstatic URL — never proxied or stored as binary */
     posterUrl: text("poster_url"),
+    /**
+     * F2.15 — 4-6 dominant hex colors, extracted on-device (canvas) from the
+     * poster the FIRST time any user adds this title, then shared here. Purely
+     * cover-derived (same for every user), so it lives on the shared catalog
+     * cache, not per user/backlog. `[]` from a CORS-failed extraction is never
+     * persisted (only-if-null write) so a later success can still fill it.
+     */
+    paletteHex: text("palette_hex").array(),
     /** Upstream rating (TMDB vote_average) — distinct from user rating */
     sourceRating: real("source_rating"),
     isrc: text("isrc"),
@@ -226,43 +240,66 @@ export const backlogItems = pgTable(
     catalogItemId: text("catalog_item_id")
       .notNull()
       .references(() => catalogItems.id, { onDelete: "restrict" }),
-    status: itemStatusEnum("status").notNull().default("on_my_radar"),
-    /** Only meaningful when status = 'custom' (F2.8) */
-    customStatusLabel: text("custom_status_label"),
-    /** No me gusta / me gusta / me obsesiona — applies in ANY status (F3.6), not gated on 'completed'. */
-    reaction: itemReactionEnum("reaction"),
     /**
-     * When `reaction` last changed (F3.6.2, council-informed). Not used to gate
-     * the UI — the input model stays free-any-status — but lets a consumer
-     * (recs engine, public exposure) discount a reaction that was just set
-     * rather than treating it as settled. Null until the first reaction.
+     * When the title was added to THIS backlog. Per-membership; per-title state
+     * (status / verdict / obsession / provenance) and the cover palette moved
+     * off this table (→ user_item and catalog_item) in migration 0011→0012.
      */
-    reactionChangedAt: timestamp("reaction_changed_at"),
-    /**
-     * Provenance (F3.6): set when this item was accepted from a cross-media
-     * AI reco, so ratings can be joined back to the prompt_version/model that
-     * produced it. Null for organically-added items. `set null` (not cascade)
-     * so pruning a cache row never deletes a user's real backlog item.
-     */
-    sourceCrossMediaRecId: text("source_cross_media_rec_id").references(
-      () => crossMediaRecs.id,
-      { onDelete: "set null" },
-    ),
-    /** F2.15 — 4-6 hex colors extracted on-device at save time */
-    paletteHex: text("palette_hex").array(),
     addedAt: timestamp("added_at").notNull().defaultNow(),
-    /** Eras (F2.10) bucket by max(addedAt, statusChangedAt) at read time */
-    statusChangedAt: timestamp("status_changed_at").notNull().defaultNow(),
   },
   (t) => [
     index("backlog_item_backlog_id_idx").on(t.backlogId),
     index("backlog_item_user_id_idx").on(t.userId),
-    index("backlog_item_source_cross_media_rec_id_idx").on(
-      t.sourceCrossMediaRecId,
-    ),
     uniqueIndex("backlog_item_unique_per_backlog").on(
       t.backlogId,
       t.catalogItemId,
+    ),
+  ],
+);
+
+/**
+ * The user's per-TITLE state — one row per (user, catalog_item), independent of
+ * how many backlogs the title is filed under. Split out from `backlog_item`
+ * (which is now pure membership) so status / verdict / obsession / AI-provenance
+ * are the SAME across every backlog a title lives in: setting "me obsesiona"
+ * once is true everywhere, and it's counted once in stats/recap. Palette is NOT
+ * here — it's cover-derived, so it lives on the shared `catalog_item`.
+ */
+export const userItems = pgTable(
+  "user_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    catalogItemId: text("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    status: itemStatusEnum("status").notNull().default("on_my_radar"),
+    /** Eras (F2.10) bucket by max(addedAt, statusChangedAt) at read time. */
+    statusChangedAt: timestamp("status_changed_at").notNull().defaultNow(),
+    /** Veredicto — me gusta / no me gusta (F3.7). Null = sin veredicto. */
+    verdict: itemVerdictEnum("verdict"),
+    verdictChangedAt: timestamp("verdict_changed_at"),
+    /** Obsession — free, status-independent "me obsesiona" + public marker. */
+    obsessed: boolean("obsessed").notNull().default(false),
+    obsessedAt: timestamp("obsessed_at"),
+    /** Provenance (F3.6): the AI reco this title was accepted from, if any. */
+    sourceCrossMediaRecId: text("source_cross_media_rec_id").references(
+      () => crossMediaRecs.id,
+      { onDelete: "set null" },
+    ),
+    /** When the title first entered the user's library (min across memberships). */
+    addedAt: timestamp("added_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // At most one state row per (user, title) — the join key from backlog_item.
+    uniqueIndex("user_item_user_catalog_unique").on(t.userId, t.catalogItemId),
+    index("user_item_user_id_idx").on(t.userId),
+    index("user_item_source_cross_media_rec_id_idx").on(
+      t.sourceCrossMediaRecId,
     ),
   ],
 );
@@ -476,15 +513,16 @@ export const crossMediaRecoFeedback = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    backlogItemId: text("backlog_item_id")
+    /** Per-title anchor — one live "why" per title (was per backlog_item). */
+    userItemId: text("user_item_id")
       .notNull()
-      .references(() => backlogItems.id, { onDelete: "cascade" }),
-    /** Denormalized from backlogItems.userId — cheap ownership, no join. */
+      .references(() => userItems.id, { onDelete: "cascade" }),
+    /** Denormalized from userItems.userId — cheap ownership, no join. */
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     /**
-     * Denormalized from backlogItems.sourceCrossMediaRecId so aggregating by
+     * Denormalized from userItems.sourceCrossMediaRecId so aggregating by
      * promptVersion/model is one join (→ cross_media_rec), not two.
      */
     crossMediaRecId: text("cross_media_rec_id")
@@ -496,9 +534,7 @@ export const crossMediaRecoFeedback = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("cross_media_reco_feedback_backlog_item_unique").on(
-      t.backlogItemId,
-    ),
+    uniqueIndex("cross_media_reco_feedback_user_item_unique").on(t.userItemId),
     index("cross_media_reco_feedback_cross_media_rec_idx").on(
       t.crossMediaRecId,
     ),
@@ -555,6 +591,14 @@ export const backlogItemsRelations = relations(backlogItems, ({ one }) => ({
 
 export const catalogItemsRelations = relations(catalogItems, ({ many }) => ({
   links: many(mediaLinks),
+}));
+
+export const userItemsRelations = relations(userItems, ({ one }) => ({
+  user: one(users, { fields: [userItems.userId], references: [users.id] }),
+  catalogItem: one(catalogItems, {
+    fields: [userItems.catalogItemId],
+    references: [catalogItems.id],
+  }),
 }));
 
 export const waitlistEntriesRelations = relations(

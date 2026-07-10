@@ -27,13 +27,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function ProgressGesture({
-  backlogItemId,
+  catalogItemId,
   initialStatus,
-  customStatusLabel,
 }: {
-  backlogItemId: string;
+  catalogItemId: string;
   initialStatus: string;
-  customStatusLabel: string | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [holding, setHolding] = useState(false);
@@ -53,7 +51,7 @@ export function ProgressGesture({
       setError("No se pudo actualizar.");
     };
     startTransition(() =>
-      setStatusAction(backlogItemId, next)
+      setStatusAction(catalogItemId, next)
         .then((res) => {
           if ("error" in res) revert();
         })
@@ -67,10 +65,7 @@ export function ProgressGesture({
     { threshold: HOLD_MS },
   );
 
-  const label =
-    status === "custom"
-      ? (customStatusLabel ?? "Estado")
-      : (STATUS_LABEL[status] ?? STATUS_LABEL.on_my_radar);
+  const label = STATUS_LABEL[status] ?? STATUS_LABEL.on_my_radar;
   const lit = status === "in_progress" || status === "completed";
 
   return (
