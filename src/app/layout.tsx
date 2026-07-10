@@ -38,6 +38,11 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "Baclog",
   description: "Tus obsesiones, en una tarjeta.",
+  // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest
+  // icons. Placeholder spark (scripts/generate-icons.mjs); the app/favicon.ico
+  // convention stays auto-linked for browser tabs. The PWA install icons
+  // (192/512 + maskable) live in src/app/manifest.ts.
+  icons: { apple: "/apple-touch-icon.png" },
   // Home-screen installs: without `black-translucent`, iOS reserves an opaque
   // status bar and the page canvas STARTS BELOW it — every top aura visibly
   // cuts off at the status-bar line. Translucent + viewportFit:"cover" lets
