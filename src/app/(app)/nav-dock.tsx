@@ -83,7 +83,7 @@ export function NavDock() {
   return (
     <nav
       aria-label="Navegación principal"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(34px+env(safe-area-inset-bottom))] z-10 flex justify-center"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] z-10 flex justify-center"
     >
       {/* Content-hugging pill (mock #p1): no border, no grain, no fixed width.
           Active destination = dark inner pill + lima glyph (HANDOFF §7 — never

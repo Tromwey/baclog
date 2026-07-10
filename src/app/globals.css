@@ -65,8 +65,24 @@
   --dur-slow: 420ms;
 
   /* Floating nav dock — bottom clearance for scrollable pages sitting under
-     the dock (dock height + gap + iOS home indicator). */
+     the dock (dock height + gap + iOS home indicator). The offsets below are
+     the aesthetic float above the bottom edge; in a browser tab they also clear
+     iOS Safari's bottom toolbar, which is why the installed-app override tightens
+     them (no toolbar there). */
+  --dock-offset: 34px;
+  --item-bar-offset: 28px;
   --dock-clearance: calc(130px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Installed PWA (Add-to-Home-Screen / standalone): there's no Safari bottom
+   toolbar filling the space, so the dock and the item action bar would leave a
+   toolbar-sized gap. Sit tighter to the home indicator (env) instead. */
+@media (display-mode: standalone) {
+  :root {
+    --dock-offset: 14px;
+    --item-bar-offset: 14px;
+    --dock-clearance: calc(110px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @theme inline {
