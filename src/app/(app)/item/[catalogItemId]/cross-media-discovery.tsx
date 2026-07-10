@@ -238,7 +238,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       className={
         isPage
           ? "relative"
-          : "relative mt-8 overflow-hidden rounded-[var(--r-lg)] border border-line bg-surface-1 p-5"
+          : "relative mt-8 overflow-hidden rounded-[var(--r-lg)] bg-surface-1 p-5"
       }
     >
       {!isPage && <div aria-hidden className="bl-grain !opacity-[0.05]" />}
@@ -323,7 +323,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         <button
           aria-label="Descartar"
           onClick={props.onDismiss ?? dismiss}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-lg text-text-2 transition-colors hover:border-text-3 disabled:opacity-40"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-lg text-text-2 transition-colors hover:bg-surface-3 disabled:opacity-40"
           disabled={busy}
         >
           ×
@@ -340,7 +340,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         <button
           aria-label="Compartir"
           onClick={share}
-          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border border-line px-4 font-semibold text-text transition-colors hover:border-accent disabled:opacity-40"
+          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-surface-2 px-4 font-semibold text-text transition-colors hover:bg-surface-3 disabled:opacity-40"
           disabled={busy}
         >
           ↗ Compartir
@@ -363,7 +363,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
       {/* Accept toast */}
       {toast && addedTo && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3 text-sm">
           <span className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-bg">
               ✓
@@ -381,9 +381,9 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
       {/* Share toast (download fallback) */}
       {shareToast && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3 text-sm">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-accent bg-surface-1 text-xs text-accent">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-soft text-xs text-accent">
               ↗
             </span>
             Tarjeta lista — <b className="font-semibold text-accent">sin portadas</b>
@@ -414,7 +414,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-t-2xl border-t border-line bg-surface-1 p-5 pb-8"
+            className="w-full max-w-md rounded-t-2xl bg-surface-1 p-5 pb-8"
           >
             <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-line" />
             <div className="flex items-baseline justify-between">
@@ -434,7 +434,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                   maxLength={60}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Nombre del backlog"
-                  className="min-w-0 flex-1 rounded-xl border border-accent bg-surface-2 px-3.5 py-3 outline-none"
+                  className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3.5 py-3 outline-none focus:bg-surface-3"
                 />
                 <button
                   onClick={createBacklog}
@@ -447,7 +447,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             ) : (
               <button
                 onClick={() => setCreating(true)}
-                className="mt-4 flex w-full items-center gap-2 rounded-xl border border-dashed border-accent/40 bg-accent-soft px-3.5 py-3.5 font-semibold text-accent"
+                className="mt-4 flex w-full items-center gap-2 rounded-xl bg-accent-soft px-3.5 py-3.5 font-semibold text-accent"
               >
                 <span className="text-xl leading-none">＋</span> Nuevo backlog
               </button>
@@ -467,8 +467,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                 <button
                   key={b.id}
                   onClick={() => setSel(b.id)}
-                  className={`flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${
-                    sel === b.id ? "border-accent bg-accent-soft" : "border-line bg-bg hover:border-text-3"
+                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors ${
+                    sel === b.id ? "bg-accent-soft" : "bg-surface-2 hover:bg-surface-3"
                   }`}
                 >
                   <span>
@@ -479,8 +479,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                     </span>
                   </span>
                   <span
-                    className={`h-3 w-3 rounded-full border ${
-                      sel === b.id ? "border-accent bg-accent" : "border-line"
+                    className={`h-3 w-3 rounded-full ${
+                      sel === b.id ? "bg-accent" : "bg-surface-3"
                     }`}
                   />
                 </button>

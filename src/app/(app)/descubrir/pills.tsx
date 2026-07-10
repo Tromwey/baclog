@@ -31,10 +31,10 @@ export function Pills({
             key={t}
             onClick={() => onToggle(t)}
             aria-pressed={on}
-            className={`inline-flex items-center rounded-full border px-[15px] py-2.5 font-sans text-[13px] font-semibold transition-colors ${
+            className={`inline-flex items-center rounded-full px-[15px] py-2.5 font-sans text-[13px] font-semibold transition-colors ${
               on
-                ? "border-line bg-accent/15 text-accent backdrop-blur-[8px]"
-                : "border-line bg-surface-2 text-text-2"
+                ? "bg-accent/15 text-accent backdrop-blur-[8px]"
+                : "bg-surface-2 text-text-2"
             }`}
           >
             {LABEL[t]}

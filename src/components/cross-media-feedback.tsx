@@ -11,20 +11,20 @@ import {
 /**
  * F3.6 — structured "why" feedback ("¿por qué?" chips) on a cross-media-sourced
  * item's reaction. Only renders when the item actually came from an AI reco
- * (sourceCrossMediaRecId set) and has a reaction to explain. Shared between the
- * backlog row (item-row.tsx) and the item detail page (item-status-controls.tsx).
+ * (sourceCrossMediaRecId set) and has a reaction to explain. Rendered on the
+ * item detail page (via reco-reasoning-panel.tsx's RecoFeedback wrapper, which
+ * feeds it the live optimistic reaction) — reaction editing lives ONLY there
+ * (HANDOFF §2), so backlog rows no longer mount it. Chips speak the reasoning
+ * panel's mono chip language (mock #p3).
  */
 export function CrossMediaFeedback({
   backlogItemId,
   reaction,
   sourceCrossMediaRecId,
-  variant = "mono",
 }: {
   backlogItemId: string;
   reaction: string | null;
   sourceCrossMediaRecId: string | null;
-  /** "mono" = uppercase mono-meta label (item detail page); "plain" = quiet sans label (backlog row) */
-  variant?: "plain" | "mono";
 }) {
   const [open, setOpen] = useState(false);
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
@@ -71,21 +71,17 @@ export function CrossMediaFeedback({
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className={
-          variant === "mono"
-            ? "font-mono text-[10px] uppercase tracking-[0.12em] text-text-3"
-            : "text-[11px] font-semibold text-text-3"
-        }
+        className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-text-3"
       >
         {open ? "Ocultar ▴" : "¿Por qué? ▾"}
       </button>
       {open && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-[7px]">
           {reasonOptions.map((tag) => (
             <button
               key={tag}
               onClick={() => toggleReason(tag)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              className={`rounded-full px-[11px] py-[7px] font-mono text-[9px] uppercase tracking-[0.05em] ${
                 selectedReasons.includes(tag)
                   ? "bg-accent text-bg"
                   : "bg-surface-2 text-text-2"

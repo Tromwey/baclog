@@ -24,8 +24,8 @@ export function AddButton({
       onClick={onClick}
       disabled={busy}
       aria-label={`Agregar ${label}`}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent transition-colors disabled:opacity-60 ${
-        added ? "bg-accent text-bg" : "bg-transparent text-accent"
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60 ${
+        added ? "bg-accent text-bg" : "bg-accent-soft text-accent"
       }`}
     >
       {added ? <Check size={18} /> : <Plus size={18} />}

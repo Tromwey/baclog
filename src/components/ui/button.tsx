@@ -2,21 +2,21 @@ import Link from "next/link";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 /**
- * Design-system button (sistema-diseno §4). Three variants:
- *  - primary   lima fill + black text — the "marquee light" CTA
- *  - secondary transparent + hairline
+ * Design-system button (sistema-diseno §4, HANDOFF §7: flat — no borders,
+ * no glow). Three variants:
+ *  - primary   lima fill + black text — the CTA
+ *  - secondary neutral surface fill
  *  - ghost     text-only (skip / later)
  * Renders as <Link> when `href` is set, else <button>. Shared classes keep
- * the pill radius, press-scale, and lima focus glow consistent everywhere.
+ * the pill radius and press-scale consistent everywhere.
  */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
-    "bg-accent text-bg shadow-[0_0_24px_var(--accent-soft)] active:bg-accent-press hover:brightness-105",
-  secondary:
-    "bg-transparent text-text border border-line hover:bg-surface-2",
+    "bg-accent text-bg active:bg-accent-press hover:brightness-105",
+  secondary: "bg-surface-2 text-text hover:bg-surface-3",
   ghost: "bg-transparent text-text-2 hover:text-text",
 };
 

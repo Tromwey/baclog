@@ -28,7 +28,10 @@ export default async function AppLayout({
       <AuraBackground colors={palette} />
       {/* z-10 keeps content above the aura; overflow-x-clip contains the page
           slide. This is a stacking context, so modals that must sit above the
-          dock (fixed z-10) portal to <body> to escape it (see NewBacklogButton). */}
+          dock (fixed z-10) portal to <body> to escape it (see NewBacklogButton).
+          The intercepted backlog-zoom overlay (backlogs/@modal) DEPENDS on this
+          wrapper staying a stacking context to render UNDER the dock — do not
+          remove relative/z-10 without checking it. */}
       <div className="relative z-10 overflow-x-clip">{children}</div>
       <NavDock />
     </NavDockVisibilityProvider>

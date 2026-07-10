@@ -13,9 +13,10 @@ import {
 import { setNavDirection } from "./nav-direction";
 
 /**
- * The floating nav dock (M3.5 redesign) — three destinations in a glass-icy
- * pill: Backlogs · Descubrir · Perfil. Active = lima, no pill/lens. It hides
- * two different ways, on purpose:
+ * The floating nav dock (M3.5 redesign, mock #p1) — three destinations in a
+ * content-hugging glass pill: Backlogs · Discover · Perfil. Active = dark
+ * inner pill + lima glyph (HANDOFF §7). It hides two different ways, on
+ * purpose:
  *  - hard route boundaries (detail/full-bleed/export/admin) → `return null`,
  *    since the whole screen already unmounts on navigation.
  *  - ephemeral same-screen UI (a search input focused / an overlay open) →
@@ -65,31 +66,35 @@ export function useHideNavDock(active: boolean) {
 }
 
 const DESTINATIONS: { href: string; label: string; Icon: () => ReactNode }[] = [
-  { href: "/backlogs", label: "Backlogs", Icon: BacklogsIcon },
-  { href: "/descubrir", label: "Descubrir", Icon: DescubrirIcon },
+  { href: "/backlogs", label: "Backlogs", Icon: EstantesIcon },
+  { href: "/descubrir", label: "Discover", Icon: DiscoverIcon },
   { href: "/perfil", label: "Perfil", Icon: PerfilIcon },
 ];
 
 export function NavDock() {
   const pathname = usePathname();
-  // The dock is always present now (fixed z-10). Full-screen overlays (backlog
-  // zoom) are opaque z-50 and simply cover it. The context-hidden fade stays as
-  // an opt-in for any future ephemeral case.
+  // The dock is always present now (fixed z-10). The backlog zoom overlay is
+  // z-50 but trapped inside the content wrapper's z-10 stacking context, so
+  // the dock (a later sibling) keeps painting above it — that's the intended
+  // framing (mock #p2 shows the dock over the zoom). The context-hidden fade
+  // stays as an opt-in for any future ephemeral case.
   const hidden = useContext(HiddenCtx);
 
   return (
     <nav
       aria-label="Navegación principal"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(30px+env(safe-area-inset-bottom))] z-10 flex justify-center"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(34px+env(safe-area-inset-bottom))] z-10 flex justify-center"
     >
+      {/* Content-hugging pill (mock #p1): no border, no grain, no fixed width.
+          Active destination = dark inner pill + lima glyph (HANDOFF §7 — never
+          a lima background). */}
       <div
-        className={`relative flex h-[62px] w-[min(300px,calc(100vw-32px))] items-center overflow-hidden rounded-[26px] border border-white/10 bg-white/5 shadow-[var(--shadow-card)] backdrop-blur-[24px] backdrop-saturate-[1.25] transition-[opacity,transform] duration-300 ease-out ${
+        className={`bl-dock-glass flex gap-1.5 rounded-full p-1.5 shadow-[0_14px_44px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"
             : "pointer-events-auto translate-y-0 opacity-100"
         }`}
       >
-        <div aria-hidden className="bl-grain" />
         {DESTINATIONS.map(({ href, label, Icon }, i) => {
           const active = pathname.startsWith(href);
           return (
@@ -104,16 +109,14 @@ export function NavDock() {
                 );
                 setNavDirection(from >= 0 && from !== i ? Math.sign(i - from) : 0);
               }}
-              className={`relative flex flex-1 flex-col items-center justify-center gap-[5px] ${
-                active ? "text-accent" : "text-text-2"
+              className={`flex flex-col items-center gap-[3px] rounded-full px-7 py-2.5 ${
+                active ? "bg-black/40 text-accent" : "text-text-3"
               }`}
             >
               <Icon />
               {/* Hanken, sentence-case — UPPERCASE is reserved to mono-meta
                   (sistema-diseno §3), so nav labels don't shout. */}
-              <span className="font-sans text-[9px] font-semibold tracking-[0.01em]">
-                {label}
-              </span>
+              <span className="font-sans text-[10px] font-medium">{label}</span>
             </Link>
           );
         })}
@@ -122,37 +125,32 @@ export function NavDock() {
   );
 }
 
-/* Bespoke FILLED glyphs (verbatim from the redesign prototype) — deliberately
+/* Bespoke FILLED glyphs (verbatim from mock #p1's dock markup) — deliberately
    not the app's stroke-based lucide set; the dock is its own treatment. Active
-   state is color-only, so there's no stroke weight to animate. */
+   state is pill + color only, so there's no stroke weight to animate. */
 
-function BacklogsIcon() {
+function EstantesIcon() {
   return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="4" cy="6" r="1.5" />
-      <circle cx="4" cy="12" r="1.5" />
-      <circle cx="4" cy="18" r="1.5" />
-      <rect x="8" y="5" width="13" height="2.2" rx="1.1" />
-      <rect x="8" y="10.9" width="13" height="2.2" rx="1.1" />
-      <rect x="8" y="16.8" width="13" height="2.2" rx="1.1" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="4" y="4" width="16" height="6.6" rx="1.7" />
+      <rect x="4" y="13.4" width="16" height="6.6" rx="1.7" />
     </svg>
   );
 }
 
-function DescubrirIcon() {
+function DiscoverIcon() {
   return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2.4l2.1 7.5 7.5 2.1-7.5 2.1L12 21.6l-2.1-7.5L2.4 12l7.5-2.1L12 2.4Z" />
-      <path d="M19.6 2.8l.7 2.5 2.5.7-2.5.7-.7 2.5-.7-2.5-2.5-.7 2.5-.7.7-2.5Z" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2z" />
     </svg>
   );
 }
 
 function PerfilIcon() {
   return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M12 14c-4.4 0-8 2.6-8 6.2 0 .5.4.8.9.8h14.2c.5 0 .9-.3.9-.8 0-3.6-3.6-6.2-8-6.2Z" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="12" cy="8.5" r="3.8" />
+      <path d="M5 20.5a7 7 0 0114 0z" />
     </svg>
   );
 }

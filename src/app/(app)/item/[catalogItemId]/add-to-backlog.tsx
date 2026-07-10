@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { addItemAction } from "@/app/actions/backlog-item-actions";
 import { extractPalette } from "@/modules/cards/palette";
@@ -11,6 +12,11 @@ interface BacklogOption {
   name: string;
 }
 
+/**
+ * The circular "+" of the fixed bottom action bar (mock #p3). Opens the
+ * "¿A cuál backlog?" sheet — portaled to <body> (escapes the (app) wrapper's
+ * stacking context) and z-50 so it rises above the z-40 action bar.
+ */
 export function AddToBacklog({
   catalogItemId,
   posterUrl,
@@ -20,7 +26,7 @@ export function AddToBacklog({
   catalogItemId: string;
   posterUrl: string | null;
   backlogs: BacklogOption[];
-  /** The backlog this item already lives in, if any — flips the CTA. */
+  /** The backlog this item already lives in, if any — flips the copy. */
   inBacklogName?: string | null;
 }) {
   const router = useRouter();
@@ -60,87 +66,114 @@ export function AddToBacklog({
       });
       setAdded(newId);
       setOpen(false);
+      router.refresh();
     }
     setBusy(false);
   }
 
   if (added) {
+    // Just added — the + becomes a lima check that jumps to the backlog.
     return (
       <button
         onClick={() => router.push(`/backlogs/${added}`)}
-        className="w-full rounded-full bg-emerald-700 py-3.5 font-semibold text-white"
+        aria-label="Agregado — ver backlog"
+        title="Agregado — ver backlog"
+        className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-accent text-bg transition-transform active:scale-[0.96]"
       >
-        ✓ Agregado — ver backlog
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M4 12l5 5 11-12"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
     );
   }
 
   return (
     <>
-      {inBacklogName ? (
-        // Already logged — the primary "add" would lie. Offer adding to ANOTHER
-        // backlog as a quieter, honest action, and show where it already lives.
-        <>
-          <button
-            onClick={() => setOpen(true)}
-            className="w-full rounded-full border border-line py-3.5 font-semibold text-text transition-colors hover:border-accent"
-          >
-            Agregar a otro backlog
-          </button>
-          <p className="text-center text-xs text-text-3">
-            Ya en <span className="text-text-2">{inBacklogName}</span>
-          </p>
-        </>
-      ) : (
-        <button
-          onClick={() => setOpen(true)}
-          className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
-        >
-          Agregar a un backlog
-        </button>
-      )}
+      <button
+        onClick={() => setOpen(true)}
+        aria-label={
+          inBacklogName ? "Agregar a otro backlog" : "Agregar a un backlog"
+        }
+        title={inBacklogName ? "Agregar a otro backlog" : "Agregar a un backlog"}
+        className="relative flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-surface-2 text-text transition-colors hover:bg-surface-3 active:scale-[0.96]"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path
+            d="M12 5v14M5 12h14"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        {/* Ya está en un backlog — visible antes de abrir el sheet. */}
+        {inBacklogName && (
+          <span
+            aria-hidden
+            className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent"
+          />
+        )}
+      </button>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-black/60"
-          onClick={() => setOpen(false)}
-        >
+      {open &&
+        createPortal(
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md space-y-2 rounded-t-2xl border-t border-line bg-surface-1 p-5 pb-8"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+            onClick={() => setOpen(false)}
           >
-            <h2 className="font-semibold">¿A cuál backlog?</h2>
-            {backlogs.map((b) => (
-              <button
-                key={b.id}
-                disabled={busy}
-                onClick={() => addTo(b.id)}
-                className="block w-full rounded-xl border border-line bg-bg px-4 py-3 text-left hover:border-accent disabled:opacity-40"
-              >
-                {b.name}
-              </button>
-            ))}
-            <form onSubmit={createAndAdd} className="flex gap-2 pt-1">
-              <input
-                value={newName}
-                maxLength={60}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder={
-                  backlogs.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
-                }
-                className="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 outline-none focus:border-accent"
-              />
-              <button
-                type="submit"
-                disabled={busy || !newName.trim()}
-                className="rounded-xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
-              >
-                Crear
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bl-rise w-full max-w-md space-y-2 rounded-t-[22px] bg-surface-1 p-5 pb-[calc(28px+env(safe-area-inset-bottom))]"
+            >
+              <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
+                ¿A cuál backlog?
+              </h2>
+              {inBacklogName && (
+                <p className="text-xs text-text-3">
+                  Ya está en{" "}
+                  <span className="text-text-2">{inBacklogName}</span> — puedes
+                  agregarlo a otro.
+                </p>
+              )}
+              {backlogs.map((b) => (
+                <button
+                  key={b.id}
+                  disabled={busy}
+                  onClick={() => addTo(b.id)}
+                  className="block w-full rounded-xl bg-surface-2 px-4 py-3 text-left transition-colors hover:bg-surface-3 disabled:opacity-40"
+                >
+                  {b.name}
+                </button>
+              ))}
+              <form onSubmit={createAndAdd} className="flex gap-2 pt-1">
+                <input
+                  value={newName}
+                  maxLength={60}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder={
+                    backlogs.length === 0
+                      ? "Tu primer backlog…"
+                      : "Nuevo backlog…"
+                  }
+                  className="min-w-0 flex-1 rounded-xl bg-surface-2 px-4 py-3 outline-none placeholder:text-text-3 focus:bg-surface-3"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !newName.trim()}
+                  className="rounded-xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
+                >
+                  Crear
+                </button>
+              </form>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

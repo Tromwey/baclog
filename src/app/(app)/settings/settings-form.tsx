@@ -81,7 +81,7 @@ export function SettingsForm({
             value={name}
             maxLength={50}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-xl border border-line bg-surface-1 px-4 py-2.5 outline-none focus:border-accent"
+            className="flex-1 rounded-xl bg-surface-2 px-4 py-2.5 outline-none transition-colors focus:bg-surface-3"
             aria-label="Nombre visible"
           />
           <button
@@ -103,10 +103,10 @@ export function SettingsForm({
             <button
               key={s.id}
               onClick={() => pickService(s.id)}
-              className={`w-full rounded-xl border px-4 py-3 text-left ${
+              className={`w-full rounded-xl px-4 py-3 text-left transition-colors ${
                 service === s.id
-                  ? "border-accent bg-surface-2 font-semibold"
-                  : "border-line bg-surface-1"
+                  ? "bg-accent-soft font-semibold text-accent"
+                  : "bg-surface-2 hover:bg-surface-3"
               }`}
             >
               {s.label}
@@ -132,7 +132,7 @@ export function SettingsForm({
                 baclog.app/{claimed}
               </a>
             </p>
-            <label className="flex items-center justify-between rounded-xl border border-line bg-surface-1 px-4 py-3">
+            <label className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
               <span className="text-sm">Perfil visible públicamente</span>
               <input
                 type="checkbox"
@@ -160,7 +160,7 @@ export function SettingsForm({
                   setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
                 }
                 placeholder="tunombre"
-                className="min-w-0 flex-1 rounded-xl border border-line bg-surface-1 px-3 py-2.5 font-mono outline-none focus:border-accent"
+                className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3 py-2.5 font-mono outline-none transition-colors focus:bg-surface-3"
                 aria-label="Username"
               />
               <button
@@ -184,7 +184,7 @@ export function SettingsForm({
       <section className="border-t border-line pt-6">
         <h2 className="text-sm font-semibold text-red-400">Zona peligrosa</h2>
         {confirmingDelete ? (
-          <div className="mt-3 space-y-2 rounded-xl border border-red-900 bg-red-950/40 p-4">
+          <div className="mt-3 space-y-2 rounded-xl bg-red-950/60 p-4">
             <p className="text-sm text-text">
               Esto borra tu cuenta y todos tus backlogs. No hay vuelta atrás.
             </p>
@@ -201,7 +201,7 @@ export function SettingsForm({
               </button>
               <button
                 onClick={() => setConfirmingDelete(false)}
-                className="rounded-xl border border-line px-4 py-2"
+                className="rounded-xl bg-surface-2 px-4 py-2 transition-colors hover:bg-surface-3"
               >
                 Cancelar
               </button>

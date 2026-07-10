@@ -23,7 +23,7 @@
   /* Firma (lima) */
   --accent: #d8ff3e; /* CTA primario, activos, focus, marca */
   --accent-press: #c2e82f; /* pressed */
-  --accent-soft: #d8ff3e1a; /* glow / focus ring / selección */
+  --accent-soft: #d8ff3e1a; /* selección — fill suave, nunca glow */
 
   /* Hot (rojo) — estado + celebración, uso escaso */
   --hot: #ff2d55;
@@ -33,14 +33,6 @@
   --radar: #7aa2ff; /* On my radar */
   --obsessing: #ff2d55; /* Obsessing over */
   --completed: #d8ff3e; /* Completed */
-
-  /* Gradiente firma (rugoso, con grano — nunca glossy) */
-  --grad-aura: radial-gradient(
-    120% 120% at 20% 0%,
-    #ff2d55 0%,
-    #7a1b4a 40%,
-    #0b0b0d 78%
-  );
 
   /* Radios — redondeado, no burbuja */
   --r-sm: 8px;
@@ -58,14 +50,13 @@
   --s-7: 48px;
   --s-8: 64px;
 
-  /* Glass — SOLO acento sobre fondo controlado */
+  /* Glass — SOLO acento sobre fondo controlado. Sin borde (HANDOFF §7). */
   --glass-bg: rgba(255, 255, 255, 0.06);
   --glass-blur: blur(20px) saturate(140%);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
 
-  /* Sombras — glow, no drop */
+  /* Sombra — profundidad OSCURA únicamente (HANDOFF §7: sin glow;
+     el aura es la única fuente de luz). */
   --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 0 24px var(--accent-soft);
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -81,6 +72,7 @@
 @theme inline {
   /* Colors → Tailwind utilities (bg-bg, text-text, border-line, …) */
   --color-bg: var(--bg);
+  --color-accent-soft: var(--accent-soft);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
@@ -142,13 +134,8 @@
   }
 }
 
-/* Signature aura + grain, reusable across public surfaces and cards.
-   Grain is the "analog artifact" detail (sistema-diseno §5) that separates
+/* Grain is the "analog artifact" detail (sistema-diseno §5) that separates
    posteable from AI-slop; it never carries information, only texture. */
-.bl-aura {
-  background: var(--grad-aura);
-}
-
 .bl-grain {
   position: absolute;
   inset: 0;
@@ -176,67 +163,77 @@
   }
 }
 
-/* ADN aura — animated "lava-lamp" light blobs (see components/ui/aura-field).
-   The technique (soft radial blob + slow drift + gentle pulse, screen-blended)
-   is the signature light that threads Discover/Profile; the grain over it keeps
-   it from reading as smooth AI-slop. Animation lives on classes (not inline
-   style) so the reduced-motion override below can win via !important. */
-@keyframes bl-aura-beam {
-  0%,
-  100% {
-    opacity: 0.32;
-    transform: scale(0.88);
-  }
-  50% {
-    opacity: 0.76;
-    transform: scale(1.1);
-  }
-}
-
+/* ADN aura — animated "lava-lamp" light (see components/ui/aura-field).
+   Mock technique (app-implementada.dc.html auraDrift/auraBreathe): each aura
+   is 1–2 LAYER divs whose background is a comma-joined multi-stop
+   radial-gradient — softness comes from the gradient fade stops, NEVER from
+   filter:blur — and the only thing that animates is the layer's transform
+   (compositor-only). Animation lives on classes (not inline style) so the
+   reduced-motion override below can win via !important. Opacity is static,
+   set inline per layer, so it stays readable when motion is off. */
 @keyframes bl-aura-drift {
   0% {
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0) scale(1.02);
   }
-  20% {
-    transform: translate(7%, -6%);
+  33% {
+    transform: translate3d(8%, -6%, 0) scale(1.12);
   }
-  45% {
-    transform: translate(-6%, 5%);
-  }
-  70% {
-    transform: translate(5%, 8%);
+  66% {
+    transform: translate3d(-6%, 5%, 0) scale(1.07);
   }
   100% {
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0) scale(1.02);
   }
 }
 
-.bl-aura-beam {
-  animation: bl-aura-beam var(--aura-p-dur, 4s) ease-in-out infinite;
-  animation-delay: var(--aura-p-delay, 0s);
+@keyframes bl-aura-breathe {
+  0%,
+  100% {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.16) translate3d(-4%, 3%, 0);
+  }
 }
 
 .bl-aura-drift {
-  animation: bl-aura-drift var(--aura-d-dur, 10s) ease-in-out infinite;
-  animation-delay: var(--aura-d-delay, 0s);
+  animation: bl-aura-drift var(--aura-dur, 11s) ease-in-out infinite;
+  animation-delay: var(--aura-delay, 0s);
+}
+
+.bl-aura-breathe {
+  animation: bl-aura-breathe var(--aura-dur, 9s) ease-in-out infinite;
+  animation-delay: var(--aura-delay, 0s);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bl-aura-beam,
-  .bl-aura-drift {
+  .bl-aura-drift,
+  .bl-aura-breathe {
     animation: none !important;
     transform: none !important;
-    opacity: 0.55;
   }
 }
 
+/* Obsession gesture (item detail): the active state's "light" comes ONLY
+   from its internal AuraField (HANDOFF §7 — no box-shadow/halo/pulse glow).
+   The flame carries a static DARK legibility drop-shadow inline in
+   obsession-gesture.tsx (depth, not irradiation). */
+
+/* Dock glass — the dock and shelf cards share this glass by design (founder
+   call: the shelf card's base IS the dock's surface, so the blurred backdrop
+   aura shows through both the same way). */
+.bl-dock-glass {
+  background: rgba(20, 20, 26, 0.55);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+}
+
 /* Glass surface (sistema-diseno §4) — accent only, over bg/aura, never full
-   layout. Reuses the canonical --glass-* tokens (shared with StatusChip). */
+   layout. Borderless (HANDOFF §7); the fill + blur do the separation. */
 .bl-glass {
   position: relative;
   overflow: hidden;
   background: var(--glass-bg);
-  border: var(--glass-border);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
 }
@@ -254,14 +251,15 @@
   }
 }
 
+/* Opacity-only: the shell's bl-zoom-in (segment layout) owns the ONE scale
+   bloom per open — a second scale here (post-skeleton, when real content
+   streams in) read as the overlay "opening twice". The aura just lights up. */
 @keyframes bl-zoom-aura {
   from {
     opacity: 0.25;
-    transform: scale(1.5);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 

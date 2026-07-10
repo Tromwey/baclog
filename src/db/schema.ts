@@ -232,6 +232,13 @@ export const backlogItems = pgTable(
     /** No me gusta / me gusta / me obsesiona — applies in ANY status (F3.6), not gated on 'completed'. */
     reaction: itemReactionEnum("reaction"),
     /**
+     * When `reaction` last changed (F3.6.2, council-informed). Not used to gate
+     * the UI — the input model stays free-any-status — but lets a consumer
+     * (recs engine, public exposure) discount a reaction that was just set
+     * rather than treating it as settled. Null until the first reaction.
+     */
+    reactionChangedAt: timestamp("reaction_changed_at"),
+    /**
      * Provenance (F3.6): set when this item was accepted from a cross-media
      * AI reco, so ratings can be joined back to the prompt_version/model that
      * produced it. Null for organically-added items. `set null` (not cascade)

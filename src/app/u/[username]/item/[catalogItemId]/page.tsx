@@ -8,7 +8,7 @@ import {
   getPublicProfile,
 } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
-import { AuraBackdrop, Button, MonoMeta } from "@/components/ui";
+import { AuraField, Button, MonoMeta, PUBLIC_ITEM_AURA } from "@/components/ui";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -59,7 +59,14 @@ export default async function PublicItemPage({
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      <AuraBackdrop height="260px" />
+      {/* Shared catalog page — no user palette to aura from, so the fixed
+          signature gradient (PUBLIC_ITEM_AURA) via the unified primitive. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[260px]"
+      >
+        <AuraField layers={[PUBLIC_ITEM_AURA]} />
+      </div>
 
       <main className="relative px-5 pb-32 pt-8">
         <Link

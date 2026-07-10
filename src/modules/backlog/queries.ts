@@ -1,7 +1,13 @@
 import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { backlogItems, backlogs, catalogItems } from "@/db/schema";
+import {
+  backlogItems,
+  backlogs,
+  catalogItems,
+  crossMediaRecs,
+} from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
 import { dominantHexes, groupDominantHexes } from "./palette";
 
@@ -28,19 +34,14 @@ export async function getBacklogsForUser(userId: string) {
 
   if (rows.length === 0) return [];
 
-  // Up to 4 cover posters + up to 6 ADN colors + up to 14 items (for the shelf
-  // zoom's clickable list) per backlog, newest first.
-  const covers = await db
+  // Up to 6 ADN colors per backlog, newest item first. (Item lists live in
+  // getLensItems/getBacklogItems — the shelf list stays palette-only.)
+  const palettes = await db
     .select({
       backlogId: backlogItems.backlogId,
-      posterUrl: catalogItems.posterUrl,
       paletteHex: backlogItems.paletteHex,
-      catalogItemId: catalogItems.id,
-      title: catalogItems.title,
-      addedAt: backlogItems.addedAt,
     })
     .from(backlogItems)
-    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
     .where(
       inArray(
         backlogItems.backlogId,
@@ -49,34 +50,27 @@ export async function getBacklogsForUser(userId: string) {
     )
     .orderBy(desc(backlogItems.addedAt));
 
-  const coverMap = new Map<string, string[]>();
-  const itemMap = new Map<string, { catalogItemId: string; title: string }[]>();
-  for (const c of covers) {
-    if (c.posterUrl) {
-      const list = coverMap.get(c.backlogId) ?? [];
-      if (list.length < 4) {
-        list.push(c.posterUrl);
-        coverMap.set(c.backlogId, list);
-      }
-    }
-    if (c.title) {
-      const list = itemMap.get(c.backlogId) ?? [];
-      if (list.length < 14) {
-        list.push({ catalogItemId: c.catalogItemId, title: c.title });
-        itemMap.set(c.backlogId, list);
-      }
-    }
-  }
   // ADN = each backlog's distinct dominant colors (one per item).
-  const paletteMap = groupDominantHexes(covers, (c) => c.backlogId, 6);
+  const paletteMap = groupDominantHexes(palettes, (c) => c.backlogId, 6);
 
   return rows.map((r) => ({
     ...r,
-    coverUrls: coverMap.get(r.id) ?? [],
     // Lima-only fallback so a backlog with no extracted palette still auras.
     paletteHex: paletteMap.get(r.id) ?? ["#D8FF3E"],
-    items: itemMap.get(r.id) ?? [],
   }));
+}
+
+/**
+ * Just {id, name} for backlog pickers (e.g. the item page's "¿A cuál
+ * backlog?" sheet) — one cheap query, no item join. Same ordering as
+ * getBacklogsForUser so both lists agree.
+ */
+export async function getBacklogNames(userId: string) {
+  return db
+    .select({ id: backlogs.id, name: backlogs.name })
+    .from(backlogs)
+    .where(eq(backlogs.userId, userId))
+    .orderBy(desc(backlogs.createdAt));
 }
 
 export interface UserStats {
@@ -139,11 +133,19 @@ export type BacklogItemWithCatalog = Awaited<
  * catalog metadata and home backlog. Null when the user hasn't logged it.
  * Powers the item page's ticket-share gate (F3.5.7 — you ticket what you've
  * logged) and the loved-seed teaser (F3.5.6). Scoped to the user in the query.
+ *
+ * AI-sourced entries (sourceCrossMediaRecId set) also carry their rec's stored
+ * narrative (rec* fields, LEFT-joined here so the item page needs no second
+ * round-trip) — all null on non-AI entries. crossMediaRecs is a shared,
+ * non-user-scoped cache of item-metadata prose (no user data), reached via an
+ * id the user owns on their backlog item, so no ownership check applies.
  */
 export async function getUserCatalogEntry(
   userId: string,
   catalogItemId: string,
 ) {
+  // Second catalogItems join (aliased): the rec's SEED item, for its title.
+  const seedCatalogItems = alias(catalogItems, "seed_catalog_items");
   const [row] = await db
     .select({
       id: backlogItems.id,
@@ -163,10 +165,23 @@ export async function getUserCatalogEntry(
       posterUrl: catalogItems.posterUrl,
       backlogId: backlogItems.backlogId,
       backlogName: backlogs.name,
+      recHookEyebrow: crossMediaRecs.hookEyebrow,
+      recHookTitle: crossMediaRecs.hookTitle,
+      recResultEyebrow: crossMediaRecs.resultEyebrow,
+      recCloser: crossMediaRecs.closer,
+      recSeedTitle: seedCatalogItems.title,
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
     .innerJoin(backlogs, eq(backlogItems.backlogId, backlogs.id))
+    .leftJoin(
+      crossMediaRecs,
+      eq(backlogItems.sourceCrossMediaRecId, crossMediaRecs.id),
+    )
+    .leftJoin(
+      seedCatalogItems,
+      eq(crossMediaRecs.seedCatalogItemId, seedCatalogItems.id),
+    )
     .where(
       and(
         eq(backlogItems.userId, userId),
@@ -178,19 +193,11 @@ export async function getUserCatalogEntry(
   return row ?? null;
 }
 
-/** No me gusta / me gusta / me obsesiona — the only "loved" values (F3.6). */
-export const LOVED_REACTIONS = ["liked", "obsessed"] as const;
-
 /**
- * F3.5.5/6 — "loved" = the trigger for a cross-media reco. Reaction-only:
+ * "Loved" = the trigger for a cross-media reco (F3.5.5/6). Reaction-only:
  * applies regardless of status, since obsession can strike mid-consumption.
- * Kept as a pure predicate so both the item page and getLovedSeeds share one
- * definition of "loved".
  */
-export function isLovedEntry(entry: { reaction: string | null } | null): boolean {
-  if (!entry) return false;
-  return entry.reaction === "liked" || entry.reaction === "obsessed";
-}
+export const LOVED_REACTIONS = ["liked", "obsessed"] as const;
 
 export interface LovedSeed {
   catalogItemId: string;
@@ -206,7 +213,7 @@ export interface LovedSeed {
 }
 
 /**
- * F3.5.6 — every distinct catalog item the user LOVES (see isLovedEntry),
+ * F3.5.6 — every distinct catalog item the user LOVES (LOVED_REACTIONS),
  * most-recently-touched first, each paired with its home backlog. These are the
  * seeds the /para-ti feed turns into Double Features. Deduped by catalog item so
  * a title loved in two backlogs surfaces once (its newest home wins as the

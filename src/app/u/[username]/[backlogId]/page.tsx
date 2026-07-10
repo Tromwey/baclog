@@ -6,8 +6,9 @@ import { ChevronLeft, Music, Play } from "lucide-react";
 import { getPublicBacklog } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
-import { AuraBackdrop, Button, MonoMeta } from "@/components/ui";
+import { AuraField, Button, MonoMeta } from "@/components/ui";
 import type { ChipTone } from "@/components/ui";
+import { shelfSeed } from "@/app/(app)/backlogs/backlog-shelf-card";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -70,7 +71,26 @@ export default async function PublicBacklogPage({
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      <AuraBackdrop height="240px" />
+      {/* The backlog's ADN aura (its items' palette, same seed as its in-app
+          shelf) blooming behind the hero — same treatment as u/[username]. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[400px]"
+      >
+        <AuraField
+          variant="ambient"
+          colors={data.palette}
+          seed={shelfSeed(backlogId)}
+          className="!opacity-[0.6]"
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, transparent 28%, rgba(11,11,13,0.5) 58%, #0B0B0D 86%)",
+          }}
+        />
+      </div>
 
       <main className="relative px-5 pb-32 pt-8">
         <header className="bl-rise">

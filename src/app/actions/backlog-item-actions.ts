@@ -34,7 +34,10 @@ export async function addItemAction(input: {
     })
     .returning({ id: backlogItems.id });
 
-  revalidatePath(`/backlogs/${backlog.id}`);
+  // "layout" over the /backlogs segment: one call covers the shelf list, both
+  // zoom twins ([backlogId] + the intercepted @modal) and the lenses — they
+  // all render this item's state.
+  revalidatePath("/backlogs", "layout");
   if (row) return { id: row.id };
 
   // Already in this backlog — return the EXISTING row's id so the caller can
@@ -81,7 +84,7 @@ export async function setStatusAction(
       statusChangedAt: new Date(),
     })
     .where(eq(backlogItems.id, item.id));
-  revalidatePath(`/backlogs/${item.backlogId}`);
+  revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
 
@@ -101,15 +104,44 @@ export async function setReactionAction(
   if (!parsed.success) return { error: "invalid" as const };
   await db
     .update(backlogItems)
-    .set({ reaction: parsed.data })
+    .set({ reaction: parsed.data, reactionChangedAt: new Date() })
     .where(eq(backlogItems.id, item.id));
-  revalidatePath(`/backlogs/${item.backlogId}`);
+  revalidatePath("/backlogs", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Quitar la reacción (detail ⋯ menu) — back to "sin reacción". Stamps
+ * reactionChangedAt like setReactionAction so consumers can discount flapping.
+ */
+export async function clearReactionAction(backlogItemId: string) {
+  const { item } = await assertOwnsBacklogItem(backlogItemId);
+  await db
+    .update(backlogItems)
+    .set({ reaction: null, reactionChangedAt: new Date() })
+    .where(eq(backlogItems.id, item.id));
+  revalidatePath("/backlogs", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * "Ocultar recomendación" (detail ⋯ menu) — drops the AI-provenance link so
+ * the row stops showing the ✦ destello and the detail stops rendering the
+ * "¿Por qué?" narrative. One-way by design: the rec id isn't recoverable.
+ */
+export async function hideRecoProvenanceAction(backlogItemId: string) {
+  const { item } = await assertOwnsBacklogItem(backlogItemId);
+  await db
+    .update(backlogItems)
+    .set({ sourceCrossMediaRecId: null })
+    .where(eq(backlogItems.id, item.id));
+  revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
 
 export async function removeItemAction(backlogItemId: string) {
   const { item } = await assertOwnsBacklogItem(backlogItemId);
   await db.delete(backlogItems).where(eq(backlogItems.id, item.id));
-  revalidatePath(`/backlogs/${item.backlogId}`);
+  revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }

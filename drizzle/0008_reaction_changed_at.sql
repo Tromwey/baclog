@@ -1,0 +1,1 @@
+ALTER TABLE "backlog_item" ADD COLUMN "reaction_changed_at" timestamp;

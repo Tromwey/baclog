@@ -16,17 +16,27 @@ export function AuraBackground({ colors }: { colors: string[] }) {
   const pathname = usePathname();
   const isDescubrir = pathname.startsWith("/descubrir");
 
+  // ONE aura per screen: views that paint their own content hero — item
+  // detail, the backlog zoom (full page or intercepted URL), and the lenses —
+  // must not composite over the user's app-wide backdrop (it read as a
+  // "double aura" behind the item hero). The backdrop belongs to the dock
+  // destinations (/backlogs list, /descubrir, /perfil) and other chrome-level
+  // screens only.
+  const hasOwnHero =
+    pathname.startsWith("/item/") ||
+    (pathname.startsWith("/backlogs/") && pathname !== "/backlogs");
+  if (hasOwnHero) return null;
+
   return (
     <div
       aria-hidden
       className="pointer-events-none fixed left-1/2 top-0 z-0 h-[480px] w-full max-w-md -translate-x-1/2"
     >
-      <AuraField
-        variant="ambient"
-        colors={colors}
-        seed={7}
-        className="!opacity-[0.55]"
-      />
+      {/* The "backdrop" variant IS the mock's app-wide header aura (.62/.58
+          layers) — no extra wrapper opacity clamp on top. The old
+          `ambient + !opacity-[0.55]` combo double-dimmed the already-tuned
+          layers (breathe layer landed at ~.30 vs the mock's .5). */}
+      <AuraField variant="backdrop" colors={colors} seed={7} />
       {/* Base fade of the aura into the background. */}
       <div
         className="absolute inset-0"

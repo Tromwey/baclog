@@ -195,7 +195,7 @@ function Entry({
       <button
         onClick={onRecomendar}
         disabled={pending}
-        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg shadow-[0_8px_24px_rgba(216,255,62,0.22)] transition-transform active:scale-[0.98] disabled:opacity-60"
+        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg transition-transform active:scale-[0.98] disabled:opacity-60"
       >
         <Sparkles size={19} /> Recomiéndame
       </button>
@@ -204,7 +204,7 @@ function Entry({
       </div>
       <button
         onClick={onSearch}
-        className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-transparent px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:border-text-3"
+        className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-surface-2 px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:bg-surface-3"
       >
         <SearchIcon size={17} /> Buscar
       </button>
@@ -426,7 +426,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label="Volver"
-      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-text transition-colors hover:border-text-3"
+      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-surface-2 text-text transition-colors hover:bg-surface-3"
     >
       <ChevronLeft size={19} />
     </button>

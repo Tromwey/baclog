@@ -116,20 +116,31 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       id: backlogItems.id,
       status: backlogItems.status,
       customStatusLabel: backlogItems.customStatusLabel,
-      reaction: backlogItems.reaction,
+      // F3.6.2: only expose a SETTLED verdict (liked/disliked) publicly once
+      // the item is completed — a mid-consumption verdict is a live behavioral
+      // signal. EXCEPTION (handoff §1): "obsessed" IS the public real-time
+      // "obsessing over" signal by design, so it always shows. Gated at the
+      // query layer, not display.
+      reaction: sql<
+        string | null
+      >`case when ${backlogItems.reaction} = 'obsessed' or ${backlogItems.status} = 'completed' then ${backlogItems.reaction} else null end`,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
+      // Cover-art colors only (nothing user-identifying) — feeds the backlog's
+      // ADN aura on the public page via dominantHexes below.
+      paletteHex: backlogItems.paletteHex,
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
     .where(eq(backlogItems.backlogId, row.backlogId))
     .orderBy(desc(backlogItems.addedAt));
 
-  return { ...row, items };
+  // Rows are newest-first, matching the in-app aura's aggregation order.
+  return { ...row, items, palette: dominantHexes(items, 6) };
 }
 
 /** Item info for the public per-item page (shared catalog, not user data). */

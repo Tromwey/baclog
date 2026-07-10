@@ -28,7 +28,7 @@ export function PerfilScreen({
     <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(56px+env(safe-area-inset-top))] text-text">
       {/* Identity */}
       <div className="flex flex-col items-center text-center">
-        <div className="relative h-24 w-24 overflow-hidden rounded-full border border-white/15 bg-bg shadow-[0_12px_34px_rgba(0,0,0,0.55)]">
+        <div className="relative h-24 w-24 overflow-hidden rounded-full bg-bg shadow-[0_12px_34px_rgba(0,0,0,0.55)]">
           <AuraField variant="orb" colors={palette} seed={33} />
         </div>
         <div className="mt-[18px] font-serif text-[34px] italic leading-none">
@@ -61,7 +61,7 @@ export function PerfilScreen({
           type="submit"
           className="relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-[rgba(232,132,108,0.06)]"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[rgba(232,132,108,0.22)] bg-[rgba(232,132,108,0.10)] text-[#E8846C]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[rgba(232,132,108,0.14)] text-[#E8846C]">
             <LogOut size={17} strokeWidth={1.8} />
           </span>
           <span className="flex-1 font-sans text-[14.5px] font-semibold text-[#E8846C]">
@@ -120,7 +120,7 @@ function Row({
         divider ? "border-b border-white/[0.07]" : ""
       }`}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/5 text-text">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-text">
         {icon}
       </span>
       <span className="flex-1 font-sans text-[14.5px] font-medium">{label}</span>

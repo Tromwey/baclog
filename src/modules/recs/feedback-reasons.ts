@@ -3,7 +3,7 @@
  * reaction. Plain module (NOT "use server") — a "use server" file may only
  * export async functions, so these constants live here and are imported by
  * both the server action (crossmedia-feedback-actions.ts) and the client UI
- * (item-row.tsx, item-status-controls.tsx) that render the chips.
+ * (reco-reasoning-panel.tsx / cross-media-feedback.tsx) that renders the chips.
  */
 export const NEGATIVE_REASONS = [
   "link_didnt_make_sense",

@@ -14,7 +14,7 @@ export function BackButton({ className = "" }: { className?: string }) {
     <button
       onClick={() => router.back()}
       aria-label="Volver"
-      className={`flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface-2 text-text-2 transition-colors hover:border-text-3 ${className}`}
+      className={`flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.28] text-text backdrop-blur-[18px] transition-colors hover:bg-black/[0.4] ${className}`}
     >
       <ChevronLeft size={20} />
     </button>

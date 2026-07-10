@@ -209,11 +209,11 @@ export function SearchPanel({
         <button
           onClick={onBack}
           aria-label="Volver"
-          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-text transition-colors hover:border-text-3"
+          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-surface-2 text-text transition-colors hover:bg-surface-3"
         >
           <ChevronLeft size={19} />
         </button>
-        <div className="flex h-[42px] flex-1 items-center gap-2.5 rounded-[26px] border border-accent bg-surface-2 px-3.5 shadow-[0_0_0_3px_rgba(216,255,62,0.10)]">
+        <div className="flex h-[42px] flex-1 items-center gap-2.5 rounded-[26px] bg-surface-3 px-3.5">
           <SearchIcon size={17} className="shrink-0 text-text-2" />
           <input
             type="search"
@@ -243,7 +243,7 @@ export function SearchPanel({
       {/* Target backlog — visible + changeable, so adds go somewhere you chose. */}
       <button
         onClick={() => setPickerOpen(true)}
-        className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-line bg-surface-2 py-1.5 pl-3.5 pr-3 text-[12.5px] transition-colors hover:border-text-3"
+        className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full bg-surface-2 py-1.5 pl-3.5 pr-3 text-[12.5px] transition-colors hover:bg-surface-3"
       >
         <span className="shrink-0 text-text-3">Agregando a</span>
         <span className="truncate font-semibold text-accent">
@@ -317,7 +317,7 @@ export function SearchPanel({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bl-rise relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.07] p-5 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
+              className="bl-rise relative w-full max-w-sm overflow-hidden rounded-[28px] bg-white/[0.07] p-5 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
             >
               <div aria-hidden className="bl-grain" />
               <div className="relative">
@@ -334,10 +334,10 @@ export function SearchPanel({
                           setTarget({ id: b.id, name: b.name });
                           setPickerOpen(false);
                         }}
-                        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition-colors ${
                           on
-                            ? "border-accent/40 bg-accent-soft text-accent"
-                            : "border-white/10 bg-black/25 text-text hover:border-white/25"
+                            ? "bg-accent-soft text-accent"
+                            : "bg-black/25 text-text hover:bg-black/40"
                         }`}
                       >
                         <span className="truncate font-medium">{b.name}</span>
@@ -356,7 +356,7 @@ export function SearchPanel({
                         ? "Tu primer backlog…"
                         : "Nuevo backlog…"
                     }
-                    className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 outline-none placeholder:text-text-3 focus:border-accent"
+                    className="min-w-0 flex-1 rounded-2xl bg-black/25 px-4 py-3 outline-none transition-colors placeholder:text-text-3 focus:bg-black/40"
                   />
                   <button
                     type="submit"

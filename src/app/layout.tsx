@@ -38,6 +38,16 @@ const spaceMono = Space_Mono({
 export const metadata: Metadata = {
   title: "Baclog",
   description: "Tus obsesiones, en una tarjeta.",
+  // Home-screen installs: without `black-translucent`, iOS reserves an opaque
+  // status bar and the page canvas STARTS BELOW it — every top aura visibly
+  // cuts off at the status-bar line. Translucent + viewportFit:"cover" lets
+  // the auras bleed underneath while headers stay clear via their
+  // env(safe-area-inset-top) paddings (already in place app-wide).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Baclog",
+  },
 };
 
 export const viewport: Viewport = {

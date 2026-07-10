@@ -33,11 +33,11 @@ export function StatusChip({
   className?: string;
 }) {
   const shell = glass
-    ? "bg-[var(--glass-bg)] border-[var(--glass-border)] backdrop-blur-[20px]"
-    : "bg-surface-2 border-line";
+    ? "bg-[var(--glass-bg)] backdrop-blur-[20px]"
+    : "bg-surface-2";
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border ${shell} px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-text ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full ${shell} px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-text ${className}`}
     >
       <span className={`h-2 w-2 rounded-full ${DOT[tone]}`} />
       {children}
