@@ -231,7 +231,10 @@ export function SearchPanel({
             }}
             placeholder="Busca películas, series, álbumes…"
             aria-label="Búsqueda universal"
-            className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-text-3"
+            // 16px (not 15) on purpose: iOS Safari auto-zooms the page when a
+            // focused input is <16px, and this one has autoFocus — the zoom
+            // fired on mount and overflowed the viewport. Keep it ≥16px.
+            className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-text-3"
           />
         </div>
       </div>
