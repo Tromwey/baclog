@@ -4,6 +4,7 @@ import { AuraField } from "@/components/ui";
 import { signOutAction } from "@/app/actions/account-actions";
 import { plural } from "@/lib/plural";
 import type { UserStats } from "@/modules/backlog/queries";
+import { InstallAppRow } from "./install-app-row";
 
 /**
  * Presentation for /perfil (M3.5). Pure server component: identity over an ADN
@@ -51,6 +52,8 @@ export function PerfilScreen({
         Ajustes
       </div>
       <div className="overflow-hidden rounded-[22px] bl-glass">
+        {/* Self-hides when already installed (client component). */}
+        <InstallAppRow divider />
         <Row href="/settings" icon={<Pencil size={17} strokeWidth={1.8} />} label="Editar perfil" divider />
         <Row href={handleHref} icon={<Share2 size={17} strokeWidth={1.8} />} label="Ver perfil público" />
       </div>
