@@ -70,6 +70,21 @@ export function ProgressGesture({
 
   return (
     <div className="flex w-[64px] flex-none flex-col items-center gap-1.5">
+      {/* Label ABOVE the ring: below, it hung under the action bar and ate the
+          bottom space (esp. installed, no Safari toolbar). Ring stays last so it
+          bottom-aligns with Agregar/Reproducir (the bar uses items-end). */}
+      <span
+        className={`text-center font-mono text-[8.5px] uppercase leading-tight tracking-[0.08em] ${
+          lit ? "text-accent" : "text-text-3"
+        }`}
+      >
+        {label}
+      </span>
+      {error && (
+        <span className="text-center text-[9px] leading-tight text-red-400">
+          {error}
+        </span>
+      )}
       <button
         type="button"
         aria-label="Progreso — toca para «en progreso», mantén presionado para «completado»"
@@ -146,18 +161,6 @@ export function ProgressGesture({
           )}
         </svg>
       </button>
-      <span
-        className={`text-center font-mono text-[8.5px] uppercase leading-tight tracking-[0.08em] ${
-          lit ? "text-accent" : "text-text-3"
-        }`}
-      >
-        {label}
-      </span>
-      {error && (
-        <span className="text-center text-[9px] leading-tight text-red-400">
-          {error}
-        </span>
-      )}
     </div>
   );
 }

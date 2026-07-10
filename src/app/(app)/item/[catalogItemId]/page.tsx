@@ -217,7 +217,7 @@ export default async function ItemPage({
         {/* fixed bottom action bar — content scrolls behind (pb clearance above) */}
         <div className="fixed inset-x-0 bottom-0 z-40">
           <div
-            className="mx-auto flex w-full max-w-md items-start gap-2.5 px-5 pb-[calc(var(--item-bar-offset)+env(safe-area-inset-bottom))] pt-3.5"
+            className="mx-auto flex w-full max-w-md items-end gap-2.5 px-5 pb-[calc(var(--item-bar-offset)+env(safe-area-inset-bottom))] pt-3.5"
             style={{
               background:
                 "linear-gradient(180deg, rgba(11,11,13,0) 0%, var(--bg) 34%)",
