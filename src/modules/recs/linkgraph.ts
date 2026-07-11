@@ -239,16 +239,38 @@ function normalizeTitle(s: string): string {
 }
 
 /**
- * Does the candidate title plausibly reference the anchor title? Containment
- * of the normalized anchor (or vice versa) — strict enough that a generic
- * compilation without the seed's words never matches (fail-closed: a missed
- * edge degrades to the thematic fallback, a false edge would lie to users).
+ * Loose reference check (names, bylines): normalized containment either way.
+ * NOT year-aware — for edge TITLES use edgeTitlesMatch below.
  */
 function titleOverlap(anchor: string, candidate: string): boolean {
   const a = normalizeTitle(anchor);
   const c = normalizeTitle(candidate);
   if (!a || !c) return false;
   return c.includes(a) || a.includes(c);
+}
+
+/**
+ * Franchise-safe title match for EDGES (review finding: bare containment let
+ * the «Cars» soundtrack claim «Cars 2» — a persistent, cross-user false
+ * "verified" link). Containment is only trusted when both years exist and sit
+ * within a small drift window (soundtrack vs film release); with a year
+ * missing, only an exact normalized match passes. Fail-closed: a missed edge
+ * degrades to the thematic fallback, a false edge would lie to users.
+ */
+function edgeTitlesMatch(
+  anchor: string,
+  candidate: string,
+  anchorYear: number | null,
+  candidateYear: number | null,
+): boolean {
+  const a = normalizeTitle(anchor);
+  const c = normalizeTitle(candidate);
+  if (!a || !c) return false;
+  if (!(c.includes(a) || a.includes(c))) return false;
+  if (anchorYear != null && candidateYear != null) {
+    return Math.abs(anchorYear - candidateYear) <= 2;
+  }
+  return a === c;
 }
 
 /** Resolve a search query to full catalog rows (unifiedSearch warms/upserts
@@ -282,7 +304,11 @@ async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
 
   const soundtrackQuery = `${seed.title} soundtrack`;
   for (const row of await searchCatalogRows(soundtrackQuery, "album")) {
-    if (!looksLikeSoundtrack(row) || !titleOverlap(seed.title, row.title)) continue;
+    if (
+      !looksLikeSoundtrack(row) ||
+      !edgeTitlesMatch(seed.title, row.title, seed.year, row.year)
+    )
+      continue;
     if (seen.has(row.id)) continue;
     seen.add(row.id);
     edges.push({
@@ -303,9 +329,11 @@ async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
     if (composer) {
       const scoreQuery = `${composer} ${seed.title}`;
       for (const row of await searchCatalogRows(scoreQuery, "album")) {
-        // The album must reference the film AND the composer must be its
-        // artist — both, or a homonymous unrelated album slips through.
-        if (!titleOverlap(seed.title, row.title)) continue;
+        // The album must reference the film (year-checked, franchise-safe)
+        // AND the composer must be its artist — both, or a homonymous
+        // unrelated album slips through.
+        if (!edgeTitlesMatch(seed.title, row.title, seed.year, row.year))
+          continue;
         if (!row.byline || !titleOverlap(composer, row.byline)) continue;
         if (seen.has(row.id)) continue;
         seen.add(row.id);
@@ -337,7 +365,7 @@ async function extractAlbumEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
 
   for (const tab of ["film", "series"] as const) {
     for (const row of await searchCatalogRows(candidate, tab)) {
-      if (!titleOverlap(candidate, row.title)) continue;
+      if (!edgeTitlesMatch(candidate, row.title, seed.year, row.year)) continue;
       return [
         {
           videoCatalogItemId: row.id,
