@@ -1,10 +1,11 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   catalogItems,
   crossMediaRecs,
   crossMediaRecUsage,
+  userItems,
 } from "@/db/schema";
 import { unifiedSearch } from "@/modules/catalog/search";
 import { getLovedSeeds, type LovedSeed } from "@/modules/backlog/queries";
@@ -125,14 +126,20 @@ export async function getCrossMediaReco(
   //    Cache hits above never reach here, so re-viewing a cached reco is free.
   if ((await remainingGenerations(userId)) <= 0) return { status: "empty" };
 
-  // 3) Provider proposes (fixture or real LLM). Only metadata crosses.
+  // 3) Provider proposes (fixture or real LLM). Only metadata crosses —
+  //    excludeTitles are bare catalog titles from the user's library in the
+  //    TARGET family (Pilar 4 holds: no user id, no PII), so the model never
+  //    proposes something the user already owns.
   const provider = crossMediaProvider();
+  const targetFamily: ("film" | "series" | "album")[] =
+    seed.mediaType === "album" ? ["film", "series"] : ["album"];
   const seedMeta: CrossMediaSeed = {
     title: seed.title,
     mediaType: seed.mediaType,
     byline: seed.byline,
     year: seed.year,
     genre: seed.genre,
+    excludeTitles: await libraryTitles(userId, targetFamily),
   };
   const outcome = await provider.propose(seedMeta);
   // A transient failure (429/network) or unusable output → `failed`, returned
@@ -154,7 +161,30 @@ export async function getCrossMediaReco(
   //    spent with nothing to show. Surfacing it (vs. the old silent `empty`) lets
   //    the UI tell the user and offer a re-roll that may ground.
   const grounded = await groundProposal(proposal);
-  if (!grounded) return { status: "spent_no_match" };
+  if (!grounded) {
+    await recordSpentNoMatch(userId);
+    return { status: "spent_no_match" };
+  }
+
+  // 5b) LIBRARY CHECK: a grounded reco the user already owns is also nothing
+  //     to show (the <exclude> block makes this rare; this is the deterministic
+  //     backstop for when the model ignores it). NOT persisted — the global
+  //     per-seed cache would permanently pin an already-owned pairing for this
+  //     user; a re-roll with the exclusion list can still find another link.
+  const [owned] = await db
+    .select({ id: userItems.id })
+    .from(userItems)
+    .where(
+      and(
+        eq(userItems.userId, userId),
+        eq(userItems.catalogItemId, grounded.id),
+      ),
+    )
+    .limit(1);
+  if (owned) {
+    await recordSpentNoMatch(userId);
+    return { status: "spent_no_match" };
+  }
 
   // 6) Persist the grounded reco keyed by seed (idempotent on the unique index).
   const [row] = await db
@@ -166,6 +196,7 @@ export async function getCrossMediaReco(
       hookTitle: proposal.narrative.hookTitle,
       resultEyebrow: proposal.narrative.resultEyebrow,
       closer: proposal.narrative.closer,
+      linkClaim: proposal.linkClaim,
       provider: provider.id,
       promptVersion: CURRENT_PROMPT_VERSION,
       model: provider.model,
@@ -267,6 +298,51 @@ async function tryChargeGeneration(userId: string): Promise<boolean> {
 
   // No returned row = the guarded update matched nothing (already at cap).
   return Boolean(row);
+}
+
+/**
+ * The user's library titles in a media family, newest first, capped — the
+ * <exclude> block for the provider. Bare titles only (Pilar 4: item metadata,
+ * never PII). The 40-title cap matches the provider's own defensive cap.
+ */
+async function libraryTitles(
+  userId: string,
+  family: ("film" | "series" | "album")[],
+): Promise<string[]> {
+  const rows = await db
+    .select({ title: catalogItems.title })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(
+      and(
+        eq(userItems.userId, userId),
+        inArray(catalogItems.mediaType, family),
+      ),
+    )
+    .orderBy(desc(userItems.addedAt))
+    .limit(40);
+  return rows.map((r) => r.title);
+}
+
+/**
+ * Count a charged-but-nothing-to-show generation (grounding miss or an
+ * already-owned target) on the month's meter row — the reco-health signal
+ * /admin/recos reads. The row always exists here: tryChargeGeneration just
+ * upserted it.
+ */
+async function recordSpentNoMatch(userId: string): Promise<void> {
+  await db
+    .update(crossMediaRecUsage)
+    .set({
+      spentNoMatch: sql`${crossMediaRecUsage.spentNoMatch} + 1`,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        eq(crossMediaRecUsage.userId, userId),
+        eq(crossMediaRecUsage.eraKey, eraKey()),
+      ),
+    );
 }
 
 /**

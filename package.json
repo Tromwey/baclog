@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "beta": "sh scripts/deploy-beta.sh",
+    "eval:recos": "tsx --conditions=react-server scripts/eval-crossmedia.ts",
     "ship": "vercel --prod"
   },
   "dependencies": {

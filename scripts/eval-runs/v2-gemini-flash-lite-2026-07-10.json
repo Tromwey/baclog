@@ -1,0 +1,351 @@
+{
+  "ranAt": "2026-07-10T23:41:53.883Z",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-lite",
+  "promptVersion": 2,
+  "ground": false,
+  "summary": {
+    "pass": 12,
+    "total": 30,
+    "distinctTargets": 12,
+    "grounded": null
+  },
+  "results": [
+    {
+      "seed": "F1 (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Drive",
+      "targetByline": "Cliff Martinez",
+      "linkClaim": "Cliff Martinez compuso el score de la película 'Drive' (2011), conocida por su atmósfera synthwave que inspiró la estética de muchas películas de carreras.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Dune: Part Two (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "The Rise and Fall of Ziggy Stardust and the Spiders from Mars",
+      "targetByline": "David Bowie",
+      "linkClaim": "Denis Villeneuve, director de Dune: Part Two, ha citado a David Bowie como una influencia clave para la estética y el tono de la película.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Past Lives (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "The Glow, Part 2",
+      "targetByline": "The Microphones",
+      "linkClaim": "El director de 'Past Lives', Celine Song, ha citado a 'The Glow, Part 2' como una influencia en su trabajo.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Challengers (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Sour",
+      "targetByline": "Olivia Rodrigo",
+      "linkClaim": "El director de 'Challengers', Luca Guadagnino, ha expresado su admiración por la música de Olivia Rodrigo, mencionándola como una influencia en el tono y la energía de sus películas.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Whiplash (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Kind of Blue",
+      "targetByline": "Miles Davis",
+      "linkClaim": "El jazz de Miles Davis, particularmente su álbum 'Kind of Blue', es una influencia reconocida en la atmósfera y la intensidad de 'Whiplash'.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Coco (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Hasta la Raíz",
+      "targetByline": "Natalia Lafourcade",
+      "linkClaim": "La banda sonora de Coco incluye la versión en español de 'Remember Me' interpretada por Natalia Lafourcade.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Y tu mamá también (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Reptilectric",
+      "targetByline": "Enrique Bunbury",
+      "linkClaim": "Enrique Bunbury compuso la banda sonora de la película 'Y tu mamá también'",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "La La Land (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Red (Taylor's Version)",
+      "targetByline": "Taylor Swift",
+      "linkClaim": "La banda sonora de La La Land fue compuesta por Justin Hurwitz, quien también ha sido elogiado por su trabajo en otros proyectos cinematográficos, y Taylor Swift ha citado a las películas de Damien Chazelle, director de La La Land, como una influencia en su narrativa visual.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "The Social Network (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "The Girl with the Dragon Tattoo (Original Motion Picture Soundtrack)",
+      "targetByline": "Trent Reznor & Atticus Ross",
+      "linkClaim": "Trent Reznor y Atticus Ross compusieron la banda sonora de 'The Social Network'.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Amores perros (film)",
+      "direction": "film → album",
+      "ok": true,
+      "targetTitle": "Amores Perros (Banda Sonora Original)",
+      "targetByline": "Varios Artistas",
+      "linkClaim": "La película Amores Perros incluye canciones de artistas mexicanos en su banda sonora.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Breaking Bad (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Euphoria (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Stranger Things (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "The Bear (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Narcos: México (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Twin Peaks (series)",
+      "direction": "series → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "OK Computer (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Un Verano Sin Ti (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Rumours (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "To Pimp a Butterfly (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "El Mal Querer (album)",
+      "direction": "album → film/series",
+      "ok": true,
+      "targetTitle": "El Mar Querer",
+      "targetByline": "Carlos Saura",
+      "linkClaim": "Rosalía se inspiró en el flamenco de Carlos Saura para crear 'El Mal Querer'.",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Random Access Memories (album)",
+      "direction": "album → film/series",
+      "ok": true,
+      "targetTitle": "Tron: Legacy",
+      "targetByline": "Joseph Kosinski",
+      "linkClaim": "Daft Punk compuso la banda sonora de Tron: Legacy",
+      "problems": [],
+      "grounded": null
+    },
+    {
+      "seed": "Norman Fucking Rockwell! (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "In Rainbows (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Pa'l Norte (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Blonde (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Debí Tirar Más Fotos (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Blade Runner 2049 (film)",
+      "direction": "film → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Tron: Legacy (film)",
+      "direction": "film → album",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    },
+    {
+      "seed": "Purple Rain (album)",
+      "direction": "album → film/series",
+      "ok": false,
+      "targetTitle": null,
+      "targetByline": null,
+      "linkClaim": null,
+      "problems": [
+        "transient/unusable output"
+      ],
+      "grounded": null
+    }
+  ]
+}

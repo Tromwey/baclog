@@ -455,6 +455,13 @@ export const crossMediaRecs = pgTable(
     hookTitle: text("hook_title").notNull(),
     resultEyebrow: text("result_eyebrow").notNull(),
     closer: text("closer"),
+    /**
+     * Prompt v2+: the model's explicit factual claim of the cultural link
+     * ("Vangelis scored Blade Runner"). NEVER rendered — it exists so the eval
+     * harness / a judge pass can audit whether the narrative rests on a real,
+     * checkable fact instead of vibes. Null on v1 rows.
+     */
+    linkClaim: text("link_claim"),
     /** "fixture" | "llm" — which provider produced this row (observability) */
     provider: text("provider").notNull(),
     /**
@@ -492,6 +499,14 @@ export const crossMediaRecUsage = pgTable(
     eraKey: varchar("era_key", { length: 7 }).notNull(),
     /** LLM generations charged this month (cache hits do NOT count) */
     generations: integer("generations").notNull().default(0),
+    /**
+     * Of those charged generations, how many delivered NOTHING: the proposal
+     * failed to ground to a real catalog item, or grounded to a title the user
+     * already had in their library. The reco-health metric the /admin/recos
+     * dashboard reads (spent/generated ratio per month) — bumped in
+     * getCrossMediaReco right where `spent_no_match` is returned.
+     */
+    spentNoMatch: integer("spent_no_match").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
