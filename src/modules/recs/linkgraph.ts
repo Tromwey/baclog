@@ -229,6 +229,26 @@ function looksLikeSoundtrack(row: { title: string; genre: string | null }): bool
   );
 }
 
+/**
+ * TMDB returns making-of featurettes, behind-the-scenes pieces, b-roll and
+ * blooper reels as ordinary "movie" entries. They are NOT a watchable primary
+ * work: as a cross-media reco target they read as junk ("The Sounds of Dune:
+ * Behind the Scenes" for a Mexican indie album), AND — having no streaming
+ * providers — their play button dead-ends to a web search. So they must never
+ * be surfaced as a reco (grounding, crossmedia.ts) nor picked as a
+ * soundtrack's film (extractAlbumEdges below). Video sibling of
+ * DERIVATIVE_ALBUM_RE: a technically-real title match that would mislead.
+ * Fail-closed like edgeTitlesMatch — a dropped junk target degrades to an
+ * honest empty, never a lie.
+ */
+const NON_PRIMARY_VIDEO_RE =
+  /\bbehind[\s-]the[\s-]scenes\b|\bmaking[\s-]of\b|\bfeaturette\b|\bb[\s-]?roll\b|\bbloopers?\b|\bgag reel\b|\bouttakes?\b|\bdeleted scenes\b/i;
+
+/** True for making-of/featurette/behind-the-scenes titles — never a video reco target. */
+export function isNonPrimaryVideoTitle(title: string): boolean {
+  return NON_PRIMARY_VIDEO_RE.test(title);
+}
+
 /** "Dune (Original Motion Picture Soundtrack)" → "Dune". */
 function stripSoundtrackSuffix(title: string): string {
   return title
@@ -384,6 +404,7 @@ async function extractAlbumEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
 
   for (const tab of ["film", "series"] as const) {
     for (const row of await searchCatalogRows(candidate, tab)) {
+      if (isNonPrimaryVideoTitle(row.title)) continue;
       if (!edgeTitlesMatch(candidate, row.title, seed.year, row.year)) continue;
       return [
         {

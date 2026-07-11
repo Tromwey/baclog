@@ -37,3 +37,21 @@ export async function getWatchLink(
     .slice(0, 5);
   return { url: regional.link, providers };
 }
+
+/**
+ * The canonical TMDB "where to watch" page for a title in a region — the same
+ * destination getWatchLink returns on success (`regional.link`), buildable from
+ * the id alone. Used as the video link-out FLOOR (resolve.ts): a title with no
+ * provider rows (a featurette, or a film not yet streaming in this region)
+ * still lands here — JustWatch-powered, matching the attribution next to the
+ * button — instead of a raw web search, and starts listing providers the moment
+ * TMDB has them. The slugless path 301-redirects to the slugged canonical URL.
+ */
+export function tmdbWatchPageUrl(
+  tmdbId: string,
+  mediaType: "film" | "series",
+  region: string,
+): string {
+  const kind = mediaType === "film" ? "movie" : "tv";
+  return `https://www.themoviedb.org/${kind}/${tmdbId}/watch?locale=${region}`;
+}

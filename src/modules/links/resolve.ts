@@ -5,7 +5,7 @@ import { linkServiceEnum, mediaLinks } from "@/db/schema";
 import type { CatalogItemRow } from "@/modules/catalog/cache";
 import { buildSearchFallback, buildVideoFallback } from "./fallback";
 import { resolveWithOdesli } from "./odesli";
-import { getWatchLink } from "./providers";
+import { getWatchLink, tmdbWatchPageUrl } from "./providers";
 
 export type MusicService = "spotify" | "apple_music" | "youtube_music";
 type LinkService = (typeof linkServiceEnum.enumValues)[number];
@@ -68,25 +68,33 @@ export async function resolveVideoLink(
   const cached = await getCached(item.id, "other", region);
   if (cached) return cached;
 
+  // All video is TMDB-sourced. The link-out FLOOR is the TMDB "where to watch"
+  // page (JustWatch-powered — matches the attribution next to the button), NOT
+  // a raw web search: getWatchLink returns the API's slugged link when the
+  // title already has provider rows; a title with none — a making-of
+  // featurette, or a film not yet streaming in this region — still lands on
+  // that same page, which lists providers the moment TMDB has them. Only a
+  // non-TMDB video (which the catalog never produces) degrades to a search.
   if (item.source === "tmdb" && item.mediaType !== "album") {
     const watch = await getWatchLink(
       item.externalId,
       item.mediaType,
       region,
     ).catch(() => null);
-    if (watch) {
-      await db
-        .insert(mediaLinks)
-        .values({
-          catalogItemId: item.id,
-          service: "other" as LinkService,
-          region,
-          url: watch.url,
-          isSearchFallback: false,
-        })
-        .onConflictDoNothing();
-      return watch.url;
-    }
+    const url =
+      watch?.url ?? tmdbWatchPageUrl(item.externalId, item.mediaType, region);
+    await db
+      .insert(mediaLinks)
+      .values({
+        catalogItemId: item.id,
+        service: "other" as LinkService,
+        region,
+        url,
+        // Not an exact provider match when we synthesized the page URL.
+        isSearchFallback: !watch,
+      })
+      .onConflictDoNothing();
+    return url;
   }
 
   const fallback = buildVideoFallback(item.title, item.year);
