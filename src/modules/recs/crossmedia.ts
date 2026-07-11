@@ -58,8 +58,20 @@ export interface CrossMediaReco {
   };
   /** "fixture" | "llm" — provenance for observability. */
   provider: string;
+  /**
+   * F3.5.8 — the honesty label: "factual" when the pairing narrates a
+   * verified graph edge (soundtrack/score/…), "thematic" when it came from
+   * the deep-cut propose path (or a pre-graph legacy row). The card renders
+   * this so a real link and a vibe are never dressed the same.
+   */
+  linkKind: "factual" | "thematic";
   /** True when served from cache (no generation charged). */
   cached: boolean;
+}
+
+/** Graph edges narrate facts; thematic/legacy rows are honest vibes. */
+function linkKindOf(linkType: string | null): "factual" | "thematic" {
+  return linkType && linkType !== "thematic" ? "factual" : "thematic";
 }
 
 /**
@@ -326,6 +338,7 @@ async function graphPathReco(
       targetPosterUrl: best.target.posterUrl,
       narrative: outcome.narrative,
       provider: provider.id,
+      linkKind: "factual",
       cached: false,
     },
   };
@@ -369,6 +382,7 @@ function toCachedReco(hit: CacheHit): CrossMediaReco {
       closer: hit.closer ?? "",
     },
     provider: hit.provider,
+    linkKind: linkKindOf(hit.linkType),
     cached: true,
   };
 }
@@ -631,6 +645,7 @@ function toReco(
     targetPosterUrl: target.posterUrl,
     narrative: proposal.narrative,
     provider: providerId,
+    linkKind: "thematic",
     cached,
   };
 }

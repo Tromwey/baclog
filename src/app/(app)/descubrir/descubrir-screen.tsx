@@ -376,6 +376,7 @@ function AiResults({
           seed={cur.seed}
           reco={cur.reco}
           narrative={cur.narrative}
+          linkKind={cur.linkKind}
           username={username}
           defaultBacklog={cur.defaultBacklog}
           backlogs={perSeedBacklogs}

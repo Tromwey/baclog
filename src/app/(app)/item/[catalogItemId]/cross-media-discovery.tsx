@@ -63,6 +63,12 @@ export interface CrossMediaDiscoveryProps {
    * screen, so dismissing moves the whole screen forward.
    */
   onDismiss?: () => void;
+  /**
+   * F3.5.8 honesty label: "factual" = the pairing narrates a VERIFIED link
+   * (soundtrack/score edge from the graph); "thematic" = the deep-cut path
+   * (an honest vibe, not a checked fact). Omitted → no label (legacy embeds).
+   */
+  linkKind?: "factual" | "thematic";
 }
 
 type Status = "pending" | "accepted" | "dismissed";
@@ -300,9 +306,20 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
       {/* Hero narrative */}
       <div className="mt-5 border-t border-line pt-4">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
-          {narrative.resultEyebrow}
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+            {narrative.resultEyebrow}
+          </p>
+          {props.linkKind && (
+            <p
+              className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] ${
+                props.linkKind === "factual" ? "text-accent" : "text-text-3"
+              }`}
+            >
+              {props.linkKind === "factual" ? "conexión real" : "misma vibra"}
+            </p>
+          )}
+        </div>
         <p className="mt-2 font-display text-[20px] font-bold leading-snug tracking-[-0.01em] text-text">
           <span className="font-serif font-normal italic">{reco.title}</span>
           {reco.byline ? (

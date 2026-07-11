@@ -192,6 +192,8 @@ export interface DiscoverItem {
   seed: DiscoverWork;
   reco: DiscoverWork;
   narrative: DoubleFeatureData["narrative"];
+  /** F3.5.8 honesty label — verified graph edge vs. thematic deep-cut. */
+  linkKind: "factual" | "thematic";
   defaultBacklog: { id: string; name: string };
 }
 
@@ -244,6 +246,7 @@ export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
       posterUrl: it.reco.targetPosterUrl,
     },
     narrative: it.reco.narrative,
+    linkKind: it.reco.linkKind,
     defaultBacklog: it.defaultBacklog,
   }));
 
