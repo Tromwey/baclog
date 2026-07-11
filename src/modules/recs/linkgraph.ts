@@ -209,9 +209,20 @@ export function buildLinkClaim(
 type NewLinkEdge = typeof crossMediaLinks.$inferInsert;
 
 const SOUNDTRACK_TITLE_RE =
-  /original (motion picture|series|game)? ?(soundtrack|score)|banda sonora( original)?|\bsoundtrack\b|música original/i;
+  /original (motion picture|series|game)? ?(soundtrack|score)|music from (the )?(motion picture|film|series|movie)|banda sonora( original)?|\bsoundtrack\b|música original/i;
+
+/**
+ * Derivative albums that reference a film without BEING its soundtrack —
+ * covers, tributes, lullaby/karaoke renditions, re-performances. An edge to
+ * one of these would be a technically-true but misleading "verified" claim
+ * (found live by the --edges eval: "Lullaby Versions of…", "MBM Performs…",
+ * "[Cover Version] - Single").
+ */
+const DERIVATIVE_ALBUM_RE =
+  /\b(covers?|tributes?|karaoke|lullab(y|ies)|performs|made famous|in the style of|music box|8[- ]?bit|reimagined)\b|cover version|- single$/i;
 
 function looksLikeSoundtrack(row: { title: string; genre: string | null }): boolean {
+  if (DERIVATIVE_ALBUM_RE.test(row.title)) return false;
   return (
     SOUNDTRACK_TITLE_RE.test(row.title) ||
     (row.genre ?? "").toLowerCase() === "soundtrack"
@@ -221,8 +232,14 @@ function looksLikeSoundtrack(row: { title: string; genre: string | null }): bool
 /** "Dune (Original Motion Picture Soundtrack)" → "Dune". */
 function stripSoundtrackSuffix(title: string): string {
   return title
-    .replace(/[([][^)\]]*?(soundtrack|banda sonora|score|música)[^)\]]*?[)\]]/gi, "")
-    .replace(/\b(original )?(motion picture )?(soundtrack|banda sonora)\b.*$/i, "")
+    .replace(
+      /[([][^)\]]*?(soundtrack|banda sonora|score|música|music from)[^)\]]*?[)\]]/gi,
+      "",
+    )
+    .replace(
+      /\b(music from (the )?)?(original )?(motion picture |netflix original series )?(soundtrack|banda sonora)\b.*$/i,
+      "",
+    )
     .trim()
     .replace(/[-–:,]$/, "")
     .trim();
@@ -331,7 +348,9 @@ async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
       for (const row of await searchCatalogRows(scoreQuery, "album")) {
         // The album must reference the film (year-checked, franchise-safe)
         // AND the composer must be its artist — both, or a homonymous
-        // unrelated album slips through.
+        // unrelated album slips through. Derivative albums (covers/lullaby)
+        // never qualify as the composer's work.
+        if (DERIVATIVE_ALBUM_RE.test(row.title)) continue;
         if (!edgeTitlesMatch(seed.title, row.title, seed.year, row.year))
           continue;
         if (!row.byline || !titleOverlap(composer, row.byline)) continue;

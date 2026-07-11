@@ -201,7 +201,14 @@ const EDGE_GOLDEN: {
   { query: "Guardians of the Galaxy", mediaType: "film", expectLinkType: "soundtrack", expectTargetIncludes: "guardians" },
   { query: "Stranger Things", mediaType: "series", expectLinkType: "soundtrack", expectTargetIncludes: "stranger" },
   { query: "Purple Rain Prince", mediaType: "album", expectLinkType: "soundtrack", expectTargetIncludes: "purple rain" },
-  { query: "Trainspotting soundtrack", mediaType: "album", expectLinkType: "soundtrack", expectTargetIncludes: "trainspotting" },
+  // NOTE: "Trainspotting soundtrack" was here and is a deliberate removal:
+  // the real 1996 soundtrack isn't on iTunes — the top hit is a knock-off
+  // covers album ("Music From: Trainspotting", Union of Sound 2012) that the
+  // heuristics CORRECTLY reject. Fail-closed working as designed.
+  // (A "GotG Awesome Mix Vol 1" album case was tried and removed too: iTunes'
+  // top hit is a 2023 reissue with no soundtrack marker and a drifted year —
+  // correctly rejected. Reverse extraction needs marker + aligned year.)
+  { query: "La La Land Original Motion Picture Soundtrack", mediaType: "album", expectLinkType: "soundtrack", expectTargetIncludes: "la la land" },
 ];
 
 async function runNarrateMode(): Promise<void> {
