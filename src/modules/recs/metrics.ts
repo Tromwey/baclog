@@ -1,7 +1,10 @@
 import "server-only";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { isNotNull } from "drizzle-orm";
 import {
+  catalogItems,
+  crossMediaLinks,
   crossMediaRecs,
   crossMediaRecUsage,
   crossMediaRecoFeedback,
@@ -92,6 +95,44 @@ export async function getRecoVersionMetrics(): Promise<RecoVersionMetrics[]> {
     if (f.reasons.some((r) => !positive.has(r))) bucket.feedbackNegative += 1;
   }
   return [...byVersion.values()];
+}
+
+/** F3.5.8 — link-graph health: coverage + how often recos ride a verified
+ *  edge vs. fall back to thematic (the "spent_no_match disappears" proof). */
+export interface LinkGraphMetrics {
+  /** Seeds that have been through extraction at least once. */
+  seedsChecked: number;
+  edgesByType: { linkType: string; source: string; count: number }[];
+  recsByLinkType: { linkType: string | null; count: number }[];
+}
+
+export async function getLinkGraphMetrics(): Promise<LinkGraphMetrics> {
+  const [checked, edges, recs] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
+      .from(catalogItems)
+      .where(isNotNull(catalogItems.linkEdgesCheckedAt)),
+    db
+      .select({
+        linkType: crossMediaLinks.linkType,
+        source: crossMediaLinks.source,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(crossMediaLinks)
+      .groupBy(crossMediaLinks.linkType, crossMediaLinks.source),
+    db
+      .select({
+        linkType: crossMediaRecs.linkType,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(crossMediaRecs)
+      .groupBy(crossMediaRecs.linkType),
+  ]);
+  return {
+    seedsChecked: checked[0]?.count ?? 0,
+    edgesByType: edges,
+    recsByLinkType: recs,
+  };
 }
 
 export async function getRecoMonthUsage(): Promise<RecoMonthUsage[]> {

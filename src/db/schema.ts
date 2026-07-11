@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -189,6 +189,15 @@ export const catalogItems = pgTable(
     raw: jsonb("raw"),
     /** ADR-007: ≤3-month cache clock, stale-while-revalidate */
     refreshedAt: timestamp("refreshed_at").notNull().defaultNow(),
+    /**
+     * F3.5.8 (link graph) — last time link-edge extraction ran FROM this item
+     * as a seed (as video: soundtrack/score lookup; as album: soundtrack→film
+     * resolution). Null = never tried → materialize lazily on next seed use.
+     * Stamped on EVERY attempt (found or not) so a seed with zero edges never
+     * re-hits iTunes/TMDB on each request. 180d TTL (cultural-link facts
+     * barely change, but a soundtrack can get indexed later).
+     */
+    linkEdgesCheckedAt: timestamp("link_edges_checked_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -437,6 +446,50 @@ export const recapSends = pgTable(
  * FK guarantees the reco is addable + link-outable. Narrative fields are the
  * LLM-authored prose the Double Feature card renders.
  */
+/**
+ * F3.5.8 — the LINK GRAPH: global, shared edges between a video catalog_item
+ * and an album catalog_item (Baclog's moat, materialized as data). Extracted
+ * lazily (see catalogItems.linkEdgesCheckedAt) from iTunes soundtrack search
+ * and TMDB credits — never LLM-authored, never metered, verifiable by
+ * construction. The reco engine RANKS these per user (taste = selection, not
+ * generation) and the LLM only narrates the chosen edge.
+ *
+ * linkType/source are app-validated text, not pgEnums (same posture as
+ * crossMediaRecoFeedback.reasons and catalog_item.source): the vocabulary is
+ * deliberately open — new link types land without a migration.
+ */
+export const crossMediaLinks = pgTable(
+  "cross_media_link",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    videoCatalogItemId: text("video_catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    albumCatalogItemId: text("album_catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    /** "soundtrack" | "score" | "artist_on_soundtrack" | "inspired" | … (open set) */
+    linkType: text("link_type").notNull(),
+    /** Edge provenance: "itunes_soundtrack_search" | "tmdb_credits_itunes_lookup" | "itunes_soundtrack_title_heuristic" | … */
+    source: text("source").notNull(),
+    /** { composer?, artist?, matchedQuery? } — narration color + debugging. Catalog metadata only, never PII. */
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cross_media_link_unique").on(
+      t.videoCatalogItemId,
+      t.albumCatalogItemId,
+      t.linkType,
+    ),
+    // The composite unique covers video-first lookups (leftmost prefix);
+    // album-seed reads need their own index.
+    index("cross_media_link_album_idx").on(t.albumCatalogItemId),
+  ],
+);
+
 export const crossMediaRecs = pgTable(
   "cross_media_rec",
   {
@@ -462,6 +515,18 @@ export const crossMediaRecs = pgTable(
      * checkable fact instead of vibes. Null on v1 rows.
      */
     linkClaim: text("link_claim"),
+    /**
+     * F3.5.8 — how seed and target are connected: a graph linkType
+     * ("soundtrack" | "score" | …) when this row narrates a verified edge, or
+     * "thematic" for the deep-cut fallback (v2 propose+ground path, honest
+     * about being vibes). Null = pre-F3.5.8 row.
+     */
+    linkType: text("link_type"),
+    /** The cross_media_link this row narrates (graph path only; null on thematic/legacy rows). */
+    crossMediaLinkId: text("cross_media_link_id").references(
+      () => crossMediaLinks.id,
+      { onDelete: "set null" },
+    ),
     /** "fixture" | "llm" — which provider produced this row (observability) */
     provider: text("provider").notNull(),
     /**
@@ -474,9 +539,22 @@ export const crossMediaRecs = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
-    // One cached reco per seed — the cache key that gates re-generation
-    uniqueIndex("cross_media_rec_seed_unique").on(t.seedCatalogItemId),
+    // F3.5.8: the cache key is (seed, target) — multiple targets per seed are
+    // legitimate now (different users' best-ranked edge differs). Every
+    // pre-existing row satisfies this (the old per-seed unique was strictly
+    // stronger), so the swap needs zero backfill.
+    uniqueIndex("cross_media_rec_seed_target_unique").on(
+      t.seedCatalogItemId,
+      t.targetCatalogItemId,
+    ),
+    // Deep-cut singleton, preserved from v2: at most ONE thematic/legacy row
+    // per seed, ever (the cost guarantee — a deep-cut is never regenerated).
+    // Partial unique index scoped to exactly that subset.
+    uniqueIndex("cross_media_rec_thematic_seed_unique")
+      .on(t.seedCatalogItemId)
+      .where(sql`${t.linkType} is null or ${t.linkType} = 'thematic'`),
     index("cross_media_rec_target_idx").on(t.targetCatalogItemId),
+    index("cross_media_rec_link_id_idx").on(t.crossMediaLinkId),
   ],
 );
 
@@ -637,6 +715,21 @@ export const crossMediaRecsRelations = relations(crossMediaRecs, ({ one }) => ({
   }),
   target: one(catalogItems, {
     fields: [crossMediaRecs.targetCatalogItemId],
+    references: [catalogItems.id],
+  }),
+  link: one(crossMediaLinks, {
+    fields: [crossMediaRecs.crossMediaLinkId],
+    references: [crossMediaLinks.id],
+  }),
+}));
+
+export const crossMediaLinksRelations = relations(crossMediaLinks, ({ one }) => ({
+  video: one(catalogItems, {
+    fields: [crossMediaLinks.videoCatalogItemId],
+    references: [catalogItems.id],
+  }),
+  album: one(catalogItems, {
+    fields: [crossMediaLinks.albumCatalogItemId],
     references: [catalogItems.id],
   }),
 }));

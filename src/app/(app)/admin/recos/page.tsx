@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
 import {
+  getLinkGraphMetrics,
   getRecoMonthUsage,
   getRecoVersionMetrics,
 } from "@/modules/recs/metrics";
@@ -16,9 +17,10 @@ export default async function RecoMetricsPage() {
   const user = await requireUser();
   if (!user.isFounder) notFound();
 
-  const [versions, months] = await Promise.all([
+  const [versions, months, graph] = await Promise.all([
     getRecoVersionMetrics(),
     getRecoMonthUsage(),
+    getLinkGraphMetrics(),
   ]);
 
   return (
@@ -72,6 +74,46 @@ export default async function RecoMetricsPage() {
             )}
           </tbody>
         </table>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold text-text-2">
+          Grafo de vínculos (F3.5.8)
+        </h2>
+        <p className="mb-2 text-xs text-text-3">
+          Seeds con extracción corrida: {graph.seedsChecked}
+        </p>
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs text-text-3">
+            <tr>
+              <th className="py-1">Edge</th>
+              <th>Fuente</th>
+              <th className="text-right">Edges</th>
+            </tr>
+          </thead>
+          <tbody>
+            {graph.edgesByType.map((e, i) => (
+              <tr key={i} className="border-t border-line">
+                <td className="py-1.5">{e.linkType}</td>
+                <td className="max-w-[10rem] truncate">{e.source}</td>
+                <td className="text-right font-mono">{e.count}</td>
+              </tr>
+            ))}
+            {graph.edgesByType.length === 0 && (
+              <tr>
+                <td colSpan={3} className="py-4 text-center text-text-3">
+                  Sin edges todavía.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-text-3">
+          Recos por tipo de vínculo:{" "}
+          {graph.recsByLinkType
+            .map((r) => `${r.linkType ?? "legacy"} ${r.count}`)
+            .join(" · ") || "—"}
+        </p>
       </section>
 
       <section className="mt-8">

@@ -47,4 +47,14 @@ export interface CatalogSearchResult {
 /** The film/series search surface — real TMDB or fixtures (launch dep). */
 export interface VideoCatalog {
   search(query: string, type: "film" | "series"): Promise<ExternalItem[]>;
+  /**
+   * F3.5.8 (link graph) — the "Original Music Composer" credit (film:
+   * /movie/{id}/credits; series: /tv/{id}/aggregate_credits). OPTIONAL:
+   * fixtures don't implement it (no crew data), and the link-graph extractor
+   * degrades to iTunes-only edges when it's absent or errors.
+   */
+  getComposer?(
+    externalId: string,
+    type: "film" | "series",
+  ): Promise<string | null>;
 }

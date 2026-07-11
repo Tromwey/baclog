@@ -46,6 +46,38 @@ class TmdbApi implements VideoCatalog {
     return res.json();
   }
 
+  /**
+   * F3.5.8 — composer credit for the link graph. Series use aggregate_credits
+   * (per-season crew flattened by TMDB). Fail-open to null: a credits error
+   * only costs a "score" edge, never blocks the pipeline.
+   */
+  async getComposer(
+    externalId: string,
+    type: "film" | "series",
+  ): Promise<string | null> {
+    const path =
+      type === "film"
+        ? `/movie/${externalId}/credits`
+        : `/tv/${externalId}/aggregate_credits`;
+    try {
+      const data = await this.get(path, {});
+      const crew = (data.crew ?? []) as {
+        name?: string;
+        job?: string;
+        jobs?: { job?: string }[];
+      }[];
+      const composer = crew.find(
+        (c) =>
+          c.job === "Original Music Composer" ||
+          c.jobs?.some((j) => j.job === "Original Music Composer"),
+      );
+      return composer?.name ?? null;
+    } catch (err) {
+      console.error("[catalog] TMDB credits failed:", err);
+      return null;
+    }
+  }
+
   async search(query: string, type: "film" | "series"): Promise<ExternalItem[]> {
     const path = type === "film" ? "/search/movie" : "/search/tv";
     const data = await this.get(path, {
