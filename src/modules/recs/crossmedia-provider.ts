@@ -1,6 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, type Schema } from "@google/genai";
 import { env } from "@/lib/env";
 
 /**
@@ -412,6 +412,38 @@ class LlmProvider implements CrossMediaRecProvider {
 /** Gemini 2.5 Flash-Lite by default (low-cost); override with GEMINI_MODEL. */
 const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
+/**
+ * Enforced output schema for the Gemini path — mirrors the Anthropic strict
+ * tool schema so malformed output is rejected by the API instead of leaking
+ * through to finalizeProposal (which stays as the second line of defense).
+ */
+const GEMINI_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  required: [
+    "targetTitle",
+    "targetMediaType",
+    "targetByline",
+    "linkClaim",
+    "narrative",
+  ],
+  properties: {
+    targetTitle: { type: Type.STRING },
+    targetMediaType: { type: Type.STRING, enum: ["album", "film", "series"] },
+    targetByline: { type: Type.STRING },
+    linkClaim: { type: Type.STRING },
+    narrative: {
+      type: Type.OBJECT,
+      required: ["hookEyebrow", "hookTitle", "resultEyebrow", "closer"],
+      properties: {
+        hookEyebrow: { type: Type.STRING },
+        hookTitle: { type: Type.STRING },
+        resultEyebrow: { type: Type.STRING },
+        closer: { type: Type.STRING },
+      },
+    },
+  },
+};
+
 class GeminiProvider implements CrossMediaRecProvider {
   readonly id = "gemini" as const;
   readonly model = GEMINI_MODEL;
@@ -435,6 +467,7 @@ class GeminiProvider implements CrossMediaRecProvider {
         config: {
           systemInstruction: SYSTEM_PROMPT,
           responseMimeType: "application/json",
+          responseSchema: GEMINI_RESPONSE_SCHEMA,
           maxOutputTokens: 1024,
           temperature: 0.8,
         },
