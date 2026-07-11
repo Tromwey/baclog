@@ -38,4 +38,5 @@ export const SAMPLE_DOUBLE_FEATURE: DoubleFeatureData = {
   },
   username: "eric",
   edition: 14,
+  linkKind: "factual",
 };

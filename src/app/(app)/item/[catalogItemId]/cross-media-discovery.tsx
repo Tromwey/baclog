@@ -74,7 +74,7 @@ export interface CrossMediaDiscoveryProps {
 type Status = "pending" | "accepted" | "dismissed";
 
 export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
-  const { seed, reco, narrative, username, defaultBacklog } = props;
+  const { seed, reco, narrative, username, defaultBacklog, linkKind } = props;
   const isPage = props.variant === "page";
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -158,6 +158,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       palette: palette.length >= 3 ? palette : ["#C7462F", "#E8B23A", "#3A5A9B", "#7A2F5A", "#241C1A"],
       narrative,
       username,
+      linkKind,
     };
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -185,7 +186,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       if (shareTimer.current) clearTimeout(shareTimer.current);
       shareTimer.current = setTimeout(() => setShareToast(false), 4200);
     }, "image/png");
-  }, [narrative, reco, seed, username]);
+  }, [narrative, reco, seed, username, linkKind]);
 
   // "Cambiar" → open picker preselected to the current target.
   const openSheet = useCallback(() => {

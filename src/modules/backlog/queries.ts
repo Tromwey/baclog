@@ -174,6 +174,9 @@ export async function getUserCatalogEntry(
       recResultEyebrow: crossMediaRecs.resultEyebrow,
       recCloser: crossMediaRecs.closer,
       recSeedTitle: seedCatalogItems.title,
+      // F3.5.8 honesty label — "thematic"/null = vibe fallback, anything else
+      // names a verified graph edge (soundtrack/score/…).
+      recLinkType: crossMediaRecs.linkType,
     })
     .from(userItems)
     .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))

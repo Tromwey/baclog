@@ -38,7 +38,7 @@ export function drawDoubleFeature(
   ctx: CanvasRenderingContext2D,
   data: DoubleFeatureData,
 ) {
-  const { seed, reco, narrative, username, edition } = data;
+  const { seed, reco, narrative, username, edition, linkKind } = data;
   const p = normalizePalette(data.palette);
 
   // Base
@@ -130,6 +130,17 @@ export function drawDoubleFeature(
   ctx.fillStyle = C.accent;
   ctx.font = MONO(30);
   ctx.fillText(narrative.resultEyebrow.toUpperCase(), 64, 1580);
+  // F3.5.8 honesty label — right-aligned on the eyebrow baseline
+  if (linkKind) {
+    ctx.textAlign = "right";
+    ctx.fillStyle = linkKind === "factual" ? C.accent : C.text3;
+    ctx.fillText(
+      linkKind === "factual" ? "CONEXIÓN REAL" : "MISMA VIBRA",
+      CARD_WIDTH - 64,
+      1580,
+    );
+    ctx.textAlign = "left";
+  }
   ctx.fillStyle = C.text;
   ctx.font = DISPLAY(84, 700);
   const heroLine = reco.creator ? `${reco.title}, de ${reco.creator}.` : `${reco.title}.`;

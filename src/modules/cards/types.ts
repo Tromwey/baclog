@@ -90,6 +90,12 @@ export interface DoubleFeatureData {
   username: string;
   /** Sequential edition number for the header, e.g. 14 → "Nº 014". */
   edition?: number;
+  /**
+   * F3.5.8 honesty label: "factual" = the pairing narrates a VERIFIED link
+   * (soundtrack/score edge from the graph); "thematic" = the deep-cut path
+   * (an honest vibe, not a checked fact). Omitted → no label (legacy callers).
+   */
+  linkKind?: "factual" | "thematic";
 }
 
 export const STATUS_LABEL: Record<ItemStatus, string> = {

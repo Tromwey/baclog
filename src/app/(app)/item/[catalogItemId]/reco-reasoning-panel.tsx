@@ -18,6 +18,11 @@ export interface RecNarrative {
   resultEyebrow: string;
   closer: string | null;
   seedTitle: string;
+  /**
+   * F3.5.8 honesty label: "factual" = the rec narrates a VERIFIED link
+   * (soundtrack/score edge), "thematic" = the deep-cut vibe fallback.
+   */
+  linkKind: "factual" | "thematic";
 }
 
 export function RecoReasoningPanel({ narrative }: { narrative: RecNarrative }) {
@@ -37,6 +42,14 @@ export function RecoReasoningPanel({ narrative }: { narrative: RecNarrative }) {
             <path d={SPARKLE_PATH} />
           </svg>
           ¿Por qué esta recomendación?
+        </span>
+        {/* F3.5.8 honesty label — same voice as /para-ti's discovery card */}
+        <span
+          className={`ml-auto shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] ${
+            narrative.linkKind === "factual" ? "text-accent" : "text-text-3"
+          }`}
+        >
+          {narrative.linkKind === "factual" ? "conexión real" : "misma vibra"}
         </span>
         <svg
           width="13"

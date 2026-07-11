@@ -65,6 +65,11 @@ export default async function ItemPage({
           resultEyebrow: entry.recResultEyebrow,
           closer: entry.recCloser,
           seedTitle: entry.recSeedTitle,
+          // F3.5.8 honesty label: "thematic"/null = vibe fallback, anything
+          // else names a verified graph edge (same rule as the /para-ti feed).
+          linkKind: (entry.recLinkType && entry.recLinkType !== "thematic"
+            ? "factual"
+            : "thematic") as "factual" | "thematic",
         }
       : null;
 

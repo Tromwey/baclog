@@ -145,7 +145,7 @@ function Disc({
 }
 
 export function DoubleFeatureCard({ data }: { data: DoubleFeatureData }) {
-  const { seed, reco, palette, narrative, username, edition } = data;
+  const { seed, reco, palette, narrative, username, edition, linkKind } = data;
   const p = normalizePalette(palette);
   const aura = auraColors(p);
   const seedFace = discFace(p, `${seed.title}-A`);
@@ -205,7 +205,15 @@ export function DoubleFeatureCard({ data }: { data: DoubleFeatureData }) {
 
       {/* Hook (part 2 — the result) = narrative HERO */}
       <div style={{ position: "relative", marginTop: 34 }}>
-        <div style={{ fontFamily: FONT.mono, fontSize: 22, letterSpacing: ".16em", color: C.accent, textTransform: "uppercase" }}>{narrative.resultEyebrow}</div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 28 }}>
+          <div style={{ fontFamily: FONT.mono, fontSize: 22, letterSpacing: ".16em", color: C.accent, textTransform: "uppercase" }}>{narrative.resultEyebrow}</div>
+          {/* F3.5.8 honesty label — verified edge vs deep-cut vibe */}
+          {linkKind && (
+            <div style={{ flex: "none", fontFamily: FONT.mono, fontSize: 22, letterSpacing: ".16em", textTransform: "uppercase", color: linkKind === "factual" ? C.accent : C.text3 }}>
+              {linkKind === "factual" ? "conexión real" : "misma vibra"}
+            </div>
+          )}
+        </div>
         <div style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 72, lineHeight: 1.02, letterSpacing: "-.02em", marginTop: 12 }}>
           <span style={{ fontFamily: FONT.serif, fontStyle: "italic", fontWeight: 400 }}>{reco.title}</span>
           {reco.creator ? <>, de <span style={{ color: C.accent }}>{reco.creator}</span>.</> : "."}
