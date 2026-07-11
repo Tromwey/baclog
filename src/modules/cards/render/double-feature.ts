@@ -125,20 +125,29 @@ export function drawDoubleFeature(
   ctx.textAlign = "right";
   ctx.fillText(workMeta(reco), CARD_WIDTH - 64, 1465);
 
-  // Hero (part 2 — the result narrative)
+  // Hero (part 2 — the result narrative). The eyebrow is LLM-authored (≤120
+  // chars) and shares its baseline with the honesty label — truncate it to
+  // the space the label leaves so they can never collide on the export.
   ctx.textAlign = "left";
   ctx.fillStyle = C.accent;
   ctx.font = MONO(30);
-  ctx.fillText(narrative.resultEyebrow.toUpperCase(), 64, 1580);
+  const labelText = linkKind
+    ? linkKind === "factual"
+      ? "CONEXIÓN REAL"
+      : "MISMA VIBRA"
+    : null;
+  const labelWidth = labelText ? ctx.measureText(labelText).width : 0;
+  const eyebrowMax = CARD_WIDTH - 128 - (labelText ? labelWidth + 24 : 0);
+  ctx.fillText(
+    truncateToWidth(ctx, narrative.resultEyebrow.toUpperCase(), eyebrowMax),
+    64,
+    1580,
+  );
   // F3.5.8 honesty label — right-aligned on the eyebrow baseline
-  if (linkKind) {
+  if (labelText) {
     ctx.textAlign = "right";
     ctx.fillStyle = linkKind === "factual" ? C.accent : C.text3;
-    ctx.fillText(
-      linkKind === "factual" ? "CONEXIÓN REAL" : "MISMA VIBRA",
-      CARD_WIDTH - 64,
-      1580,
-    );
+    ctx.fillText(labelText, CARD_WIDTH - 64, 1580);
     ctx.textAlign = "left";
   }
   ctx.fillStyle = C.text;
@@ -169,6 +178,21 @@ export function drawDoubleFeature(
 
   // Grain last, over everything (ADR-008: the analog-artifact detail)
   drawGrain(ctx, CARD_WIDTH, CARD_HEIGHT, 0.06, hashString(`${seed.title}-${reco.title}`));
+}
+
+/** Ellipsis-truncate a single line to a pixel width (single-baseline rows
+ *  where two texts share the line and must never collide). */
+function truncateToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return `${t.trimEnd()}…`;
 }
 
 function radialAura(
