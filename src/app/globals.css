@@ -29,6 +29,11 @@
   --hot: #ff2d55;
   --hot-soft: #ff2d5522;
 
+  /* Semáforo Torre de Control (/admin) — ok = accent, sin-señal = text-3.
+     Apagados a propósito: nada neón salvo la lima (diseño Torre de Control). */
+  --warn: #e8b23a;
+  --bad: #c4494e;
+
   /* Hues de estado (mayormente como puntos/tints) */
   --radar: #7aa2ff; /* On my radar */
   --obsessing: #ff2d55; /* Obsessing over */
@@ -99,6 +104,8 @@
   --color-accent: var(--accent);
   --color-accent-press: var(--accent-press);
   --color-hot: var(--hot);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
   --color-radar: var(--radar);
   --color-obsessing: var(--obsessing);
   --color-completed: var(--completed);

@@ -17,11 +17,15 @@ export function PerfilScreen({
   username,
   stats,
   palette,
+  isAdmin,
 }: {
   name: string;
   username: string | null;
   stats: UserStats;
   palette: string[];
+  /** Shows the operator-only "Torre de control" entry (→ /admin). Gated on
+   *  users.isAdmin — NOT the isFounder badge the whole first-100 cohort has. */
+  isAdmin: boolean;
 }) {
   const handleHref = username ? `/u/${username}` : "/settings";
 
@@ -58,6 +62,33 @@ export function PerfilScreen({
         <Row href={handleHref} icon={<Share2 size={17} strokeWidth={1.8} />} label="Ver perfil público" />
       </div>
 
+      {/* Torre de control — admin-only (nav-reachability del portal /admin) */}
+      {isAdmin && (
+        <>
+          <div className="mb-[13px] mt-[26px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
+            Solo founder
+          </div>
+          <Link
+            href="/admin"
+            className="relative flex items-center gap-[13px] overflow-hidden rounded-[22px] bl-glass px-[15px] py-[14px] transition-colors hover:bg-white/[0.045]"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-bg">
+              <ControlTowerGlyph />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-sans text-[15px] font-semibold text-text">
+                Torre de control
+              </span>
+              <span className="mt-[3px] block font-mono text-[9.5px] uppercase tracking-[0.06em] text-text-3">
+                Solo tú lo ves · founder
+              </span>
+            </span>
+            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent" />
+            <ChevronRight size={18} className="shrink-0 text-text-3" />
+          </Link>
+        </>
+      )}
+
       {/* Cerrar sesión */}
       <form action={signOutAction} className="mt-[14px] overflow-hidden rounded-[22px] bl-glass">
         <button
@@ -77,6 +108,33 @@ export function PerfilScreen({
         Baclog · tu recibo de gusto
       </div>
     </main>
+  );
+}
+
+/** Radar/tower glyph from the Torre de Control design (bespoke, not lucide). */
+function ControlTowerGlyph() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 16a8 8 0 0 1 16 0"
+        stroke="var(--accent)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 16 16.6 10.8"
+        stroke="var(--accent)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="16" r="1.7" fill="var(--accent)" />
+      <path
+        d="M7.2 14.2h.01M12 12.6h.01M16.8 14.2h.01"
+        stroke="var(--text-3)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

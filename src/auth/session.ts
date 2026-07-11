@@ -27,6 +27,7 @@ export const getCurrentUser = cache(async () => {
       isMinor: users.isMinor,
       isFounder: users.isFounder,
       founderRank: users.founderRank,
+      isAdmin: users.isAdmin,
     })
     .from(users)
     .where(eq(users.id, id))

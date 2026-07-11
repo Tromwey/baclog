@@ -95,10 +95,22 @@ export const users = pgTable(
     /** F2.17 — null means not claimed; public page requires it + isPublic */
     username: varchar("username", { length: 30 }),
     isPublic: boolean("is_public").notNull().default(false),
-    /** F3.2 — first ~100 accounts + manually-seeded curators */
+    /**
+     * F3.2 — first ~100 accounts + manually-seeded curators. A BADGE flag
+     * (public founder marker), NOT an admin role: the whole early cohort has
+     * it. Anything operational gates on `isAdmin` below.
+     */
     isFounder: boolean("is_founder").notNull().default(false),
     /** F3.2 — organic first-100 get a rank; seeded curators keep it null */
     founderRank: integer("founder_rank"),
+    /**
+     * Torre de Control — operator role: /admin portal + maintenance tools
+     * (palette backfill). Assigned manually in the DB, never by signup logic;
+     * today only the actual founder's account. Deliberately separate from
+     * isFounder (badge), whose auto-assignment would otherwise have handed
+     * the first 100 users the admin portal.
+     */
+    isAdmin: boolean("is_admin").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -631,6 +643,42 @@ export const crossMediaRecoFeedback = pgTable(
     index("cross_media_reco_feedback_cross_media_rec_idx").on(
       t.crossMediaRecId,
     ),
+  ],
+);
+
+/**
+ * Torre de Control — per-call LLM telemetry. One row per provider invocation
+ * (propose/narrate), success or failure, so /admin can compute REAL cost
+ * (tokens × price), failure rate, and latency instead of inferring them from
+ * the usage meter. Deliberately user-free (Pilar 4): cost/health is global,
+ * per-user accounting already lives on cross_media_rec_usage. Writes are
+ * fire-and-forget (recs/telemetry.ts) — telemetry must never fail a reco.
+ *
+ * kind/provider/model/outcome are app-validated text, not pgEnums (same
+ * posture as crossMediaLinks.linkType): new providers/outcomes land without a
+ * migration. outcome ∈ "ok" | "transient" | "moderation_rejected" today.
+ */
+export const llmCallLog = pgTable(
+  "llm_call_log",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    /** "propose" (deep-cut path) | "narrate" (graph path) */
+    kind: text("kind").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptVersion: integer("prompt_version").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    /** Null when the provider errored before reporting usage. */
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    outcome: text("outcome").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // Every /admin aggregate windows on time (month burn, 24h failure rate).
+    index("llm_call_log_created_at_idx").on(t.createdAt),
   ],
 );
 

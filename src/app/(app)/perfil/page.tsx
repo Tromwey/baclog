@@ -21,6 +21,7 @@ export default async function PerfilPage() {
       username={user.username}
       stats={stats}
       palette={palette}
+      isAdmin={user.isAdmin}
     />
   );
 }

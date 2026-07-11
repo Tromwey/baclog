@@ -80,6 +80,11 @@ export function NavDock() {
   // stays as an opt-in for any future ephemeral case.
   const hidden = useContext(HiddenCtx);
 
+  // Hard route boundary (see the doc comment above): the Torre de Control
+  // (/admin) is a whole different screen, so the dock returns null — no
+  // post-hydration fade, no flash on a hard load.
+  if (pathname.startsWith("/admin")) return null;
+
   return (
     <nav
       aria-label="Navegación principal"

@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth";
+import { requireAdmin } from "@/modules/admin/guard";
 import { BackfillRunner } from "./backfill-runner";
 
 /**
@@ -8,11 +7,12 @@ import { BackfillRunner } from "./backfill-runner";
  * discipline as /admin/analytics), non-founders get a 404.
  */
 export default async function PaletteBackfillPage() {
-  const user = await requireUser();
-  if (!user.isFounder) notFound();
+  await requireAdmin();
 
+  // Content-only: the /admin layout (Torre de Control) provides the
+  // container, header and tab chrome.
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-4 pb-dock-clearance pt-8 text-text">
+    <main className="pt-1 text-text">
       <h1 className="text-xl font-bold">Backfill de paleta (ADN)</h1>
       <p className="mt-2 text-sm text-text-2">
         Re-extrae el color dominante de cada item con el algoritmo nuevo

@@ -19,12 +19,14 @@ import {
 import {
   buildLinkClaim,
   getOrMaterializeLinkEdges,
+  isNonPrimaryVideoTitle,
   rankEdgesForUser,
   type CatalogItemRow as GraphCatalogItemRow,
   type CrossMediaLinkType,
   type RankedTarget,
 } from "./linkgraph";
 import { screenNarrative } from "./moderation";
+import { logLlmCall, type LlmCallOutcome } from "./telemetry";
 
 /**
  * F3.5.5 — the public cross-media reco engine (Baclog's moat surface).
@@ -103,8 +105,10 @@ export type RecoResult =
   | { status: "spent_no_match" }
   | { status: "failed" };
 
-/** "2026-07" — matches recap_send / era.ts. */
-function eraKey(now = new Date()): string {
+/** "2026-07" — matches recap_send / era.ts. Exported as THE canonical current
+ *  era key: admin/metrics.ts must bucket by the exact strings this module
+ *  writes into cross_media_rec_usage.era_key, so there is one copy. */
+export function eraKey(now = new Date()): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
@@ -190,12 +194,32 @@ export async function getCrossMediaReco(
     genre: seed.genre,
     excludeTitles: await libraryTitles(userId, targetFamily),
   };
+  const proposeStart = Date.now();
   const outcome = await provider.propose(seedMeta);
+  // Captured HERE, not inside the closure: on the ok path the log fires after
+  // grounding (external catalog HTTP) + ownership + moderation, and folding
+  // that time in would make the p50/p95 tiles blame the provider for slow
+  // grounding.
+  const proposeLatencyMs = Date.now() - proposeStart;
+  // Torre de Control telemetry: exactly one row per provider call, stamped at
+  // the branch where the LLM-stage verdict is known (a grounding miss is still
+  // an LLM "ok" — that health signal lives on the usage meter as spent_no_match).
+  const logPropose = (result: LlmCallOutcome) =>
+    logLlmCall({
+      kind: "propose",
+      provider: provider.id,
+      model: provider.model,
+      promptVersion: CURRENT_PROMPT_VERSION,
+      latencyMs: proposeLatencyMs,
+      usage: outcome.usage,
+      outcome: result,
+    });
   // 4) A transient failure (429/network) or unusable output → `failed`, and the
   //    step-2 charge is refunded: net-zero on the meter, distinct from the
-  //    `empty` cases (no reco to show).
+  //    `empty` cases (no reco to show). Telemetry and meter writes are
+  //    independent rows — run them in parallel (the user is already waiting).
   if (!outcome.ok) {
-    await refundGeneration(userId);
+    await Promise.all([logPropose("transient"), refundGeneration(userId)]);
     return { status: "failed" };
   }
   const proposal = outcome.proposal;
@@ -208,7 +232,7 @@ export async function getCrossMediaReco(
   //    the UI tell the user and offer a re-roll that may ground.
   const grounded = await groundProposal(proposal);
   if (!grounded) {
-    await recordSpentNoMatch(userId);
+    await Promise.all([logPropose("ok"), recordSpentNoMatch(userId)]);
     return { status: "spent_no_match" };
   }
 
@@ -218,7 +242,7 @@ export async function getCrossMediaReco(
   //     per-seed cache would permanently pin an already-owned pairing for this
   //     user; a re-roll with the exclusion list can still find another link.
   if (await userOwnsItem(userId, grounded.id)) {
-    await recordSpentNoMatch(userId);
+    await Promise.all([logPropose("ok"), recordSpentNoMatch(userId)]);
     return { status: "spent_no_match" };
   }
 
@@ -249,9 +273,13 @@ export async function getCrossMediaReco(
       "[crossmedia] narrative rejected by moderation:",
       moderation.reason,
     );
-    await refundGeneration(userId);
+    await Promise.all([
+      logPropose("moderation_rejected"),
+      refundGeneration(userId),
+    ]);
     return { status: "failed" };
   }
+  await logPropose("ok");
 
   // 6) Persist the thematic reco. Bare onConflictDoNothing (any constraint):
   //    a concurrent request may have won either the thematic-singleton partial
@@ -314,6 +342,7 @@ async function graphPathReco(
   const linkClaim = buildLinkClaim(linkType, videoTitle, albumTitle, creatorName);
 
   const provider = crossMediaProvider();
+  const narrateStart = Date.now();
   const outcome = await provider.narrate(
     {
       title: seed.title,
@@ -330,8 +359,21 @@ async function graphPathReco(
     },
     { linkType, linkClaim, creatorName },
   );
+  // Captured at resolution time — see the logPropose latency note above.
+  const narrateLatencyMs = Date.now() - narrateStart;
+  // Torre de Control telemetry — narrate-path sibling of logPropose above.
+  const logNarrate = (result: LlmCallOutcome) =>
+    logLlmCall({
+      kind: "narrate",
+      provider: provider.id,
+      model: provider.model,
+      promptVersion: NARRATE_PROMPT_VERSION,
+      latencyMs: narrateLatencyMs,
+      usage: outcome.usage,
+      outcome: result,
+    });
   if (!outcome.ok) {
-    await refundGeneration(userId);
+    await Promise.all([logNarrate("transient"), refundGeneration(userId)]);
     return { status: "failed" };
   }
 
@@ -351,9 +393,13 @@ async function graphPathReco(
       "[crossmedia] narrative rejected by moderation:",
       moderation.reason,
     );
-    await refundGeneration(userId);
+    await Promise.all([
+      logNarrate("moderation_rejected"),
+      refundGeneration(userId),
+    ]);
     return { status: "failed" };
   }
+  await logNarrate("ok");
 
   const [row] = await db
     .insert(crossMediaRecs)
@@ -649,9 +695,12 @@ async function recordSpentNoMatch(userId: string): Promise<void> {
  * also warms the shared cache), picking the first result of the target media
  * type. Tries a byline-biased query first (tighter match), then the bare title
  * (iTunes/TMDB are strict about extra tokens — commas + artist names can zero
- * out an otherwise-real album). Returns null when nothing resolves — the reco
- * is then dropped (the hallucination guard: prose can be the LLM's, the item
- * must be real).
+ * out an otherwise-real album). Video targets skip making-of/behind-the-scenes
+ * featurettes (isNonPrimaryVideoTitle): TMDB lists them as "movie", but they're
+ * junk recos with no streaming providers — better a spent_no_match the UI
+ * surfaces than a dead-end pairing. Returns null when nothing resolves — the
+ * reco is then dropped (the hallucination guard: prose can be the LLM's, the
+ * item must be real).
  */
 async function groundProposal(
   proposal: CrossMediaProposal,
@@ -661,6 +710,7 @@ async function groundProposal(
     proposal.targetTitle,
   ].filter((q, i, a) => q && a.indexOf(q) === i);
 
+  const wantsVideo = proposal.targetMediaType !== "album";
   for (const query of queries) {
     let results;
     try {
@@ -669,7 +719,11 @@ async function groundProposal(
       console.error("[crossmedia] grounding search failed:", err);
       continue;
     }
-    const match = results.find((r) => r.mediaType === proposal.targetMediaType);
+    const match = results.find(
+      (r) =>
+        r.mediaType === proposal.targetMediaType &&
+        !(wantsVideo && isNonPrimaryVideoTitle(r.title)),
+    );
     if (!match) continue;
 
     const [row] = await db

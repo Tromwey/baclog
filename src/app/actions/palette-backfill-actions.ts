@@ -17,10 +17,12 @@ import { paletteHexSchema } from "@/modules/backlog/palette";
  * client-side, one item at a time, and persists each result here.
  *
  * Palette is per-TITLE (cover-derived) and lives on the shared catalog cache, so
- * targets are catalog_item rows (one per title), not per-copy. Founder-gated,
- * NOT ownership-scoped — a SECOND deliberate exception to the app-layer
- * ownership rule alongside getPublicProfile (AGENTS.md's authz section names
- * both). Writes only catalog_item.paletteHex (shared cache, cosmetic).
+ * targets are catalog_item rows (one per title), not per-copy. ADMIN-gated
+ * (users.isAdmin — the operator role, NOT the isFounder badge that the whole
+ * first-100 cohort carries), NOT ownership-scoped — a deliberate exception to
+ * the app-layer ownership rule alongside getPublicProfile (AGENTS.md's authz
+ * section names them). Writes only catalog_item.paletteHex (shared cache,
+ * cosmetic).
  */
 export interface PaletteBackfillTarget {
   catalogItemId: string;
@@ -31,7 +33,7 @@ export async function getPaletteBackfillTargetsAction(): Promise<
   PaletteBackfillTarget[] | { error: "forbidden" }
 > {
   const user = await requireUser();
-  if (!user.isFounder) return { error: "forbidden" };
+  if (!user.isAdmin) return { error: "forbidden" };
 
   const rows = await db
     .select({
@@ -53,7 +55,7 @@ export async function updateItemPaletteAction(
   paletteHex: string[],
 ): Promise<{ ok: true } | { error: "forbidden" | "invalid" | "not_found" }> {
   const user = await requireUser();
-  if (!user.isFounder) return { error: "forbidden" };
+  if (!user.isAdmin) return { error: "forbidden" };
 
   const parsed = paletteHexSchema.safeParse(paletteHex);
   if (!parsed.success) return { error: "invalid" as const };

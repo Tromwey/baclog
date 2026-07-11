@@ -91,21 +91,35 @@ export interface CrossMediaProposal {
 }
 
 /**
+ * Token usage reported by the provider API for one call (Torre de Control
+ * telemetry — real cost = tokens × price, not generations × guess). Null when
+ * the API errored before reporting usage. inputTokens folds cache
+ * creation/read tokens in (priced at the base input rate — a deliberate
+ * upper-bound simplification; see admin/costs.ts).
+ */
+export interface LlmUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+/**
  * A provider outcome. Either a PROPOSAL to ground, or a TRANSIENT failure —
  * provider 429/network/timeout, or unusable/malformed output. The caller must
  * treat `{ ok: false }` as "try again", NOT as "no connection found", and it
  * must NOT charge the meter for it (see crossmedia.ts). A provider never
  * signals a "legitimate empty": whether a proposal yields a real, addable reco
- * is decided downstream by GROUNDING, not here.
+ * is decided downstream by GROUNDING, not here. `usage` rides along whenever
+ * the API got far enough to report it (an unusable-output failure still
+ * billed tokens).
  */
 export type ProposalOutcome =
-  | { ok: true; proposal: CrossMediaProposal }
-  | { ok: false; error: "transient" };
+  | { ok: true; proposal: CrossMediaProposal; usage?: LlmUsage }
+  | { ok: false; error: "transient"; usage?: LlmUsage };
 
 /** F3.5.8 narrate outcome — prose only; the pairing was decided upstream. */
 export type NarrateOutcome =
-  | { ok: true; narrative: CrossMediaProposal["narrative"] }
-  | { ok: false; error: "transient" };
+  | { ok: true; narrative: CrossMediaProposal["narrative"]; usage?: LlmUsage }
+  | { ok: false; error: "transient"; usage?: LlmUsage };
 
 /**
  * The prompt "generation" every freshly-cached reco is stamped with
@@ -235,6 +249,9 @@ const FIXTURE_FALLBACK: CrossMediaProposal = {
   },
 };
 
+/** Fixture calls are free — zero tokens keeps admin cost math honest. */
+const FIXTURE_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
+
 class FixtureProvider implements CrossMediaRecProvider {
   readonly id = "fixture" as const;
   readonly model = "fixture";
@@ -248,7 +265,11 @@ class FixtureProvider implements CrossMediaRecProvider {
     const hit = FIXTURE_PAIRINGS.find(
       (p) => p.match(seed) && !excluded.has(p.proposal.targetTitle.toLowerCase()),
     );
-    return { ok: true, proposal: hit ? hit.proposal : FIXTURE_FALLBACK };
+    return {
+      ok: true,
+      proposal: hit ? hit.proposal : FIXTURE_FALLBACK,
+      usage: FIXTURE_USAGE,
+    };
   }
 
   async narrate(
@@ -267,6 +288,7 @@ class FixtureProvider implements CrossMediaRecProvider {
         resultEyebrow: "y dimos con tu próxima obsesión",
         closer: "Conexión verificada — dale una vuelta.",
       },
+      usage: FIXTURE_USAGE,
     };
   }
 }
@@ -512,6 +534,23 @@ function finalizeProposal(
   };
 }
 
+/**
+ * Anthropic usage → LlmUsage. Cache write/read tokens fold into inputTokens
+ * (priced at the base input rate downstream — a deliberate upper bound; cache
+ * reads are actually ~10× cheaper, but the error is pennies at this volume
+ * and it keeps one price per model in admin/costs.ts).
+ */
+function anthropicUsage(message: Anthropic.Message): LlmUsage {
+  const u = message.usage;
+  return {
+    inputTokens:
+      u.input_tokens +
+      (u.cache_creation_input_tokens ?? 0) +
+      (u.cache_read_input_tokens ?? 0),
+    outputTokens: u.output_tokens,
+  };
+}
+
 class LlmProvider implements CrossMediaRecProvider {
   readonly id = "anthropic" as const;
   readonly model = LLM_MODEL;
@@ -551,10 +590,15 @@ class LlmProvider implements CrossMediaRecProvider {
 
     // No forced tool_use block, or output that can't be finalized, is a
     // transient/unusable result — retryable, never a "no connection" verdict.
+    // Usage rides along either way: an unusable output still billed tokens.
+    const usage = anthropicUsage(message);
     const block = message.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return { ok: false, error: "transient" };
+    if (!block || block.type !== "tool_use")
+      return { ok: false, error: "transient", usage };
     const proposal = finalizeProposal(seed, block.input as Record<string, unknown>);
-    return proposal ? { ok: true, proposal } : { ok: false, error: "transient" };
+    return proposal
+      ? { ok: true, proposal, usage }
+      : { ok: false, error: "transient", usage };
   }
 
   async narrate(
@@ -585,10 +629,14 @@ class LlmProvider implements CrossMediaRecProvider {
       console.error("[crossmedia] Anthropic narrate failed:", err);
       return { ok: false, error: "transient" };
     }
+    const usage = anthropicUsage(message);
     const block = message.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return { ok: false, error: "transient" };
+    if (!block || block.type !== "tool_use")
+      return { ok: false, error: "transient", usage };
     const narrative = finalizeNarrative(block.input as Record<string, unknown>);
-    return narrative ? { ok: true, narrative } : { ok: false, error: "transient" };
+    return narrative
+      ? { ok: true, narrative, usage }
+      : { ok: false, error: "transient", usage };
   }
 }
 
@@ -649,6 +697,20 @@ const GEMINI_NARRATE_SCHEMA: Schema = {
   },
 };
 
+/** Gemini usageMetadata → LlmUsage (thinking tokens are output-side billing). */
+function geminiUsage(meta?: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+}): LlmUsage {
+  if (!meta) return { inputTokens: null, outputTokens: null };
+  return {
+    inputTokens: meta.promptTokenCount ?? null,
+    outputTokens:
+      (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
+  };
+}
+
 class GeminiProvider implements CrossMediaRecProvider {
   readonly id = "gemini" as const;
   readonly model = GEMINI_MODEL;
@@ -664,6 +726,7 @@ class GeminiProvider implements CrossMediaRecProvider {
     link: CrossMediaLinkContext,
   ): Promise<NarrateOutcome> {
     let text: string | undefined;
+    let usage: LlmUsage = { inputTokens: null, outputTokens: null };
     try {
       const res = await this.client.models.generateContent({
         model: GEMINI_MODEL,
@@ -677,19 +740,22 @@ class GeminiProvider implements CrossMediaRecProvider {
         },
       });
       text = res.text;
+      usage = geminiUsage(res.usageMetadata);
     } catch (err) {
       console.error("[crossmedia] Gemini narrate failed:", err);
-      return { ok: false, error: "transient" };
+      return { ok: false, error: "transient", usage };
     }
-    if (!text) return { ok: false, error: "transient" };
+    if (!text) return { ok: false, error: "transient", usage };
     let raw: Record<string, unknown>;
     try {
       raw = JSON.parse(text) as Record<string, unknown>;
     } catch {
-      return { ok: false, error: "transient" };
+      return { ok: false, error: "transient", usage };
     }
     const narrative = finalizeNarrative(raw);
-    return narrative ? { ok: true, narrative } : { ok: false, error: "transient" };
+    return narrative
+      ? { ok: true, narrative, usage }
+      : { ok: false, error: "transient", usage };
   }
 
   async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
@@ -699,6 +765,7 @@ class GeminiProvider implements CrossMediaRecProvider {
     // Every failure below (429/network, empty, non-JSON, unusable) is transient
     // and retryable — none of them is a legitimate "no connection".
     let text: string | undefined;
+    let usage: LlmUsage = { inputTokens: null, outputTokens: null };
     try {
       const res = await this.client.models.generateContent({
         model: GEMINI_MODEL,
@@ -712,21 +779,24 @@ class GeminiProvider implements CrossMediaRecProvider {
         },
       });
       text = res.text;
+      usage = geminiUsage(res.usageMetadata);
     } catch (err) {
       console.error("[crossmedia] Gemini provider failed:", err);
-      return { ok: false, error: "transient" };
+      return { ok: false, error: "transient", usage };
     }
-    if (!text) return { ok: false, error: "transient" };
+    if (!text) return { ok: false, error: "transient", usage };
 
     let raw: Record<string, unknown>;
     try {
       raw = JSON.parse(text) as Record<string, unknown>;
     } catch {
       console.error("[crossmedia] Gemini returned non-JSON output");
-      return { ok: false, error: "transient" };
+      return { ok: false, error: "transient", usage };
     }
     const proposal = finalizeProposal(seed, raw);
-    return proposal ? { ok: true, proposal } : { ok: false, error: "transient" };
+    return proposal
+      ? { ok: true, proposal, usage }
+      : { ok: false, error: "transient", usage };
   }
 }
 
