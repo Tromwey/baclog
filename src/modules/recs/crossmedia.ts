@@ -24,6 +24,7 @@ import {
   type CrossMediaLinkType,
   type RankedTarget,
 } from "./linkgraph";
+import { screenNarrative } from "./moderation";
 
 /**
  * F3.5.5 — the public cross-media reco engine (Baclog's moat surface).
@@ -221,6 +222,37 @@ export async function getCrossMediaReco(
     return { status: "spent_no_match" };
   }
 
+  // 5c) MODERATION (deterministic, local — see moderation.ts): the row about
+  //     to be inserted is a SHARED PERMANENT cache entry served verbatim to
+  //     every user, forever. Screen every LLM-authored field — the narrative
+  //     plus targetTitle/targetByline/linkClaim (all model output on this
+  //     path) — before anything persists. A rejection is treated like a
+  //     transient failure: refunded (the user never pays for OUR rejection)
+  //     and retryable, with NOTHING written.
+  //     Two calls so the total-length cap stays scoped to the narrative
+  //     (moderation.ts sizes it for the card copy, not the metadata fields).
+  const narrativeVerdict = screenNarrative([
+    proposal.narrative.hookEyebrow,
+    proposal.narrative.hookTitle,
+    proposal.narrative.resultEyebrow,
+    proposal.narrative.closer,
+  ]);
+  const moderation = narrativeVerdict.ok
+    ? screenNarrative([
+        proposal.targetTitle,
+        proposal.targetByline ?? "",
+        proposal.linkClaim ?? "",
+      ])
+    : narrativeVerdict;
+  if (!moderation.ok) {
+    console.error(
+      "[crossmedia] narrative rejected by moderation:",
+      moderation.reason,
+    );
+    await refundGeneration(userId);
+    return { status: "failed" };
+  }
+
   // 6) Persist the thematic reco. Bare onConflictDoNothing (any constraint):
   //    a concurrent request may have won either the thematic-singleton partial
   //    index or the (seed, target) pair unique — both resolve to "re-read".
@@ -299,6 +331,26 @@ async function graphPathReco(
     { linkType, linkClaim, creatorName },
   );
   if (!outcome.ok) {
+    await refundGeneration(userId);
+    return { status: "failed" };
+  }
+
+  // MODERATION (deterministic, local — see moderation.ts): this row is a
+  // SHARED PERMANENT cache entry served verbatim to every user, forever.
+  // Screen the LLM-authored narrative before it persists (linkClaim is our
+  // own deterministic string on this path — not screened). A rejection is
+  // treated like a transient failure: refunded and retryable, NOTHING written.
+  const moderation = screenNarrative([
+    outcome.narrative.hookEyebrow,
+    outcome.narrative.hookTitle,
+    outcome.narrative.resultEyebrow,
+    outcome.narrative.closer,
+  ]);
+  if (!moderation.ok) {
+    console.error(
+      "[crossmedia] narrative rejected by moderation:",
+      moderation.reason,
+    );
     await refundGeneration(userId);
     return { status: "failed" };
   }
