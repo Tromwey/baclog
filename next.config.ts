@@ -14,6 +14,32 @@ const nextConfig: NextConfig = {
       static: 180,
     },
   },
+  /**
+   * Clean public URLs: baclog.app/{username}, /{username}/item/{id} and
+   * /{username}/{backlogId} — the pretty form the exported cards' watermark and
+   * Web Share text point at — proxied onto the /u/... routes the pages actually
+   * live at. These live in `fallback`, which Next checks AFTER every real route
+   * and static asset (rewrites.md: step 8): /login, /backlogs, /item/{id}, etc.
+   * all resolve normally, and ONLY a path that matches nothing (i.e. a bare
+   * username) falls through here. That's why the rewrite needs no reserved-route
+   * allowlist — the one guard is claimUsernameAction's RESERVED set, which stops
+   * a handle from shadowing a real top-level route.
+   */
+  async rewrites() {
+    return {
+      fallback: [
+        {
+          source: "/:username/item/:catalogItemId",
+          destination: "/u/:username/item/:catalogItemId",
+        },
+        {
+          source: "/:username/:backlogId",
+          destination: "/u/:username/:backlogId",
+        },
+        { source: "/:username", destination: "/u/:username" },
+      ],
+    };
+  },
 };
 
 export default nextConfig;

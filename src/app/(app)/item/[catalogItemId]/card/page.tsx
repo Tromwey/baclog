@@ -40,7 +40,7 @@ export default async function ItemCardPage({
       subtitle="tu ticket de admisión"
       publicUrl={
         user.username && user.isPublic
-          ? `https://baclog.app/${user.username}`
+          ? `https://baclog.app/${user.username}/item/${catalogItemId}`
           : null
       }
     />

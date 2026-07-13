@@ -40,7 +40,7 @@ export default async function CardPage({
       subtitle="tu backlog, como recibo"
       publicUrl={
         user.username && user.isPublic
-          ? `https://baclog.app/${user.username}`
+          ? `https://baclog.app/${user.username}/${backlog.id}`
           : null
       }
     />

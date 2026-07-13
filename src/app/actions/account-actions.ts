@@ -88,10 +88,13 @@ export async function updateDisplayNameAction(name: string) {
 }
 
 const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
+// Handles that would shadow a real top-level route once clean public URLs
+// (next.config.ts fallback rewrites) resolve baclog.app/{username}. Keep in
+// sync with the app's top-level routes.
 const RESERVED = new Set([
   "admin", "api", "app", "baclog", "backlogs", "blocked", "descubrir", "item",
-  "login", "onboarding", "perfil", "prototype", "search", "settings", "u",
-  "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
+  "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
+  "u", "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
 ]);
 
 /** F2.17 — claiming implies opting in to a public page (toggleable). */
