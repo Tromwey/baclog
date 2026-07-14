@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { tmdbAuth } from "@/modules/catalog/tmdb";
 
 /**
  * TMDB watch/providers (JustWatch data): regional availability. TMDB does
@@ -18,12 +19,7 @@ export async function getWatchLink(
   const url = new URL(
     `https://api.themoviedb.org/3/${kind}/${tmdbId}/watch/providers`,
   );
-  const headers: HeadersInit = {};
-  if (env.TMDB_API_KEY.startsWith("eyJ")) {
-    headers.Authorization = `Bearer ${env.TMDB_API_KEY}`;
-  } else {
-    url.searchParams.set("api_key", env.TMDB_API_KEY);
-  }
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
 
   const res = await fetch(url, { headers, next: { revalidate: 0 } });
   if (!res.ok) return null;

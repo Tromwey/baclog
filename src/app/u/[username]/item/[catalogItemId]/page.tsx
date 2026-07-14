@@ -8,9 +8,18 @@ import {
   getPublicProfile,
 } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
-import { AuraField, Button, MonoMeta, PUBLIC_ITEM_AURA } from "@/components/ui";
+import { Button, MonoMeta } from "@/components/ui";
+import { ItemHeroAura } from "@/components/item-hero-aura";
+import { Tracklist } from "@/components/tracklist";
+import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import { getSpanishOverview } from "@/modules/catalog/tmdb";
+import { auraSeed } from "@/lib/color";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
+
+/** Genre casing differs by source (TMDB "Drama", iTunes lowercased) — normalize
+ * the first letter for the meta line. */
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export async function generateMetadata({
   params,
@@ -20,9 +29,15 @@ export async function generateMetadata({
   const { catalogItemId } = await params;
   const item = await getPublicCatalogItem(catalogItemId);
   if (!item) return {};
+  // Spanish SEO description when available (cache-shared with the page body's
+  // call), English stored synopsis otherwise.
+  const esOverview =
+    item.source === "tmdb" && item.mediaType !== "album"
+      ? await getSpanishOverview(item.externalId, item.mediaType)
+      : null;
   return {
     title: `${item.title} · Baclog`,
-    description: item.synopsis ?? `${item.title} en Baclog`,
+    description: (esOverview ?? item.synopsis) ?? `${item.title} en Baclog`,
     openGraph: {
       title: item.title,
       description: [item.byline, item.year].filter(Boolean).join(" · "),
@@ -48,6 +63,10 @@ export default async function PublicItemPage({
   ]);
   if (!profile || !item) notFound();
 
+  // Album tracklist OR film/series Spanish synopsis (English fallback), derived
+  // from the source provider and cached — shared with the in-app item page.
+  const { tracks, synopsis } = await getItemDisplayMedia(item);
+
   captureView({
     eventType: "public_item_view",
     targetUsername: username,
@@ -59,14 +78,17 @@ export default async function PublicItemPage({
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      {/* Shared catalog page — no user palette to aura from, so the fixed
-          signature gradient (PUBLIC_ITEM_AURA) via the unified primitive. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[260px]"
-      >
-        <AuraField layers={[PUBLIC_ITEM_AURA]} />
-      </div>
+      {/* Content-driven ADN aura from the shared cover palette — same hero the
+          in-app /item page uses (paletteHex is cover-derived + public-safe, and
+          extracts on-device when it hasn't been backfilled yet). Deliberately
+          NO catalogItemId: this page is anonymous, so it stays display-only —
+          the shared row is filled by signed-in views + the admin backfill, not
+          by an unauthenticated write from this viral surface. */}
+      <ItemHeroAura
+        paletteHex={item.paletteHex}
+        posterUrl={item.posterUrl}
+        seed={auraSeed(item.id)}
+      />
 
       <main className="relative px-5 pb-32 pt-8">
         <Link
@@ -98,10 +120,22 @@ export default async function PublicItemPage({
               {item.title}
             </h1>
             <MonoMeta className="mt-2 block normal-case tracking-normal text-text-2">
-              {[item.byline, item.year].filter(Boolean).join(" · ")}
+              {[item.byline, item.year, item.genre && cap(item.genre)]
+                .filter(Boolean)
+                .join(" · ")}
             </MonoMeta>
           </div>
         </div>
+
+        {/* Films/series carry a TMDB synopsis; albums show their tracklist
+            below instead (iTunes has no album description — see M4/M5 note on
+            editorialNotes). Shown in-app under identification use + attribution,
+            never on an export card (ADR-008). */}
+        {synopsis && (
+          <p className="bl-rise mt-5 text-sm leading-[1.55] text-text-2">
+            {synopsis}
+          </p>
+        )}
 
         <div className="mt-7 space-y-2.5">
           {item.mediaType === "album" ? (
@@ -131,6 +165,8 @@ export default async function PublicItemPage({
             </Button>
           )}
         </div>
+
+        <Tracklist tracks={tracks} />
 
         <p className="mt-8 text-center">
           <MonoMeta className="text-[10px] text-text-3">

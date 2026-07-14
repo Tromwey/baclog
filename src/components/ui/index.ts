@@ -11,7 +11,6 @@ export {
   LENS_AURAS,
   ONBOARDING_AURA,
   EMPTY_SHELF_AURA,
-  PUBLIC_ITEM_AURA,
   type LensAuraKey,
 } from "./aura-presets";
 export { AuthAuraBackdrop, AUTH_ADN } from "./auth-aura-backdrop";

@@ -53,6 +53,9 @@ export const LENS_AURAS: Record<LensAuraKey, FixedAuraLayer> = {
 /** First-use screen (mock #p8): muted fixed-color aura — there's no content
  * ADN to drive one yet, and an AuraField palette fallback would aura lima,
  * which is exactly what the mock avoids here. */
+// NOTE: the public item page (u/[username]/item/[id]) no longer uses a fixed
+// preset — it auras from the cover-derived catalog palette via <ItemHeroAura>,
+// identical to the in-app /item hero (the paletteHex is public-safe).
 export const ONBOARDING_AURA: FixedAuraLayer = {
   background:
     "radial-gradient(46% 58% at 20% 8%, #C7462F 0%, rgba(199,70,47,0) 58%), radial-gradient(46% 58% at 82% 12%, #3A5A9B 0%, rgba(58,90,155,0) 58%), radial-gradient(50% 60% at 55% 40%, #9B4DCA 0%, rgba(155,77,202,0) 60%)",
@@ -72,14 +75,3 @@ export const EMPTY_SHELF_AURA: FixedAuraLayer = {
   duration: "12s",
 };
 
-/** Public item page (u/[username]/item/[id]): it has no user palette
- * to aura from, so it keeps the old static signature gradient (--grad-aura's
- * red) as a fixed layer with a slow breathe — same look, unified primitive. */
-export const PUBLIC_ITEM_AURA: FixedAuraLayer = {
-  background:
-    "radial-gradient(120% 120% at 20% 0%, #FF2D55 0%, #7A1B4A 40%, #0B0B0D 78%)",
-  opacity: 0.9,
-  animation: "breathe",
-  duration: "14s",
-  inset: "0",
-};

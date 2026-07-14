@@ -16,6 +16,18 @@ const GENRES: Record<number, string> = {
   10767: "talk", 10768: "war",
 };
 
+/**
+ * TMDB auth for a request: v4 read tokens are JWTs (start with "eyJ") and go in
+ * the Authorization header; v3 keys go in the query. Mutates `url` (adds the v3
+ * param) and returns the headers. One place so the three TMDB call sites
+ * (TmdbApi.get, getSpanishOverview, links/providers.getWatchLink) can't drift.
+ */
+export function tmdbAuth(url: URL, apiKey: string): HeadersInit {
+  if (apiKey.startsWith("eyJ")) return { Authorization: `Bearer ${apiKey}` };
+  url.searchParams.set("api_key", apiKey);
+  return {};
+}
+
 interface TmdbResult {
   id: number;
   title?: string;
@@ -34,13 +46,7 @@ class TmdbApi implements VideoCatalog {
   private async get(path: string, params: Record<string, string>) {
     const url = new URL(`https://api.themoviedb.org/3${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    const headers: HeadersInit = {};
-    // v4 read tokens are JWTs (start with "eyJ"); v3 keys go in the query
-    if (this.apiKey.startsWith("eyJ")) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
-    } else {
-      url.searchParams.set("api_key", this.apiKey);
-    }
+    const headers = tmdbAuth(url, this.apiKey);
     const res = await fetch(url, { headers, next: { revalidate: 0 } });
     if (!res.ok) throw new Error(`TMDB ${path}: ${res.status}`);
     return res.json();
@@ -108,6 +114,50 @@ function yearOf(date?: string): number | null {
   if (!date) return null;
   const y = Number(date.slice(0, 4));
   return Number.isFinite(y) && y > 1800 ? y : null;
+}
+
+/**
+ * Spanish overview for a title, fetched at item-view time (cached 30d). The
+ * catalog is stored in English (search runs `en-US`; changing that would also
+ * localize TITLES, which the link graph matches soundtracks against — so we
+ * localize ONLY the synopsis, here, without touching stored rows). Returns null
+ * when TMDB has no Spanish translation (much of the long tail) so the caller
+ * falls back to the stored English `synopsis`. Uses /translations to catch both
+ * es-MX and es-ES in one call. Text metadata (not artwork) → server-side fetch
+ * is fine (ADR-007's proxy rule is images only).
+ */
+export async function getSpanishOverview(
+  tmdbId: string,
+  mediaType: "film" | "series",
+): Promise<string | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const kind = mediaType === "film" ? "movie" : "tv";
+  const url = new URL(
+    `https://api.themoviedb.org/3/${kind}/${tmdbId}/translations`,
+  );
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
+  try {
+    const res = await fetch(url, {
+      headers,
+      next: { revalidate: 60 * 60 * 24 * 30 },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const es = ((data.translations ?? []) as Array<{
+      iso_639_1?: string;
+      iso_3166_1?: string;
+      data?: { overview?: string };
+    }>).filter((t) => t.iso_639_1 === "es" && t.data?.overview?.trim());
+    if (es.length === 0) return null;
+    // Prefer Mexican Spanish, then Spain, then any es variant.
+    const pick =
+      es.find((t) => t.iso_3166_1 === "MX") ??
+      es.find((t) => t.iso_3166_1 === "ES") ??
+      es[0];
+    return pick.data?.overview?.trim() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 class TmdbFixtures implements VideoCatalog {

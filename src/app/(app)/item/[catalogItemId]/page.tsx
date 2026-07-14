@@ -7,11 +7,13 @@ import {
   getUserCatalogEntry,
 } from "@/modules/backlog/queries";
 import { getCatalogItem } from "@/modules/catalog/cache";
+import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { AddToBacklog } from "./add-to-backlog";
 import { Attribution } from "./attribution";
 import { CloseChip } from "./close-chip";
 import { HideDock } from "./hide-dock";
-import { ItemHeroAura } from "./item-hero-aura";
+import { ItemHeroAura } from "@/components/item-hero-aura";
+import { Tracklist } from "@/components/tracklist";
 import { ItemMoreMenu } from "./item-more-menu";
 import { ObsessionGesture } from "./obsession-gesture";
 import { ProgressGesture } from "./progress-gesture";
@@ -49,6 +51,10 @@ export default async function ItemPage({
   ]);
   if (!item) notFound();
 
+  // Album tracklist OR film/series Spanish synopsis (English fallback), derived
+  // from the source provider and cached — shared with the public item page.
+  const { tracks, synopsis } = await getItemDisplayMedia(item);
+
   // AI provenance narrative — rides along on getUserCatalogEntry's LEFT JOIN
   // (rec* fields, null on non-AI entries) so it costs no extra round-trip.
   // recCloser stays nullable inside a present narrative; the rest are NOT NULL
@@ -74,7 +80,7 @@ export default async function ItemPage({
       : null;
 
   // Mock #p3's meta line carries no stats (HANDOFF §0 — no ratings UI).
-  const meta = [TYPE_LABEL[item.mediaType], item.byline, item.year]
+  const meta = [TYPE_LABEL[item.mediaType], item.byline, item.year, item.genre]
     .filter(Boolean)
     .join(" · ");
 
@@ -111,6 +117,7 @@ export default async function ItemPage({
           paletteHex={entry?.paletteHex ?? null}
           posterUrl={item.posterUrl}
           seed={auraSeed(item.id)}
+          catalogItemId={item.id}
         />
 
         {/* top bar: ✕ close + (share · ⋯) — the right chips need a logged entry to act on */}
@@ -186,12 +193,18 @@ export default async function ItemPage({
           <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
             {meta}
           </p>
-          {item.synopsis && (
+          {synopsis && (
             <p className="mx-auto mt-3.5 max-w-[34ch] text-sm leading-[1.5] text-text-2">
-              {item.synopsis}
+              {synopsis}
             </p>
           )}
         </div>
+
+        {tracks.length > 0 && (
+          <div className="relative px-5">
+            <Tracklist tracks={tracks} />
+          </div>
+        )}
 
         {/* the one prominent reaction (HANDOFF §2) */}
         {entry && (
