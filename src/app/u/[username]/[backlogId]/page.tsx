@@ -2,33 +2,18 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Music, Play } from "lucide-react";
+import { Music, Play } from "lucide-react";
 import { getPublicBacklog } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
-import { plural } from "@/lib/plural";
-import { AuraField, Button, MonoMeta } from "@/components/ui";
-import type { ChipTone } from "@/components/ui";
+import { parseHex } from "@/lib/color";
+import { BacklogHero } from "@/components/backlog-hero";
+import { ItemStatus } from "@/components/item-status";
+import { BackButton, Button, MonoMeta } from "@/components/ui";
+import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { shelfSeed } from "@/app/(app)/backlogs/backlog-shelf-card";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
-const STATUS_LABEL: Record<string, string> = {
-  on_my_radar: "On my radar",
-  in_progress: "In progress",
-  completed: "Completed",
-};
-const STATUS_TONE: Record<string, ChipTone> = {
-  on_my_radar: "radar",
-  in_progress: "progress",
-  completed: "completed",
-};
-const TONE_DOT: Record<ChipTone, string> = {
-  radar: "bg-radar",
-  progress: "bg-obsessing",
-  completed: "bg-completed",
-  obsessed: "bg-obsessing",
-  neutral: "bg-text-3",
-};
 export async function generateMetadata({
   params,
 }: {
@@ -66,98 +51,168 @@ export default async function PublicBacklogPage({
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      {/* The backlog's ADN aura (its items' palette, same seed as its in-app
-          shelf) blooming behind the hero — same treatment as u/[username]. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[400px]"
-      >
-        <AuraField
-          variant="ambient"
-          colors={data.palette}
-          seed={shelfSeed(backlogId)}
-          className="!opacity-[0.6]"
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, transparent 28%, rgba(11,11,13,0.5) 58%, #0B0B0D 86%)",
-          }}
-        />
-      </div>
+      {/* Shared hero (B disciplinada) — the SAME component the in-app zoom view
+          renders, so the two backlog-detail twins can't drift. The public
+          top-bar control is the ‹ @username link back to the owner's profile. */}
+      <BacklogHero
+        name={data.backlogName}
+        vibe={data.vibe}
+        itemCount={data.items.length}
+        year={data.createdAt.getFullYear()}
+        palette={data.palette}
+        seed={shelfSeed(backlogId)}
+        controls={<BackButton href={`/u/${username}`} />}
+      />
 
-      <main className="relative px-5 pb-32 pt-8">
-        <header className="bl-rise">
-          <Link
-            href={`/u/${username}`}
-            className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-[0.08em] text-text-2 transition-colors hover:text-text"
-          >
-            <ChevronLeft size={14} /> @{data.ownerUsername}
-          </Link>
-          <h1 className="mt-3 font-display text-3xl font-bold leading-[1.05] tracking-[-0.01em]">
-            {data.backlogName}
-          </h1>
-          <MonoMeta className="mt-2 block">
-            {data.items.length} {plural(data.items.length, "ítem", "ítems")}
-            {data.vibe ? ` · ${data.vibe}` : ""}
-          </MonoMeta>
-        </header>
-
-        <div className="mt-6 space-y-2">
-          {data.items.map((item) => {
-            const tone: ChipTone = STATUS_TONE[item.status] ?? "neutral";
-            const label = STATUS_LABEL[item.status];
-            // F3.7: obsession (public real-time) wins the caption; else a
-            // settled "me gusta" (the query only exposes a verdict once
-            // completed). "No me gusta" is never surfaced publicly.
-            const reactionLabel = item.obsessed
-              ? "Me obsesiona"
-              : item.verdict === "liked"
-                ? "Me gusta"
+      <main className="relative px-5 pb-32 pt-[18px]">
+        {data.items.length > 0 ? (
+          <div className="space-y-2">
+            {data.items.map((item) => {
+              // Per-item palette wash (left): the cover's dominant hue bleeds
+              // from the left edge and fades to the card fill by ~60%. parseHex
+              // → rgba (same technique as the item page's coverShadow), fading to
+              // the SAME colour at alpha 0 (never `transparent`) so there's no
+              // dark fringe (aura-field rule). Card stays borderless (§7).
+              const wash = item.paletteHex?.[0]
+                ? parseHex(item.paletteHex[0])
                 : null;
-            return (
-              <Link
-                key={item.id}
-                href={`/u/${username}/item/${item.catalogItemId}`}
-                className="flex items-center gap-3 rounded-[var(--r-md)] border border-line bg-surface-1 p-2.5 transition-colors hover:bg-surface-2"
-              >
-                {item.posterUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-                  <img
-                    src={item.posterUrl}
-                    alt=""
-                    className="h-16 w-12 shrink-0 rounded-[var(--r-sm)] object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-16 w-12 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-surface-3 text-text-3">
-                    {item.mediaType === "album" ? (
-                      <Music size={18} />
+              const leftWash = wash
+                ? `linear-gradient(90deg, rgba(${wash.r},${wash.g},${wash.b},0.34) 0%, rgba(${wash.r},${wash.g},${wash.b},0) 60%)`
+                : null;
+              const isAlbum = item.mediaType === "album";
+              return (
+                <Link
+                  key={item.id}
+                  // ?from carries the origin backlog so the item page's back
+                  // returns HERE, not to the profile. Deep-linked/shared item
+                  // URLs omit it and fall back to the profile.
+                  href={`/u/${username}/item/${item.catalogItemId}?from=${backlogId}`}
+                  className="relative flex items-center gap-3 overflow-hidden rounded-[var(--r-md)] bg-surface-1 p-2.5 transition-colors hover:bg-surface-2"
+                >
+                  {leftWash && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0"
+                      style={{ background: leftWash }}
+                    />
+                  )}
+                  {/* Obsession (B disciplinada): a CONTAINED radial hot aura
+                      pooling AROUND the flame at the right edge — the glyph is
+                      the ember throwing the light (§7: the aura is the only light
+                      source). A glow, not a full bloom, so it never fights the
+                      hero aura. */}
+                  {item.obsessed && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        background:
+                          "radial-gradient(circle at 100% 50%, rgba(255,45,85,0.34) 0%, rgba(255,45,85,0) 60%)",
+                      }}
+                    />
+                  )}
+                  {/* Native-aspect thumbnail — album 1:1, film/series 2:3 (never
+                      cross-crop) — centred in a fixed 56px slot so every title's
+                      text starts at the same x; the side gap for a tall poster
+                      shows the wash, not black. */}
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+                    {item.posterUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
+                      <img
+                        src={item.posterUrl}
+                        alt=""
+                        loading="lazy"
+                        className={`rounded-[var(--r-sm)] object-cover ${isAlbum ? "h-14 w-14" : "h-14 w-[37px]"}`}
+                      />
                     ) : (
-                      <Play size={18} />
+                      <div
+                        className={`flex items-center justify-center rounded-[var(--r-sm)] bg-surface-3 text-text-3 ${isAlbum ? "h-14 w-14" : "h-14 w-[37px]"}`}
+                      >
+                        {isAlbum ? <Music size={18} /> : <Play size={18} />}
+                      </div>
                     )}
                   </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-serif text-lg italic leading-tight text-text">
-                    {item.title}
-                  </p>
-                  <MonoMeta className="mt-0.5 block text-[10px] normal-case tracking-normal text-text-2">
-                    {[item.byline, item.year].filter(Boolean).join(" · ")}
-                  </MonoMeta>
-                  <span className="mt-1.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.06em] text-text-2">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`}
-                    />
-                    {label}
-                    {reactionLabel ? ` · ${reactionLabel}` : ""}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                  <div className="relative min-w-0 flex-1">
+                    <p className="truncate font-serif text-lg italic leading-tight text-text">
+                      {item.title}
+                    </p>
+                    <MonoMeta className="mt-0.5 block text-[10px] normal-case tracking-normal text-text-2">
+                      {[item.byline, item.year].filter(Boolean).join(" · ")}
+                    </MonoMeta>
+                    <span className="mt-1.5 block">
+                      {/* Public caption — status dot + Spanish label + public
+                          reaction. hideProvenance: the ✦ provenance glyph NEVER
+                          appears publicly (the atom owns that rule). */}
+                      <ItemStatus
+                        mode="caption"
+                        status={item.status}
+                        // The public query types verdict as sql<string | null>
+                        // (gated to completed items); narrow to the atom's union.
+                        verdict={
+                          item.verdict as "disliked" | "liked" | null
+                        }
+                        obsessed={item.obsessed}
+                        sourceCrossMediaRecId={null}
+                        hideProvenance
+                      />
+                    </span>
+                  </div>
+                  {/* Obsession signal: a prominent flame at the source of its
+                      own right-edge hot wash. No caption word (flame + wash
+                      carry it, like "en el radar" the label is redundant);
+                      off-white so it reads on the red wash — with no hot caption
+                      word left to be inconsistent with. */}
+                  {item.obsessed && (
+                    // Comfortable trailing inset (~16px total with the card's
+                    // p-2.5) so the lone flame doesn't look glued to the edge —
+                    // still edge-anchored to its own right-edge glow, not pulled
+                    // to the vertical centre (that would detach it from the wash).
+                    <span aria-hidden className="relative flex-none pr-1.5">
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox={GLYPH_VIEWBOX}
+                        fill="#F4F3EE"
+                        aria-hidden
+                      >
+                        <path d={FLAME_PATH} />
+                      </svg>
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          // Estante en blanco, read-only twin of backlog-zoom-view's empty
+          // state (mock #p7): the viewer isn't the owner, so no "Agregar
+          // algo" CTA — the fixed login button below already invites them to
+          // start their own. Dashed tile is a deliberate §7 exception.
+          <div className="mt-10 flex flex-col items-center text-center">
+            <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[22px] border-[1.5px] border-dashed border-[#33333C]">
+              <svg
+                width="30"
+                height="30"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M12 5v14M5 12h14"
+                  stroke="#4A4A54"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <p className="mt-[22px] font-serif text-[26px] italic leading-[1.2]">
+              Este backlog está vacío.
+            </p>
+            <p className="mt-3 max-w-[30ch] text-sm leading-[1.55] text-text-2">
+              Todavía no hay títulos aquí.
+            </p>
+          </div>
+        )}
 
         {/* This list page has no per-item watch button to attribute JustWatch
             next to — that note lives on each item's own page instead. General

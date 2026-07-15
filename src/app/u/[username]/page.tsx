@@ -92,8 +92,21 @@ export default async function PublicProfilePage({
         />
       </div>
 
-      <main className="relative px-5 pb-32 pt-[calc(20px+env(safe-area-inset-top))]">
-        {viewer && <BackButton className="mb-5" />}
+      {/* Top bar — same px-4 / pt-[24px+safe] as the backlog & item back chip so
+          the control sits in the SAME spot across every public screen. Only for
+          a signed-in viewer; anonymous visitors get no back (the profile is the
+          root of the public space). When present it owns the safe-area, so main
+          drops it (pt-5) to avoid double-counting the notch inset. */}
+      {viewer && (
+        <div className="relative flex px-4 pt-[calc(24px+env(safe-area-inset-top))]">
+          <BackButton />
+        </div>
+      )}
+      <main
+        className={`relative px-5 pb-32 ${
+          viewer ? "pt-5" : "pt-[calc(20px+env(safe-area-inset-top))]"
+        }`}
+      >
         <header className="bl-rise">
           <MonoMeta className="text-text-2">baclog.app/{profile.username}</MonoMeta>
           <h1 className="mt-2 font-display text-[40px] font-extrabold leading-none tracking-[-0.02em]">

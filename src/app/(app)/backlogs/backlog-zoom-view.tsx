@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { assertOwnsBacklog } from "@/authz";
-import { AuraField, EMPTY_SHELF_AURA } from "@/components/ui";
+import { BacklogHero } from "@/components/backlog-hero";
 import { ItemRowRemovable } from "@/components/item-row-removable";
 import { ThemeColorSync } from "@/components/theme-color-sync";
-import { plural } from "@/lib/plural";
 import { getBacklogItems } from "@/modules/backlog/queries";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
 import { dominantHexes } from "@/modules/backlog/palette";
@@ -54,66 +53,29 @@ export function BacklogZoomView({
       {/* In-browser Safari tints the status-bar band from theme-color — sync
           it to the aura's dominant hue so the hero doesn't cut off in black. */}
       <ThemeColorSync color={hasItems ? paletteHex[0] : null} />
-      {/* Hero light. Sin aura hasta el primer ítem (HANDOFF §5) — AuraField
-          would fall back to lima on empty colors, so it's not rendered at all;
-          an empty shelf gets the mock's faint neutral glow instead (#p7). */}
-      <div
-        className={`absolute inset-x-0 top-0 overflow-hidden ${hasItems ? "h-[330px]" : "h-[300px]"}`}
-      >
-        {hasItems ? (
-          <div className={`absolute inset-0 ${zoom ? "bl-zoom-aura" : ""}`}>
-            <AuraField
-              variant="ambient"
-              colors={paletteHex}
-              seed={shelfSeed(backlog.id)}
+
+      {/* Shared hero (B disciplinada) — identical to the public twin; the two
+          surfaces diverge only in the row density below + the top-bar controls
+          (private: back + ⋯ menu). `zoom` carries the intercepted-overlay bloom. */}
+      <BacklogHero
+        name={backlog.name}
+        vibe={backlog.vibe}
+        itemCount={items.length}
+        year={backlog.createdAt.getFullYear()}
+        palette={paletteHex}
+        seed={shelfSeed(backlog.id)}
+        zoom={zoom}
+        controls={
+          <>
+            <ZoomBackButton />
+            <BacklogMenu
+              backlogId={backlog.id}
+              currentName={backlog.name}
+              hasItems={hasItems}
             />
-          </div>
-        ) : (
-          <AuraField layers={[EMPTY_SHELF_AURA]} />
-        )}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: hasItems
-              ? "linear-gradient(180deg, rgba(11,11,13,0.15) 0%, rgba(11,11,13,0.1) 45%, #0B0B0D 96%)"
-              : "linear-gradient(180deg, rgba(11,11,13,0.18) 0%, rgba(11,11,13,0.12) 45%, #0B0B0D 96%)",
-          }}
-        />
-      </div>
-
-      {/* top bar */}
-      <div
-        className={`relative flex items-center justify-between px-4 pt-[calc(24px+env(safe-area-inset-top))] ${content}`}
-      >
-        <ZoomBackButton />
-        <BacklogMenu
-          backlogId={backlog.id}
-          currentName={backlog.name}
-          hasItems={hasItems}
-        />
-      </div>
-
-      {/* hero text */}
-      <div className={`relative px-5 pt-[22px] ${content}`}>
-        <h1
-          className={`font-display font-extrabold leading-none tracking-[-0.025em] [text-shadow:0_2px_20px_rgba(0,0,0,0.5)] ${hasItems ? "mt-[5px] text-[40px]" : "text-[38px]"}`}
-        >
-          {backlog.name}
-        </h1>
-        {backlog.vibe && (
-          <p className="mt-2 max-w-[22ch] font-serif text-lg italic leading-[1.15] [text-shadow:0_1px_12px_rgba(0,0,0,0.5)]">
-            {backlog.vibe}
-          </p>
-        )}
-        <p
-          className={`font-mono text-[10px] uppercase tracking-[0.1em] text-text-2 ${hasItems ? "mt-2" : "mt-2.5"}`}
-        >
-          {items.length} {plural(items.length, "ítem", "ítems")}
-          {hasItems
-            ? ` · ${backlog.createdAt.getFullYear()}`
-            : " · aún sin aura"}
-        </p>
-      </div>
+          </>
+        }
+      />
 
       {hasItems ? (
         <div className={`relative mt-[18px] ${content}`}>

@@ -2,12 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
 import { auraSeed, parseHex } from "@/lib/color";
+import { capitalize } from "@/lib/format";
 import {
   getBacklogNames,
   getUserCatalogEntry,
 } from "@/modules/backlog/queries";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { AddToBacklog } from "./add-to-backlog";
 import { CreditsLink, JustWatchNote } from "./attribution";
 import { CloseChip } from "./close-chip";
@@ -23,12 +25,6 @@ import {
   RecoFeedback,
   RecoReasoningPanel,
 } from "./reco-reasoning-panel";
-
-const TYPE_LABEL: Record<string, string> = {
-  film: "Película",
-  series: "Serie",
-  album: "Álbum",
-};
 
 /**
  * Item detail (item-flow Phase 2) — zoom-pushed view, no dock (HANDOFF §6):
@@ -80,7 +76,14 @@ export default async function ItemPage({
       : null;
 
   // Mock #p3's meta line carries no stats (HANDOFF §0 — no ratings UI).
-  const meta = [TYPE_LABEL[item.mediaType], item.byline, item.year, item.genre]
+  // Genre capitalized to match the public item page (audit fix — catalog
+  // genres are stored lowercased for both sources; capitalize() is display-only).
+  const meta = [
+    MEDIA_TYPE_TITLE[item.mediaType],
+    item.byline,
+    item.year,
+    item.genre && capitalize(item.genre),
+  ]
     .filter(Boolean)
     .join(" · ");
 

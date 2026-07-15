@@ -102,6 +102,9 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       backlogId: backlogs.id,
       backlogName: backlogs.name,
       vibe: backlogs.vibe,
+      // Creation year for the hero meta ("{N} ítems · {año}"). Public-safe: the
+      // backlog itself is already public; a year is not user-identifying.
+      createdAt: backlogs.createdAt,
       ownerName: users.name,
       ownerUsername: users.username,
     })

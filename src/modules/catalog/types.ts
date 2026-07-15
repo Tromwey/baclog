@@ -11,6 +11,17 @@ export const MEDIA_TYPE_LABEL: Record<MediaType, string> = {
   album: "ÁLBUM",
 };
 
+/** Same vocabulary, Title Case — for meta lines that render in mixed case
+ * (item hero, public item page) rather than the force-uppercase mono-meta
+ * badge voice above, so the type token doesn't shout inside an otherwise
+ * sentence-case "Película · A24 · 2024 · Drama" string. Shared so the two
+ * item-page twins can't drift (one had it, one omitted it — audit fix). */
+export const MEDIA_TYPE_TITLE: Record<MediaType, string> = {
+  film: "Película",
+  series: "Serie",
+  album: "Álbum",
+};
+
 /** Normalized result shape — the app never sees raw TMDB/iTunes payloads. */
 export interface ExternalItem {
   source: "tmdb" | "itunes";

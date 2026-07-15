@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { setStatusAction } from "@/app/actions/backlog-item-actions";
 import { useLongPress } from "@/hooks/use-long-press";
+import { STATUS_LABEL } from "@/modules/backlog/status";
 
 /**
  * The single progress control in the bottom action bar (HANDOFF §1):
@@ -19,12 +20,6 @@ import { useLongPress } from "@/hooks/use-long-press";
 const HOLD_MS = 500;
 const R = 9;
 const CIRC = 2 * Math.PI * R; // ≈ 56.5 on the 24×24 grid
-
-const STATUS_LABEL: Record<string, string> = {
-  on_my_radar: "En el radar",
-  in_progress: "En progreso",
-  completed: "Completado",
-};
 
 export function ProgressGesture({
   catalogItemId,

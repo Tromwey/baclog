@@ -2,24 +2,22 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Music, Play } from "lucide-react";
+import { Music, Play } from "lucide-react";
 import {
   getPublicCatalogItem,
   getPublicProfile,
 } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
-import { Button, MonoMeta } from "@/components/ui";
+import { BackButton, Button, MonoMeta } from "@/components/ui";
 import { ItemHeroAura } from "@/components/item-hero-aura";
 import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
+import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { auraSeed } from "@/lib/color";
+import { capitalize } from "@/lib/format";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
-
-/** Genre casing differs by source (TMDB "Drama", iTunes lowercased) — normalize
- * the first letter for the meta line. */
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export async function generateMetadata({
   params,
@@ -53,10 +51,18 @@ export async function generateMetadata({
  */
 export default async function PublicItemPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ username: string; catalogItemId: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { username, catalogItemId } = await params;
+  const { from } = await searchParams;
+  // ?from carries the origin backlog (set when navigating from a public backlog)
+  // so back returns there, not to the profile. Validated to a bare id so it
+  // can't inject into the href; absent/invalid (a shared item deep-link) → the
+  // profile.
+  const fromBacklogId = from && /^[0-9a-f-]{36}$/i.test(from) ? from : null;
   const [profile, item] = await Promise.all([
     getPublicProfile(username),
     getPublicCatalogItem(catalogItemId),
@@ -90,15 +96,17 @@ export default async function PublicItemPage({
         seed={auraSeed(item.id)}
       />
 
-      <main className="relative px-5 pb-32 pt-8">
-        <Link
-          href={`/u/${username}`}
-          className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-[0.08em] text-text-2 transition-colors hover:text-text"
-        >
-          <ChevronLeft size={14} /> @{profile.username}
-        </Link>
+      {/* Top bar — same px-4 / pt-[24px+safe] as the backlog hero (BacklogHero)
+          so the back chip sits in the SAME spot across screens (no jump when
+          navigating backlog ⇄ item) and clears the notch when installed. */}
+      <div className="relative flex px-4 pt-[calc(24px+env(safe-area-inset-top))]">
+        <BackButton
+          href={fromBacklogId ? `/u/${username}/${fromBacklogId}` : `/u/${username}`}
+        />
+      </div>
 
-        <div className="bl-rise mt-5 flex gap-4">
+      <main className="relative px-5 pb-32 pt-5">
+        <div className="bl-rise flex gap-4">
           {item.posterUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
             <img
@@ -120,7 +128,14 @@ export default async function PublicItemPage({
               {item.title}
             </h1>
             <MonoMeta className="mt-2 block normal-case tracking-normal text-text-2">
-              {[item.byline, item.year, item.genre && cap(item.genre)]
+              {/* type · byline · year · genre — same order as the in-app item
+                  page (audit fix: this page used to omit the type label). */}
+              {[
+                MEDIA_TYPE_TITLE[item.mediaType],
+                item.byline,
+                item.year,
+                item.genre && capitalize(item.genre),
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </MonoMeta>
