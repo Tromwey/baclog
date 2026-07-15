@@ -44,7 +44,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
+    <main className="relative flex min-h-lvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
       <AuthAuraBackdrop seed={47} />
       <div className="relative flex w-full max-w-sm flex-col items-center">
         <h1 className="font-mono text-xl font-bold uppercase tracking-[0.35em] text-accent">

@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function WaitlistPage() {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 text-text">
+    <main className="flex min-h-lvh flex-col items-center justify-center bg-bg px-6 text-text">
       <div className="w-full max-w-sm text-center">
         <h1 className="font-mono text-2xl font-bold tracking-[0.35em]">BACLOG</h1>
         <p className="mt-3 text-text-2">
