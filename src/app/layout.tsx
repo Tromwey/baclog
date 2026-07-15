@@ -76,6 +76,15 @@ export default function RootLayout({
       className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${spaceMono.variable}`}
     >
       <head>
+        {/* This Next build's `appleWebApp: { capable: true }` only emits the
+            generic `mobile-web-app-capable` tag (see its own docs), not
+            `apple-mobile-web-app-capable`. Safari specifically needs the
+            latter to launch the home-screen install in true standalone
+            mode — without it, iOS falls back to a hybrid Safari chrome that
+            (a) ignores `statusBarStyle: black-translucent` (opaque status
+            bar) and (b) still collapses its toolbar on first touch,
+            triggering iOS's 100dvh recalculation-on-first-scroll bug. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* Card renderers draw these families onto <canvas>, so they must load
             as real document fonts (next/font's hashed names are unusable
             there). Kept in sync with CARD_FONTS in src/modules/cards. */}
