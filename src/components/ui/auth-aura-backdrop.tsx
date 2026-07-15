@@ -26,13 +26,17 @@ export function AuthAuraBackdrop({ seed }: { seed: number }) {
         seed={seed}
         className="!opacity-[0.5]"
       />
-      {/* Keep the form legible over the aura. */}
+      {/* Scrim the copy/form band for legibility, but leave the top and
+          bottom edges clear — a centered radial vignette dims edges
+          monotonically outward, which was crushing the aura to near-black
+          right behind the status bar. A vertical band keeps the dark scrim
+          only where there's text. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 50% 50%, transparent 0%, rgba(11,11,13,0.55) 62%, #0B0B0D 100%)",
+            "linear-gradient(to bottom, transparent 0%, transparent 12%, rgba(11,11,13,0.55) 28%, rgba(11,11,13,0.55) 64%, transparent 82%, transparent 100%)",
         }}
       />
     </>
