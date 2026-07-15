@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   claimUsernameAction,
   deleteAccountAction,
@@ -179,6 +180,13 @@ export function SettingsForm({
             </p>
           </form>
         )}
+      </section>
+
+      <section className="border-t border-line pt-6">
+        <h2 className="text-sm font-semibold text-text-2">Legal</h2>
+        <Link href="/creditos" className="mt-3 inline-block text-sm underline">
+          Créditos
+        </Link>
       </section>
 
       <section className="border-t border-line pt-6">

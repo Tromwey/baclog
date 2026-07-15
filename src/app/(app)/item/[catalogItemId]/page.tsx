@@ -9,7 +9,7 @@ import {
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { AddToBacklog } from "./add-to-backlog";
-import { Attribution } from "./attribution";
+import { CreditsLink, JustWatchNote } from "./attribution";
 import { CloseChip } from "./close-chip";
 import { HideDock } from "./hide-dock";
 import { ItemHeroAura } from "@/components/item-hero-aura";
@@ -228,8 +228,13 @@ export default async function ItemPage({
             connection awaits spoils the surprise — recommendations live ONLY
             in Descubrir. The reasoning panel above is provenance, not a reco. */}
 
-        <div className="relative px-5">
-          <Attribution source={item.source} mediaType={item.mediaType} />
+        {/* general TMDB/Apple Music attribution lives at /creditos (TMDB's own
+            FAQ allows centralizing it in an About/Credits section); the
+            JustWatch note stays here, right above the Reproducir button it
+            labels, since that one can't be centralized the same way. */}
+        <div className="relative mt-10 space-y-2 border-t border-line px-5 pt-4">
+          {item.mediaType !== "album" && <JustWatchNote />}
+          <CreditsLink />
         </div>
 
         {/* fixed bottom action bar — content scrolls behind (pb clearance above) */}

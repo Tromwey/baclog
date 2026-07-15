@@ -168,11 +168,30 @@ export default async function PublicItemPage({
 
         <Tracklist tracks={tracks} />
 
+        {/* General TMDB/Apple Music attribution now lives at /creditos (TMDB's
+            FAQ allows centralizing it in an About/Credits section). JustWatch
+            can't be centralized the same way, so it stays here, next to the
+            watch link it labels — film/series only (albums never resolve via
+            JustWatch, see resolveVideoLink). */}
         <p className="mt-8 text-center">
           <MonoMeta className="text-[10px] text-text-3">
-            {item.mediaType === "album"
-              ? "Datos y portadas de Apple Music"
-              : "Datos e imágenes de TMDB · Disponibilidad por JustWatch"}
+            {item.mediaType !== "album" && (
+              <>
+                Disponibilidad por{" "}
+                <a
+                  href="https://www.justwatch.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  JustWatch
+                </a>
+                {" · "}
+              </>
+            )}
+            <Link href="/creditos" className="underline">
+              Créditos
+            </Link>
           </MonoMeta>
         </p>
       </main>

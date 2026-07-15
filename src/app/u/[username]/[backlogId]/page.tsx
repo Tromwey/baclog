@@ -159,9 +159,15 @@ export default async function PublicBacklogPage({
           })}
         </div>
 
+        {/* This list page has no per-item watch button to attribute JustWatch
+            next to — that note lives on each item's own page instead. General
+            TMDB/Apple Music attribution centralizes at /creditos (TMDB's own
+            FAQ allows this in an About/Credits section). */}
         <footer className="mt-10 text-center">
           <MonoMeta className="text-[10px] text-text-3">
-            Datos e imágenes de TMDB y Apple Music · Disponibilidad por JustWatch
+            <Link href="/creditos" className="underline">
+              Créditos
+            </Link>
           </MonoMeta>
         </footer>
       </main>

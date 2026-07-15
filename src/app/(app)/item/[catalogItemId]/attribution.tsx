@@ -1,55 +1,40 @@
+import Link from "next/link";
+
 /**
- * Mandatory attributions (ADR-007/ADR-008): TMDB logo+legend for video,
- * JustWatch for provider data (G4), Apple Music badge next to music
- * artwork. Rendered on every item surface, private and public.
+ * TMDB's own FAQ allows centralizing the general attribution + disclaimer
+ * in an "About"/"Credits" section instead of repeating it per page — the
+ * full text now lives at /creditos. This is just the pointer to it.
  */
-export function Attribution({
-  source,
-  mediaType,
-}: {
-  source: string;
-  mediaType: string;
-}) {
+export function CreditsLink({ className = "" }: { className?: string }) {
   return (
-    <footer className="mt-10 space-y-1 border-t border-line pt-4 text-[11px] leading-relaxed text-text-3">
-      {source === "tmdb" && (
-        <p>
-          Datos e imágenes de{" "}
-          <a
-            href="https://www.themoviedb.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            TMDB
-          </a>
-          . Este producto usa la API de TMDB pero no está avalado ni
-          certificado por TMDB. Disponibilidad de streaming por{" "}
-          <a
-            href="https://www.justwatch.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            JustWatch
-          </a>
-          .
-        </p>
-      )}
-      {mediaType === "album" && (
-        <p>
-          Datos y portadas de{" "}
-          <a
-            href="https://music.apple.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Apple Music
-          </a>
-          .
-        </p>
-      )}
-    </footer>
+    <Link
+      href="/creditos"
+      className={`text-[11px] text-text-3 underline ${className}`}
+    >
+      Créditos
+    </Link>
+  );
+}
+
+/**
+ * JustWatch attribution can't be centralized the same way as the general
+ * TMDB text — it has to stay next to the watch-provider link it labels.
+ * Film/series only: albums resolve via Odesli/Spotify/Apple Music/YouTube
+ * Music, never JustWatch (see resolveVideoLink in modules/links/resolve.ts).
+ */
+export function JustWatchNote({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-[11px] text-text-3 ${className}`}>
+      Disponibilidad por{" "}
+      <a
+        href="https://www.justwatch.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline"
+      >
+        JustWatch
+      </a>
+      .
+    </p>
   );
 }
