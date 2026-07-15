@@ -6,6 +6,7 @@ import {
   completeOnboardingAction,
 } from "@/app/actions/account-actions";
 import { AuthAuraBackdrop, Button } from "@/components/ui";
+import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 
 const SERVICES = [
   { id: "spotify", label: "Spotify" },
@@ -14,6 +15,8 @@ const SERVICES = [
 ] as const;
 
 export default function OnboardingPage() {
+  const nameRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
+  const birthYearRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState("");
   const [birthYear, setBirthYear] = useState("");
@@ -59,6 +62,7 @@ export default function OnboardingPage() {
               </label>
               <input
                 id="name"
+                ref={nameRef}
                 required
                 maxLength={50}
                 autoFocus
@@ -74,6 +78,7 @@ export default function OnboardingPage() {
               </label>
               <input
                 id="birthYear"
+                ref={birthYearRef}
                 required
                 inputMode="numeric"
                 pattern="[0-9]{4}"

@@ -4,11 +4,13 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { AuthAuraBackdrop, Button } from "@/components/ui";
+import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 
 function VerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
   const email = params.get("email") ?? "";
+  const codeRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "checking" | "wrong">("idle");
 
@@ -43,6 +45,7 @@ function VerifyForm() {
           </label>
           <input
             id="code"
+            ref={codeRef}
             inputMode="numeric"
             pattern="[0-9]{6}"
             maxLength={6}
