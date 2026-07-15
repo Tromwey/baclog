@@ -62,7 +62,7 @@ export const ONBOARDING_AURA: FixedAuraLayer = {
   opacity: 0.4,
   animation: "drift",
   duration: "16s",
-  inset: "-12% -12% 0",
+  inset: "-12%",
 };
 
 /** Empty shelf (mock #p7): the faint neutral glow a backlog gets before its

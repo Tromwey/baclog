@@ -223,7 +223,7 @@ function buildVariant(
             animation: "drift",
             duration: dur(10, 3, 0, seed),
             delay: delay(8, 0, seed),
-            inset: "-12% -12% 0",
+            inset: "-12%",
           },
           {
             // Mock: .55 + screen. Painted normally for iOS; over the near-black
@@ -234,7 +234,7 @@ function buildVariant(
             animation: "breathe",
             duration: dur(8, 1, 1, seed),
             delay: `${(-2 - rand(1, seed + 12) * 4).toFixed(2)}s`,
-            inset: "-14% -14% 0",
+            inset: "-14%",
           },
         ],
       };
@@ -248,7 +248,7 @@ function buildVariant(
             animation: "drift",
             duration: dur(13, 3, 0, seed),
             delay: delay(8, 0, seed),
-            inset: "-12% -12% 0",
+            inset: "-12%",
           },
           {
             // Mock: .5 + screen → normal + bump (same rationale as ambient L2).
@@ -257,7 +257,7 @@ function buildVariant(
             animation: "breathe",
             duration: dur(8, 2, 1, seed),
             delay: `${(-2 - rand(1, seed + 12) * 4).toFixed(2)}s`,
-            inset: "-14% -14% 0",
+            inset: "-14%",
           },
         ],
       };
@@ -320,7 +320,7 @@ export function AuraField(props: AuraFieldProps) {
   let layers: LayerSpec[];
   let grain: number;
   if ("layers" in props) {
-    layers = props.layers.map((l) => ({ inset: "-10% -10% 0", ...l }));
+    layers = props.layers.map((l) => ({ inset: "-10%", ...l }));
     grain = 0.05;
   } else {
     const palette = props.colors.length > 0 ? props.colors : [LIMA];
