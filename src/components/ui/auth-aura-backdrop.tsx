@@ -26,18 +26,13 @@ export function AuthAuraBackdrop({ seed }: { seed: number }) {
         seed={seed}
         className="!opacity-[0.5]"
       />
-      {/* Scrim the copy/form band for legibility as a smooth wash — no flat
-          plateau feeding into a sudden ramp (that slope discontinuity reads
-          as a hard seam, worst right behind the status bar) and no literal
-          `transparent` keyword (rgba(0,0,0,0) interpolated toward an opaque
-          color leaves a muddy fringe — same pitfall AuraField's own ellipses
-          document avoiding). Every stop is the same rgb, alpha-only ramp. */}
+      {/* Keep the form legible over the aura. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(11,11,13,0) 0%, rgba(11,11,13,0.08) 10%, rgba(11,11,13,0.22) 20%, rgba(11,11,13,0.55) 32%, rgba(11,11,13,0.55) 60%, rgba(11,11,13,0.22) 74%, rgba(11,11,13,0.08) 84%, rgba(11,11,13,0) 96%)",
+            "radial-gradient(120% 90% at 50% 50%, transparent 0%, rgba(11,11,13,0.55) 62%, #0B0B0D 100%)",
         }}
       />
     </>
