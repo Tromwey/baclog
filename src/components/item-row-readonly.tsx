@@ -40,22 +40,6 @@ export function ItemRowReadonly({
 }: ItemRowReadonlyProps) {
   return (
     <div className="relative flex h-[58px] items-center gap-3 pl-5 pr-1.5">
-      {/* Obsession coherence (B disciplinada): a VERY subtle right-edge hot wash
-          when obsessed — the compact row already anchors 🔥 via the glyph on the
-          left, so it does NOT repeat the flame here (that's the public card's
-          job); this just tints the tail so the list stays quiet. Behind the
-          content (rendered first + siblings are `relative`); the row itself
-          stays transparent so the hero aura still bleeds through. */}
-      {obsessed && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-1/2"
-          style={{
-            background:
-              "linear-gradient(270deg, rgba(255,45,85,0.11) 0%, rgba(255,45,85,0) 72%)",
-          }}
-        />
-      )}
       {/* tap-body = reproducir: resolve to the user's streaming deep-link */}
       <a
         href={`/api/links/resolve?catalogItemId=${catalogItemId}`}
