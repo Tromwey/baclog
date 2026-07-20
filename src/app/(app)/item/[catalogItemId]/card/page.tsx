@@ -36,8 +36,6 @@ export default async function ItemCardPage({
     <CardExporter
       backlog={cardBacklog}
       style="ticket"
-      eyebrow={item.title}
-      subtitle="tu ticket de admisión"
       publicUrl={
         user.username && user.isPublic
           ? `https://baclog.app/${user.username}/item/${catalogItemId}`

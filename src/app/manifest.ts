@@ -18,6 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Tus obsesiones, en una tarjeta.",
     start_url: "/",
     display: "standalone",
+    orientation: "portrait-primary",
     background_color: "#0B0B0D",
     theme_color: "#0B0B0D",
     icons: [

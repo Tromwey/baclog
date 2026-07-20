@@ -28,7 +28,7 @@ export function CardExporter({
   backlog: CardBacklog;
   style: CardStyle;
   publicUrl: string | null;
-  /** Small mono label above the preview (defaults to the backlog name). */
+  /** Small mono label above the preview. Omit (with no subtitle) to hide the header. */
   eyebrow?: string;
   /** One-line context under the eyebrow. */
   subtitle?: string;
@@ -105,39 +105,49 @@ export function CardExporter({
   }, [style, publicUrl]);
 
   return (
-    <main className="flex min-h-dvh flex-col items-center bg-bg px-4 pb-8 pt-6 text-text">
-      <header className="mb-4 text-center">
-        <MonoMeta className="text-text-2">{eyebrow ?? backlog.name}</MonoMeta>
-        {subtitle && <p className="mt-1 text-xs text-text-3">{subtitle}</p>}
-      </header>
+    <main className="flex h-dvh flex-col items-center bg-bg px-4 pb-dock-clearance pt-5 text-text">
+      {(eyebrow || subtitle) && (
+        <header className="mb-3 shrink-0 text-center">
+          {eyebrow && <MonoMeta className="text-text-2">{eyebrow}</MonoMeta>}
+          {subtitle && <p className="mt-1 text-xs text-text-3">{subtitle}</p>}
+        </header>
+      )}
 
-      <div className="relative w-full max-w-[340px]">
+      {/* Preview flexes to the space between the top and the button, so the
+          ticket is as large as it fits WITHOUT ever pushing the share button
+          under the fixed dock (the reason it wasn't visible). No card surface
+          behind it — the ticket art already carries its own background. */}
+      <div className="relative flex min-h-0 w-full max-w-[340px] flex-1 items-center justify-center">
         <canvas
           ref={canvasRef}
           width={CARD_WIDTH}
           height={CARD_HEIGHT}
-          className="aspect-[9/16] w-full rounded-[var(--r-lg)] shadow-[var(--shadow-card)]"
+          className="max-h-full w-auto max-w-full rounded-[var(--r-lg)]"
+          style={{ aspectRatio: "9 / 16" }}
         />
         {!fontsReady && (
-          <div className="absolute inset-0 animate-pulse rounded-[var(--r-lg)] bg-surface-2" />
+          <div
+            className="absolute inset-0 m-auto max-h-full w-auto max-w-full animate-pulse rounded-[var(--r-lg)] bg-surface-2"
+            style={{ aspectRatio: "9 / 16" }}
+          />
         )}
       </div>
 
       <Button
         onClick={share}
         disabled={!fontsReady}
-        className="mt-5 w-full max-w-[340px]"
+        className="mt-4 w-full max-w-[340px] shrink-0"
       >
         Compartir tarjeta
       </Button>
       {!publicUrl && (
-        <p className="mt-2 max-w-[340px] text-center text-xs text-text-3">
+        <p className="mt-2 max-w-[340px] shrink-0 text-center text-xs text-text-3">
           Reclama tu username en Ajustes para que tu link viaje con la tarjeta.
         </p>
       )}
 
       {toast && (
-        <p className="mt-3 rounded-full bg-surface-2 px-4 py-2 text-xs text-text-2">
+        <p className="mt-3 shrink-0 rounded-full bg-surface-2 px-4 py-2 text-xs text-text-2">
           {toast}
         </p>
       )}

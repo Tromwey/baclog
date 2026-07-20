@@ -15,6 +15,13 @@ export interface CardItem {
   status: ItemStatus;
   /** Single card glyph derived from the two axes (F3.7): obsessed → ★★, liked → ★. */
   reaction?: ItemReaction;
+  /**
+   * Cover-derived dominant hexes (catalog_item.paletteHex, vividness-ranked).
+   * The ticket tints its face with palette[0], clamped for legibility; absent →
+   * the renderer keeps its per-media-type color. Color is not artwork (ADR-008:
+   * the one sanctioned bridge from cover to card).
+   */
+  palette?: string[];
 }
 
 export interface CardBacklog {

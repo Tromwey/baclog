@@ -311,6 +311,7 @@ const TRAFFIC_EVENT_LABEL = {
   public_backlog_view: "Vistas de backlog",
   public_item_view: "Vistas de ítem",
   card_share: "Shares de tarjeta",
+  link_share: "Shares de link",
 } as const;
 
 type TrafficEventType = keyof typeof TRAFFIC_EVENT_LABEL;

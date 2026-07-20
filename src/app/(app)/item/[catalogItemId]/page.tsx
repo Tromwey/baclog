@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
 import { auraSeed, parseHex } from "@/lib/color";
@@ -17,6 +16,7 @@ import { HideDock } from "./hide-dock";
 import { ItemHeroAura } from "@/components/item-hero-aura";
 import { Tracklist } from "@/components/tracklist";
 import { ItemMoreMenu } from "./item-more-menu";
+import { ItemShareMenu } from "./item-share-menu";
 import { ObsessionGesture } from "./obsession-gesture";
 import { ProgressGesture } from "./progress-gesture";
 import { ItemReactionProvider } from "./reaction-state";
@@ -128,28 +128,15 @@ export default async function ItemPage({
           <CloseChip />
           {entry && (
             <div className="flex items-center gap-2.5">
-              <Link
-                href={`/item/${item.id}/card`}
-                aria-label="Compartir ticket"
-                className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-black/[0.28] text-text backdrop-blur-[18px]"
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M12 3v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  <path
-                    d="M8 7l4-4 4 4"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M5 12v6a2 2 0 002 2h10a2 2 0 002-2v-6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </Link>
+              <ItemShareMenu
+                itemId={item.id}
+                title={item.title}
+                publicUrl={
+                  user.username && user.isPublic
+                    ? `https://baclog.app/${user.username}/item/${item.id}`
+                    : null
+                }
+              />
               <ItemMoreMenu
                 catalogItemId={item.id}
                 sourceCrossMediaRecId={entry.sourceCrossMediaRecId}

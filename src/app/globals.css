@@ -90,6 +90,33 @@
   }
 }
 
+/* Portrait-only lock — the card UI (fixed dock, dvh scroll-snap, aura
+   backdrops) is built exclusively for portrait and visibly breaks in
+   landscape (browser tab AND standalone PWA alike, manifest `orientation`
+   isn't honoured by iOS Safari). Rather than let that show, block the
+   viewport with a rotate prompt. Height-gated, not just orientation, so a
+   landscape desktop/tablet BROWSER WINDOW (tall enough) is never caught —
+   only short/phone-shaped landscape viewports are. */
+.portrait-lock {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .portrait-lock {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-4);
+    padding: 0 var(--s-6);
+    text-align: center;
+    background: var(--bg);
+  }
+}
+
 @theme inline {
   /* Colors → Tailwind utilities (bg-bg, text-text, border-line, …) */
   --color-bg: var(--bg);

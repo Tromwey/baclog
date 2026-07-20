@@ -102,6 +102,34 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-bg text-text">
         {children}
+        {/* Portrait-only lock (see globals.css .portrait-lock) — hidden except
+            in short/phone-shaped landscape viewports, where it covers the
+            card UI instead of letting it visibly break. */}
+        <div className="portrait-lock">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <rect
+              x="7"
+              y="2"
+              width="10"
+              height="20"
+              rx="2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <path
+              d="M12 18.5h.01"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          <p className="font-serif text-xl italic text-text">
+            Gira tu dispositivo
+          </p>
+          <p className="max-w-[30ch] text-sm leading-[1.55] text-text-2">
+            Baclog está diseñado para uso vertical.
+          </p>
+        </div>
       </body>
     </html>
   );

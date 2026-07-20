@@ -34,6 +34,9 @@ export function toCardBacklog(
         // Two independent axes → one card glyph (F3.7): obsession (★★) outranks
         // a verdict (★ liked / nothing for disliked, via reactionGlyph).
         reaction: i.obsessed ? "obsessed" : (i.verdict ?? undefined),
+        // Cover palette (shared catalog_item) tints the ticket; null when
+        // unextracted → the renderer keeps its per-type fallback color.
+        palette: i.paletteHex ?? undefined,
       }),
     ),
   };

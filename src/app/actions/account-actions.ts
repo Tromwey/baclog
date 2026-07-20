@@ -67,9 +67,10 @@ export async function setPreferredServiceAction(service: PreferredService) {
 }
 
 /**
- * Onboarding step 2: server-side redirect on purpose — a client
- * router.push here can replay the stale "/backlogs → /onboarding"
- * redirect cached before onboarding completed.
+ * Onboarding's terminal step (3, after the username claim): server-side
+ * redirect on purpose — a client router.push here can replay the stale
+ * "/backlogs → /onboarding" redirect cached before onboarding completed.
+ * Keep this step last so the flow's only navigation stays server-side.
  */
 export async function chooseServiceAndFinishAction(service: PreferredService) {
   await setPreferredServiceAction(service);

@@ -70,6 +70,7 @@ export const analyticsEventTypeEnum = pgEnum("analytics_event_type", [
   "public_backlog_view",
   "public_item_view",
   "card_share",
+  "link_share",
 ]);
 
 // ---------- Auth.js tables (Drizzle adapter, OTP flow — no passwords) ----------

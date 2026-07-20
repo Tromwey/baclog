@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   chooseServiceAndFinishAction,
+  claimUsernameAction,
   completeOnboardingAction,
 } from "@/app/actions/account-actions";
 import { AuthAuraBackdrop, Button } from "@/components/ui";
@@ -17,9 +18,12 @@ const SERVICES = [
 export default function OnboardingPage() {
   const nameRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const birthYearRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
-  const [step, setStep] = useState<1 | 2>(1);
+  const usernameRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState("");
   const [birthYear, setBirthYear] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
 
@@ -38,6 +42,28 @@ export default function OnboardingPage() {
       return;
     }
     setStep(2);
+  }
+
+  // Step 2 is skippable BY DESIGN (Pilar 4: "privado por default, opt-in
+  // explícito" — a wall here would make every account public without a
+  // choice). It exists because the claim used to live only in Ajustes, so
+  // username stayed null for everyone and every share card exported with no
+  // link (card-exporter drops `text` when publicUrl is null).
+  async function submitUsername(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setUsernameError(null);
+    const res = await claimUsernameAction(username);
+    setBusy(false);
+    if (!("username" in res)) {
+      setUsernameError(
+        res.error === "taken"
+          ? "Ese username ya existe."
+          : "Username inválido (3-30: a-z, 0-9, _ .)",
+      );
+      return;
+    }
+    setStep(3);
   }
 
   async function pickService(service: (typeof SERVICES)[number]["id"]) {
@@ -104,6 +130,53 @@ export default function OnboardingPage() {
                 Revisa los datos e intenta de nuevo.
               </p>
             )}
+          </form>
+        ) : step === 2 ? (
+          <form onSubmit={submitUsername} className="mt-10 w-full space-y-4">
+            <div>
+              <label className="block text-sm text-text-2" htmlFor="username">
+                Reclama tu página
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="shrink-0 font-mono text-sm text-text-3">
+                  baclog.app/
+                </span>
+                <input
+                  id="username"
+                  ref={usernameRef}
+                  value={username}
+                  maxLength={30}
+                  autoFocus
+                  onChange={(e) =>
+                    setUsername(
+                      e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""),
+                    )
+                  }
+                  placeholder="tunombre"
+                  className="min-w-0 flex-1 rounded-[var(--r-md)] bg-surface-2 px-4 py-3 font-mono text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
+                />
+              </div>
+              <p className="mt-2 text-xs text-text-3">
+                Es a donde llega todo lo que compartas. Tu nombre y tus backlogs
+                quedan visibles ahí; puedes apagarlo en Ajustes cuando quieras.
+              </p>
+            </div>
+            <Button
+              type="submit"
+              disabled={busy || username.length < 3}
+              className="w-full"
+            >
+              {busy ? "Reclamando…" : "Reclamar"}
+            </Button>
+            {usernameError && <p className="text-sm text-hot">{usernameError}</p>}
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              disabled={busy}
+              className="w-full py-1 text-sm text-text-3 underline disabled:opacity-40"
+            >
+              Ahora no
+            </button>
           </form>
         ) : (
           <div className="mt-10 w-full space-y-3">
