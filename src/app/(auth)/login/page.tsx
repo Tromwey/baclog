@@ -62,7 +62,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@email.com"
-            className="w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-base text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+            className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-base text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
           />
           <Button type="submit" disabled={status === "sending"} className="w-full">
             {status === "sending" ? "Enviando…" : "Enviarme un código"}

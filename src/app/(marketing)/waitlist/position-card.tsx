@@ -37,7 +37,7 @@ export function PositionCard({
 
   return (
     <div className="mt-8 space-y-4">
-      <div className="rounded-2xl border border-line bg-surface-1 p-6">
+      <div className="rounded-2xl bg-surface-1 p-6">
         <p className="text-sm text-text-2">
           {alreadyJoined ? "Ya estabas en la fila" : "¡Estás dentro!"}
         </p>

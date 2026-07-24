@@ -55,7 +55,7 @@ function VerifyForm() {
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
             placeholder="000000"
-            className="w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+            className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
           />
           <Button
             type="submit"

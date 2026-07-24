@@ -53,7 +53,7 @@ export function ReportButton({ username }: { username: string }) {
                     key={r.id}
                     disabled={busy}
                     onClick={() => report(r.id)}
-                    className="block w-full rounded-xl border border-line bg-bg px-4 py-3 text-left text-sm hover:border-accent disabled:opacity-40"
+                    className="block w-full rounded-xl bg-surface-2 px-4 py-3 text-left text-sm transition-colors hover:bg-surface-3 disabled:opacity-40"
                   >
                     {r.label}
                   </button>

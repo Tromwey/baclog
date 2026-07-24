@@ -17,15 +17,24 @@ import { createPortal } from "react-dom";
  *
  * The link row needs a public URL (claimed username + public profile); without
  * one the shared link would 404, so it degrades to a nudge instead.
+ *
+ * `canShareCard` is false for a title the user hasn't added: the public item
+ * page resolves off `catalog_item` alone (no ownership join — see
+ * modules/backlog/public.ts), so the LINK works for anything searchable, but the
+ * ticket stamps a backlog name + status that a non-member simply doesn't have.
+ * With one option left there's nothing to choose, so ↗ shares straight away
+ * rather than opening a single-row panel.
  */
 export function ItemShareMenu({
   itemId,
   title,
   publicUrl,
+  canShareCard,
 }: {
   itemId: string;
   title: string;
   publicUrl: string | null;
+  canShareCard: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -74,7 +83,7 @@ export function ItemShareMenu({
   return (
     <>
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (canShareCard ? setOpen((v) => !v) : onLink())}
         aria-label="Compartir"
         className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-black/[0.28] text-text backdrop-blur-[18px]"
       >

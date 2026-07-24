@@ -113,7 +113,7 @@ export default async function PublicProfilePage({
             {profile.displayName}
           </h1>
           {profile.isFounder && (
-            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-3 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-accent">
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-accent">
               <Sparkles size={12} /> Fundador
             </span>
           )}

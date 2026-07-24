@@ -10,7 +10,6 @@ import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { AddToBacklog } from "./add-to-backlog";
-import { CreditsLink, JustWatchNote } from "./attribution";
 import { CloseChip } from "./close-chip";
 import { HideDock } from "./hide-dock";
 import { ItemHeroAura } from "@/components/item-hero-aura";
@@ -123,26 +122,31 @@ export default async function ItemPage({
           catalogItemId={item.id}
         />
 
-        {/* top bar: ✕ close + (share · ⋯) — the right chips need a logged entry to act on */}
+        {/* top bar: ✕ close + (share · ⋯). ⋯ mutates state so it needs a logged
+            entry; ↗ does not — the public item page resolves off catalog_item
+            alone, so "ya lo vi, no lo guardo, pero te lo paso" works without
+            adding. Un-owned falls back to link-only (no backlog to stamp on a
+            ticket) — see ItemShareMenu. */}
         <div className="relative z-20 flex items-center justify-between px-4 pt-[calc(16px+env(safe-area-inset-top))]">
           <CloseChip />
-          {entry && (
-            <div className="flex items-center gap-2.5">
-              <ItemShareMenu
-                itemId={item.id}
-                title={item.title}
-                publicUrl={
-                  user.username && user.isPublic
-                    ? `https://baclog.app/${user.username}/item/${item.id}`
-                    : null
-                }
-              />
+          <div className="flex items-center gap-2.5">
+            <ItemShareMenu
+              itemId={item.id}
+              title={item.title}
+              publicUrl={
+                user.username && user.isPublic
+                  ? `https://baclog.app/${user.username}/item/${item.id}`
+                  : null
+              }
+              canShareCard={entry !== null}
+            />
+            {entry && (
               <ItemMoreMenu
                 catalogItemId={item.id}
                 sourceCrossMediaRecId={entry.sourceCrossMediaRecId}
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* cover */}
@@ -218,14 +222,10 @@ export default async function ItemPage({
             connection awaits spoils the surprise — recommendations live ONLY
             in Descubrir. The reasoning panel above is provenance, not a reco. */}
 
-        {/* general TMDB/Apple Music attribution lives at /creditos (TMDB's own
-            FAQ allows centralizing it in an About/Credits section); the
-            JustWatch note stays here, right above the Reproducir button it
-            labels, since that one can't be centralized the same way. */}
-        <div className="relative mt-10 space-y-2 border-t border-line px-5 pt-4">
-          {item.mediaType !== "album" && <JustWatchNote />}
-          <CreditsLink />
-        </div>
+        {/* No Créditos link here — redundant for a signed-in user, who
+            already has one in Ajustes (the app's About/Credits section per
+            TMDB's own FAQ). Public pages keep their own link: anonymous
+            viewers never reach Ajustes. */}
 
         {/* fixed bottom action bar — content scrolls behind (pb clearance above) */}
         <div className="fixed inset-x-0 bottom-0 z-40">
@@ -252,7 +252,7 @@ export default async function ItemPage({
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M6 4.5l14 7.5-14 7.5z" />
               </svg>
-              Reproducir
+              {item.mediaType === "album" ? "Reproducir" : "Ver en JustWatch"}
             </a>
             {entry && (
               <ProgressGesture

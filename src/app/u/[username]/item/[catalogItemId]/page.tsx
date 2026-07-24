@@ -175,35 +175,22 @@ export default async function PublicItemPage({
               </a>
             </>
           ) : (
+            // TMDB's own guidance for watch/providers data is "a reference on
+            // each media item" (not necessarily a link) — the button's own
+            // label carries the JustWatch attribution instead of a separate
+            // note below it.
             <Button href={resolve("")} className="w-full">
-              Ver dónde streamear
+              Ver en JustWatch
             </Button>
           )}
         </div>
 
         <Tracklist tracks={tracks} />
 
-        {/* General TMDB/Apple Music attribution now lives at /creditos (TMDB's
-            FAQ allows centralizing it in an About/Credits section). JustWatch
-            can't be centralized the same way, so it stays here, next to the
-            watch link it labels — film/series only (albums never resolve via
-            JustWatch, see resolveVideoLink). */}
+        {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
+            FAQ allows centralizing it in an About/Credits section). */}
         <p className="mt-8 text-center">
           <MonoMeta className="text-[10px] text-text-3">
-            {item.mediaType !== "album" && (
-              <>
-                Disponibilidad por{" "}
-                <a
-                  href="https://www.justwatch.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  JustWatch
-                </a>
-                {" · "}
-              </>
-            )}
             <Link href="/creditos" className="underline">
               Créditos
             </Link>

@@ -95,7 +95,7 @@ export default function OnboardingPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Tu nombre visible"
-                className="mt-2 w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+                className="mt-2 w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
               />
             </div>
             <div>
@@ -112,7 +112,7 @@ export default function OnboardingPage() {
                 value={birthYear}
                 onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))}
                 placeholder="2004"
-                className="mt-2 w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:border-accent"
+                className="mt-2 w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
               />
               <p className="mt-1 text-xs text-text-3">
                 Solo para verificar tu edad. Nunca se muestra.
@@ -188,7 +188,7 @@ export default function OnboardingPage() {
                 key={s.id}
                 disabled={busy}
                 onClick={() => pickService(s.id)}
-                className="w-full rounded-[var(--r-md)] border border-line bg-surface-2 px-4 py-3.5 text-left font-medium text-text transition-colors hover:border-accent disabled:opacity-40"
+                className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3.5 text-left font-medium text-text transition-colors hover:bg-surface-3 disabled:opacity-40"
               >
                 {s.label}
               </button>
