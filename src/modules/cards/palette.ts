@@ -1,8 +1,10 @@
 /**
  * F2.15 — on-device palette extraction (client-only). Colors are not
  * protectable expression (ADR-008): we store 4-6 hex values, never the
- * artwork. Requires the CDN to allow CORS (mzstatic and image.tmdb.org
- * do); a tainted canvas or any failure degrades to [] silently.
+ * artwork. Requires the CDN to allow CORS (mzstatic and image.tmdb.org do —
+ * though TMDB only sends the ACAO header when an Origin is present, hence the
+ * poisoned-cache guard below); a tainted canvas or any failure degrades to []
+ * silently.
  *
  * F3.6.1: ranks buckets by vividness (chroma) × coverage, not raw pixel count.
  * Pure frequency favored whatever covered the most area — usually a dark or
@@ -17,7 +19,17 @@ export async function extractPalette(posterUrl: string): Promise<string[]> {
   try {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = posterUrl;
+    // Poisoned-cache guard (films/series were silently losing their palette).
+    // The same cover is ALSO rendered as a plain <img> (no crossOrigin) on the
+    // item/search surfaces, which caches a NON-CORS response for the bare URL.
+    // image.tmdb.org only sends Access-Control-Allow-Origin when the request
+    // carries an Origin header, so that cached entry has no ACAO — and the
+    // browser then reuses it for THIS crossOrigin load, throwing EncodingError
+    // at decode() → []. (mzstatic albums send ACAO unconditionally, so they were
+    // unaffected — which is why only TMDB video hit this.) Requesting a private
+    // ?_pal variant nothing else fetches guarantees a clean CORS response. Keep
+    // it STATIC so repeat extractions of the same cover still hit the cache.
+    img.src = withPaletteCacheKey(posterUrl);
     await img.decode();
 
     const size = 64;
@@ -75,5 +87,21 @@ export async function extractPalette(posterUrl: string): Promise<string[]> {
       );
   } catch {
     return [];
+  }
+}
+
+/**
+ * Append the private `?_pal` cache key used above. Kept separate (and behind its
+ * own try/catch) so a non-absolute or malformed URL falls back to the original
+ * string — the outer decode still runs, matching pre-fix behavior — instead of
+ * throwing out of `new URL` and blanking the palette.
+ */
+function withPaletteCacheKey(posterUrl: string): string {
+  try {
+    const u = new URL(posterUrl);
+    u.searchParams.set("_pal", "1");
+    return u.toString();
+  } catch {
+    return posterUrl;
   }
 }
