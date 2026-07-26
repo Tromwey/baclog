@@ -9,6 +9,9 @@ import { useEffect, useRef } from "react";
  * Scrolls the element back into view on focus and on every subsequent
  * visualViewport resize (the keyboard's show animation fires this a beat
  * after focus) while it's still the active element.
+ *
+ * Sibling: [useKeyboardScrollGuard] — for a screen whose field is already at
+ * the top, it only UNDOES an upward scroll instead of centering anything.
  */
 export function useScrollIntoViewOnKeyboard<T extends HTMLElement>() {
   const ref = useRef<T>(null);

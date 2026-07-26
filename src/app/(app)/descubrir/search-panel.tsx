@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,7 @@ import {
   type MediaType,
   type SearchTab,
 } from "@/modules/catalog/types";
+import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
 import { AddButton } from "./add-button";
 import { Pills } from "./pills";
 
@@ -38,6 +40,8 @@ export function SearchPanel({
   selected,
   onToggle,
   fromRect,
+  inputRef,
+  initialQuery,
   backlogs,
   onBack,
 }: {
@@ -45,14 +49,18 @@ export function SearchPanel({
   onToggle: (t: MediaType) => void;
   /** The Buscar button's rect at tap time — the bar FLIPs up from here. */
   fromRect: DOMRect | null;
+  /** Owned by the parent so the tap handler can focus it inside the gesture. */
+  inputRef: RefObject<HTMLInputElement | null>;
+  /** From ?q= — a search restored after closing an item (re-runs on mount). */
+  initialQuery: string;
   backlogs: DiscoveryBacklog[];
   onBack: () => void;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<CatalogSearchResult[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
-    "idle",
+    initialQuery.trim().length >= 2 ? "loading" : "idle",
   );
   // catalogItemId -> the created backlogItem row id, so tapping ✓ can remove it.
   const [added, setAdded] = useState<Record<string, string>>({});
@@ -69,31 +77,67 @@ export function SearchPanel({
   const [creating, setCreating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const [flying, setFlying] = useState(fromRect !== null);
 
-  // FLIP: start the search bar at the Buscar button's position/size, then let
-  // it animate up into place — it rises "with" the native keyboard.
+  // FLIP: a GHOST bar starts at the Buscar button's position/size and animates
+  // up into the real bar, which just fades in where it already is.
+  //
+  // The ghost exists because the animation must NOT touch the row that owns the
+  // focused input: a transform parked that input near the bottom of the screen
+  // for ~400ms, exactly while iOS raises the keyboard, and Safari's
+  // keyboard-avoidance then scrolled the page to clear that transient position —
+  // leaving the real bar scrolled off the top once the animation landed.
   useLayoutEffect(() => {
-    const el = rowRef.current;
-    if (!el || !fromRect) return;
-    const to = el.getBoundingClientRect();
+    const el = ghostRef.current;
+    const row = rowRef.current;
+    if (!el || !row || !fromRect) return;
+    const to = row.getBoundingClientRect();
+    el.style.left = `${to.left}px`;
+    el.style.top = `${to.top}px`;
+    el.style.width = `${to.width}px`;
+    el.style.height = `${to.height}px`;
     const sx = to.width ? fromRect.width / to.width : 1;
     const sy = to.height ? fromRect.height / to.height : 1;
-    el.style.transformOrigin = "top left";
     el.style.transform = `translate(${fromRect.left - to.left}px, ${fromRect.top - to.top}px) scale(${sx}, ${sy})`;
-    el.style.opacity = "0.5";
+    row.style.opacity = "0.35";
     void el.offsetWidth; // reflow so the start frame commits
     el.style.transition =
-      "transform 0.42s cubic-bezier(0.7, 0, 0.2, 1), opacity 0.32s ease";
+      "transform 0.42s cubic-bezier(0.7, 0, 0.2, 1), opacity 0.16s ease 0.26s";
     el.style.transform = "translate(0px, 0px) scale(1, 1)";
-    el.style.opacity = "1";
-    const clear = () => {
-      el.style.transition = "";
-      el.style.transform = "";
-      el.style.transformOrigin = "";
+    el.style.opacity = "0";
+    row.style.transition = "opacity 0.28s ease 0.14s";
+    row.style.opacity = "1";
+    const land = () => {
+      row.style.transition = "";
+      row.style.opacity = "";
+      setFlying(false);
     };
-    el.addEventListener("transitionend", clear, { once: true });
-    return () => el.removeEventListener("transitionend", clear);
+    el.addEventListener("transitionend", land, { once: true });
+    // Safari drops transitionend when the app is backgrounded mid-flight; land
+    // on a timer too, or the decoy stays in the DOM for the whole session.
+    const failsafe = window.setTimeout(land, 600);
+    return () => {
+      el.removeEventListener("transitionend", land);
+      clearTimeout(failsafe);
+    };
   }, [fromRect]);
+
+  // Fallback for a mount that didn't come from the Buscar tap (the handler
+  // focuses inside the gesture, which is the only path iOS opens a keyboard
+  // for). Skipped on a restored search: you came back to READ those results,
+  // and a keyboard would cover them. Never steals an already-picked field.
+  useEffect(() => {
+    if (initialQuery) return;
+    const input = inputRef.current;
+    if (input && document.activeElement !== input) input.focus();
+    // Only ever on mount — a later re-render must not re-grab focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The FLIP no longer moves the input, but iOS still scrolls the document to
+  // clear the keyboard on its own and (in a standalone PWA) never scrolls back.
+  useKeyboardScrollGuard(inputRef, rowRef);
 
   const active = MEDIA_TYPES.filter((t) => selected[t]);
   // One type selected → search just that; 0 or 2+ → "all" and filter client-side.
@@ -129,6 +173,22 @@ export function SearchPanel({
     active.length === 0
       ? results
       : results.filter((r) => selected[r.mediaType]);
+
+  // Stamp the live query onto THIS history entry before pushing the item, so
+  // the item's ✕ (router.back) returns to these same results. Native
+  // replaceState is the supported way to sync the URL without a re-render
+  // (Next: "Native History API"); router.replace would re-run the page.
+  const openItem = (catalogItemId: string) => {
+    const q = query.trim();
+    if (q) {
+      window.history.replaceState(
+        null,
+        "",
+        `/descubrir?q=${encodeURIComponent(q)}`,
+      );
+    }
+    router.push(`/item/${catalogItemId}`);
+  };
 
   // Flip a single row's pending flag, leaving every other row untouched.
   const setRowPending = (id: string, on: boolean) =>
@@ -209,7 +269,18 @@ export function SearchPanel({
 
   return (
     <div className="relative z-10 flex min-h-dvh flex-col px-4 pb-dock-clearance pt-[calc(48px+env(safe-area-inset-top))]">
-      <div ref={rowRef} className="flex items-center gap-2.5 will-change-transform">
+      {/* Decoy bar: the only thing that travels, and it unmounts once it lands.
+          Mirrors the real row's shape (back button + bar read as one rounded
+          slab at this size). Positioned from viewport coords, hence `fixed`. */}
+      {flying && (
+        <div
+          ref={ghostRef}
+          aria-hidden
+          className="pointer-events-none fixed z-20 origin-top-left rounded-[26px] bg-surface-3 will-change-transform"
+        />
+      )}
+
+      <div ref={rowRef} className="flex items-center gap-2.5">
         <button
           onClick={onBack}
           aria-label="Volver"
@@ -221,7 +292,8 @@ export function SearchPanel({
           <SearchIcon size={17} className="shrink-0 text-text-2" />
           <input
             type="search"
-            autoFocus
+            // Focused by the Buscar tap (openSearch in descubrir-screen.tsx).
+            ref={inputRef}
             value={query}
             onChange={(e) => {
               const v = e.target.value;
@@ -236,8 +308,8 @@ export function SearchPanel({
             placeholder="Busca películas, series, álbumes…"
             aria-label="Búsqueda universal"
             // 16px (not 15) on purpose: iOS Safari auto-zooms the page when a
-            // focused input is <16px, and this one has autoFocus — the zoom
-            // fired on mount and overflowed the viewport. Keep it ≥16px.
+            // focused input is <16px, and this one is focused the moment it
+            // mounts — the zoom fired and overflowed the viewport. Keep it ≥16px.
             className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-text-3"
           />
         </div>
@@ -277,7 +349,9 @@ export function SearchPanel({
         {visible.map((r) => (
           <div
             key={r.catalogItemId}
-            onClick={() => router.push(`/item/${r.catalogItemId}`)}
+            onClick={() => {
+              openItem(r.catalogItemId);
+            }}
             className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-surface-1"
           >
             {r.posterUrl ? (

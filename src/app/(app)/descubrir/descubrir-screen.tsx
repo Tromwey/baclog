@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { flushSync } from "react-dom";
+import { useSearchParams } from "next/navigation";
 import { ChevronLeft, Search as SearchIcon, Sparkles } from "lucide-react";
 import {
   discoverNextRecoAction,
@@ -38,7 +40,11 @@ export function DescubrirScreen({
   /** User ADN palette — only for the loading screen's full-bleed aura. */
   loadingColors: string[];
 }) {
-  const [mode, setMode] = useState<Mode>("entry");
+  // ?q= is what survives a trip into an item: the search writes it before
+  // pushing /item/…, so the ✕ (router.back) lands back on the SAME list instead
+  // of dumping the user on the entry screen to retype their query.
+  const restoredQuery = useSearchParams().get("q") ?? "";
+  const [mode, setMode] = useState<Mode>(restoredQuery ? "search" : "entry");
   const [pills, setPills] = useState<Record<MediaType, boolean>>({
     film: true,
     series: true,
@@ -49,14 +55,24 @@ export function DescubrirScreen({
   // The Buscar button's on-screen rect at tap time — the search bar morphs
   // (FLIP) up from here, so it "rises into" the bar instead of popping in.
   const [searchFrom, setSearchFrom] = useState<DOMRect | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
 
   const togglePill = (t: MediaType) =>
     setPills((p) => ({ ...p, [t]: !p[t] }));
 
   const openSearch = (e: React.MouseEvent) => {
-    setSearchFrom(e.currentTarget.getBoundingClientRect());
-    setMode("search");
+    const rect = e.currentTarget.getBoundingClientRect();
+    // iOS only raises the keyboard for a focus() that runs inside the tap's own
+    // task. Mount the panel synchronously (flushSync) so the input exists right
+    // here, then focus it from the handler — relying on `autoFocus` (or any
+    // focus deferred to an effect) left the field focused with a caret and NO
+    // keyboard whenever React didn't commit inside the gesture.
+    flushSync(() => {
+      setSearchFrom(rect);
+      setMode("search");
+    });
+    searchInputRef.current?.focus();
   };
 
   const recomendar = () => {
@@ -150,8 +166,14 @@ export function DescubrirScreen({
           selected={pills}
           onToggle={togglePill}
           fromRect={searchFrom}
+          inputRef={searchInputRef}
+          initialQuery={restoredQuery}
           backlogs={backlogs}
-          onBack={() => setMode("entry")}
+          onBack={() => {
+            // Leaving search for real — drop ?q= so the next visit is clean.
+            window.history.replaceState(null, "", "/descubrir");
+            setMode("entry");
+          }}
         />
       )}
     </main>
