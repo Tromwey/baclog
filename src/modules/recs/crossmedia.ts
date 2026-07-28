@@ -1193,11 +1193,20 @@ export type DiscoverResult =
  * generation on ONE seed — bounded per call so the meter only moves on
  * deliberate taps (getCrossMediaReco enforces the cap + grounding).
  *
- * F3.5.9 — WHICH seed changed, and that's the whole fix for "it only ever gives
- * me one recommendation". The old version hunted for a seed with NOTHING
- * showable and returned `no_more` once every loved title had its single pairing;
- * now the seed the user is looking at (`preferSeedCatalogItemId`) is re-rolled
- * on request, so a title can yield a second, third… connection.
+ * F3.5.9 — WHICH seed gets it, in strict order of what buys the user the most:
+ *   1. a loved title that has NEVER had a recommendation
+ *   2. a title whose every cached pairing is owned or dismissed
+ *   3. the title on screen (`preferSeedCatalogItemId`) — a re-roll
+ *   4. their most recent loved title
+ *
+ * Breadth before depth, deliberately. An earlier cut of this put the on-screen
+ * seed first and it trapped the user on one title: the feed only had that seed
+ * showable, so × → generate → land back on the same seed → × … while two loved
+ * titles sat at zero recommendations. Re-rolling is the FALLBACK for when the
+ * library is already covered, not the default.
+ *
+ * The one-reco-per-item dead end stays fixed either way — step 3 exists, and
+ * `getCrossMediaReco` can now narrate a further edge or another deep cut.
  *
  * Returns the `seedCatalogItemId` it generated for on `result === "generated"`
  * (null otherwise) so the caller can land on exactly that pairing after a
@@ -1213,14 +1222,14 @@ export async function generateAnotherReco(
   if ((await remainingGenerations(userId)) <= 0)
     return { result: "cap_reached", seedCatalogItemId: null };
 
-  // Pick the single most useful seed: the one on screen, else one with nothing
-  // left to show for free (a first pairing beats a second one elsewhere), else
-  // their most recent loved title.
+  // Breadth first (see the ordering in the doc comment above): a title with
+  // nothing to show — least of all one that has never had a recommendation at
+  // all — beats another pairing for the title already on screen.
   const preferred = preferSeedCatalogItemId
     ? seeds.find((s) => s.catalogItemId === preferSeedCatalogItemId)
     : undefined;
   const target =
-    preferred ?? (await firstSeedWithNothingShowable(userId, seeds)) ?? seeds[0];
+    (await neediestSeed(userId, seeds)) ?? preferred ?? seeds[0];
 
   // forceNew: don't hand back an already-seen cached pairing here — the user
   // explicitly asked for another one. An UNSEEN cached pairing still wins
@@ -1243,21 +1252,28 @@ export async function generateAnotherReco(
 }
 
 /**
- * The first loved seed with NOTHING left to serve this user for free — every
- * cached pairing owned or dismissed, or none cached at all. A generation spent
- * here buys a title its first connection, which beats a second one elsewhere.
+ * The loved seed with the most to gain from one generation, or null when every
+ * title already has something showable.
+ *
+ * Two buckets, and the order between them matters: a title that has NEVER been
+ * narrated (no cached row at all) outranks one whose pairings merely ran out
+ * for this user, because the first buys a silent title its voice and the second
+ * only buys a replacement. Within a bucket, library order wins.
  */
-async function firstSeedWithNothingShowable(
+async function neediestSeed(
   userId: string,
   seeds: LovedSeed[],
 ): Promise<LovedSeed | null> {
+  let exhausted: LovedSeed | null = null;
   for (const seed of seeds) {
     const cached = await readCacheCandidates(seed.catalogItemId);
+    // Never narrated — take it immediately, nothing outranks this.
     if (cached.length === 0) return seed;
+    if (exhausted) continue; // already hold a bucket-2 pick; keep scanning for a bucket-1
     const showable = await showableForUser(userId, cached);
-    if (showable.length === 0) return seed;
+    if (showable.length === 0) exhausted = seed;
   }
-  return null;
+  return exhausted;
 }
 
 /** Remaining generations this month for a user (for UI / meter display). */
