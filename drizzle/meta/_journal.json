@@ -127,6 +127,13 @@
       "when": 1784241454172,
       "tag": "0017_link_share_event",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785097049016,
+      "tag": "0018_reco_variety",
+      "breakpoints": true
     }
   ]
 }

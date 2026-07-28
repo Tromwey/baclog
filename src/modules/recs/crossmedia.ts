@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   catalogItems,
   crossMediaRecs,
+  crossMediaRecSeen,
   crossMediaRecUsage,
   userItems,
   users,
@@ -70,6 +71,11 @@ async function capForUser(userId: string): Promise<number> {
 }
 
 export interface CrossMediaReco {
+  /**
+   * The cross_media_rec row id. Needed by the caller so it can stamp the
+   * per-user seen/dismissed ledger (F3.5.9) for exactly the pairing it showed.
+   */
+  recId: string;
   /** The grounded reco catalog_item — real, addable, link-outable. */
   targetCatalogItemId: string;
   targetTitle: string;
@@ -95,6 +101,12 @@ export interface CrossMediaReco {
   linkKind: "factual" | "thematic";
   /** True when served from cache (no generation charged). */
   cached: boolean;
+  /**
+   * F3.5.9 — this user has already been shown this pairing at least once.
+   * A seen reco is still served (free beats generating), just AFTER every
+   * unseen one; dismissed pairings never make it this far.
+   */
+  seen: boolean;
 }
 
 /** Graph edges narrate facts; thematic/legacy rows are honest vibes. */
@@ -147,12 +159,21 @@ type SeedRow = typeof catalogItems.$inferSelect;
  * from a LEGITIMATE empty (`empty` — ineligible seed, cap reached with nothing
  * cached, or a proposal that didn't ground). A `failed` never charges the meter.
  *
+ * F3.5.9 — a seed is no longer a one-reco dead end. The cache is ranked FOR
+ * THIS USER (owned/dismissed dropped, unseen before seen), and when nothing
+ * unseen is left an explicit re-roll (`forceNew`) narrates the next-best graph
+ * edge, or generates another deep cut. The monthly meter is the only ceiling.
+ *
  * @param seedCatalogItemId the catalog_item the user loved
- * @param userId            for the per-user monthly meter ONLY (never sent to the LLM)
+ * @param userId            for the per-user meter + seen ledger ONLY (never sent to the LLM)
+ * @param opts.forceNew     the user asked for ANOTHER pairing: skip re-serving
+ *                          an already-seen cached one and generate instead.
+ *                          Unseen cached pairings still win (free AND new).
  */
 export async function getCrossMediaReco(
   seedCatalogItemId: string,
   userId: string,
+  opts: { forceNew?: boolean } = {},
 ): Promise<RecoResult> {
   const [seed] = await db
     .select()
@@ -170,32 +191,65 @@ export async function getCrossMediaReco(
     return { status: "empty" };
   }
 
-  // F3.5.8 GRAPH PATH (retrieve→narrate), tried first: materialize the seed's
-  // verified edges (lazy, never metered — same cost class as the old grounding
-  // step) and rank them for THIS user (taste = deterministic selection, no
-  // LLM). Any usable candidate means the pairing is real by construction and
-  // already ownership-filtered; the LLM is only asked for prose.
+  // 1) CACHE FIRST, ranked for THIS user: graph rows before thematic, dropping
+  //    what they own or dismissed, unseen before seen. An UNSEEN cached pairing
+  //    is both free and new to them, so it beats generating even on a re-roll.
+  const cached = await readCacheCandidates(seedCatalogItemId);
+  const showable = await showableForUser(userId, cached);
+  const unseen = showable.filter((r) => !r.seen);
+  if (unseen.length > 0) return { status: "ok", reco: unseen[0] };
+  if (!opts.forceNew && showable.length > 0) {
+    return { status: "ok", reco: showable[0] };
+  }
+
+  // 2) GRAPH PATH (F3.5.8 retrieve→narrate), tried before the deep cut:
+  //    materialize the seed's verified edges (lazy, never metered — same cost
+  //    class as the old grounding step) and rank them for THIS user (taste =
+  //    deterministic selection, no LLM). Narrate the best-ranked edge we have
+  //    NOT already narrated — that skip is what makes a second, third… pairing
+  //    for the same seed possible instead of re-returning the first forever.
+  //    Any candidate here is real by construction and already ownership-
+  //    filtered; the LLM is only asked for prose.
   const edges = await getOrMaterializeLinkEdges(seed);
   const ranked = await rankEdgesForUser(userId, seed, edges);
-  if (ranked.length > 0) {
-    return graphPathReco(seed, ranked, userId);
+  const narratedTargets = new Set(cached.map((r) => r.targetCatalogItemId));
+  const freshEdge = ranked.find((c) => !narratedTargets.has(c.target.id));
+  if (freshEdge) return narrateEdge(seed, freshEdge, userId);
+
+  // 3) DEEP-CUT FALLBACK (v2 propose+ground, stamped "thematic"): no edges, or
+  //    every edge already narrated / owned. Honest degradation — the model may
+  //    only offer a thematic connection here, and the row records that. Titles
+  //    already narrated for this seed join the exclude list so a re-roll can't
+  //    come back with the same pairing.
+  const generated = await generateThematicReco(
+    seed,
+    userId,
+    cached.map((r) => r.targetTitle),
+  );
+  // A no-charge dead end (cap race) shouldn't strand the user on an empty
+  // screen when we still have an already-seen card in hand — re-serve it.
+  if (generated.status === "empty" && showable.length > 0) {
+    return { status: "ok", reco: showable[0] };
   }
+  return generated;
+}
 
-  // DEEP-CUT FALLBACK (v2 propose+ground, stamped "thematic"): no edges, or
-  // every edge target already owned. Honest degradation — the model may only
-  // offer a thematic connection here, and the row records that.
+/**
+ * Generate one THEMATIC (deep-cut) reco for a seed: charge → propose → ground →
+ * moderate → persist. Extracted from getCrossMediaReco so the orchestrator
+ * above reads as cache → graph → deep cut.
+ *
+ * @param excludeTargetTitles titles already narrated for THIS seed — appended to
+ *        the user's library exclusions so a re-roll proposes something new.
+ */
+async function generateThematicReco(
+  seed: SeedRow,
+  userId: string,
+  excludeTargetTitles: string[],
+): Promise<RecoResult> {
+  const seedCatalogItemId = seed.id;
 
-  // 1) Thematic cache (per-seed singleton, cross-user): serve free unless the
-  //    target is already in THIS user's library (read-time library check).
-  const cachedReco = await readCacheAnyThematic(seedCatalogItemId);
-  if (cachedReco) {
-    if (await userOwnsItem(userId, cachedReco.targetCatalogItemId)) {
-      return { status: "empty" };
-    }
-    return { status: "ok", reco: cachedReco };
-  }
-
-  // 2) Charge the meter FIRST (race-safe hard cap): the guarded upsert admits
+  // 1) Charge the meter FIRST (race-safe hard cap): the guarded upsert admits
   //    at most cap generations, so N concurrent requests can no longer all
   //    reach the provider on a stale read-only pre-check (LLM-cost/quota
   //    amplification). A transient provider failure REFUNDS the charge below,
@@ -204,20 +258,43 @@ export async function getCrossMediaReco(
   //    cost real money).
   if (!(await tryChargeGeneration(userId))) return { status: "empty" };
 
-  // 3) Provider proposes (fixture or real LLM). Only metadata crosses —
-  //    excludeTitles are bare catalog titles from the user's library in the
-  //    TARGET family (Pilar 4 holds: no user id, no PII), so the model never
-  //    proposes something the user already owns.
+  // 2) Provider proposes (fixture or real LLM). Only metadata crosses:
+  //    excludeTitles are bare catalog titles in the TARGET family — narrated,
+  //    already-shown, and owned (see below) — so Pilar 4 still holds. No user
+  //    id, no email, nothing that identifies whose taste this is; the titles
+  //    are the same public catalog strings search returns to anyone.
   const provider = crossMediaProvider();
   const targetFamily: ("film" | "series" | "album")[] =
     seed.mediaType === "album" ? ["film", "series"] : ["album"];
+  // Independent reads (different tables) — the user is already waiting.
+  const [shownTitles, ownedTitles] = await Promise.all([
+    shownTargetTitles(userId, targetFamily),
+    libraryTitles(userId, targetFamily),
+  ]);
   const seedMeta: CrossMediaSeed = {
     title: seed.title,
     mediaType: seed.mediaType,
     byline: seed.byline,
     year: seed.year,
     genre: seed.genre,
-    excludeTitles: await libraryTitles(userId, targetFamily),
+    // THREE exclusion sources, in falling order of "must not repeat", because
+    // the provider clamps the list at 40 and the head of it is what survives:
+    //   1. titles already narrated for THIS seed — a re-roll must not hand back
+    //      the pairing we already have (the model has no memory of its own
+    //      previous answer)
+    //   2. titles this user has already been SHOWN for ANY seed — stops the
+    //      cross-seed repeat (three different Nolan-ish films all landing on
+    //      Pink Floyd's The Wall), which per-seed exclusion can't see
+    //   3. their library in the target family — a reco you already own is a
+    //      wasted generation
+    // A library title crowded out is only a soft loss: step 4b's ownership
+    // check is the deterministic backstop. Deduped case-insensitively so a
+    // title in two lists doesn't burn two of the 40 slots.
+    excludeTitles: dedupeTitles([
+      ...excludeTargetTitles,
+      ...shownTitles,
+      ...ownedTitles,
+    ]),
   };
   const proposeStart = Date.now();
   const outcome = await provider.propose(seedMeta);
@@ -239,8 +316,8 @@ export async function getCrossMediaReco(
       usage: outcome.usage,
       outcome: result,
     });
-  // 4) A transient failure (429/network) or unusable output → `failed`, and the
-  //    step-2 charge is refunded: net-zero on the meter, distinct from the
+  // 3) A transient failure (429/network) or unusable output → `failed`, and the
+  //    step-1 charge is refunded: net-zero on the meter, distinct from the
   //    `empty` cases (no reco to show). Telemetry and meter writes are
   //    independent rows — run them in parallel (the user is already waiting).
   if (!outcome.ok) {
@@ -249,9 +326,9 @@ export async function getCrossMediaReco(
   }
   const proposal = outcome.proposal;
 
-  // 5) GROUNDING (mandatory): resolve the proposed title against the catalog.
+  // 4) GROUNDING (mandatory): resolve the proposed title against the catalog.
   //    Only a real, addable catalog_item is surfaced (LLMs hallucinate titles).
-  //    We already CHARGED above (step 2, ADR-009 — the LLM call cost money), so a
+  //    We already CHARGED above (step 1, ADR-009 — the LLM call cost money), so a
   //    grounding miss here is `spent_no_match`, NOT `empty`: a discovery was
   //    spent with nothing to show. Surfacing it (vs. the old silent `empty`) lets
   //    the UI tell the user and offer a re-roll that may ground.
@@ -261,7 +338,7 @@ export async function getCrossMediaReco(
     return { status: "spent_no_match" };
   }
 
-  // 5b) LIBRARY CHECK: a grounded reco the user already owns is also nothing
+  // 4b) LIBRARY CHECK: a grounded reco the user already owns is also nothing
   //     to show (the <exclude> block makes this rare; this is the deterministic
   //     backstop for when the model ignores it). NOT persisted — the global
   //     per-seed cache would permanently pin an already-owned pairing for this
@@ -271,7 +348,7 @@ export async function getCrossMediaReco(
     return { status: "spent_no_match" };
   }
 
-  // 5c) MODERATION (deterministic, local — see moderation.ts): the row about
+  // 4c) MODERATION (deterministic, local — see moderation.ts): the row about
   //     to be inserted is a SHARED PERMANENT cache entry served verbatim to
   //     every user, forever. Screen every LLM-authored field — the narrative
   //     plus targetTitle/targetByline/linkClaim (all model output on this
@@ -306,9 +383,10 @@ export async function getCrossMediaReco(
   }
   await logPropose("ok");
 
-  // 6) Persist the thematic reco. Bare onConflictDoNothing (any constraint):
-  //    a concurrent request may have won either the thematic-singleton partial
-  //    index or the (seed, target) pair unique — both resolve to "re-read".
+  // 5) Persist the thematic reco. onConflictDoNothing on the (seed, target)
+  //    unique: a concurrent request may have narrated this very pairing first
+  //    (or the model may have re-proposed a pairing this seed already has,
+  //    despite the exclude list) — either way, re-read that row.
   const [row] = await db
     .insert(crossMediaRecs)
     .values({
@@ -329,34 +407,29 @@ export async function getCrossMediaReco(
 
   // A concurrent request may have won the insert — fall back to the cached row.
   if (!row) {
-    const cached = await readCacheAnyThematic(seedCatalogItemId);
+    const cached = await readCacheForPair(seedCatalogItemId, grounded.id);
     return cached ? { status: "ok", reco: cached } : { status: "empty" };
   }
 
-  return { status: "ok", reco: toReco(proposal, grounded, provider.id, false) };
+  return {
+    status: "ok",
+    reco: toReco(row.id, proposal, grounded, provider.id, false),
+  };
 }
 
 /**
- * F3.5.8 graph path: serve a cached narration for any ranked pair (free), or
- * narrate the best-ranked edge (metered). The target is a real catalog_item
- * and already ownership-filtered — no grounding, no post-hoc library check;
- * spent_no_match can't happen here outside a hairline TOCTOU (user adds the
- * target mid-request), which we accept: the row still serves everyone else.
+ * F3.5.8 graph path: narrate ONE verified edge (metered). The caller has already
+ * ruled out the cache and picked the best-ranked edge it hasn't narrated yet, so
+ * this function only generates. The target is a real catalog_item and already
+ * ownership-filtered — no grounding, no post-hoc library check; spent_no_match
+ * can't happen here outside a hairline TOCTOU (user adds the target
+ * mid-request), which we accept: the row still serves everyone else.
  */
-async function graphPathReco(
+async function narrateEdge(
   seed: GraphCatalogItemRow,
-  ranked: RankedTarget[],
+  best: RankedTarget,
   userId: string,
 ): Promise<RecoResult> {
-  // Cache-first across ALL ranked pairs, best first: an already-narrated
-  // pairing is free, and free beats regenerating (ADR-009) even when it isn't
-  // the top-ranked edge today.
-  for (const candidate of ranked) {
-    const cached = await readCacheForPair(seed.id, candidate.target.id);
-    if (cached) return { status: "ok", reco: cached };
-  }
-
-  const best = ranked[0];
   if (!(await tryChargeGeneration(userId))) return { status: "empty" };
 
   const meta = (best.edge.meta ?? {}) as { composer?: string; artist?: string };
@@ -453,6 +526,7 @@ async function graphPathReco(
   return {
     status: "ok",
     reco: {
+      recId: row.id,
       targetCatalogItemId: best.target.id,
       targetTitle: best.target.title,
       targetMediaType: best.target.mediaType,
@@ -463,12 +537,14 @@ async function graphPathReco(
       provider: provider.id,
       linkKind: "factual",
       cached: false,
+      seen: false,
     },
   };
 }
 
 /** Shared select shape for all cache readers (rec row + joined target). */
 const CACHE_SELECT = {
+  id: crossMediaRecs.id,
   hookEyebrow: crossMediaRecs.hookEyebrow,
   hookTitle: crossMediaRecs.hookTitle,
   resultEyebrow: crossMediaRecs.resultEyebrow,
@@ -480,6 +556,7 @@ const CACHE_SELECT = {
 } as const;
 
 type CacheHit = {
+  id: string;
   hookEyebrow: string;
   hookTitle: string;
   resultEyebrow: string;
@@ -490,8 +567,11 @@ type CacheHit = {
   target: typeof catalogItems.$inferSelect;
 };
 
+/** `seen` starts false — only showableForUser/orderShowable can know the truth. */
 function toCachedReco(hit: CacheHit): CrossMediaReco {
   return {
+    recId: hit.id,
+    seen: false,
     targetCatalogItemId: hit.target.id,
     targetTitle: hit.target.title,
     targetMediaType: hit.target.mediaType,
@@ -532,25 +612,117 @@ async function readCacheForPair(
   return hit ? toCachedReco(hit) : null;
 }
 
-/** The seed's thematic/legacy singleton (deep-cut path), if any. */
-async function readCacheAnyThematic(
-  seedCatalogItemId: string,
-): Promise<CrossMediaReco | null> {
-  const [hit] = await db
-    .select(CACHE_SELECT)
-    .from(crossMediaRecs)
-    .innerJoin(
-      catalogItems,
-      eq(crossMediaRecs.targetCatalogItemId, catalogItems.id),
-    )
+/**
+ * F3.5.9 — the user's per-rec ledger state for a batch of recs. Two sets, because
+ * seen and dismissed drive opposite decisions: seen only DEPRIORITIZES (a re-serve
+ * is still free), dismissed EXCLUDES.
+ */
+async function recSeenState(
+  userId: string,
+  recIds: string[],
+): Promise<{ seen: Set<string>; dismissed: Set<string> }> {
+  if (recIds.length === 0) return { seen: new Set(), dismissed: new Set() };
+  const rows = await db
+    .select({
+      crossMediaRecId: crossMediaRecSeen.crossMediaRecId,
+      dismissedAt: crossMediaRecSeen.dismissedAt,
+    })
+    .from(crossMediaRecSeen)
     .where(
       and(
-        eq(crossMediaRecs.seedCatalogItemId, seedCatalogItemId),
-        sql`${crossMediaRecs.linkType} is null or ${crossMediaRecs.linkType} = 'thematic'`,
+        eq(crossMediaRecSeen.userId, userId),
+        inArray(crossMediaRecSeen.crossMediaRecId, recIds),
       ),
+    );
+  const seen = new Set(rows.map((r) => r.crossMediaRecId));
+  const dismissed = new Set(
+    rows.filter((r) => r.dismissedAt !== null).map((r) => r.crossMediaRecId),
+  );
+  return { seen, dismissed };
+}
+
+/** Which of these catalog items the user already has (any backlog), batched. */
+async function ownedTargetIds(
+  userId: string,
+  targetIds: string[],
+): Promise<Set<string>> {
+  if (targetIds.length === 0) return new Set();
+  const rows = await db
+    .select({ catalogItemId: userItems.catalogItemId })
+    .from(userItems)
+    .where(
+      and(
+        eq(userItems.userId, userId),
+        inArray(userItems.catalogItemId, targetIds),
+      ),
+    );
+  return new Set(rows.map((r) => r.catalogItemId));
+}
+
+/**
+ * THE per-user view of a seed's shared cache (F3.5.9). Drops what the user owns
+ * (read-time library check — the cache is cross-user) and what they dismissed,
+ * then puts UNSEEN pairings first, preserving the caller's order within each
+ * group (readCacheCandidates already ranks graph rows before thematic).
+ *
+ * Pure so the feed can reuse it across many seeds off ONE batched pair of reads.
+ */
+function orderShowable(
+  recos: CrossMediaReco[],
+  owned: Set<string>,
+  state: { seen: Set<string>; dismissed: Set<string> },
+): CrossMediaReco[] {
+  const eligible = recos
+    .filter(
+      (r) => !owned.has(r.targetCatalogItemId) && !state.dismissed.has(r.recId),
     )
-    .limit(1);
-  return hit ? toCachedReco(hit) : null;
+    .map((r) => ({ ...r, seen: state.seen.has(r.recId) }));
+  return [...eligible.filter((r) => !r.seen), ...eligible.filter((r) => r.seen)];
+}
+
+/** Single-seed convenience wrapper around {@link orderShowable}. */
+async function showableForUser(
+  userId: string,
+  recos: CrossMediaReco[],
+): Promise<CrossMediaReco[]> {
+  if (recos.length === 0) return [];
+  const [owned, state] = await Promise.all([
+    ownedTargetIds(userId, [...new Set(recos.map((r) => r.targetCatalogItemId))]),
+    recSeenState(
+      userId,
+      recos.map((r) => r.recId),
+    ),
+  ]);
+  return orderShowable(recos, owned, state);
+}
+
+/**
+ * Record that this user was SHOWN a pairing. Idempotent and deliberately
+ * non-destructive: onConflictDoNothing keeps the first seenAt AND never
+ * resurrects a dismissed row.
+ */
+export async function markRecoSeen(
+  userId: string,
+  crossMediaRecId: string,
+): Promise<void> {
+  await db
+    .insert(crossMediaRecSeen)
+    .values({ userId, crossMediaRecId })
+    .onConflictDoNothing();
+}
+
+/** The × — hide this pairing from this user for good. Upsert: × after a view. */
+export async function dismissReco(
+  userId: string,
+  crossMediaRecId: string,
+): Promise<void> {
+  await db
+    .insert(crossMediaRecSeen)
+    .values({ userId, crossMediaRecId, dismissedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [crossMediaRecSeen.userId, crossMediaRecSeen.crossMediaRecId],
+      set: { dismissedAt: sql`now()` },
+    });
 }
 
 /**
@@ -696,6 +868,59 @@ async function libraryTitles(
 }
 
 /**
+ * Titles this user has already BEEN SHOWN as a reco, any seed, target family
+ * only, newest first — the cross-seed half of the exclude list.
+ *
+ * Per-seed exclusion can't see this: it stops "Memento → The Wall" twice, but
+ * not "Inception → The Wall" AND "Memento → The Wall", which is the repetition
+ * that actually reads as canned. Sourced from the F3.5.9 seen ledger, so it only
+ * ever suppresses pairings the user has really laid eyes on.
+ *
+ * KNOWN TRADEOFF: the row this shapes lands in the SHARED cross-user cache, so
+ * one user's "already saw it" nudges what every later user gets for that seed.
+ * That's pre-existing (libraryTitles has always done it) and it's the deal the
+ * shared cache makes — noted here so it isn't rediscovered as a bug. The 10-row
+ * cap keeps the nudge small next to the 40-title budget.
+ */
+async function shownTargetTitles(
+  userId: string,
+  family: ("film" | "series" | "album")[],
+  limit = 10,
+): Promise<string[]> {
+  const rows = await db
+    .select({ title: catalogItems.title })
+    .from(crossMediaRecSeen)
+    .innerJoin(
+      crossMediaRecs,
+      eq(crossMediaRecSeen.crossMediaRecId, crossMediaRecs.id),
+    )
+    .innerJoin(
+      catalogItems,
+      eq(crossMediaRecs.targetCatalogItemId, catalogItems.id),
+    )
+    .where(
+      and(
+        eq(crossMediaRecSeen.userId, userId),
+        inArray(catalogItems.mediaType, family),
+      ),
+    )
+    .orderBy(desc(crossMediaRecSeen.seenAt))
+    .limit(limit);
+  return rows.map((r) => r.title);
+}
+
+/** Order-preserving, case-insensitive dedupe — the exclude budget is only 40. */
+function dedupeTitles(titles: string[]): string[] {
+  const seen = new Set<string>();
+  return titles.filter((t) => {
+    const key = t.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
  * Count a charged-but-nothing-to-show generation (grounding miss or an
  * already-owned target) on the month's meter row — the reco-health signal
  * /admin/recos reads. The row always exists here: tryChargeGeneration just
@@ -763,12 +988,15 @@ async function groundProposal(
 }
 
 function toReco(
+  recId: string,
   proposal: CrossMediaProposal,
   target: SeedRow,
   providerId: string,
   cached: boolean,
 ): CrossMediaReco {
   return {
+    recId,
+    seen: false,
     targetCatalogItemId: target.id,
     targetTitle: target.title,
     targetMediaType: target.mediaType,
@@ -829,6 +1057,25 @@ export interface CrossMediaFeed {
   spentNoMatch: boolean;
 }
 
+/**
+ * Payload ceiling for one feed read. Since F3.5.9 a seed can hold many cached
+ * pairings, and getLovedSeeds returns up to 24 seeds — without this, a heavy user
+ * would ship ~100 pairings to the client to look at one card at a time.
+ */
+const FEED_MAX_ITEMS = 40;
+
+/** Take one from each group, round-robin, until every group is drained. */
+function interleave<T>(groups: T[][]): T[] {
+  const out: T[] = [];
+  const depth = Math.max(0, ...groups.map((g) => g.length));
+  for (let i = 0; i < depth; i++) {
+    for (const group of groups) {
+      if (i < group.length) out.push(group[i]);
+    }
+  }
+  return out;
+}
+
 function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
   return {
     seed: {
@@ -850,7 +1097,7 @@ function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
  * a first visit, spends AT MOST ONE generation — on the most-recent loved seed —
  * and only when under the cap. That single bounded attempt keeps a first load
  * from bursting the meter; more pairings come from the explicit "discover
- * another" action (generateNextUncachedReco).
+ * another" action (generateAnotherReco).
  */
 export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed> {
   const cap = await capForUser(userId);
@@ -866,40 +1113,38 @@ export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed>
     };
   }
 
-  // Cache-first read: a seed may now have SEVERAL cached pairings (F3.5.8 —
-  // one per narrated edge, plus at most one thematic). Per seed, show the
-  // first candidate whose target THIS user doesn't own (graph rows rank ahead
-  // of thematic; ownership resolved in one batched query — the read-time
-  // library check for the shared cross-user cache).
+  // Cache-first read: a seed can have SEVERAL cached pairings (one per narrated
+  // edge, plus any number of deep cuts since F3.5.9). Emit EVERY showable one —
+  // the old code took a single pick per seed, which threw away variety we had
+  // already paid for and left the × with nowhere to go. Ownership + seen/
+  // dismissed state resolve in ONE batched pair of reads for all seeds.
   const seedCandidates: { seed: LovedSeed; recos: CrossMediaReco[] }[] = [];
   for (const seed of seeds) {
     const recos = await readCacheCandidates(seed.catalogItemId);
     if (recos.length > 0) seedCandidates.push({ seed, recos });
   }
-  const allTargetIds = [
-    ...new Set(
-      seedCandidates.flatMap((s) => s.recos.map((r) => r.targetCatalogItemId)),
+  const allRecos = seedCandidates.flatMap((s) => s.recos);
+  const [ownedTargets, seenState] = await Promise.all([
+    ownedTargetIds(userId, [
+      ...new Set(allRecos.map((r) => r.targetCatalogItemId)),
+    ]),
+    recSeenState(
+      userId,
+      allRecos.map((r) => r.recId),
     ),
-  ];
-  const ownedTargets = new Set(
-    allTargetIds.length === 0
-      ? []
-      : (
-          await db
-            .select({ catalogItemId: userItems.catalogItemId })
-            .from(userItems)
-            .where(
-              and(
-                eq(userItems.userId, userId),
-                inArray(userItems.catalogItemId, allTargetIds),
-              ),
-            )
-        ).map((r) => r.catalogItemId),
-  );
-  const items: CrossMediaFeedItem[] = seedCandidates.flatMap(({ seed, recos }) => {
-    const pick = recos.find((r) => !ownedTargets.has(r.targetCatalogItemId));
-    return pick ? [toFeedItem(seed, pick)] : [];
-  });
+  ]);
+  // Round-robin across seeds: the × should walk a DIFFERENT loved title next,
+  // not grind through five pairings of the same one. Truncating AFTER the
+  // interleave is what makes the cap harmless — round 1 of every seed lands
+  // before round 2 of any, so what falls off the end is only ever a seed's
+  // nth-best pairing, and the × reaches it on a later pass anyway.
+  const items: CrossMediaFeedItem[] = interleave(
+    seedCandidates.map(({ seed, recos }) =>
+      orderShowable(recos, ownedTargets, seenState).map((r) =>
+        toFeedItem(seed, r),
+      ),
+    ),
+  ).slice(0, FEED_MAX_ITEMS);
 
   // Nothing cached yet → one bounded generation so the page is never empty for
   // a user who has loved items and meter left. A transient provider failure is
@@ -944,54 +1189,47 @@ export type DiscoverResult =
   | "failed";
 
 /**
- * User-initiated generation for the /para-ti "discover another" button. Finds
- * the first loved seed with no cached pairing and spends ONE generation on it
- * (getCrossMediaReco enforces cap + grounding). Bounded to a single seed per
- * call so the meter only moves on deliberate taps.
+ * User-initiated generation for the "otra conexión" button. Spends ONE
+ * generation on ONE seed — bounded per call so the meter only moves on
+ * deliberate taps (getCrossMediaReco enforces the cap + grounding).
+ *
+ * F3.5.9 — WHICH seed changed, and that's the whole fix for "it only ever gives
+ * me one recommendation". The old version hunted for a seed with NOTHING
+ * showable and returned `no_more` once every loved title had its single pairing;
+ * now the seed the user is looking at (`preferSeedCatalogItemId`) is re-rolled
+ * on request, so a title can yield a second, third… connection.
  *
  * Returns the `seedCatalogItemId` it generated for on `result === "generated"`
  * (null otherwise) so the caller can land on exactly that pairing after a
  * cache-first re-read — getCrossMediaFeed orders items by seed, not append
  * order, so a positional guess would land on the wrong one.
  */
-export async function generateNextUncachedReco(
+export async function generateAnotherReco(
   userId: string,
+  preferSeedCatalogItemId?: string | null,
 ): Promise<{ result: DiscoverResult; seedCatalogItemId: string | null }> {
   const seeds = await getLovedSeeds(userId);
   if (seeds.length === 0) return { result: "no_more", seedCatalogItemId: null };
-
-  // "Uncached" is now per-USER (F3.5.8): a seed whose every cached candidate
-  // targets something this user already owns still deserves a generation —
-  // the graph path can narrate a different edge for them.
-  let nextUncached: LovedSeed | null = null;
-  for (const seed of seeds) {
-    const candidates = await readCacheCandidates(seed.catalogItemId);
-    if (candidates.length === 0) {
-      nextUncached = seed;
-      break;
-    }
-    const targetIds = candidates.map((c) => c.targetCatalogItemId);
-    const owned = await db
-      .select({ catalogItemId: userItems.catalogItemId })
-      .from(userItems)
-      .where(
-        and(
-          eq(userItems.userId, userId),
-          inArray(userItems.catalogItemId, targetIds),
-        ),
-      );
-    if (owned.length === targetIds.length) {
-      nextUncached = seed;
-      break;
-    }
-  }
-  if (!nextUncached) return { result: "no_more", seedCatalogItemId: null };
   if ((await remainingGenerations(userId)) <= 0)
     return { result: "cap_reached", seedCatalogItemId: null };
 
-  const res = await getCrossMediaReco(nextUncached.catalogItemId, userId);
+  // Pick the single most useful seed: the one on screen, else one with nothing
+  // left to show for free (a first pairing beats a second one elsewhere), else
+  // their most recent loved title.
+  const preferred = preferSeedCatalogItemId
+    ? seeds.find((s) => s.catalogItemId === preferSeedCatalogItemId)
+    : undefined;
+  const target =
+    preferred ?? (await firstSeedWithNothingShowable(userId, seeds)) ?? seeds[0];
+
+  // forceNew: don't hand back an already-seen cached pairing here — the user
+  // explicitly asked for another one. An UNSEEN cached pairing still wins
+  // (free and new), and getCrossMediaReco handles that internally.
+  const res = await getCrossMediaReco(target.catalogItemId, userId, {
+    forceNew: true,
+  });
   if (res.status === "ok")
-    return { result: "generated", seedCatalogItemId: nextUncached.catalogItemId };
+    return { result: "generated", seedCatalogItemId: target.catalogItemId };
   if (res.status === "failed") return { result: "failed", seedCatalogItemId: null };
   // Charged, proposal ok, but grounding missed → surface it (not silent) so the
   // user learns a discovery was spent; a re-roll may ground. Distinct from both
@@ -1002,6 +1240,24 @@ export async function generateNextUncachedReco(
   // saw meter left, the guarded upsert then found the cap full): no reco to show,
   // not a retryable error — keep the quiet "nothing more" path.
   return { result: "no_more", seedCatalogItemId: null };
+}
+
+/**
+ * The first loved seed with NOTHING left to serve this user for free — every
+ * cached pairing owned or dismissed, or none cached at all. A generation spent
+ * here buys a title its first connection, which beats a second one elsewhere.
+ */
+async function firstSeedWithNothingShowable(
+  userId: string,
+  seeds: LovedSeed[],
+): Promise<LovedSeed | null> {
+  for (const seed of seeds) {
+    const cached = await readCacheCandidates(seed.catalogItemId);
+    if (cached.length === 0) return seed;
+    const showable = await showableForUser(userId, cached);
+    if (showable.length === 0) return seed;
+  }
+  return null;
 }
 
 /** Remaining generations this month for a user (for UI / meter display). */

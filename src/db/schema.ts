@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -560,12 +560,14 @@ export const crossMediaRecs = pgTable(
       t.seedCatalogItemId,
       t.targetCatalogItemId,
     ),
-    // Deep-cut singleton, preserved from v2: at most ONE thematic/legacy row
-    // per seed, ever (the cost guarantee — a deep-cut is never regenerated).
-    // Partial unique index scoped to exactly that subset.
-    uniqueIndex("cross_media_rec_thematic_seed_unique")
-      .on(t.seedCatalogItemId)
-      .where(sql`${t.linkType} is null or ${t.linkType} = 'thematic'`),
+    // F3.5.9 DROPPED the v2 deep-cut singleton (one thematic row per seed,
+    // ever). It was a per-seed cost ceiling, and it made an edgeless seed —
+    // most indie albums have no soundtrack/score edge — yield exactly ONE
+    // recommendation for every user forever: the engine looked like it was
+    // stuck. Cost control now rests entirely on cross_media_rec_usage, the
+    // race-safe per-user monthly meter (ADR-009's actual guard); the (seed,
+    // target) unique above still stops the same pairing from being narrated
+    // twice, so nothing is regenerated — new pairings are simply allowed.
     index("cross_media_rec_target_idx").on(t.targetCatalogItemId),
     index("cross_media_rec_link_id_idx").on(t.crossMediaLinkId),
   ],
@@ -604,6 +606,48 @@ export const crossMediaRecUsage = pgTable(
   (t) => [
     // THE meter key: at most one counter row per (user, month)
     uniqueIndex("cross_media_rec_usage_user_era_unique").on(t.userId, t.eraKey),
+  ],
+);
+
+/**
+ * F3.5.9 — the per-user "already served" ledger for cross-media recos.
+ *
+ * cross_media_rec is a SHARED cross-user cache, so "have I already been shown
+ * this pairing?" and "I said no to this pairing" cannot live on the row itself.
+ * One row per (user, rec), with two DELIBERATELY different states:
+ *
+ *   - row exists          → SEEN. Deprioritized, never hidden: a re-visit still
+ *                           re-serves it for FREE rather than burning a
+ *                           generation, so opening Descubrir stays costless.
+ *   - dismissedAt not null → the user's explicit ×. Hidden for good.
+ *
+ * That split is what keeps ADR-009 intact while still rotating: variety comes
+ * from unseen cached pairings first, and the meter only moves on a deliberate
+ * "otra conexión".
+ */
+export const crossMediaRecSeen = pgTable(
+  "cross_media_rec_seen",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    crossMediaRecId: text("cross_media_rec_id")
+      .notNull()
+      .references(() => crossMediaRecs.id, { onDelete: "cascade" }),
+    seenAt: timestamp("seen_at").notNull().defaultNow(),
+    /** Set by the × — null means "shown, still eligible". */
+    dismissedAt: timestamp("dismissed_at"),
+  },
+  (t) => [
+    uniqueIndex("cross_media_rec_seen_user_rec_unique").on(
+      t.userId,
+      t.crossMediaRecId,
+    ),
+    // Every read is "this user's state for these recs" — leftmost prefix covers it.
+    index("cross_media_rec_seen_user_idx").on(t.userId),
   ],
 );
 

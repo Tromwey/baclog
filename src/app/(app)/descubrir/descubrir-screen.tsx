@@ -6,7 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { ChevronLeft, Search as SearchIcon, Sparkles } from "lucide-react";
 import {
   discoverNextRecoAction,
+  dismissRecoAction,
   getDiscoverFeedAction,
+  markRecoSeenAction,
   type DiscoverFeedResult,
 } from "@/app/actions/crossmedia-actions";
 import {
@@ -91,16 +93,42 @@ export function DescubrirScreen({
   };
 
   const readyItems = feed && feed.kind === "ready" ? feed.items : [];
+  const current = readyItems[Math.min(aiIndex, readyItems.length - 1)] ?? null;
+  const currentRecId = current?.recId ?? null;
 
-  // The × / "otra conexión": walk cached pairings for free, then spend ONE
-  // generation when they run out (the engine still enforces the monthly cap).
+  // F3.5.9 — stamp the seen ledger for whatever pairing is on screen, so the
+  // NEXT visit leads with something they haven't been shown. Fire-and-forget:
+  // being seen only deprioritizes (a re-serve is still free), so a lost call
+  // costs nothing. Keyed on recId — re-runs when the × advances the card.
+  useEffect(() => {
+    if (!currentRecId) return;
+    void markRecoSeenAction(currentRecId);
+  }, [currentRecId]);
+
+  // The × / "otra conexión": DISMISS the current pairing (permanently, per the
+  // button's own "Descartar" label), then walk the remaining cached pairings for
+  // free, and only spend a generation when they run out.
   const next = () => {
+    // .catch: the promise floats on the cheap advance path below, and an expired
+    // session must not surface as an unhandled rejection over the card.
+    const dismissing = current
+      ? dismissRecoAction(current.recId).catch(() => {})
+      : Promise.resolve();
     if (aiIndex < readyItems.length - 1) {
+      // Advancing uses the list we already hold, so the write can land whenever.
       setAiIndex(aiIndex + 1);
       return;
     }
     start(async () => {
-      const { result, seedCatalogItemId } = await discoverNextRecoAction();
+      // AWAIT the × here: the re-read below filters dismissed pairings, so a
+      // still-in-flight write would hand the just-dismissed card straight back.
+      await dismissing;
+      // Pass the seed on screen so "otra conexión" re-rolls THIS title instead
+      // of only filling in titles that had no pairing yet — that's what made
+      // the engine look stuck on one recommendation per item.
+      const { result, seedCatalogItemId } = await discoverNextRecoAction(
+        current?.seed.catalogItemId ?? null,
+      );
       // A transient generation failure surfaces its own retryable state instead
       // of silently dropping back to the button (the QA bug: the user couldn't
       // tell "it errored" from "no connection found"). A charge never happened.

@@ -6,9 +6,11 @@ import { assertUser } from "@/authz";
 import { db } from "@/db";
 import { backlogItems, backlogs } from "@/db/schema";
 import {
-  generateNextUncachedReco,
+  dismissReco,
+  generateAnotherReco,
   getCrossMediaFeed,
   getCrossMediaRecId,
+  markRecoSeen,
   type CrossMediaFeed,
   type DiscoverResult,
 } from "@/modules/recs/crossmedia";
@@ -141,13 +143,19 @@ export async function acceptRecoToBacklogAction(input: {
 }
 
 /**
- * F3.5.6 — "descubre otra conexión" on /para-ti. Generates ONE new pairing for
- * the next uncached loved seed (the engine enforces the monthly cap + grounding),
- * then revalidates so the feed re-reads cache-first (no extra generation on the
- * refresh). AUTHZ: assertUser gates it; the engine only ever sees item metadata
- * (Pilar 4) and the userId for the meter — never sent to the LLM.
+ * F3.5.6 — "descubre otra conexión" on Descubrir. Generates ONE new pairing (the
+ * engine enforces the monthly cap + grounding), then revalidates so the feed
+ * re-reads cache-first (no extra generation on the refresh). AUTHZ: assertUser
+ * gates it; the engine only ever sees item metadata (Pilar 4) and the userId for
+ * the meter — never sent to the LLM.
+ *
+ * @param seedCatalogItemId the seed the user is looking at, so "otra conexión"
+ *        re-rolls THAT title (F3.5.9) instead of only ever filling in titles
+ *        that had no pairing yet. Ignored when it isn't one of their loved seeds.
  */
-export async function discoverNextRecoAction(): Promise<{
+export async function discoverNextRecoAction(
+  seedCatalogItemId?: string | null,
+): Promise<{
   result: DiscoverResult;
   /**
    * The seed the fresh pairing was generated for (set only on
@@ -158,18 +166,59 @@ export async function discoverNextRecoAction(): Promise<{
 }> {
   const user = await assertUser();
   let result: DiscoverResult;
-  let seedCatalogItemId: string | null = null;
+  let generatedFor: string | null = null;
   try {
-    const gen = await generateNextUncachedReco(user.id);
+    const gen = await generateAnotherReco(user.id, seedCatalogItemId ?? null);
     result = gen.result;
-    seedCatalogItemId = gen.seedCatalogItemId;
+    generatedFor = gen.seedCatalogItemId;
   } catch (err) {
     // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
     console.error("[crossmedia] discover next failed:", err);
     result = "failed";
   }
   revalidatePath("/descubrir");
-  return { result, seedCatalogItemId };
+  return { result, seedCatalogItemId: generatedFor };
+}
+
+/**
+ * F3.5.9 — stamp the per-user seen ledger for a pairing that was just SHOWN.
+ * Fire-and-forget from the client. Being seen only deprioritizes a pairing (a
+ * re-serve stays free), so the worst case of a lost call is seeing it first
+ * again — never a charged generation.
+ *
+ * AUTHZ: assertUser scopes the write to the caller. crossMediaRecId is a shared,
+ * non-user-scoped cache id, so there's no ownership to check — a bogus id can
+ * only ever affect the caller's OWN view (and the FK rejects it outright).
+ */
+export async function markRecoSeenAction(
+  crossMediaRecId: string,
+): Promise<void> {
+  const user = await assertUser();
+  try {
+    await markRecoSeen(user.id, crossMediaRecId);
+  } catch (err) {
+    // Bookkeeping must never break the card the user is looking at.
+    console.error("[crossmedia] mark seen failed:", err);
+  }
+}
+
+/**
+ * F3.5.9 — the × on a Double Feature: hide this pairing from this user for good.
+ * Same authz posture as markRecoSeenAction (per-user row, shared rec id).
+ *
+ * No revalidatePath: /descubrir never server-renders the feed (it's fetched by
+ * getDiscoverFeedAction on an explicit tap), so refreshing the route on every ×
+ * would be pure churn — the client already advances to the next pairing.
+ */
+export async function dismissRecoAction(
+  crossMediaRecId: string,
+): Promise<void> {
+  const user = await assertUser();
+  try {
+    await dismissReco(user.id, crossMediaRecId);
+  } catch (err) {
+    console.error("[crossmedia] dismiss failed:", err);
+  }
 }
 
 /**
@@ -189,6 +238,8 @@ export interface DiscoverWork {
 }
 
 export interface DiscoverItem {
+  /** cross_media_rec id — what the seen/dismiss ledger keys on (F3.5.9). */
+  recId: string;
   seed: DiscoverWork;
   reco: DiscoverWork;
   narrative: DoubleFeatureData["narrative"];
@@ -229,6 +280,7 @@ export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
   if (!feed.hasLovedItems) return { kind: "no_loved" };
 
   const items: DiscoverItem[] = feed.items.map((it) => ({
+    recId: it.reco.recId,
     seed: {
       catalogItemId: it.seed.catalogItemId,
       title: it.seed.title,
