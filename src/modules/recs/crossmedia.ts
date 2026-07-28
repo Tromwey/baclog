@@ -6,6 +6,7 @@ import {
   crossMediaRecs,
   crossMediaRecUsage,
   userItems,
+  users,
 } from "@/db/schema";
 import { unifiedSearch } from "@/modules/catalog/search";
 import { getLovedSeeds, type LovedSeed } from "@/modules/backlog/queries";
@@ -43,6 +44,30 @@ import { logLlmCall, type LlmCallOutcome } from "./telemetry";
 
 /** Free-tier monthly LLM generation cap (ADR-009: gate the bonus, not the habit). */
 export const MONTHLY_GENERATION_CAP = 20;
+
+/**
+ * Operator cap. The account that TUNES the engine (prompt iterations, eval
+ * runs, QA of a new link type) burns generations at a rate the free-tier gate
+ * was never meant to allow, and hitting the wall mid-QA blocks the work rather
+ * than the abuse. Gated on `users.isAdmin` — the manually-assigned OPERATOR
+ * role — and NOT on `isFounder`, the badge F3.2 auto-grants to the first ~100
+ * accounts (that would hand the whole cohort an uncapped LLM budget). Still
+ * finite: the meter stays a cost guard, it just isn't the free-tier one here.
+ */
+export const ADMIN_GENERATION_CAP = 500;
+
+/**
+ * The monthly cap that applies to THIS user. One indexed PK lookup on the paths
+ * that already hit the DB for the meter anyway.
+ */
+async function capForUser(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ isAdmin: users.isAdmin })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row?.isAdmin ? ADMIN_GENERATION_CAP : MONTHLY_GENERATION_CAP;
+}
 
 export interface CrossMediaReco {
   /** The grounded reco catalog_item — real, addable, link-outable. */
@@ -585,6 +610,7 @@ export async function getCrossMediaRecId(
  */
 async function tryChargeGeneration(userId: string): Promise<boolean> {
   const key = eraKey();
+  const cap = await capForUser(userId);
   const [row] = await db
     .insert(crossMediaRecUsage)
     .values({ userId, eraKey: key, generations: 1 })
@@ -595,7 +621,7 @@ async function tryChargeGeneration(userId: string): Promise<boolean> {
         updatedAt: sql`now()`,
       },
       // Only bump while still under the cap — over-cap rows are left untouched.
-      setWhere: sql`${crossMediaRecUsage.generations} < ${MONTHLY_GENERATION_CAP}`,
+      setWhere: sql`${crossMediaRecUsage.generations} < ${cap}`,
     })
     .returning({ generations: crossMediaRecUsage.generations });
 
@@ -827,7 +853,7 @@ function toFeedItem(seed: LovedSeed, reco: CrossMediaReco): CrossMediaFeedItem {
  * another" action (generateNextUncachedReco).
  */
 export async function getCrossMediaFeed(userId: string): Promise<CrossMediaFeed> {
-  const cap = MONTHLY_GENERATION_CAP;
+  const cap = await capForUser(userId);
   const seeds = await getLovedSeeds(userId);
   if (seeds.length === 0) {
     return {
@@ -980,6 +1006,7 @@ export async function generateNextUncachedReco(
 
 /** Remaining generations this month for a user (for UI / meter display). */
 export async function remainingGenerations(userId: string): Promise<number> {
+  const cap = await capForUser(userId);
   const [row] = await db
     .select({ generations: crossMediaRecUsage.generations })
     .from(crossMediaRecUsage)
@@ -990,5 +1017,5 @@ export async function remainingGenerations(userId: string): Promise<number> {
       ),
     )
     .limit(1);
-  return Math.max(0, MONTHLY_GENERATION_CAP - (row?.generations ?? 0));
+  return Math.max(0, cap - (row?.generations ?? 0));
 }

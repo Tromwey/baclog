@@ -480,12 +480,18 @@ export async function getRecosMetrics(): Promise<RecosMetrics> {
     db
       .select({ reasons: crossMediaRecoFeedback.reasons })
       .from(crossMediaRecoFeedback),
+    // "Usuarios en el tope" = users who hit the FREE-TIER wall. Admins run on
+    // ADMIN_GENERATION_CAP, so an operator past 20 during QA is not topped out
+    // and must not be counted here (it would read as a real user hitting the
+    // gate).
     db
       .select({ c: count() })
       .from(crossMediaRecUsage)
+      .innerJoin(users, eq(users.id, crossMediaRecUsage.userId))
       .where(
         and(
           eq(crossMediaRecUsage.eraKey, era),
+          eq(users.isAdmin, false),
           sql`${crossMediaRecUsage.generations} >= ${MONTHLY_GENERATION_CAP}`,
         ),
       ),
