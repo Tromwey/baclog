@@ -14,7 +14,7 @@ import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
-import { auraSeed } from "@/lib/color";
+import { auraSeed, parseHex } from "@/lib/color";
 import { capitalize } from "@/lib/format";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
@@ -82,6 +82,37 @@ export default async function PublicItemPage({
   const resolve = (extra: string) =>
     `/api/links/resolve?catalogItemId=${item.id}${extra}`;
 
+  // Cover keeps the artwork's own aspect: albums are SQUARE, films/series 2:3
+  // (this page used to force 2:3 on everything, so album art arrived letterboxed
+  // into a poster slot). Bigger than the in-app /item hero on purpose — this is
+  // the anonymous conversion surface, where the art does the selling.
+  const coverSize =
+    item.mediaType === "album"
+      ? "h-[200px] w-[200px]"
+      : "h-[240px] w-[160px]";
+
+  // Palette-tinted cover shadow, same recipe as the in-app item page — here off
+  // catalog_item.paletteHex (shared, cover-derived) since there's no user_item
+  // for an anonymous viewer. Neutral black until it's been extracted.
+  const shadowTint = item.paletteHex?.[0] ? parseHex(item.paletteHex[0]) : null;
+  const coverShadow = `0 24px 60px ${
+    shadowTint
+      ? `rgba(${shadowTint.r},${shadowTint.g},${shadowTint.b},0.5)`
+      : "rgba(0,0,0,0.5)"
+  }`;
+
+  // byline · year · genre. The media-type label is dropped for albums: the
+  // square art, the artist byline and the "Escuchar en…" buttons already say
+  // it. Película/Serie stays — that one carries information the page doesn't.
+  const meta = [
+    item.mediaType !== "album" ? MEDIA_TYPE_TITLE[item.mediaType] : null,
+    item.byline,
+    item.year,
+    item.genre && capitalize(item.genre),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
       {/* Content-driven ADN aura from the shared cover palette — same hero the
@@ -106,40 +137,35 @@ export default async function PublicItemPage({
       </div>
 
       <main className="relative px-5 pb-32 pt-5">
-        <div className="bl-rise flex gap-4">
+        <div className="bl-rise flex justify-center">
           {item.posterUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
             <img
               src={item.posterUrl}
               alt={`Portada de ${item.title}`}
-              className="h-44 w-30 shrink-0 rounded-[var(--r-md)] object-cover shadow-[var(--shadow-card)]"
+              style={{ boxShadow: coverShadow }}
+              className={`rounded-2xl object-cover ${coverSize}`}
             />
           ) : (
-            <div className="flex h-44 w-30 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-surface-2 text-text-3">
+            <div
+              className={`flex items-center justify-center rounded-2xl bg-surface-2 text-text-3 ${coverSize}`}
+            >
               {item.mediaType === "album" ? (
-                <Music size={30} />
+                <Music size={40} />
               ) : (
-                <Play size={30} />
+                <Play size={40} />
               )}
             </div>
           )}
-          <div className="min-w-0 pt-1">
-            <h1 className="font-serif text-2xl italic leading-tight text-text">
-              {item.title}
-            </h1>
-            <MonoMeta className="mt-2 block normal-case tracking-normal text-text-2">
-              {/* type · byline · year · genre — same order as the in-app item
-                  page (audit fix: this page used to omit the type label). */}
-              {[
-                MEDIA_TYPE_TITLE[item.mediaType],
-                item.byline,
-                item.year,
-                item.genre && capitalize(item.genre),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </MonoMeta>
-          </div>
+        </div>
+
+        <div className="bl-rise mt-6 text-center">
+          <h1 className="font-serif text-[38px] italic leading-[1.05] text-text">
+            {item.title}
+          </h1>
+          <MonoMeta className="mt-2.5 block text-[10px] tracking-[0.1em] text-text-2">
+            {meta}
+          </MonoMeta>
         </div>
 
         {/* Films/series carry a TMDB synopsis; albums show their tracklist
@@ -147,7 +173,7 @@ export default async function PublicItemPage({
             editorialNotes). Shown in-app under identification use + attribution,
             never on an export card (ADR-008). */}
         {synopsis && (
-          <p className="bl-rise mt-5 text-sm leading-[1.55] text-text-2">
+          <p className="bl-rise mx-auto mt-4 max-w-[34ch] text-center text-sm leading-[1.55] text-text-2">
             {synopsis}
           </p>
         )}
