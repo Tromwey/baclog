@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ChevronLeft, Search as SearchIcon, Sparkles } from "lucide-react";
 import {
@@ -34,19 +35,34 @@ export function DescubrirScreen({
   username,
   backlogs,
   totalTitles,
+  hasLoved,
   loadingColors,
 }: {
   username: string;
   backlogs: DiscoveryBacklog[];
   totalTitles: number;
+  /**
+   * The user has at least one "me gusta"/"me obsesiona" — i.e. the reco engine
+   * has a seed to work from. False ⇒ Recomiéndame would dead-end on `no_loved`
+   * AFTER spending the tap, so the entry declares the unlock instead.
+   */
+  hasLoved: boolean;
   /** User ADN palette — only for the loading screen's full-bleed aura. */
   loadingColors: string[];
 }) {
   // ?q= is what survives a trip into an item: the search writes it before
   // pushing /item/…, so the ✕ (router.back) lands back on the SAME list instead
   // of dumping the user on the entry screen to retype their query.
-  const restoredQuery = useSearchParams().get("q") ?? "";
-  const [mode, setMode] = useState<Mode>(restoredQuery ? "search" : "entry");
+  const params = useSearchParams();
+  const restoredQuery = params.get("q") ?? "";
+  // ?buscar=1&to= — the guided handoff from a backlog: open Buscar directly
+  // (skipping an editorial screen whose loudest button this user can't use
+  // yet) with that backlog pinned as the add target.
+  const guided = params.get("buscar") === "1";
+  const pinnedBacklogId = params.get("to");
+  const [mode, setMode] = useState<Mode>(
+    restoredQuery || guided ? "search" : "entry",
+  );
   const [pills, setPills] = useState<Record<MediaType, boolean>>({
     film: true,
     series: true,
@@ -171,6 +187,7 @@ export function DescubrirScreen({
           onRecomendar={recomendar}
           onSearch={openSearch}
           totalTitles={totalTitles}
+          hasLoved={hasLoved}
           pending={pending}
         />
       )}
@@ -197,6 +214,9 @@ export function DescubrirScreen({
           inputRef={searchInputRef}
           initialQuery={restoredQuery}
           backlogs={backlogs}
+          pinnedBacklogId={pinnedBacklogId}
+          guidedArrival={guided}
+          libraryEmpty={totalTitles === 0}
           onBack={() => {
             // Leaving search for real — drop ?q= so the next visit is clean.
             window.history.replaceState(null, "", "/descubrir");
@@ -214,6 +234,7 @@ function Entry({
   onRecomendar,
   onSearch,
   totalTitles,
+  hasLoved,
   pending,
 }: {
   pills: Record<MediaType, boolean>;
@@ -221,6 +242,7 @@ function Entry({
   onRecomendar: () => void;
   onSearch: (e: React.MouseEvent) => void;
   totalTitles: number;
+  hasLoved: boolean;
   pending: boolean;
 }) {
   return (
@@ -231,8 +253,9 @@ function Entry({
         apetece hoy?
       </div>
       <p className="mt-3 max-w-[30ch] text-[13.5px] leading-[1.5] text-text-2">
-        Afina por tipo si quieres, y deja que Baclog te recomiende algo, o
-        búscalo tú mismo.
+        {hasLoved
+          ? "Afina por tipo si quieres, y deja que Baclog te recomiende algo, o búscalo tú mismo."
+          : "Dinos qué se te antoja y tendemos un puente desde algo que ya amas."}
       </p>
 
       <div className="flex-1" />
@@ -242,22 +265,92 @@ function Entry({
       </div>
       <Pills selected={pills} onToggle={onToggle} />
 
-      <button
-        onClick={onRecomendar}
-        disabled={pending}
-        className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg transition-transform active:scale-[0.98] disabled:opacity-60"
-      >
-        <Sparkles size={19} /> Recomiéndame
-      </button>
-      <div className="my-[10px] text-center font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-        Destilado de tus {totalTitles} títulos · sin spoilers
-      </div>
+      {hasLoved ? (
+        <>
+          <button
+            onClick={onRecomendar}
+            disabled={pending}
+            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            <Sparkles size={19} /> Recomiéndame
+          </button>
+          <div className="my-[10px] text-center font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
+            Destilado de {totalTitles === 1 ? "tu único título" : `tus ${totalTitles} títulos`} · sin spoilers
+          </div>
+          <button
+            onClick={onSearch}
+            className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-surface-2 px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:bg-surface-3"
+          >
+            <SearchIcon size={17} /> Buscar
+          </button>
+        </>
+      ) : (
+        <RecomendameEnEspera
+          totalTitles={totalTitles}
+          onSearch={onSearch}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Descubrir before the first reaction (step 3).
+ *
+ * The engine seeds off LOVED titles, so with none the lima "Recomiéndame"
+ * spent the user's tap only to land them on the `no_loved` empty state. Here
+ * the order inverts: Buscar takes the front, and Recomiéndame states its unlock
+ * condition BEFORE the tap — the literal truth of the engine, phrased as a
+ * pending promise rather than a denied feature. No padlock, no dead disabled
+ * button: the card is a live link into the library where the reaction lives.
+ */
+function RecomendameEnEspera({
+  totalTitles,
+  onSearch,
+}: {
+  totalTitles: number;
+  onSearch: (e: React.MouseEvent) => void;
+}) {
+  const empty = totalTitles === 0;
+  return (
+    <div className="mt-5 flex flex-col gap-3.5">
       <button
         onClick={onSearch}
-        className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-surface-2 px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:bg-surface-3"
+        className="flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[17px] font-display text-[17px] font-bold text-bg transition-transform active:scale-[0.98]"
       >
-        <SearchIcon size={17} /> Buscar
+        <SearchIcon size={17} /> Buscar algo que ya amas
       </button>
+
+      <Link
+        href="/backlogs"
+        className="flex flex-col gap-3 rounded-[22px] bg-surface-1 p-5 transition-colors hover:bg-surface-2"
+      >
+        <span className="flex items-center gap-2.5">
+          <Sparkles size={16} className="text-text-3" />
+          <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-3">
+            Recomiéndame · en espera
+          </span>
+        </span>
+        <span className="font-serif text-[24px] italic leading-[1.15]">
+          El motor necesita saber qué amas.
+        </span>
+        <span className="font-mono text-[9px] uppercase leading-[1.8] tracking-[0.14em] text-text-2">
+          Marca un título como «me gusta» o «me obsesiona» y esto se enciende
+        </span>
+        <span aria-hidden className="mt-0.5 h-px bg-line" />
+        <span className="flex items-center justify-between gap-3">
+          <span className="min-w-0 font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
+            {empty
+              ? "Aún sin destilar"
+              : `Tienes ${totalTitles === 1 ? "un título" : `${totalTitles} títulos`} · 0 marcados`}
+          </span>
+          {/* nowrap: the arrow belongs to the label — letting it wrap onto its
+              own line at 375px read as a broken glyph. */}
+          <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-accent">
+            {empty ? "Empieza un backlog" : "Ir a mis títulos"} →
+          </span>
+        </span>
+      </Link>
     </div>
   );
 }

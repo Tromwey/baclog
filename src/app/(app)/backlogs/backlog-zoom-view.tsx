@@ -6,6 +6,12 @@ import { ThemeColorSync } from "@/components/theme-color-sync";
 import { getBacklogItems } from "@/modules/backlog/queries";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
 import { dominantHexes } from "@/modules/backlog/palette";
+import {
+  firstRunStep,
+  getFirstRunCounts,
+  type FirstRunStep,
+} from "@/modules/backlog/first-run";
+import { StepMeter } from "@/components/ui";
 import { shelfSeed } from "./backlog-shelf-card";
 import { ZoomBackButton } from "./zoom-back-button";
 import { BacklogMenu } from "./[backlogId]/backlog-menu";
@@ -21,9 +27,18 @@ import { BacklogMenu } from "./[backlogId]/backlog-menu";
 export async function loadBacklogZoom(backlogId: string) {
   const itemsP = getBacklogItems(backlogId);
   itemsP.catch(() => {}); // no unhandled rejection if the assert throws first
-  const { backlog } = await assertOwnsBacklog(backlogId);
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
   const items = await itemsP;
-  return { backlog, items, paletteHex: dominantHexes(items, 6) };
+  // Welcome onboarding: standing inside a backlog means backlogs > 0, so the
+  // step reduces to the library-wide counts. Fetched AFTER the assert (it's a
+  // read for the owner only) but before render, so the guide never flashes in.
+  const counts = await getFirstRunCounts(user.id);
+  return {
+    backlog,
+    items,
+    paletteHex: dominantHexes(items, 6),
+    step: firstRunStep({ backlogs: 1, ...counts }),
+  };
 }
 
 /**
@@ -37,16 +52,26 @@ export function BacklogZoomView({
   backlog,
   items,
   paletteHex,
+  step,
   zoom = false,
 }: {
   backlog: { id: string; name: string; vibe: string | null; createdAt: Date };
   items: BacklogItemWithCatalog[];
   /** The backlog's ADN (dominant hexes). Ignored while the backlog is empty. */
   paletteHex: string[];
+  /** Welcome onboarding step (0 = activated, no guidance renders). */
+  step: FirstRunStep;
   zoom?: boolean;
 }) {
   const hasItems = items.length > 0;
   const content = zoom ? "bl-zoom-content" : "";
+  // Step 2 = the library is empty account-wide. An ACTIVATED user's empty
+  // backlog keeps the placeholder, the serif line and the CTA — only the meter
+  // drops, so this screen never advertises a step that isn't theirs.
+  const showMeter = step === 2 && !hasItems;
+  // Step 3 lands here once the first title exists: name the two gestures that
+  // actually unlock the engine, next to the row they apply to.
+  const showReactionCoach = step === 3 && hasItems;
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
@@ -68,11 +93,14 @@ export function BacklogZoomView({
         controls={
           <>
             <ZoomBackButton />
-            <BacklogMenu
-              backlogId={backlog.id}
-              currentName={backlog.name}
-              hasItems={hasItems}
-            />
+            <div className="flex items-center gap-3">
+              {showMeter && <StepMeter step={2} />}
+              <BacklogMenu
+                backlogId={backlog.id}
+                currentName={backlog.name}
+                hasItems={hasItems}
+              />
+            </div>
           </>
         }
       />
@@ -92,6 +120,32 @@ export function BacklogZoomView({
               sourceCrossMediaRecId={item.sourceCrossMediaRecId}
             />
           ))}
+
+          {showReactionCoach && (
+            <div className="bl-rise mx-5 mt-[26px]">
+              <div className="h-px bg-line" />
+              <div className="mt-4 flex gap-2.5 font-mono text-[9px] uppercase tracking-[0.16em]">
+                <span className="flex-none text-text-2">Paso 3</span>
+                <span className="leading-[1.7] text-text-3">
+                  Abre el título y márcalo «me obsesiona», o «me gusta» en el
+                  menú de opciones. Eso enciende las recomendaciones.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* A filled backlog had no add affordance of its own — the only path
+              back to search was the dock. This row carries the pinned target,
+              same as the empty state's CTA. */}
+          <Link
+            href={`/descubrir?buscar=1&to=${backlog.id}`}
+            className="mx-5 mt-[18px] flex items-center gap-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-2 transition-colors hover:text-text"
+          >
+            <span aria-hidden className="text-[14px] leading-none text-accent">
+              ＋
+            </span>
+            Agregar a este backlog
+          </Link>
         </div>
       ) : (
         /* Estante en blanco (mock #p7) */
@@ -121,8 +175,12 @@ export function BacklogZoomView({
             Agrega una película, serie o álbum — su color llenará el aura del
             backlog.
           </p>
+          {/* The CTA carries its own destination: ?buscar=1 opens the search
+              panel directly (no editorial detour through Recomiéndame, which
+              a user with nothing loved can't use yet) and ?to= pins THIS
+              backlog as where the adds land. */}
           <Link
-            href="/descubrir"
+            href={`/descubrir?buscar=1&to=${backlog.id}`}
             className="mt-[26px] flex items-center justify-center gap-2 rounded-full bg-accent px-[22px] py-3.5 text-[15px] font-semibold text-bg"
           >
             <svg

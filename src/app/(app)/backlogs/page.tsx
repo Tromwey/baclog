@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
-import { AuraField, ONBOARDING_AURA } from "@/components/ui";
+import { AuraField, ONBOARDING_AURA, StepMeter } from "@/components/ui";
 import { getBacklogsForUser } from "@/modules/backlog/queries";
 import { SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { NewBacklogTrigger } from "./new-backlog-button";
@@ -11,7 +11,7 @@ export default async function BacklogsPage() {
   const user = await requireUser();
   const list = await getBacklogsForUser(user.id);
 
-  if (list.length === 0) return <FirstUse />;
+  if (list.length === 0) return <FirstUse name={user.name} />;
 
   const shelves: Shelf[] = list.map((b) => ({
     id: b.id,
@@ -52,8 +52,12 @@ export default async function BacklogsPage() {
  * back to lima, which is exactly what the mock avoids here), one lima CTA
  * into the create modal and one dark CTA into Discover, then the gesture
  * coach marks — the row model, said once before any rows exist.
+ *
+ * This screen IS step 1 of the welcome onboarding (no backlogs is the step's
+ * definition), so the greeting + meter are unconditional here — reaching it
+ * with a backlog is impossible.
  */
-function FirstUse() {
+function FirstUse({ name }: { name: string | null }) {
   return (
     <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <div
@@ -71,7 +75,18 @@ function FirstUse() {
       </div>
 
       <div className="relative px-5 pt-[calc(44px+env(safe-area-inset-top))]">
-        <h1 className="mt-[22px] font-display text-[36px] font-extrabold leading-none tracking-[-0.025em]">
+        {/* The first moment the app can use the name onboarding just captured. */}
+        {/* justify-end + mr-auto: the meter stays pinned right even when the
+            account has no display name to greet. */}
+        <div className="bl-rise flex items-center justify-end gap-3">
+          {name && (
+            <p className="mr-auto min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
+              Hola, {name}.
+            </p>
+          )}
+          <StepMeter step={1} />
+        </div>
+        <h1 className="mt-4 font-display text-[36px] font-extrabold leading-none tracking-[-0.025em]">
           Empieza tu backlog.
         </h1>
         <p className="mt-3.5 max-w-[26ch] font-serif text-[20px] italic leading-[1.25] text-text-2">

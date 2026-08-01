@@ -8,9 +8,10 @@ import {
   type FormEvent,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, ChevronLeft, Search as SearchIcon } from "lucide-react";
+import { ChevronDown, ChevronLeft, Search as SearchIcon } from "lucide-react";
+import { Sheet } from "@/components/ui";
+import { BacklogChoiceList } from "@/components/backlog-choice-list";
 import {
   addItemAction,
   removeMembershipAction,
@@ -28,6 +29,10 @@ import {
 import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
 import { AddButton } from "./add-button";
 import { Pills } from "./pills";
+import {
+  FirstItemSheet,
+  type FirstItemCelebration,
+} from "./first-item-sheet";
 
 type Target = { id: string; name: string };
 
@@ -43,6 +48,9 @@ export function SearchPanel({
   inputRef,
   initialQuery,
   backlogs,
+  pinnedBacklogId,
+  guidedArrival,
+  libraryEmpty,
   onBack,
 }: {
   selected: Record<MediaType, boolean>;
@@ -54,6 +62,18 @@ export function SearchPanel({
   /** From ?q= — a search restored after closing an item (re-runs on mount). */
   initialQuery: string;
   backlogs: DiscoveryBacklog[];
+  /**
+   * From ?to= — the backlog the user came FROM, pre-selected as the add target.
+   * Resolved against `backlogs` (the owner's own server-loaded list), so a
+   * foreign or stale id simply doesn't match and falls back to the default:
+   * no extra query, no enumeration oracle, assertOwnsBacklog still the choke
+   * point on the add itself.
+   */
+  pinnedBacklogId: string | null;
+  /** Arrived from a guided CTA (?buscar=1) — emphasizes the destination once. */
+  guidedArrival: boolean;
+  /** The account has no titles yet — a successful add here is the first ever. */
+  libraryEmpty: boolean;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -69,13 +89,29 @@ export function SearchPanel({
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // Session target backlog — shown + changeable so adds aren't a mystery.
   const [options, setOptions] = useState<DiscoveryBacklog[]>(backlogs);
-  const [target, setTarget] = useState<Target | null>(
-    backlogs[0] ? { id: backlogs[0].id, name: backlogs[0].name } : null,
+  const [target, setTarget] = useState<Target | null>(() => {
+    const pinned =
+      (pinnedBacklogId && backlogs.find((b) => b.id === pinnedBacklogId)) ||
+      backlogs[0];
+    return pinned ? { id: pinned.id, name: pinned.name } : null;
+  });
+  // The guided emphasis is a one-shot answer to "¿a dónde va esto?", not a
+  // mode: it retires on the first add or as soon as the user picks a target
+  // themselves (at which point they've clearly got the model).
+  const [emphasizeTarget, setEmphasizeTarget] = useState(guidedArrival);
+  // catalogItemId whose add just failed — the row says so instead of quietly
+  // snapping back to ＋, which read as "nothing happened".
+  const [failed, setFailed] = useState<string | null>(null);
+  const [celebration, setCelebration] = useState<FirstItemCelebration | null>(
+    null,
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Once per mount, even if the user undoes the add and re-adds — the sheet is
+  // a first-time moment, not a per-add confirmation.
+  const celebrated = useRef(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const [flying, setFlying] = useState(fromRect !== null);
@@ -210,6 +246,7 @@ export function SearchPanel({
       return;
     }
     setRowPending(id, true);
+    setFailed((f) => (f === id ? null : f)); // a retry clears its own error
     try {
       if (existingItemId) {
         await removeMembershipAction(existingItemId);
@@ -234,13 +271,35 @@ export function SearchPanel({
         const itemId = "id" in res ? res.id : null;
         if (itemId) {
           setAdded((a) => ({ ...a, [id]: itemId }));
+          setEmphasizeTarget(false);
+          // First title of the account (the library was empty when this panel
+          // mounted) → the closing sheet, once. A duplicate returns the
+          // existing membership id, so re-adding can't re-trigger it: `added`
+          // already holds every id this session put in.
+          if (libraryEmpty && !celebrated.current) {
+            celebrated.current = true;
+            setCelebration({
+              title: r.title,
+              mediaType: r.mediaType,
+              year: r.year,
+              posterUrl: r.posterUrl,
+              paletteHex:
+                paletteHex.length > 0 ? paletteHex : (r.paletteHex ?? []),
+              backlogId: target.id,
+              backlogName: target.name,
+            });
+          }
+        } else {
+          setFailed(id);
         }
-        // duplicate/invalid → leave unmarked (it's already in the backlog)
       }
     } catch {
       // Add/remove failed: don't fake success. The row falls back to its prior
       // state (idle ＋ if it wasn't added), and clearing pending re-enables the
-      // tap — a failed add is retryable, never stuck mid-state.
+      // tap — a failed add is retryable, never stuck mid-state. Removals stay
+      // silent (the row simply keeps its ✓); only a failed ADD gets the line,
+      // because that's the one the user was told would be saved.
+      if (!existingItemId) setFailed(id);
     } finally {
       setRowPending(id, false);
     }
@@ -257,6 +316,7 @@ export function SearchPanel({
       if (id) {
         setOptions((o) => [{ id, name, itemCount: 0 }, ...o]);
         setTarget({ id, name });
+        setEmphasizeTarget(false); // they chose the destination themselves
         setNewName("");
         setPickerOpen(false);
       }
@@ -319,17 +379,39 @@ export function SearchPanel({
         <Pills selected={selected} onToggle={onToggle} />
       </div>
 
-      {/* Target backlog — visible + changeable, so adds go somewhere you chose. */}
+      {/* Target backlog — visible + changeable, so adds go somewhere you chose.
+          On a guided arrival it's the SAME chip speaking louder once (lima
+          soft fill + settle-in), never a banner: the question it answers is
+          "¿a dónde va esto?", and it's already the element that answers it. */}
       <button
         onClick={() => setPickerOpen(true)}
-        className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full bg-surface-2 py-1.5 pl-3.5 pr-3 text-[12.5px] transition-colors hover:bg-surface-3"
+        className={`mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full py-1.5 pl-3.5 pr-3 text-[12.5px] transition-colors ${
+          emphasizeTarget
+            ? "bl-chip bg-accent-soft"
+            : "bg-surface-2 hover:bg-surface-3"
+        }`}
       >
-        <span className="shrink-0 text-text-3">Agregando a</span>
+        <span
+          className={`shrink-0 ${emphasizeTarget ? "text-accent/80" : "text-text-3"}`}
+        >
+          Agregando a
+        </span>
         <span className="truncate font-semibold text-accent">
           {target?.name ?? "elige un backlog"}
         </span>
-        <ChevronDown size={14} className="shrink-0 text-text-3" />
+        <ChevronDown
+          size={14}
+          className={`shrink-0 ${emphasizeTarget ? "text-accent/80" : "text-text-3"}`}
+        />
       </button>
+
+      {/* Said once, only while the library is still empty: the sentence that
+          makes the pinned destination unambiguous before the first ＋. */}
+      {emphasizeTarget && libraryEmpty && (
+        <p className="bl-rise mt-2.5 pl-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-text-3">
+          Todo lo que agregues aquí cae en ese backlog
+        </p>
+      )}
 
       <div className="mt-4 flex-1 space-y-1">
         {state === "loading" &&
@@ -347,8 +429,8 @@ export function SearchPanel({
           </p>
         )}
         {visible.map((r) => (
+          <div key={r.catalogItemId}>
           <div
-            key={r.catalogItemId}
             onClick={() => {
               openItem(r.catalogItemId);
             }}
@@ -385,73 +467,65 @@ export function SearchPanel({
               }}
             />
           </div>
+          {/* A failed add used to revert in silence, which reads as "nothing
+              happened" — say it didn't save, and that ＋ retries. */}
+          {failed === r.catalogItemId && (
+            <p
+              role="status"
+              className="ml-[61px] flex items-center gap-2 pb-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-text-2"
+            >
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 flex-none rounded-full bg-hot"
+              />
+              No se guardó · toca ＋ para reintentar
+            </p>
+          )}
+          </div>
         ))}
       </div>
 
-      {pickerOpen &&
-        createPortal(
-          // Portaled to <body> so it escapes the content wrapper and sits above
-          // the dock. Centered glass, matching the rest of the M3.5 interface.
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-[2px]"
-            onClick={() => setPickerOpen(false)}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="bl-rise relative w-full max-w-sm overflow-hidden rounded-[28px] bg-white/[0.07] p-5 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
+      {celebration && (
+        <FirstItemSheet
+          item={celebration}
+          onDismiss={() => setCelebration(null)}
+        />
+      )}
+
+      {pickerOpen && (
+        <Sheet onClose={() => setPickerOpen(false)} label="Agregar a…">
+          <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
+            Agregar a…
+          </h2>
+          <BacklogChoiceList
+            options={options}
+            selectedId={target?.id ?? null}
+            onPick={(b) => {
+              setTarget({ id: b.id, name: b.name });
+              setEmphasizeTarget(false);
+              setPickerOpen(false);
+            }}
+          />
+          <form onSubmit={createAndSelect} className="mt-3 flex gap-2">
+            <input
+              value={newName}
+              maxLength={60}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={
+                options.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
+              }
+              className="min-w-0 flex-1 rounded-[var(--r-md)] bg-surface-2 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
+            />
+            <button
+              type="submit"
+              disabled={creating || !newName.trim()}
+              className="shrink-0 rounded-[var(--r-md)] bg-accent px-4 font-semibold text-bg disabled:opacity-40"
             >
-              <div aria-hidden className="bl-grain" />
-              <div className="relative">
-                <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
-                  Agregar a…
-                </h2>
-                <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto">
-                  {options.map((b) => {
-                    const on = target?.id === b.id;
-                    return (
-                      <button
-                        key={b.id}
-                        onClick={() => {
-                          setTarget({ id: b.id, name: b.name });
-                          setPickerOpen(false);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition-colors ${
-                          on
-                            ? "bg-accent-soft text-accent"
-                            : "bg-black/25 text-text hover:bg-black/40"
-                        }`}
-                      >
-                        <span className="truncate font-medium">{b.name}</span>
-                        {on && <Check size={16} className="shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                <form onSubmit={createAndSelect} className="mt-3 flex gap-2">
-                  <input
-                    value={newName}
-                    maxLength={60}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder={
-                      options.length === 0
-                        ? "Tu primer backlog…"
-                        : "Nuevo backlog…"
-                    }
-                    className="min-w-0 flex-1 rounded-2xl bg-black/25 px-4 py-3 outline-none transition-colors placeholder:text-text-3 focus:bg-black/40"
-                  />
-                  <button
-                    type="submit"
-                    disabled={creating || !newName.trim()}
-                    className="shrink-0 rounded-2xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
-                  >
-                    Crear
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+              Crear
+            </button>
+          </form>
+        </Sheet>
+      )}
     </div>
   );
 }

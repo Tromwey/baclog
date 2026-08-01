@@ -34,6 +34,7 @@ export default async function InterceptedBacklogZoom({
       backlog={data.backlog}
       items={data.items}
       paletteHex={data.paletteHex}
+      step={data.step}
       zoom
     />
   );

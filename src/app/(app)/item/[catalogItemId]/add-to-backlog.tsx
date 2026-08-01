@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { addItemAction } from "@/app/actions/backlog-item-actions";
 import { extractPalette } from "@/modules/cards/palette";
+import { Sheet } from "@/components/ui";
+import { BacklogChoiceList } from "@/components/backlog-choice-list";
 
 interface BacklogOption {
   id: string;
@@ -126,60 +127,42 @@ export function AddToBacklog({
         )}
       </button>
 
-      {open &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
-            onClick={() => setOpen(false)}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="bl-rise w-full max-w-md space-y-2 rounded-t-[22px] bg-surface-1 p-5 pb-[calc(28px+env(safe-area-inset-bottom))]"
+      {open && (
+        <Sheet onClose={() => setOpen(false)} label="¿A cuál backlog?">
+          <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
+            ¿A cuál backlog?
+          </h2>
+          {inBacklogName && (
+            <p className="mt-1.5 text-xs text-text-3">
+              Ya está en <span className="text-text-2">{inBacklogName}</span> —
+              puedes agregarlo a otro.
+            </p>
+          )}
+          <BacklogChoiceList
+            options={backlogs}
+            disabled={busy}
+            onPick={(b) => addTo(b.id)}
+          />
+          <form onSubmit={createAndAdd} className="mt-3 flex gap-2">
+            <input
+              value={newName}
+              maxLength={60}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={
+                backlogs.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
+              }
+              className="min-w-0 flex-1 rounded-[var(--r-md)] bg-surface-2 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
+            />
+            <button
+              type="submit"
+              disabled={busy || !newName.trim()}
+              className="rounded-[var(--r-md)] bg-accent px-4 font-semibold text-bg disabled:opacity-40"
             >
-              <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
-                ¿A cuál backlog?
-              </h2>
-              {inBacklogName && (
-                <p className="text-xs text-text-3">
-                  Ya está en{" "}
-                  <span className="text-text-2">{inBacklogName}</span> — puedes
-                  agregarlo a otro.
-                </p>
-              )}
-              {backlogs.map((b) => (
-                <button
-                  key={b.id}
-                  disabled={busy}
-                  onClick={() => addTo(b.id)}
-                  className="block w-full rounded-xl bg-surface-2 px-4 py-3 text-left transition-colors hover:bg-surface-3 disabled:opacity-40"
-                >
-                  {b.name}
-                </button>
-              ))}
-              <form onSubmit={createAndAdd} className="flex gap-2 pt-1">
-                <input
-                  value={newName}
-                  maxLength={60}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder={
-                    backlogs.length === 0
-                      ? "Tu primer backlog…"
-                      : "Nuevo backlog…"
-                  }
-                  className="min-w-0 flex-1 rounded-xl bg-surface-2 px-4 py-3 outline-none placeholder:text-text-3 focus:bg-surface-3"
-                />
-                <button
-                  type="submit"
-                  disabled={busy || !newName.trim()}
-                  className="rounded-xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
-                >
-                  Crear
-                </button>
-              </form>
-            </div>
-          </div>,
-          document.body,
-        )}
+              Crear
+            </button>
+          </form>
+        </Sheet>
+      )}
     </>
   );
 }

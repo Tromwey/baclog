@@ -6,6 +6,7 @@ import {
   getBacklogNames,
   getUserCatalogEntry,
 } from "@/modules/backlog/queries";
+import { countLovedItems } from "@/modules/backlog/first-run";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
@@ -17,6 +18,7 @@ import { Tracklist } from "@/components/tracklist";
 import { ItemMoreMenu } from "./item-more-menu";
 import { ItemShareMenu } from "./item-share-menu";
 import { ObsessionGesture } from "./obsession-gesture";
+import { ReactionCoach } from "./reaction-coach";
 import { ProgressGesture } from "./progress-gesture";
 import { ItemReactionProvider } from "./reaction-state";
 import {
@@ -39,10 +41,11 @@ export default async function ItemPage({
 }) {
   const user = await requireUser();
   const { catalogItemId } = await params;
-  const [item, userBacklogs, entry] = await Promise.all([
+  const [item, userBacklogs, entry, lovedCount] = await Promise.all([
     getCatalogItem(catalogItemId),
     getBacklogNames(user.id),
     getUserCatalogEntry(user.id, catalogItemId),
+    countLovedItems(user.id),
   ]);
   if (!item) notFound();
 
@@ -206,6 +209,15 @@ export default async function ItemPage({
             <ObsessionGesture />
           </div>
         )}
+
+        {/* Welcome onboarding step 3. A logged entry means backlogs > 0 and
+            items > 0 by construction, so "nothing loved yet" IS step 3 — no
+            other count needed.
+            NOT gated on lovedCount here: reacting revalidates this page, so a
+            server gate would unmount the component at the exact moment it has
+            something to say. It freezes the flag itself and renders nothing
+            when the step was already done. */}
+        {entry && <ReactionCoach stepPending={lovedCount === 0} />}
 
         {/* AI provenance: why this pairing + the user's own why-feedback */}
         {entry && narrative && (

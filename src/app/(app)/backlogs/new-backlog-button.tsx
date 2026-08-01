@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
+import { Sheet } from "@/components/ui";
 
 /**
  * Any "create a backlog" entry point: renders the caller's button (the dashed
@@ -38,7 +38,7 @@ export function NewBacklogTrigger({
   );
 }
 
-/** The create-backlog modal — centered floating glass, portaled to <body>. */
+/** The create-backlog sheet — shape and portaling live in <Sheet>. */
 function NewBacklogModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -56,18 +56,10 @@ function NewBacklogModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-[2px]"
-      onClick={onClose}
-    >
-      <form
-        onSubmit={create}
-        onClick={(e) => e.stopPropagation()}
-        className="bl-rise relative w-full max-w-sm overflow-hidden rounded-[28px] bg-white/[0.07] p-6 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
-      >
-        <div aria-hidden className="bl-grain" />
-        <div className="relative space-y-3">
+  return (
+    <Sheet onClose={onClose} label="Nuevo backlog">
+      <form onSubmit={create}>
+        <div className="space-y-3">
           <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
             Nuevo backlog
           </h2>
@@ -78,14 +70,17 @@ function NewBacklogModal({ onClose }: { onClose: () => void }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Nombre (ej. Summer Era)"
-            className="w-full rounded-2xl bg-black/25 px-4 py-3 outline-none transition-colors placeholder:text-text-3 focus:bg-black/40"
+            // Surface fills, not black alphas: the sheet is opaque now, so
+            // translucent blacks that were tuned against glass would read as
+            // muddy. Selection/focus stays a fill change (never an outline).
+            className="w-full rounded-[var(--r-md)] bg-surface-3 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3"
           />
           <input
             maxLength={80}
             value={vibe}
             onChange={(e) => setVibe(e.target.value)}
             placeholder="Vibe (opcional)"
-            className="w-full rounded-2xl bg-black/25 px-4 py-3 outline-none transition-colors placeholder:text-text-3 focus:bg-black/40"
+            className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
           />
           <button
             type="submit"
@@ -96,7 +91,6 @@ function NewBacklogModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </form>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
