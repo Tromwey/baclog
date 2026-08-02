@@ -4,6 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Music, Play } from "lucide-react";
 import { getPublicBacklog } from "@/modules/backlog/public";
+import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
+import { CountdownMono } from "@/components/countdown";
 import { captureView } from "@/modules/analytics/capture";
 import { parseHex } from "@/lib/color";
 import { BacklogHero } from "@/components/backlog-hero";
@@ -42,6 +44,11 @@ export default async function PublicBacklogPage({
   const { username, backlogId } = await params;
   const data = await getPublicBacklog(username, backlogId);
   if (!data) notFound();
+
+  // One render instant for every countdown on the page (see countdown.tsx).
+  const now = await getRenderInstant();
+  const upcomingOn = (i: { releaseDate: Date | null }) =>
+    isUpcoming(i.releaseDate, now);
 
   captureView({
     eventType: "public_backlog_view",
@@ -137,7 +144,20 @@ export default async function PublicBacklogPage({
                       {item.title}
                     </p>
                     <MonoMeta className="mt-0.5 block text-[10px] normal-case tracking-normal text-text-2">
-                      {[item.byline, item.year].filter(Boolean).join(" · ")}
+                      {[item.byline, upcomingOn(item) ? null : item.year]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      {upcomingOn(item) && (
+                        <>
+                          {item.byline ? " · " : ""}
+                          <CountdownMono
+                            releaseDate={item.releaseDate!.toISOString()}
+                            initialNow={now}
+                            className="text-[10px] tracking-normal text-text"
+                            liveClassName="text-[12px]"
+                          />
+                        </>
+                      )}
                     </MonoMeta>
                     <span className="mt-1.5 block">
                       {/* Public caption — status dot + Spanish label + public

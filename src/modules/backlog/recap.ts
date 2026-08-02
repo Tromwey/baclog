@@ -60,6 +60,7 @@ async function fetchUserItems(
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
+      releaseDate: catalogItems.releaseDate,
       genre: catalogItems.genre,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,

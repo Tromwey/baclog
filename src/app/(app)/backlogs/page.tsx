@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
 import { AuraField, ONBOARDING_AURA, StepMeter } from "@/components/ui";
-import { getBacklogsForUser } from "@/modules/backlog/queries";
+import {
+  getBacklogsForUser,
+  getUpcomingSummary,
+} from "@/modules/backlog/queries";
+import { shouldAnnounce } from "@/modules/announcements";
+import { getRenderInstant } from "@/modules/catalog/release";
+import { NovedadesModal } from "@/components/novedades-modal";
 import { SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { LensAccess } from "./lens-access";
@@ -12,6 +18,15 @@ export default async function BacklogsPage() {
   const list = await getBacklogsForUser(user.id);
 
   if (list.length === 0) return <FirstUse name={user.name} />;
+
+  // Novedades (modules/announcements.ts + components/novedades-modal). Gated
+  // FIRST so the extra read only happens for an account that can actually see
+  // it. Deliberately not on the first-use screen above: someone who hasn't made
+  // a backlog yet is already being guided somewhere, and an announcement on top
+  // of onboarding is two voices talking at once.
+  const announce = shouldAnnounce(user);
+  const upcoming = announce ? await getUpcomingSummary(user.id) : null;
+  const now = await getRenderInstant();
 
   const shelves: Shelf[] = list.map((b) => ({
     id: b.id,
@@ -40,6 +55,23 @@ export default async function BacklogsPage() {
           </div>
         </div>
       </header>
+
+      {announce && (
+        <NovedadesModal
+          initialNow={now}
+          own={
+            upcoming?.nearest?.releaseDate
+              ? {
+                  count: upcoming.count,
+                  title: upcoming.nearest.title,
+                  byline: upcoming.nearest.byline,
+                  posterUrl: upcoming.nearest.posterUrl,
+                  releaseDate: upcoming.nearest.releaseDate.toISOString(),
+                }
+              : null
+          }
+        />
+      )}
 
       <BacklogShelves shelves={shelves} />
     </main>

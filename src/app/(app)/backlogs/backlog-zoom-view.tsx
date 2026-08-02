@@ -3,6 +3,8 @@ import { assertOwnsBacklog } from "@/authz";
 import { BacklogHero } from "@/components/backlog-hero";
 import { ItemRowRemovable } from "@/components/item-row-removable";
 import { ThemeColorSync } from "@/components/theme-color-sync";
+import { UpcomingShelf } from "@/components/upcoming-shelf";
+import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { getBacklogItems } from "@/modules/backlog/queries";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
 import { dominantHexes } from "@/modules/backlog/palette";
@@ -38,6 +40,9 @@ export async function loadBacklogZoom(backlogId: string) {
     items,
     paletteHex: dominantHexes(items, 6),
     step: firstRunStep({ backlogs: 1, ...counts }),
+    // F3.8 — read the clock HERE (the loader is async; the view below is not)
+    // so the shelf and every row's countdown share one instant.
+    now: await getRenderInstant(),
   };
 }
 
@@ -53,6 +58,7 @@ export function BacklogZoomView({
   items,
   paletteHex,
   step,
+  now,
   zoom = false,
 }: {
   backlog: { id: string; name: string; vibe: string | null; createdAt: Date };
@@ -61,10 +67,22 @@ export function BacklogZoomView({
   paletteHex: string[];
   /** Welcome onboarding step (0 = activated, no guidance renders). */
   step: FirstRunStep;
+  /** The render instant from loadBacklogZoom — every countdown on this screen
+   *  is measured from it (see components/countdown.tsx). */
+  now: number;
   zoom?: boolean;
 }) {
   const hasItems = items.length > 0;
   const content = zoom ? "bl-zoom-content" : "";
+  const upcoming = items
+    .filter((it) => isUpcoming(it.releaseDate, now))
+    .sort((a, b) => a.releaseDate!.getTime() - b.releaseDate!.getTime())
+    .map((it) => ({
+      catalogItemId: it.catalogItemId,
+      title: it.title,
+      posterUrl: it.posterUrl,
+      releaseDate: it.releaseDate!.toISOString(),
+    }));
   // Step 2 = the library is empty account-wide. An ACTIVATED user's empty
   // backlog keeps the placeholder, the serif line and the CTA — only the meter
   // drops, so this screen never advertises a step that isn't theirs.
@@ -107,6 +125,18 @@ export function BacklogZoomView({
 
       {hasItems ? (
         <div className={`relative mt-[18px] ${content}`}>
+          {/* F3.8 — what hasn't come out yet, nearest first. The rows below
+              deliberately DON'T repeat the countdown: a title appears in both
+              places, and saying "faltan 5 días" twice on one screen makes the
+              shelf look like it's insisting. The shelf is where the wait is
+              legible; the row stays a row. */}
+          {upcoming.length > 0 && (
+            <>
+              <UpcomingShelf items={upcoming} initialNow={now} />
+              <div className="mx-5 mb-1 mt-5 h-px bg-line" />
+            </>
+          )}
+
           {items.map((item, i) => (
             <ItemRowRemovable
               key={item.id}

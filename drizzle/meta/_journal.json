@@ -134,6 +134,20 @@
       "when": 1785097049016,
       "tag": "0018_reco_variety",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785629014921,
+      "tag": "0019_no_puedo_esperar",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785696690021,
+      "tag": "0020_announcement_seen",
+      "breakpoints": true
     }
   ]
 }

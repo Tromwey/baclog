@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/auth";
 import { getPublicProfile } from "@/modules/backlog/public";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
+import { UpcomingShelf } from "@/components/upcoming-shelf";
+import { getRenderInstant } from "@/modules/catalog/release";
 import {
   AuraField,
   BackButton,
@@ -65,6 +67,8 @@ export default async function PublicProfilePage({
   });
 
   const totalItems = profile.backlogs.reduce((n, b) => n + b.itemCount, 0);
+  // One server instant for every countdown on the page (see countdown.tsx).
+  const now = await getRenderInstant();
   // Logged-in viewers (e.g. the owner via "ver perfil público") need a way back
   // and don't need the "start a backlog" pitch — that's for anonymous visitors.
   const viewer = await getCurrentUser();
@@ -128,6 +132,20 @@ export default async function PublicProfilePage({
             </StatusChip>
           </div>
         </header>
+
+        {/* F3.8 — what they're waiting for, above what they already have. Third
+            person here ("No puede esperar"): the visitor is reading someone
+            else's anticipation, not their own. Renders nothing when there's
+            nothing coming. */}
+        <UpcomingShelf
+          items={profile.upcoming}
+          initialNow={now}
+          heading="No puede esperar"
+          itemHref={(id) => `/u/${profile.username}/item/${id}`}
+          // -mx-5 cancels main's padding so the carousel can bleed to the
+          // screen edge like it does inside a backlog.
+          className="-mx-5 mt-9"
+        />
 
         {/* The owner's backlogs as ADN-aura shelves — same language as the
             in-app Backlogs list. Each links to the public backlog view. */}

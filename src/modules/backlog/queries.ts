@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
@@ -166,6 +166,7 @@ export async function getUserCatalogEntry(
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
+      releaseDate: catalogItems.releaseDate,
       genre: catalogItems.genre,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
@@ -311,6 +312,8 @@ export async function getBacklogItems(backlogId: string) {
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
+      // F3.8 — what turns a row into a countdown and feeds the shelf above it.
+      releaseDate: catalogItems.releaseDate,
       genre: catalogItems.genre,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
@@ -326,4 +329,28 @@ export async function getBacklogItems(backlogId: string) {
     )
     .where(eq(backlogItems.backlogId, backlogId))
     .orderBy(desc(backlogItems.addedAt));
+}
+
+/**
+ * F3.8 — what this user is waiting for: how many titles, and the nearest one.
+ * Keyed on `user_item` (library membership), so a title filed in two backlogs
+ * counts once and the answer doesn't depend on which shelf they opened.
+ *
+ * ONE indexed read: the count and the nearest both come out of the same rows,
+ * so a summary costs no more than the list would.
+ */
+export async function getUpcomingSummary(userId: string) {
+  const rows = await db
+    .select({
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
+      byline: catalogItems.byline,
+      posterUrl: catalogItems.posterUrl,
+      releaseDate: catalogItems.releaseDate,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(and(eq(userItems.userId, userId), gt(catalogItems.releaseDate, new Date())))
+    .orderBy(asc(catalogItems.releaseDate));
+  return { count: rows.length, nearest: rows[0] ?? null };
 }

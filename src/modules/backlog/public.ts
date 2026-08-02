@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   backlogItems,
@@ -82,6 +82,26 @@ export async function getPublicProfile(username: string) {
   const backlogPalettes = groupDominantHexes(coverRows, (c) => c.backlogId, 6);
   const palette = dominantHexes(coverRows, 6);
 
+  // F3.8 — what this profile is waiting for. Scoped to user_item (one row per
+  // title, so a title filed in two backlogs appears once) and to dates still in
+  // the future; every field is catalog data, which keeps this inside the
+  // public-safe field list this function is built around. Nothing here says
+  // WHICH backlog a title is in, or anything about the owner's state on it.
+  const upcoming = await db
+    .select({
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
+      posterUrl: catalogItems.posterUrl,
+      releaseDate: catalogItems.releaseDate,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(
+      and(eq(userItems.userId, user.id), gt(catalogItems.releaseDate, new Date())),
+    )
+    .orderBy(catalogItems.releaseDate)
+    .limit(12);
+
   return {
     displayName: user.name ?? user.username ?? "",
     username: user.username!,
@@ -92,6 +112,10 @@ export async function getPublicProfile(username: string) {
       ...l,
       coverUrls: covers.get(l.id) ?? [],
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
+    })),
+    upcoming: upcoming.map((u) => ({
+      ...u,
+      releaseDate: u.releaseDate!.toISOString(),
     })),
   };
 }
@@ -138,6 +162,9 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
+      // F3.8 — the countdown replaces the year on a public row too: the wait
+      // is catalog data, identical for any visitor, session or not.
+      releaseDate: catalogItems.releaseDate,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
       // Cover-art colors only (nothing user-identifying) — feeds the backlog's

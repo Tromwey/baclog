@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   assertOwnsBacklog,
@@ -9,95 +9,45 @@ import {
   assertOwnsUserItem,
 } from "@/authz";
 import { db } from "@/db";
-import { backlogItems, catalogItems, itemStatusEnum, userItems } from "@/db/schema";
+import { backlogItems, itemStatusEnum, userItems } from "@/db/schema";
 import { paletteHexSchema } from "@/modules/backlog/palette";
+import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
+import { cacheReleaseDate, getCatalogItem } from "@/modules/catalog/cache";
+import { getAlbumDetail } from "@/modules/catalog/itunes";
 
 type ItemStatus = (typeof itemStatusEnum.enumValues)[number];
 
 const paletteSchema = paletteHexSchema.optional();
 
 /**
- * The one place a title enters a user's world: ensure the shared cover palette,
- * the per-title state row (user_item), and the per-backlog membership all exist.
- * Shared by addItemAction and the cross-media accept flow so both keep the three
- * levels consistent (membership = per-backlog, state = per-title, palette =
- * per-catalog). Internal (a "use server" file may only EXPORT async functions).
+ * F3.8 — resolve a pre-order's release date at add time.
+ *
+ * Gated on `year IS NULL`, which is the pre-order signature and nothing else:
+ * iTunes' album search index doesn't carry unreleased titles at all, and the
+ * song rows that DO surface them (the song→album fold in itunes.ts) carry no
+ * releaseDate, so a pre-order is the only album that lands in the catalog
+ * without a year. Every already-released album skips the lookup entirely.
+ *
+ * Best-effort by construction: adding a title must never fail because Apple
+ * was slow. Worst case the date arrives later, on the first view of the item.
  */
-async function ensureUserItemAndMembership(opts: {
-  userId: string;
-  backlogId: string;
-  catalogItemId: string;
-  paletteHex?: string[] | null;
-  sourceCrossMediaRecId?: string | null;
-}): Promise<{ membershipId: string | null; userItemId: string }> {
-  // 1. Persist the cover-derived palette onto the shared catalog row — only if
-  //    absent, so one user's extraction fills it for everyone and a CORS-empty
-  //    ([]) or a re-add never clobbers a real value.
-  if (opts.paletteHex && opts.paletteHex.length > 0) {
-    await db
-      .update(catalogItems)
-      .set({ paletteHex: opts.paletteHex })
-      .where(
-        and(
-          eq(catalogItems.id, opts.catalogItemId),
-          isNull(catalogItems.paletteHex),
-        ),
-      );
+async function backfillPreorderDate(catalogItemId: string): Promise<void> {
+  try {
+    const item = await getCatalogItem(catalogItemId);
+    if (
+      !item ||
+      item.source !== "itunes" ||
+      item.mediaType !== "album" ||
+      item.year !== null ||
+      item.releaseDate !== null
+    ) {
+      return;
+    }
+    const detail = await getAlbumDetail(item.externalId);
+    await cacheReleaseDate(catalogItemId, detail.releaseDate, null);
+  } catch (err) {
+    console.error("[F3.8] pre-order date backfill failed:", err);
   }
-
-  // 2. Ensure the per-title state row. Existing state WINS (onConflictDoNothing):
-  //    re-adding a title, or accepting a reco for one you already have, never
-  //    resets its status/obsession. Provenance is only seeded on a fresh create.
-  await db
-    .insert(userItems)
-    .values({
-      userId: opts.userId,
-      catalogItemId: opts.catalogItemId,
-      sourceCrossMediaRecId: opts.sourceCrossMediaRecId ?? null,
-    })
-    .onConflictDoNothing({
-      target: [userItems.userId, userItems.catalogItemId],
-    });
-  const [ui] = await db
-    .select({ id: userItems.id })
-    .from(userItems)
-    .where(
-      and(
-        eq(userItems.userId, opts.userId),
-        eq(userItems.catalogItemId, opts.catalogItemId),
-      ),
-    )
-    .limit(1);
-
-  // 3. Add the membership (idempotent per backlog). Resolve the id either way so
-  //    the caller can still act on an already-present row (Descubrir toggle).
-  const [inserted] = await db
-    .insert(backlogItems)
-    .values({
-      backlogId: opts.backlogId,
-      userId: opts.userId,
-      catalogItemId: opts.catalogItemId,
-    })
-    .onConflictDoNothing({
-      target: [backlogItems.backlogId, backlogItems.catalogItemId],
-    })
-    .returning({ id: backlogItems.id });
-  let membershipId = inserted?.id ?? null;
-  if (!membershipId) {
-    const [existing] = await db
-      .select({ id: backlogItems.id })
-      .from(backlogItems)
-      .where(
-        and(
-          eq(backlogItems.backlogId, opts.backlogId),
-          eq(backlogItems.catalogItemId, opts.catalogItemId),
-        ),
-      )
-      .limit(1);
-    membershipId = existing?.id ?? null;
-  }
-
-  return { membershipId, userItemId: ui!.id };
 }
 
 export async function addItemAction(input: {
@@ -116,27 +66,14 @@ export async function addItemAction(input: {
     paletteHex: palette.data ?? null,
   });
 
+  await backfillPreorderDate(input.catalogItemId);
+
   // "layout" over the /backlogs segment: one call covers the shelf list, both
   // zoom twins ([backlogId] + the intercepted @modal) and the lenses.
   revalidatePath("/backlogs", "layout");
   // Return the membership id (new OR pre-existing) so the caller can still mark
   // it as added / allow removal (the Descubrir search toggle relies on this).
   return membershipId ? { id: membershipId } : { error: "invalid" as const };
-}
-
-/**
- * Add the same title to a second backlog (or the accept flow) — reuses the
- * shared helper so the per-title state/palette are untouched, only a membership
- * is created. Exposed for callers that already hold a resolved backlog id.
- */
-export async function ensureMembership(opts: {
-  userId: string;
-  backlogId: string;
-  catalogItemId: string;
-  paletteHex?: string[] | null;
-  sourceCrossMediaRecId?: string | null;
-}) {
-  return ensureUserItemAndMembership(opts);
 }
 
 // F2.8 custom status is retired (item-flow redesign): only the three real

@@ -112,6 +112,19 @@ export const users = pgTable(
      * the first 100 users the admin portal.
      */
     isAdmin: boolean("is_admin").notNull().default(false),
+    /**
+     * The key of the last feature announcement this account dismissed
+     * (see modules/announcements.ts). TEXT, not an enum: enum members can't be
+     * dropped without rebuilding the type — `item_status.custom` is still in
+     * the schema for exactly that reason, and this column is meant to churn.
+     *
+     * Reset semantics are "bump the constant", NOT "clear the column": the next
+     * announcement changes CURRENT_ANNOUNCEMENT, every stored value stops
+     * matching, and everyone is eligible again with no UPDATE to run and no
+     * cleanup step to forget mid-deploy. What each account last saw survives as
+     * a side effect, which is the only telemetry this needs.
+     */
+    announcementSeen: text("announcement_seen"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -211,6 +224,20 @@ export const catalogItems = pgTable(
      * barely change, but a soundtrack can get indexed later).
      */
     linkEdgesCheckedAt: timestamp("link_edges_checked_at"),
+    /**
+     * F3.8 ("No puedo esperar") — the album's release timestamp from the iTunes
+     * lookup's `wrapperType: "collection"` row. A FUTURE value is the whole
+     * feature: the countdown state is DERIVED (`releaseDate > now()`), never
+     * stored and never user-set, so it expires on its own with nothing to clean
+     * up. Null = unknown (legacy rows, video, or a lookup that failed) and the
+     * countdown simply doesn't render — the feature is purely additive.
+     *
+     * Why it isn't just `year`: a pre-order is missing from iTunes' ALBUM search
+     * index entirely and its SONG-index rows carry no releaseDate at all, so a
+     * pre-order enters the catalog with `year: null`. That null IS the tell we
+     * use to decide a lookup is worth paying for on add.
+     */
+    releaseDate: timestamp("release_date"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [
@@ -219,6 +246,8 @@ export const catalogItems = pgTable(
       t.externalId,
     ),
     index("catalog_item_media_type_idx").on(t.mediaType),
+    // The release cron's only scan: "what crossed zero since yesterday".
+    index("catalog_item_release_date_idx").on(t.releaseDate),
   ],
 );
 
@@ -446,6 +475,36 @@ export const recapSends = pgTable(
     // THE idempotency key: at most one recap per (user, era), ever
     uniqueIndex("recap_send_user_era_unique").on(t.userId, t.eraKey),
     index("recap_send_era_key_idx").on(t.eraKey),
+  ],
+);
+
+/**
+ * F3.8 — the release-day notice claim. Same shape and same reasoning as
+ * `recap_send` above: the unique(user_id, catalog_item_id) makes the
+ * INSERT … ON CONFLICT DO NOTHING RETURNING an atomic claim, so an
+ * at-least-once cron (retry, manual re-trigger, overlapping runs) can never
+ * mail the same person about the same album twice.
+ *
+ * No opt-in column: having the title in your library IS the opt-in (a user_item
+ * row), so the audience is a join, not a flag.
+ */
+export const releaseNotices = pgTable(
+  "release_notice",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    catalogItemId: text("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    emailSentAt: timestamp("email_sent_at", { mode: "date" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("release_notice_user_item_unique").on(t.userId, t.catalogItemId),
   ],
 );
 
@@ -799,6 +858,14 @@ export const waitlistEntriesRelations = relations(
 
 export const recapSendsRelations = relations(recapSends, ({ one }) => ({
   user: one(users, { fields: [recapSends.userId], references: [users.id] }),
+}));
+
+export const releaseNoticesRelations = relations(releaseNotices, ({ one }) => ({
+  user: one(users, { fields: [releaseNotices.userId], references: [users.id] }),
+  catalogItem: one(catalogItems, {
+    fields: [releaseNotices.catalogItemId],
+    references: [catalogItems.id],
+  }),
 }));
 
 export const crossMediaRecsRelations = relations(crossMediaRecs, ({ one }) => ({

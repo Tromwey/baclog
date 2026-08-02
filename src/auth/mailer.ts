@@ -43,6 +43,39 @@ export function sendOtpEmail(email: string, code: string): Promise<void> {
   );
 }
 
+/**
+ * F3.8 — the release-day notice. The whole point of the feature's back half:
+ * you put something in your backlog before it existed, and on the morning it
+ * exists, we say so.
+ *
+ * The copy names the wait itself ("cuando faltaban 42 días") because that's the
+ * only thing this email knows that a store notification doesn't. `waitedDays`
+ * is null when we can't reconstruct it (added after the date was already known
+ * to be past), and the sentence is simply dropped rather than faked.
+ */
+export function sendReleaseEmail(
+  email: string,
+  album: {
+    title: string;
+    byline: string | null;
+    itemUrl: string;
+    addedOn: string | null;
+    waitedDays: number | null;
+  },
+): Promise<void> {
+  const artist = album.byline ? `, de ${album.byline}` : "";
+  const waited =
+    album.addedOn && album.waitedDays != null && album.waitedDays > 0
+      ? `Lo agregaste a tu backlog el ${album.addedOn}, cuando faltaban ${album.waitedDays} días. La espera terminó.\n\n`
+      : "";
+  const body =
+    `Hoy sale ${album.title}${artist}.\n\n` +
+    waited +
+    `Escúchalo: ${album.itemUrl}\n\n` +
+    `—\nTe avisamos porque está en tu backlog.`;
+  return send(email, `${album.title} ya salió ✦`, body, "RELEASE");
+}
+
 /** F3.3 — monthly recap notification. */
 export function sendRecapEmail(
   email: string,

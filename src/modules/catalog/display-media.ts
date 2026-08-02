@@ -1,13 +1,16 @@
 import "server-only";
 import type { AlbumTrack } from "./itunes";
-import { getAlbumTracks } from "./itunes";
+import { getAlbumDetail } from "./itunes";
 import { getSpanishOverview } from "./tmdb";
+import { cacheReleaseDate } from "./cache";
 
 interface DisplayMediaInput {
+  id: string;
   source: string;
   mediaType: "film" | "series" | "album";
   externalId: string;
   synopsis: string | null;
+  releaseDate: Date | null;
 }
 
 /**
@@ -16,18 +19,46 @@ interface DisplayMediaInput {
  * an album's tracklist (iTunes) OR a film/series' Spanish synopsis (TMDB) — a
  * title is never both. Both fetches are cached (see the respective functions);
  * the synopsis falls back to the stored English when TMDB has no translation.
+ *
+ * F3.8: that album lookup ALSO carries the release date, so VIEWING an item is
+ * what teaches the catalog when a pre-order lands — self-healing, at the cost
+ * of zero extra requests (the call was already happening for the tracklist).
+ * It's why an album added while unreleased doesn't stay dateless: the first
+ * view of its page fills the date in, for every user afterwards.
  */
 export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
   tracks: AlbumTrack[];
+  /** The album's full song count — exceeds tracks.length before release. */
+  trackCount: number;
   synopsis: string | null;
+  /** Freshest known release date: what the provider just said, else the stored
+   *  value. Callers derive the countdown from THIS, not from the row they read
+   *  a moment ago, so a date that moved takes effect on the same render. */
+  releaseDate: Date | null;
 }> {
-  const tracks =
-    item.mediaType === "album" && item.source === "itunes"
-      ? await getAlbumTracks(item.externalId)
-      : [];
+  const isAlbum = item.mediaType === "album" && item.source === "itunes";
+  const detail = isAlbum
+    ? await getAlbumDetail(
+        item.externalId,
+        // Unknown or still-future date ⇒ short cache; a released album's
+        // tracklist is immutable and keeps the long one.
+        !item.releaseDate || item.releaseDate.getTime() > Date.now(),
+      )
+    : { tracks: [] as AlbumTrack[], trackCount: 0, releaseDate: null };
+
+  if (isAlbum) {
+    await cacheReleaseDate(item.id, detail.releaseDate, item.releaseDate);
+  }
+
   const synopsis =
     (item.source === "tmdb" && item.mediaType !== "album"
       ? await getSpanishOverview(item.externalId, item.mediaType)
       : null) ?? item.synopsis;
-  return { tracks, synopsis };
+
+  return {
+    tracks: detail.tracks,
+    trackCount: detail.trackCount,
+    synopsis,
+    releaseDate: detail.releaseDate ?? item.releaseDate,
+  };
 }

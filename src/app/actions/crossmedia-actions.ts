@@ -15,7 +15,7 @@ import {
   type DiscoverResult,
 } from "@/modules/recs/crossmedia";
 import type { DoubleFeatureData } from "@/modules/cards/types";
-import { ensureMembership } from "./backlog-item-actions";
+import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -95,7 +95,7 @@ export async function acceptRecoAction(input: {
     getCrossMediaRecId(input.seedCatalogItemId, input.targetCatalogItemId),
   ]);
 
-  await ensureMembership({
+  await ensureUserItemAndMembership({
     userId: user.id,
     backlogId: target.backlogId,
     catalogItemId: input.targetCatalogItemId,
@@ -130,7 +130,7 @@ export async function acceptRecoToBacklogAction(input: {
   ]);
   if (!backlog) return { error: "not_found" };
 
-  await ensureMembership({
+  await ensureUserItemAndMembership({
     userId: user.id,
     backlogId: backlog.id,
     catalogItemId: input.targetCatalogItemId,

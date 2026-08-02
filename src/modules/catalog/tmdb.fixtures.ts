@@ -46,6 +46,7 @@ function fx(
     title,
     byline,
     year,
+    releaseDate: null,
     genre,
     synopsis,
     posterUrl: null,

@@ -28,6 +28,7 @@ export function ItemHeroAura({
   posterUrl,
   seed,
   catalogItemId,
+  opacity,
 }: {
   paletteHex: string[] | null;
   posterUrl: string | null;
@@ -35,6 +36,11 @@ export function ItemHeroAura({
   /** When set (in-app, authenticated), a fresh extraction backfills the shared
    * catalog palette. Omitted on the anonymous public page → display-only. */
   catalogItemId?: string;
+  /** F3.8 — the aura is the only light in the system, so it's also the only
+   * thing allowed to register the wait: full while the clock is live, dimmer
+   * once the album is out (design §1g). Default 1 leaves every other surface
+   * exactly as it was. */
+  opacity?: number;
 }) {
   const persisted = paletteHex ?? [];
   const [extracted, setExtracted] = useState<string[]>([]);
@@ -65,7 +71,8 @@ export function ItemHeroAura({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[400px] overflow-hidden"
+      className="pointer-events-none absolute inset-x-0 top-0 h-[400px] overflow-hidden transition-opacity duration-[420ms] ease-[cubic-bezier(.16,1,.3,1)]"
+      style={opacity != null ? { opacity } : undefined}
     >
       {/* Safari's status-bar band tints from theme-color — match the aura. */}
       <ThemeColorSync color={colors[0]} />

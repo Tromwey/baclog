@@ -84,6 +84,11 @@ async function fetchAlbums(
 
 function toAlbumItem(c: ItunesCollection, externalId: string): ExternalItem {
   const albumUrl = toAlbumViewUrl(c.collectionViewUrl);
+  // A pre-order reaches search ONLY through the song→album fold above, and its
+  // song rows carry no releaseDate at all — so both of these land null and the
+  // item enters the catalog dateless. getAlbumDetail fills them in later; the
+  // null year is the signal that it's worth the lookup.
+  const released = c.releaseDate ? new Date(c.releaseDate) : null;
   return {
     source: "itunes",
     externalId,
@@ -91,6 +96,8 @@ function toAlbumItem(c: ItunesCollection, externalId: string): ExternalItem {
     title: c.collectionName as string,
     byline: c.artistName,
     year: c.releaseDate ? Number(c.releaseDate.slice(0, 4)) || null : null,
+    releaseDate:
+      released && !Number.isNaN(released.getTime()) ? released : null,
     genre: c.primaryGenreName?.toLowerCase() ?? null,
     synopsis: null,
     posterUrl: c.artworkUrl100?.replace("100x100bb", "600x600bb") ?? null,
@@ -118,6 +125,60 @@ function toAlbumViewUrl(viewUrl: string | undefined): string | undefined {
   }
 }
 
+/**
+ * F3.8 / Novedades 6b — an artist's UNRELEASED albums, soonest first.
+ *
+ * This is the only route that reaches a pre-order reliably. Searching the
+ * artist's NAME never gets there: iTunes ranks by relevance, so 20+ released
+ * records come back ahead of an unreleased one whose tracks are still called
+ * "Track 4" — verified against benny blanco and Mastodon, both of which have a
+ * pre-order and neither of which surfaces it by name search. The artist LOOKUP
+ * has no ranking to fight: it returns the whole discography, and a pre-order
+ * sits there with its real future releaseDate already in the payload (no
+ * per-candidate lookup needed, unlike the search path).
+ *
+ * `artistId` comes from the stored iTunes payload of an album the user owns
+ * (catalog_item.raw), so this only ever runs for artists they already have.
+ */
+export async function getArtistUpcoming(
+  artistId: number,
+  now: number = Date.now(),
+): Promise<ExternalItem[]> {
+  const url = new URL("https://itunes.apple.com/lookup");
+  url.searchParams.set("id", String(artistId));
+  url.searchParams.set("entity", "album");
+  url.searchParams.set("limit", "200");
+
+  try {
+    // 6h: short enough that a newly announced record shows up the same day,
+    // long enough that a fleet of users doesn't re-ask for one discography.
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows = (data.results ?? []) as Array<
+      ItunesCollection & { wrapperType?: string }
+    >;
+    return rows
+      .filter(
+        (r) =>
+          r.wrapperType === "collection" &&
+          r.collectionId != null &&
+          Boolean(r.collectionName) &&
+          Boolean(r.releaseDate) &&
+          new Date(r.releaseDate as string).getTime() > now,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.releaseDate as string).getTime() -
+          new Date(b.releaseDate as string).getTime(),
+      )
+      .map((r) => toAlbumItem(r, String(r.collectionId)));
+  } catch (err) {
+    console.error(`[catalog] iTunes artist lookup ${artistId} failed:`, err);
+    return [];
+  }
+}
+
 export interface AlbumTrack {
   /** Play-order position (disc-flattened). */
   n: number;
@@ -125,17 +186,51 @@ export interface AlbumTrack {
   durationMs: number | null;
 }
 
+export interface AlbumDetail {
+  /** From the lookup's `wrapperType: "collection"` row — the ONLY place iTunes
+   *  exposes a pre-order's release date (search payloads omit it entirely). */
+  releaseDate: Date | null;
+  /** The collection's own track count, which can exceed `tracks.length` on a
+   *  pre-order (iTunes counted 8, listed 7 for "Hermoso"). Drives "3 DE 11". */
+  trackCount: number;
+  tracks: AlbumTrack[];
+}
+
+/** iTunes' placeholder for an unreleased track: literally "Track 4", never
+ *  streamable. A real song titled "Track 5" on a released album IS streamable,
+ *  so requiring both keeps a genuine oddity from being swallowed. */
+function isPlaceholderTrack(name: string, streamable: boolean): boolean {
+  return !streamable && /^track \d+$/i.test(name.trim());
+}
+
 /**
- * An album's tracklist via the keyless iTunes lookup (ADR-007). Track names are
- * the album equivalent of a film's synopsis: metadata/FACTS, the "receipt" safe
- * zone (ADR-008) — fetched server-side like the rest of the catalog. This is
- * text, not artwork, so the "never proxy images" rule (images only) does not
- * apply. Cached 30d: a released album's tracklist is effectively immutable.
- * Returns [] on any failure — the caller just omits the section.
+ * An album's tracklist AND release date via the keyless iTunes lookup
+ * (ADR-007). Track names are the album equivalent of a film's synopsis:
+ * metadata/FACTS, the "receipt" safe zone (ADR-008) — fetched server-side like
+ * the rest of the catalog. This is text, not artwork, so the "never proxy
+ * images" rule (images only) does not apply. Returns an empty detail on any
+ * failure — the caller just omits the section and the countdown.
+ *
+ * ONE call serves both: the response's first row is the collection (carrying
+ * releaseDate + trackCount), the rest are its tracks. That's why F3.8 costs no
+ * extra requests on the item page — this lookup was already happening and the
+ * collection row was being filtered away.
+ *
+ * CACHE, and why it's conditional: a RELEASED album's detail is immutable, so
+ * it keeps the original 30d. A pre-order is the opposite — its date slips, its
+ * placeholder tracks fill in — so it gets 24h. Making it 24h for everything
+ * would have multiplied outbound traffic to Apple by 30 on a path ANONYMOUS
+ * visitors can trigger (the public item page calls this for any catalog id), and
+ * the thing being re-fetched would be facts that cannot change.
  *
  * `collectionId` is the album's iTunes id, stored as catalog_item.externalId.
+ * `pending` = the caller's stored release date is in the future or unknown.
  */
-export async function getAlbumTracks(collectionId: string): Promise<AlbumTrack[]> {
+export async function getAlbumDetail(
+  collectionId: string,
+  pending = true,
+): Promise<AlbumDetail> {
+  const EMPTY: AlbumDetail = { releaseDate: null, trackCount: 0, tracks: [] };
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", collectionId);
   url.searchParams.set("entity", "song");
@@ -143,31 +238,54 @@ export async function getAlbumTracks(collectionId: string): Promise<AlbumTrack[]
 
   try {
     const res = await fetch(url, {
-      next: { revalidate: 60 * 60 * 24 * 30 },
+      next: { revalidate: pending ? 60 * 60 * 24 : 60 * 60 * 24 * 30 },
     });
-    if (!res.ok) return [];
+    if (!res.ok) return EMPTY;
     const data = await res.json();
     const rows = (data.results ?? []) as Array<{
       wrapperType?: string;
+      collectionType?: string;
+      releaseDate?: string;
+      trackCount?: number;
       trackNumber?: number;
       discNumber?: number;
       trackName?: string;
       trackTimeMillis?: number;
+      isStreamable?: boolean;
     }>;
-    return rows
+
+    const collection = rows.find((r) => r.wrapperType === "collection");
+    const parsed = collection?.releaseDate
+      ? new Date(collection.releaseDate)
+      : null;
+
+    const tracks = rows
       .filter((r) => r.wrapperType === "track" && Boolean(r.trackName))
       .sort(
         (a, b) =>
           (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
           (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
       )
+      // "Track 4" never reaches the screen (design 1f): a muted placeholder row
+      // says nothing the "N canciones más" divider doesn't say better. The
+      // partial tracklist splits on trackCount, so streamability matters only
+      // here, as half of that test.
+      .filter((t) => !isPlaceholderTrack(t.trackName as string, t.isStreamable === true))
       .map((t) => ({
         n: t.trackNumber ?? 0,
         name: t.trackName as string,
         durationMs:
           typeof t.trackTimeMillis === "number" ? t.trackTimeMillis : null,
       }));
+
+    return {
+      releaseDate: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+      // The collection's count is the truth about how many songs the album HAS;
+      // `tracks` is only what iTunes is willing to name today.
+      trackCount: collection?.trackCount ?? tracks.length,
+      tracks,
+    };
   } catch {
-    return [];
+    return EMPTY;
   }
 }

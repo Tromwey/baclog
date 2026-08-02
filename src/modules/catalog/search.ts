@@ -21,6 +21,19 @@ export async function unifiedSearch(
   if (tab === "album" || tab === "all") tasks.push(safe(searchAlbums(query)));
 
   const external = (await Promise.all(tasks)).flat();
+  return cacheExternalItems(external);
+}
+
+/**
+ * Upsert provider results into catalog_items and return them in the client
+ * shape, preserving the caller's ordering. Search doubles as the cache warmer,
+ * and F3.8's artist-lookup path (Novedades 6b) needs the same write to get a
+ * catalogItemId it can add to a backlog — so the upsert lives here once
+ * instead of being reimplemented next to each producer.
+ */
+export async function cacheExternalItems(
+  external: ExternalItem[],
+): Promise<CatalogSearchResult[]> {
   if (external.length === 0) return [];
 
   const rows = await db
@@ -33,6 +46,7 @@ export async function unifiedSearch(
         title: e.title,
         byline: e.byline,
         year: e.year,
+        releaseDate: e.releaseDate,
         genre: e.genre,
         synopsis: e.synopsis,
         posterUrl: e.posterUrl,
@@ -48,6 +62,10 @@ export async function unifiedSearch(
         title: sql`excluded.title`,
         byline: sql`coalesce(excluded.byline, ${catalogItems.byline})`,
         year: sql`excluded.year`,
+        // coalesce, unlike `year`: search NEVER carries a pre-order's date, so
+        // an incoming null here means "this payload doesn't know", not "there
+        // is no date" — overwriting would erase what getAlbumDetail resolved.
+        releaseDate: sql`coalesce(excluded.release_date, ${catalogItems.releaseDate})`,
         genre: sql`coalesce(excluded.genre, ${catalogItems.genre})`,
         synopsis: sql`coalesce(excluded.synopsis, ${catalogItems.synopsis})`,
         posterUrl: sql`coalesce(excluded.poster_url, ${catalogItems.posterUrl})`,

@@ -12,6 +12,12 @@ import { BackButton, Button, MonoMeta } from "@/components/ui";
 import { ItemHeroAura } from "@/components/item-hero-aura";
 import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import {
+  getRenderInstant,
+  isUpcoming,
+  restArrivesLabel,
+} from "@/modules/catalog/release";
+import { CountdownHero, CountdownMono } from "@/components/countdown";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { auraSeed, parseHex } from "@/lib/color";
@@ -71,7 +77,17 @@ export default async function PublicItemPage({
 
   // Album tracklist OR film/series Spanish synopsis (English fallback), derived
   // from the source provider and cached — shared with the in-app item page.
-  const { tracks, synopsis } = await getItemDisplayMedia(item);
+  // F3.8 note: unlike the palette, this DOES write back on the anonymous page
+  // (getItemDisplayMedia persists the release date). The palette rule exists
+  // because that value is extracted on the VIEWER's device — user-supplied. A
+  // release date comes from iTunes server-side, so an anonymous visitor can
+  // trigger the refresh but can never influence what gets stored.
+  const { tracks, trackCount, synopsis, releaseDate } =
+    await getItemDisplayMedia(item);
+
+  const now = await getRenderInstant();
+  const upcoming = isUpcoming(releaseDate, now);
+  const releaseIso = releaseDate ? releaseDate.toISOString() : null;
 
   captureView({
     eventType: "public_item_view",
@@ -104,10 +120,17 @@ export default async function PublicItemPage({
   // byline · year · genre. The media-type label is dropped for albums: the
   // square art, the artist byline and the "Escuchar en…" buttons already say
   // it. Película/Serie stays — that one carries information the page doesn't.
-  const meta = [
+  // Split at the year: while the album is still coming, the countdown occupies
+  // ITS slot (identical to the in-app page, and identical for a visitor with no
+  // session at all — the date is catalog data, never user data).
+  const metaBefore = [
     item.mediaType !== "album" ? MEDIA_TYPE_TITLE[item.mediaType] : null,
     item.byline,
-    item.year,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const metaAfter = [
+    upcoming ? null : item.year,
     item.genre && capitalize(item.genre),
   ]
     .filter(Boolean)
@@ -164,8 +187,28 @@ export default async function PublicItemPage({
             {item.title}
           </h1>
           <MonoMeta className="mt-2.5 block text-[10px] tracking-[0.1em] text-text-2">
-            {meta}
+            {metaBefore}
+            {releaseIso && upcoming && (
+              <>
+                {metaBefore && " · "}
+                <CountdownMono
+                  releaseDate={releaseIso}
+                  initialNow={now}
+                  className="text-[10px] tracking-[0.1em] text-text"
+                  liveClassName="text-[13px] tracking-[0.02em]"
+                />
+              </>
+            )}
+            {/* The separator depends on whether ANYTHING was emitted before it,
+                not on metaBefore alone: an album drops the media-type label, so
+                a null artist leaves metaBefore empty and the countdown would
+                collide with the genre ("FALTAN 13 DÍASPop"). */}
+            {metaAfter &&
+              `${metaBefore || (releaseIso && upcoming) ? " · " : ""}${metaAfter}`}
           </MonoMeta>
+          {releaseIso && upcoming && (
+            <CountdownHero releaseDate={releaseIso} initialNow={now} />
+          )}
         </div>
 
         {/* Films/series carry a TMDB synopsis; albums show their tracklist
@@ -211,7 +254,15 @@ export default async function PublicItemPage({
           )}
         </div>
 
-        <Tracklist tracks={tracks} />
+        <Tracklist
+          tracks={tracks}
+          totalCount={upcoming ? trackCount : undefined}
+          pendingLabel={
+            upcoming && releaseDate
+              ? restArrivesLabel(releaseDate, now)
+              : undefined
+          }
+        />
 
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}

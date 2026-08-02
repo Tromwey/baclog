@@ -31,6 +31,15 @@ export interface ExternalItem {
   /** Studio/network for video, artist for music */
   byline: string | null;
   year: number | null;
+  /**
+   * F3.8 — exact release timestamp when the provider gives one. iTunes' search
+   * payload carries it for RELEASED albums (so this backfills for free on every
+   * search) but omits it entirely for pre-orders, which is why an unreleased
+   * album needs the lookup in getAlbumDetail. Null for video: v1 of "No puedo
+   * esperar" is albums-only, and storing a TMDB date here would put films in
+   * the release cron's scan without any of the UI that makes them make sense.
+   */
+  releaseDate: Date | null;
   genre: string | null;
   synopsis: string | null;
   /** Hotlink to image.tmdb.org / mzstatic — never proxied (ADR-007) */

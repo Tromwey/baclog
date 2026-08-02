@@ -28,6 +28,11 @@ export const getCurrentUser = cache(async () => {
       isFounder: users.isFounder,
       founderRank: users.founderRank,
       isAdmin: users.isAdmin,
+      // Feature announcements (modules/announcements.ts). Rides along on the
+      // per-request user read the JWT-session deviation already pays for, so
+      // eligibility costs no extra query anywhere in the app.
+      announcementSeen: users.announcementSeen,
+      createdAt: users.createdAt,
     })
     .from(users)
     .where(eq(users.id, id))

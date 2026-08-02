@@ -9,7 +9,18 @@ import {
 import { countLovedItems } from "@/modules/backlog/first-run";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import {
+  getRenderInstant,
+  isFreshlyReleased,
+  isUpcoming,
+  restArrivesLabel,
+} from "@/modules/catalog/release";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
+import {
+  CountdownBar,
+  CountdownHero,
+  CountdownMono,
+} from "@/components/countdown";
 import { AddToBacklog } from "./add-to-backlog";
 import { CloseChip } from "./close-chip";
 import { HideDock } from "./hide-dock";
@@ -51,7 +62,18 @@ export default async function ItemPage({
 
   // Album tracklist OR film/series Spanish synopsis (English fallback), derived
   // from the source provider and cached — shared with the public item page.
-  const { tracks, synopsis } = await getItemDisplayMedia(item);
+  // For an album this also refreshes catalog_item.release_date (F3.8), so read
+  // the countdown off the returned value, not the row we loaded before it.
+  const { tracks, trackCount, synopsis, releaseDate } =
+    await getItemDisplayMedia(item);
+
+  // F3.8 — ONE server instant, threaded to every countdown on the page so SSR
+  // and the first client render agree (they'd disagree by whatever the request
+  // took). The wait is derived here and nowhere else: no status, no flag.
+  const now = await getRenderInstant();
+  const upcoming = isUpcoming(releaseDate, now);
+  const releaseIso = releaseDate ? releaseDate.toISOString() : null;
+  const fresh = isFreshlyReleased(releaseDate, now);
 
   // AI provenance narrative — rides along on getUserCatalogEntry's LEFT JOIN
   // (rec* fields, null on non-AI entries) so it costs no extra round-trip.
@@ -80,10 +102,15 @@ export default async function ItemPage({
   // Mock #p3's meta line carries no stats (HANDOFF §0 — no ratings UI).
   // Genre capitalized to match the public item page (audit fix — catalog
   // genres are stored lowercased for both sources; capitalize() is display-only).
-  const meta = [
-    MEDIA_TYPE_TITLE[item.mediaType],
-    item.byline,
-    item.year,
+  // F3.8: split at the year so the countdown can be spliced into ITS slot
+  // instead of trailing the line — the counter is never its own component, it's
+  // a value in an existing position (design §0). A pre-order has no year to
+  // show anyway.
+  const metaBefore = [MEDIA_TYPE_TITLE[item.mediaType], item.byline]
+    .filter(Boolean)
+    .join(" · ");
+  const metaAfter = [
+    upcoming ? null : item.year,
     item.genre && capitalize(item.genre),
   ]
     .filter(Boolean)
@@ -100,6 +127,13 @@ export default async function ItemPage({
       ? `rgba(${shadowTint.r},${shadowTint.g},${shadowTint.b},0.5)`
       : "rgba(0,0,0,0.5)"
   }`;
+
+  // The aura is the only light in the system, so it's also the only thing that
+  // registers the crossing: full-ish while the wait is on, dimmer for the day
+  // after (design §1g), untouched for every ordinary title.
+  let auraOpacity: number | undefined;
+  if (fresh) auraOpacity = 0.55;
+  else if (upcoming) auraOpacity = 0.82;
 
   return (
     // key: add-to-backlog's router.refresh() can swap `entry` (none → logged) —
@@ -123,6 +157,7 @@ export default async function ItemPage({
           posterUrl={item.posterUrl}
           seed={auraSeed(item.id)}
           catalogItemId={item.id}
+          opacity={auraOpacity}
         />
 
         {/* top bar: ✕ close + (share · ⋯). ⋯ mutates state so it needs a logged
@@ -188,8 +223,25 @@ export default async function ItemPage({
             {item.title}
           </h1>
           <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
-            {meta}
+            {metaBefore}
+            {releaseIso && upcoming && (
+              <>
+                {metaBefore && " · "}
+                <CountdownMono
+                  releaseDate={releaseIso}
+                  initialNow={now}
+                  className="text-[10px] tracking-[0.1em] text-text"
+                  liveClassName="text-[13px] tracking-[0.02em]"
+                />
+              </>
+            )}
+            {metaAfter && `${metaBefore ? " · " : ""}${metaAfter}`}
           </p>
+          {/* The counter as display type — the one place the wait is the
+              headline instead of a footnote (design §1c). */}
+          {releaseIso && (upcoming || fresh) && (
+            <CountdownHero releaseDate={releaseIso} initialNow={now} />
+          )}
           {synopsis && (
             <p className="mx-auto mt-3.5 max-w-[34ch] text-sm leading-[1.5] text-text-2">
               {synopsis}
@@ -199,7 +251,15 @@ export default async function ItemPage({
 
         {tracks.length > 0 && (
           <div className="relative px-5">
-            <Tracklist tracks={tracks} />
+            <Tracklist
+              tracks={tracks}
+              totalCount={upcoming ? trackCount : undefined}
+              pendingLabel={
+                upcoming && releaseDate
+                  ? restArrivesLabel(releaseDate, now)
+                  : undefined
+              }
+            />
           </div>
         )}
 
@@ -255,23 +315,51 @@ export default async function ItemPage({
               backlogs={userBacklogs}
               inBacklogName={entry?.backlogName ?? null}
             />
-            <a
-              href={`/api/links/resolve?catalogItemId=${item.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-accent text-[15px] font-semibold text-bg transition-transform active:scale-[0.98]"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                <path d="M6 4.5l14 7.5-14 7.5z" />
-              </svg>
-              {item.mediaType === "album" ? "Reproducir" : "Ver en JustWatch"}
-            </a>
-            {entry && (
-              <ProgressGesture
-                key={entry.id}
-                catalogItemId={item.id}
-                initialStatus={entry.status}
-              />
+            {/* F3.8 — before release, two of the three actions are lies:
+                "Reproducir" can't play an album that doesn't exist and there is
+                no progress to make on it. The wait takes the primary slot and
+                simply STATES that the notice is coming (it's automatic — the
+                bar informs, it doesn't ask). The play slot survives only as the
+                advance singles, and only when there are any. */}
+            {releaseIso && upcoming ? (
+              <>
+                <CountdownBar releaseDate={releaseIso} initialNow={now} />
+                {tracks.length > 0 && (
+                  <a
+                    href={`/api/links/resolve?catalogItemId=${item.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Escuchar los ${tracks.length} adelantos`}
+                    className="flex h-[52px] w-[52px] flex-none items-center justify-center gap-1 rounded-full bg-surface-3 text-[13px] text-text transition-transform active:scale-[0.98]"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M6 4.5l14 7.5-14 7.5z" />
+                    </svg>
+                    {tracks.length}
+                  </a>
+                )}
+              </>
+            ) : (
+              <>
+                <a
+                  href={`/api/links/resolve?catalogItemId=${item.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-accent text-[15px] font-semibold text-bg transition-transform active:scale-[0.98]"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M6 4.5l14 7.5-14 7.5z" />
+                  </svg>
+                  {item.mediaType === "album" ? "Reproducir" : "Ver en JustWatch"}
+                </a>
+                {entry && (
+                  <ProgressGesture
+                    key={entry.id}
+                    catalogItemId={item.id}
+                    initialStatus={entry.status}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

@@ -32,6 +32,7 @@ export default async function BacklogDetailPage({
         items={data.items}
         paletteHex={data.paletteHex}
         step={data.step}
+        now={data.now}
       />
     </main>
   );

@@ -213,6 +213,28 @@
   }
 }
 
+/* F3.8 — the crossing to zero (design §1g). A countdown reaching its release
+   is the single most tempting place in the app to celebrate, and the answer is
+   almost nothing: "00:00:01" becomes "ya salió" as a text replacement with one
+   420ms settle. No flash, no confetti, and — per HANDOFF §7 — no pulse. This is
+   a one-shot arrival, not a loop. */
+@keyframes bl-settle {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bl-settle {
+    animation: bl-settle var(--dur-slow) var(--ease-out) both;
+  }
+}
+
 /* Welcome onboarding entrances (one-shot, never loops — HANDOFF §7 bans
    pulses, not arrivals). bl-sheet is the first-item closing sheet rising into
    place; bl-chip is the destination chip settling in from above on a guided

@@ -27,3 +27,32 @@ export async function getCatalogItem(
     isStale: Date.now() - row.refreshedAt.getTime() > STALE_MS,
   };
 }
+
+/**
+ * F3.8 — persist the release date the item view just learned from iTunes.
+ * Self-healing cache write, same posture as the cover palette: shared,
+ * provider-derived, no user data, so it needs no ownership check.
+ *
+ * Writes ONLY on an actual change, which makes the common case (a released
+ * album whose date we already have) a pure read. A moved date DOES overwrite —
+ * label delays are normal, and a countdown to a date the store no longer
+ * believes in is worse than no countdown. A null incoming value never erases a
+ * known date: a failed lookup shouldn't retract a fact.
+ */
+export async function cacheReleaseDate(
+  catalogItemId: string,
+  incoming: Date | null,
+  current: Date | null,
+): Promise<void> {
+  if (!incoming) return;
+  if (current && current.getTime() === incoming.getTime()) return;
+  try {
+    await db
+      .update(catalogItems)
+      .set({ releaseDate: incoming })
+      .where(eq(catalogItems.id, catalogItemId));
+  } catch (err) {
+    // A cache write must never take the page down with it.
+    console.error("[catalog] release date cache failed:", err);
+  }
+}

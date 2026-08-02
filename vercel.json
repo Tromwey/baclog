@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/recap",
       "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/cron/release",
+      "schedule": "0 14 * * *"
     }
   ]
 }
