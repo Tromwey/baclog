@@ -21,7 +21,7 @@ import { CountdownHero, CountdownMono } from "@/components/countdown";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { auraSeed, parseHex } from "@/lib/color";
-import { capitalize } from "@/lib/format";
+import { capitalize, joinMeta } from "@/lib/format";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -120,21 +120,29 @@ export default async function PublicItemPage({
   // byline · year · genre. The media-type label is dropped for albums: the
   // square art, the artist byline and the "Escuchar en…" buttons already say
   // it. Película/Serie stays — that one carries information the page doesn't.
-  // Split at the year: while the album is still coming, the countdown occupies
-  // ITS slot (identical to the in-app page, and identical for a visitor with no
-  // session at all — the date is catalog data, never user data).
-  const metaBefore = [
+  // While the album is still coming, the countdown occupies the YEAR's slot
+  // (identical to the in-app page, and identical for a visitor with no session
+  // at all — the date is catalog data, never user data).
+  //
+  // Dropping the media-type label is also why this line is the one that can
+  // START with the countdown: an album with no artist leaves everything before
+  // it empty. joinMeta is what keeps that from printing "FALTAN 13 DÍASPop".
+  const meta = joinMeta([
     item.mediaType !== "album" ? MEDIA_TYPE_TITLE[item.mediaType] : null,
     item.byline,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const metaAfter = [
-    upcoming ? null : item.year,
+    upcoming && releaseIso ? (
+      <CountdownMono
+        key="countdown"
+        releaseDate={releaseIso}
+        initialNow={now}
+        className="text-[10px] tracking-[0.1em] text-text"
+        liveClassName="text-[13px] tracking-[0.02em]"
+      />
+    ) : (
+      item.year
+    ),
     item.genre && capitalize(item.genre),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ]);
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
@@ -187,24 +195,7 @@ export default async function PublicItemPage({
             {item.title}
           </h1>
           <MonoMeta className="mt-2.5 block text-[10px] tracking-[0.1em] text-text-2">
-            {metaBefore}
-            {releaseIso && upcoming && (
-              <>
-                {metaBefore && " · "}
-                <CountdownMono
-                  releaseDate={releaseIso}
-                  initialNow={now}
-                  className="text-[10px] tracking-[0.1em] text-text"
-                  liveClassName="text-[13px] tracking-[0.02em]"
-                />
-              </>
-            )}
-            {/* The separator depends on whether ANYTHING was emitted before it,
-                not on metaBefore alone: an album drops the media-type label, so
-                a null artist leaves metaBefore empty and the countdown would
-                collide with the genre ("FALTAN 13 DÍASPop"). */}
-            {metaAfter &&
-              `${metaBefore || (releaseIso && upcoming) ? " · " : ""}${metaAfter}`}
+            {meta}
           </MonoMeta>
           {releaseIso && upcoming && (
             <CountdownHero releaseDate={releaseIso} initialNow={now} />
