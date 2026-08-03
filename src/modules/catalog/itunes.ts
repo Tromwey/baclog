@@ -186,10 +186,25 @@ export interface AlbumTrack {
   durationMs: number | null;
 }
 
+/**
+ * How much staleness the caller can live with.
+ * - `fresh`   — no cache at all. For the release-day cron: it exists to see the
+ *   album as it is NOW, and a payload cached before the 07:00Z release would
+ *   hand it the very placeholder tracklist it runs to replace.
+ * - `pending` — 24h. The date is future or unknown, so it can still slip.
+ * - `settled` — 30d. Already out: its tracklist and date cannot change, and
+ *   this path is reachable by ANONYMOUS visitors (the public item page takes
+ *   any catalog id), so a short TTL there is outbound traffic for nothing.
+ */
+export type DetailFreshness = "fresh" | "pending" | "settled";
+
 export interface AlbumDetail {
   /** From the lookup's `wrapperType: "collection"` row — the ONLY place iTunes
    *  exposes a pre-order's release date (search payloads omit it entirely). */
   releaseDate: Date | null;
+  /** Cover from the same collection row, at 600px. A label swaps a pre-order's
+   *  art surprisingly often, so release day is the moment to take it again. */
+  posterUrl: string | null;
   /** The collection's own track count, which can exceed `tracks.length` on a
    *  pre-order (iTunes counted 8, listed 7 for "Hermoso"). Drives "3 DE 11". */
   trackCount: number;
@@ -216,36 +231,43 @@ function isPlaceholderTrack(name: string, streamable: boolean): boolean {
  * extra requests on the item page — this lookup was already happening and the
  * collection row was being filtered away.
  *
- * CACHE, and why it's conditional: a RELEASED album's detail is immutable, so
- * it keeps the original 30d. A pre-order is the opposite — its date slips, its
- * placeholder tracks fill in — so it gets 24h. Making it 24h for everything
- * would have multiplied outbound traffic to Apple by 30 on a path ANONYMOUS
- * visitors can trigger (the public item page calls this for any catalog id), and
- * the thing being re-fetched would be facts that cannot change.
- *
  * `collectionId` is the album's iTunes id, stored as catalog_item.externalId.
- * `pending` = the caller's stored release date is in the future or unknown.
+ * See DetailFreshness for what each caching posture is for.
  */
 export async function getAlbumDetail(
   collectionId: string,
-  pending = true,
+  freshness: DetailFreshness = "pending",
 ): Promise<AlbumDetail> {
-  const EMPTY: AlbumDetail = { releaseDate: null, trackCount: 0, tracks: [] };
+  const EMPTY: AlbumDetail = {
+    releaseDate: null,
+    posterUrl: null,
+    trackCount: 0,
+    tracks: [],
+  };
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", collectionId);
   url.searchParams.set("entity", "song");
   url.searchParams.set("limit", "300");
 
   try {
-    const res = await fetch(url, {
-      next: { revalidate: pending ? 60 * 60 * 24 : 60 * 60 * 24 * 30 },
-    });
+    const res = await fetch(
+      url,
+      freshness === "fresh"
+        ? { cache: "no-store" }
+        : {
+            next: {
+              revalidate:
+                freshness === "pending" ? 60 * 60 * 24 : 60 * 60 * 24 * 30,
+            },
+          },
+    );
     if (!res.ok) return EMPTY;
     const data = await res.json();
     const rows = (data.results ?? []) as Array<{
       wrapperType?: string;
       collectionType?: string;
       releaseDate?: string;
+      artworkUrl100?: string;
       trackCount?: number;
       trackNumber?: number;
       discNumber?: number;
@@ -280,6 +302,8 @@ export async function getAlbumDetail(
 
     return {
       releaseDate: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+      posterUrl:
+        collection?.artworkUrl100?.replace("100x100bb", "600x600bb") ?? null,
       // The collection's count is the truth about how many songs the album HAS;
       // `tracks` is only what iTunes is willing to name today.
       trackCount: collection?.trackCount ?? tracks.length,

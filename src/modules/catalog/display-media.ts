@@ -40,11 +40,16 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
   const detail = isAlbum
     ? await getAlbumDetail(
         item.externalId,
-        // Unknown or still-future date ⇒ short cache; a released album's
-        // tracklist is immutable and keeps the long one.
-        !item.releaseDate || item.releaseDate.getTime() > Date.now(),
+        !item.releaseDate || item.releaseDate.getTime() > Date.now()
+          ? "pending"
+          : "settled",
       )
-    : { tracks: [] as AlbumTrack[], trackCount: 0, releaseDate: null };
+    : {
+        tracks: [] as AlbumTrack[],
+        trackCount: 0,
+        releaseDate: null,
+        posterUrl: null,
+      };
 
   if (isAlbum) {
     await cacheReleaseDate(item.id, detail.releaseDate, item.releaseDate);

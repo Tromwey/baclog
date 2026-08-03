@@ -67,7 +67,11 @@ export function formatCountdown(
   }
 
   if (d > 2 * DAY) {
-    const n = Math.ceil(d / DAY);
+    // FLOOR, not ceil: "faltan N días" means N whole days still remain, so it
+    // never overstates the wait. Ceil also made "2 DÍAS" unreachable — the days
+    // phase starts just above 48 h, where ceil already returns 3, so the
+    // sequence read 3 DÍAS → 48 HORAS with nothing in between.
+    const n = Math.floor(d / DAY);
     const unit = n === 1 ? "DÍA" : "DÍAS";
     return {
       phase: "days",

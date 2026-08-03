@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, gte, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import { env } from "@/lib/env";
 import { db } from "@/db";
 import {
@@ -56,6 +56,14 @@ export async function GET(request: Request) {
   // pre-order signature (a released album always carries a year from search),
   // and the join to user_item keeps this to titles somebody actually owns.
   // Bounded per run: this is a backlog to work through, not a scan to finish.
+  // The refreshedAt guard is what stops it becoming permanent: a dateless album
+  // usually has no date to find (most are just missing metadata, not
+  // pre-orders), and without the filter those same rows would burn the 25-call
+  // budget every single day, forever. Stamping on EVERY attempt — found or not
+  // — is the same trick catalog_item.link_edges_checked_at uses for seeds with
+  // zero edges. A week is well inside the horizon that matters: the item view
+  // and the add path both resolve dates on their own, so this is the backstop.
+  const retryBefore = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const dateless = await db
     .selectDistinct({
       id: catalogItems.id,
@@ -69,6 +77,7 @@ export async function GET(request: Request) {
         eq(catalogItems.source, "itunes"),
         isNull(catalogItems.year),
         isNull(catalogItems.releaseDate),
+        lt(catalogItems.refreshedAt, retryBefore),
       ),
     )
     .limit(25);
@@ -77,12 +86,14 @@ export async function GET(request: Request) {
   for (const album of dateless) {
     try {
       const detail = await getAlbumDetail(album.externalId);
-      if (!detail.releaseDate) continue;
       await db
         .update(catalogItems)
-        .set({ releaseDate: detail.releaseDate })
+        .set({
+          ...(detail.releaseDate ? { releaseDate: detail.releaseDate } : {}),
+          refreshedAt: now,
+        })
         .where(eq(catalogItems.id, album.id));
-      resolved++;
+      if (detail.releaseDate) resolved++;
     } catch (err) {
       console.error(`[cron/release] resolve ${album.id} failed:`, err);
     }
@@ -96,6 +107,7 @@ export async function GET(request: Request) {
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
+      posterUrl: catalogItems.posterUrl,
       releaseDate: catalogItems.releaseDate,
     })
     .from(catalogItems)
@@ -126,10 +138,13 @@ export async function GET(request: Request) {
   for (const album of landed) {
     try {
       // ---- 1. refresh: the album exists now, so ask what it actually is.
-      const detail = await getAlbumDetail(album.externalId);
+      // "fresh" and not the default: this call is the entire point of the pass,
+      // and the 24h data cache could otherwise serve it a copy fetched BEFORE
+      // the 07:00Z release — the exact placeholder tracklist it runs to replace.
+      const detail = await getAlbumDetail(album.externalId, "fresh");
       const resolvedYear =
         album.year ?? album.releaseDate?.getFullYear() ?? null;
-      if (resolvedYear !== album.year || detail.releaseDate) {
+      if (resolvedYear !== album.year || detail.releaseDate || detail.posterUrl) {
         await db
           .update(catalogItems)
           .set({
@@ -137,6 +152,10 @@ export async function GET(request: Request) {
             // A date that moved AGAIN (a delay announced on release day) wins:
             // better a countdown that slips than an email that lies.
             releaseDate: detail.releaseDate ?? album.releaseDate,
+            // Labels swap a pre-order's art, so this is the moment to take it
+            // again — coalesced, since a lookup that came back without artwork
+            // must never blank a cover we already have.
+            posterUrl: detail.posterUrl ?? album.posterUrl,
             refreshedAt: now,
           })
           .where(eq(catalogItems.id, album.id));

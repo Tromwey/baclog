@@ -38,6 +38,13 @@ export async function getCatalogItem(
  * label delays are normal, and a countdown to a date the store no longer
  * believes in is worse than no countdown. A null incoming value never erases a
  * known date: a failed lookup shouldn't retract a fact.
+ *
+ * The equality check stays exact OFF UTC too, which is not obvious: the column
+ * is `timestamp` without a zone, yet the Neon/pg driver serializes and parses
+ * it as UTC in BOTH directions. Verified from a UTC-6 machine — iTunes'
+ * 07:00:00Z stored as wall 07:00:00 and read back as 07:00:00.000Z. So this
+ * never degrades into an UPDATE per render, and local countdowns aren't
+ * offset. Don't "fix" it into timestamptz on a hunch; measure first.
  */
 export async function cacheReleaseDate(
   catalogItemId: string,
