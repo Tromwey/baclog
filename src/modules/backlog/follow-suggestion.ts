@@ -4,14 +4,18 @@ import { db } from "@/db";
 import { catalogItems, userItems } from "@/db/schema";
 import { cacheExternalItems } from "@/modules/catalog/search";
 import { getArtistUpcoming } from "@/modules/catalog/itunes";
+import type { UpcomingItem } from "@/components/upcoming-shelf";
 
-export interface FollowSuggestion {
-  catalogItemId: string;
-  title: string;
+/**
+ * An UpcomingItem plus the artist. Declared as an EXTENSION and not as its own
+ * matching field list: the Novedades sheet renders one of these or one of
+ * those in the same slot, which only typechecks while the shapes agree — and
+ * nothing was holding them together except that they happened to be written
+ * the same way. `byline` is the one real difference: the sheet's copy names
+ * the artist ("el de RØZ & Young Cister"), the shelf doesn't render it.
+ */
+export interface FollowSuggestion extends UpcomingItem {
   byline: string | null;
-  posterUrl: string | null;
-  /** ISO — always in the future. */
-  releaseDate: string;
 }
 
 /** How many of the user's artists to ask about before falling back. */

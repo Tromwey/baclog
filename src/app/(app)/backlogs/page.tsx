@@ -63,6 +63,7 @@ export default async function BacklogsPage() {
             upcoming?.nearest?.releaseDate
               ? {
                   count: upcoming.count,
+                  catalogItemId: upcoming.nearest.catalogItemId,
                   title: upcoming.nearest.title,
                   byline: upcoming.nearest.byline,
                   posterUrl: upcoming.nearest.posterUrl,

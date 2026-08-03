@@ -40,14 +40,13 @@ export function NovedadesModal({
   own,
   initialNow,
 }: {
-  /** The reader's own upcoming titles, when they have any (6c). */
-  own: {
-    count: number;
-    title: string;
-    byline: string | null;
-    posterUrl: string | null;
-    releaseDate: string;
-  } | null;
+  /**
+   * The reader's own upcoming titles, when they have any (6c) — their nearest
+   * one, plus how many there are. Typed off FollowSuggestion because `cover`
+   * below renders whichever of the two this sheet got; stating that here is
+   * what makes the substitution a rule instead of a coincidence.
+   */
+  own: (FollowSuggestion & { count: number }) | null;
   initialNow: number;
 }) {
   const router = useRouter();
