@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
 import { auraSeed, parseHex } from "@/lib/color";
-import { capitalize } from "@/lib/format";
+import { capitalize, joinMeta } from "@/lib/format";
 import {
   getBacklogNames,
   getUserCatalogEntry,
@@ -102,19 +102,25 @@ export default async function ItemPage({
   // Mock #p3's meta line carries no stats (HANDOFF §0 — no ratings UI).
   // Genre capitalized to match the public item page (audit fix — catalog
   // genres are stored lowercased for both sources; capitalize() is display-only).
-  // F3.8: split at the year so the countdown can be spliced into ITS slot
-  // instead of trailing the line — the counter is never its own component, it's
-  // a value in an existing position (design §0). A pre-order has no year to
-  // show anyway.
-  const metaBefore = [MEDIA_TYPE_TITLE[item.mediaType], item.byline]
-    .filter(Boolean)
-    .join(" · ");
-  const metaAfter = [
-    upcoming ? null : item.year,
+  // The countdown sits in the YEAR's slot, which is the whole F3.8 rule: the
+  // counter is never its own component, it's a value in an existing position
+  // (design §0). A pre-order has no year to show anyway.
+  const meta = joinMeta([
+    MEDIA_TYPE_TITLE[item.mediaType],
+    item.byline,
+    upcoming && releaseIso ? (
+      <CountdownMono
+        key="countdown"
+        releaseDate={releaseIso}
+        initialNow={now}
+        className="text-[10px] tracking-[0.1em] text-text"
+        liveClassName="text-[13px] tracking-[0.02em]"
+      />
+    ) : (
+      item.year
+    ),
     item.genre && capitalize(item.genre),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ]);
 
   // Palette-tinted cover shadow (mock #p3: 0 24px 60px rgba(140,40,60,.5) —
   // the dominant hue at half alpha). Neutral black until the item is logged
@@ -223,19 +229,7 @@ export default async function ItemPage({
             {item.title}
           </h1>
           <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
-            {metaBefore}
-            {releaseIso && upcoming && (
-              <>
-                {metaBefore && " · "}
-                <CountdownMono
-                  releaseDate={releaseIso}
-                  initialNow={now}
-                  className="text-[10px] tracking-[0.1em] text-text"
-                  liveClassName="text-[13px] tracking-[0.02em]"
-                />
-              </>
-            )}
-            {metaAfter && `${metaBefore ? " · " : ""}${metaAfter}`}
+            {meta}
           </p>
           {/* The counter as display type — the one place the wait is the
               headline instead of a footnote (design §1c). */}

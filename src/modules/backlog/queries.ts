@@ -332,15 +332,22 @@ export async function getBacklogItems(backlogId: string) {
 }
 
 /**
- * F3.8 — what this user is waiting for: how many titles, and the nearest one.
- * Keyed on `user_item` (library membership), so a title filed in two backlogs
- * counts once and the answer doesn't depend on which shelf they opened.
+ * F3.8 — THE definition of "what this user is still waiting for", nearest
+ * first. Keyed on `user_item` (library membership), so a title filed in two
+ * backlogs appears once and the answer doesn't depend on which shelf they
+ * opened. Unbounded by default; `limit` is for surfaces that show a finite
+ * carousel rather than a count.
  *
- * ONE indexed read: the count and the nearest both come out of the same rows,
- * so a summary costs no more than the list would.
+ * EVERY selected column is catalog data, and that is load-bearing rather than
+ * incidental: the public profile shares this query (public.ts, one of the three
+ * deliberate authz exceptions — it runs with no session at all). A `user_item`
+ * field added here (status, verdict, obsessed, addedAt) or anything off `users`
+ * would silently become readable by anonymous visitors. The public caller still
+ * narrows this to its own field list before returning; both guards are meant to
+ * be there.
  */
-export async function getUpcomingSummary(userId: string) {
-  const rows = await db
+export async function getUpcomingForUser(userId: string, limit?: number) {
+  const q = db
     .select({
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
@@ -352,5 +359,15 @@ export async function getUpcomingSummary(userId: string) {
     .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
     .where(and(eq(userItems.userId, userId), gt(catalogItems.releaseDate, new Date())))
     .orderBy(asc(catalogItems.releaseDate));
+  return limit === undefined ? q : q.limit(limit);
+}
+
+/**
+ * How many titles, and the nearest one. ONE indexed read: the count and the
+ * nearest both come out of the same rows, so a summary costs no more than the
+ * list would — which is why this doesn't pass a limit.
+ */
+export async function getUpcomingSummary(userId: string) {
+  const rows = await getUpcomingForUser(userId);
   return { count: rows.length, nearest: rows[0] ?? null };
 }

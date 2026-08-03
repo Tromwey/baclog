@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   backlogItems,
@@ -9,6 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { dominantHexes, groupDominantHexes } from "./palette";
+import { getUpcomingForUser } from "./queries";
 
 /**
  * THE deliberate authz exception (see src/authz): these queries run with
@@ -82,25 +83,18 @@ export async function getPublicProfile(username: string) {
   const backlogPalettes = groupDominantHexes(coverRows, (c) => c.backlogId, 6);
   const palette = dominantHexes(coverRows, 6);
 
-  // F3.8 — what this profile is waiting for. Scoped to user_item (one row per
-  // title, so a title filed in two backlogs appears once) and to dates still in
-  // the future; every field is catalog data, which keeps this inside the
-  // public-safe field list this function is built around. Nothing here says
-  // WHICH backlog a title is in, or anything about the owner's state on it.
-  const upcoming = await db
-    .select({
-      catalogItemId: catalogItems.id,
-      title: catalogItems.title,
-      posterUrl: catalogItems.posterUrl,
-      releaseDate: catalogItems.releaseDate,
-    })
-    .from(userItems)
-    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
-    .where(
-      and(eq(userItems.userId, user.id), gt(catalogItems.releaseDate, new Date())),
-    )
-    .orderBy(catalogItems.releaseDate)
-    .limit(12);
+  // F3.8 — what this profile is waiting for. Shares its definition with the
+  // in-app shelf (getUpcomingForUser): scoped to user_item, so a title filed in
+  // two backlogs appears once, and to dates still in the future.
+  //
+  // Every field it returns is catalog data, which is what keeps this inside the
+  // public-safe field list this function is built around: nothing here says
+  // WHICH backlog a title is in, or anything about the owner's state on it. The
+  // shared query is documented to hold that line, and the mapping below spells
+  // out the exposed fields ANYWAY — never spread the row. A column added to the
+  // shared select for some in-app caller (byline is already one) must not
+  // become public just because it rode along.
+  const upcoming = await getUpcomingForUser(user.id, 12);
 
   return {
     displayName: user.name ?? user.username ?? "",
@@ -114,7 +108,9 @@ export async function getPublicProfile(username: string) {
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
     })),
     upcoming: upcoming.map((u) => ({
-      ...u,
+      catalogItemId: u.catalogItemId,
+      title: u.title,
+      posterUrl: u.posterUrl,
       releaseDate: u.releaseDate!.toISOString(),
     })),
   };
