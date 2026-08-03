@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   claimUsernameAction,
   deleteAccountAction,
+  setNotifyReleasesAction,
   setPreferredServiceAction,
   setPublicAction,
   updateDisplayNameAction,
@@ -24,12 +25,14 @@ export function SettingsForm({
   email,
   initialUsername,
   initialIsPublic,
+  initialNotifyReleases,
 }: {
   initialName: string;
   initialService: ServiceId | null;
   email: string;
   initialUsername: string | null;
   initialIsPublic: boolean;
+  initialNotifyReleases: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [service, setService] = useState<ServiceId | null>(initialService);
@@ -39,6 +42,7 @@ export function SettingsForm({
   const [username, setUsername] = useState(initialUsername ?? "");
   const [claimed, setClaimed] = useState<string | null>(initialUsername);
   const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [notifyReleases, setNotifyReleases] = useState(initialNotifyReleases);
   const [usernameError, setUsernameError] = useState<string | null>(null);
 
   async function claim(e: React.FormEvent) {
@@ -114,6 +118,27 @@ export function SettingsForm({
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-text-2">Avisos</h2>
+        <label className="mt-3 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+          <span className="text-sm">Avísame el día que sale un álbum</span>
+          <input
+            type="checkbox"
+            checked={notifyReleases}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setNotifyReleases(next);
+              await setNotifyReleasesAction(next);
+            }}
+            className="h-5 w-5 accent-accent"
+          />
+        </label>
+        <p className="mt-2 text-xs text-text-3">
+          Un correo, una sola vez, cuando un álbum en preventa que guardaste
+          por fin existe. Apágalo y el álbum se queda en tu backlog igual.
+        </p>
       </section>
 
       <section>

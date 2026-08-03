@@ -130,6 +130,19 @@ export async function setPublicAction(isPublic: boolean) {
 }
 
 /**
+ * F3.8 — the release email's opt-out. No revalidatePath: nothing cached
+ * renders this, and the only reader is the daily cron.
+ */
+export async function setNotifyReleasesAction(notifyReleases: boolean) {
+  const user = await assertUser();
+  await db
+    .update(users)
+    .set({ notifyReleases: Boolean(notifyReleases) })
+    .where(eq(users.id, user.id));
+  return { ok: true as const };
+}
+
+/**
  * F2.4 — deletes the user row; every user-owned table cascades (backlogs,
  * items, sessions, reports-against). catalog_items/media_links are shared
  * cache, not user data. No "why are you leaving" email — just gone.

@@ -148,6 +148,13 @@
       "when": 1785696690021,
       "tag": "0020_announcement_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785725569000,
+      "tag": "0021_notify_releases",
+      "breakpoints": true
     }
   ]
 }

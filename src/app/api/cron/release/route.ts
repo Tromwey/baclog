@@ -169,6 +169,10 @@ export async function GET(request: Request) {
 
       // ---- 2. notify: one row per user who has the title (user_item), so a
       // title filed in two backlogs still sends exactly one email.
+      // notifyReleases is the opt-out (default true, /settings). Filtered HERE
+      // rather than skipped at send time on purpose: an opted-out user must not
+      // claim a release_notice row, or turning the switch back on would find
+      // the notice already "sent" and stay silent forever.
       const owners = await db
         .select({
           userId: userItems.userId,
@@ -177,7 +181,12 @@ export async function GET(request: Request) {
         })
         .from(userItems)
         .innerJoin(users, eq(users.id, userItems.userId))
-        .where(eq(userItems.catalogItemId, album.id));
+        .where(
+          and(
+            eq(userItems.catalogItemId, album.id),
+            eq(users.notifyReleases, true),
+          ),
+        );
 
       for (const owner of owners) {
         try {

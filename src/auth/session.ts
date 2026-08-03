@@ -23,6 +23,7 @@ export const getCurrentUser = cache(async () => {
       name: users.name,
       username: users.username,
       isPublic: users.isPublic,
+      notifyReleases: users.notifyReleases,
       preferredService: users.preferredService,
       isMinor: users.isMinor,
       isFounder: users.isFounder,

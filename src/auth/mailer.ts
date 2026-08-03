@@ -52,6 +52,9 @@ export function sendOtpEmail(email: string, code: string): Promise<void> {
  * only thing this email knows that a store notification doesn't. `waitedDays`
  * is null when we can't reconstruct it (added after the date was already known
  * to be past), and the sentence is simply dropped rather than faked.
+ *
+ * The footer carries the opt-out (users.notifyReleases, toggled in /settings)
+ * so the only way to stop the notice isn't deleting the album you waited for.
  */
 export function sendReleaseEmail(
   email: string,
@@ -72,7 +75,8 @@ export function sendReleaseEmail(
     `Hoy sale ${album.title}${artist}.\n\n` +
     waited +
     `Escúchalo: ${album.itemUrl}\n\n` +
-    `—\nTe avisamos porque está en tu backlog.`;
+    `—\nTe avisamos porque está en tu backlog. Si no quieres estos avisos, ` +
+    `apágalos en https://baclog.app/settings`;
   return send(email, `${album.title} ya salió ✦`, body, "RELEASE");
 }
 
