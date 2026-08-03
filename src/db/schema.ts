@@ -97,6 +97,21 @@ export const users = pgTable(
     username: varchar("username", { length: 30 }),
     isPublic: boolean("is_public").notNull().default(false),
     /**
+     * F3.8 — consent for the release-day email (cron/release). Default TRUE,
+     * unlike every other flag here: the notice is the second half of a feature
+     * the user opted into at the tap ("te avisamos" is on the Novedades sheet
+     * BEFORE they add the album), so shipping it default-off would silently
+     * break the promise for everyone already waiting. This column exists to
+     * give them a way OUT that isn't "delete the album you care about".
+     *
+     * Per-USER and not per-title on purpose: at this scale the question people
+     * actually have is "do I want these emails at all", and a user_item column
+     * would need its own UI on the item view for a distinction nobody has
+     * asked for. Scoped to release only — the monthly recap is a separate
+     * cron with its own (unchanged) posture.
+     */
+    notifyReleases: boolean("notify_releases").notNull().default(true),
+    /**
      * F3.2 — first ~100 accounts + manually-seeded curators. A BADGE flag
      * (public founder marker), NOT an admin role: the whole early cohort has
      * it. Anything operational gates on `isAdmin` below.

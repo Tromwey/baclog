@@ -20,6 +20,7 @@ export default async function SettingsPage() {
         email={user.email}
         initialUsername={user.username}
         initialIsPublic={user.isPublic}
+        initialNotifyReleases={user.notifyReleases}
       />
     </main>
   );
