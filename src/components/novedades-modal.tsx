@@ -39,7 +39,6 @@ import type { FollowSuggestion } from "@/modules/backlog/follow-suggestion";
 export function NovedadesModal({
   own,
   initialNow,
-  presetSuggestion = null,
 }: {
   /** The reader's own upcoming titles, when they have any (6c). */
   own: {
@@ -50,15 +49,10 @@ export function NovedadesModal({
     releaseDate: string;
   } | null;
   initialNow: number;
-  /** Skips the lookup when the caller already has one — the /prototype route
-   *  uses it to show 6b without a session. Null in the real page. */
-  presetSuggestion?: FollowSuggestion | null;
 }) {
   const router = useRouter();
   const [closed, setClosed] = useState(false);
-  const [suggestion, setSuggestion] = useState<FollowSuggestion | null>(
-    presetSuggestion,
-  );
+  const [suggestion, setSuggestion] = useState<FollowSuggestion | null>(null);
   const [followed, setFollowed] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -70,7 +64,7 @@ export function NovedadesModal({
   const [isOwn] = useState(() => Boolean(own));
 
   useEffect(() => {
-    if (own || presetSuggestion) return; // nothing to fetch
+    if (own) return; // 6c needs nothing fetched
     // Once per tab: without this, every /backlogs navigation by a user with no
     // suggestable artist would re-run five iTunes searches to conclude the same
     // nothing. The announcement stays unspent either way.
@@ -85,7 +79,7 @@ export function NovedadesModal({
     return () => {
       alive = false;
     };
-  }, [own, presetSuggestion]);
+  }, [own]);
 
   if (closed) return null;
 
