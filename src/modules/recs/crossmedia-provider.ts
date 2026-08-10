@@ -644,8 +644,8 @@ class LlmProvider implements CrossMediaRecProvider {
 // Gemini provider — Google free tier (the low-cost option)
 // ============================================================
 
-/** Gemini 2.5 Flash-Lite by default (low-cost); override with GEMINI_MODEL. */
-const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+/** Gemini 3.5 Flash-Lite by default (higher free-tier quota than 2.5); override with GEMINI_MODEL. */
+const GEMINI_MODEL = env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
 /**
  * Enforced output schema for the Gemini path — mirrors the Anthropic strict

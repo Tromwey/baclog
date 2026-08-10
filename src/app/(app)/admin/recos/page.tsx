@@ -158,6 +158,7 @@ export default async function RecosPage() {
 
 const MODEL_DISPLAY: Record<string, string> = {
   "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
+  "gemini-3.5-flash-lite": "Gemini 3.5 Flash Lite",
   "claude-opus-4-8": "Claude Opus 4.8",
   fixture: "Fixture (determinista)",
 };
