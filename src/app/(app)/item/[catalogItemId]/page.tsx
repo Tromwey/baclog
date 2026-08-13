@@ -29,6 +29,7 @@ import { AddToBacklog } from "./add-to-backlog";
 import { CloseChip } from "./close-chip";
 import { HideDock } from "./hide-dock";
 import { ItemHeroAura } from "@/components/item-hero-aura";
+import { Synopsis } from "@/components/synopsis";
 import { Tracklist } from "@/components/tracklist";
 import { ItemMoreMenu } from "./item-more-menu";
 import { ItemShareMenu } from "./item-share-menu";
@@ -250,9 +251,10 @@ export default async function ItemPage({
             <CountdownHero releaseDate={releaseIso} initialNow={now} />
           )}
           {synopsis && (
-            <p className="mx-auto mt-3.5 max-w-[34ch] text-sm leading-[1.5] text-text-2">
-              {synopsis}
-            </p>
+            <Synopsis
+              text={synopsis}
+              className="mx-auto mt-3.5 max-w-[34ch] text-sm leading-[1.5] text-text-2"
+            />
           )}
         </div>
 

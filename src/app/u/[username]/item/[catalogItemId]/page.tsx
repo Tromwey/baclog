@@ -10,6 +10,7 @@ import {
 import { captureView } from "@/modules/analytics/capture";
 import { BackButton, Button, MonoMeta } from "@/components/ui";
 import { ItemHeroAura } from "@/components/item-hero-aura";
+import { Synopsis } from "@/components/synopsis";
 import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import {
@@ -219,9 +220,10 @@ export default async function PublicItemPage({
             editorialNotes). Shown in-app under identification use + attribution,
             never on an export card (ADR-008). */}
         {synopsis && (
-          <p className="bl-rise mx-auto mt-4 max-w-[34ch] text-center text-sm leading-[1.55] text-text-2">
-            {synopsis}
-          </p>
+          <Synopsis
+            text={synopsis}
+            className="bl-rise mx-auto mt-4 max-w-[34ch] text-center text-sm leading-[1.55] text-text-2"
+          />
         )}
 
         {/* F3.9 — whoever follows this link came for a PERSON. Their review
