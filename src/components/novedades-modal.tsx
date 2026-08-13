@@ -1,127 +1,76 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Sheet } from "@/components/ui/sheet";
-import { CountdownCover } from "@/components/countdown";
 import {
   ANNOUNCEMENT_COPY,
-  followedCopy,
-  ownCopy,
-  suggestionCopy,
+  invitationCopy,
 } from "@/modules/announcements";
-import {
-  dismissAnnouncementAction,
-  findFollowSuggestionAction,
-  followSuggestionAction,
-} from "@/app/actions/announcement-actions";
-import type { FollowSuggestion } from "@/modules/backlog/follow-suggestion";
+import { dismissAnnouncementAction } from "@/app/actions/announcement-actions";
+import type { ReviewInvitation } from "@/modules/reviews/queries";
 
 /**
- * Novedades — the F3.8 announcement, in the shape the design settled on (6b/6c).
+ * Novedades — the F3.9 announcement (reseñas), in the shape F3.8 established:
+ * full-bleed cover, eyebrow, serif title, one paragraph, one action.
  *
- * ONE form, two purposes: activate whoever has nothing pending, confirm whoever
- * already does. Which one you get is decided by your own backlog, never by a
- * flag, so the sheet always opens on something concrete:
+ * What makes it concrete is the cover: it is a title THIS reader already
+ * reacted to and never wrote about, so the sheet is never explaining a feature
+ * in the abstract — it's pointing at a specific gap in their own library. The
+ * page only renders this when such a title exists (`getReviewInvitation`);
+ * otherwise the announcement stays unspent for another day.
  *
- * - 6c (`own`): titles of theirs are already counting. Nothing is offered —
- *   the cover is theirs, the clock is real, and the only action is closing.
- * - 6b (`suggest`): nothing of theirs is pending, so a real unreleased album by
- *   an artist they already have is offered, with "+ Seguir" ON the cover.
- *   Following doesn't close the sheet: the chip flips to SIGUIENDO and the copy
- *   confirms the date, so the reward is visible before they dismiss.
- *
- * The suggestion is fetched AFTER mount (it costs several iTunes round-trips),
- * so 6b appears a beat late rather than delaying /backlogs for everyone. If
- * there's nothing to suggest, the sheet never opens and the announcement stays
- * UNSPENT — better to say nothing today than to describe a feature abstractly.
+ * Both buttons dismiss. The primary one also walks them to the item page,
+ * where the box is already open — the point of the sheet is not that they
+ * acknowledge it, it's that they write something.
  */
 export function NovedadesModal({
-  own,
-  initialNow,
+  invitation,
 }: {
-  /**
-   * The reader's own upcoming titles, when they have any (6c) — their nearest
-   * one, plus how many there are. Typed off FollowSuggestion because `cover`
-   * below renders whichever of the two this sheet got; stating that here is
-   * what makes the substitution a rule instead of a coincidence.
-   */
-  own: (FollowSuggestion & { count: number }) | null;
-  initialNow: number;
+  invitation: ReviewInvitation;
 }) {
   const router = useRouter();
   const [closed, setClosed] = useState(false);
-  const [suggestion, setSuggestion] = useState<FollowSuggestion | null>(null);
-  const [followed, setFollowed] = useState(false);
   const [, startTransition] = useTransition();
-
-  // Which sheet this is, FROZEN at open. Following calls router.refresh(), which
-  // re-renders the page and hands `own` back non-null (the album they just
-  // followed is now theirs) — reading the live prop would flip 6b into 6c
-  // mid-interaction, taking away the ✓ SIGUIENDO chip and the confirmation copy
-  // at the exact moment they earned them.
-  const [isOwn] = useState(() => Boolean(own));
-
-  useEffect(() => {
-    if (own) return; // 6c needs nothing fetched
-    // Once per tab: without this, every /backlogs navigation by a user with no
-    // suggestable artist would re-run five iTunes searches to conclude the same
-    // nothing. The announcement stays unspent either way.
-    if (sessionStorage.getItem("bl-novedades-tried")) return;
-    sessionStorage.setItem("bl-novedades-tried", "1");
-    let alive = true;
-    findFollowSuggestionAction()
-      .then((s) => {
-        if (alive) setSuggestion(s);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [own]);
 
   if (closed) return null;
 
-  const cover = isOwn ? own : suggestion;
-  if (!cover) return null;
-
-  const title = cover.title;
-  const releaseDate = cover.releaseDate;
-
-  const body =
-    isOwn && own
-      ? ownCopy(
-          own.count,
-          { byline: own.byline, releaseDate: own.releaseDate },
-          initialNow,
-        )
-      : followed
-        ? followedCopy(releaseDate, initialNow)
-        : suggestionCopy(cover.byline);
-
   // Dismissal is what spends the announcement — the sheet appearing is not
   // enough, since it can appear and be scrolled past by a reload.
-  const close = () => {
+  const spend = () => {
     setClosed(true);
     startTransition(() => {
       dismissAnnouncementAction().catch(() => {});
     });
   };
 
+  // The dismissal is AWAITED before navigating, not fired alongside it: a
+  // transition started and then interrupted by router.push can be dropped, and
+  // the cost of dropping it is showing the same announcement again tomorrow to
+  // the one person who did exactly what it asked. The sheet closes on the tap,
+  // so the wait is invisible.
+  const write = () => {
+    setClosed(true);
+    startTransition(async () => {
+      await dismissAnnouncementAction().catch(() => {});
+      router.push(`/item/${invitation.catalogItemId}`);
+    });
+  };
+
   return (
-    <Sheet onClose={close} variant="cover" label={ANNOUNCEMENT_COPY.title}>
+    <Sheet onClose={spend} variant="cover" label={ANNOUNCEMENT_COPY.title}>
       {/* Full-bleed cover, 1.25:1 — square album art is cropped top and bottom
-          rather than letterboxed, exactly as the mock frames it. */}
+          rather than letterboxed, the same frame F3.8 uses. */}
       <div className="relative aspect-[1.25] w-full overflow-hidden bg-surface-2">
-        {cover.posterUrl && (
+        {invitation.posterUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
           <img
-            src={cover.posterUrl}
-            alt={`Portada de ${title}`}
+            src={invitation.posterUrl}
+            alt={`Portada de ${invitation.title}`}
             className="absolute inset-0 h-full w-full object-cover"
           />
         )}
-        {/* Neutral dark scrim so the clock reads on any artwork (§7 exempts
+        {/* Neutral dark scrim so the type reads on any artwork (§7 exempts
             dark depth gradients; this is not a glow). */}
         <div
           aria-hidden
@@ -131,55 +80,21 @@ export function NovedadesModal({
               "linear-gradient(180deg, rgba(11,11,13,0.15) 0%, rgba(11,11,13,0.05) 42%, rgba(11,11,13,0.78) 100%)",
           }}
         />
-        <div className="absolute inset-x-0 bottom-0 flex items-end p-[18px]">
-          <CountdownCover
-            releaseDate={releaseDate}
-            initialNow={initialNow}
-            title={title}
-          />
+        {/* Where F3.8 put a clock, this puts the title itself: the cover IS the
+            example, so it has to be readable as one. */}
+        <div className="absolute inset-x-0 bottom-0 p-[18px]">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/70">
+            Ya reaccionaste
+          </p>
+          <p className="mt-1 font-serif text-[30px] italic leading-[1.02] text-text">
+            {invitation.title}
+          </p>
+          {invitation.byline && (
+            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-white/60">
+              {invitation.byline}
+            </p>
+          )}
         </div>
-
-        {/* 6b only: following lives ON the cover, where the content is, so the
-            single action at the bottom stays "close" like every other sheet. */}
-        {!isOwn && suggestion && (
-          <button
-            type="button"
-            disabled={followed}
-            onClick={() => {
-              if (followed) return;
-              startTransition(async () => {
-                // The chip flips only once the write actually landed. Flipping
-                // first and swallowing the outcome would promise "te avisamos
-                // el 14 de agosto" for an album in no backlog — and the reader
-                // would only find out by never getting the email.
-                const res = await followSuggestionAction(
-                  suggestion.catalogItemId,
-                ).catch((err) => {
-                  console.error("[F3.8] follow failed:", err);
-                  return null;
-                });
-                if (!res || "error" in res) return;
-                setFollowed(true);
-                // Refresh so the "No puedo esperar" shelf is already there
-                // when they close — the reward is behind the sheet, too.
-                router.refresh();
-              });
-            }}
-            className={
-              followed
-                ? "absolute right-3.5 top-3.5 inline-flex h-11 items-center gap-2 rounded-full bg-accent px-4 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-bg"
-                : "absolute right-3.5 top-3.5 inline-flex h-11 items-center gap-2 rounded-full bg-[rgba(11,11,13,0.86)] px-4 text-sm font-semibold text-text transition-colors active:bg-[rgba(11,11,13,0.96)]"
-            }
-          >
-            {followed ? (
-              <>✓ Siguiendo</>
-            ) : (
-              <>
-                <span className="text-[17px] leading-none">+</span>Seguir
-              </>
-            )}
-          </button>
-        )}
       </div>
 
       <div className="p-5">
@@ -190,12 +105,19 @@ export function NovedadesModal({
           {ANNOUNCEMENT_COPY.title}
         </h2>
         <p className="mt-2 text-[14.5px] leading-[1.5] text-text-2 [text-wrap:pretty]">
-          {body}
+          {invitationCopy(invitation.count, invitation.title)}
         </p>
         <button
           type="button"
-          onClick={close}
+          onClick={write}
           className="mt-[18px] w-full rounded-full bg-accent px-6 py-[15px] text-base font-semibold text-bg transition-transform active:scale-[0.99]"
+        >
+          {ANNOUNCEMENT_COPY.cta}
+        </button>
+        <button
+          type="button"
+          onClick={spend}
+          className="mt-2 w-full rounded-full px-6 py-3 text-[15px] font-semibold text-text-2 transition-colors hover:text-text"
         >
           {ANNOUNCEMENT_COPY.close}
         </button>

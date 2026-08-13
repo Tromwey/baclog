@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
 import { AuraField, ONBOARDING_AURA, StepMeter } from "@/components/ui";
-import {
-  getBacklogsForUser,
-  getUpcomingSummary,
-} from "@/modules/backlog/queries";
+import { getBacklogsForUser } from "@/modules/backlog/queries";
 import { shouldAnnounce } from "@/modules/announcements";
-import { getRenderInstant } from "@/modules/catalog/release";
+import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
 import { SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { NewBacklogTrigger } from "./new-backlog-button";
@@ -24,9 +21,12 @@ export default async function BacklogsPage() {
   // it. Deliberately not on the first-use screen above: someone who hasn't made
   // a backlog yet is already being guided somewhere, and an announcement on top
   // of onboarding is two voices talking at once.
+  // F3.9: the sheet needs a title this reader already reacted to and hasn't
+  // written about. No such title = no sheet, and the announcement stays unspent
+  // (see getReviewInvitation) — it will find them the day they react to
+  // something.
   const announce = shouldAnnounce(user);
-  const upcoming = announce ? await getUpcomingSummary(user.id) : null;
-  const now = await getRenderInstant();
+  const invitation = announce ? await getReviewInvitation(user.id) : null;
 
   const shelves: Shelf[] = list.map((b) => ({
     id: b.id,
@@ -56,23 +56,7 @@ export default async function BacklogsPage() {
         </div>
       </header>
 
-      {announce && (
-        <NovedadesModal
-          initialNow={now}
-          own={
-            upcoming?.nearest?.releaseDate
-              ? {
-                  count: upcoming.count,
-                  catalogItemId: upcoming.nearest.catalogItemId,
-                  title: upcoming.nearest.title,
-                  byline: upcoming.nearest.byline,
-                  posterUrl: upcoming.nearest.posterUrl,
-                  releaseDate: upcoming.nearest.releaseDate.toISOString(),
-                }
-              : null
-          }
-        />
-      )}
+      {invitation && <NovedadesModal invitation={invitation} />}
 
       <BacklogShelves shelves={shelves} />
     </main>

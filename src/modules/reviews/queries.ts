@@ -355,6 +355,65 @@ export async function getPublicOwnerReview(
   };
 }
 
+export interface ReviewInvitation {
+  /** Titles they've reacted to and not yet written about. */
+  count: number;
+  catalogItemId: string;
+  title: string;
+  byline: string | null;
+  posterUrl: string | null;
+}
+
+/**
+ * What the F3.9 Novedades sheet is ABOUT for this particular account: the
+ * titles they already reacted to, where the review box is unlocked right now
+ * and still empty. The most recent one is the sheet's cover.
+ *
+ * Null when there is nothing to point at — no reactions yet, or every reacted
+ * title already has a review. The modal then never opens and the announcement
+ * stays UNSPENT (the F3.8 rule): someone who hasn't reacted to anything can't
+ * write a review at all, and telling them about a box they can't open is the
+ * abstract announcement the mechanism exists to avoid. They'll get it the day
+ * they react to something.
+ *
+ * `count(*) over ()` rides along on the same round-trip, so the copy can say
+ * how many there are without a second query.
+ */
+export async function getReviewInvitation(
+  userId: string,
+): Promise<ReviewInvitation | null> {
+  const [row] = await db
+    .select({
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
+      byline: catalogItems.byline,
+      posterUrl: catalogItems.posterUrl,
+      count: sql<number>`count(*) over ()::int`,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(
+      and(
+        eq(userItems.userId, userId),
+        // The unlock rule, verbatim: a verdict — either one — or an obsession.
+        or(eq(userItems.obsessed, true), sql`${userItems.verdict} is not null`),
+        sql`not exists (
+          select 1 from ${itemReviews}
+          where ${itemReviews.userId} = ${userItems.userId}
+            and ${itemReviews.catalogItemId} = ${userItems.catalogItemId}
+        )`,
+      ),
+    )
+    // Most recently reacted first — the title still warm in their head.
+    .orderBy(
+      desc(
+        sql`greatest(coalesce(${userItems.obsessedAt}, ${userItems.addedAt}), coalesce(${userItems.verdictChangedAt}, ${userItems.addedAt}))`,
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 /**
  * "Lo que dice X" on the public profile — the person is the constant here and
  * the TITLE is the variable, so the card flips: title in serif, no avatar.

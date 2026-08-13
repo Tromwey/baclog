@@ -11,15 +11,23 @@
  * every eligible account, and there is no un-seeing it — so change it in the
  * deploy that carries the finished copy, never ahead of it.
  *
+ * ⚠️ Beta and production share one database. A key bumped on beta is spendable
+ * there: whoever dismisses it on beta has it stamped for good and will never
+ * see it in production. Ship the pair together, or accept that beta users
+ * spend their announcement early.
+ *
  * THE RULE FOR WHAT GOES HERE: announce only what a user cannot discover by
  * using the app normally. A change they'll meet by opening a screen they
  * already open does not need a strip; it needs to be good. This mechanism is
  * cheap enough to overuse, which is the only real way it can fail.
+ *
+ * Reviews qualify under that rule for one reason: the box is INVISIBLE until
+ * you react. Someone who never marked a verdict has no way to find out it
+ * exists — and someone who did has a row of titles sitting there with nothing
+ * written in them.
  */
 
-import { releaseDayLong } from "@/modules/catalog/release";
-
-export const CURRENT_ANNOUNCEMENT = "f3.8-no-puedo-esperar";
+export const CURRENT_ANNOUNCEMENT = "f3.9-resenas";
 
 /**
  * When the announced feature shipped. Accounts created AFTER this never see
@@ -30,13 +38,14 @@ export const CURRENT_ANNOUNCEMENT = "f3.8-no-puedo-esperar";
  * at signup) means no write on the signup path and no way for a new account
  * creation route to be missed — same posture as the derived onboarding step.
  */
-export const ANNOUNCED_AT = new Date("2026-08-02T00:00:00.000Z");
+export const ANNOUNCED_AT = new Date("2026-08-13T00:00:00.000Z");
 
 /** Fixed chrome for the Novedades sheet. */
 export const ANNOUNCEMENT_COPY = {
   eyebrow: "Nuevo en Baclog",
-  title: "No puedo esperar",
-  close: "Entendido",
+  title: "Reseñas",
+  cta: "Escribir la primera",
+  close: "Ahora no",
 } as const;
 
 const NUMBER_WORD = [
@@ -57,47 +66,19 @@ function spell(n: number): string {
   return NUMBER_WORD[n] ?? String(n);
 }
 
-/** "hoy" / "mañana" / "en 12 días" — the release as a phrase in a sentence. */
-export function releasePhrase(releaseDate: Date | string, now: number): string {
-  const ms = new Date(releaseDate).getTime() - now;
-  if (ms <= 0) return "ya salió";
-  const days = Math.ceil(ms / 86_400_000);
-  if (ms <= 86_400_000) return "hoy";
-  if (days === 1) return "mañana";
-  return `en ${days} días`;
-}
-
 /**
- * Novedades 6c — the reader already owns unreleased titles, so there is nothing
- * to offer: the copy just tells them what their own backlog is now doing.
+ * The body of the F3.9 sheet.
+ *
+ * It never explains the feature in the abstract — it reads the reader's own
+ * library back to them: these are titles YOU already reacted to, and the box
+ * on each one is already open. The count is the argument; the cover is the
+ * example.
  */
-export function ownCopy(
-  count: number,
-  nearest: { byline: string | null; releaseDate: Date | string },
-  now: number,
-): string {
-  const when = releasePhrase(nearest.releaseDate, now);
-  const whose = nearest.byline ? `el de ${nearest.byline}` : "el más cercano";
+export function invitationCopy(count: number, title: string): string {
   if (count === 1) {
-    return `Un título de tu backlog todavía no salió. Ahora cuenta lo que falta, y sale ${when}: te avisamos.`;
+    return `Reaccionaste a ${title} y nunca dijiste por qué. Ahora cabe: 280 caracteres por título, y debajo lo que escribió todo el mundo.`;
   }
-  return `${spell(count)} títulos de tu backlog todavía no salieron. Ahora cuentan lo que falta, y ${whose} sale ${when}: te avisamos.`;
-}
-
-/** Novedades 6b — nothing of theirs is pending, so we demonstrate on one. */
-export function suggestionCopy(artist: string | null): string {
-  const whose = artist ? `el de ${artist}` : "este";
-  return `Ahora Baclog cuenta los días de lo que todavía no salió y te avisa el día del lanzamiento. Sigue ${whose} para verlo funcionando.`;
-}
-
-/** Novedades 6b, after the tap — the reward, before they close. */
-export function followedCopy(releaseDate: Date | string, now: number): string {
-  const when = releasePhrase(releaseDate, now);
-  const day =
-    when === "hoy" || when === "mañana"
-      ? when
-      : `el ${releaseDayLong(releaseDate)}`;
-  return `Listo: te avisamos ${day}. Ya está contando arriba de tu backlog.`;
+  return `${spell(count)} títulos tuyos tienen una reacción y ninguna palabra. Ahora caben: 280 caracteres cada uno, y debajo lo que escribió todo el mundo.`;
 }
 
 /**
