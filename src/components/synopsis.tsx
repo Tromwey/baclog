@@ -11,8 +11,12 @@ import { useLayoutEffect, useRef, useState } from "react";
  * the screen entirely. The page's shape shouldn't depend on how talkative a
  * distributor's copywriter was.
  *
- * So it clamps to four lines and nothing is ever cut for good — the rest is one
- * tap away. The toggle only appears when the text ACTUALLY overflows, measured
+ * So it clamps to three lines and nothing is ever cut for good — the rest is
+ * one tap away. Three and not four so the "Me obsesiona" gesture also clears
+ * the fold on a phone: this block sits between the title and everything the
+ * page is actually for.
+ *
+ * The toggle only appears when the text ACTUALLY overflows, measured
  * after mount rather than guessed from a character count: `max-w-[34ch]` is a
  * width in zero-widths, and real Spanish prose wraps nowhere near it. Server
  * render is the clamped paragraph with no toggle, so nothing jumps on
@@ -41,7 +45,7 @@ export function Synopsis({
     <>
       <p
         ref={ref}
-        className={`${className} ${expanded ? "" : "line-clamp-4"}`}
+        className={`${className} ${expanded ? "" : "line-clamp-3"}`}
       >
         {text}
       </p>
