@@ -22,6 +22,14 @@ import { getSpanishOverview } from "@/modules/catalog/tmdb";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
 import { auraSeed, parseHex } from "@/lib/color";
 import { capitalize, joinMeta } from "@/lib/format";
+import {
+  countPublicReviews,
+  getPublicOwnerReview,
+  getReviewFeedPage,
+} from "@/modules/reviews/queries";
+import { conversionLine, markLabel } from "@/modules/reviews/format";
+import { ReviewCard } from "@/components/reviews/review-card";
+import { ReviewFeed } from "@/components/reviews/review-feed";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -69,9 +77,13 @@ export default async function PublicItemPage({
   // can't inject into the href; absent/invalid (a shared item deep-link) → the
   // profile.
   const fromBacklogId = from && /^[0-9a-f-]{36}$/i.test(from) ? from : null;
-  const [profile, item] = await Promise.all([
+  const [profile, item, ownerReview, feed, reviewCount] = await Promise.all([
     getPublicProfile(username),
     getPublicCatalogItem(catalogItemId),
+    // F3.9 — the reason they were sent this link, and the conversation under it.
+    getPublicOwnerReview(username, catalogItemId),
+    getReviewFeedPage(catalogItemId, { excludeUsername: username }),
+    countPublicReviews(catalogItemId),
   ]);
   if (!profile || !item) notFound();
 
@@ -212,6 +224,27 @@ export default async function PublicItemPage({
           </p>
         )}
 
+        {/* F3.9 — whoever follows this link came for a PERSON. Their review
+            goes before the service buttons: the page stops being
+            "arte → acción" and becomes "arte → por qué te lo mandó → acción".
+            Its own mono label keeps it from reading as part of the feed below. */}
+        {ownerReview && (
+          <div className="bl-rise mt-[26px]">
+            <div className="mb-[10px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-3">
+              Lo que dice {profile.username}
+            </div>
+            <ReviewCard
+              body={ownerReview.body}
+              hasSpoiler={ownerReview.hasSpoiler}
+              mark={ownerReview.mark}
+              when={ownerReview.when}
+              author={ownerReview.author}
+              markLabel={markLabel(ownerReview.mark)}
+              displayName={ownerReview.author.username}
+            />
+          </div>
+        )}
+
         <div className="mt-7 space-y-2.5">
           {item.mediaType === "album" ? (
             <>
@@ -254,6 +287,40 @@ export default async function PublicItemPage({
               : undefined
           }
         />
+
+        {/* The rest of the conversation. No ⋯ anywhere in here: an anonymous
+            viewer can neither report nor edit, and a menu whose only entry is
+            "regístrate" would be a trap (design decision). Spoilers ARE covered
+            for them too — this is where it matters most, since nobody arrives
+            here having seen the thing. */}
+        {feed.reviews.length > 0 && (
+          <section className="mt-7">
+            <div className="mb-[18px] h-px bg-line" />
+            <div className="mb-[14px] flex items-baseline justify-between gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-3">
+                Reseñas
+              </span>
+              <span className="font-mono text-[10px] tracking-[0.06em] text-text-3">
+                {reviewCount}
+              </span>
+            </div>
+            <ReviewFeed
+              catalogItemId={item.id}
+              initialReviews={feed.reviews}
+              initialCursor={feed.nextCursor}
+              canReport={false}
+              excludeUsername={username}
+            />
+          </section>
+        )}
+
+        {/* The one conversion sentence on the page — everything else is done by
+            the content itself. The fixed CTA below never changes. */}
+        {conversionLine(reviewCount) && (
+          <p className="mx-auto mt-[26px] max-w-[30ch] text-center text-[14.5px] leading-[1.5] text-text-2">
+            {conversionLine(reviewCount)}
+          </p>
+        )}
 
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}

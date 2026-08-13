@@ -155,6 +155,13 @@
       "when": 1785725569000,
       "tag": "0021_notify_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786595133360,
+      "tag": "0022_item_reviews",
+      "breakpoints": true
     }
   ]
 }

@@ -51,12 +51,22 @@ export const linkServiceEnum = pgEnum("link_service", [
   "prime_video",
   "other",
 ]);
+/**
+ * Shared by profile reports (F2.21) and review reports (F3.9). The first five
+ * values predate reviews; the last three were added for them — `impersonation`
+ * is the only one that stays profile-only (a 280-character review can't
+ * impersonate anyone), and the review sheet simply doesn't offer it. Values are
+ * append-only: dropping one requires rebuilding the type.
+ */
 export const reportReasonEnum = pgEnum("report_reason", [
   "spam",
   "impersonation",
   "harassment",
   "illegal_content",
   "other",
+  "unmarked_spoiler",
+  "hate",
+  "off_topic",
 ]);
 export const deviceClassEnum = pgEnum("device_class", [
   "ios",
@@ -370,6 +380,66 @@ export const userItems = pgTable(
   ],
 );
 
+// ---------- reviews module (F3.9) ----------
+
+/**
+ * One short review per (user, title) — the first USER-GENERATED CONTENT in the
+ * product, which is what shapes every decision here.
+ *
+ * Why its own table and not columns on `user_item`:
+ *  1. The read pattern is the opposite one. `user_item` is indexed for "this
+ *     user's titles"; the feed asks "everyone's reviews of THIS title", which
+ *     needs (catalog_item_id, created_at desc) — an index that would sit on the
+ *     hottest table in the app to serve a query that never touches it.
+ *  2. Moderation state is not user state. `hiddenAt` is something an operator
+ *     did TO the row, not something the user set about the title.
+ *  3. The public feed selects an explicit public-safe field list from ONE table
+ *     (same posture as public.ts). Reading the feed off `user_item` would put
+ *     status/verdict/provenance one careless `select()` away from anonymous
+ *     viewers.
+ *
+ * Lifecycle is still tied to the library: `user_item` is GC'd when the last
+ * membership goes (removeMembershipAction), and the review goes with it — the
+ * mutations delete it explicitly, since there is no FK to cascade from.
+ */
+export const itemReviews = pgTable(
+  "item_review",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    catalogItemId: text("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "restrict" }),
+    /** ≤280 chars, trimmed, URLs rejected at the action (spam has no payoff). */
+    body: text("body").notNull(),
+    hasSpoiler: boolean("has_spoiler").notNull().default(false),
+    /**
+     * Set by an admin from the Torre de Control queue; null = visible. The row
+     * is never deleted by moderation — hiding is reversible, and the author
+     * keeps seeing their own text with a note (no shadowban).
+     */
+    hiddenAt: timestamp("hidden_at"),
+    hiddenByUserId: text("hidden_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // At most one review per (user, title) — editing replaces, never appends.
+    uniqueIndex("item_review_user_catalog_unique").on(t.userId, t.catalogItemId),
+    // THE feed index: "reviews of this title, newest first".
+    index("item_review_catalog_created_idx").on(t.catalogItemId, t.createdAt),
+    index("item_review_user_id_idx").on(t.userId),
+    // The moderation queue's "what's currently hidden" scan.
+    index("item_review_hidden_at_idx").on(t.hiddenAt),
+  ],
+);
+
 // ---------- links module (lazy-resolved deep-link cache — ADR-007) ----------
 
 export const mediaLinks = pgTable(
@@ -410,11 +480,36 @@ export const reports = pgTable(
     targetUserId: text("target_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * F3.9 — set when the report is about a REVIEW rather than the profile as a
+     * whole; null keeps the original profile-report shape. `targetUserId` stays
+     * NOT NULL either way and carries the review's AUTHOR, so the moderation
+     * queue gets repeat-offender context for free and the constraint never had
+     * to be loosened.
+     */
+    targetReviewId: text("target_review_id").references(() => itemReviews.id, {
+      onDelete: "cascade",
+    }),
     reason: reportReasonEnum("reason").notNull(),
     details: text("details"),
+    /**
+     * Closed by an operator — either by hiding the review or by dismissing the
+     * report. Null = pending, which is exactly what the queue lists. Profile
+     * reports (F2.21) have no UI that sets this yet; they stay null and are
+     * simply not part of the reviews queue's scan (it filters on
+     * target_review_id IS NOT NULL).
+     */
+    resolvedAt: timestamp("resolved_at"),
+    resolvedByUserId: text("resolved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [index("report_target_user_id_idx").on(t.targetUserId)],
+  (t) => [
+    index("report_target_user_id_idx").on(t.targetUserId),
+    // The queue's scan: pending reports grouped by review.
+    index("report_target_review_id_idx").on(t.targetReviewId),
+  ],
 );
 
 // ---------- growth module (F3.1 waitlist + referrals) ----------

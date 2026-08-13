@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/auth";
 import { getPublicProfile } from "@/modules/backlog/public";
+import { getProfileReviews } from "@/modules/reviews/queries";
+import { ProfileReviews } from "@/components/reviews/profile-reviews";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
 import { UpcomingShelf } from "@/components/upcoming-shelf";
@@ -56,7 +58,11 @@ export default async function PublicProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
-  const profile = await getPublicProfile(username);
+  const [profile, reviews] = await Promise.all([
+    getPublicProfile(username),
+    // Public-gated inside the query, so a private handle simply returns [].
+    getProfileReviews(username),
+  ]);
   // Private and nonexistent are identical 404s — no enumeration oracle
   if (!profile) notFound();
 
@@ -168,6 +174,9 @@ export default async function PublicProfilePage({
             ))}
           </div>
         </section>
+
+        {/* F3.9 — "Lo que dice X". Renders nothing until they've written one. */}
+        <ProfileReviews username={profile.username} reviews={reviews} />
 
         <div className="mt-10 text-center">
           <ReportButton username={profile.username} />

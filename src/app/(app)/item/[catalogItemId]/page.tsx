@@ -5,7 +5,11 @@ import { capitalize, joinMeta } from "@/lib/format";
 import {
   getBacklogNames,
   getUserCatalogEntry,
+  getUserPalette,
 } from "@/modules/backlog/queries";
+import { getItemReviewContext } from "@/modules/reviews/queries";
+import { legibleAdnPair } from "@/modules/reviews/format";
+import { ReviewsBlock } from "@/components/reviews/reviews-block";
 import { countLovedItems } from "@/modules/backlog/first-run";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
@@ -52,13 +56,22 @@ export default async function ItemPage({
 }) {
   const user = await requireUser();
   const { catalogItemId } = await params;
-  const [item, userBacklogs, entry, lovedCount] = await Promise.all([
-    getCatalogItem(catalogItemId),
-    getBacklogNames(user.id),
-    getUserCatalogEntry(user.id, catalogItemId),
-    countLovedItems(user.id),
-  ]);
+  const [item, userBacklogs, entry, lovedCount, reviews, viewerPalette] =
+    await Promise.all([
+      getCatalogItem(catalogItemId),
+      getBacklogNames(user.id),
+      getUserCatalogEntry(user.id, catalogItemId),
+      countLovedItems(user.id),
+      // F3.9 — own review + the first page of everyone else's, in one trip.
+      getItemReviewContext(user.id, catalogItemId),
+      getUserPalette(user.id, 2),
+    ]);
   if (!item) notFound();
+
+  // The viewer's own ADN, for the avatar on their own review card (same
+  // legibility filter the feed's avatars use — the initial is punched out in
+  // the page background, so a near-black stop would erase it).
+  const viewerHexes = legibleAdnPair(viewerPalette);
 
   // Album tracklist OR film/series Spanish synopsis (English fallback), derived
   // from the source provider and cached — shared with the public item page.
@@ -272,6 +285,18 @@ export default async function ItemPage({
             something to say. It freezes the flag itself and renders nothing
             when the step was already done. */}
         {entry && <ReactionCoach stepPending={lovedCount === 0} />}
+
+        {/* F3.9 — reseñas: below the gesture that unlocks writing, above the
+            provenance panel. Renders for an un-owned title too: reading the
+            conversation is never gated, only writing is. */}
+        <ReviewsBlock
+          catalogItemId={item.id}
+          itemTitle={item.title}
+          inLibrary={entry !== null}
+          viewerIsPublic={Boolean(user.username && user.isPublic)}
+          viewerHexes={viewerHexes}
+          context={reviews}
+        />
 
         {/* AI provenance: why this pairing + the user's own why-feedback */}
         {entry && narrative && (

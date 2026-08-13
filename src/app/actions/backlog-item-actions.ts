@@ -9,7 +9,12 @@ import {
   assertOwnsUserItem,
 } from "@/authz";
 import { db } from "@/db";
-import { backlogItems, itemStatusEnum, userItems } from "@/db/schema";
+import {
+  backlogItems,
+  itemReviews,
+  itemStatusEnum,
+  userItems,
+} from "@/db/schema";
 import { paletteHexSchema } from "@/modules/backlog/palette";
 import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
 import { cacheReleaseDate, getCatalogItem } from "@/modules/catalog/cache";
@@ -172,6 +177,25 @@ export async function hideRecoProvenanceAction(catalogItemId: string) {
 }
 
 /**
+ * F3.9 — a review belongs to a title the user KEEPS. There is no FK from
+ * item_review to user_item to cascade from (they're independent tables by
+ * design), so the two removes that GC the per-title state clean it up here,
+ * explicitly. Leaving it behind would keep a review in the public feed for a
+ * title its author no longer has, with a reaction glyph read off a row that
+ * no longer exists.
+ */
+async function deleteOwnReview(userId: string, catalogItemId: string) {
+  await db
+    .delete(itemReviews)
+    .where(
+      and(
+        eq(itemReviews.userId, userId),
+        eq(itemReviews.catalogItemId, catalogItemId),
+      ),
+    );
+}
+
+/**
  * Quitar de ESTE backlog — deletes one membership (by its backlog_item id).
  * If it was the title's last membership, GC the per-title state (user_item),
  * which cascades its reco feedback. This is the per-backlog remove the shelf row
@@ -200,6 +224,7 @@ export async function removeMembershipAction(backlogItemId: string) {
           eq(userItems.catalogItemId, item.catalogItemId),
         ),
       );
+    await deleteOwnReview(user.id, item.catalogItemId);
   }
 
   revalidatePath("/backlogs", "layout");
@@ -229,6 +254,7 @@ export async function removeFromLibraryAction(catalogItemId: string) {
         eq(userItems.catalogItemId, catalogItemId),
       ),
     );
+  await deleteOwnReview(user.id, catalogItemId);
   revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
