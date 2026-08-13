@@ -73,12 +73,17 @@ function spell(n: number): string {
  * library back to them: these are titles YOU already reacted to, and the box
  * on each one is already open. The count is the argument; the cover is the
  * example.
+ *
+ * No character limit in the copy. 280 is a constraint of the box, not a
+ * feature of the product: someone about to write about a series they love
+ * doesn't need a budget quoted at them first — they'll meet the counter when
+ * they start typing, which is the only moment it means anything.
  */
 export function invitationCopy(count: number, title: string): string {
   if (count === 1) {
-    return `Reaccionaste a ${title} y nunca dijiste por qué. Ahora cabe: 280 caracteres por título, y debajo lo que escribió todo el mundo.`;
+    return `Reaccionaste a ${title} y nunca dijiste por qué. Cuéntalo en tu reseña, y lee las de los demás.`;
   }
-  return `${spell(count)} títulos tuyos tienen una reacción y ninguna palabra. Ahora caben: 280 caracteres cada uno, y debajo lo que escribió todo el mundo.`;
+  return `${spell(count)} títulos tuyos tienen una reacción y ninguna palabra. Cuéntalo en una reseña, y lee las de los demás.`;
 }
 
 /**
