@@ -28,6 +28,7 @@ export function ReviewFeed({
   initialReviews,
   initialCursor,
   canReport,
+  allowSpoiler,
   excludeUsername,
   emptyNote,
 }: {
@@ -35,6 +36,12 @@ export function ReviewFeed({
   initialReviews: FeedReview[];
   initialCursor: string | null;
   canReport: boolean;
+  /**
+   * False on albums: with no spoiler switch to forget, "Spoiler sin marcar"
+   * can't be a real complaint — leaving it in the sheet would ask people to
+   * report a rule the product never applied here.
+   */
+  allowSpoiler: boolean;
   /** Handle whose review is pinned above — kept out of every page loaded here. */
   excludeUsername?: string;
   emptyNote?: React.ReactNode;
@@ -112,7 +119,9 @@ export function ReviewFeed({
             ¿Qué pasa con esta reseña?
           </div>
           <div className="mt-[14px] flex flex-col gap-2">
-            {REVIEW_REPORT_REASONS.map((reason) => (
+            {REVIEW_REPORT_REASONS.filter(
+              (reason) => allowSpoiler || reason.id !== "unmarked_spoiler",
+            ).map((reason) => (
               <button
                 key={reason.id}
                 onClick={() => report(reason.id)}

@@ -6,8 +6,9 @@ import { z } from "zod";
 import { getCurrentUser } from "@/auth";
 import { assertOwnsUserItem, assertUser } from "@/authz";
 import { db } from "@/db";
-import { itemReviews, reports } from "@/db/schema";
+import { catalogItems, itemReviews, reports } from "@/db/schema";
 import { getReviewFeedPage } from "@/modules/reviews/queries";
+import { supportsSpoiler } from "@/modules/reviews/format";
 import {
   REVIEW_MAX_LENGTH,
   REVIEW_MORE_SIZE,
@@ -79,8 +80,20 @@ export async function saveReviewAction(input: {
         : "invalid",
     };
   }
-  const hasSpoiler = z.boolean().safeParse(input.hasSpoiler);
-  if (!hasSpoiler.success) return { error: "invalid" };
+  const parsedSpoiler = z.boolean().safeParse(input.hasSpoiler);
+  if (!parsedSpoiler.success) return { error: "invalid" };
+
+  // Albums have nothing to spoil, so the flag can't be set on one — the sheet
+  // hides the switch, and this drops the value whatever the caller sent. Also
+  // normalizes on the way through: editing an album review clears a flag that
+  // should never have been settable.
+  const [catalog] = await db
+    .select({ mediaType: catalogItems.mediaType })
+    .from(catalogItems)
+    .where(eq(catalogItems.id, input.catalogItemId))
+    .limit(1);
+  const hasSpoiler =
+    catalog && supportsSpoiler(catalog.mediaType) ? parsedSpoiler.data : false;
 
   const now = new Date();
   try {
@@ -90,7 +103,7 @@ export async function saveReviewAction(input: {
         userId: user.id,
         catalogItemId: input.catalogItemId,
         body: body.data,
-        hasSpoiler: hasSpoiler.data,
+        hasSpoiler,
         createdAt: now,
         updatedAt: now,
       })
@@ -98,7 +111,7 @@ export async function saveReviewAction(input: {
         target: [itemReviews.userId, itemReviews.catalogItemId],
         set: {
           body: body.data,
-          hasSpoiler: hasSpoiler.data,
+          hasSpoiler,
           updatedAt: now,
           hiddenAt: null,
           hiddenByUserId: null,

@@ -28,7 +28,11 @@ import {
   getPublicOwnerReview,
   getReviewFeedPage,
 } from "@/modules/reviews/queries";
-import { conversionLine, markLabel } from "@/modules/reviews/format";
+import {
+  conversionLine,
+  markLabel,
+  supportsSpoiler,
+} from "@/modules/reviews/format";
 import { ReviewCard } from "@/components/reviews/review-card";
 import { ReviewFeed } from "@/components/reviews/review-feed";
 
@@ -311,6 +315,7 @@ export default async function PublicItemPage({
               initialReviews={feed.reviews}
               initialCursor={feed.nextCursor}
               canReport={false}
+              allowSpoiler={supportsSpoiler(item.mediaType)}
               excludeUsername={username}
             />
           </section>

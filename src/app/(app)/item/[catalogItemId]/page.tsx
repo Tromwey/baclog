@@ -8,7 +8,7 @@ import {
   getUserPalette,
 } from "@/modules/backlog/queries";
 import { getItemReviewContext } from "@/modules/reviews/queries";
-import { legibleAdnPair } from "@/modules/reviews/format";
+import { legibleAdnPair, supportsSpoiler } from "@/modules/reviews/format";
 import { ReviewsBlock } from "@/components/reviews/reviews-block";
 import { countLovedItems } from "@/modules/backlog/first-run";
 import { getCatalogItem } from "@/modules/catalog/cache";
@@ -294,6 +294,7 @@ export default async function ItemPage({
         <ReviewsBlock
           catalogItemId={item.id}
           itemTitle={item.title}
+          allowSpoiler={supportsSpoiler(item.mediaType)}
           inLibrary={entry !== null}
           viewerIsPublic={Boolean(user.username && user.isPublic)}
           viewerHexes={viewerHexes}

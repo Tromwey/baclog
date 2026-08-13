@@ -23,6 +23,7 @@ export function ReviewSheet({
   itemTitle,
   initialBody,
   initialHasSpoiler,
+  allowSpoiler,
   isEdit,
   saving,
   error,
@@ -32,6 +33,11 @@ export function ReviewSheet({
   itemTitle: string;
   initialBody: string;
   initialHasSpoiler: boolean;
+  /**
+   * False for albums, which have no ending to give away — the switch simply
+   * isn't there and the flag saves as false (see `supportsSpoiler`).
+   */
+  allowSpoiler: boolean;
   isEdit: boolean;
   saving: boolean;
   /** Copy for a failed save. The sheet stays open and keeps the draft. */
@@ -40,7 +46,9 @@ export function ReviewSheet({
   onSave: (body: string, hasSpoiler: boolean) => void;
 }) {
   const [body, setBody] = useState(initialBody);
-  const [hasSpoiler, setHasSpoiler] = useState(initialHasSpoiler);
+  const [hasSpoiler, setHasSpoiler] = useState(
+    allowSpoiler && initialHasSpoiler,
+  );
   const ref = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
 
@@ -111,31 +119,33 @@ export function ReviewSheet({
         />
       </div>
 
-      <button
-        onClick={() => setHasSpoiler((v) => !v)}
-        role="switch"
-        aria-checked={hasSpoiler}
-        className="mt-3 flex w-full items-center gap-3 rounded-[14px] bg-surface-2 px-[14px] py-[13px] text-left"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm text-text">Contiene spoiler</span>
-          <span className="mt-[2px] block text-[11.5px] leading-[1.35] text-text-3">
-            Se cubre hasta que alguien decida verlo.
-          </span>
-        </span>
-        <span
-          aria-hidden
-          className={`relative block h-[26px] w-[44px] flex-none rounded-full transition-colors duration-[220ms] ease-[var(--ease-out)] ${
-            hasSpoiler ? "bg-accent" : "bg-surface-3"
-          }`}
+      {allowSpoiler && (
+        <button
+          onClick={() => setHasSpoiler((v) => !v)}
+          role="switch"
+          aria-checked={hasSpoiler}
+          className="mt-3 flex w-full items-center gap-3 rounded-[14px] bg-surface-2 px-[14px] py-[13px] text-left"
         >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm text-text">Contiene spoiler</span>
+            <span className="mt-[2px] block text-[11.5px] leading-[1.35] text-text-3">
+              Se cubre hasta que alguien decida verlo.
+            </span>
+          </span>
           <span
-            className={`absolute top-[3px] h-5 w-5 rounded-full transition-[left] duration-[220ms] ease-[var(--ease-out)] ${
-              hasSpoiler ? "left-[21px] bg-bg" : "left-[3px] bg-text-2"
+            aria-hidden
+            className={`relative block h-[26px] w-[44px] flex-none rounded-full transition-colors duration-[220ms] ease-[var(--ease-out)] ${
+              hasSpoiler ? "bg-accent" : "bg-surface-3"
             }`}
-          />
-        </span>
-      </button>
+          >
+            <span
+              className={`absolute top-[3px] h-5 w-5 rounded-full transition-[left] duration-[220ms] ease-[var(--ease-out)] ${
+                hasSpoiler ? "left-[21px] bg-bg" : "left-[3px] bg-text-2"
+              }`}
+            />
+          </span>
+        </button>
+      )}
 
       {error && (
         <p className="mt-3 text-[13px] leading-[1.45] text-hot">{error}</p>

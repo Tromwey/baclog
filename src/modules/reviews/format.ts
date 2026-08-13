@@ -1,5 +1,6 @@
 import { parseHex, rgba } from "@/lib/color";
 import { plural } from "@/lib/plural";
+import type { MediaType } from "@/modules/catalog/types";
 import type { ReviewMark } from "./types";
 
 /**
@@ -50,6 +51,20 @@ export function ownMarkLabel(mark: ReviewMark): string | null {
   if (mark === "liked") return "te gustó";
   if (mark === "disliked") return "no te gustó";
   return null;
+}
+
+/**
+ * Whether a title can be spoiled at all.
+ *
+ * A film or a series has an ending someone can ruin. An album doesn't: there's
+ * no plot to give away, and offering "Contiene spoiler" next to a record makes
+ * the whole control look like boilerplate that was never thought about. So on
+ * albums the switch isn't there, "Spoiler sin marcar" isn't in the report
+ * sheet, and `saveReviewAction` forces the flag off — the UI hiding a control
+ * is a courtesy, the server dropping the value is the rule.
+ */
+export function supportsSpoiler(mediaType: MediaType): boolean {
+  return mediaType !== "album";
 }
 
 const UNITS = [

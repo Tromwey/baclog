@@ -32,6 +32,7 @@ import { ReviewSheet } from "./review-sheet";
 export function ReviewsBlock({
   catalogItemId,
   itemTitle,
+  allowSpoiler,
   inLibrary,
   viewerIsPublic,
   viewerHexes,
@@ -39,6 +40,8 @@ export function ReviewsBlock({
 }: {
   catalogItemId: string;
   itemTitle: string;
+  /** False for albums — no ending to give away (see `supportsSpoiler`). */
+  allowSpoiler: boolean;
   /** The title has to be in the library before there's anything to react to. */
   inLibrary: boolean;
   /**
@@ -231,6 +234,7 @@ export function ReviewsBlock({
         initialReviews={context.reviews}
         initialCursor={context.nextCursor}
         canReport
+        allowSpoiler={allowSpoiler}
         emptyNote={
           <p className="mt-[18px] text-sm leading-[1.5] text-text-3">
             {own
@@ -245,6 +249,7 @@ export function ReviewsBlock({
           itemTitle={itemTitle}
           initialBody={own?.body ?? ""}
           initialHasSpoiler={own?.hasSpoiler ?? false}
+          allowSpoiler={allowSpoiler}
           isEdit={own !== null}
           saving={saving}
           error={error}
