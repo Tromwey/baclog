@@ -4,8 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
-const CHIP =
+/** The 40px glass chip recipe — exported so /perfil's header chips (compartir ·
+ *  ajustes, F3.10) stay the same glass as the back control beside them. */
+export const glassChipClass =
   "flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.28] text-text backdrop-blur-[18px] transition-colors hover:bg-black/[0.4]";
+
+const CHIP = glassChipClass;
 
 /**
  * Circular glass back control (M3.5) — the app's ONE back affordance.

@@ -6,6 +6,8 @@ import { Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/auth";
 import { getPublicProfile } from "@/modules/backlog/public";
 import { getProfileReviews } from "@/modules/reviews/queries";
+import { isFollowing } from "@/modules/social/queries";
+import { FollowButton, followPillClass } from "@/components/follow-button";
 import { ProfileReviews } from "@/components/reviews/profile-reviews";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
@@ -78,6 +80,10 @@ export default async function PublicProfilePage({
   // Logged-in viewers (e.g. the owner via "ver perfil público") need a way back
   // and don't need the "start a backlog" pitch — that's for anonymous visitors.
   const viewer = await getCurrentUser();
+  // F3.10 — the follow control beside the name. The owner sees neither state.
+  const isOwner = viewer?.username === profile.username;
+  const viewerFollows =
+    viewer && !isOwner ? await isFollowing(viewer.id, profile.username) : false;
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
@@ -118,10 +124,31 @@ export default async function PublicProfilePage({
         }`}
       >
         <header className="bl-rise">
-          <MonoMeta className="text-text-2">baclog.app/{profile.username}</MonoMeta>
-          <h1 className="mt-2 font-display text-[40px] font-extrabold leading-none tracking-[-0.02em]">
-            {profile.displayName}
-          </h1>
+          {/* F3.10 — the @handle replaces baclog.app/… on the profile screens. */}
+          <MonoMeta className="text-text-2">@{profile.username}</MonoMeta>
+          <div className="mt-2 flex items-end gap-3.5">
+            {/* overflow-wrap: a 50-char display name (or one long token) must
+                wrap inside its narrowed column, not clip under the page's
+                overflow-hidden. */}
+            <h1 className="min-w-0 flex-1 font-display text-[40px] font-extrabold leading-none tracking-[-0.02em] [overflow-wrap:anywhere]">
+              {profile.displayName}
+            </h1>
+            {!isOwner &&
+              (viewer ? (
+                <FollowButton
+                  username={profile.username}
+                  initialFollowing={viewerFollows}
+                  size="lg"
+                  className="mb-0.5"
+                />
+              ) : (
+                // Same recipe as the real pill (followPillClass) so the
+                // logged-out conversion path can't drift from the button.
+                <Link href="/login" className={`mb-0.5 ${followPillClass}`}>
+                  Seguir
+                </Link>
+              ))}
+          </div>
           {profile.isFounder && (
             <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-accent">
               <Sparkles size={12} /> Fundador
@@ -135,6 +162,10 @@ export default async function PublicProfilePage({
             </StatusChip>
             <StatusChip tone="obsessed" glass>
               {totalItems} {plural(totalItems, "obsesión", "obsesiones")}
+            </StatusChip>
+            <StatusChip tone="neutral" glass>
+              {profile.followerCount}{" "}
+              {plural(profile.followerCount, "seguidor", "seguidores")}
             </StatusChip>
           </div>
         </header>
@@ -184,14 +215,16 @@ export default async function PublicProfilePage({
       </main>
 
       {/* Sticky lima CTA — the conversion pill (§6). Only for anonymous
-          visitors; logged-in users get a back button instead. */}
+          visitors; logged-in users get a back button instead. F3.10 pivots the
+          pitch from "start a backlog" to the social loop ("seguirle": the
+          neutral MX form — we don't know anyone's gender). */}
       {!viewer && (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md px-5 pb-5">
           <Button
             href="/login"
             className="pointer-events-auto w-full shadow-[0_0_30px_var(--accent-soft)]"
           >
-            Empieza tu backlog →
+            Regístrate para seguirle →
           </Button>
         </div>
       )}

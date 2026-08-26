@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { avatarGradient } from "@/modules/reviews/format";
+import { AdnAvatar } from "@/components/adn-avatar";
+import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import type { ReviewAuthor, ReviewMark } from "@/modules/reviews/types";
 
 /**
@@ -34,12 +35,12 @@ export function MarkGlyph({ mark }: { mark: ReviewMark }) {
       <svg
         width="10"
         height="10"
-        viewBox="0 0 24 24"
+        viewBox={GLYPH_VIEWBOX}
         fill="var(--hot)"
         className="flex-none"
         aria-hidden
       >
-        <path d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 015.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133.998a5.99 5.99 0 011.925-3.546 3.75 3.75 0 013.255 3.72z" />
+        <path d={FLAME_PATH} />
       </svg>
     );
   }
@@ -62,15 +63,14 @@ export function MarkGlyph({ mark }: { mark: ReviewMark }) {
   return null;
 }
 
+/** The 30px review-card size of the shared ADN orb — one recipe, no drift. */
 export function ReviewAvatar({ author }: { author: ReviewAuthor }) {
   return (
-    <span
-      aria-hidden
-      className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full font-mono text-[11px] text-bg"
-      style={{ background: avatarGradient(author.avatarHexes) }}
-    >
-      {author.initial}
-    </span>
+    <AdnAvatar
+      hexes={author.avatarHexes}
+      initial={author.initial}
+      className="h-[30px] w-[30px] text-[11px]"
+    />
   );
 }
 

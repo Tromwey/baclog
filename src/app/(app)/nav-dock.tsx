@@ -68,6 +68,7 @@ export function useHideNavDock(active: boolean) {
 const DESTINATIONS: { href: string; label: string; Icon: () => ReactNode }[] = [
   { href: "/backlogs", label: "Backlogs", Icon: EstantesIcon },
   { href: "/descubrir", label: "Discover", Icon: DiscoverIcon },
+  { href: "/feed", label: "Feed", Icon: FeedIcon },
   { href: "/perfil", label: "Perfil", Icon: PerfilIcon },
 ];
 
@@ -114,7 +115,12 @@ export function NavDock() {
                 );
                 setNavDirection(from >= 0 && from !== i ? Math.sign(i - from) : 0);
               }}
-              className={`flex flex-col items-center gap-[3px] rounded-full px-7 py-2.5 ${
+              // 22px, not the 3-destination 28px: the fourth destination has
+              // to fit a 390px viewport with the pill still content-hugging
+              // (F3.10 design 1j — 349px wide, was 317). Below 390 (iPhone
+              // SE1, page zoom) even 22px overflows a centered fixed pill, so
+              // narrow viewports drop to 14px instead of clipping the ends.
+              className={`flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 min-[390px]:px-[22px] ${
                 active ? "bg-black/40 text-accent" : "text-text-3"
               }`}
             >
@@ -147,6 +153,17 @@ function DiscoverIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2z" />
+    </svg>
+  );
+}
+
+/** F3.10 — disco ADN + dos barras: una persona y su actividad (design 1j). */
+function FeedIcon() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="8" cy="12" r="4.2" />
+      <rect x="14.4" y="7.6" width="5.6" height="3.2" rx="1.6" />
+      <rect x="14.4" y="13.2" width="3.8" height="3.2" rx="1.6" />
     </svg>
   );
 }

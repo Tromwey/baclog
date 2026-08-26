@@ -42,6 +42,8 @@ next-env.d.ts
 
 # local
 .obsidian/
-.claude/
+.claude/*
+# ...except the shared agent brain, which is meant to be versioned and travel with the repo.
+!.claude/knowledge/
 .env.local
 .env*.local
