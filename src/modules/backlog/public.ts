@@ -5,6 +5,7 @@ import {
   backlogItems,
   backlogs,
   catalogItems,
+  userFollows,
   userItems,
   users,
 } from "@/db/schema";
@@ -96,10 +97,18 @@ export async function getPublicProfile(username: string) {
   // become public just because it rode along.
   const upcoming = await getUpcomingForUser(user.id, 12);
 
+  // F3.10 — follower count is PUBLIC by decision (counts public, lists
+  // private): an aggregate over follow edges, nothing identifying anyone.
+  const [followerAgg] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(userFollows)
+    .where(eq(userFollows.followedUserId, user.id));
+
   return {
     displayName: user.name ?? user.username ?? "",
     username: user.username!,
     isFounder: user.isFounder,
+    followerCount: followerAgg?.n ?? 0,
     // Lima fallback so an owner with no extracted palette still auras.
     palette: palette.length > 0 ? palette : ["#D8FF3E"],
     backlogs: lists.map((l) => ({

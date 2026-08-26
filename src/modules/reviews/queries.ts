@@ -48,11 +48,14 @@ const publicAuthor = and(
 );
 
 
-function initialOf(username: string): string {
+/** Shared with the social module (F3.10) — same avatar, same initial rule. */
+export function initialOf(username: string): string {
   return (Array.from(username)[0] ?? "·").toUpperCase();
 }
 
-function markOf(row: {
+/** THE obsessed → liked → disliked precedence. Exported so the social feed
+ *  can't drift from the four reviews surfaces that already use it. */
+export function markOf(row: {
   obsessed: boolean | null;
   verdict: string | null;
 }): ReviewMark {
@@ -69,8 +72,12 @@ function markOf(row: {
  * recency in a subquery and keeps the top 12 per author, then reuses
  * `dominantHexes`' rule (first distinct dominant color per item) — the same
  * colors the profile orb auras with, cut to two.
+ *
+ * Exported for the social module (F3.10): feed cards, follow suggestions and
+ * the siguiendo/seguidores lists all render the same ADN avatar, and this is
+ * the one batched implementation of it.
  */
-async function avatarHexesFor(
+export async function avatarHexesFor(
   userIds: string[],
 ): Promise<Map<string, [string, string]>> {
   const out = new Map<string, [string, string]>();
@@ -120,7 +127,11 @@ async function avatarHexesFor(
   return out;
 }
 
-function decodeCursor(cursor: string | null): { at: Date; id: string } | null {
+/** `${iso}|${id}` keyset cursor codec — shared with the social module, so the
+ *  two feeds can never disagree on the format. */
+export function decodeCursor(
+  cursor: string | null,
+): { at: Date; id: string } | null {
   if (!cursor) return null;
   const sep = cursor.lastIndexOf("|");
   if (sep < 1) return null;

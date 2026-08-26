@@ -1,46 +1,84 @@
 import Link from "next/link";
-import { ChevronRight, LogOut, Pencil, Share2 } from "lucide-react";
-import { AuraField } from "@/components/ui";
-import { signOutAction } from "@/app/actions/account-actions";
+import { ChevronRight, SlidersHorizontal } from "lucide-react";
+import { AuraField, glassChipClass } from "@/components/ui";
 import { plural } from "@/lib/plural";
 import type { UserStats } from "@/modules/backlog/queries";
-import { InstallAppRow } from "./install-app-row";
+import {
+  ShelfCard,
+  shelfSeed,
+} from "@/app/(app)/backlogs/backlog-shelf-card";
+import { ShareProfileChip } from "./share-profile-chip";
 
 /**
- * Presentation for /perfil (M3.5). Pure server component: identity over an ADN
- * orb, a glass stats card, a glass settings list (editing lives in /settings,
- * reused as-is), the public-profile link, and sign out via a native
- * <form action={signOutAction}> — no client boundary needed.
+ * Presentation for /perfil (F3.10, design 2a). The tab stopped being a
+ * settings list: it IS your public profile — identity, counts, tu gente and
+ * your backlogs — with two glass chips up top (compartir · ajustes). What used
+ * to live here (install, edit, admin, sign out) moved behind the ajustes chip
+ * (/settings, design 2b). Pure server component.
  */
 export function PerfilScreen({
   name,
   username,
+  isPublic,
   stats,
   palette,
-  isAdmin,
+  followCounts,
+  backlogs,
 }: {
   name: string;
   username: string | null;
+  /** Gates the share chip and the @handle link — a private profile's public
+   *  URL 404s, and offering to share a dead link is worse than no chip. */
+  isPublic: boolean;
   stats: UserStats;
   palette: string[];
-  /** Shows the operator-only "Torre de control" entry (→ /admin). Gated on
-   *  users.isAdmin — NOT the isFounder badge the whole first-100 cohort has. */
-  isAdmin: boolean;
+  followCounts: { following: number; followers: number };
+  backlogs: {
+    id: string;
+    name: string;
+    itemCount: number;
+    paletteHex: string[];
+  }[];
 }) {
-  const handleHref = username ? `/u/${username}` : "/settings";
+  const publicUrl = username && isPublic ? `/u/${username}` : null;
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(56px+env(safe-area-inset-top))] text-text">
+    <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(30px+env(safe-area-inset-top))] text-text">
+      {/* Header chips — compartir · ajustes (design 2a). */}
+      <div className="flex justify-end gap-2">
+        {username && isPublic && <ShareProfileChip username={username} />}
+        <Link href="/settings" aria-label="Ajustes" className={glassChipClass}>
+          <SlidersHorizontal size={19} strokeWidth={1.9} />
+        </Link>
+      </div>
+
       {/* Identity */}
-      <div className="flex flex-col items-center text-center">
+      <div className="flex flex-col items-center pt-[22px] text-center">
         <div className="relative h-24 w-24 overflow-hidden rounded-full bg-bg shadow-[0_12px_34px_rgba(0,0,0,0.55)]">
           <AuraField variant="orb" colors={palette} seed={33} />
         </div>
         <div className="mt-[18px] font-serif text-[34px] italic leading-none">
           {name || "Sin nombre"}
         </div>
+        {/* El @handle reemplaza al baclog.app/… (design t2). When the page is
+            live, the handle IS the path to it — the replaced "Ver perfil
+            público" row's job, kept without re-adding the row. */}
         <div className="mt-[10px] font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
-          {username ? `@${username} · baclog.app/${username}` : "reclama tu @handle"}
+          {publicUrl ? (
+            <Link
+              href={publicUrl}
+              title="Ver tu perfil público"
+              className="transition-colors hover:text-text"
+            >
+              @{username}
+            </Link>
+          ) : username ? (
+            `@${username}`
+          ) : (
+            <Link href="/settings" className="transition-colors hover:text-text">
+              reclama tu @handle
+            </Link>
+          )}
         </div>
       </div>
 
@@ -51,89 +89,110 @@ export function PerfilScreen({
         <Stat value={stats.obsesiones} label={plural(stats.obsesiones, "OBSESIÓN", "OBSESIONES")} />
       </div>
 
-      {/* Ajustes */}
+      {/* Tu gente (F3.10) — counts here, the LISTS are behind the rows and
+          only ever rendered for you (counts public, lists private). */}
       <div className="mb-[13px] mt-[30px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-        Ajustes
+        Tu gente
       </div>
       <div className="overflow-hidden rounded-[22px] bl-glass">
-        {/* Self-hides when already installed (client component). */}
-        <InstallAppRow divider />
-        <Row href="/settings" icon={<Pencil size={17} strokeWidth={1.8} />} label="Editar perfil" divider />
-        <Row href={handleHref} icon={<Share2 size={17} strokeWidth={1.8} />} label="Ver perfil público" />
+        <PeopleRow
+          href="/perfil/siguiendo"
+          icon={<FollowingGlyph />}
+          label="A quién sigues"
+          count={followCounts.following}
+          divider
+        />
+        <PeopleRow
+          href="/perfil/seguidores"
+          icon={<FollowersGlyph />}
+          label="Quién te sigue"
+          count={followCounts.followers}
+        />
       </div>
 
-      {/* Torre de control — admin-only (nav-reachability del portal /admin) */}
-      {isAdmin && (
+      {/* Tus backlogs — the same shelves a visitor sees on /u/{handle}. */}
+      {backlogs.length > 0 && (
         <>
-          <div className="mb-[13px] mt-[26px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-            Solo founder
+          <div className="mt-7 flex items-baseline justify-between">
+            <span className="font-mono text-xs uppercase tracking-[0.08em] text-text-3">
+              Tus backlogs
+            </span>
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3">
+              {backlogs.length} {plural(backlogs.length, "backlog", "backlogs")}
+            </span>
           </div>
-          <Link
-            href="/admin"
-            className="relative flex items-center gap-[13px] overflow-hidden rounded-[22px] bl-glass px-[15px] py-[14px] transition-colors hover:bg-white/[0.045]"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-bg">
-              <ControlTowerGlyph />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-sans text-[15px] font-semibold text-text">
-                Torre de control
-              </span>
-              <span className="mt-[3px] block font-mono text-[9.5px] uppercase tracking-[0.06em] text-text-3">
-                Solo tú lo ves · founder
-              </span>
-            </span>
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent" />
-            <ChevronRight size={18} className="shrink-0 text-text-3" />
-          </Link>
+          <div>
+            {backlogs.map((b) => (
+              <Link key={b.id} href={`/backlogs/${b.id}`} className="mt-3 block">
+                <ShelfCard
+                  name={b.name}
+                  itemCount={b.itemCount}
+                  paletteHex={b.paletteHex}
+                  seed={shelfSeed(b.id)}
+                />
+              </Link>
+            ))}
+          </div>
         </>
       )}
 
-      {/* Cerrar sesión */}
-      <form action={signOutAction} className="mt-[14px] overflow-hidden rounded-[22px] bl-glass">
-        <button
-          type="submit"
-          className="relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-[rgba(232,132,108,0.06)]"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[rgba(232,132,108,0.14)] text-[#E8846C]">
-            <LogOut size={17} strokeWidth={1.8} />
-          </span>
-          <span className="flex-1 font-sans text-[14.5px] font-semibold text-[#E8846C]">
-            Cerrar sesión
-          </span>
-        </button>
-      </form>
-
-      <div className="mt-[22px] text-center font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
+      <div className="mt-[26px] text-center font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
         Baclog · tu recibo de gusto
       </div>
     </main>
   );
 }
 
-/** Radar/tower glyph from the Torre de Control design (bespoke, not lucide). */
-function ControlTowerGlyph() {
+function PeopleRow({
+  href,
+  icon,
+  label,
+  count,
+  divider,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  divider?: boolean;
+}) {
   return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 16a8 8 0 0 1 16 0"
-        stroke="var(--accent)"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 16 16.6 10.8"
-        stroke="var(--accent)"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <circle cx="12" cy="16" r="1.7" fill="var(--accent)" />
-      <path
-        d="M7.2 14.2h.01M12 12.6h.01M16.8 14.2h.01"
-        stroke="var(--text-3)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+    <Link
+      href={href}
+      className={`relative flex items-center gap-[13px] px-[15px] py-[14px] transition-colors hover:bg-white/[0.045] ${
+        divider ? "border-b border-white/[0.07]" : ""
+      }`}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-text">
+        {icon}
+      </span>
+      <span className="flex-1 font-sans text-[14.5px] font-medium">{label}</span>
+      <span className="font-mono text-[13px] text-text-2">{count}</span>
+      <ChevronRight size={18} className="text-text-3" />
+    </Link>
+  );
+}
+
+/* Bespoke FILLED glyphs from the design (2a) — the feed glyph for "a quién
+   sigues", its mirrored two-heads sibling for "quién te sigue". */
+
+function FollowingGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="8" cy="12" r="4.2" />
+      <rect x="14.4" y="7.6" width="5.6" height="3.2" rx="1.6" />
+      <rect x="14.4" y="13.2" width="3.8" height="3.2" rx="1.6" />
+    </svg>
+  );
+}
+
+function FollowersGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <circle cx="9" cy="9" r="3.6" />
+      <path d="M3.4 18.6a5.6 5.6 0 0111.2 0z" />
+      <circle cx="17.6" cy="10.4" r="2.6" opacity=".55" />
+      <path d="M13.6 18.6a4 4 0 018 0z" opacity=".55" />
     </svg>
   );
 }
@@ -160,32 +219,5 @@ function Stat({
         {label}
       </div>
     </div>
-  );
-}
-
-function Row({
-  href,
-  icon,
-  label,
-  divider,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  divider?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`relative flex items-center gap-[13px] px-[15px] py-[14px] transition-colors hover:bg-white/[0.045] ${
-        divider ? "border-b border-white/[0.07]" : ""
-      }`}
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-text">
-        {icon}
-      </span>
-      <span className="flex-1 font-sans text-[14.5px] font-medium">{label}</span>
-      <ChevronRight size={18} className="text-text-3" />
-    </Link>
   );
 }

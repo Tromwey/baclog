@@ -440,6 +440,44 @@ export const itemReviews = pgTable(
   ],
 );
 
+// ---------- social module (F3.10 feed + follows) ----------
+
+/**
+ * F3.10 — one row per "A sigue a B". Unilateral (Letterboxd-style), only ever
+ * created toward a PUBLIC profile (followUserAction gates on isPublic), and
+ * deliberately kept when the followed account later goes private: the row turns
+ * inert because every feed/suggestion read re-gates on `users.isPublic` at
+ * query time, so nothing has to clean it up and re-publishing restores the
+ * follower's feed intact.
+ *
+ * The FEED ITSELF has no table. It is 100% derived (the F3.8 rule): a merge of
+ * backlog_item.added_at / user_item.status_changed_at / user_item.obsessed_at /
+ * item_review.created_at across followed users, read fresh per request in
+ * modules/social/queries.ts. No fan-out, no event log to backfill or GC.
+ */
+export const userFollows = pgTable(
+  "user_follow",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    followerUserId: text("follower_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followedUserId: text("followed_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // One follow per pair, ever — re-following is an upsert no-op.
+    uniqueIndex("user_follow_pair_unique").on(t.followerUserId, t.followedUserId),
+    // "Quién sigue a X" (counts + followers list). The unique above already
+    // serves "a quién sigue X" via its leftmost prefix.
+    index("user_follow_followed_idx").on(t.followedUserId),
+  ],
+);
+
 // ---------- links module (lazy-resolved deep-link cache — ADR-007) ----------
 
 export const mediaLinks = pgTable(
@@ -926,6 +964,17 @@ export const analyticsEvents = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   backlogs: many(backlogs),
   sessions: many(sessions),
+}));
+
+export const userFollowsRelations = relations(userFollows, ({ one }) => ({
+  follower: one(users, {
+    fields: [userFollows.followerUserId],
+    references: [users.id],
+  }),
+  followed: one(users, {
+    fields: [userFollows.followedUserId],
+    references: [users.id],
+  }),
 }));
 
 export const backlogsRelations = relations(backlogs, ({ one, many }) => ({

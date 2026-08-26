@@ -162,6 +162,13 @@
       "when": 1786595133360,
       "tag": "0022_item_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787726685451,
+      "tag": "0023_user_follows",
+      "breakpoints": true
     }
   ]
 }

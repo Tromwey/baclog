@@ -96,6 +96,8 @@ const RESERVED = new Set([
   "admin", "api", "app", "baclog", "backlogs", "blocked", "descubrir", "item",
   "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
   "u", "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
+  // F3.10 nav destination + /creditos (public credits page, was missing here).
+  "feed", "creditos",
 ]);
 
 /** F2.17 — claiming implies opting in to a public page (toggleable). */
