@@ -289,6 +289,26 @@ export const backlogs = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     vibe: text("vibe"),
+    /**
+     * F3.10.1 — per-backlog visibility, TWO independent axes that read as
+     * three states (Privado / Público / En tu perfil):
+     *
+     *   isPublic=false                  → private: the public URL 404s and the
+     *                                     feed's "agregó a X" events vanish.
+     *   isPublic=true, showOnProfile=false → public by direct link (shared
+     *                                     receipts keep working, feed events
+     *                                     keep their name) but off the profile.
+     *   both true (the default)        → the escaparate: listed on the profile.
+     *
+     * Container privacy only, on purpose: title-level state (obsessed /
+     * completed / reviews / the upcoming carousel) is per-user_item and stays
+     * governed by users.isPublic alone — hiding a SHELF never hides what you
+     * did with a TITLE. showOnProfile only means anything while isPublic is
+     * true; reads derive featured = isPublic AND showOnProfile, so an
+     * inconsistent row degrades safely.
+     */
+    isPublic: boolean("is_public").notNull().default(true),
+    showOnProfile: boolean("show_on_profile").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

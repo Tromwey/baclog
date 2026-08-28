@@ -35,6 +35,9 @@ export async function getPublicProfile(username: string) {
     .limit(1);
   if (!user) return null;
 
+  // F3.10.1 — the profile lists only the ESCAPARATE: public AND chosen for
+  // the profile. A public-but-unfeatured backlog stays reachable by direct
+  // link (getPublicBacklog below); a private one exists nowhere out here.
   const lists = await db
     .select({
       id: backlogs.id,
@@ -44,7 +47,13 @@ export async function getPublicProfile(username: string) {
     })
     .from(backlogs)
     .leftJoin(backlogItems, eq(backlogItems.backlogId, backlogs.id))
-    .where(eq(backlogs.userId, user.id))
+    .where(
+      and(
+        eq(backlogs.userId, user.id),
+        eq(backlogs.isPublic, true),
+        eq(backlogs.showOnProfile, true),
+      ),
+    )
     .groupBy(backlogs.id)
     .orderBy(desc(backlogs.createdAt));
 
@@ -144,6 +153,9 @@ export async function getPublicBacklog(username: string, backlogId: string) {
         eq(backlogs.id, backlogId),
         eq(users.username, username),
         eq(users.isPublic, true),
+        // F3.10.1 — a private backlog 404s identically to a nonexistent one,
+        // whatever the owner's account visibility says.
+        eq(backlogs.isPublic, true),
       ),
     )
     .limit(1);

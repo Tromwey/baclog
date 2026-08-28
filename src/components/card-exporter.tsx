@@ -24,6 +24,7 @@ export function CardExporter({
   publicUrl,
   eyebrow,
   subtitle,
+  noLinkNote = "Reclama tu username en Ajustes para que tu link viaje con la tarjeta.",
 }: {
   backlog: CardBacklog;
   style: CardStyle;
@@ -32,6 +33,9 @@ export function CardExporter({
   eyebrow?: string;
   /** One-line context under the eyebrow. */
   subtitle?: string;
+  /** Why no link travels — the default blames the missing username; F3.10.1
+   *  passes a private-backlog variant so the note never lies. */
+  noLinkNote?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fontsReady, setFontsReady] = useState(false);
@@ -142,7 +146,7 @@ export function CardExporter({
       </Button>
       {!publicUrl && (
         <p className="mt-2 max-w-[340px] shrink-0 text-center text-xs text-text-3">
-          Reclama tu username en Ajustes para que tu link viaje con la tarjeta.
+          {noLinkNote}
         </p>
       )}
 

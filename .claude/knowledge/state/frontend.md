@@ -21,7 +21,7 @@
 | `src/app/(app)/item/[catalogItemId]/` | Detalle de título y su `card` compartible |
 | `src/app/(app)/descubrir/` · `search/` · `para-ti/` · `recap/` | Descubrimiento, búsqueda, recos y recap |
 | `src/app/(app)/feed/` | F3.10: feed social (card 5-sabores, listas, vacíos 1b/1c, skeleton, error, búsqueda por @handle) |
-| `src/app/(app)/perfil/` · `settings/` | Perfil propio (F3.10: forma de perfil público + "Tu gente" + estantes; `siguiendo/`·`seguidores/`) y Ajustes (absorbió instalar/admin/cerrar sesión tras el chip) |
+| `src/app/(app)/perfil/` · `settings/` | Perfil propio (F3.10: forma de perfil público + "Tu gente" + escaparate de estantes; `edit-shelves.tsx` = hoja Privado/Público/Perfil por backlog F3.10.1; `siguiendo/`·`seguidores/`) y Ajustes (absorbió instalar/admin/cerrar sesión tras el chip) |
 | `src/app/(app)/admin/` | Torre de Control: `analytics`, `recos`, `salud`, `trafico`, `usuarios`, `palette-backfill` |
 | `src/app/(auth)/` | `login`, `verify`, `onboarding`, `blocked` |
 | `src/app/(marketing)/` | `waitlist`, `creditos` |

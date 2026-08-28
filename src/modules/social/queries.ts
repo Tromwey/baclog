@@ -207,7 +207,17 @@ export async function getFeedPage(
         users,
         and(eq(users.id, backlogItems.userId), publicAuthor),
       )
-      .innerJoin(backlogs, eq(backlogs.id, backlogItems.backlogId))
+      // F3.10.1 — an add to a PRIVATE backlog is not activity anyone gets to
+      // see: the whole event vanishes (not just the shelf name). Read-time
+      // join, so making a backlog private retracts its adds from every feed
+      // retroactively, and re-publishing restores them — derived, as always.
+      .innerJoin(
+        backlogs,
+        and(
+          eq(backlogs.id, backlogItems.backlogId),
+          eq(backlogs.isPublic, true),
+        ),
+      )
       .innerJoin(catalogItems, eq(catalogItems.id, backlogItems.catalogItemId))
       .where(
         and(
@@ -517,7 +527,9 @@ export async function getFollowSuggestions(
       })
       .from(backlogs)
       .innerJoin(users, and(eq(users.id, backlogs.userId), publicAuthor))
-      .where(inArray(backlogs.userId, ids))
+      // "N backlogs" on a suggestion card describes their PUBLIC presence —
+      // private shelves don't count toward it (F3.10.1).
+      .where(and(inArray(backlogs.userId, ids), eq(backlogs.isPublic, true)))
       .groupBy(backlogs.userId),
     db
       .select({
@@ -688,7 +700,13 @@ export async function getPeoplePage(
           .select({ userId: backlogs.userId, n: sql<number>`count(*)::int` })
           .from(backlogs)
           .innerJoin(users, and(eq(users.id, backlogs.userId), publicAuthor))
-          .where(inArray(backlogs.userId, publicIds))
+          // Public shelves only — same rule as the suggestion cards (F3.10.1).
+          .where(
+            and(
+              inArray(backlogs.userId, publicIds),
+              eq(backlogs.isPublic, true),
+            ),
+          )
           .groupBy(backlogs.userId)
       : Promise.resolve([]),
     // Followers hidden from the list above (no handle / private) — first page
