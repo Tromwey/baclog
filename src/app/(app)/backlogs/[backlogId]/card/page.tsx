@@ -31,7 +31,10 @@ export default async function CardPage({
   );
 
   // F3.5.7 — sharing a BACKLOG exports the RECEIPT (the typographic list of its
-  // items), directly, with no generic style picker.
+  // items), directly, with no generic style picker. F3.10.1: a PRIVATE
+  // backlog's URL 404s, so the link doesn't travel and the note says why —
+  // never a dead link on the viral surface.
+  const accountPublic = Boolean(user.username && user.isPublic);
   return (
     <CardExporter
       backlog={cardBacklog}
@@ -39,9 +42,14 @@ export default async function CardPage({
       eyebrow={cardBacklog.name}
       subtitle="tu backlog, como recibo"
       publicUrl={
-        user.username && user.isPublic
+        accountPublic && backlog.isPublic
           ? `https://baclog.app/${user.username}/${backlog.id}`
           : null
+      }
+      noLinkNote={
+        accountPublic && !backlog.isPublic
+          ? "Este backlog es privado — la tarjeta viaja sin link. Cámbialo en Perfil · Editar."
+          : undefined
       }
     />
   );

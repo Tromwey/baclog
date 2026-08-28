@@ -28,10 +28,15 @@ NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews
 `crossMediaRecoFeedback`, `llmCallLog`, `analyticsEvents`, `waitlistEntries`, `waitlistReferrals`,
 `recapSends`, `releaseNotices`, `reports`.
 
-Última migración: **0023 `user_follows`** (F3.10, aditiva-inocua — `user_follow` con unique
-`(follower, followed)` + índice en `followed`; **aplicada a la DB compartida el 2026-08-26**, antes
-del deploy del código, según el patrón de la casa). El feed social NO tiene tabla propia: se deriva
-(ver AGENTS.md).
+Últimas migraciones: **0023 `user_follows`** (F3.10, aditiva-inocua — `user_follow` con unique
+`(follower, followed)` + índice en `followed`) y **0024 `backlog_visibility`** (F3.10.1, aditiva —
+`backlog.is_public` + `backlog.show_on_profile`, ambas boolean NOT NULL DEFAULT true; "featured"
+se deriva como `is_public AND show_on_profile`, ver AGENTS.md). **Ambas aplicadas a la DB
+compartida el 2026-08-26**, antes del deploy del código, según el patrón de la casa. El feed social
+NO tiene tabla propia: se deriva (ver AGENTS.md).
+
+Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
+(escanean por `user_id` y ordenan); irrelevante a decenas de usuarios, revisar si el feed crece.
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.

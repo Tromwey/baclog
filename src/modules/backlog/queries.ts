@@ -25,6 +25,9 @@ export async function getBacklogsForUser(userId: string) {
       name: backlogs.name,
       vibe: backlogs.vibe,
       createdAt: backlogs.createdAt,
+      // F3.10.1 — visibility axes, for the profile's escaparate + edit sheet.
+      isPublic: backlogs.isPublic,
+      showOnProfile: backlogs.showOnProfile,
       itemCount: sql<number>`count(${backlogItems.id})::int`,
     })
     .from(backlogs)

@@ -41,6 +41,40 @@ export async function renameBacklogAction(backlogId: string, name: string) {
   return { ok: true as const };
 }
 
+/** The three states of F3.10.1, and how they land on the two boolean axes. */
+const VISIBILITY = {
+  private: { isPublic: false, showOnProfile: false },
+  public: { isPublic: true, showOnProfile: false },
+  featured: { isPublic: true, showOnProfile: true },
+} as const;
+
+export type BacklogVisibility = keyof typeof VISIBILITY;
+
+/**
+ * F3.10.1 — Privado / Público / En tu perfil, set from the profile's edit
+ * sheet. One action for the whole triad so the two columns can never be
+ * written inconsistently (featured always implies public). Revalidates the
+ * public tree too: making a backlog private must 404 its /u URL immediately.
+ */
+export async function setBacklogVisibilityAction(
+  backlogId: string,
+  visibility: BacklogVisibility,
+) {
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  const parsed = z.enum(["private", "public", "featured"]).safeParse(visibility);
+  if (!parsed.success) return { error: "invalid" as const };
+
+  await db
+    .update(backlogs)
+    .set({ ...VISIBILITY[parsed.data], updatedAt: new Date() })
+    .where(eq(backlogs.id, backlog.id));
+
+  revalidatePath("/perfil");
+  revalidatePath("/feed");
+  if (user.username) revalidatePath(`/u/${user.username}`, "layout");
+  return { ok: true as const };
+}
+
 export async function deleteBacklogAction(backlogId: string) {
   const { backlog } = await assertOwnsBacklog(backlogId);
   await db.delete(backlogs).where(eq(backlogs.id, backlog.id));

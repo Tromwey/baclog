@@ -7,6 +7,7 @@ import {
   ShelfCard,
   shelfSeed,
 } from "@/app/(app)/backlogs/backlog-shelf-card";
+import { EditShelves } from "./edit-shelves";
 import { ShareProfileChip } from "./share-profile-chip";
 
 /**
@@ -38,6 +39,8 @@ export function PerfilScreen({
     name: string;
     itemCount: number;
     paletteHex: string[];
+    isPublic: boolean;
+    showOnProfile: boolean;
   }[];
 }) {
   const publicUrl = username && isPublic ? `/u/${username}` : null;
@@ -110,31 +113,60 @@ export function PerfilScreen({
         />
       </div>
 
-      {/* Tus backlogs — the same shelves a visitor sees on /u/{handle}. */}
-      {backlogs.length > 0 && (
-        <>
-          <div className="mt-7 flex items-baseline justify-between">
-            <span className="font-mono text-xs uppercase tracking-[0.08em] text-text-3">
-              Tus backlogs
-            </span>
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3">
-              {backlogs.length} {plural(backlogs.length, "backlog", "backlogs")}
-            </span>
-          </div>
-          <div>
-            {backlogs.map((b) => (
-              <Link key={b.id} href={`/backlogs/${b.id}`} className="mt-3 block">
-                <ShelfCard
-                  name={b.name}
-                  itemCount={b.itemCount}
-                  paletteHex={b.paletteHex}
-                  seed={shelfSeed(b.id)}
-                />
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
+      {/* Tus backlogs — the ESCAPARATE (F3.10.1): only public backlogs chosen
+          for the profile, exactly what a visitor sees on /u/{handle}. The
+          full list (with Privado/Público/Perfil per shelf) lives behind
+          Editar; /backlogs stays the workbench with everything. */}
+      {backlogs.length > 0 &&
+        (() => {
+          const featured = backlogs.filter(
+            (b) => b.isPublic && b.showOnProfile,
+          );
+          return (
+            <>
+              <div className="mt-7 flex items-baseline justify-between">
+                <span className="font-mono text-xs uppercase tracking-[0.08em] text-text-3">
+                  Tus backlogs
+                </span>
+                <EditShelves backlogs={backlogs} />
+              </div>
+              {featured.length > 0 ? (
+                <div>
+                  {featured.map((b) => (
+                    <Link
+                      key={b.id}
+                      href={`/backlogs/${b.id}`}
+                      className="mt-3 block"
+                    >
+                      <ShelfCard
+                        name={b.name}
+                        itemCount={b.itemCount}
+                        paletteHex={b.paletteHex}
+                        seed={shelfSeed(b.id)}
+                      />
+                    </Link>
+                  ))}
+                  {backlogs.length > featured.length && (
+                    <div className="mt-3 text-center font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
+                      +{backlogs.length - featured.length}{" "}
+                      {plural(
+                        backlogs.length - featured.length,
+                        "backlog solo para ti",
+                        "backlogs solo para ti",
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-3 text-[13.5px] leading-[1.5] text-pretty text-text-2">
+                  Ninguno en tu perfil todavía — tus {backlogs.length}{" "}
+                  {plural(backlogs.length, "backlog vive", "backlogs viven")}{" "}
+                  solo para ti. Elige cuáles enseñar con Editar.
+                </p>
+              )}
+            </>
+          );
+        })()}
 
       <div className="mt-[26px] text-center font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
         Baclog · tu recibo de gusto
