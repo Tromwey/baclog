@@ -10,7 +10,9 @@ import {
 
 const paramsSchema = z.object({
   catalogItemId: z.string().uuid(),
-  service: z.enum(["spotify", "apple_music", "youtube_music"]).optional(),
+  service: z
+    .enum(["spotify", "apple_music", "youtube_music", "tidal"])
+    .optional(),
 });
 
 /**

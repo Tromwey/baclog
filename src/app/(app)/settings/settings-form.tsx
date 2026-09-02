@@ -15,6 +15,7 @@ const SERVICES = [
   { id: "spotify", label: "Spotify" },
   { id: "apple_music", label: "Apple Music" },
   { id: "youtube_music", label: "YouTube Music" },
+  { id: "tidal", label: "TIDAL" },
 ] as const;
 
 type ServiceId = (typeof SERVICES)[number]["id"];

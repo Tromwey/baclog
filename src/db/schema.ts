@@ -39,11 +39,13 @@ export const preferredServiceEnum = pgEnum("preferred_service", [
   "spotify",
   "apple_music",
   "youtube_music",
+  "tidal",
 ]);
 export const linkServiceEnum = pgEnum("link_service", [
   "spotify",
   "apple_music",
   "youtube_music",
+  "tidal",
   "netflix",
   "hulu",
   "disney_plus",

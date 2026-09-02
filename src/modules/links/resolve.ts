@@ -7,7 +7,7 @@ import { buildSearchFallback, buildVideoFallback } from "./fallback";
 import { resolveWithOdesli } from "./odesli";
 import { getWatchLink, tmdbWatchPageUrl } from "./providers";
 
-export type MusicService = "spotify" | "apple_music" | "youtube_music";
+export type MusicService = "spotify" | "apple_music" | "youtube_music" | "tidal";
 type LinkService = (typeof linkServiceEnum.enumValues)[number];
 
 /**

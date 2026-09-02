@@ -57,7 +57,7 @@ type PreferredService = (typeof preferredServiceEnum.enumValues)[number];
 
 export async function setPreferredServiceAction(service: PreferredService) {
   const user = await assertUser();
-  const valid = ["spotify", "apple_music", "youtube_music"] as const;
+  const valid = ["spotify", "apple_music", "youtube_music", "tidal"] as const;
   if (!valid.includes(service)) return { error: "invalid" as const };
   await db
     .update(users)

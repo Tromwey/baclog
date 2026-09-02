@@ -6,9 +6,10 @@ import type { ReviewAuthor } from "@/modules/reviews/types";
  * No "server-only": client components (feed list, follow lists) import these.
  */
 
-/** First page of the feed, and how many each "Ver más" adds. */
-export const FEED_PAGE_SIZE = 12;
-export const FEED_MORE_SIZE = 12;
+/** Events fetched per keyset chunk while assembling a page of CARDS. */
+export const FEED_EVENT_CHUNK = 24;
+/** Cards per feed page — a burst counts as ONE card (design v2). */
+export const FEED_CARDS_PER_PAGE = 12;
 
 /** Page size of the siguiendo/seguidores lists. */
 export const PEOPLE_PAGE_SIZE = 30;
@@ -25,6 +26,9 @@ export interface FeedEvent {
   /** `${kind}:${sourceRowId}` — unique across the union, and the keyset tiebreak. */
   id: string;
   kind: FeedEventKind;
+  /** ISO instant of the event — drives the time buckets that lift the gems
+   *  (feed v2) and re-encodes the keyset cursor at a page cut. */
+  at: string;
   /** Pre-formatted on the server ("hace 2 d") — same formatter as reviews. */
   when: string;
   author: ReviewAuthor;
@@ -47,6 +51,36 @@ export interface FeedEvent {
   hasSpoiler: boolean;
 }
 
+/**
+ * Feed v2 (design "Feed poblado v2", 2026-09-02): the feed renders CARDS,
+ * not events. Consecutive adds by the same author to the same backlog fold
+ * into one BURST; everything else is a single, at one of two densities the
+ * card component picks from the kind (obsessed/reviewed = gem, big; added/
+ * completed = compact, one row).
+ */
+export interface FeedBurst {
+  kind: "burst";
+  /** `burst:${newestEventId}` */
+  id: string;
+  author: ReviewAuthor;
+  /** Relative time of the NEWEST add in the run. */
+  when: string;
+  backlogName: string;
+  count: number;
+  /** "Película ×5 · Álbum ×2" — per media type, in run order of first sight. */
+  typeCounts: string;
+  /** Newest first — the cover strip and the expanded rows. */
+  items: FeedEvent[];
+}
+
+export interface FeedSingle {
+  kind: "single";
+  event: FeedEvent;
+}
+
+export type FeedCard = FeedBurst | FeedSingle;
+
+/** A page of raw events (the keyset primitive getFeedCards builds on). */
 export interface FeedPage {
   events: FeedEvent[];
   /** Opaque `${atIso}|${eventId}` cursor for the next page; null when done. */
@@ -56,12 +90,17 @@ export interface FeedPage {
   followingCount: number;
 }
 
-/**
- * A public profile offered in the feed's empty states. NOT `FollowSuggestion`:
+/** What /feed and "Ver más" actually render. */
+export interface FeedCardsPage {
+  cards: FeedCard[];
+  nextCursor: string | null;
+  followingCount: number;
+}
+
+/** A public profile offered in the feed's empty states. NOT `FollowSuggestion`:
  * modules/backlog/follow-suggestion.ts already exports that name for an
  * unrelated concept (an unreleased ALBUM to follow, F3.8 Novedades), and two
- * same-named exports one auto-import apart is how the wrong one gets picked.
- */
+ * same-named exports one auto-import apart is how the wrong one gets picked. */
 export interface SuggestedProfile {
   username: string;
   name: string;

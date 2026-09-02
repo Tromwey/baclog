@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getRenderInstant } from "@/modules/catalog/release";
 import {
-  getFeedPage,
+  getFeedCards,
   getFollowingPreview,
   getFollowSuggestions,
 } from "@/modules/social/queries";
@@ -27,20 +27,20 @@ export default async function FeedPage() {
   const now = await getRenderInstant();
   // One entry query: the feed page itself carries followingCount (it loads
   // the followed ids anyway), so the empty states don't pay extra counts.
-  const page = await getFeedPage(user.id, { now });
+  const page = await getFeedCards(user.id, { now });
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <ScreenHeader title="Tu feed" />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
-      ) : page.events.length === 0 ? (
+      ) : page.cards.length === 0 ? (
         <EmptyNoActivity
           userId={user.id}
           followingCount={page.followingCount}
         />
       ) : (
-        <FeedList initialEvents={page.events} initialCursor={page.nextCursor} />
+        <FeedList initialCards={page.cards} initialCursor={page.nextCursor} />
       )}
     </main>
   );
