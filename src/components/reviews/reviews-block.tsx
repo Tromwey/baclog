@@ -185,7 +185,7 @@ export function ReviewsBlock({
               {own.body}
             </p>
             <p className="mt-[10px] text-xs leading-[1.45] text-text-3">
-              Ya no aparece en el feed.{" "}
+              Ya no aparece en el feed, y editarla no la vuelve a publicar.{" "}
               <button
                 onClick={() => {
                   setError(null);
@@ -193,7 +193,7 @@ export function ReviewsBlock({
                 }}
                 className="text-accent"
               >
-                Puedes editarla y volver a enviarla.
+                Editarla
               </button>
             </p>
           </div>

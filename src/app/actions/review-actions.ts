@@ -57,10 +57,11 @@ export type SaveReviewResult =
  * check enforces the product rule that writing is UNLOCKED by reacting — a
  * verdict or an obsession, either one.
  *
- * Editing clears `hiddenAt`: a hidden review tells its author "puedes editarla
- * y volver a enviarla", so the edit has to actually re-publish it. The reports
- * that got it hidden stay on file (and stay resolved), so the queue keeps the
- * history and a repeat offender still reads as one.
+ * Editing does NOT touch `hiddenAt` (founder decision, 2026-09-02): a review
+ * moderation hid stays hidden however many times its author rewrites it — the
+ * only way back into the feed is Restaurar in the Torre. Anything else turns
+ * every edit into a free re-publish that skips the queue. The author-facing
+ * note (reviews-block.tsx) says exactly that, so the copy and the rule agree.
  */
 export async function saveReviewAction(input: {
   catalogItemId: string;
@@ -113,8 +114,6 @@ export async function saveReviewAction(input: {
           body: body.data,
           hasSpoiler,
           updatedAt: now,
-          hiddenAt: null,
-          hiddenByUserId: null,
         },
       });
   } catch (err) {
