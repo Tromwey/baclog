@@ -16,7 +16,7 @@ export default function FeedError({
 }) {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <ScreenHeader eyebrow="Feed" title="Tu feed" />
+      <ScreenHeader title="Tu feed" />
       <div className="px-4">
         <div className="rounded-[22px] bg-surface-1 p-[22px]">
           <div className="flex items-center gap-[9px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">

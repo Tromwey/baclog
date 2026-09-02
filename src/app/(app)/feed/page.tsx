@@ -31,7 +31,7 @@ export default async function FeedPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <ScreenHeader eyebrow="Feed" title="Tu feed" />
+      <ScreenHeader title="Tu feed" />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
       ) : page.events.length === 0 ? (

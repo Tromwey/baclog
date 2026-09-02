@@ -66,12 +66,28 @@ export function useHideNavDock(active: boolean) {
   }, [active, api]);
 }
 
-const DESTINATIONS: { href: string; label: string; Icon: () => ReactNode }[] = [
+const DESTINATIONS: {
+  href: string;
+  label: string;
+  Icon: () => ReactNode;
+  /** Extra prefixes that light this tab up — screens REACHED FROM it that
+   *  aren't under its path (founder call: /settings lives behind Perfil's
+   *  ajustes chip, so Perfil keeps the pill there). */
+  also?: string[];
+}[] = [
   { href: "/backlogs", label: "Backlogs", Icon: EstantesIcon },
   { href: "/descubrir", label: "Discover", Icon: DiscoverIcon },
   { href: "/feed", label: "Feed", Icon: FeedIcon },
-  { href: "/perfil", label: "Perfil", Icon: PerfilIcon },
+  { href: "/perfil", label: "Perfil", Icon: PerfilIcon, also: ["/settings"] },
 ];
+
+function destinationIndex(pathname: string): number {
+  return DESTINATIONS.findIndex(
+    (d) =>
+      pathname.startsWith(d.href) ||
+      d.also?.some((p) => pathname.startsWith(p)),
+  );
+}
 
 export function NavDock() {
   const pathname = usePathname();
@@ -89,7 +105,7 @@ export function NavDock() {
   // content-hugging: labels differ in width, so fractions won't do.
   const listRef = useRef<HTMLDivElement>(null);
   const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
-  const activeIndex = DESTINATIONS.findIndex((d) => pathname.startsWith(d.href));
+  const activeIndex = destinationIndex(pathname);
 
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -154,9 +170,7 @@ export function NavDock() {
               aria-current={active ? "page" : undefined}
               onClick={() => {
                 // Carousel direction: which way the destinations are ordered.
-                const from = DESTINATIONS.findIndex((d) =>
-                  pathname.startsWith(d.href),
-                );
+                const from = destinationIndex(pathname);
                 setNavDirection(from >= 0 && from !== i ? Math.sign(i - from) : 0);
               }}
               // 22px, not the 3-destination 28px: the fourth destination has

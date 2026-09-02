@@ -8,8 +8,7 @@ export default function Loading() {
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance">
       <div className="animate-pulse">
         <header className="px-4 pb-[26px] pt-[calc(24px+env(safe-area-inset-top))]">
-          <div className="h-2.5 w-28 rounded-full bg-surface-1" />
-          <div className="mt-3 h-8 w-40 rounded-xl bg-surface-1" />
+          <div className="h-8 w-40 rounded-xl bg-surface-1" />
         </header>
         <div className="flex flex-col gap-2 px-4">
           <SkeletonCard tall />

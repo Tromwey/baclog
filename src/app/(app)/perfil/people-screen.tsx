@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
 import { getFollowCounts, getPeoplePage } from "@/modules/social/queries";
-import { BackButton, MonoMeta } from "@/components/ui";
+import { BackButton } from "@/components/ui";
 import { PeopleList } from "./people-list";
 
 /**
@@ -27,8 +27,7 @@ export async function PeopleScreen({
         <BackButton href="/perfil" />
       </div>
       <header className="px-4 pb-5 pt-[18px]">
-        <MonoMeta>Baclog · Tu gente</MonoMeta>
-        <h1 className="mt-1 font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
+        <h1 className="font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
           {mode === "following" ? "A quién sigues" : "Quién te sigue"}
         </h1>
       </header>

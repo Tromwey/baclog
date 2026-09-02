@@ -19,10 +19,7 @@ export default async function SettingsPage() {
       <BackButton href="/perfil" />
 
       <header className="pb-2 pt-[18px]">
-        <div className="font-mono text-xs uppercase tracking-[0.08em] text-text-3">
-          Baclog · Ajustes
-        </div>
-        <h1 className="mt-1 font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em]">
+        <h1 className="font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em]">
           Ajustes
         </h1>
       </header>
