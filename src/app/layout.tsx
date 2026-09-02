@@ -71,6 +71,10 @@ export const viewport: Viewport = {
   // to real values — the floating dock/header math depends on it (default
   // "auto" leaves those insets at 0).
   viewportFit: "cover",
+  // Android Chrome: the keyboard RESIZES the layout viewport, so fixed sheets
+  // sit above it natively (and useKeyboardInset computes 0 — no double lift).
+  // iOS ignores this; there the sheet lifts itself via visualViewport.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

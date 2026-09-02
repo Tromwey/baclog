@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 
 /**
  * "Has this hydrated?" — false on the server, true in the browser.
@@ -58,6 +59,12 @@ export function Sheet({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
+  // iOS keyboard: the sheet is fixed against the LAYOUT viewport, which the
+  // keyboard does NOT shrink — without this lift, a sheet with an input ends
+  // up exactly underneath it (founder report, 2026-08-28). The container's
+  // bottom padding grows by the covered pixels, and max-h keeps a tall sheet
+  // from overflowing the top instead.
+  const keyboardInset = useKeyboardInset();
 
   // Escape closes, matching every other dismissible surface in the app.
   useEffect(() => {
@@ -87,14 +94,25 @@ export function Sheet({
           ? "items-end p-5 pb-[calc(20px+env(safe-area-inset-bottom))]"
           : "items-center p-6"
       }`}
+      style={
+        keyboardInset > 0
+          ? {
+              paddingBottom: bottom
+                ? `calc(${keyboardInset}px + 20px + env(safe-area-inset-bottom))`
+                : `calc(${keyboardInset}px + 24px)`,
+            }
+          : undefined
+      }
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={label}
         onClick={(e) => e.stopPropagation()}
-        className={`bl-sheet relative w-full max-w-md overflow-hidden rounded-[22px] ${
-          cover ? "shadow-[var(--shadow-card)]" : "shadow-[var(--shadow-glass)]"
+        className={`bl-sheet relative w-full max-w-md rounded-[22px] ${
+          cover
+            ? "overflow-hidden shadow-[var(--shadow-card)]"
+            : "max-h-full overflow-y-auto overflow-x-hidden shadow-[var(--shadow-glass)]"
         } ${surface}`}
       >
         {!cover && <div aria-hidden className="bl-grain" />}
