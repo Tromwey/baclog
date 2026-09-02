@@ -128,7 +128,14 @@ export async function avatarHexesFor(
 }
 
 /** `${iso}|${id}` keyset cursor codec — shared with the social module, so the
- *  two feeds can never disagree on the format. */
+ *  two feeds can never disagree on the format. BOTH halves live here: every
+ *  producer goes through encodeCursor, so a format change can't leave a stale
+ *  hand-built encoder behind (decodeCursor answers null to one, and a null
+ *  cursor silently re-serves page 1 forever). */
+export function encodeCursor(at: Date | string, id: string): string {
+  return `${typeof at === "string" ? at : at.toISOString()}|${id}`;
+}
+
 export function decodeCursor(
   cursor: string | null,
 ): { at: Date; id: string } | null {
@@ -237,7 +244,7 @@ export async function getReviewFeedPage(
     reviews,
     nextCursor:
       rows.length > limit && last
-        ? `${last.createdAt.toISOString()}|${last.id}`
+        ? encodeCursor(last.createdAt, last.id)
         : null,
   };
 }

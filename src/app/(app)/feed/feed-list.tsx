@@ -2,13 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { loadMoreFeedAction } from "@/app/actions/social-actions";
+import { LoadMoreButton } from "@/components/ui";
 import type { FeedCard } from "@/modules/social/types";
 import { FeedCardView } from "./feed-card";
 
 /**
  * F3.10 — the populated feed, as CARDS (v2). "Ver más" pages through the
  * server action with the keyset cursor the server re-encoded from the last
- * event the previous page consumed, so a burst never repeats or splits.
+ * event the previous page consumed, so a burst never repeats, and only splits
+ * when one run outgrows the whole chunk budget (see getFeedCards).
+ *
+ * A failed load keeps the cursor and SAYS so on the button: the route error
+ * boundary would remount the list and drop every page already read, and a
+ * silent retap is indistinguishable from the end of the feed.
  */
 export function FeedList({
   initialCards,
@@ -19,6 +25,7 @@ export function FeedList({
 }) {
   const [cards, setCards] = useState(initialCards);
   const [cursor, setCursor] = useState(initialCursor);
+  const [failed, setFailed] = useState(false);
   const [loading, startLoading] = useTransition();
 
   function loadMore() {
@@ -28,8 +35,9 @@ export function FeedList({
         const page = await loadMoreFeedAction({ cursor });
         setCards((prev) => [...prev, ...page.cards]);
         setCursor(page.nextCursor);
+        setFailed(false);
       } catch {
-        // Keep the cursor: the button stays, a retap retries.
+        setFailed(true);
       }
     });
   }
@@ -40,13 +48,11 @@ export function FeedList({
         <FeedCardView key={card.kind === "burst" ? card.id : card.event.id} card={card} />
       ))}
       {cursor && (
-        <button
+        <LoadMoreButton
           onClick={loadMore}
-          disabled={loading}
-          className="block w-full rounded-[14px] bg-surface-2 py-[13px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity disabled:opacity-50"
-        >
-          {loading ? "Cargando…" : "Ver más"}
-        </button>
+          loading={loading}
+          label={failed ? "No se pudo cargar · Reintentar" : "Ver más"}
+        />
       )}
     </div>
   );

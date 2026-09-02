@@ -28,6 +28,7 @@ import { formatCountdown, isUpcoming } from "@/modules/catalog/release";
 import {
   avatarHexesFor,
   decodeCursor,
+  encodeCursor,
   initialOf,
   markOf,
 } from "@/modules/reviews/queries";
@@ -35,17 +36,17 @@ import { FALLBACK_ADN, relativeWhen } from "@/modules/reviews/format";
 import {
   FEED_CARDS_PER_PAGE,
   FEED_EVENT_CHUNK,
+  FEED_MAX_CHUNKS,
   PEOPLE_PAGE_SIZE,
   type FeedCard,
   type FeedCardsPage,
   type FeedEvent,
   type FeedEventKind,
-  type FeedPage,
   type SuggestedProfile,
   type PeoplePage,
   type PersonRow,
 } from "./types";
-import { groupIntoCards, lastEventOf, liftGems } from "./group";
+import { closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
 
 /**
  * F3.10 — reads for the social feed and the follow graph.
@@ -121,6 +122,19 @@ export async function isFollowing(
 // ---------- the feed ----------
 
 /**
+ * A JS instant as a keyset parameter against a `timestamp` (no time zone)
+ * column. NEVER interpolate the raw Date: the driver serializes it in the
+ * process's LOCAL offset ("…T10:13:12-06:00") and a timestamp-without-tz
+ * comparison silently drops that offset — on any machine outside UTC the
+ * cursor lands hours off and a whole window of events vanishes from page 2.
+ * Column-bound operators (lt(col, date)) encode through the column and are
+ * fine; only raw `sql` templates need this. See learnings/2026-09-02.
+ */
+function atParam(d: Date) {
+  return sql`${d.toISOString()}::timestamp`;
+}
+
+/**
  * Branch keyset: strictly older, or same instant with a smaller composite id.
  *
  * `date_trunc('milliseconds', …)` on the SQL side is load-bearing: Postgres
@@ -137,7 +151,8 @@ function olderThan(
   after: { at: Date; id: string } | null,
 ) {
   if (!after) return undefined;
-  return sql`(date_trunc('milliseconds', ${atCol}) < ${after.at} or (date_trunc('milliseconds', ${atCol}) = ${after.at} and ${idExpr} < ${after.id}))`;
+  const at = atParam(after.at);
+  return sql`(date_trunc('milliseconds', ${atCol}) < ${at} or (date_trunc('milliseconds', ${atCol}) = ${at} and ${idExpr} < ${after.id}))`;
 }
 
 interface RawEvent {
@@ -153,6 +168,7 @@ interface RawEvent {
   byline: string | null;
   posterUrl: string | null;
   releaseDate: Date | null;
+  backlogId: string | null;
   backlogName: string | null;
   verdict: string | null;
   obsessed: boolean;
@@ -172,17 +188,27 @@ function waitingLabel(releaseDate: Date, now: number): string {
   return parts.phase === "live" ? "sale hoy" : parts.phrase;
 }
 
-export async function getFeedPage(
-  viewerId: string,
-  opts: { cursor?: string | null; limit?: number; now?: number } = {},
-): Promise<FeedPage> {
-  const limit = opts.limit ?? FEED_EVENT_CHUNK;
-  const now = opts.now ?? Date.now();
-  const after = decodeCursor(opts.cursor ?? null);
+interface FeedChunk {
+  events: FeedEvent[];
+  nextCursor: string | null;
+}
 
-  const ids = await getFollowedIds(viewerId);
-  if (ids.length === 0)
-    return { events: [], nextCursor: null, followingCount: 0 };
+/**
+ * One keyset chunk of events across the four branches, for an already
+ * resolved set of followed ids. Private on purpose: getFeedCards is the only
+ * reader, and it owns the two per-render invariants this used to recompute
+ * on every call — the follow graph (`ids`) and the authors' ADN hexes
+ * (`hexCache`, filled lazily, so a chunk only queries the authors it hasn't
+ * seen yet). Not the feed's public page shape: that is cards, never events.
+ */
+async function fetchFeedChunk(
+  ids: string[],
+  cursor: string | null,
+  now: number,
+  hexCache: Map<string, [string, string]>,
+): Promise<FeedChunk> {
+  const limit = FEED_EVENT_CHUNK;
+  const after = decodeCursor(cursor);
 
   // Each branch over-fetches a full page so the merge can be dominated by any
   // single kind and still fill up; limit+1 total is how hasMore is known.
@@ -204,6 +230,7 @@ export async function getFeedPage(
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
         releaseDate: catalogItems.releaseDate,
+        backlogId: backlogs.id,
         backlogName: backlogs.name,
       })
       .from(backlogItems)
@@ -360,6 +387,7 @@ export async function getFeedPage(
     ...completions.map((r) => ({
       ...r,
       kind: "completed" as const,
+      backlogId: null,
       backlogName: null,
       obsessed: false,
       body: null,
@@ -371,6 +399,7 @@ export async function getFeedPage(
         ...r,
         at: r.at!,
         kind: "obsessed" as const,
+        backlogId: null,
         backlogName: null,
         verdict: null,
         obsessed: true,
@@ -380,6 +409,7 @@ export async function getFeedPage(
     ...reviews.map((r) => ({
       ...r,
       kind: "reviewed" as const,
+      backlogId: null,
       backlogName: null,
       obsessed: r.obsessed ?? false,
     })),
@@ -394,7 +424,11 @@ export async function getFeedPage(
 
   const hasMore = raw.length > limit;
   const page = raw.slice(0, limit);
-  const hexes = await avatarHexesFor([...new Set(page.map((r) => r.userId))]);
+  const unseen = [...new Set(page.map((r) => r.userId))].filter(
+    (id) => !hexCache.has(id),
+  );
+  if (unseen.length > 0)
+    for (const [id, pair] of await avatarHexesFor(unseen)) hexCache.set(id, pair);
 
   const events: FeedEvent[] = page.map((r) => {
     const username = r.username ?? "";
@@ -406,7 +440,7 @@ export async function getFeedPage(
       author: {
         username,
         initial: initialOf(username),
-        avatarHexes: hexes.get(r.userId) ?? FALLBACK_ADN,
+        avatarHexes: hexCache.get(r.userId) ?? FALLBACK_ADN,
       },
       catalogItemId: r.catalogItemId,
       title: r.title,
@@ -419,6 +453,7 @@ export async function getFeedPage(
         r.kind === "added" && isUpcoming(r.releaseDate, now)
           ? waitingLabel(r.releaseDate!, now)
           : null,
+      backlogId: r.backlogId,
       backlogName: r.backlogName,
       // The verdict travels only on Completó/Reseñó; the obsession EVENT
       // carries its flame on the verb line, not as a mark.
@@ -437,9 +472,7 @@ export async function getFeedPage(
   const last = page.at(-1);
   return {
     events,
-    nextCursor:
-      hasMore && last ? `${last.at.toISOString()}|${eventIdOf(last)}` : null,
-    followingCount: ids.length,
+    nextCursor: hasMore && last ? encodeCursor(last.at, eventIdOf(last)) : null,
   };
 }
 
@@ -679,9 +712,9 @@ export async function getPeoplePage(
         identifiable,
         after
           ? or(
-              sql`date_trunc('milliseconds', ${userFollows.createdAt}) < ${after.at}`,
+              sql`date_trunc('milliseconds', ${userFollows.createdAt}) < ${atParam(after.at)}`,
               and(
-                sql`date_trunc('milliseconds', ${userFollows.createdAt}) = ${after.at}`,
+                sql`date_trunc('milliseconds', ${userFollows.createdAt}) = ${atParam(after.at)}`,
                 sql`${userFollows.id} < ${after.id}`,
               ),
             )
@@ -750,7 +783,7 @@ export async function getPeoplePage(
     privateCount: privateAgg[0]?.n ?? 0,
     nextCursor:
       rows.length > PEOPLE_PAGE_SIZE && last
-        ? `${last.at.toISOString()}|${last.followId}`
+        ? encodeCursor(last.at, last.followId)
         : null,
   };
 }
@@ -762,52 +795,52 @@ export async function getPeoplePage(
  * of consecutive adds by one author to one backlog is ONE burst card. Pages
  * count cards, not events — 12 cards may be 40 events.
  *
- * Built on the keyset event primitive above: chunks of events are pulled and
- * grouped until the page holds MORE than FEED_CARDS_PER_PAGE cards — that
- * strict ">" is what guarantees the 12th card is CLOSED (a 13th card exists
- * after it, so its run has ended) and a burst is never split across pages.
- * The next cursor is re-encoded from the last event the page actually
- * consumed, so "Ver más" resumes exactly after it. A pathological run longer
- * than the chunk budget is cut at the budget (the one case a burst splits).
+ * Built on the keyset chunk above: chunks of events are pulled and grouped
+ * until the page holds MORE than FEED_CARDS_PER_PAGE cards; then everything
+ * but the trailing OPEN run ships (closedPrefix). A card is closed once a
+ * later event broke its run, so a burst is never split across pages — and the
+ * page ships every closed card it already paid for instead of throwing them
+ * away to be re-fetched, so it's usually bigger than the minimum. The next
+ * cursor is re-encoded from the last event the page actually consumed, so
+ * "Ver más" resumes exactly after it. The one exception: a run longer than
+ * the whole chunk budget (FEED_EVENT_CHUNK × FEED_MAX_CHUNKS) is cut at the
+ * budget and continues as a second burst on the next page — bounded cost
+ * over a perfect card.
  *
  * Gems are lifted per page: a page reorders its own cards within each time
- * bucket, never across pages — good enough, and pages stay keyset-stable.
+ * bucket, never across pages. Re-lifting the accumulated list on the client
+ * would move cards the reader already scrolled past, so the seam between two
+ * pages is the lesser artifact — and bigger pages mean fewer seams.
  */
 export async function getFeedCards(
   viewerId: string,
   opts: { cursor?: string | null; now?: number } = {},
 ): Promise<FeedCardsPage> {
   const now = opts.now ?? Date.now();
-  const target = FEED_CARDS_PER_PAGE;
-  const MAX_CHUNKS = 6;
+  const ids = await getFollowedIds(viewerId);
+  if (ids.length === 0) return { cards: [], nextCursor: null, followingCount: 0 };
 
-  let cursor: string | null = opts.cursor ?? null;
-  let followingCount = 0;
-  let exhausted = false;
+  const hexCache = new Map<string, [string, string]>();
   const events: FeedEvent[] = [];
+  let cursor: string | null = opts.cursor ?? null;
+  let more = true; // events remain beyond `cursor`
   let cards: FeedCard[] = [];
 
-  for (let i = 0; i < MAX_CHUNKS; i++) {
-    const page = await getFeedPage(viewerId, { cursor, limit: FEED_EVENT_CHUNK, now });
-    followingCount = page.followingCount;
-    events.push(...page.events);
-    cursor = page.nextCursor;
+  for (let i = 0; i < FEED_MAX_CHUNKS; i++) {
+    const chunk = await fetchFeedChunk(ids, cursor, now, hexCache);
+    events.push(...chunk.events);
+    cursor = chunk.nextCursor;
+    more = cursor !== null;
     cards = groupIntoCards(events);
-    if (cards.length > target) break;
-    if (!cursor) {
-      exhausted = true;
-      break;
-    }
+    if (cards.length > FEED_CARDS_PER_PAGE || !more) break;
   }
 
-  const page = cards.slice(0, target);
-  const consumedAll = page.length === cards.length;
-  let nextCursor: string | null = null;
-  if (!(consumedAll && exhausted)) {
-    const last = lastEventOf(page);
-    // Nothing consumed (can't happen with events, but keep the type honest).
-    nextCursor = last ? `${last.at}|${last.id}` : cursor;
-  }
+  // The trailing run only stays open when more events exist AND the page
+  // filled — a budget cut ships it whole (see above); exhaustion closes it.
+  const cut = more && cards.length > FEED_CARDS_PER_PAGE;
+  const page = cut ? closedPrefix(cards) : cards;
+  const last = lastEventOf(page);
+  const nextCursor = more && last ? encodeCursor(last.at, last.id) : null;
 
-  return { cards: liftGems(page, now), nextCursor, followingCount };
+  return { cards: liftGems(page, now), nextCursor, followingCount: ids.length };
 }

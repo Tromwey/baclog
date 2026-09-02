@@ -11,9 +11,11 @@ import type { ReviewMark } from "./types";
  */
 
 const MINUTE = 60_000;
-const HOUR = 3_600_000;
-const DAY = 86_400_000;
-const WEEK = 7 * DAY;
+/** Exported so the feed's time buckets (modules/social/group.ts) and these
+ *  labels can never disagree on where "hoy" ends and "esta semana" begins. */
+export const HOUR = 3_600_000;
+export const DAY = 86_400_000;
+export const WEEK = 7 * DAY;
 
 /**
  * "ahora" · "hace 8 min" · "hace 3 h" · "hace 2 d" · "hace 3 sem" ·

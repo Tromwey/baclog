@@ -6,10 +6,19 @@ import type { ReviewAuthor } from "@/modules/reviews/types";
  * No "server-only": client components (feed list, follow lists) import these.
  */
 
-/** Events fetched per keyset chunk while assembling a page of CARDS. */
+/**
+ * The knobs that shape a feed page — kept together because they constrain
+ * each other: getFeedCards pulls chunks of FEED_EVENT_CHUNK events until the
+ * page holds MORE than FEED_CARDS_PER_PAGE cards, giving up after
+ * FEED_MAX_CHUNKS. So FEED_EVENT_CHUNK × FEED_MAX_CHUNKS (144) is the longest
+ * run of adds one burst can absorb before it is cut (and continues on the
+ * next page) — raise the page target and that budget has to grow with it.
+ */
 export const FEED_EVENT_CHUNK = 24;
-/** Cards per feed page — a burst counts as ONE card (design v2). */
+/** MINIMUM cards per feed page — a burst counts as ONE card (design v2). A
+ *  page ships every CLOSED card its chunks produced, so it's usually more. */
 export const FEED_CARDS_PER_PAGE = 12;
+export const FEED_MAX_CHUNKS = 6;
 
 /** Page size of the siguiendo/seguidores lists. */
 export const PEOPLE_PAGE_SIZE = 30;
@@ -42,7 +51,10 @@ export interface FeedEvent {
   /** "faltan 12 días" when the title is still unreleased — flips the card to
    *  its "No puede esperar" flavor. Null once it's out. */
   waiting: string | null;
-  /** The destination backlog — `added` events only. */
+  /** The destination backlog — `added` events only. The id is what bursts
+   *  key on (names aren't unique per user); it is also the public URL segment
+   *  (/u/{username}/{backlogId}) — the query already gates on isPublic. */
+  backlogId: string | null;
   backlogName: string | null;
   /** The author's mark, rendered at the metadata tier (never above it). */
   mark: "obsessed" | "liked" | "disliked" | null;
@@ -65,11 +77,10 @@ export interface FeedBurst {
   author: ReviewAuthor;
   /** Relative time of the NEWEST add in the run. */
   when: string;
+  backlogId: string;
   backlogName: string;
-  count: number;
-  /** "Película ×5 · Álbum ×2" — per media type, in run order of first sight. */
-  typeCounts: string;
-  /** Newest first — the cover strip and the expanded rows. */
+  /** Newest first — the cover strip and the expanded rows. The count and the
+   *  per-type tally are derived from this on render, never shipped twice. */
   items: FeedEvent[];
 }
 
@@ -80,20 +91,13 @@ export interface FeedSingle {
 
 export type FeedCard = FeedBurst | FeedSingle;
 
-/** A page of raw events (the keyset primitive getFeedCards builds on). */
-export interface FeedPage {
-  events: FeedEvent[];
+/** What /feed and "Ver más" actually render. */
+export interface FeedCardsPage {
+  cards: FeedCard[];
   /** Opaque `${atIso}|${eventId}` cursor for the next page; null when done. */
   nextCursor: string | null;
   /** How many people the viewer follows — rides along because the feed query
    *  already loads the ids, and the page's empty states branch on it. */
-  followingCount: number;
-}
-
-/** What /feed and "Ver más" actually render. */
-export interface FeedCardsPage {
-  cards: FeedCard[];
-  nextCursor: string | null;
   followingCount: number;
 }
 
