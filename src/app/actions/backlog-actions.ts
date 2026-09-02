@@ -71,6 +71,8 @@ export async function setBacklogVisibilityAction(
 
   revalidatePath("/perfil");
   revalidatePath("/feed");
+  // The taller's shelf list shows the lock on private backlogs.
+  revalidatePath("/backlogs");
   if (user.username) revalidatePath(`/u/${user.username}`, "layout");
   return { ok: true as const };
 }

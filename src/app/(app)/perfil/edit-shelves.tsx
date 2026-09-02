@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Pencil } from "lucide-react";
 import { Sheet } from "@/components/ui";
 import {
-  setBacklogVisibilityAction,
-  type BacklogVisibility,
-} from "@/app/actions/backlog-actions";
+  VisibilitySegments,
+  visibilityOf,
+} from "@/components/backlog-visibility-segments";
+import type { BacklogVisibility } from "@/app/actions/backlog-actions";
 import {
   ShelfCard,
   shelfSeed,
@@ -43,20 +44,6 @@ interface EditableBacklog {
   showOnProfile: boolean;
 }
 
-function visibilityOf(b: {
-  isPublic: boolean;
-  showOnProfile: boolean;
-}): BacklogVisibility {
-  if (!b.isPublic) return "private";
-  return b.showOnProfile ? "featured" : "public";
-}
-
-const STATES: { id: BacklogVisibility; label: string }[] = [
-  { id: "private", label: "Privado" },
-  { id: "public", label: "Público" },
-  { id: "featured", label: "Perfil" },
-];
-
 const FILTER_THRESHOLD = 8;
 
 /** Case- and accent-insensitive, so "cancion" finds "Canción". */
@@ -73,7 +60,6 @@ export function ShelvesSection({ backlogs }: { backlogs: EditableBacklog[] }) {
   const [states, setStates] = useState<Record<string, BacklogVisibility>>(() =>
     Object.fromEntries(backlogs.map((b) => [b.id, visibilityOf(b)])),
   );
-  const [, startSave] = useTransition();
   const dirty = useRef(false);
   const router = useRouter();
 
@@ -94,23 +80,6 @@ export function ShelvesSection({ backlogs }: { backlogs: EditableBacklog[] }) {
   const shown = filter.trim()
     ? backlogs.filter((b) => fold(b.name).includes(fold(filter)))
     : backlogs;
-
-  function setVisibility(backlogId: string, next: BacklogVisibility) {
-    const prev = states[backlogId];
-    if (prev === next) return;
-    setStates((s) => ({ ...s, [backlogId]: next }));
-    dirty.current = true;
-    startSave(async () => {
-      try {
-        const result = await setBacklogVisibilityAction(backlogId, next);
-        if ("error" in result) {
-          setStates((s) => ({ ...s, [backlogId]: prev }));
-        }
-      } catch {
-        setStates((s) => ({ ...s, [backlogId]: prev }));
-      }
-    });
-  }
 
   function close() {
     setOpen(false);
@@ -226,22 +195,14 @@ export function ShelvesSection({ backlogs }: { backlogs: EditableBacklog[] }) {
                       {b.itemCount} {plural(b.itemCount, "ítem", "ítems")}
                     </span>
                   </span>
-                  <span className="flex flex-none gap-1 rounded-full bg-surface-3 p-[3px]">
-                    {STATES.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => setVisibility(b.id, s.id)}
-                        aria-pressed={current === s.id}
-                        className={`rounded-full px-2 py-[6px] font-mono text-[8.5px] uppercase tracking-[0.06em] transition-colors ${
-                          current === s.id
-                            ? "bg-accent-soft text-accent"
-                            : "text-text-3 hover:text-text-2"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </span>
+                  <VisibilitySegments
+                    backlogId={b.id}
+                    initial={current}
+                    onSync={(next) => {
+                      dirty.current = true;
+                      setStates((s) => ({ ...s, [b.id]: next }));
+                    }}
+                  />
                 </div>
               );
             })}
