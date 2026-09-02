@@ -6,7 +6,7 @@ import "server-only";
  * somewhere useful.
  */
 export function buildSearchFallback(
-  service: "spotify" | "apple_music" | "youtube_music",
+  service: "spotify" | "apple_music" | "youtube_music" | "tidal",
   title: string,
   byline: string | null,
 ): string {
@@ -18,6 +18,8 @@ export function buildSearchFallback(
       return `https://music.apple.com/search?term=${q}`;
     case "youtube_music":
       return `https://music.youtube.com/search?q=${q}`;
+    case "tidal":
+      return `https://listen.tidal.com/search?q=${q}`;
   }
 }
 

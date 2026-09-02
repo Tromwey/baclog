@@ -7,15 +7,11 @@ import { assertUser } from "@/authz";
 import { db } from "@/db";
 import { userFollows, users } from "@/db/schema";
 import {
-  getFeedPage,
+  getFeedCards,
   getPeoplePage,
   publicAuthor,
 } from "@/modules/social/queries";
-import {
-  FEED_MORE_SIZE,
-  type FeedPage,
-  type PeoplePage,
-} from "@/modules/social/types";
+import type { FeedCardsPage, PeoplePage } from "@/modules/social/types";
 
 /**
  * F3.10 — the follow mutations and the feed's pagination endpoints. Both
@@ -102,15 +98,14 @@ export async function unfollowUserAction(
   return { ok: true };
 }
 
-/** "Ver más" on the feed — next keyset page for the caller's own follows. */
+/** "Ver más" on the feed — the next page of CARDS for the caller's own follows. */
 export async function loadMoreFeedAction(input: {
   cursor: string;
-}): Promise<FeedPage> {
+}): Promise<FeedCardsPage> {
   const user = await assertUser();
   const cursor = z.string().min(1).max(160).safeParse(input.cursor);
-  if (!cursor.success)
-    return { events: [], nextCursor: null, followingCount: 0 };
-  return getFeedPage(user.id, { cursor: cursor.data, limit: FEED_MORE_SIZE });
+  if (!cursor.success) return { cards: [], nextCursor: null, followingCount: 0 };
+  return getFeedCards(user.id, { cursor: cursor.data });
 }
 
 /** "Ver más" on the siguiendo/seguidores lists — always the caller's own. */

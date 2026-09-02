@@ -33,8 +33,11 @@ import {
 } from "@/modules/reviews/queries";
 import { FALLBACK_ADN, relativeWhen } from "@/modules/reviews/format";
 import {
-  FEED_PAGE_SIZE,
+  FEED_CARDS_PER_PAGE,
+  FEED_EVENT_CHUNK,
   PEOPLE_PAGE_SIZE,
+  type FeedCard,
+  type FeedCardsPage,
   type FeedEvent,
   type FeedEventKind,
   type FeedPage,
@@ -42,6 +45,7 @@ import {
   type PeoplePage,
   type PersonRow,
 } from "./types";
+import { groupIntoCards, lastEventOf, liftGems } from "./group";
 
 /**
  * F3.10 — reads for the social feed and the follow graph.
@@ -172,7 +176,7 @@ export async function getFeedPage(
   viewerId: string,
   opts: { cursor?: string | null; limit?: number; now?: number } = {},
 ): Promise<FeedPage> {
-  const limit = opts.limit ?? FEED_PAGE_SIZE;
+  const limit = opts.limit ?? FEED_EVENT_CHUNK;
   const now = opts.now ?? Date.now();
   const after = decodeCursor(opts.cursor ?? null);
 
@@ -397,6 +401,7 @@ export async function getFeedPage(
     return {
       id: eventIdOf(r),
       kind: r.kind,
+      at: r.at.toISOString(),
       when: relativeWhen(r.at, now),
       author: {
         username,
@@ -748,4 +753,61 @@ export async function getPeoplePage(
         ? `${last.at.toISOString()}|${last.followId}`
         : null,
   };
+}
+
+// ---------- feed v2: cards (bursts + singles), paged by CARDS ----------
+
+/**
+ * What /feed renders (design "Feed poblado v2"): a page of CARDS, where a run
+ * of consecutive adds by one author to one backlog is ONE burst card. Pages
+ * count cards, not events — 12 cards may be 40 events.
+ *
+ * Built on the keyset event primitive above: chunks of events are pulled and
+ * grouped until the page holds MORE than FEED_CARDS_PER_PAGE cards — that
+ * strict ">" is what guarantees the 12th card is CLOSED (a 13th card exists
+ * after it, so its run has ended) and a burst is never split across pages.
+ * The next cursor is re-encoded from the last event the page actually
+ * consumed, so "Ver más" resumes exactly after it. A pathological run longer
+ * than the chunk budget is cut at the budget (the one case a burst splits).
+ *
+ * Gems are lifted per page: a page reorders its own cards within each time
+ * bucket, never across pages — good enough, and pages stay keyset-stable.
+ */
+export async function getFeedCards(
+  viewerId: string,
+  opts: { cursor?: string | null; now?: number } = {},
+): Promise<FeedCardsPage> {
+  const now = opts.now ?? Date.now();
+  const target = FEED_CARDS_PER_PAGE;
+  const MAX_CHUNKS = 6;
+
+  let cursor: string | null = opts.cursor ?? null;
+  let followingCount = 0;
+  let exhausted = false;
+  const events: FeedEvent[] = [];
+  let cards: FeedCard[] = [];
+
+  for (let i = 0; i < MAX_CHUNKS; i++) {
+    const page = await getFeedPage(viewerId, { cursor, limit: FEED_EVENT_CHUNK, now });
+    followingCount = page.followingCount;
+    events.push(...page.events);
+    cursor = page.nextCursor;
+    cards = groupIntoCards(events);
+    if (cards.length > target) break;
+    if (!cursor) {
+      exhausted = true;
+      break;
+    }
+  }
+
+  const page = cards.slice(0, target);
+  const consumedAll = page.length === cards.length;
+  let nextCursor: string | null = null;
+  if (!(consumedAll && exhausted)) {
+    const last = lastEventOf(page);
+    // Nothing consumed (can't happen with events, but keep the type honest).
+    nextCursor = last ? `${last.at}|${last.id}` : cursor;
+  }
+
+  return { cards: liftGems(page, now), nextCursor, followingCount };
 }

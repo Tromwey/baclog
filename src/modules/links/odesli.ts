@@ -5,6 +5,7 @@ export interface OdesliLinks {
   spotify?: string;
   apple_music?: string;
   youtube_music?: string;
+  tidal?: string;
 }
 
 /**
@@ -29,8 +30,9 @@ export async function resolveWithOdesli(
     spotify: pick("spotify"),
     apple_music: pick("appleMusic") ?? pick("itunes"),
     youtube_music: pick("youtubeMusic") ?? pick("youtube"),
+    tidal: pick("tidal"),
   };
-  return links.spotify || links.apple_music || links.youtube_music
+  return links.spotify || links.apple_music || links.youtube_music || links.tidal
     ? links
     : null;
 }

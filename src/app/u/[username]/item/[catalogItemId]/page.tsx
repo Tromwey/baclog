@@ -289,6 +289,14 @@ export default async function PublicItemPage({
               >
                 Escuchar en YouTube Music
               </a>
+              {/* TIDAL's brand is black-on-black; on our dark ground the pill
+                  inverts to white so it reads as a peer of the other three. */}
+              <a
+                href={resolve("&service=tidal")}
+                className="block w-full rounded-full bg-white py-3.5 text-center font-sans font-semibold text-black transition-transform active:scale-[0.97]"
+              >
+                Escuchar en TIDAL
+              </a>
             </>
           ) : (
             // TMDB's own guidance for watch/providers data is "a reference on
