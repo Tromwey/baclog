@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import { AuraField } from "@/components/ui";
 import { plural } from "@/lib/plural";
 
@@ -19,12 +20,17 @@ export function ShelfCard({
   itemCount,
   paletteHex,
   seed,
+  locked = false,
 }: {
   name: string;
   itemCount: number;
   /** The backlog's ADN — dominant colors of its items (lima fallback). */
   paletteHex: string[];
   seed: number;
+  /** F3.10.1 — private backlog marker, IN-APP surfaces only (the taller and
+   *  nothing else: public pages never see a private shelf, and the profile's
+   *  escaparate is public-by-definition, so neither ever passes this). */
+  locked?: boolean;
 }) {
   return (
     // Base = the nav dock's glass (founder call): the blurred backdrop aura
@@ -39,8 +45,18 @@ export function ShelfCard({
       />
       {/* No backdrop-blur here: the chip already sits on the card's own glass,
           and a nested blur is a per-frame compositing cost for nothing. */}
-      <span className="relative self-end rounded-full bg-black/35 px-[9px] py-1 font-mono text-[9px] uppercase tracking-[0.06em] text-text">
-        {itemCount} {plural(itemCount, "ítem", "ítems")}
+      <span className="relative flex items-center gap-1.5 self-end">
+        {locked && (
+          <span
+            aria-label="Backlog privado"
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-black/35 text-text-2"
+          >
+            <Lock size={10} />
+          </span>
+        )}
+        <span className="rounded-full bg-black/35 px-[9px] py-1 font-mono text-[9px] uppercase tracking-[0.06em] text-text">
+          {itemCount} {plural(itemCount, "ítem", "ítems")}
+        </span>
       </span>
       <div className="relative font-serif text-[27px] italic leading-none text-text [text-shadow:0_1px_14px_rgba(0,0,0,0.55)]">
         {name}

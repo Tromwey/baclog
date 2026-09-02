@@ -33,6 +33,7 @@ export default async function BacklogsPage() {
     name: b.name,
     itemCount: b.itemCount,
     paletteHex: b.paletteHex,
+    isPublic: b.isPublic,
   }));
 
   return (
