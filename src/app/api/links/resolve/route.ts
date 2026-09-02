@@ -36,16 +36,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
+  // Vercel provides the viewer's country; local dev defaults to MX. Video
+  // caches per region (providers differ); music only scopes its search by it.
+  const region =
+    request.headers.get("x-vercel-ip-country")?.toUpperCase() ?? "MX";
+
   let target: string;
   if (item.mediaType === "album") {
     const user = await getCurrentUser();
     const service: MusicService =
       parsed.data.service ?? user?.preferredService ?? "spotify";
-    target = await resolveMusicLink(item, service);
+    target = await resolveMusicLink(item, service, region);
   } else {
-    // Vercel provides the viewer's country; local dev defaults to MX
-    const region =
-      request.headers.get("x-vercel-ip-country")?.toUpperCase() ?? "MX";
     target = await resolveVideoLink(item, region);
   }
 

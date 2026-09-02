@@ -28,6 +28,13 @@ export const env = {
   /** Optional: console mailer when absent (launch dep, founder-provided) */
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   /**
+   * Optional (link-out fase 2): TIDAL API client credentials. Absent → the
+   * TIDAL button degrades to the search deep link (not cached, so adding the
+   * keys later needs no purge). Founder-provided, Production AND Preview.
+   */
+  TIDAL_CLIENT_ID: process.env.TIDAL_CLIENT_ID,
+  TIDAL_CLIENT_SECRET: process.env.TIDAL_CLIENT_SECRET,
+  /**
    * Optional (F3.5.5): the cross-media reco engine has three providers behind
    * one interface — deterministic FIXTURE (default, no key: build/test never
    * blocks), Anthropic Claude, and Google Gemini (free tier). Provider is

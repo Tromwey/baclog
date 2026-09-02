@@ -24,6 +24,7 @@ En dev, los códigos OTP se imprimen en la consola del server (`[dev-mailer] OTP
 | `AUTH_SECRET` | ✅ | `openssl rand -base64 32` |
 | `TMDB_API_KEY` | opcional | Sin ella el catálogo de cine/series usa **fixtures** (la interfaz `VideoCatalog` intercambia la implementación sin tocar código) |
 | `RESEND_API_KEY` | opcional | Sin ella el OTP va a consola. Con ella, emails reales vía Resend |
+| `TIDAL_CLIENT_ID` · `TIDAL_CLIENT_SECRET` | opcional | Links exactos al álbum en TIDAL (API oficial, client credentials). Sin ellas el botón cae a la búsqueda dentro de TIDAL |
 
 ## Los 5 módulos (`src/modules/`)
 
@@ -31,7 +32,7 @@ Límites de monolito modular (ADR-010): extraer después es extracción, no rewr
 
 - **`catalog`** — búsqueda TMDB + iTunes, caché de metadatos en Postgres (`refreshed_at` ≤ 3 meses), imágenes siempre hotlinked (nunca proxeadas)
 - **`backlog`** — backlogs, ítems, estados, rating, eras mensuales (derivadas en lectura); `public.ts` = la única vía de lectura sin sesión (gateada por `isPublic`)
-- **`links`** — deep links lazy: Apple Music exacto desde el catálogo iTunes + búsqueda por servicio (música; Odesli murió 2026-07) + TMDB watch/providers (video) cacheados en `media_links`; fallback de búsqueda = nunca un tap muerto
+- **`links`** — deep links lazy: Apple Music exacto desde el catálogo iTunes, TIDAL exacto vía su API oficial con matching estricto (`resolvers/`), Spotify/YouTube Music por búsqueda (Odesli murió 2026-07) + TMDB watch/providers (video) cacheados en `media_links`; fallback de búsqueda = nunca un tap muerto
 - **`cards`** — render 100% client-side de tarjetas 1080×1920 (receipt/ticket/patrón); `CardItem` no tiene campo de imagen: los PNG exportados no pueden contener artwork (ADR-008)
 - **`recs`** — sugerencias content-based (TMDB /similar o match por género), presentadas como IA
 

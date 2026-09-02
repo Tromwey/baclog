@@ -5,6 +5,8 @@ import { linkServiceEnum, mediaLinks } from "@/db/schema";
 import type { CatalogItemRow } from "@/modules/catalog/cache";
 import { buildSearchFallback, buildVideoFallback } from "./fallback";
 import { getWatchLink, tmdbWatchPageUrl } from "./providers";
+import { resolveTidalAlbum } from "./resolvers/tidal";
+import type { ResolveOutcome } from "./resolvers/types";
 
 export type MusicService = "spotify" | "apple_music" | "youtube_music" | "tidal";
 type LinkService = (typeof linkServiceEnum.enumValues)[number];
@@ -20,18 +22,32 @@ type LinkService = (typeof linkServiceEnum.enumValues)[number];
  *   - apple_music: the catalog already stores the iTunes album page URL
  *     (`raw.collectionViewUrl`, track `?i=` stripped by itunes.ts) — exact,
  *     free, zero upstream calls.
- *   - spotify / youtube_music / tidal: search fallback until the per-service
- *     resolvers (brief "link-out post-Odesli", fase 2) land.
+ *   - tidal: official API search (client credentials) + confident matching
+ *     in resolvers/match.ts; no credentials / 429 / 5xx / timeout → the
+ *     search fallback is returned but NOT cached (next tap retries).
+ *   - spotify: search fallback (Web API needs a Premium developer account
+ *     since 2026-02; pending founder decision — see the brief).
+ *   - youtube_music: search fallback by design (no album API).
+ *
+ * `region` (viewer country, from x-vercel-ip-country) only scopes the
+ * upstream search; music links are cached region-less because album ids
+ * are global.
  */
 export async function resolveMusicLink(
   item: CatalogItemRow,
   service: MusicService,
+  region = "MX",
 ): Promise<string> {
   const cached = await getCached(item.id, service, null);
   if (cached) return cached;
 
-  const exact = resolveExactMusicUrl(item, service);
-  const url = exact ?? buildSearchFallback(service, item.title, item.byline);
+  const outcome = await resolveExactMusic(item, service, region);
+  const fallback = buildSearchFallback(service, item.title, item.byline);
+  // Transient upstream trouble: serve the floor, keep the cache empty so
+  // the next tap gets another shot at the exact link.
+  if (outcome.kind === "unavailable") return fallback;
+
+  const url = outcome.kind === "exact" ? outcome.url : fallback;
   await db
     .insert(mediaLinks)
     .values({
@@ -39,29 +55,48 @@ export async function resolveMusicLink(
       service,
       region: null,
       url,
-      isSearchFallback: exact === null,
+      isSearchFallback: outcome.kind !== "exact",
     })
     .onConflictDoNothing();
   return url;
 }
 
-/** Exact album URL for `service` when we can get one without an upstream
- *  call; null means "no exact link known" → search fallback. */
-function resolveExactMusicUrl(
+/** Per-service exact album link. `none` = confidently no exact link (cache
+ *  the fallback); `unavailable` = don't cache, retry on the next tap. */
+async function resolveExactMusic(
   item: CatalogItemRow,
   service: MusicService,
-): string | null {
-  if (service !== "apple_music") return null;
+  region: string,
+): Promise<ResolveOutcome> {
+  switch (service) {
+    case "apple_music":
+      return appleMusicFromCatalog(item);
+    case "tidal":
+      return resolveTidalAlbum(
+        { title: item.title, byline: item.byline, year: item.year },
+        region,
+      );
+    case "spotify":
+    case "youtube_music":
+      return { kind: "none" };
+  }
+}
+
+/** The catalog already stores the iTunes album page — exact, free, no
+ *  upstream call. Host-checked so a malformed `raw` can't redirect anywhere. */
+function appleMusicFromCatalog(item: CatalogItemRow): ResolveOutcome {
   const raw = item.raw as { collectionViewUrl?: string } | null;
   const url = raw?.collectionViewUrl;
-  if (!url) return null;
+  if (!url) return { kind: "none" };
   try {
     const host = new URL(url).hostname;
-    if (host !== "music.apple.com" && !host.endsWith(".apple.com")) return null;
+    if (host !== "music.apple.com" && !host.endsWith(".apple.com")) {
+      return { kind: "none" };
+    }
   } catch {
-    return null;
+    return { kind: "none" };
   }
-  return url;
+  return { kind: "exact", url };
 }
 
 export async function resolveVideoLink(

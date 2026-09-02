@@ -34,7 +34,7 @@
 | `src/app/api/cron/recap/` | Job del recap |
 | `src/modules/backlog/` | `queries.ts`, `public.ts`, `palette.ts`, `lenses.ts`, `era.ts`, `status.ts`, `recap.ts` |
 | `src/modules/catalog/` | TMDB (`tmdb.ts`, `tmdb.fixtures.ts`), iTunes, `search.ts`, `cache.ts`, `display-media.ts` |
-| `src/modules/links/` | `resolve.ts` (música: Apple Music exacto desde `catalog_item.raw.collectionViewUrl`, cero upstream; Spotify/YouTube Music/TIDAL → búsqueda hasta fase 2 del brief `requerimientos/brief-link-out-post-odesli.md`; Odesli retiró su API 2026-07-31 y se eliminó), `providers.ts` (video TMDB), `fallback.ts` (piso "nunca un link muerto", `is_search_fallback`) |
+| `src/modules/links/` | `resolve.ts` (`resolveMusicLink(item, service, region)`: cache `media_link` → despacho por servicio → piso de búsqueda; `ResolveOutcome` exact/none/**unavailable** — unavailable NO cachea para que el siguiente tap reintente), `resolvers/tidal.ts` (API oficial v2 JSON:API, client credentials `TIDAL_CLIENT_ID/SECRET`, token en memoria, `searchResults?include=albums,albums.artists` + `/albums?filter[id]` si faltan créditos), `resolvers/match.ts` (puro: título Y artistas iguales tras normalizar, sin containment; guardrail `scripts/check-album-match.ts`), Apple Music exacto desde `catalog_item.raw.collectionViewUrl` (cero upstream), Spotify/YouTube Music → búsqueda. Odesli retiró su API 2026-07-31 y se eliminó. Brief: `~/Documents/Baclog/requerimientos/brief-link-out-post-odesli.md`; learning `2026-09-02-tidal-search-endpoint-y-fold-latino.md` |
 | `src/modules/analytics/` | `capture.ts`, `aggregate.ts` |
 | `src/modules/growth/` | `waitlist.ts`, `founder.ts` |
 | `src/modules/admin/` | Torre de Control: `guard.ts`, `metrics.ts`, `checks.ts`, `costs.ts` |
@@ -47,9 +47,13 @@
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
+- **Link-out de música: un resolver por servicio, fail-open al piso de búsqueda (2026-09-02).** Odesli («una llamada trae todo») murió; ahora cada servicio resuelve solo y un fallo transitorio (sin key, 429/5xx, timeout) devuelve la búsqueda SIN cachearla. Un link exacto equivocado es peor que una búsqueda: el matcher exige título y artistas iguales, nunca containment.
+- **Spotify se queda en búsqueda profunda por ahora (2026-09-02).** Desde 2026-02 la Web API en Development Mode exige cuenta Premium del desarrollador, 1 Client ID y uso «no comercial»; la app quedó sin crear, pendiente de decisión del founder. YouTube Music no tiene API de álbumes: búsqueda por diseño.
+- **Los links de música se cachean sin región** aunque la búsqueda de TIDAL use `countryCode` del viewer: los ids de álbum son globales; la disponibilidad por país es problema de la página de TIDAL, no nuestro.
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->
+- Hay `catalog_item` de tipo álbum cuyo `title` es una pista (p. ej. «Black Boy (Alternative)») y cuyo `collectionViewUrl` apunta al álbum contenedor (*Drowning*): Apple Music aterriza bien, pero el matcher de TIDAL no encontrará un álbum con ese título → búsqueda. Costo: menos links exactos; arreglo real = normalizar el catálogo al importar.
