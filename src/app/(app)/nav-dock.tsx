@@ -6,6 +6,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -81,6 +82,39 @@ export function NavDock() {
   // stays as an opt-in for any future ephemeral case.
   const hidden = useContext(HiddenCtx);
 
+  // The active pill is a SINGLE measured indicator that slides between
+  // destinations on navigation (founder ask, 2026-08-28) instead of each Link
+  // painting its own bg — a one-shot transition, which §7 allows (pulses are
+  // what's banned). Measured (offsetLeft/offsetWidth) because the pill is
+  // content-hugging: labels differ in width, so fractions won't do.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
+  const activeIndex = DESTINATIONS.findIndex((d) => pathname.startsWith(d.href));
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      // Routes outside the four destinations (/settings, /recap…) keep the
+      // dock but have no active tab: the indicator fades away instead of
+      // parking on a wrong one.
+      if (activeIndex < 0) {
+        setPill(null);
+        return;
+      }
+      const el = list.querySelectorAll("a")[activeIndex] as
+        | HTMLElement
+        | undefined;
+      if (el) setPill({ x: el.offsetLeft, w: el.offsetWidth });
+    };
+    // First run happens pre-paint (useLayoutEffect), so the mount shows the
+    // pill already in place — only NAVIGATIONS animate. Re-measure on resize:
+    // the per-item padding steps at the 390px breakpoint.
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeIndex]);
+
   // Hard route boundary (see the doc comment above): the Torre de Control
   // (/admin) is a whole different screen, so the dock returns null — no
   // post-hydration fade, no flash on a hard load.
@@ -95,14 +129,24 @@ export function NavDock() {
           Active destination = dark inner pill + lima glyph (HANDOFF §7 — never
           a lima background). */}
       <div
-        className={`bl-dock-glass flex gap-1.5 rounded-full p-1.5 shadow-[0_14px_44px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[opacity,transform] duration-300 ease-out ${
+        ref={listRef}
+        className={`bl-dock-glass relative flex gap-1.5 rounded-full p-1.5 shadow-[0_14px_44px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"
             : "pointer-events-auto translate-y-0 opacity-100"
         }`}
       >
+        {/* The sliding active pill. Absolutely positioned under the Links
+            (they're `relative`, so they paint above it). */}
+        {pill && (
+          <span
+            aria-hidden
+            className="absolute bottom-1.5 left-0 top-1.5 rounded-full bg-black/40 transition-[transform,width] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
+            style={{ transform: `translateX(${pill.x}px)`, width: pill.w }}
+          />
+        )}
         {DESTINATIONS.map(({ href, label, Icon }, i) => {
-          const active = pathname.startsWith(href);
+          const active = i === activeIndex;
           return (
             <Link
               key={href}
@@ -120,8 +164,8 @@ export function NavDock() {
               // (F3.10 design 1j — 349px wide, was 317). Below 390 (iPhone
               // SE1, page zoom) even 22px overflows a centered fixed pill, so
               // narrow viewports drop to 14px instead of clipping the ends.
-              className={`flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 min-[390px]:px-[22px] ${
-                active ? "bg-black/40 text-accent" : "text-text-3"
+              className={`relative flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 transition-colors duration-300 min-[390px]:px-[22px] ${
+                active ? "text-accent" : "text-text-3"
               }`}
             >
               <Icon />
