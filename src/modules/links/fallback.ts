@@ -19,7 +19,7 @@ export function buildSearchFallback(
     case "youtube_music":
       return `https://music.youtube.com/search?q=${q}`;
     case "tidal":
-      return `https://listen.tidal.com/search?q=${q}`;
+      return `https://tidal.com/search?q=${q}`;
   }
 }
 

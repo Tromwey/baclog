@@ -33,7 +33,13 @@ NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews
 `backlog.is_public` + `backlog.show_on_profile`, ambas boolean NOT NULL DEFAULT true; "featured"
 se deriva como `is_public AND show_on_profile`, ver AGENTS.md). **Ambas aplicadas a la DB
 compartida el 2026-08-26**, antes del deploy del código, según el patrón de la casa. El feed social
-NO tiene tabla propia: se deriva (ver AGENTS.md).
+NO tiene tabla propia: se deriva (ver AGENTS.md). **0025 `tidal_service`** (2026-09-02, aditiva —
+`ALTER TYPE ... ADD VALUE 'tidal'` en `preferred_service` y `link_service`; el cuarto servicio de
+música junto a Spotify/Apple Music/YouTube Music). Los valores del enum viven en CUATRO listas que
+hay que mantener a mano al agregar un servicio: `schema.ts` (ambos enums), el `z.enum` de
+`api/links/resolve/route.ts`, el `valid` de `setPreferredServiceAction`, y la unión
+`MusicService`/`buildSearchFallback` en `modules/links/` — más los `SERVICES` de onboarding/settings
+y los botones de `u/[username]/item/`.
 
 Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
 (escanean por `user_id` y ordenan); irrelevante a decenas de usuarios, revisar si el feed crece.
