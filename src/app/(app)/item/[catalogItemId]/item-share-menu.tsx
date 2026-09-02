@@ -110,7 +110,7 @@ export function ItemShareMenu({
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)}>
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bl-rise absolute right-4 top-[calc(72px+env(safe-area-inset-top))] w-52 overflow-hidden rounded-[20px] bg-surface-2/90 py-1.5 text-sm shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
+              className="bl-rise bl-dock-glass absolute right-4 top-[calc(72px+env(safe-area-inset-top))] w-52 overflow-hidden rounded-[20px] py-1.5 text-sm shadow-[var(--shadow-glass)]"
             >
               <button
                 onClick={onLink}
@@ -134,7 +134,7 @@ export function ItemShareMenu({
 
       {toast &&
         createPortal(
-          <p className="bl-rise fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full bg-surface-2/90 px-4 py-2 text-xs text-text-2 backdrop-blur-[28px]">
+          <p className="bl-rise bl-dock-glass fixed left-1/2 top-[calc(72px+env(safe-area-inset-top))] z-50 -translate-x-1/2 rounded-full px-4 py-2 text-xs text-text-2 shadow-[var(--shadow-glass)]">
             {toast}
           </p>,
           document.body,

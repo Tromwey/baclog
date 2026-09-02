@@ -131,7 +131,7 @@ export function ItemMoreMenu({
             <div
               role="menu"
               onClick={(e) => e.stopPropagation()}
-              className="bl-rise fixed min-w-[230px] rounded-[18px] bg-surface-2 p-1.5 shadow-[var(--shadow-card)]"
+              className="bl-rise bl-dock-glass fixed min-w-[230px] rounded-[18px] p-1.5 shadow-[var(--shadow-glass)]"
               style={{ top: pos.top, right: pos.right }}
             >
               <button
