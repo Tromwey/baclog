@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
+import { LoadMoreButton } from "@/components/ui";
 import { FollowButton } from "@/components/follow-button";
 import { loadMorePeopleAction } from "@/app/actions/social-actions";
 import { plural } from "@/lib/plural";
@@ -77,13 +78,7 @@ export function PeopleList({
       )}
 
       {cursor && (
-        <button
-          onClick={loadMore}
-          disabled={loading}
-          className="mt-0.5 block w-full rounded-[14px] bg-surface-2 py-[13px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity disabled:opacity-50"
-        >
-          {loading ? "Cargando…" : "Ver más"}
-        </button>
+        <LoadMoreButton onClick={loadMore} loading={loading} className="mt-0.5" />
       )}
     </div>
   );

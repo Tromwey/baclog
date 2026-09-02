@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Sheet } from "@/components/ui";
+import { Sheet, LoadMoreButton } from "@/components/ui";
 import {
   loadMoreReviewsAction,
   reportReviewAction,
@@ -104,13 +104,12 @@ export function ReviewFeed({
       </div>
 
       {cursor && (
-        <button
+        <LoadMoreButton
           onClick={loadMore}
-          disabled={loading}
-          className="mt-[10px] block w-full rounded-[14px] bg-surface-2 py-[13px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity disabled:opacity-50"
-        >
-          {loading ? "Cargando…" : "Ver más reseñas"}
-        </button>
+          loading={loading}
+          label="Ver más reseñas"
+          className="mt-[10px]"
+        />
       )}
 
       {target && (

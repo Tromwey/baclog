@@ -42,7 +42,14 @@ hay que mantener a mano al agregar un servicio: `schema.ts` (ambos enums), el `z
 y los botones de `u/[username]/item/`.
 
 Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
-(escanean por `user_id` y ordenan); irrelevante a decenas de usuarios, revisar si el feed crece.
+(escanean por `user_id` y ordenan). Costo por página de `/feed` (feed v2): 1 query de ids seguidos + por
+chunk 4 ramas en paralelo (`limit+1` = 25 filas cada una) + 1 query de ADN solo para autores no vistos;
+lo normal es 1 chunk (3 saltos serie), el techo es `FEED_MAX_CHUNKS` = 6 chunks (una ráfaga de >144 adds
+se corta ahí). Irrelevante a decenas de usuarios, revisar si el feed crece.
+
+Regla de queries: un instante JS en un template `sql\`…\`` va SIEMPRE como `toISOString()::timestamp`
+(`atParam` en `modules/social/queries.ts`), nunca como `Date` crudo — el driver lo serializa con el offset
+local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date-crudo-…).
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.
