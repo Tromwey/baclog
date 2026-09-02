@@ -21,7 +21,10 @@ import type { FeedEvent } from "@/modules/social/types";
  */
 export function FeedCard({ event }: { event: FeedEvent }) {
   const profileHref = `/u/${event.author.username}`;
-  const itemHref = `/u/${event.author.username}/item/${event.catalogItemId}`;
+  // Straight to the viewer's OWN item page: the feed is a signed-in surface,
+  // and the public item page now redirects sessions there anyway — linking
+  // through it would just add a server hop per tap.
+  const itemHref = `/item/${event.catalogItemId}`;
   const isAlbum = event.mediaType === "album";
   // Server contract: `waiting` is only ever set on `added` events (queries.ts).
   const waiting = event.waiting;

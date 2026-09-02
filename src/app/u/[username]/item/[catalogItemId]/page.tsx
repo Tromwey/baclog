@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getCurrentUser } from "@/auth";
 import { Music, Play } from "lucide-react";
 import {
   getPublicCatalogItem,
@@ -77,6 +78,22 @@ export default async function PublicItemPage({
 }) {
   const { username, catalogItemId } = await params;
   const { from } = await searchParams;
+
+  // Founder call (2026-08-28): a SIGNED-IN viewer opening a shared item link
+  // gets their OWN item page — the app knows their preferred service, their
+  // backlogs and their reactions, so the generic every-service conversion
+  // splash is strictly worse for them. This page stays what F2.19 built it to
+  // be: the anonymous visitor's landing.
+  //
+  // The redirect runs BEFORE any owner lookup and unconditionally on session,
+  // so it confirms nothing about the username (private, nonexistent and
+  // public all redirect identically — no enumeration oracle); /item/[id]
+  // itself is session-gated and 404s unknown catalog ids. Deliberate trade:
+  // the owner auditing "what does my public page look like" loses item-level
+  // preview while signed in (their profile/backlog previews still work).
+  const viewer = await getCurrentUser();
+  if (viewer) redirect(`/item/${catalogItemId}`);
+
   // ?from carries the origin backlog (set when navigating from a public backlog)
   // so back returns there, not to the profile. Validated to a bare id so it
   // can't inject into the href; absent/invalid (a shared item deep-link) → the
