@@ -39,9 +39,12 @@ function useHydrated(): boolean {
  *
  * SURFACE (founder call 2026-08-28): bottom and center wear the DOCK's glass
  * (bl-dock-glass + --shadow-glass) so every floating control in the app is
- * the same material — the scrim behind them keeps text legible over anything.
- * `cover` stays opaque: artwork needs a solid backing to read against, and
- * the grain overlay is skipped there for the same reason.
+ * the same material. The scrim behind is a LIGHT dim only — no backdrop-blur
+ * and no heavy darkening (founder correction, same day): the glass IS the
+ * modal, and it only reads as glass when live content stays visible behind it
+ * for the panel's own blur to transluce — exactly how the dock earns its look
+ * over the auras. `cover` stays opaque: artwork needs a solid backing to read
+ * against, and the grain overlay is skipped there for the same reason.
  *
  * Borderless and glow-free by construction (HANDOFF §7): the only depth is a
  * dark neutral shadow (exempt).
@@ -89,7 +92,7 @@ export function Sheet({
   return createPortal(
     <div
       onClick={onClose}
-      className={`bl-fade-in fixed inset-0 z-50 flex justify-center bg-[rgba(4,4,6,0.66)] backdrop-blur-[6px] ${
+      className={`bl-fade-in fixed inset-0 z-50 flex justify-center bg-[rgba(4,4,6,0.32)] ${
         bottom
           ? "items-end p-5 pb-[calc(20px+env(safe-area-inset-bottom))]"
           : "items-center p-6"
