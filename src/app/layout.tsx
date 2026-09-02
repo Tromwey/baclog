@@ -3,7 +3,7 @@ import {
   Bricolage_Grotesque,
   Hanken_Grotesk,
   Instrument_Serif,
-  Space_Mono,
+  Red_Hat_Mono,
 } from "next/font/google";
 import "./globals.css";
 
@@ -28,10 +28,18 @@ const hanken = Hanken_Grotesk({
   variable: "--font-hanken",
   display: "swap",
 });
-const spaceMono = Space_Mono({
+/**
+ * The UI's data voice (founder call, 2026-08-28): Red Hat Mono — humanist
+ * terminals, same monospace DNA, without Space Mono's thermal-printer edge.
+ * Space Mono is NOT gone: it stays the ink of the exportable cards
+ * (receipt/ticket/J-card), loaded as a real document font via the
+ * fonts.googleapis <link> below because the canvas rasterizer needs it by
+ * family name, not CSS var.
+ */
+const redHatMono = Red_Hat_Mono({
   subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-space-mono",
+  weight: ["400", "500", "700"],
+  variable: "--font-red-hat-mono",
   display: "swap",
 });
 
@@ -73,7 +81,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${spaceMono.variable}`}
+      className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${redHatMono.variable}`}
     >
       <head>
         {/* This Next build's `appleWebApp: { capable: true }` only emits the

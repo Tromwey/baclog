@@ -144,12 +144,14 @@
   --radius-full: var(--r-full);
 
   /* Fonts — next/font sets these CSS vars on <html> (see layout.tsx).
-     Space Mono is loaded as a real document font for the canvas cards,
-     so it also stays available as a plain family name. */
+     The UI data voice is Red Hat Mono (founder call, 2026-08-28: Space Mono
+     read too mechanical in-app). Space Mono is still loaded as a real
+     document font for the exportable cards — the receipt/ticket ink — which
+     reference it by family name (cards/render/fonts.ts, double-feature). */
   --font-display: var(--font-bricolage), system-ui, sans-serif;
   --font-serif: var(--font-instrument-serif), Georgia, serif;
   --font-sans: var(--font-hanken), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-space-mono), "Space Mono", ui-monospace, monospace;
+  --font-mono: var(--font-red-hat-mono), "Red Hat Mono", ui-monospace, monospace;
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
