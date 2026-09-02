@@ -4,7 +4,7 @@ import type { CheckStatus } from "@/modules/admin/checks";
 /**
  * Torre de Control — shared presentation primitives (Claude Design
  * "Torre de Control.dc.html"). All server-safe: flat surface fills, no
- * borders/glows (HANDOFF §7), Space Mono as the instrument voice.
+ * borders/glows (HANDOFF §7), Red Hat Mono as the instrument voice.
  */
 
 export const STATUS_TEXT_CLASS: Record<CheckStatus, string> = {

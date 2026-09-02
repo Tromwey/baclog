@@ -9,7 +9,10 @@
  * root layout also loads them via a plain <link> stylesheet kept in sync here.
  */
 
-/** Space Mono — receipt/ticket/archive "data voice". */
+/** Space Mono — the exportable cards' thermal-printer ink. Deliberately NOT
+ *  the UI's --font-mono (Red Hat Mono since 2026-08-28): a card is a printed
+ *  object and keeps its own voice; the document <link> in layout.tsx is what
+ *  keeps this family loadable by name for the canvas. */
 export const MONO = (size: number, bold = false) =>
   `${bold ? "700" : "400"} ${size}px "Space Mono", monospace`;
 

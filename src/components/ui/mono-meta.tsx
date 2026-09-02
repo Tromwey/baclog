@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef } from "react";
 
 /**
- * mono-meta label (sistema-diseno §3). The "data voice": Space Mono,
+ * mono-meta label (sistema-diseno §3). The "data voice": Red Hat Mono,
  * UPPERCASE, wide tracking. This is the ONLY place uppercase is allowed —
  * it makes caps feel systemic (timestamps, status labels, receipt headers),
  * never decorative. Defaults to text-3 (metadata/watermark tier).
