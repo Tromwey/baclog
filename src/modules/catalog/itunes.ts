@@ -14,7 +14,7 @@ interface ItunesCollection {
   primaryGenreName?: string;
   artworkUrl100?: string;
   /** Apple Music deep link. On a song result it points at the track
-   *  (`?i=trackId`); link resolution (resolve.ts → Odesli) wants the album. */
+   *  (`?i=trackId`); link resolution (resolve.ts, Apple Music exact link) wants the album. */
   collectionViewUrl?: string;
 }
 

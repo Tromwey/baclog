@@ -4,17 +4,24 @@ import { db } from "@/db";
 import { linkServiceEnum, mediaLinks } from "@/db/schema";
 import type { CatalogItemRow } from "@/modules/catalog/cache";
 import { buildSearchFallback, buildVideoFallback } from "./fallback";
-import { resolveWithOdesli } from "./odesli";
 import { getWatchLink, tmdbWatchPageUrl } from "./providers";
 
 export type MusicService = "spotify" | "apple_music" | "youtube_music" | "tidal";
 type LinkService = (typeof linkServiceEnum.enumValues)[number];
 
 /**
- * F2.11–F2.13 lazy resolution: cache hit → redirect; miss → one upstream
- * call fans out to every service we learn about → cached forever (taps 2+
- * are cache hits, respecting Odesli's shared free tier). Never returns a
- * dead link: search fallback is the floor, cached with isSearchFallback.
+ * F2.11–F2.13 lazy resolution: cache hit → redirect; miss → resolve the
+ * service and cache the answer forever (taps 2+ are cache hits). Never
+ * returns a dead link: the search deep link is the floor, cached with
+ * isSearchFallback so a later, better resolver can be told apart from it.
+ *
+ * Odesli (the old "one call brings every platform" upstream) retired its
+ * public API on 2026-07-31, so exact links are now resolved per service:
+ *   - apple_music: the catalog already stores the iTunes album page URL
+ *     (`raw.collectionViewUrl`, track `?i=` stripped by itunes.ts) — exact,
+ *     free, zero upstream calls.
+ *   - spotify / youtube_music / tidal: search fallback until the per-service
+ *     resolvers (brief "link-out post-Odesli", fase 2) land.
  */
 export async function resolveMusicLink(
   item: CatalogItemRow,
@@ -23,42 +30,38 @@ export async function resolveMusicLink(
   const cached = await getCached(item.id, service, null);
   if (cached) return cached;
 
-  const raw = item.raw as { collectionViewUrl?: string } | null;
-  const sourceUrl = raw?.collectionViewUrl;
-  if (sourceUrl) {
-    const links = await resolveWithOdesli(sourceUrl).catch(() => null);
-    if (links) {
-      const rows = (
-        Object.entries(links) as [MusicService, string | undefined][]
-      )
-        .filter((e): e is [MusicService, string] => Boolean(e[1]))
-        .map(([svc, url]) => ({
-          catalogItemId: item.id,
-          service: svc,
-          region: null,
-          url,
-          isSearchFallback: false,
-        }));
-      if (rows.length > 0) {
-        await db.insert(mediaLinks).values(rows).onConflictDoNothing();
-      }
-      if (links[service]) return links[service];
-    }
-  }
-
-  // No exact match → cache the search deep link so we never re-hit Odesli
-  const fallback = buildSearchFallback(service, item.title, item.byline);
+  const exact = resolveExactMusicUrl(item, service);
+  const url = exact ?? buildSearchFallback(service, item.title, item.byline);
   await db
     .insert(mediaLinks)
     .values({
       catalogItemId: item.id,
       service,
       region: null,
-      url: fallback,
-      isSearchFallback: true,
+      url,
+      isSearchFallback: exact === null,
     })
     .onConflictDoNothing();
-  return fallback;
+  return url;
+}
+
+/** Exact album URL for `service` when we can get one without an upstream
+ *  call; null means "no exact link known" → search fallback. */
+function resolveExactMusicUrl(
+  item: CatalogItemRow,
+  service: MusicService,
+): string | null {
+  if (service !== "apple_music") return null;
+  const raw = item.raw as { collectionViewUrl?: string } | null;
+  const url = raw?.collectionViewUrl;
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname;
+    if (host !== "music.apple.com" && !host.endsWith(".apple.com")) return null;
+  } catch {
+    return null;
+  }
+  return url;
 }
 
 export async function resolveVideoLink(

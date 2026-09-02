@@ -27,8 +27,6 @@ export const env = {
   TMDB_API_KEY: process.env.TMDB_API_KEY,
   /** Optional: console mailer when absent (launch dep, founder-provided) */
   RESEND_API_KEY: process.env.RESEND_API_KEY,
-  /** Optional: Odesli keyless free tier when absent */
-  ODESLI_API_KEY: process.env.ODESLI_API_KEY,
   /**
    * Optional (F3.5.5): the cross-media reco engine has three providers behind
    * one interface — deterministic FIXTURE (default, no key: build/test never

@@ -34,7 +34,7 @@
 | `src/app/api/cron/recap/` | Job del recap |
 | `src/modules/backlog/` | `queries.ts`, `public.ts`, `palette.ts`, `lenses.ts`, `era.ts`, `status.ts`, `recap.ts` |
 | `src/modules/catalog/` | TMDB (`tmdb.ts`, `tmdb.fixtures.ts`), iTunes, `search.ts`, `cache.ts`, `display-media.ts` |
-| `src/modules/links/` | `odesli.ts`, `providers.ts`, `resolve.ts`, `fallback.ts` |
+| `src/modules/links/` | `resolve.ts` (música: Apple Music exacto desde `catalog_item.raw.collectionViewUrl`, cero upstream; Spotify/YouTube Music/TIDAL → búsqueda hasta fase 2 del brief `requerimientos/brief-link-out-post-odesli.md`; Odesli retiró su API 2026-07-31 y se eliminó), `providers.ts` (video TMDB), `fallback.ts` (piso "nunca un link muerto", `is_search_fallback`) |
 | `src/modules/analytics/` | `capture.ts`, `aggregate.ts` |
 | `src/modules/growth/` | `waitlist.ts`, `founder.ts` |
 | `src/modules/admin/` | Torre de Control: `guard.ts`, `metrics.ts`, `checks.ts`, `costs.ts` |
