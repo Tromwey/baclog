@@ -62,6 +62,11 @@
   /* Sombra — profundidad OSCURA únicamente (HANDOFF §7: sin glow;
      el aura es la única fuente de luz). */
   --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.55);
+  /* The dock's depth: dark drop + the 1px inner highlight that sells the
+     glass edge. Founder call 2026-08-28: every modal/popup wears the dock's
+     glass, so they share this shadow too (dark neutral depth — §7 exempt). */
+  --shadow-glass: 0 14px 44px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

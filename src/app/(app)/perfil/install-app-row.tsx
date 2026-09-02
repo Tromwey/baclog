@@ -138,7 +138,7 @@ function InstructionSheet({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bl-rise w-full max-w-md rounded-t-[22px] bg-surface-1 p-5 pb-[calc(28px+env(safe-area-inset-bottom))]"
+        className="bl-rise bl-dock-glass w-full max-w-md rounded-t-[22px] p-5 pb-[calc(28px+env(safe-area-inset-bottom))] shadow-[var(--shadow-glass)]"
       >
         <div className="flex items-start justify-between">
           <h2 className="font-display text-lg font-bold tracking-[-0.01em]">

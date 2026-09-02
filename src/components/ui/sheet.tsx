@@ -29,18 +29,21 @@ function useHydrated(): boolean {
  * so a `fixed` sheet rendered inside it gets trapped UNDER the floating dock
  * (AGENTS.md). Portaling is the fix; never lower the dock's z-index.
  *
- * Three variants, and the difference carries meaning:
- * - `bottom` (default) — routine sheets: pick something, name something. Opaque
- *   surface, floating clear of the screen edges, thumb-reachable.
- * - `center` — the rare celebration. Glass (the system's --glass tokens),
- *   centered, so it reads as an event rather than a control.
- * - `cover` — centered and opaque, with NO padding: for a sheet whose first
- *   child is full-bleed artwork (F3.8 Novedades). The child owns its own
- *   insets. Glass is wrong here — art needs an opaque backing to read against,
- *   and the grain overlay is skipped for the same reason.
+ * Three variants:
+ * - `bottom` (default) — routine sheets: pick something, name something.
+ *   Floating clear of the screen edges, thumb-reachable.
+ * - `center` — the rare celebration: centered, so it reads as an event.
+ * - `cover` — centered, with NO padding: for a sheet whose first child is
+ *   full-bleed artwork (F3.8 Novedades). The child owns its own insets.
  *
- * Borderless and glow-free by construction (HANDOFF §7): the only depth is the
- * dark --shadow-card.
+ * SURFACE (founder call 2026-08-28): bottom and center wear the DOCK's glass
+ * (bl-dock-glass + --shadow-glass) so every floating control in the app is
+ * the same material — the scrim behind them keeps text legible over anything.
+ * `cover` stays opaque: artwork needs a solid backing to read against, and
+ * the grain overlay is skipped there for the same reason.
+ *
+ * Borderless and glow-free by construction (HANDOFF §7): the only depth is a
+ * dark neutral shadow (exempt).
  */
 export function Sheet({
   onClose,
@@ -71,10 +74,10 @@ export function Sheet({
   const cover = variant === "cover";
 
   const surface = bottom
-    ? "bg-surface-1 p-[22px]"
+    ? "bl-dock-glass p-[22px]"
     : cover
       ? "bg-surface-1"
-      : "bg-[var(--glass-bg)] p-6 backdrop-blur-[20px] backdrop-saturate-[1.4]";
+      : "bl-dock-glass p-6";
 
   return createPortal(
     <div
@@ -90,7 +93,9 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         onClick={(e) => e.stopPropagation()}
-        className={`bl-sheet relative w-full max-w-md overflow-hidden rounded-[22px] shadow-[var(--shadow-card)] ${surface}`}
+        className={`bl-sheet relative w-full max-w-md overflow-hidden rounded-[22px] ${
+          cover ? "shadow-[var(--shadow-card)]" : "shadow-[var(--shadow-glass)]"
+        } ${surface}`}
       >
         {!cover && <div aria-hidden className="bl-grain" />}
         <div className={cover ? undefined : "relative"}>{children}</div>

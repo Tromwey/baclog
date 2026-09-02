@@ -64,7 +64,7 @@ export function BacklogMenu({
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bl-rise absolute right-4 top-[calc(72px+env(safe-area-inset-top))] overflow-hidden rounded-[20px] bg-surface-2/90 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
+              className="bl-rise bl-dock-glass absolute right-4 top-[calc(72px+env(safe-area-inset-top))] overflow-hidden rounded-[20px] shadow-[var(--shadow-glass)]"
             >
               {mode === "menu" && (
                 <div className="w-60 py-1.5 text-sm">
