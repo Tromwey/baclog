@@ -33,6 +33,11 @@ export function SuggestionCard({ s }: { s: SuggestedProfile }) {
         <FollowButton username={s.username} initialFollowing={false} />
       </div>
       {s.covers.length > 0 && (
+        // ONE band height, native WIDTHS (founder call 2026-08-28): a mixed
+        // strip of 54×81 posters and 54×54 albums stair-stepped; equal height
+        // with the width carrying the aspect (poster 36px = exact 2:3, album
+        // 54px) reads as one shelf — and never cross-crops a cover, the same
+        // fixed-row criterion the backlog rows follow.
         <div className="flex items-end gap-1.5">
           {s.covers.map((c, i) => (
             // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
@@ -40,8 +45,8 @@ export function SuggestionCard({ s }: { s: SuggestedProfile }) {
               key={i}
               src={c.posterUrl}
               alt=""
-              className={`w-[54px] flex-none rounded-lg object-cover ${
-                c.mediaType === "album" ? "h-[54px]" : "h-[81px]"
+              className={`h-[54px] flex-none rounded-lg object-cover ${
+                c.mediaType === "album" ? "w-[54px]" : "w-9"
               }`}
             />
           ))}
