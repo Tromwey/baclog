@@ -8,6 +8,8 @@ export interface Shelf {
   itemCount: number;
   /** The backlog's ADN — dominant colors of its items (lima fallback). */
   paletteHex: string[];
+  /** F3.10.1 — false shows the lock: state visible where you work. */
+  isPublic: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function BacklogShelves({ shelves }: { shelves: Shelf[] }) {
             itemCount={sh.itemCount}
             paletteHex={sh.paletteHex}
             seed={shelfSeed(sh.id)}
+            locked={!sh.isPublic}
           />
         </Link>
       ))}
