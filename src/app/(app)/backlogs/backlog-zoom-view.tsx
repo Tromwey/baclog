@@ -61,7 +61,15 @@ export function BacklogZoomView({
   now,
   zoom = false,
 }: {
-  backlog: { id: string; name: string; vibe: string | null; createdAt: Date };
+  backlog: {
+    id: string;
+    name: string;
+    vibe: string | null;
+    createdAt: Date;
+    // F3.10.1 — feeds the ⋯ menu's Visibilidad triad.
+    isPublic: boolean;
+    showOnProfile: boolean;
+  };
   items: BacklogItemWithCatalog[];
   /** The backlog's ADN (dominant hexes). Ignored while the backlog is empty. */
   paletteHex: string[];
@@ -117,6 +125,8 @@ export function BacklogZoomView({
                 backlogId={backlog.id}
                 currentName={backlog.name}
                 hasItems={hasItems}
+                isPublic={backlog.isPublic}
+                showOnProfile={backlog.showOnProfile}
               />
             </div>
           </>

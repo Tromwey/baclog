@@ -3,31 +3,44 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   deleteBacklogAction,
   renameBacklogAction,
 } from "@/app/actions/backlog-actions";
+import {
+  VisibilitySegments,
+  visibilityOf,
+} from "@/components/backlog-visibility-segments";
 
 /**
- * The zoom hero's ⋯ menu: Compartir (ticket) · Renombrar · Eliminar. Panels
- * portal to <body> so they escape the (app) content wrapper's stacking context
- * and sit ABOVE the dock (see new-backlog-button.tsx / AGENTS.md) — the dock
- * stays visible on zoom screens, so an in-place panel would slide under it.
+ * The zoom hero's ⋯ menu: Visibilidad (F3.10.1, the same triad as the
+ * profile's escaparate sheet — you're standing in the backlog, so you can
+ * decide its visibility right here) · Compartir (ticket) · Renombrar ·
+ * Eliminar. Panels portal to <body> so they escape the (app) content wrapper's
+ * stacking context and sit ABOVE the dock (see new-backlog-button.tsx /
+ * AGENTS.md) — the dock stays visible on zoom screens, so an in-place panel
+ * would slide under it.
  */
 export function BacklogMenu({
   backlogId,
   currentName,
   hasItems = false,
+  isPublic,
+  showOnProfile,
 }: {
   backlogId: string;
   currentName: string;
   hasItems?: boolean;
+  isPublic: boolean;
+  showOnProfile: boolean;
 }) {
   const [mode, setMode] = useState<"closed" | "menu" | "rename" | "delete">(
     "closed",
   );
   const [name, setName] = useState(currentName);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   return (
     <>
@@ -54,7 +67,22 @@ export function BacklogMenu({
               className="bl-rise absolute right-4 top-[calc(72px+env(safe-area-inset-top))] overflow-hidden rounded-[20px] bg-surface-2/90 shadow-[var(--shadow-card)] backdrop-blur-[28px] backdrop-saturate-[1.25]"
             >
               {mode === "menu" && (
-                <div className="w-48 py-1.5 text-sm">
+                <div className="w-60 py-1.5 text-sm">
+                  <div className="px-4 pb-2.5 pt-2">
+                    <div className="font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
+                      Visibilidad
+                    </div>
+                    <VisibilitySegments
+                      backlogId={backlogId}
+                      initial={visibilityOf({ isPublic, showOnProfile })}
+                      className="mt-2 w-fit"
+                      // The /backlogs list behind the zoom shows the lock —
+                      // refresh so it reacts without leaving the screen.
+                      onSync={() => router.refresh()}
+                    />
+                  </div>
+                  {/* Content hairline divider (AGENTS §7 exempt). */}
+                  <div className="mx-4 mb-1 h-px bg-white/[0.07]" />
                   {hasItems && (
                     <Link
                       href={`/backlogs/${backlogId}/card`}
