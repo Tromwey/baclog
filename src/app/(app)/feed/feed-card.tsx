@@ -285,11 +285,15 @@ function Hero({
           className="absolute inset-x-0 bottom-0 h-40"
           style={{ background: "linear-gradient(to bottom, rgba(11,11,13,0), var(--bg))" }}
         />
-        {/* The art fades into the page bg over its last 160px (founder call
-            2026-09-03: the mock's hard bottom edge read as a cut). Under the
-            word panel, whose translucent gradient lets it through. Same
-            color at alpha 0, never `transparent` (dark-fringe rule). */}
-        <span aria-hidden className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-bg/0 to-bg" />
+        {/* The art fades into the page bg over its last 224px (founder call
+            2026-09-03: the mock's hard bottom edge read as a cut, and a 160px
+            linear ramp still did — this one eases in and reaches bg sooner).
+            Under the word panel, whose translucent gradient lets it through.
+            Same color at alpha 0, never `transparent` (dark-fringe rule). */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-bg/0 via-bg/70 via-55% to-bg"
+        />
         <Link
           href={itemHref(event.catalogItemId)}
           aria-label={event.title}
