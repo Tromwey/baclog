@@ -31,6 +31,12 @@ import { FeedGlow } from "./feed-glow";
  *  - COMPACT — a lone add, a "no puede esperar", a completion: 124px cover
  *              on the LEFT, handle + verb, serif 24 title, meta · when.
  *
+ * Every card is its own stacking context (`isolate`): the z-indexes that
+ * order its layers (stretched link, pill, panel, raised handle links) must
+ * never reach the page, where the sticky glass header sits at z-5 — without
+ * it a hero pill scrolled under the header painted OVER it (founder report,
+ * 2026-09-03).
+ *
  * Links, never nested: the hero is one stretched item link under a raised
  * profile pill and a pointer-transparent text panel (only the spoiler button
  * takes taps); the compact keeps v2's stretched title link under raised
@@ -145,7 +151,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
   const hexes = mixed.length > 0 ? mixed : author.avatarHexes;
 
   return (
-    <article className="relative flex flex-col gap-3.5">
+    <article className="relative isolate flex flex-col gap-3.5">
       <FeedGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
       <div className="relative flex items-center gap-[9px] px-5">
         <Link href={profileHref(author.username)} className="flex-none">
@@ -260,7 +266,7 @@ function Hero({
 }) {
   const { author } = event;
   return (
-    <article className="relative">
+    <article className="relative isolate">
       <FeedGlow hexes={glowHexes(event)} opacity={glowOpacity} />
       <Cover event={event} className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)]`}>
         <span
@@ -385,7 +391,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className="relative flex items-center gap-[18px] px-5">
+    <article className="relative isolate flex items-center gap-[18px] px-5">
       <FeedGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
       <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">

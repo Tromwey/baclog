@@ -31,7 +31,7 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
   const widest = Math.max(0, ...s.covers.map((c) => fanWidth(c.mediaType)));
   const fanBase = Math.max(0, (FAN_BOX - (widest + (n - 1) * FAN_STEP)) / 2);
   return (
-    <article className="relative flex items-center gap-4 px-5 py-1.5">
+    <article className="relative isolate flex items-center gap-4 px-5 py-1.5">
       <FeedGlow hexes={hexes} opacity={0.35} angle={110} className="inset-x-0 -inset-y-5" />
       <span className="relative flex min-w-0 flex-1 flex-col gap-2.5">
         <span className="font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
