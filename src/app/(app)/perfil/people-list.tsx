@@ -43,31 +43,7 @@ export function PeopleList({
   return (
     <div className="mt-3.5 flex flex-col gap-2">
       {people.map((p) => (
-        <div
-          key={p.username}
-          className={`flex items-center gap-3 rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 ${
-            p.isPrivate ? "opacity-55" : ""
-          }`}
-        >
-          {p.isPrivate ? (
-            // A private profile has no page to land on — identity only.
-            <span className="flex min-w-0 flex-1 items-center gap-3">
-              <PersonIdentity p={p} />
-            </span>
-          ) : (
-            <Link
-              href={`/u/${p.username}`}
-              className="flex min-w-0 flex-1 items-center gap-3"
-            >
-              <PersonIdentity p={p} />
-            </Link>
-          )}
-          <FollowButton
-            username={p.username}
-            initialFollowing={p.following}
-            size="sm"
-          />
-        </div>
+        <PersonRowView key={p.username} p={p} />
       ))}
 
       {privateCount > 0 && (
@@ -80,6 +56,40 @@ export function PeopleList({
       {cursor && (
         <LoadMoreButton onClick={loadMore} loading={loading} className="mt-0.5" />
       )}
+    </div>
+  );
+}
+
+/**
+ * One person row — identity (orb, name, @handle · meta) plus the follow chip.
+ * Shared with Buscar gente (/feed/gente), so a search result and a list row
+ * are the same object; a private row (only possible in the owner's lists)
+ * dims and loses its link, since a private profile has no page to land on.
+ */
+export function PersonRowView({ p }: { p: PersonRow }) {
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 ${
+        p.isPrivate ? "opacity-55" : ""
+      }`}
+    >
+      {p.isPrivate ? (
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <PersonIdentity p={p} />
+        </span>
+      ) : (
+        <Link
+          href={`/u/${p.username}`}
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
+          <PersonIdentity p={p} />
+        </Link>
+      )}
+      <FollowButton
+        username={p.username}
+        initialFollowing={p.following}
+        size="sm"
+      />
     </div>
   );
 }

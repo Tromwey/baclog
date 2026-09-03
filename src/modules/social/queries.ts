@@ -1,11 +1,14 @@
 import "server-only";
 import {
   and,
+  asc,
   desc,
   eq,
+  ilike,
   inArray,
   isNotNull,
   isNull,
+  like,
   lte,
   ne,
   or,
@@ -38,6 +41,8 @@ import {
   FEED_EVENT_CHUNK,
   FEED_MAX_CHUNKS,
   PEOPLE_PAGE_SIZE,
+  PROFILE_SEARCH_LIMIT,
+  PROFILE_SEARCH_MIN_CHARS,
   type FeedCard,
   type FeedCardsPage,
   type FeedEvent,
@@ -623,6 +628,102 @@ export async function getFollowSuggestions(
       lastActive: last === null ? null : activityBucket(last, now),
     };
   });
+}
+
+// ---------- buscar gente ----------
+
+/** The needle as the query sees it: no "@", no case, no edge whitespace. */
+export function normalizeProfileQuery(raw: string): string {
+  return raw.trim().replace(/^@/, "").toLowerCase();
+}
+
+/** Escape LIKE metacharacters (Postgres' default escape is the backslash) —
+ *  a handle can legitimately contain "_", which would otherwise match any
+ *  character. */
+function likeEscape(needle: string): string {
+  return needle.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Buscar gente — public profiles whose @handle CONTAINS the needle or whose
+ * name contains it (case-insensitive). The follow graph's discovery surface
+ * once the feed has content and the empty states' suggestions are gone.
+ *
+ * Same posture as every other cross-user read here: `publicAuthor` INSIDE the
+ * query with a public-safe field list, so a private account can't be found by
+ * name any more than by URL — the search is over what is already public, not
+ * an enumeration oracle. The viewer is excluded (nothing to follow there).
+ *
+ * Ranked the way a person types: exact handle first, then handle prefix, then
+ * handle substring, then name matches — followers desc, then handle asc, as
+ * the tiebreak. `name` uses ILIKE (mixed case, no accent folding — a diacritic
+ * search is a known gap at this scale); `username` is lowercase by
+ * construction, so a plain LIKE on the normalized needle is exact.
+ */
+export async function searchProfiles(
+  viewerId: string,
+  raw: string,
+  limit = PROFILE_SEARCH_LIMIT,
+): Promise<PersonRow[]> {
+  const needle = normalizeProfileQuery(raw);
+  if (needle.length < PROFILE_SEARCH_MIN_CHARS) return [];
+  const escaped = likeEscape(needle);
+  const prefix = `${escaped}%`;
+  const contains = `%${escaped}%`;
+
+  const rank = sql<number>`case when ${users.username} = ${needle} then 0 when ${users.username} like ${prefix} then 1 when ${users.username} like ${contains} then 2 else 3 end`;
+  const followers = sql<number>`(select count(*) from ${userFollows} f where f.followed_user_id = ${users.id})`;
+
+  const rows = await db
+    .select({
+      userId: users.id,
+      username: users.username,
+      name: users.name,
+      isFounder: users.isFounder,
+      following: sql<boolean>`${userFollows.id} is not null`,
+    })
+    .from(users)
+    .leftJoin(
+      userFollows,
+      and(
+        eq(userFollows.followerUserId, viewerId),
+        eq(userFollows.followedUserId, users.id),
+      ),
+    )
+    .where(
+      and(
+        publicAuthor,
+        ne(users.id, viewerId),
+        or(like(users.username, contains), ilike(users.name, contains)),
+      ),
+    )
+    .orderBy(rank, desc(followers), asc(users.username))
+    .limit(limit);
+
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.userId);
+
+  const [hexes, backlogCounts] = await Promise.all([
+    avatarHexesFor(ids),
+    db
+      .select({ userId: backlogs.userId, n: sql<number>`count(*)::int` })
+      .from(backlogs)
+      .innerJoin(users, and(eq(users.id, backlogs.userId), publicAuthor))
+      // Public shelves only — the same "N backlogs" the lists show (F3.10.1).
+      .where(and(inArray(backlogs.userId, ids), eq(backlogs.isPublic, true)))
+      .groupBy(backlogs.userId),
+  ]);
+  const backlogMap = new Map(backlogCounts.map((r) => [r.userId, r.n]));
+
+  return rows.map((r) => ({
+    username: r.username ?? "",
+    name: r.name ?? r.username ?? "",
+    isFounder: r.isFounder,
+    isPrivate: false,
+    avatarHexes: hexes.get(r.userId) ?? FALLBACK_ADN,
+    backlogCount: backlogMap.get(r.userId) ?? 0,
+    following: r.following,
+  }));
 }
 
 // ---------- siguiendo / seguidores (owner-only lists) ----------
