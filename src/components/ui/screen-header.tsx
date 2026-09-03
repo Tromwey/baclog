@@ -41,7 +41,10 @@ export function ScreenHeader({
       {glass && (
         <div
           aria-hidden
-          className="absolute inset-0 -z-10 backdrop-blur-[18px] backdrop-saturate-[1.4]"
+          // Runs 40px past the header so the fade has room to breathe over
+          // the first card (founder call 2026-09-03: the mock's in-box fade
+          // was too short at 68px of header).
+          className="absolute inset-x-0 -bottom-10 top-0 -z-10 backdrop-blur-[18px] backdrop-saturate-[1.4]"
           style={{
             background:
               "linear-gradient(rgba(11,11,13,.85), rgba(11,11,13,.55) 70%, rgba(11,11,13,0))",
