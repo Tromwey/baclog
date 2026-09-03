@@ -1,26 +1,33 @@
 import { requireUser } from "@/auth";
+import { getUserPalette } from "@/modules/backlog/queries";
+import { getLibraryUpcoming } from "@/modules/backlog/library";
 import {
-  getBacklogsForUser,
-  getUserPalette,
-  getUserStats,
-} from "@/modules/backlog/queries";
+  getObsessions,
+  getProfileCards,
+  getReactionCounts,
+} from "@/modules/backlog/profile-stats";
 import { getFollowCounts } from "@/modules/social/queries";
+import { getRenderInstant } from "@/modules/catalog/release";
 import { PerfilScreen } from "./perfil-screen";
 
 /**
- * F3.10 (design 2a) — Perfil is your public profile now: identity, stats,
- * tu gente (follows) and your backlog shelves. The settings list that used to
- * live here sits behind the header's ajustes chip (/settings). All server
- * component — nothing here needs client state.
+ * Screen 09 (Revamp UI, 2026-09-03) — your profile: identity over your ADN
+ * glow, the three reaction pills, followers/following, what you can't wait
+ * for, your current obsessions and your cards. Every read is scoped to the
+ * session user inside its query. All server component.
  */
 export default async function PerfilPage() {
   const user = await requireUser();
-  const [stats, palette, followCounts, backlogs] = await Promise.all([
-    getUserStats(user.id),
-    getUserPalette(user.id),
-    getFollowCounts(user.id),
-    getBacklogsForUser(user.id),
-  ]);
+  const now = await getRenderInstant();
+  const [palette, counts, followCounts, upcoming, obsessions, cards] =
+    await Promise.all([
+      getUserPalette(user.id),
+      getReactionCounts(user.id),
+      getFollowCounts(user.id),
+      getLibraryUpcoming(user.id, now),
+      getObsessions(user.id),
+      getProfileCards(user.id, now),
+    ]);
 
   return (
     <PerfilScreen
@@ -28,10 +35,13 @@ export default async function PerfilPage() {
       username={user.username}
       avatarUrl={user.image}
       isPublic={user.isPublic}
-      stats={stats}
       palette={palette}
+      counts={counts}
       followCounts={followCounts}
-      backlogs={backlogs}
+      upcoming={upcoming}
+      obsessions={obsessions}
+      cards={cards}
+      now={now}
     />
   );
 }

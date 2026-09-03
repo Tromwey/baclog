@@ -3,14 +3,18 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth";
-import { Music, Play } from "lucide-react";
 import {
   getPublicCatalogItem,
   getPublicProfile,
 } from "@/modules/backlog/public";
+import {
+  getTitleStats,
+  titleStatsSentence,
+} from "@/modules/backlog/title-stats";
 import { captureView } from "@/modules/analytics/capture";
-import { BackButton, Button, MonoMeta } from "@/components/ui";
-import { ItemHeroAura } from "@/components/item-hero-aura";
+import { FillIcon, PaletteGlow, StrokeIcon } from "@/components/ui";
+import { EXTERNAL_PATH, PLAY_PATH } from "@/components/glyph-paths";
+import { coverAspect } from "@/components/cover-tile";
 import { Synopsis } from "@/components/synopsis";
 import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
@@ -19,23 +23,18 @@ import {
   isUpcoming,
   restArrivesLabel,
 } from "@/modules/catalog/release";
-import { CountdownHero, CountdownMono } from "@/components/countdown";
+import { CountdownMono } from "@/components/countdown";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
-import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
-import { auraSeed, parseHex } from "@/lib/color";
-import { capitalize, joinMeta } from "@/lib/format";
+import type { MediaType } from "@/modules/catalog/types";
+import { joinMeta } from "@/lib/format";
 import {
   countPublicReviews,
   getPublicOwnerReview,
   getReviewFeedPage,
 } from "@/modules/reviews/queries";
-import {
-  conversionLine,
-  markLabel,
-  supportsSpoiler,
-} from "@/modules/reviews/format";
-import { ReviewCard } from "@/components/reviews/review-card";
-import { ReviewFeed } from "@/components/reviews/review-feed";
+import { ShareChip } from "@/app/u/share-chip";
+import { PublicReviews } from "./public-reviews";
+import { TracklistCard } from "./tracklist-card";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -64,20 +63,39 @@ export async function generateMetadata({
   };
 }
 
+/** The mock's kind label in the meta line: "Cine · 2023 · Wim Wenders". */
+const KIND: Record<MediaType, string> = {
+  film: "Cine",
+  series: "Serie",
+  album: "Álbum",
+};
+
+/** The four "Dónde escuchar" rows, in the mock's order. */
+const MUSIC_SERVICES = [
+  { id: "spotify", label: "Spotify" },
+  { id: "apple_music", label: "Apple Music" },
+  { id: "youtube_music", label: "YouTube Music" },
+  { id: "tidal", label: "TIDAL" },
+] as const;
+
+/** Surface tones that pad a short palette to the mock's five bands. */
+const BAND_PAD = ["#26262c", "#1c1c21", "#141417"];
+
+const GLASS_BUTTON =
+  "flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] font-sans text-[14px] font-semibold text-text transition-colors hover:bg-white/[0.12]";
+
 /**
- * F2.19 — the anonymous-viewer conversion page: real artwork (in-page
- * display + link-out = the safe zone per ADR-008), buttons to every
- * service, and the register CTA.
+ * Screens 06b/06d/06f (Revamp UI, 2026-09-03) — the anonymous-viewer landing
+ * for a shared title: wordmark + share, the cover beside the serif title over
+ * the title's own glow, where to watch/listen, the synopsis, "En Baclog" and
+ * the reviews, with the register CTA fixed over a fade at the bottom.
  */
 export default async function PublicItemPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ username: string; catalogItemId: string }>;
-  searchParams: Promise<{ from?: string }>;
 }) {
   const { username, catalogItemId } = await params;
-  const { from } = await searchParams;
 
   // Founder call (2026-08-28): a SIGNED-IN viewer opening a shared item link
   // gets their OWN item page — the app knows their preferred service, their
@@ -88,25 +106,20 @@ export default async function PublicItemPage({
   // The redirect runs BEFORE any owner lookup and unconditionally on session,
   // so it confirms nothing about the username (private, nonexistent and
   // public all redirect identically — no enumeration oracle); /item/[id]
-  // itself is session-gated and 404s unknown catalog ids. Deliberate trade:
-  // the owner auditing "what does my public page look like" loses item-level
-  // preview while signed in (their profile/backlog previews still work).
+  // itself is session-gated and 404s unknown catalog ids.
   const viewer = await getCurrentUser();
   if (viewer) redirect(`/item/${catalogItemId}`);
 
-  // ?from carries the origin backlog (set when navigating from a public backlog)
-  // so back returns there, not to the profile. Validated to a bare id so it
-  // can't inject into the href; absent/invalid (a shared item deep-link) → the
-  // profile.
-  const fromBacklogId = from && /^[0-9a-f-]{36}$/i.test(from) ? from : null;
-  const [profile, item, ownerReview, feed, reviewCount] = await Promise.all([
-    getPublicProfile(username),
-    getPublicCatalogItem(catalogItemId),
-    // F3.9 — the reason they were sent this link, and the conversation under it.
-    getPublicOwnerReview(username, catalogItemId),
-    getReviewFeedPage(catalogItemId, { excludeUsername: username }),
-    countPublicReviews(catalogItemId),
-  ]);
+  const [profile, item, ownerReview, feed, reviewCount, stats] =
+    await Promise.all([
+      getPublicProfile(username),
+      getPublicCatalogItem(catalogItemId),
+      // F3.9 — the reason they were sent this link, pinned first in the list.
+      getPublicOwnerReview(username, catalogItemId),
+      getReviewFeedPage(catalogItemId, { excludeUsername: username }),
+      countPublicReviews(catalogItemId),
+      getTitleStats(catalogItemId),
+    ]);
   if (!profile || !item) notFound();
 
   // Album tracklist OR film/series Spanish synopsis (English fallback), derived
@@ -132,246 +145,213 @@ export default async function PublicItemPage({
   const resolve = (extra: string) =>
     `/api/links/resolve?catalogItemId=${item.id}${extra}`;
 
-  // Cover keeps the artwork's own aspect: albums are SQUARE, films/series 2:3
-  // (this page used to force 2:3 on everything, so album art arrived letterboxed
-  // into a poster slot). Bigger than the in-app /item hero on purpose — this is
-  // the anonymous conversion surface, where the art does the selling.
-  const coverSize =
-    item.mediaType === "album"
-      ? "h-[200px] w-[200px]"
-      : "h-[240px] w-[160px]";
+  const isAlbum = item.mediaType === "album";
+  const palette = item.paletteHex ?? [];
+  // The mock's five palette bands for a title with no art: its hexes, then
+  // surface tones so the cover always reads as a full card.
+  const bands = [...palette, ...BAND_PAD].slice(0, 5);
+  const minutes = Math.round(
+    tracks.reduce((ms, t) => ms + (t.durationMs ?? 0), 0) / 60_000,
+  );
+  const inBaclog = titleStatsSentence(stats, item.mediaType);
 
-  // Palette-tinted cover shadow, same recipe as the in-app item page — here off
-  // catalog_item.paletteHex (shared, cover-derived) since there's no user_item
-  // for an anonymous viewer. Neutral black until it's been extracted.
-  const shadowTint = item.paletteHex?.[0] ? parseHex(item.paletteHex[0]) : null;
-  const coverShadow = `0 24px 60px ${
-    shadowTint
-      ? `rgba(${shadowTint.r},${shadowTint.g},${shadowTint.b},0.5)`
-      : "rgba(0,0,0,0.5)"
-  }`;
-
-  // byline · year · genre. The media-type label is dropped for albums: the
-  // square art, the artist byline and the "Escuchar en…" buttons already say
-  // it. Película/Serie stays — that one carries information the page doesn't.
-  // While the album is still coming, the countdown occupies the YEAR's slot
-  // (identical to the in-app page, and identical for a visitor with no session
-  // at all — the date is catalog data, never user data).
-  //
-  // Dropping the media-type label is also why this line is the one that can
-  // START with the countdown: an album with no artist leaves everything before
-  // it empty. joinMeta is what keeps that from printing "FALTAN 13 DÍASPop".
+  // Kind · year · byline. While an album is still coming, the countdown takes
+  // the YEAR's slot (F3.8) — the date is catalog data, identical for anyone.
   const meta = joinMeta([
-    item.mediaType !== "album" ? MEDIA_TYPE_TITLE[item.mediaType] : null,
-    item.byline,
+    KIND[item.mediaType],
     upcoming && releaseIso ? (
       <CountdownMono
         key="countdown"
         releaseDate={releaseIso}
         initialNow={now}
-        className="text-[10px] tracking-[0.1em] text-text"
+        className="text-[11px] tracking-[0.12em] text-text"
         liveClassName="text-[13px] tracking-[0.02em]"
       />
     ) : (
       item.year
     ),
-    item.genre && capitalize(item.genre),
+    item.byline,
   ]);
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      {/* Content-driven ADN aura from the shared cover palette — same hero the
-          in-app /item page uses (paletteHex is cover-derived + public-safe, and
-          extracts on-device when it hasn't been backfilled yet). Deliberately
-          NO catalogItemId: this page is anonymous, so it stays display-only —
-          the shared row is filled by signed-in views + the admin backfill, not
-          by an unauthenticated write from this viral surface. */}
-      <ItemHeroAura
-        paletteHex={item.paletteHex}
-        posterUrl={item.posterUrl}
-        seed={auraSeed(item.id)}
-      />
-
-      {/* Top bar — same px-4 / pt-[24px+safe] as the backlog hero (BacklogHero)
-          so the back chip sits in the SAME spot across screens (no jump when
-          navigating backlog ⇄ item) and clears the notch when installed. */}
-      <div className="relative flex px-4 pt-[calc(24px+env(safe-area-inset-top))]">
-        <BackButton
-          href={fromBacklogId ? `/u/${username}/${fromBacklogId}` : `/u/${username}`}
+    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[150px] text-text">
+      {/* Hero: the title's own two hexes as the page glow (the mock's
+          `glow()`: 120°, .5, blur 90) hanging off the top edge. */}
+      <div className="relative flex flex-col gap-[22px] px-6 pt-[calc(12px+env(safe-area-inset-top))]">
+        <PaletteGlow
+          hexes={palette.slice(0, 2)}
+          angle={120}
+          opacity={0.5}
+          blur={90}
+          className="-inset-x-[60px] -top-[120px] h-[460px]"
         />
+        <div className="relative flex items-center justify-between">
+          <Link
+            href="/"
+            className="font-display text-[18px] font-extrabold tracking-[-0.02em] text-text"
+          >
+            baclog
+          </Link>
+          <ShareChip
+            path={`/u/${username}/item/${item.id}`}
+            label={`Compartir ${item.title}`}
+          />
+        </div>
+
+        <div className="relative flex items-end gap-4">
+          <span
+            className={`relative block w-[118px] flex-none overflow-hidden rounded-[14px] bg-surface-1 shadow-[0_20px_44px_-14px_rgba(0,0,0,.8)] ${coverAspect(item.mediaType)}`}
+          >
+            {item.posterUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
+              <img
+                src={item.posterUrl}
+                alt={`Portada de ${item.title}`}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <span aria-hidden className="absolute inset-0 flex flex-col">
+                {bands.map((hex, i) => (
+                  <span key={i} className="flex-1" style={{ background: hex }} />
+                ))}
+              </span>
+            )}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-[14px] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]"
+            />
+          </span>
+          <span className="flex min-w-0 flex-col gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
+              {meta}
+            </span>
+            <h1 className="font-serif text-[40px] italic leading-[0.95] tracking-[-0.01em] text-pretty text-text [overflow-wrap:anywhere]">
+              {item.title}
+            </h1>
+            {!item.posterUrl && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+                Paleta extraída · sin arte
+              </span>
+            )}
+          </span>
+        </div>
       </div>
 
-      <main className="relative px-5 pb-32 pt-5">
-        <div className="bl-rise flex justify-center">
-          {item.posterUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-            <img
-              src={item.posterUrl}
-              alt={`Portada de ${item.title}`}
-              style={{ boxShadow: coverShadow }}
-              className={`rounded-2xl object-cover ${coverSize}`}
-            />
-          ) : (
-            <div
-              className={`flex items-center justify-center rounded-2xl bg-surface-2 text-text-3 ${coverSize}`}
-            >
-              {item.mediaType === "album" ? (
-                <Music size={40} />
-              ) : (
-                <Play size={40} />
-              )}
+      <main className="relative flex flex-col gap-[22px] px-5 pt-[22px]">
+        {isAlbum ? (
+          <>
+            {/* "Dónde escuchar": four glass rows, one per service, each to
+                today's per-service resolve link. All four read "Abrir" — the
+                mock's dimmed "No disponible" needs a pre-resolution this page
+                doesn't do at render time. */}
+            <div className="flex flex-col gap-2">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
+                Dónde escuchar
+              </span>
+              {MUSIC_SERVICES.map((s) => (
+                <a
+                  key={s.id}
+                  href={resolve(`&service=${s.id}`)}
+                  className="flex items-center gap-3 rounded-full bg-[var(--glass-bg)] px-4 py-3 transition-colors hover:bg-white/[0.12]"
+                >
+                  <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-white/10 text-text">
+                    <FillIcon d={PLAY_PATH} size={12} />
+                  </span>
+                  <span className="flex-1 text-[14px] font-semibold text-text">
+                    {s.label}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+                    Abrir
+                  </span>
+                </a>
+              ))}
             </div>
-          )}
-        </div>
-
-        <div className="bl-rise mt-6 text-center">
-          <h1 className="font-serif text-[38px] italic leading-[1.05] text-text">
-            {item.title}
-          </h1>
-          <MonoMeta className="mt-2.5 block text-[10px] tracking-[0.1em] text-text-2">
-            {meta}
-          </MonoMeta>
-          {releaseIso && upcoming && (
-            <CountdownHero releaseDate={releaseIso} initialNow={now} />
-          )}
-        </div>
-
-        {/* Films/series carry a TMDB synopsis; albums show their tracklist
-            below instead (iTunes has no album description — see M4/M5 note on
-            editorialNotes). Shown in-app under identification use + attribution,
-            never on an export card (ADR-008). */}
-        {synopsis && (
-          <Synopsis
-            text={synopsis}
-            className="bl-rise mx-auto mt-4 max-w-[34ch] text-center text-sm leading-[1.55] text-text-2"
-          />
-        )}
-
-        {/* F3.9 — whoever follows this link came for a PERSON. Their review
-            goes before the service buttons: the page stops being
-            "arte → acción" and becomes "arte → por qué te lo mandó → acción".
-            Its own mono label keeps it from reading as part of the feed below. */}
-        {ownerReview && (
-          <div className="bl-rise mt-[26px]">
-            <div className="mb-[10px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-3">
-              Lo que dice {profile.username}
-            </div>
-            <ReviewCard
-              body={ownerReview.body}
-              hasSpoiler={ownerReview.hasSpoiler}
-              mark={ownerReview.mark}
-              when={ownerReview.when}
-              author={ownerReview.author}
-              markLabel={markLabel(ownerReview.mark)}
-              displayName={ownerReview.author.username}
-            />
+            {tracks.length > 0 && (
+              <TracklistCard
+                trackCount={upcoming ? trackCount : tracks.length}
+                minutes={minutes}
+              >
+                <Tracklist
+                  tracks={tracks}
+                  totalCount={upcoming ? trackCount : undefined}
+                  pendingLabel={
+                    upcoming && releaseDate
+                      ? restArrivesLabel(releaseDate, now)
+                      : undefined
+                  }
+                />
+              </TracklistCard>
+            )}
+          </>
+        ) : (
+          // TMDB's own guidance for watch/providers data is "a reference on
+          // each media item" — the button's label carries the JustWatch
+          // attribution instead of a separate note below it.
+          <div className="flex gap-2.5">
+            <a href={resolve("")} className={GLASS_BUTTON}>
+              Dónde ver · JustWatch
+              <StrokeIcon d={EXTERNAL_PATH} size={12} strokeWidth={2.4} />
+            </a>
           </div>
         )}
 
-        <div className="mt-7 space-y-2.5">
-          {item.mediaType === "album" ? (
-            <>
-              <a
-                href={resolve("&service=spotify")}
-                className="block w-full rounded-full bg-[#1db954] py-3.5 text-center font-sans font-semibold text-black transition-transform active:scale-[0.97]"
-              >
-                Escuchar en Spotify
-              </a>
-              <a
-                href={resolve("&service=apple_music")}
-                className="block w-full rounded-full bg-[#fa2d48] py-3.5 text-center font-sans font-semibold text-white transition-transform active:scale-[0.97]"
-              >
-                Escuchar en Apple Music
-              </a>
-              <a
-                href={resolve("&service=youtube_music")}
-                className="block w-full rounded-full bg-[#ff0000] py-3.5 text-center font-sans font-semibold text-white transition-transform active:scale-[0.97]"
-              >
-                Escuchar en YouTube Music
-              </a>
-              {/* TIDAL's brand is black-on-black; on our dark ground the pill
-                  inverts to white so it reads as a peer of the other three. */}
-              <a
-                href={resolve("&service=tidal")}
-                className="block w-full rounded-full bg-white py-3.5 text-center font-sans font-semibold text-black transition-transform active:scale-[0.97]"
-              >
-                Escuchar en TIDAL
-              </a>
-            </>
-          ) : (
-            // TMDB's own guidance for watch/providers data is "a reference on
-            // each media item" (not necessarily a link) — the button's own
-            // label carries the JustWatch attribution instead of a separate
-            // note below it.
-            <Button href={resolve("")} className="w-full">
-              Ver en JustWatch
-            </Button>
-          )}
-        </div>
+        {/* Films/series carry a TMDB synopsis; albums have none (iTunes has no
+            album description). Identification use + attribution (ADR-008). */}
+        {synopsis && (
+          <Synopsis
+            text={synopsis}
+            className="text-[15px] leading-[1.5] text-pretty text-text-2"
+          />
+        )}
 
-        <Tracklist
-          tracks={tracks}
-          totalCount={upcoming ? trackCount : undefined}
-          pendingLabel={
-            upcoming && releaseDate
-              ? restArrivesLabel(releaseDate, now)
-              : undefined
-          }
+        {/* "En Baclog" — the title's counts across the whole app (see
+            title-stats.ts). Hidden until someone has reacted. */}
+        {inBaclog && (
+          <div className="flex flex-col gap-2.5">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
+              En Baclog
+            </span>
+            <p className="font-serif text-[22px] italic leading-[1.1] text-pretty text-text">
+              {inBaclog}
+            </p>
+          </div>
+        )}
+
+        <PublicReviews
+          catalogItemId={item.id}
+          count={reviewCount}
+          pinned={ownerReview}
+          initialReviews={feed.reviews}
+          initialCursor={feed.nextCursor}
+          excludeUsername={username}
         />
-
-        {/* The rest of the conversation. No ⋯ anywhere in here: an anonymous
-            viewer can neither report nor edit, and a menu whose only entry is
-            "regístrate" would be a trap (design decision). Spoilers ARE covered
-            for them too — this is where it matters most, since nobody arrives
-            here having seen the thing. */}
-        {feed.reviews.length > 0 && (
-          <section className="mt-7">
-            <div className="mb-[18px] h-px bg-line" />
-            <div className="mb-[14px] flex items-baseline justify-between gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-3">
-                Reseñas
-              </span>
-              <span className="font-mono text-[10px] tracking-[0.06em] text-text-3">
-                {reviewCount}
-              </span>
-            </div>
-            <ReviewFeed
-              catalogItemId={item.id}
-              initialReviews={feed.reviews}
-              initialCursor={feed.nextCursor}
-              canReport={false}
-              allowSpoiler={supportsSpoiler(item.mediaType)}
-              excludeUsername={username}
-            />
-          </section>
-        )}
-
-        {/* The one conversion sentence on the page — everything else is done by
-            the content itself. The fixed CTA below never changes. */}
-        {conversionLine(reviewCount) && (
-          <p className="mx-auto mt-[26px] max-w-[30ch] text-center text-[14.5px] leading-[1.5] text-text-2">
-            {conversionLine(reviewCount)}
-          </p>
-        )}
 
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}
-        <p className="mt-8 text-center">
-          <MonoMeta className="text-[10px] text-text-3">
-            <Link href="/creditos" className="underline">
-              Créditos
-            </Link>
-          </MonoMeta>
+        <p className="text-center font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+          <Link href="/creditos" className="transition-colors hover:text-text-2">
+            Créditos
+          </Link>
         </p>
       </main>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md px-5 pb-5">
-        <Button
+      {/* The fade the CTA floats on, then the CTA itself: the one accent
+          button on the page (no lima glow — §7) and its line. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[200px] w-full max-w-md"
+        style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
+      />
+      <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
+        <Link
           href="/login"
-          className="pointer-events-auto w-full shadow-[0_0_30px_var(--accent-soft)]"
+          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg transition-all active:scale-[0.98] active:bg-accent-press"
         >
-          Crea tu Baclog →
-        </Button>
+          Empieza tu backlog →
+        </Link>
+        <span className="text-center text-[12px] text-text-3">
+          Guarda, marca y comparte lo que te obsesiona
+        </span>
       </div>
     </div>
   );

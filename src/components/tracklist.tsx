@@ -19,17 +19,23 @@ function fmt(ms: number | null): string {
  * what arrives here is only what you can actually play. The real track numbers
  * survive (01, 04, 09) — the gaps say what's missing better than a muted row
  * would, and the count of what's still coming goes in the closing divider.
+ *
+ * `hideHeader` is for the in-app card (Revamp UI 06e), which already prints
+ * "Tracklist · 15 canciones · 41 min" in its own header; the public item page
+ * keeps the heading.
  */
 export function Tracklist({
   tracks,
   totalCount,
   pendingLabel,
+  hideHeader = false,
 }: {
   tracks: AlbumTrack[];
   /** The album's full song count. Greater than tracks.length ⇒ partial mode. */
   totalCount?: number;
   /** When the rest arrives: "el 14 de agosto" / "esta noche". Partial only. */
   pendingLabel?: string;
+  hideHeader?: boolean;
 }) {
   if (tracks.length === 0) return null;
 
@@ -37,34 +43,41 @@ export function Tracklist({
   const pending = total ? total - tracks.length : 0;
 
   return (
-    <section className="mt-7">
-      {total ? (
-        <div className="mb-2.5 flex items-baseline justify-between">
-          <h2 className="font-serif text-[22px] italic leading-none text-text">
-            Ya puedes oír
+    <section className={hideHeader ? undefined : "mt-7"}>
+      {!hideHeader &&
+        (total ? (
+          <div className="mb-2.5 flex items-baseline justify-between">
+            <h2 className="font-serif text-[22px] italic leading-none text-text">
+              Ya puedes oír
+            </h2>
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+              {tracks.length} de {total}
+            </span>
+          </div>
+        ) : (
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+            {tracks.length} canciones
           </h2>
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3">
-            {tracks.length} de {total}
-          </span>
-        </div>
-      ) : (
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-          {tracks.length} canciones
-        </h2>
-      )}
+        ))}
 
-      <ol className={total ? "divide-y divide-white/[0.06]" : "mt-2 divide-y divide-white/[0.06]"}>
+      <ol
+        className={
+          hideHeader || total
+            ? "divide-y divide-white/[0.06]"
+            : "mt-2 divide-y divide-white/[0.06]"
+        }
+      >
         {tracks.map((t, i) => (
           <li
             key={`${t.n}-${i}`}
-            className="flex items-baseline gap-3 py-2.5 text-sm text-text"
+            className="flex items-baseline gap-3 py-2.5 text-[14px] text-text"
           >
-            <span className="w-5 shrink-0 font-mono text-xs tabular-nums text-text-3">
+            <span className="w-5 shrink-0 font-mono text-[11px] tabular-nums text-text-3">
               {t.n || i + 1}
             </span>
             <span className="min-w-0 flex-1 leading-snug">{t.name}</span>
             {t.durationMs != null && (
-              <span className="shrink-0 font-mono text-xs tabular-nums text-text-3">
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-text-3">
                 {fmt(t.durationMs)}
               </span>
             )}

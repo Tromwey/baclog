@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { Sheet, LoadMoreButton } from "@/components/ui";
 import {
   loadMoreReviewsAction,
@@ -14,14 +14,29 @@ import {
 } from "@/modules/reviews/types";
 import { ReportedCard, ReviewCard } from "./review-card";
 
+/** How many pages one "Ver todas" pulls at most — a bound, not a design. */
+const MAX_PAGES_PER_TAP = 5;
+
+export interface ReviewPaging {
+  hasMore: boolean;
+  loading: boolean;
+  /** Loads the next page; with `renderHeader`, keeps going until the end. */
+  loadMore: () => void;
+}
+
 /**
  * F3.9 — everyone else's reviews of a title. Shared by the in-app block and the
  * anonymous public item page; the only difference is `canReport`, which the
  * public page turns off (an anonymous viewer can't act on anything, and a ⋯
  * that only says "regístrate" would be a trap — design decision).
  *
- * "Ver más" pages through a server action with the keyset cursor, so a review
- * published mid-read can't duplicate a card.
+ * Paging is keyset through a server action, so a review published mid-read
+ * can't duplicate a card. Two shapes of the same list:
+ *  - default: the list, then a "Ver más reseñas" button (public page).
+ *  - `renderHeader`: the caller draws the header (the Revamp UI's
+ *    "Reseñas · 38 · Ver todas") from the paging state and pins its own card
+ *    (`pinned`) between the header and the list; "Ver todas" then drains the
+ *    remaining pages instead of one at a time.
  */
 export function ReviewFeed({
   catalogItemId,
@@ -31,6 +46,8 @@ export function ReviewFeed({
   allowSpoiler,
   excludeUsername,
   emptyNote,
+  renderHeader,
+  pinned,
 }: {
   catalogItemId: string;
   initialReviews: FeedReview[];
@@ -44,7 +61,9 @@ export function ReviewFeed({
   allowSpoiler: boolean;
   /** Handle whose review is pinned above — kept out of every page loaded here. */
   excludeUsername?: string;
-  emptyNote?: React.ReactNode;
+  emptyNote?: ReactNode;
+  renderHeader?: (paging: ReviewPaging) => ReactNode;
+  pinned?: ReactNode;
 }) {
   const [reviews, setReviews] = useState(initialReviews);
   const [cursor, setCursor] = useState(initialCursor);
@@ -55,14 +74,24 @@ export function ReviewFeed({
 
   function loadMore() {
     if (!cursor) return;
+    const drain = renderHeader !== undefined;
     startLoading(async () => {
-      const page = await loadMoreReviewsAction({
-        catalogItemId,
-        cursor,
-        excludeUsername,
-      });
-      setReviews((prev) => [...prev, ...page.reviews]);
-      setCursor(page.nextCursor);
+      let next: string | null = cursor;
+      let pages = 0;
+      try {
+        do {
+          const page = await loadMoreReviewsAction({
+            catalogItemId,
+            cursor: next,
+            excludeUsername,
+          });
+          setReviews((prev) => [...prev, ...page.reviews]);
+          next = page.nextCursor;
+          pages += 1;
+        } while (drain && next && pages < MAX_PAGES_PER_TAP);
+      } finally {
+        setCursor(next);
+      }
     });
   }
 
@@ -78,11 +107,11 @@ export function ReviewFeed({
     });
   }
 
-  if (reviews.length === 0) return <>{emptyNote}</>;
-
-  return (
-    <>
-      <div className="mt-2 flex flex-col gap-2">
+  const list =
+    reviews.length === 0 ? (
+      emptyNote
+    ) : (
+      <div className="flex flex-col gap-3">
         {reviews.map((review) =>
           reported[review.id] ? (
             <ReportedCard key={review.id} />
@@ -95,15 +124,22 @@ export function ReviewFeed({
               when={review.when}
               author={review.author}
               markLabel={markLabel(review.mark)}
-              displayName={review.author.username}
+              displayName={`@${review.author.username}`}
               menuLabel="Reportar reseña"
               onMenu={canReport ? () => setTarget(review.id) : undefined}
             />
           ),
         )}
       </div>
+    );
 
-      {cursor && (
+  return (
+    <>
+      {renderHeader?.({ hasMore: cursor !== null, loading, loadMore })}
+      {pinned}
+      {list}
+
+      {!renderHeader && cursor && (
         <LoadMoreButton
           onClick={loadMore}
           loading={loading}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getFollowCounts, getPeoplePage } from "@/modules/social/queries";
-import { BackButton, glassChipClass } from "@/components/ui";
+import { BackButton, ScreenHeader, glassChipClass } from "@/components/ui";
 import { PeopleList } from "./people-list";
 
 /**
@@ -24,7 +24,9 @@ export async function PeopleScreen({
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <div className="flex items-center justify-between px-4 pt-[calc(24px+env(safe-area-inset-top))]">
+      {/* Revamp UI (2026-09-03): the back chip and the search chip on the
+          mock's header row, then the one screen title. */}
+      <div className="flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))]">
         <BackButton href="/perfil" />
         <Link
           href="/feed/gente"
@@ -34,13 +36,12 @@ export async function PeopleScreen({
           <UserPlus size={18} />
         </Link>
       </div>
-      <header className="px-4 pb-5 pt-[18px]">
-        <h1 className="font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
-          {mode === "following" ? "A quién sigues" : "Quién te sigue"}
-        </h1>
-      </header>
+      <ScreenHeader
+        title={mode === "following" ? "A quién sigues" : "Quién te sigue"}
+        className="pt-[18px]!"
+      />
 
-      <div className="px-4 pb-10">
+      <div className="px-5 pb-10">
         <div className="flex gap-1.5 rounded-full bg-surface-2 p-[5px]">
           <Tab href="/perfil/siguiendo" active={mode === "following"}>
             Siguiendo {counts.following}

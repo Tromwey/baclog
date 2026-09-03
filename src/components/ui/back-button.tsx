@@ -5,19 +5,7 @@ import { useRouter } from "next/navigation";
 import { BACK_PATH } from "@/components/glyph-paths";
 import { StrokeIcon } from "./stroke-icon";
 
-/**
- * The 38px glass chip recipe (Revamp UI, 2026-09-03): the mock's round chip —
- * `var(--glass)` fill, no border, no blur (blur is reserved to what FLOATS:
- * dock, sheets, the floating action). Exported so every header chip in the
- * app (share · ajustes · "+" · visibility) is the same chip as the back
- * control beside it.
- */
-export const glassChipClass =
-  "flex h-[38px] w-[38px] flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text transition-colors hover:bg-white/[0.12]";
-
-/** The text pill of the same glass: mono uppercase 10.5, 9/14 padding. */
-export const glassPillClass =
-  "inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-text transition-colors hover:bg-white/[0.12]";
+import { glassChipClass } from "./glass";
 
 const CHIP = glassChipClass;
 

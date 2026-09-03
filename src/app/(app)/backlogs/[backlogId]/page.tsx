@@ -3,7 +3,7 @@ import { NotFoundError, UnauthorizedError } from "@/authz";
 import { BacklogZoomView, loadBacklogZoom } from "../backlog-zoom-view";
 
 /**
- * The shelf zoom as a full page — what a hard nav / refresh / shared URL
+ * The backlog detail as a full page — what a hard nav / refresh / shared URL
  * renders. Soft navs from /backlogs are intercepted into the overlay twin
  * (@modal/(.)[backlogId]) instead. No bl-zoom-* classes here: template.tsx
  * already animates page entry. A direct URL to a nonexistent backlog SHOULD
@@ -30,7 +30,6 @@ export default async function BacklogDetailPage({
       <BacklogZoomView
         backlog={data.backlog}
         items={data.items}
-        paletteHex={data.paletteHex}
         step={data.step}
         now={data.now}
       />

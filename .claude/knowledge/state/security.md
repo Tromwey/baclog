@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: YYYY-MM-DD
+> Actualizado: 2026-09-03 (Revamp UI)
 
 ## Qué cubre este dominio
 <!-- Autenticación, autorización app-layer, gates de admin, superficies públicas y manejo de secretos.
@@ -23,6 +23,9 @@
 | `src/modules/admin/guard.ts` | `requireAdmin()` — gate del panel Torre de Control |
 | `src/modules/backlog/public.ts` | `getPublicProfile` (+ conteo de seguidores F3.10), superficie pública gated por `users.isPublic` |
 | `src/modules/social/queries.ts` | F3.10: lecturas cross-user CON sesión pero re-gateadas en `isPublic + username` por query (postura público-safe; reglas en AGENTS.md). Incluye `searchProfiles` (F3.10.2 Buscar gente): busca por handle o **nombre** solo entre perfiles públicos — un privado no se encuentra por nombre igual que no se encuentra por URL; excluye al viewer; metacaracteres de LIKE escapados |
+| `src/modules/social/trending.ts` · `title-activity.ts` · `affinity.ts` | **Revamp UI (2026-09-03)**: tres lecturas cross-user CON sesión, misma postura que `social/queries.ts` — cada rama re-gatea `publicAuthor` (`isPublic = true AND username IS NOT NULL`) DENTRO de la query con lista blanca; `trending` y `affinity` gatean además `backlog.is_public` del dueño; `title-activity` jamás devuelve un "no me gustó" ajeno; `affinity` devuelve null para el propio dueño |
+| `src/modules/backlog/title-stats.ts` | **Revamp UI**: `getTitleStats` — conteo de obsesionados/completados de un título sobre TODOS los usuarios (públicos y privados). Es un AGREGADO sin identidad ni campo per-user (postura de las métricas admin), servido en el ítem público. Pendiente de confirmación del founder; si prefiere solo públicos, es un `INNER JOIN users` con `publicAuthor` |
+| `src/modules/backlog/onboarding-pool.ts` | **Revamp UI**: agregado de conteos por título del catálogo (sin identidad) para el paso "Elige tres" |
 | `src/modules/reviews/queries.ts` | Feed público de reseñas (excepción authz #4, gated en `isPublic` + `hidden_at IS NULL`) |
 | `src/app/api/auth/**` | Route handlers de auth y OTP |
 | `src/app/api/avatar/[key]/route.ts` | F3.11: sirve la foto de perfil por `key` aleatorio por subida. Gate: dueño **público** → se sirve a cualquiera con la URL; dueño **privado** → solo a su propia sesión; key inválido/inexistente/ajeno = mismo 404 vacío (sin oráculo). `users.image` entra en las listas blancas público-safe (public.ts, social, reviews) bajo el MISMO gate que `username`: es identidad, no estado; en las listas de gente un seguido que se volvió privado devuelve `avatarUrl: null` |

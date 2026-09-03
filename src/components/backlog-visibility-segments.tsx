@@ -5,6 +5,7 @@ import {
   setBacklogVisibilityAction,
   type BacklogVisibility,
 } from "@/app/actions/backlog-actions";
+import { VISIBILITY_STATES, visibilityOf } from "@/modules/backlog/visibility";
 
 /**
  * F3.10.1 — THE three-state visibility control (Privado · Público · Perfil),
@@ -17,19 +18,7 @@ import {
  * sheet's live counts) can never drift from what the control shows.
  */
 
-export const VISIBILITY_STATES: { id: BacklogVisibility; label: string }[] = [
-  { id: "private", label: "Privado" },
-  { id: "public", label: "Público" },
-  { id: "featured", label: "Perfil" },
-];
-
-export function visibilityOf(b: {
-  isPublic: boolean;
-  showOnProfile: boolean;
-}): BacklogVisibility {
-  if (!b.isPublic) return "private";
-  return b.showOnProfile ? "featured" : "public";
-}
+export { VISIBILITY_STATES, visibilityOf };
 
 export function VisibilitySegments({
   backlogId,

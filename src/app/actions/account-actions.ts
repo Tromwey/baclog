@@ -72,10 +72,6 @@ export async function setPreferredServiceAction(service: PreferredService) {
  * "/backlogs → /onboarding" redirect cached before onboarding completed.
  * Keep this step last so the flow's only navigation stays server-side.
  */
-export async function chooseServiceAndFinishAction(service: PreferredService) {
-  await setPreferredServiceAction(service);
-  redirect("/backlogs");
-}
 
 export async function updateDisplayNameAction(name: string) {
   const user = await assertUser();

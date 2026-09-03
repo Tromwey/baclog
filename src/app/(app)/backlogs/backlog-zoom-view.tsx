@@ -1,25 +1,38 @@
 import Link from "next/link";
 import { assertOwnsBacklog } from "@/authz";
-import { BacklogHero } from "@/components/backlog-hero";
-import { ItemRowRemovable } from "@/components/item-row-removable";
 import { ThemeColorSync } from "@/components/theme-color-sync";
-import { UpcomingShelf } from "@/components/upcoming-shelf";
+import { UpcomingShelf, type UpcomingItem } from "@/components/upcoming-shelf";
+import { visibilityOf } from "@/modules/backlog/visibility";
+import { SHARE_PATH } from "@/components/glyph-paths";
+import {
+  PaletteGlow,
+  StepMeter,
+  StrokeIcon,
+  glassChipClass,
+  mixHexes,
+} from "@/components/ui";
+import { plural } from "@/lib/plural";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { getBacklogItems } from "@/modules/backlog/queries";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
-import { dominantHexes } from "@/modules/backlog/palette";
 import {
   firstRunStep,
   getFirstRunCounts,
   type FirstRunStep,
 } from "@/modules/backlog/first-run";
-import { StepMeter } from "@/components/ui";
-import { shelfSeed } from "./backlog-shelf-card";
+import { HideDock } from "./hide-dock";
 import { ZoomBackButton } from "./zoom-back-button";
-import { BacklogMenu } from "./[backlogId]/backlog-menu";
+import { BacklogGrid, type GridItem } from "./[backlogId]/backlog-grid";
+import {
+  BacklogVisibilityProvider,
+  DeleteBacklogRow,
+  EditBacklogTrigger,
+  VisibilityPill,
+  VisibilityRow,
+} from "./[backlogId]/backlog-sheets";
 
 /**
- * Shared data loader for the two zoom twins ([backlogId]/page.tsx and the
+ * Shared data loader for the two detail twins ([backlogId]/page.tsx and the
  * intercepted @modal/(.)[backlogId]/page.tsx). Ownership check and item fetch
  * run CONCURRENTLY — nothing renders unless the assert resolves, so the authz
  * model is unchanged; the items are just already in flight when it does.
@@ -38,25 +51,27 @@ export async function loadBacklogZoom(backlogId: string) {
   return {
     backlog,
     items,
-    paletteHex: dominantHexes(items, 6),
     step: firstRunStep({ backlogs: 1, ...counts }),
     // F3.8 — read the clock HERE (the loader is async; the view below is not)
-    // so the shelf and every row's countdown share one instant.
+    // so the strip and every wait pill share one instant.
     now: await getRenderInstant(),
   };
 }
 
 /**
- * Shelf zoom body (mock #p2/#p7) — hero with the backlog's ADN aura + the
- * read-only item list. Presentational and server-safe; shared by the real
- * /backlogs/[id] page (plain, template.tsx animates it) and the intercepted
- * overlay (`zoom` adds the bl-zoom-aura/-content bloom, the overlay route owns
- * bl-zoom-in on its fixed wrapper).
+ * Backlog detail (Revamp UI screen 03, 2026-09-03): a page-wide palette glow
+ * hanging off the top, the header row (back · visibility pill · share), the
+ * title block (mono count, serif 54 name, vibe + "editar"), this backlog's
+ * "No puede esperar", the tabbed cover grid, and the settings rows. No dock —
+ * the floating "Agregar título" takes its place (HideDock + BacklogGrid).
+ *
+ * Server-safe; shared by the real /backlogs/[id] page (plain, template.tsx
+ * animates it) and the intercepted overlay (`zoom` adds the bl-zoom-content
+ * stagger; the overlay route owns bl-zoom-in on its fixed shell).
  */
 export function BacklogZoomView({
   backlog,
   items,
-  paletteHex,
   step,
   now,
   zoom = false,
@@ -65,188 +80,140 @@ export function BacklogZoomView({
     id: string;
     name: string;
     vibe: string | null;
-    createdAt: Date;
-    // F3.10.1 — feeds the ⋯ menu's Visibilidad triad.
     isPublic: boolean;
     showOnProfile: boolean;
   };
   items: BacklogItemWithCatalog[];
-  /** The backlog's ADN (dominant hexes). Ignored while the backlog is empty. */
-  paletteHex: string[];
   /** Welcome onboarding step (0 = activated, no guidance renders). */
   step: FirstRunStep;
-  /** The render instant from loadBacklogZoom — every countdown on this screen
-   *  is measured from it (see components/countdown.tsx). */
+  /** The render instant from loadBacklogZoom — every wait on this screen is
+   *  measured from it. */
   now: number;
   zoom?: boolean;
 }) {
   const hasItems = items.length > 0;
   const content = zoom ? "bl-zoom-content" : "";
-  const upcoming = items
+  const glow = mixHexes(items.map((it) => it.paletteHex ?? []));
+
+  const upcoming: UpcomingItem[] = items
     .filter((it) => isUpcoming(it.releaseDate, now))
     .sort((a, b) => a.releaseDate!.getTime() - b.releaseDate!.getTime())
     .map((it) => ({
       catalogItemId: it.catalogItemId,
       title: it.title,
+      mediaType: it.mediaType,
       posterUrl: it.posterUrl,
+      paletteHex: it.paletteHex,
       releaseDate: it.releaseDate!.toISOString(),
     }));
+
+  const gridItems: GridItem[] = items.map((it) => ({
+    backlogItemId: it.id,
+    catalogItemId: it.catalogItemId,
+    title: it.title,
+    mediaType: it.mediaType,
+    year: it.year,
+    posterUrl: it.posterUrl,
+    paletteHex: it.paletteHex,
+    status: it.status,
+    verdict: it.verdict,
+    obsessed: it.obsessed,
+    releaseDate: it.releaseDate ? it.releaseDate.toISOString() : null,
+  }));
+
   // Step 2 = the library is empty account-wide. An ACTIVATED user's empty
-  // backlog keeps the placeholder, the serif line and the CTA — only the meter
-  // drops, so this screen never advertises a step that isn't theirs.
+  // backlog keeps the copy — only the meter drops, so this screen never
+  // advertises a step that isn't theirs.
   const showMeter = step === 2 && !hasItems;
   // Step 3 lands here once the first title exists: name the two gestures that
-  // actually unlock the engine, next to the row they apply to.
+  // actually unlock the engine, next to the grid they apply to.
   const showReactionCoach = step === 3 && hasItems;
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
+    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-[160px] text-text">
       {/* In-browser Safari tints the status-bar band from theme-color — sync
-          it to the aura's dominant hue so the hero doesn't cut off in black. */}
-      <ThemeColorSync color={hasItems ? paletteHex[0] : null} />
+          it to the glow's dominant hue so the hero doesn't cut off in black. */}
+      <ThemeColorSync color={glow[0]} />
+      <HideDock />
 
-      {/* Shared hero (B disciplinada) — identical to the public twin; the two
-          surfaces diverge only in the row density below + the top-bar controls
-          (private: back + ⋯ menu). `zoom` carries the intercepted-overlay bloom. */}
-      <BacklogHero
-        name={backlog.name}
-        vibe={backlog.vibe}
-        itemCount={items.length}
-        year={backlog.createdAt.getFullYear()}
-        palette={paletteHex}
-        seed={shelfSeed(backlog.id)}
-        zoom={zoom}
-        controls={
-          <>
-            <ZoomBackButton />
-            <div className="flex items-center gap-3">
-              {showMeter && <StepMeter step={2} />}
-              <BacklogMenu
-                backlogId={backlog.id}
-                currentName={backlog.name}
-                hasItems={hasItems}
-                isPublic={backlog.isPublic}
-                showOnProfile={backlog.showOnProfile}
-              />
-            </div>
-          </>
-        }
+      {/* Page-wide light (mock: inset -60px -40px auto, 420px, blur 80, .5). */}
+      <PaletteGlow
+        hexes={glow}
+        angle={110}
+        opacity={0.5}
+        blur={80}
+        className={`-inset-x-10 -top-[60px] h-[420px] ${zoom ? "bl-zoom-aura" : ""}`}
       />
 
-      {hasItems ? (
-        <div className={`relative mt-[18px] ${content}`}>
-          {/* F3.8 — what hasn't come out yet, nearest first. The rows below
-              deliberately DON'T repeat the countdown: a title appears in both
-              places, and saying "faltan 5 días" twice on one screen makes the
-              shelf look like it's insisting. The shelf is where the wait is
-              legible; the row stays a row. */}
-          {upcoming.length > 0 && (
-            <>
-              <UpcomingShelf items={upcoming} initialNow={now} />
-              <div className="mx-5 mb-1 mt-5 h-px bg-line" />
-            </>
-          )}
-
-          {items.map((item, i) => (
-            <ItemRowRemovable
-              key={item.id}
-              backlogItemId={item.id}
-              index={i + 1}
-              catalogItemId={item.catalogItemId}
-              title={item.title}
-              mediaType={item.mediaType}
-              verdict={item.verdict}
-              obsessed={item.obsessed}
-              sourceCrossMediaRecId={item.sourceCrossMediaRecId}
-            />
-          ))}
-
-          {showReactionCoach && (
-            <div className="bl-rise mx-5 mt-[26px]">
-              <div className="h-px bg-line" />
-              <div className="mt-4 flex gap-2.5 font-mono text-[9px] uppercase tracking-[0.16em]">
-                <span className="flex-none text-text-2">Paso 3</span>
-                <span className="leading-[1.7] text-text-3">
-                  Abre el título y márcalo «me obsesiona», o «me gusta» en el
-                  menú de opciones. Eso enciende las recomendaciones.
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* A filled backlog had no add affordance of its own — the only path
-              back to search was the dock. This row carries the pinned target,
-              same as the empty state's CTA. */}
-          <Link
-            href={`/descubrir?buscar=1&to=${backlog.id}`}
-            className="mx-5 mt-[18px] flex items-center gap-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-2 transition-colors hover:text-text"
-          >
-            <span aria-hidden className="text-[14px] leading-none text-accent">
-              ＋
-            </span>
-            Agregar a este backlog
-          </Link>
-        </div>
-      ) : (
-        /* Estante en blanco (mock #p7) */
-        <div
-          className={`relative flex flex-col items-center px-[30px] pt-11 text-center ${content}`}
+      <BacklogVisibilityProvider backlogId={backlog.id} initial={visibilityOf(backlog)}>
+        <header
+          className={`relative flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))] ${content}`}
         >
-          <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[22px] border-[1.5px] border-dashed border-[#33333C]">
-            <svg
-              width="30"
-              height="30"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
-            >
-              <path
-                d="M12 5v14M5 12h14"
-                stroke="#4A4A54"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
+          <ZoomBackButton />
+          <div className="flex items-center gap-2">
+            {showMeter && <StepMeter step={2} />}
+            <VisibilityPill />
+            {hasItems && (
+              <Link
+                href={`/backlogs/${backlog.id}/card`}
+                aria-label="Compartir"
+                className={glassChipClass}
+              >
+                <StrokeIcon d={SHARE_PATH} size={16} strokeWidth={2.2} />
+              </Link>
+            )}
           </div>
-          <p className="mt-[22px] font-serif text-[26px] italic leading-[1.2]">
-            Este backlog está en blanco.
+        </header>
+
+        <div className={`relative flex flex-col gap-2 px-6 pt-[26px] ${content}`}>
+          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
+            Backlog · {items.length} {plural(items.length, "título", "títulos")}
+          </span>
+          <h1 className="font-serif text-[54px] font-normal italic leading-[0.95] tracking-[-0.01em]">
+            {backlog.name}
+          </h1>
+          <p className="mt-0.5 text-[15px] leading-[1.45] text-text-2 [text-wrap:pretty]">
+            {backlog.vibe && <>{backlog.vibe} </>}
+            <EditBacklogTrigger
+              backlogId={backlog.id}
+              name={backlog.name}
+              vibe={backlog.vibe}
+            />
           </p>
-          <p className="mt-3 max-w-[30ch] text-sm leading-[1.55] text-text-2">
-            Agrega una película, serie o álbum — su color llenará el aura del
-            backlog.
-          </p>
-          {/* The CTA carries its own destination: ?buscar=1 opens the search
-              panel directly (no editorial detour through Recomiéndame, which
-              a user with nothing loved can't use yet) and ?to= pins THIS
-              backlog as where the adds land. */}
-          <Link
-            href={`/descubrir?buscar=1&to=${backlog.id}`}
-            className="mt-[26px] flex items-center justify-center gap-2 rounded-full bg-accent px-[22px] py-3.5 text-[15px] font-semibold text-bg"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
-            >
-              <path
-                d="M12 5v14M5 12h14"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-            Agregar algo
-          </Link>
-          <Link
-            href="/para-ti"
-            className="mt-3.5 text-sm text-text-2 transition-colors hover:text-text"
-          >
-            Explorar Para ti
-          </Link>
         </div>
-      )}
+
+        <div className={`relative pt-[26px] ${content}`}>
+          {/* F3.8 — what hasn't come out yet, nearest first. The grid below
+              repeats the wait as the cover's pill (mock), not as a row. */}
+          <UpcomingShelf items={upcoming} initialNow={now} inset="px-6" />
+        </div>
+
+        <BacklogGrid
+          backlogId={backlog.id}
+          items={gridItems}
+          now={now}
+          className={`relative ${content}`}
+        />
+
+        {showReactionCoach && (
+          <div className="bl-rise relative mx-6 mt-[26px]">
+            {/* Content hairline divider (AGENTS §7 exempt: coach marks). */}
+            <div className="h-px bg-line" />
+            <div className="mt-4 flex gap-2.5 font-mono text-[9px] uppercase tracking-[0.16em]">
+              <span className="flex-none text-text-2">Paso 3</span>
+              <span className="leading-[1.7] text-text-3">
+                Abre el título y márcalo «me obsesiona», o «me gusta» en el
+                menú de opciones. Eso enciende las recomendaciones.
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className={`relative flex flex-col gap-2 px-5 pt-[34px] ${content}`}>
+          <VisibilityRow />
+          <DeleteBacklogRow backlogId={backlog.id} />
+        </div>
+      </BacklogVisibilityProvider>
     </div>
   );
 }

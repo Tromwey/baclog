@@ -1,5 +1,6 @@
 "use client";
 
+import { HERO_PILL } from "./follow-pill";
 import { useState, useTransition } from "react";
 import {
   followUserAction,
@@ -10,13 +11,16 @@ import {
  * F3.10 — the one follow control, everywhere a public profile can be followed
  * (its hero, the feed's suggestion cards, the siguiendo/seguidores rows).
  * Optimistic: the chip flips on tap and only reverts if the server says no.
- * Two fills, per the design: lima pill = "Seguir" (the action), neutral
- * surface + accent check = "Siguiendo" (the state). No borders, no glow (§7).
+ * No borders, no glow (§7).
  *
- * `variant="glass"` is the feed v3 mock's version for the in-feed suggestion
- * card: off-white pill (text on bg) that turns into the mock's glass when
- * following, 9/18 padding, 13px semibold, 200ms color transition — the same
- * optimistic toggle underneath.
+ * Three variants, all the same optimistic toggle underneath:
+ *  - `accent` — the lima pill = "Seguir", neutral surface + check =
+ *    "Siguiendo" (people rows).
+ *  - `glass` — feed v3's suggestion card: off-white pill that turns into the
+ *    glass when following, 9/18 padding, 13px semibold.
+ *  - `hero` — the public profile's button (Revamp UI screen 10, 2026-09-03):
+ *    fills its half of the row, off-white pill (`text` on `bg`), Hanken 600
+ *    14, 13px vertical padding; following = the app's glass fill.
  */
 
 const SIZES = {
@@ -27,13 +31,6 @@ const SIZES = {
 
 const ACCENT_PILL =
   "inline-flex flex-none items-center rounded-full bg-accent font-sans font-semibold leading-none text-bg transition-all active:scale-[0.97] active:bg-accent-press";
-
-/**
- * The lima "Seguir" pill as a plain class, for the ANONYMOUS variant on the
- * public profile (a Link to /login) — same slot, same fill, same press state
- * as the real button, so the logged-out conversion path can't drift from it.
- */
-export const followPillClass = `${ACCENT_PILL} ${SIZES.lg}`;
 
 const GLASS_PILL =
   "inline-flex flex-none items-center rounded-full px-[18px] py-[9px] font-sans text-[13px] font-semibold leading-none backdrop-blur-[16px] transition-[background-color,color] duration-200 active:scale-[0.97]";
@@ -48,7 +45,7 @@ export function FollowButton({
   username: string;
   initialFollowing: boolean;
   size?: keyof typeof SIZES;
-  variant?: "accent" | "glass";
+  variant?: "accent" | "glass" | "hero";
   className?: string;
 }) {
   const [following, setFollowing] = useState(initialFollowing);
@@ -72,6 +69,19 @@ export function FollowButton({
         setFollowing(!next);
       }
     });
+  }
+
+  if (variant === "hero") {
+    return (
+      <button
+        onClick={toggle}
+        className={`${HERO_PILL} ${
+          following ? "bg-[var(--glass-bg)] text-text" : "bg-text text-bg"
+        } ${className}`}
+      >
+        {following ? "Siguiendo" : "Seguir"}
+      </button>
+    );
   }
 
   if (variant === "glass") {

@@ -7,24 +7,22 @@ import { useLayoutEffect, useRef, useState } from "react";
  *
  * TMDB overviews have no length contract: most are two or three lines, and
  * then something like «The Wild Soccer Bunch 4» arrives with a nine-line plot
- * summary that pushes the reaction gesture, the reviews and the action bar off
- * the screen entirely. The page's shape shouldn't depend on how talkative a
+ * summary that pushes the reaction row, the reviews and everything else off
+ * the screen. The page's shape shouldn't depend on how talkative a
  * distributor's copywriter was.
  *
  * So it clamps to three lines and nothing is ever cut for good — the rest is
- * one tap away. Three and not four so the "Me obsesiona" gesture also clears
- * the fold on a phone: this block sits between the title and everything the
- * page is actually for.
- *
- * The toggle only appears when the text ACTUALLY overflows, measured
- * after mount rather than guessed from a character count: `max-w-[34ch]` is a
- * width in zero-widths, and real Spanish prose wraps nowhere near it. Server
+ * one tap away. The toggle only appears when the text ACTUALLY overflows,
+ * measured after mount rather than guessed from a character count. Server
  * render is the clamped paragraph with no toggle, so nothing jumps on
  * hydration — the affordance just appears.
+ *
+ * Revamp UI (2026-09-03): the mock's paragraph — 15px/1.5, text-2,
+ * text-pretty, left-aligned — is the default; the caller may override.
  */
 export function Synopsis({
   text,
-  className = "",
+  className = "text-[15px] leading-[1.5] text-text-2",
 }: {
   text: string;
   className?: string;
@@ -42,21 +40,22 @@ export function Synopsis({
   }, [text, expanded]);
 
   return (
-    <>
+    <div className="flex flex-col gap-2">
       <p
         ref={ref}
-        className={`${className} ${expanded ? "" : "line-clamp-3"}`}
+        className={`${className} text-pretty ${expanded ? "" : "line-clamp-3"}`}
       >
         {text}
       </p>
       {overflows && (
         <button
+          type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mx-auto mt-2 block font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-3 transition-colors hover:text-text-2"
+          className="self-start font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3 transition-colors hover:text-text-2"
         >
           {expanded ? "Leer menos" : "Leer más"}
         </button>
       )}
-    </>
+    </div>
   );
 }

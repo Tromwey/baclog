@@ -1,38 +1,32 @@
-import { AuraField } from "@/components/ui/aura-field";
+import { AdnAvatar } from "@/components/adn-avatar";
+import { legibleAdnPair } from "@/modules/reviews/format";
 
 /**
- * F3.11 — the profile-sized identity disc (/perfil and /u/[username]): the
- * owner's photo when they have one, otherwise their ADN blooming as an orb
- * (the M3.5 recipe, unchanged). Server component; the orb is an AuraField.
- * `className` carries the size and the depth shadow — the disc itself only
- * knows it is round and clipped.
+ * The profile-sized identity disc (/perfil and /u/[username]), redrawn for the
+ * Revamp UI (2026-09-03): the mock's 72px ADN orb — the owner's two legible
+ * palette stops, their initial in mono 24 punched out in the page background
+ * — with the mock's depth shadow and 1px inner highlight; their photo on top
+ * when they have one (F3.11), the orb staying underneath as the loading fill.
+ * Server component; size travels in `className` when a caller needs another.
  */
 export function ProfileAvatar({
   src,
   palette,
-  seed,
+  initial,
   className = "",
 }: {
   src: string | null;
   palette: string[];
-  seed: number;
+  /** First grapheme of the handle/name, uppercased. */
+  initial: string;
   className?: string;
 }) {
   return (
-    <div
-      className={`relative flex-none overflow-hidden rounded-full bg-bg ${className}`}
-    >
-      {src ? (
-        // eslint-disable-next-line @next/next/no-img-element -- our own route, fixed square, no optimizer needed
-        <img
-          src={src}
-          alt=""
-          draggable={false}
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        <AuraField variant="orb" colors={palette} seed={seed} />
-      )}
-    </div>
+    <AdnAvatar
+      hexes={legibleAdnPair(palette)}
+      initial={initial}
+      src={src}
+      className={`h-[72px] w-[72px] text-[24px] shadow-[0_18px_40px_-14px_rgba(0,0,0,.8),inset_0_1px_0_rgba(255,255,255,.3)] ${className}`}
+    />
   );
 }

@@ -28,13 +28,27 @@ export async function createBacklogAction(input: {
   return { id: created.id };
 }
 
-export async function renameBacklogAction(backlogId: string, name: string) {
+/**
+ * Name + vibe (Revamp UI 2026-09-03: the detail's "editar" sheet edits both).
+ * `vibe` is optional so the name-only callers keep working: `undefined` leaves
+ * the vibe untouched, an empty string clears it.
+ */
+export async function renameBacklogAction(
+  backlogId: string,
+  name: string,
+  vibe?: string,
+) {
   const { backlog } = await assertOwnsBacklog(backlogId);
   const parsed = nameSchema.safeParse(name);
-  if (!parsed.success) return { error: "invalid" as const };
+  const parsedVibe = vibeSchema.safeParse(vibe);
+  if (!parsed.success || !parsedVibe.success) return { error: "invalid" as const };
   await db
     .update(backlogs)
-    .set({ name: parsed.data, updatedAt: new Date() })
+    .set({
+      name: parsed.data,
+      ...(parsedVibe.data !== undefined ? { vibe: parsedVibe.data || null } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(backlogs.id, backlog.id));
   revalidatePath(`/backlogs/${backlog.id}`);
   revalidatePath("/backlogs");

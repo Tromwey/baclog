@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { submitCrossMediaFeedbackAction } from "@/app/actions/crossmedia-feedback-actions";
+import { glassPillClass } from "@/components/ui/glass";
 import {
   NEGATIVE_REASONS,
   POSITIVE_REASONS,
@@ -12,11 +13,10 @@ import {
  * F3.6 — structured "why" feedback ("¿por qué?" chips) on a cross-media-sourced
  * item's reaction. Only renders when the item came from an AI reco
  * (sourceCrossMediaRecId set) AND there is some reaction to explain — either a
- * verdict or an obsession (the two independent axes, F3.7). Rendered on the item
- * detail page (via reco-reasoning-panel.tsx's RecoFeedback wrapper, which feeds
- * it the live optimistic axes) — reaction editing lives ONLY there (HANDOFF §2),
- * so backlog rows no longer mount it. Chips speak the reasoning panel's mono
- * chip language (mock #p3).
+ * verdict or an obsession (the two independent axes, F3.7). Rendered inside
+ * the item detail's provenance row (reco-reasoning-panel.tsx), which feeds it
+ * the live optimistic axes — reaction editing lives ONLY there (HANDOFF §2).
+ * Chips are the Revamp UI's glass pills; a picked one fills accent.
  */
 export function CrossMediaFeedback({
   catalogItemId,
@@ -76,38 +76,45 @@ export function CrossMediaFeedback({
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-2">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-text-3"
+        aria-expanded={open}
+        className="self-start font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3"
       >
-        {open ? "Ocultar ▴" : "¿Por qué? ▾"}
+        {open ? "Ocultar ▴" : "¿Por qué te gustó? ▾"}
       </button>
       {open && (
-        <div className="mt-2 flex flex-wrap gap-[7px]">
+        <div className="flex flex-wrap gap-[7px]">
           {reasonOptions.map((tag) => (
             <button
               key={tag}
+              type="button"
               onClick={() => toggleReason(tag)}
-              className={`rounded-full px-[11px] py-[7px] font-mono text-[9px] uppercase tracking-[0.05em] ${
+              aria-pressed={selectedReasons.includes(tag)}
+              className={
                 selectedReasons.includes(tag)
-                  ? "bg-accent text-bg"
-                  : "bg-surface-2 text-text-2"
-              }`}
+                  ? `${glassPillClass} bg-accent text-bg hover:bg-accent`
+                  : `${glassPillClass} text-text-2`
+              }
             >
               {REASON_LABEL[tag]}
             </button>
           ))}
           <button
+            type="button"
             onClick={submit}
             disabled={pending || selectedReasons.length === 0}
-            className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-bg disabled:opacity-40"
+            className="rounded-full bg-accent px-3.5 py-[9px] text-[12px] font-semibold text-bg disabled:opacity-40"
           >
             Enviar
           </button>
         </div>
       )}
-      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+      {error && (
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-hot">{error}</p>
+      )}
     </div>
   );
 }

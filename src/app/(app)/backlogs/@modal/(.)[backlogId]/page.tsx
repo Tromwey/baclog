@@ -3,12 +3,12 @@ import { NotFoundError, UnauthorizedError } from "@/authz";
 import { BacklogZoomView, loadBacklogZoom } from "../../backlog-zoom-view";
 
 /**
- * The shelf zoom as an intercepted overlay — a soft nav from /backlogs lands
- * here (URL becomes /backlogs/[id], shareable) while the shelf list stays
+ * The backlog detail as an intercepted overlay — a soft nav from /backlogs
+ * lands here (URL becomes /backlogs/[id], shareable) while the list stays
  * mounted underneath. Same loader as the full-page twin. The fixed shell +
  * bl-zoom-in bloom live in this segment's layout.tsx so they play ONCE and
  * survive the loading→page swap; `zoom` here only adds the inner content
- * staggers. Dismiss = router.back() (the hero's ZoomBackButton).
+ * staggers. Dismiss = router.back() (the header's ZoomBackButton).
  */
 export default async function InterceptedBacklogZoom({
   params,
@@ -33,7 +33,6 @@ export default async function InterceptedBacklogZoom({
     <BacklogZoomView
       backlog={data.backlog}
       items={data.items}
-      paletteHex={data.paletteHex}
       step={data.step}
       now={data.now}
       zoom

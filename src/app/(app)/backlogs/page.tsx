@@ -1,20 +1,38 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
-import { AuraField, ONBOARDING_AURA, StepMeter } from "@/components/ui";
-import { getBacklogsForUser } from "@/modules/backlog/queries";
+import {
+  AuraField,
+  ONBOARDING_AURA,
+  ScreenHeader,
+  StepMeter,
+  StrokeIcon,
+  glassChipClass,
+} from "@/components/ui";
+import { getShelvesForUser } from "@/modules/backlog/shelves";
+import { getLibraryUpcoming } from "@/modules/backlog/library";
+import { getRenderInstant } from "@/modules/catalog/release";
 import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
-import { SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
+import { PLUS_PATH, SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { NewBacklogTrigger } from "./new-backlog-button";
-import { LensAccess } from "./lens-access";
-import { BacklogShelves, type Shelf } from "./backlog-shelves";
+import { BacklogShelves } from "./backlog-shelves";
 
+/**
+ * /backlogs (Revamp UI screen 02, 2026-09-03): "Backlogs" header with the "+"
+ * chip, the kind filter (Todos · Cine · Series · Música), the library-wide
+ * "No puede esperar" strip and then every backlog as a strip of covers over
+ * its palette glow. The lens entry (flame + dropdown) is gone from here — the
+ * mock has none; /backlogs/lentes/* keeps working by URL.
+ */
 export default async function BacklogsPage() {
   const user = await requireUser();
-  const list = await getBacklogsForUser(user.id);
+  const [shelves, now] = await Promise.all([
+    getShelvesForUser(user.id),
+    getRenderInstant(),
+  ]);
 
-  if (list.length === 0) return <FirstUse name={user.name} />;
+  if (shelves.length === 0) return <FirstUse name={user.name} />;
 
   // Novedades (modules/announcements.ts + components/novedades-modal). Gated
   // FIRST so the extra read only happens for an account that can actually see
@@ -26,40 +44,25 @@ export default async function BacklogsPage() {
   // (see getReviewInvitation) — it will find them the day they react to
   // something.
   const announce = shouldAnnounce(user);
-  const invitation = announce ? await getReviewInvitation(user.id) : null;
-
-  const shelves: Shelf[] = list.map((b) => ({
-    id: b.id,
-    name: b.name,
-    itemCount: b.itemCount,
-    paletteHex: b.paletteHex,
-    isPublic: b.isPublic,
-  }));
+  const [invitation, upcoming] = await Promise.all([
+    announce ? getReviewInvitation(user.id) : Promise.resolve(null),
+    getLibraryUpcoming(user.id, now),
+  ]);
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <header className="px-5 pb-1 pt-[calc(44px+env(safe-area-inset-top))]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="font-display text-[32px] font-extrabold leading-none tracking-[-0.02em]">
-              Tus backlogs
-            </h1>
-            <p className="mt-3 max-w-[32ch] text-[13px] leading-[1.5] text-text-2">
-              Colecciones que armas a mano — cine, series y álbumes en un mismo
-              backlog.
-            </p>
-          </div>
-          {/* Mock #p1 header actions: flame + chevron only — creating lives in
-              the "Nuevo estante" ghost card that closes the shelf list. */}
-          <div className="mt-1 shrink-0">
-            <LensAccess />
-          </div>
-        </div>
-      </header>
+      <ScreenHeader
+        title="Backlogs"
+        action={
+          <NewBacklogTrigger ariaLabel="Nuevo backlog" className={glassChipClass}>
+            <StrokeIcon d={PLUS_PATH} size={16} strokeWidth={2.4} />
+          </NewBacklogTrigger>
+        }
+      />
 
       {invitation && <NovedadesModal invitation={invitation} />}
 
-      <BacklogShelves shelves={shelves} />
+      <BacklogShelves shelves={shelves} upcoming={upcoming} now={now} />
     </main>
   );
 }
@@ -69,7 +72,8 @@ export default async function BacklogsPage() {
  * color aura (there's no content ADN to drive one yet — AuraField would fall
  * back to lima, which is exactly what the mock avoids here), one lima CTA
  * into the create modal and one dark CTA into Discover, then the gesture
- * coach marks — the row model, said once before any rows exist.
+ * coach marks — the row model, said once before any rows exist. Kept as-is:
+ * the Revamp UI mock defers empty states.
  *
  * This screen IS step 1 of the welcome onboarding (no backlogs is the step's
  * definition), so the greeting + meter are unconditional here — reaching it
@@ -114,18 +118,7 @@ function FirstUse({ name }: { name: string | null }) {
 
       <div className="relative flex flex-col gap-2.5 px-5 pt-8">
         <NewBacklogTrigger className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-[15px] text-[15px] font-semibold text-bg">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+          <StrokeIcon d={PLUS_PATH} size={18} strokeWidth={2} />
           Crear tu primer backlog
         </NewBacklogTrigger>
         <Link

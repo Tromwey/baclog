@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { glassChipClass } from "@/components/ui/glass";
+import { StrokeIcon } from "@/components/ui/stroke-icon";
+import { SHARE_PATH } from "@/components/glyph-paths";
+import { useItemReaction } from "./reaction-state";
 
 /**
  * The item's ↗ share affordance — a two-way chooser instead of a direct jump to
@@ -18,24 +22,27 @@ import { createPortal } from "react-dom";
  * The link row needs a public URL (claimed username + public profile); without
  * one the shared link would 404, so it degrades to a nudge instead.
  *
- * `canShareCard` is false for a title the user hasn't added: the public item
- * page resolves off `catalog_item` alone (no ownership join — see
- * modules/backlog/public.ts), so the LINK works for anything searchable, but the
- * ticket stamps a backlog name + status that a non-member simply doesn't have.
- * With one option left there's nothing to choose, so ↗ shares straight away
- * rather than opening a single-row panel.
+ * The card is only offered for a title in the library (read LIVE off the
+ * provider, so a reaction that just added it unlocks the ticket at once): the
+ * public item page resolves off `catalog_item` alone (no ownership join — see
+ * modules/backlog/public.ts), so the LINK works for anything searchable, but
+ * the ticket stamps a backlog name + status that a non-member simply doesn't
+ * have. With one option left there's nothing to choose, so ↗ shares straight
+ * away rather than opening a single-row panel.
+ *
+ * The chip is the shared 38px glass recipe with the mock's share glyph
+ * (16px, stroke 2.2) — the same chip as the back control beside it.
  */
 export function ItemShareMenu({
   itemId,
   title,
   publicUrl,
-  canShareCard,
 }: {
   itemId: string;
   title: string;
   publicUrl: string | null;
-  canShareCard: boolean;
 }) {
+  const { inLibrary: canShareCard } = useItemReaction();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,26 +90,12 @@ export function ItemShareMenu({
   return (
     <>
       <button
+        type="button"
         onClick={() => (canShareCard ? setOpen((v) => !v) : onLink())}
         aria-label="Compartir"
-        className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-black/[0.28] text-text backdrop-blur-[18px]"
+        className={glassChipClass}
       >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M12 3v12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path
-            d="M8 7l4-4 4 4"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M5 12v6a2 2 0 002 2h10a2 2 0 002-2v-6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
+        <StrokeIcon d={SHARE_PATH} size={16} strokeWidth={2.2} />
       </button>
 
       {open &&

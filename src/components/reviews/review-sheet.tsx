@@ -5,26 +5,23 @@ import { Sheet } from "@/components/ui";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 
 /**
- * F3.9 — writing and editing. Reuses the app's one Sheet (bottom variant,
- * portaled to <body> so it clears the item page's fixed action bar); only the
- * contents are new.
+ * F3.9 — EDITING an existing review (Revamp UI, 2026-09-03: writing a new one
+ * moved to the Completar sheet, 08). Reuses the app's one Sheet (bottom
+ * variant, portaled to <body>); the field is the 08 glass card at the sheet's
+ * scale — 16px/1.5 text, accent caret, the mock's 36×22 spoiler switch and
+ * the "142 / 280" counter under it, hot past the limit.
  *
- * Two details carry the design's intent:
- *  - The counter lives next to the TITLE, not under the field — the top-right
- *    corner is where metadata is read everywhere else in the app. Past 280 it
- *    counts down in `--hot`.
- *  - Nothing is ever truncated. The excess is tinted with `--hot-soft` inside
- *    the field so you can see exactly what's over, and you decide what to cut.
- *    That tint needs a mirror layer behind a transparent-text textarea (a
- *    textarea can't style a range of its own value); the mirror only renders
- *    while over the limit, so the ordinary case is a plain textarea.
+ * Nothing is ever truncated. The excess is tinted with `--hot-soft` inside
+ * the field so you can see exactly what's over, and you decide what to cut.
+ * That tint needs a mirror layer behind a transparent-text textarea (a
+ * textarea can't style a range of its own value); the mirror only renders
+ * while over the limit, so the ordinary case is a plain textarea.
  */
 export function ReviewSheet({
   itemTitle,
   initialBody,
   initialHasSpoiler,
   allowSpoiler,
-  isEdit,
   saving,
   error,
   onCancel,
@@ -38,7 +35,6 @@ export function ReviewSheet({
    * isn't there and the flag saves as false (see `supportsSpoiler`).
    */
   allowSpoiler: boolean;
-  isEdit: boolean;
   saving: boolean;
   /** Copy for a failed save. The sheet stays open and keeps the draft. */
   error: string | null;
@@ -68,25 +64,16 @@ export function ReviewSheet({
   }, [body]);
 
   const fieldClasses =
-    "w-full resize-none rounded-[14px] p-[14px] text-[15px] leading-[1.5] outline-none";
+    "w-full resize-none rounded-[18px] p-4 text-[16px] leading-[1.5] outline-none";
 
   return (
-    <Sheet onClose={onCancel} label={isEdit ? "Edita tu reseña" : "Tu reseña"}>
+    <Sheet onClose={onCancel} label="Edita tu reseña">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-display text-[18px] font-bold tracking-[-0.01em] text-text">
-          {isEdit ? "Edita tu reseña" : "Tu reseña"}
-        </span>
-        <span
-          className={`font-mono text-[11px] tracking-[0.04em] ${
-            over ? "text-hot" : "text-text-3"
-          }`}
-        >
-          {over
-            ? `−${body.length - REVIEW_MAX_LENGTH}`
-            : `${body.length}/${REVIEW_MAX_LENGTH}`}
+          Edita tu reseña
         </span>
       </div>
-      <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-text-3">
+      <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
         Sobre {itemTitle}
       </p>
 
@@ -97,7 +84,7 @@ export function ReviewSheet({
           <div
             ref={mirrorRef}
             aria-hidden
-            className={`${fieldClasses} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words bg-surface-2 text-text`}
+            className={`${fieldClasses} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words bg-[var(--glass-bg)] text-text`}
           >
             {body.slice(0, REVIEW_MAX_LENGTH)}
             <span className="bg-[var(--hot-soft)] text-text">
@@ -111,61 +98,74 @@ export function ReviewSheet({
           onChange={(e) => setBody(e.target.value)}
           placeholder="¿Qué se te quedó?"
           autoFocus
-          className={`${fieldClasses} relative min-h-[104px] ${
+          className={`${fieldClasses} relative min-h-[120px] caret-accent placeholder:text-text-3 ${
             over
-              ? "bg-transparent text-transparent caret-[var(--text)]"
-              : "bg-surface-2 text-text"
+              ? "bg-transparent text-transparent"
+              : "bg-[var(--glass-bg)] text-text"
           }`}
         />
       </div>
 
-      {allowSpoiler && (
-        <button
-          onClick={() => setHasSpoiler((v) => !v)}
-          role="switch"
-          aria-checked={hasSpoiler}
-          className="mt-3 flex w-full items-center gap-3 rounded-[14px] bg-surface-2 px-[14px] py-[13px] text-left"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm text-text">Contiene spoiler</span>
-            <span className="mt-[2px] block text-[11.5px] leading-[1.35] text-text-3">
-              Se cubre hasta que alguien decida verlo.
-            </span>
-          </span>
-          <span
-            aria-hidden
-            className={`relative block h-[26px] w-[44px] flex-none rounded-full transition-colors duration-[220ms] ease-[var(--ease-out)] ${
-              hasSpoiler ? "bg-accent" : "bg-surface-3"
-            }`}
+      <div className="mt-2.5 flex items-center justify-between px-1">
+        {allowSpoiler ? (
+          <button
+            type="button"
+            onClick={() => setHasSpoiler((v) => !v)}
+            role="switch"
+            aria-checked={hasSpoiler}
+            className="flex items-center gap-2.5"
           >
             <span
-              className={`absolute top-[3px] h-5 w-5 rounded-full transition-[left] duration-[220ms] ease-[var(--ease-out)] ${
-                hasSpoiler ? "left-[21px] bg-bg" : "left-[3px] bg-text-2"
+              aria-hidden
+              className={`relative block h-[22px] w-9 flex-none rounded-full transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] ${
+                hasSpoiler ? "bg-accent" : "bg-surface-2"
               }`}
-            />
-          </span>
-        </button>
-      )}
+            >
+              <span
+                className={`absolute top-[2px] rounded-full transition-[left,width,height] duration-[var(--dur-base)] ease-[var(--ease-out)] ${
+                  hasSpoiler
+                    ? "left-4 h-[18px] w-[18px] bg-bg"
+                    : "left-[2px] h-4 w-4 bg-text-3"
+                }`}
+              />
+            </span>
+            <span className="text-[13px] text-text-2">Contiene spoiler</span>
+          </button>
+        ) : (
+          <span />
+        )}
+        <span
+          className={`font-mono text-[10.5px] uppercase tracking-[0.1em] ${
+            over ? "text-hot" : "text-text-3"
+          }`}
+        >
+          {body.length} / {REVIEW_MAX_LENGTH}
+        </span>
+      </div>
 
       {error && (
-        <p className="mt-3 text-[13px] leading-[1.45] text-hot">{error}</p>
+        <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-hot">
+          {error}
+        </p>
       )}
 
       <div className="mt-4 flex gap-[10px]">
         <button
+          type="button"
           onClick={onCancel}
-          className="flex-none rounded-full px-5 py-[14px] text-[15px] font-semibold text-text-2"
+          className="flex-none rounded-full px-5 py-[13px] text-[14px] font-semibold text-text-2"
         >
           Cancelar
         </button>
         <button
+          type="button"
           onClick={() => onSave(body.trim(), hasSpoiler)}
           disabled={disabled}
-          className={`flex-1 rounded-full px-6 py-[14px] text-[15px] font-semibold text-bg transition-opacity ${
+          className={`flex-1 rounded-full px-6 py-[13px] text-[14px] font-semibold text-bg transition-opacity ${
             disabled ? "bg-surface-3 opacity-50" : "bg-accent"
           }`}
         >
-          {saving ? "…" : isEdit ? "Guardar" : "Publicar"}
+          {saving ? "…" : "Guardar"}
         </button>
       </div>
     </Sheet>

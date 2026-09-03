@@ -17,6 +17,11 @@ import type { ReactNode } from "react";
  * state of its own, so a server component can render link segments and a
  * client component can drive `onSelect`. `scrollable` lets a long picker (the
  * "Agregar a" backlog row) run off the edge instead of squeezing.
+ *
+ * `value` lights ONE segment (a picker). `values` lights ANY number of them —
+ * the item's reaction row is three independent fields (me gustó · obsesión ·
+ * completo) drawn in one track, so several can be on at once; it then reads
+ * as a group of toggles (aria-pressed), not a tablist.
  */
 export interface Segment {
   key: string;
@@ -29,7 +34,8 @@ export interface Segment {
 
 export function Segmented({
   segments,
-  value,
+  value = null,
+  values,
   onSelect,
   variant = "tabs",
   scrollable = false,
@@ -37,7 +43,9 @@ export function Segmented({
   ariaLabel,
 }: {
   segments: Segment[];
-  value: string | null;
+  value?: string | null;
+  /** Multi-select highlight; wins over `value` when given. */
+  values?: readonly string[];
   onSelect?: (key: string) => void;
   variant?: "tabs" | "actions";
   scrollable?: boolean;
@@ -51,16 +59,17 @@ export function Segmented({
       ? "flex items-center justify-center gap-1.5 py-[11px]"
       : "py-[9px] text-center";
   const width = scrollable ? "flex-none px-4" : "flex-1 min-w-0";
+  const multi = values !== undefined;
   return (
     <div
-      role={onSelect ? "tablist" : undefined}
+      role={onSelect && !multi ? "tablist" : undefined}
       aria-label={ariaLabel}
       className={`flex rounded-full bg-white/[0.07] ${track} ${
         scrollable ? "bl-scroll overflow-x-auto" : ""
       } ${className}`}
     >
       {segments.map((s) => {
-        const active = s.key === value;
+        const active = multi ? values.includes(s.key) : s.key === value;
         const cls = `${seg} ${width} whitespace-nowrap rounded-full font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-[var(--dur-fast)] ${
           active ? "bg-white/[0.08] text-text" : "text-text-3"
         } ${s.className ?? ""}`;
@@ -86,9 +95,9 @@ export function Segmented({
           <button
             key={s.key}
             type="button"
-            role={onSelect ? "tab" : undefined}
-            aria-selected={onSelect ? active : undefined}
-            aria-pressed={onSelect ? undefined : active}
+            role={onSelect && !multi ? "tab" : undefined}
+            aria-selected={onSelect && !multi ? active : undefined}
+            aria-pressed={onSelect && !multi ? undefined : active}
             onClick={onSelect ? () => onSelect(s.key) : undefined}
             className={cls}
           >

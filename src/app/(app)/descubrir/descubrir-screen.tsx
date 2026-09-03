@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, Search as SearchIcon, Sparkles } from "lucide-react";
 import {
   discoverNextRecoAction,
   dismissRecoAction,
@@ -16,20 +14,27 @@ import {
   CrossMediaDiscovery,
   type DiscoveryBacklog,
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
-import type { MediaType } from "@/modules/catalog/types";
-import { AuraField, AUTH_ADN } from "@/components/ui";
-import { Pills } from "./pills";
-import { SearchPanel } from "./search-panel";
+import type { ObsessionRail, LatestDoubleFeature } from "@/modules/recs/discover-rails";
+import type { TrendingTitle } from "@/modules/social/trending";
+import { AuraField, AUTH_ADN, StrokeIcon, glassChipClass } from "@/components/ui";
+import { BACK_PATH } from "@/components/glyph-paths";
+import { DiscoverHome } from "./discover-home";
+import { SearchSheet } from "./search-sheet";
 import { FeatureAura } from "./feature-aura";
 
-type Mode = "entry" | "loading" | "ai" | "search";
+type Mode = "home" | "loading" | "ai";
+
+export interface SearchBacklog extends DiscoveryBacklog {
+  /** ADN of the backlog — the search sheet glows in the target's colors. */
+  paletteHex: string[];
+}
 
 /**
- * F3.5.6 (M3.5 nav) — Descubrir merges Buscar + Para ti behind one editorial
- * entry: pick types, then "Recomiéndame" (the cross-media engine, cache-first)
- * or "Buscar" (the shipped search). "Recomiéndame" opens the Double Feature
- * screen itself — one narrative pairing at a time; the × walks to the next
- * (free from cache, then one generation when the cache runs out).
+ * Discover (Revamp UI, 2026-09-03 — mock 04 + 07). The home is the rails +
+ * the Double Feature card; the search field opens the search SHEET (mock 07)
+ * over it; the card runs the cross-media engine (cache-first, then at most
+ * one generation) and lands on the Double Feature screen — one narrative
+ * pairing at a time, the × walks to the next.
  */
 export function DescubrirScreen({
   username,
@@ -37,60 +42,55 @@ export function DescubrirScreen({
   totalTitles,
   hasLoved,
   loadingColors,
+  rails,
+  trending,
+  doubleFeature,
 }: {
   username: string;
-  backlogs: DiscoveryBacklog[];
+  backlogs: SearchBacklog[];
   totalTitles: number;
   /**
    * The user has at least one "me gusta"/"me obsesiona" — i.e. the reco engine
-   * has a seed to work from. False ⇒ Recomiéndame would dead-end on `no_loved`
-   * AFTER spending the tap, so the entry declares the unlock instead.
+   * has a seed to work from. False ⇒ the card states its unlock instead of
+   * spending the tap on the `no_loved` dead end.
    */
   hasLoved: boolean;
-  /** User ADN palette — only for the loading screen's full-bleed aura. */
+  /** User ADN palette — the loading screen's full-bleed aura + the generic card's glow. */
   loadingColors: string[];
+  rails: ObsessionRail[];
+  trending: TrendingTitle[];
+  doubleFeature: LatestDoubleFeature | null;
 }) {
   // ?q= is what survives a trip into an item: the search writes it before
-  // pushing /item/…, so the ✕ (router.back) lands back on the SAME list instead
-  // of dumping the user on the entry screen to retype their query.
+  // pushing /item/…, so the ✕ (router.back) lands back on the SAME list.
   const params = useSearchParams();
   const restoredQuery = params.get("q") ?? "";
-  // ?buscar=1&to= — the guided handoff from a backlog: open Buscar directly
-  // (skipping an editorial screen whose loudest button this user can't use
-  // yet) with that backlog pinned as the add target.
+  // ?buscar=1&to= — the guided handoff from a backlog: open the sheet directly
+  // with that backlog pinned as the add target.
   const guided = params.get("buscar") === "1";
   const pinnedBacklogId = params.get("to");
-  const [mode, setMode] = useState<Mode>(
-    restoredQuery || guided ? "search" : "entry",
+  const [mode, setMode] = useState<Mode>("home");
+  const [searchOpen, setSearchOpen] = useState(
+    Boolean(restoredQuery) || guided,
   );
-  const [pills, setPills] = useState<Record<MediaType, boolean>>({
-    film: true,
-    series: true,
-    album: true,
-  });
   const [feed, setFeed] = useState<DiscoverFeedResult | null>(null);
   const [aiIndex, setAiIndex] = useState(0);
-  // The Buscar button's on-screen rect at tap time — the search bar morphs
-  // (FLIP) up from here, so it "rises into" the bar instead of popping in.
-  const [searchFrom, setSearchFrom] = useState<DOMRect | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
 
-  const togglePill = (t: MediaType) =>
-    setPills((p) => ({ ...p, [t]: !p[t] }));
-
-  const openSearch = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
+  const openSearch = () => {
     // iOS only raises the keyboard for a focus() that runs inside the tap's own
-    // task. Mount the panel synchronously (flushSync) so the input exists right
-    // here, then focus it from the handler — relying on `autoFocus` (or any
-    // focus deferred to an effect) left the field focused with a caret and NO
-    // keyboard whenever React didn't commit inside the gesture.
-    flushSync(() => {
-      setSearchFrom(rect);
-      setMode("search");
-    });
+    // task. Mount the sheet synchronously (flushSync) so the input exists right
+    // here, then focus it from the handler — an `autoFocus` or a focus deferred
+    // to an effect left the field with a caret and NO keyboard.
+    flushSync(() => setSearchOpen(true));
     searchInputRef.current?.focus();
+  };
+
+  const closeSearch = () => {
+    // Leaving search for real — drop ?q=/?buscar= so the next visit is clean.
+    window.history.replaceState(null, "", "/descubrir");
+    setSearchOpen(false);
   };
 
   const recomendar = () => {
@@ -140,21 +140,18 @@ export function DescubrirScreen({
       // still-in-flight write would hand the just-dismissed card straight back.
       await dismissing;
       // Pass the seed on screen so "otra conexión" re-rolls THIS title instead
-      // of only filling in titles that had no pairing yet — that's what made
-      // the engine look stuck on one recommendation per item.
+      // of only filling in titles that had no pairing yet.
       const { result, seedCatalogItemId } = await discoverNextRecoAction(
         current?.seed.catalogItemId ?? null,
       );
       // A transient generation failure surfaces its own retryable state instead
-      // of silently dropping back to the button (the QA bug: the user couldn't
-      // tell "it errored" from "no connection found"). A charge never happened.
+      // of silently dropping back. A charge never happened.
       if (result === "failed") {
         setFeed({ kind: "failed" });
         return;
       }
       // We DID spend a discovery (ADR-009 charges the LLM call) but the proposal
-      // didn't ground to a real title. Surface it plainly — its own state, not
-      // the quiet "no_more" — so the meter drop isn't silent; a re-roll may land.
+      // didn't ground to a real title. Its own state, so the meter drop isn't silent.
       if (result === "spent_no_match") {
         setFeed({ kind: "spent_no_match" });
         return;
@@ -162,11 +159,9 @@ export function DescubrirScreen({
       const res = await getDiscoverFeedAction();
       setFeed(res);
       // Land on the pairing we just generated by LOCATING its seed in the
-      // re-read feed — never a positional guess. getCrossMediaFeed orders items
-      // by seed (not append order), and a retry from the "failed" state re-reads
-      // with readyItems already emptied, so `readyItems.length` would land on the
-      // wrong (or first, already-seen) pairing. Fall back to the last item when
-      // nothing new was generated (cap_reached / no_more).
+      // re-read feed — never a positional guess (getCrossMediaFeed orders by
+      // seed, not append order). Fall back to the last item when nothing new
+      // was generated (cap_reached / no_more).
       if (res.kind === "ready") {
         const generatedIndex = seedCatalogItemId
           ? res.items.findIndex(
@@ -179,16 +174,18 @@ export function DescubrirScreen({
   };
 
   return (
-    <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden text-text">
-      {mode === "entry" && (
-        <Entry
-          pills={pills}
-          onToggle={togglePill}
-          onRecomendar={recomendar}
-          onSearch={openSearch}
-          totalTitles={totalTitles}
+    <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip text-text">
+      {mode === "home" && (
+        <DiscoverHome
+          rails={rails}
+          trending={trending}
+          doubleFeature={doubleFeature}
           hasLoved={hasLoved}
+          totalTitles={totalTitles}
+          adnHexes={loadingColors}
           pending={pending}
+          onSearch={openSearch}
+          onRecomendar={recomendar}
         />
       )}
 
@@ -201,157 +198,22 @@ export function DescubrirScreen({
           username={username}
           backlogs={backlogs}
           pending={pending}
-          onBack={() => setMode("entry")}
+          onBack={() => setMode("home")}
           onNext={next}
         />
       )}
 
-      {mode === "search" && (
-        <SearchPanel
-          selected={pills}
-          onToggle={togglePill}
-          fromRect={searchFrom}
+      {searchOpen && (
+        <SearchSheet
           inputRef={searchInputRef}
           initialQuery={restoredQuery}
           backlogs={backlogs}
           pinnedBacklogId={pinnedBacklogId}
-          guidedArrival={guided}
           libraryEmpty={totalTitles === 0}
-          onBack={() => {
-            // Leaving search for real — drop ?q= so the next visit is clean.
-            window.history.replaceState(null, "", "/descubrir");
-            setMode("entry");
-          }}
+          onClose={closeSearch}
         />
       )}
     </main>
-  );
-}
-
-function Entry({
-  pills,
-  onToggle,
-  onRecomendar,
-  onSearch,
-  totalTitles,
-  hasLoved,
-  pending,
-}: {
-  pills: Record<MediaType, boolean>;
-  onToggle: (t: MediaType) => void;
-  onRecomendar: () => void;
-  onSearch: (e: React.MouseEvent) => void;
-  totalTitles: number;
-  hasLoved: boolean;
-  pending: boolean;
-}) {
-  return (
-    <div className="relative z-10 flex min-h-dvh flex-col px-[22px] pb-dock-clearance pt-[calc(56px+env(safe-area-inset-top))]">
-      <div className="font-serif text-[40px] italic leading-[1.03]">
-        ¿Qué te
-        <br />
-        apetece hoy?
-      </div>
-      <p className="mt-3 max-w-[30ch] text-[13.5px] leading-[1.5] text-text-2">
-        {hasLoved
-          ? "Afina por tipo si quieres, y deja que Baclog te recomiende algo, o búscalo tú mismo."
-          : "Dinos qué se te antoja y tendemos un puente desde algo que ya amas."}
-      </p>
-
-      <div className="flex-1" />
-
-      <div className="mb-[11px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-        Afinar por tipo
-      </div>
-      <Pills selected={pills} onToggle={onToggle} />
-
-      {hasLoved ? (
-        <>
-          <button
-            onClick={onRecomendar}
-            disabled={pending}
-            className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[15px] font-display text-base font-bold text-bg transition-transform active:scale-[0.98] disabled:opacity-60"
-          >
-            <Sparkles size={19} /> Recomiéndame
-          </button>
-          <div className="my-[10px] text-center font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-            Destilado de {totalTitles === 1 ? "tu único título" : `tus ${totalTitles} títulos`} · sin spoilers
-          </div>
-          <button
-            onClick={onSearch}
-            className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-surface-2 px-4 py-3.5 text-[15px] font-semibold text-text transition-colors hover:bg-surface-3"
-          >
-            <SearchIcon size={17} /> Buscar
-          </button>
-        </>
-      ) : (
-        <RecomendameEnEspera
-          totalTitles={totalTitles}
-          onSearch={onSearch}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * Descubrir before the first reaction (step 3).
- *
- * The engine seeds off LOVED titles, so with none the lima "Recomiéndame"
- * spent the user's tap only to land them on the `no_loved` empty state. Here
- * the order inverts: Buscar takes the front, and Recomiéndame states its unlock
- * condition BEFORE the tap — the literal truth of the engine, phrased as a
- * pending promise rather than a denied feature. No padlock, no dead disabled
- * button: the card is a live link into the library where the reaction lives.
- */
-function RecomendameEnEspera({
-  totalTitles,
-  onSearch,
-}: {
-  totalTitles: number;
-  onSearch: (e: React.MouseEvent) => void;
-}) {
-  const empty = totalTitles === 0;
-  return (
-    <div className="mt-5 flex flex-col gap-3.5">
-      <button
-        onClick={onSearch}
-        className="flex w-full items-center justify-center gap-2.5 rounded-[26px] bg-accent px-4 py-[17px] font-display text-[17px] font-bold text-bg transition-transform active:scale-[0.98]"
-      >
-        <SearchIcon size={17} /> Buscar algo que ya amas
-      </button>
-
-      <Link
-        href="/backlogs"
-        className="flex flex-col gap-3 rounded-[22px] bg-surface-1 p-5 transition-colors hover:bg-surface-2"
-      >
-        <span className="flex items-center gap-2.5">
-          <Sparkles size={16} className="text-text-3" />
-          <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-text-3">
-            Recomiéndame · en espera
-          </span>
-        </span>
-        <span className="font-serif text-[24px] italic leading-[1.15]">
-          El motor necesita saber qué amas.
-        </span>
-        <span className="font-mono text-[9px] uppercase leading-[1.8] tracking-[0.14em] text-text-2">
-          Marca un título como «me gusta» o «me obsesiona» y esto se enciende
-        </span>
-        <span aria-hidden className="mt-0.5 h-px bg-line" />
-        <span className="flex items-center justify-between gap-3">
-          <span className="min-w-0 font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-            {empty
-              ? "Aún sin destilar"
-              : `Tienes ${totalTitles === 1 ? "un título" : `${totalTitles} títulos`} · 0 marcados`}
-          </span>
-          {/* nowrap: the arrow belongs to the label — letting it wrap onto its
-              own line at 375px read as a broken glyph. */}
-          <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-accent">
-            {empty ? "Empieza un backlog" : "Ir a mis títulos"} →
-          </span>
-        </span>
-      </Link>
-    </div>
   );
 }
 
@@ -377,10 +239,9 @@ function Loading({ colors }: { colors: string[] }) {
 
   return (
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-8 text-center">
-      {/* This screen's own emphatic aura, full-bleed (not just the top band). */}
       <AuraField variant="ambient" colors={aura} seed={13} />
       <div className="absolute top-[calc(52px+env(safe-area-inset-top))] font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
-        Baclog · Descubrir
+        Baclog · Discover
       </div>
       <div className="relative font-serif text-[26px] italic text-text">
         {LOADING_MESSAGES[i]}
@@ -430,15 +291,7 @@ function AiResults({
         onBack={onBack}
         title="No pudimos generar tu conexión ahora."
         body="Fue un tropiezo del momento, no tú. Reintenta y volvemos a buscar — no gastaste ningún descubrimiento."
-        action={
-          <button
-            onClick={onNext}
-            disabled={pending}
-            className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
-          >
-            {pending ? "Reintentando…" : "Reintentar"}
-          </button>
-        }
+        action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
   }
@@ -448,15 +301,7 @@ function AiResults({
         onBack={onBack}
         title="Gastamos un intento, pero no encontramos un match real."
         body="Propusimos una conexión que no existe (todavía) en el catálogo, así que este intento sí contó. Reintenta — a la próxima puede aterrizar."
-        action={
-          <button
-            onClick={onNext}
-            disabled={pending}
-            className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
-          >
-            {pending ? "Reintentando…" : "Reintentar"}
-          </button>
-        }
+        action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
   }
@@ -476,13 +321,12 @@ function AiResults({
         }
         action={
           feed.remaining > 0 ? (
-            <button
+            <RetryButton
               onClick={onNext}
-              disabled={pending}
-              className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
-            >
-              {pending ? "Buscando…" : "Descúbreme una"}
-            </button>
+              pending={pending}
+              label="Descúbreme una"
+              pendingLabel="Buscando…"
+            />
           ) : undefined
         }
       />
@@ -504,7 +348,7 @@ function AiResults({
         recoPosterUrl={cur.reco.posterUrl}
       />
       <div className="relative z-30 flex items-center justify-between">
-        <BackButton onClick={onBack} />
+        <BackChip onClick={onBack} />
         <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-text-2">
           Tu descubrimiento
         </span>
@@ -535,6 +379,29 @@ function AiResults({
   );
 }
 
+function RetryButton({
+  onClick,
+  pending,
+  label = "Reintentar",
+  pendingLabel = "Reintentando…",
+}: {
+  onClick: () => void;
+  pending: boolean;
+  label?: string;
+  pendingLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
+    >
+      {pending ? pendingLabel : label}
+    </button>
+  );
+}
+
 function EmptyState({
   onBack,
   title,
@@ -549,11 +416,11 @@ function EmptyState({
   return (
     <div className="relative z-10 min-h-dvh">
       <div className="px-4 pt-[calc(48px+env(safe-area-inset-top))]">
-        <BackButton onClick={onBack} />
+        <BackChip onClick={onBack} />
       </div>
       <div className="flex flex-col items-center px-8 pt-[18vh] text-center">
         <p className="mb-6 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
-          Descubrir
+          Discover
         </p>
         <p className="font-serif text-xl italic text-text">{title}</p>
         <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-text-2">
@@ -565,14 +432,20 @@ function EmptyState({
   );
 }
 
-function BackButton({ onClick }: { onClick: () => void }) {
+/**
+ * The AI mode's back control is an in-page mode switch, not a route change,
+ * so it can't be the router-backed BackButton — but it IS the same glass
+ * chip (glassChipClass + the mock's back glyph), so nothing looks bespoke.
+ */
+function BackChip({ onClick }: { onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label="Volver"
-      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-surface-2 text-text transition-colors hover:bg-surface-3"
+      className={glassChipClass}
     >
-      <ChevronLeft size={19} />
+      <StrokeIcon d={BACK_PATH} size={16} strokeWidth={2.4} />
     </button>
   );
 }

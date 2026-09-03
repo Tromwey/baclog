@@ -1,209 +1,214 @@
 import Link from "next/link";
-import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { glassChipClass } from "@/components/ui";
+import { GEAR_PATH } from "@/components/glyph-paths";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { plural } from "@/lib/plural";
-import type { UserStats } from "@/modules/backlog/queries";
-import { ShelvesSection } from "./edit-shelves";
-import { ShareProfileChip } from "./share-profile-chip";
+import { UpcomingShelf, type UpcomingItem } from "@/components/upcoming-shelf";
+import { initialOf } from "@/modules/reviews/queries";
+import type {
+  ObsessionTile,
+  ProfileCards,
+  ReactionCounts,
+} from "@/modules/backlog/profile-stats";
+import { ProfileBackdrop } from "@/app/u/profile-backdrop";
+import { ProfileStatPills } from "@/app/u/profile-stat-pills";
+import { CoverStrip } from "@/app/u/cover-strip";
 
 /**
- * Presentation for /perfil (F3.10, design 2a). The tab stopped being a
- * settings list: it IS your public profile — identity, counts, tu gente and
- * your backlogs — with two glass chips up top (compartir · ajustes). What used
- * to live here (install, edit, admin, sign out) moved behind the ajustes chip
- * (/settings, design 2b). Pure server component.
+ * Presentation for /perfil (Revamp UI screen 09, 2026-09-03): the gear chip
+ * alone up top, the 72px orb, the Bricolage name, the @handle, the three
+ * reaction pills and the followers line; then "No puede esperar", the
+ * "Obsesiones actuales" strip and the "Tus tarjetas" fan. The settings list
+ * lives behind the gear (/settings); per-backlog visibility moved to each
+ * backlog's own screen. Pure server component.
  */
 export function PerfilScreen({
   name,
   username,
   avatarUrl,
   isPublic,
-  stats,
   palette,
+  counts,
   followCounts,
-  backlogs,
+  upcoming,
+  obsessions,
+  cards,
+  now,
 }: {
   name: string;
   username: string | null;
   /** F3.11 — the photo; null keeps the ADN orb. */
   avatarUrl: string | null;
-  /** Gates the share chip and the @handle link — a private profile's public
-   *  URL 404s, and offering to share a dead link is worse than no chip. */
+  /** Gates the @handle link — a private profile's public URL 404s. */
   isPublic: boolean;
-  stats: UserStats;
   palette: string[];
+  counts: ReactionCounts;
   followCounts: { following: number; followers: number };
-  backlogs: {
-    id: string;
-    name: string;
-    itemCount: number;
-    paletteHex: string[];
-    isPublic: boolean;
-    showOnProfile: boolean;
-  }[];
+  upcoming: UpcomingItem[];
+  obsessions: ObsessionTile[];
+  cards: ProfileCards;
+  now: number;
 }) {
   const publicUrl = username && isPublic ? `/u/${username}` : null;
+  const initial = initialOf(name || username || "·");
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(30px+env(safe-area-inset-top))] text-text">
-      {/* Header chips — compartir · ajustes (design 2a). */}
-      <div className="flex justify-end gap-2">
-        {username && isPublic && <ShareProfileChip username={username} />}
-        <Link href="/settings" aria-label="Ajustes" className={glassChipClass}>
-          <SlidersHorizontal size={19} strokeWidth={1.9} />
+    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-dock-clearance text-text">
+      <ProfileBackdrop palette={palette} midStop={50} />
+
+      <main className="relative">
+        {/* Header — the gear alone. Sharing lives on the public page itself. */}
+        <header className="flex justify-end px-5 pt-[calc(12px+env(safe-area-inset-top))]">
+          <Link href="/settings" aria-label="Ajustes" className={glassChipClass}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d={GEAR_PATH} />
+            </svg>
+          </Link>
+        </header>
+
+        {/* Identity */}
+        <div className="flex flex-col gap-1.5 px-6 pt-[18px]">
+          <ProfileAvatar src={avatarUrl} palette={palette} initial={initial} />
+          <h1 className="mt-3 font-display text-[44px] font-extrabold leading-none tracking-[-0.02em] text-text [overflow-wrap:anywhere]">
+            {name || "Sin nombre"}
+          </h1>
+          {/* When the page is live, the handle IS the path to it. */}
+          <div className="font-mono text-[10px] tracking-[0.1em] text-text-2">
+            {publicUrl ? (
+              <Link
+                href={publicUrl}
+                title="Ver tu perfil público"
+                className="transition-colors hover:text-text"
+              >
+                @{username}
+              </Link>
+            ) : username ? (
+              `@${username}`
+            ) : (
+              <Link href="/settings" className="transition-colors hover:text-text">
+                reclama tu @handle
+              </Link>
+            )}
+          </div>
+
+          <ProfileStatPills counts={counts} className="mt-3.5" />
+
+          {/* F3.10 — counts here; the LISTS are behind the links and only
+              ever rendered for you (counts public, lists private). */}
+          <div className="mt-4 flex gap-[18px] text-[13px] text-text-2">
+            <Link href="/perfil/seguidores" className="transition-colors hover:text-text">
+              <b className="font-semibold text-text">{followCounts.followers}</b> seguidores
+            </Link>
+            <Link href="/perfil/siguiendo" className="transition-colors hover:text-text">
+              <b className="font-semibold text-text">{followCounts.following}</b> siguiendo
+            </Link>
+          </div>
+        </div>
+
+        {/* F3.8 — the library-wide wait. Nothing coming = nothing rendered. */}
+        <UpcomingShelf
+          items={upcoming}
+          initialNow={now}
+          inset="px-6"
+          className="pt-[30px]"
+        />
+
+        <CoverStrip
+          label="Obsesiones actuales"
+          items={obsessions}
+          height="h-[170px]"
+          itemHref={(id) => `/item/${id}`}
+          className="pt-[30px]"
+        />
+
+        <CardsFan palette={palette} cards={cards} now={now} />
+      </main>
+    </div>
+  );
+}
+
+const CARD =
+  "absolute flex h-[170px] w-32 flex-col gap-1.5 rounded-[12px] p-2.5 shadow-[0_12px_30px_rgba(0,0,0,.5)] transition-transform active:scale-[0.98]";
+const CARD_LABEL = "font-mono text-[7px] tracking-[0.08em] text-text-3";
+const CARD_TITLE = "font-serif text-[15px] italic leading-[1.1] text-text";
+
+/**
+ * "Tus tarjetas" — the mock's fan of three rotated 128×170 cards: the
+ * receipt (→ /recap), the double feature (→ /descubrir) and the ticket of
+ * the last title you completed (→ its card; /backlogs until there is one).
+ * The mock's 7px mono is a miniature's, drawn as-is.
+ */
+function CardsFan({
+  palette,
+  cards,
+  now,
+}: {
+  palette: string[];
+  cards: ProfileCards;
+  now: number;
+}) {
+  const month = new Date(now)
+    .toLocaleDateString("es-MX", { month: "long" })
+    .toUpperCase();
+  const bars = [palette[0] ?? "#c7462f", palette[1] ?? "#3a5a9b", palette[2] ?? "#e8b23a"];
+  const ticketHref = cards.latestCompleted
+    ? `/item/${cards.latestCompleted.catalogItemId}/card`
+    : "/backlogs";
+
+  return (
+    <section className="flex flex-col gap-3 px-6 pt-[26px]">
+      <h2 className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
+        Tus tarjetas
+      </h2>
+      <div className="relative h-[190px]">
+        <Link
+          href="/recap"
+          aria-label="Tu recibo del mes"
+          className={`${CARD} left-1 top-3.5 rotate-[-8deg] bg-bg`}
+        >
+          <span className={CARD_LABEL}>BACLOG · RECEIPT</span>
+          <span className="flex h-2 gap-0.5" aria-hidden>
+            {bars.map((hex, i) => (
+              <span key={i} className="flex-1" style={{ background: hex }} />
+            ))}
+          </span>
+          <span className={CARD_LABEL}>
+            {month} · {cards.monthCount} ITEMS
+          </span>
+        </Link>
+        <Link
+          href="/descubrir"
+          aria-label="Tu double feature"
+          className={`${CARD} left-[112px] top-1 rotate-[4deg]`}
+          style={{ background: "linear-gradient(180deg, #241c1a, #161211)" }}
+        >
+          <span className={CARD_LABEL}>DOUBLE FEATURE</span>
+          <span className={CARD_TITLE}>
+            {cards.doubleFeature
+              ? `${cards.doubleFeature.seedTitle} × ${cards.doubleFeature.targetTitle}`
+              : "Tu double feature"}
+          </span>
+        </Link>
+        <Link
+          href={ticketHref}
+          aria-label="Tu último ticket"
+          className={`${CARD} left-[216px] top-5 rotate-[11deg] bg-surface-1`}
+        >
+          <span className={CARD_LABEL}>TICKET</span>
+          <span className={CARD_TITLE}>
+            {cards.latestCompleted?.title ?? "Tu primer completado"}
+          </span>
         </Link>
       </div>
-
-      {/* Identity */}
-      <div className="flex flex-col items-center pt-[22px] text-center">
-        <ProfileAvatar
-          src={avatarUrl}
-          palette={palette}
-          seed={33}
-          className="h-24 w-24 shadow-[0_12px_34px_rgba(0,0,0,0.55)]"
-        />
-        <div className="mt-[18px] font-serif text-[34px] italic leading-none">
-          {name || "Sin nombre"}
-        </div>
-        {/* El @handle reemplaza al baclog.app/… (design t2). When the page is
-            live, the handle IS the path to it — the replaced "Ver perfil
-            público" row's job, kept without re-adding the row. */}
-        <div className="mt-[10px] font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
-          {publicUrl ? (
-            <Link
-              href={publicUrl}
-              title="Ver tu perfil público"
-              className="transition-colors hover:text-text"
-            >
-              @{username}
-            </Link>
-          ) : username ? (
-            `@${username}`
-          ) : (
-            <Link href="/settings" className="transition-colors hover:text-text">
-              reclama tu @handle
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="mt-[26px] flex overflow-hidden rounded-[22px] bl-glass">
-        <Stat value={stats.totalItems} label={plural(stats.totalItems, "TÍTULO", "TÍTULOS")} divider />
-        <Stat value={stats.totalBacklogs} label={plural(stats.totalBacklogs, "BACKLOG", "BACKLOGS")} divider />
-        <Stat value={stats.obsesiones} label={plural(stats.obsesiones, "OBSESIÓN", "OBSESIONES")} />
-      </div>
-
-      {/* Tu gente (F3.10) — counts here, the LISTS are behind the rows and
-          only ever rendered for you (counts public, lists private). */}
-      <div className="mb-[13px] mt-[30px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-        Tu gente
-      </div>
-      <div className="overflow-hidden rounded-[22px] bl-glass">
-        <PeopleRow
-          href="/perfil/siguiendo"
-          icon={<FollowingGlyph />}
-          label="A quién sigues"
-          count={followCounts.following}
-          divider
-        />
-        <PeopleRow
-          href="/perfil/seguidores"
-          icon={<FollowersGlyph />}
-          label="Quién te sigue"
-          count={followCounts.followers}
-        />
-      </div>
-
-      {/* Tus backlogs — the ESCAPARATE (F3.10.1): only public backlogs chosen
-          for the profile, exactly what a visitor sees on /u/{handle}. Section,
-          Editar chip and the sheet live in ONE client component so every
-          affordance opens the same editor; /backlogs stays the workbench. */}
-      {backlogs.length > 0 && <ShelvesSection backlogs={backlogs} />}
-
-      <div className="mt-[26px] text-center font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
-        Baclog · tu recibo de gusto
-      </div>
-    </main>
-  );
-}
-
-function PeopleRow({
-  href,
-  icon,
-  label,
-  count,
-  divider,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  divider?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`relative flex items-center gap-[13px] px-[15px] py-[14px] transition-colors hover:bg-white/[0.045] ${
-        divider ? "border-b border-white/[0.07]" : ""
-      }`}
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-text">
-        {icon}
-      </span>
-      <span className="flex-1 font-sans text-[14.5px] font-medium">{label}</span>
-      <span className="font-mono text-[13px] text-text-2">{count}</span>
-      <ChevronRight size={18} className="text-text-3" />
-    </Link>
-  );
-}
-
-/* Bespoke FILLED glyphs from the design (2a) — the feed glyph for "a quién
-   sigues", its mirrored two-heads sibling for "quién te sigue". */
-
-function FollowingGlyph() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="8" cy="12" r="4.2" />
-      <rect x="14.4" y="7.6" width="5.6" height="3.2" rx="1.6" />
-      <rect x="14.4" y="13.2" width="3.8" height="3.2" rx="1.6" />
-    </svg>
-  );
-}
-
-function FollowersGlyph() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="9" cy="9" r="3.6" />
-      <path d="M3.4 18.6a5.6 5.6 0 0111.2 0z" />
-      <circle cx="17.6" cy="10.4" r="2.6" opacity=".55" />
-      <path d="M13.6 18.6a4 4 0 018 0z" opacity=".55" />
-    </svg>
-  );
-}
-
-function Stat({
-  value,
-  label,
-  divider,
-}: {
-  value: number;
-  label: string;
-  divider?: boolean;
-}) {
-  return (
-    <div
-      className={`relative flex-1 py-[15px] text-center ${
-        divider ? "border-r border-white/[0.08]" : ""
-      }`}
-    >
-      <div className="font-display text-2xl font-extrabold tracking-[-0.02em]">
-        {value}
-      </div>
-      <div className="mt-[5px] font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-2">
-        {label}
-      </div>
-    </div>
+    </section>
   );
 }

@@ -7,12 +7,11 @@ import { getPublicBacklog } from "@/modules/backlog/public";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { CountdownMono } from "@/components/countdown";
 import { captureView } from "@/modules/analytics/capture";
-import { parseHex } from "@/lib/color";
+import { auraSeed, parseHex } from "@/lib/color";
 import { BacklogHero } from "@/components/backlog-hero";
 import { ItemStatus } from "@/components/item-status";
-import { BackButton, Button, MonoMeta } from "@/components/ui";
+import { BackButton, MonoMeta } from "@/components/ui";
 import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
-import { shelfSeed } from "@/app/(app)/backlogs/backlog-shelf-card";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -67,11 +66,11 @@ export default async function PublicBacklogPage({
         itemCount={data.items.length}
         year={data.createdAt.getFullYear()}
         palette={data.palette}
-        seed={shelfSeed(backlogId)}
+        seed={auraSeed(backlogId)}
         controls={<BackButton href={`/u/${username}`} />}
       />
 
-      <main className="relative px-5 pb-32 pt-[18px]">
+      <main className="relative px-5 pb-[150px] pt-[18px]">
         {data.items.length > 0 ? (
           <div className="space-y-2">
             {data.items.map((item) => {
@@ -247,13 +246,23 @@ export default async function PublicBacklogPage({
         </footer>
       </main>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md px-5 pb-5">
-        <Button
+      {/* The conversion CTA over a fade — the public item page's recipe
+          (Revamp UI 06b): the one accent button, no lima glow (§7). */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[200px] w-full max-w-md"
+        style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
+      />
+      <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
+        <Link
           href="/login"
-          className="pointer-events-auto w-full shadow-[0_0_30px_var(--accent-soft)]"
+          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg transition-all active:scale-[0.98] active:bg-accent-press"
         >
           Empieza tu backlog →
-        </Button>
+        </Link>
+        <span className="text-center text-[12px] text-text-3">
+          Guarda, marca y comparte lo que te obsesiona
+        </span>
       </div>
     </div>
   );

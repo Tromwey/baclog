@@ -7,7 +7,7 @@ import { Sheet } from "@/components/ui";
 
 /**
  * Any "create a backlog" entry point: renders the caller's button (the dashed
- * "Nuevo estante" ghost card on #p1, the lima CTA on the #p8 first-use screen)
+ * "+" chip on /backlogs, the lima CTA on the #p8 first-use screen)
  * and owns the create modal it opens. The modal is portaled to <body> so it
  * escapes the (app) content wrapper's stacking context and sits ABOVE the
  * dock (see AGENTS.md).

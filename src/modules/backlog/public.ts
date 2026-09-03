@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   backlogItems,
@@ -10,7 +10,6 @@ import {
   users,
 } from "@/db/schema";
 import { dominantHexes, groupDominantHexes } from "./palette";
-import { getUpcomingForUser } from "./queries";
 
 /**
  * THE deliberate authz exception (see src/authz): these queries run with
@@ -82,6 +81,10 @@ export async function getPublicProfile(username: string) {
       : [];
 
   const covers = new Map<string, string[]>();
+  // Revamp UI (screen 10): the row's fan of up to three covers, newest first,
+  // keeping a coverless title so the fan can paint its palette instead of
+  // skipping a slot (posterUrl OR paletteHex — never both missing).
+  const fans = new Map<string, { posterUrl: string | null; paletteHex: string[] | null }[]>();
   for (const c of coverRows) {
     if (c.posterUrl) {
       const list = covers.get(c.backlogId) ?? [];
@@ -90,23 +93,41 @@ export async function getPublicProfile(username: string) {
         covers.set(c.backlogId, list);
       }
     }
+    if (c.posterUrl || c.paletteHex?.length) {
+      const fan = fans.get(c.backlogId) ?? [];
+      if (fan.length < 3) {
+        fan.push({ posterUrl: c.posterUrl, paletteHex: c.paletteHex ?? null });
+        fans.set(c.backlogId, fan);
+      }
+    }
   }
   // Per-backlog ADN (each shelf's aura) + the owner aggregate (hero aura).
   const backlogPalettes = groupDominantHexes(coverRows, (c) => c.backlogId, 6);
   const palette = dominantHexes(coverRows, 6);
 
-  // F3.8 — what this profile is waiting for. Shares its definition with the
-  // in-app shelf (getUpcomingForUser): scoped to user_item, so a title filed in
-  // two backlogs appears once, and to dates still in the future.
+  // F3.8 — what this profile is waiting for. Same definition as the in-app
+  // strip (library.ts getLibraryUpcoming): scoped to user_item, so a title
+  // filed in two backlogs appears once, and to dates still in the future.
   //
   // Every field it returns is catalog data, which is what keeps this inside the
   // public-safe field list this function is built around: nothing here says
-  // WHICH backlog a title is in, or anything about the owner's state on it. The
-  // shared query is documented to hold that line, and the mapping below spells
-  // out the exposed fields ANYWAY — never spread the row. A column added to the
-  // shared select for some in-app caller (byline is already one) must not
-  // become public just because it rode along.
-  const upcoming = await getUpcomingForUser(user.id, 12);
+  // WHICH backlog a title is in, or anything about the owner's state on it.
+  // Spelled out here rather than shared so a column added to the in-app select
+  // can never become public just because it rode along.
+  const upcoming = await db
+    .select({
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
+      mediaType: catalogItems.mediaType,
+      posterUrl: catalogItems.posterUrl,
+      paletteHex: catalogItems.paletteHex,
+      releaseDate: catalogItems.releaseDate,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(and(eq(userItems.userId, user.id), gt(catalogItems.releaseDate, new Date())))
+    .orderBy(asc(catalogItems.releaseDate))
+    .limit(12);
 
   // F3.10 — follower count is PUBLIC by decision (counts public, lists
   // private): an aggregate over follow edges, nothing identifying anyone.
@@ -126,15 +147,41 @@ export async function getPublicProfile(username: string) {
     backlogs: lists.map((l) => ({
       ...l,
       coverUrls: covers.get(l.id) ?? [],
+      covers: fans.get(l.id) ?? [],
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
     })),
     upcoming: upcoming.map((u) => ({
       catalogItemId: u.catalogItemId,
       title: u.title,
+      mediaType: u.mediaType,
       posterUrl: u.posterUrl,
+      paletteHex: u.paletteHex ?? null,
       releaseDate: u.releaseDate!.toISOString(),
     })),
   };
+}
+
+/**
+ * Revamp UI (screen 10) — the three stat pills on a public profile: how many
+ * titles the owner liked, obsesses over and completed. Their OWN aggregates
+ * over user_item (no other account is involved), public-safe by construction
+ * — three counts, no title, no backlog — and gated exactly like the profile:
+ * a private or nonexistent handle gets null, identically.
+ */
+export async function getPublicReactionCounts(username: string) {
+  const [row] = await db
+    .select({
+      liked: sql<number>`(count(${userItems.id}) filter (where ${userItems.verdict} = 'liked'))::int`,
+      obsessed: sql<number>`(count(${userItems.id}) filter (where ${userItems.obsessed}))::int`,
+      completed: sql<number>`(count(${userItems.id}) filter (where ${userItems.status} = 'completed'))::int`,
+    })
+    .from(users)
+    .leftJoin(userItems, eq(userItems.userId, users.id))
+    .where(and(eq(users.username, username), eq(users.isPublic, true)))
+    .groupBy(users.id)
+    .limit(1);
+  if (!row) return null;
+  return { liked: row.liked, obsessed: row.obsessed, completed: row.completed };
 }
 
 export async function getPublicBacklog(username: string, backlogId: string) {
