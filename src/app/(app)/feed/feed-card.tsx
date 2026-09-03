@@ -37,6 +37,9 @@ import { FeedGlow } from "./feed-glow";
  * @handle / backlog links. The flame stays the only color; verdicts stay at
  * the metadata tier; covers keep their native aspect (album 1:1, video 2:3).
  * Glass = the app's chip recipe (bg-black/28 + blur), borderless (§7).
+ * Gutter: 16px, not the mock's 20 — the mock aligns its header and its cards
+ * at 20; the app's ScreenHeader (and every page body) sits at 16, and the
+ * alignment is the point, not the number.
  */
 
 export function FeedCardView({ card }: { card: FeedCard }) {
@@ -143,7 +146,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
   return (
     <article className="relative flex flex-col gap-3.5">
       <FeedGlow hexes={hexes} className="inset-x-0 bottom-0 top-5" />
-      <div className="relative flex items-center gap-[9px] px-5">
+      <div className="relative flex items-center gap-[9px] px-4">
         <Link href={profileHref(author.username)} className="flex-none">
           <AdnAvatar
             hexes={author.avatarHexes}
@@ -174,7 +177,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         <span className={`ml-auto flex-none ${META} text-[9px] text-text-2`}>{burst.when}</span>
       </div>
 
-      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-5 pb-1.5 pt-1 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-4 pb-1.5 pt-1 [scroll-padding-inline:16px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {strip.map((e) => (
           <Link
             key={e.id}
@@ -201,7 +204,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         )}
       </div>
 
-      <div className="relative flex items-center gap-2.5 px-5">
+      <div className="relative flex items-center gap-2.5 px-4">
         <span className={`${META} text-text-3`}>{tally(burst.items)}</span>
         <button
           type="button"
@@ -214,7 +217,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
       </div>
 
       {expanded && (
-        <div className="bl-rise relative mx-5 flex flex-col gap-2.5 rounded-[18px] bg-black/[0.28] px-3.5 py-3 backdrop-blur-[24px]">
+        <div className="bl-rise relative mx-4 flex flex-col gap-2.5 rounded-[18px] bg-black/[0.28] px-3.5 py-3 backdrop-blur-[24px]">
           {burst.items.map((e) => (
             <Link key={e.id} href={itemHref(e.catalogItemId)} className="flex items-center gap-3">
               <Cover event={e} className="w-10 flex-none rounded-[7px]" />
@@ -281,7 +284,7 @@ function Hero({
           <span className={`flex-none ${META} text-text-2`}>{event.when}</span>
         </Link>
         <span
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-1.5 px-5 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-1.5 px-4 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6]"
           style={{
             background: "linear-gradient(rgba(18,18,24,.22), rgba(18,18,24,.6))",
             maskImage: "linear-gradient(transparent, #000 14px)",
@@ -350,7 +353,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className="relative flex items-center gap-[18px] px-5">
+    <article className="relative flex items-center gap-[18px] px-4">
       <FeedGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
       <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">

@@ -13,13 +13,25 @@ import { FeedGlow } from "./feed-glow";
  * from those covers. Plain data in, the FollowButton is the only state.
  *
  * The fan: each cover rotates ±9° around its bottom edge from the middle one,
- * stepping 30px sideways and 8px down — the mock's geometry verbatim.
+ * stepping 30px sideways and 8px down — the mock's geometry, generalized: the
+ * mock always has three covers; a library with one or two must not leave a
+ * lone cover parked in a corner, so the group is centered in the 150px box
+ * for whatever count it has (the widest cover drives the width).
  */
+
+const FAN_BOX = 150;
+const FAN_STEP = 30;
+const fanWidth = (mediaType: FeedSuggestion["covers"][number]["mediaType"]) =>
+  mediaType === "album" ? 96 : 64;
 export function SuggestCard({ s }: { s: FeedSuggestion }) {
   const mixed = dominantHexes(s.covers, 4);
   const hexes = mixed.length > 0 ? mixed : s.avatarHexes;
+  const n = s.covers.length;
+  const center = (n - 1) / 2;
+  const widest = Math.max(0, ...s.covers.map((c) => fanWidth(c.mediaType)));
+  const fanBase = Math.max(0, (FAN_BOX - (widest + (n - 1) * FAN_STEP)) / 2);
   return (
-    <article className="relative flex items-center gap-4 px-5 py-1.5">
+    <article className="relative flex items-center gap-4 px-4 py-1.5">
       <FeedGlow hexes={hexes} opacity={0.35} className="inset-x-0 -inset-y-5" />
       <span className="relative flex min-w-0 flex-1 flex-col gap-2.5">
         <span className="font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
@@ -56,10 +68,10 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
                 c.mediaType === "album" ? "w-24" : "w-16"
               }`}
               style={{
-                right: `${(2 - i) * 30 + 6}px`,
-                top: `${Math.abs(i - 1) * 8 + 8}px`,
-                zIndex: i === 1 ? 3 : 1,
-                transform: `rotate(${(i - 1) * 9}deg)`,
+                right: `${fanBase + (n - 1 - i) * FAN_STEP}px`,
+                top: `${Math.abs(i - center) * 8 + 8}px`,
+                zIndex: n - Math.round(Math.abs(i - center)),
+                transform: `rotate(${(i - center) * 9}deg)`,
               }}
             />
           ))}

@@ -64,7 +64,7 @@ export function FeedList({
       ))}
       {slot === cards.length && suggestion && <SuggestCard s={suggestion} />}
       {cursor && (
-        <div className="flex justify-center px-5 pt-1">
+        <div className="flex justify-center px-4 pt-1">
           <LoadMoreButton
             onClick={loadMore}
             loading={loading}

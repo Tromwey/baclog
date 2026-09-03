@@ -30,7 +30,7 @@ function SkeletonHero() {
         <div className="h-[22px] w-[22px] rounded-full bg-surface-3" />
         <div className="h-[9px] w-16 rounded-full bg-surface-3" />
       </div>
-      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 px-5 pb-[22px] pt-[18px]">
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 px-4 pb-[22px] pt-[18px]">
         <div className="h-[10px] w-20 rounded-full bg-surface-2" />
         <div className="h-7 w-4/5 rounded-full bg-surface-2" />
         <div className="h-7 w-1/2 rounded-full bg-surface-2" />
@@ -42,7 +42,7 @@ function SkeletonHero() {
 
 function SkeletonCompact({ faded = false }: { faded?: boolean }) {
   return (
-    <div className={`flex items-center gap-[18px] px-5 ${faded ? "opacity-50" : ""}`}>
+    <div className={`flex items-center gap-[18px] px-4 ${faded ? "opacity-50" : ""}`}>
       <div className="aspect-[2/3] w-[124px] flex-none rounded-[14px] bg-surface-1" />
       <div className="flex min-w-0 flex-1 flex-col gap-[9px]">
         <div className="flex items-center gap-[7px]">
@@ -60,7 +60,7 @@ function SkeletonCompact({ faded = false }: { faded?: boolean }) {
 function SkeletonBurst() {
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-[9px] px-5">
+      <div className="flex items-center gap-[9px] px-4">
         <div className="h-[26px] w-[26px] flex-none rounded-full bg-surface-2" />
         <div className="flex flex-col gap-[5px]">
           <div className="h-[9px] w-20 rounded-full bg-surface-2" />
@@ -68,12 +68,12 @@ function SkeletonBurst() {
         </div>
         <div className="ml-auto h-[7px] w-10 rounded-full bg-surface-2" />
       </div>
-      <div className="flex items-end gap-2.5 overflow-hidden px-5 py-1">
+      <div className="flex items-end gap-2.5 overflow-hidden px-4 py-1">
         <div className="h-[208px] w-[139px] flex-none rounded-[14px] bg-surface-1" />
         <div className="h-[208px] w-[208px] flex-none rounded-[14px] bg-surface-1" />
         <div className="h-[208px] w-[139px] flex-none rounded-[14px] bg-surface-1" />
       </div>
-      <div className="flex items-center px-5">
+      <div className="flex items-center px-4">
         <div className="h-[7px] w-28 rounded-full bg-surface-2" />
         <div className="ml-auto h-7 w-20 rounded-full bg-surface-2" />
       </div>
