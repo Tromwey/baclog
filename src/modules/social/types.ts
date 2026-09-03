@@ -24,6 +24,15 @@ export const FEED_MAX_CHUNKS = 6;
 export const PEOPLE_PAGE_SIZE = 30;
 
 /**
+ * Buscar gente (/feed/gente): the shortest needle that searches, and the cap
+ * on one result list. No pagination on purpose — a handle/name search that
+ * needs more than 20 rows is a search that needs a longer needle, and the
+ * screen says so instead of paging.
+ */
+export const PROFILE_SEARCH_MIN_CHARS = 2;
+export const PROFILE_SEARCH_LIMIT = 20;
+
+/**
  * The four SOURCES of a feed card. "No puede esperar" is deliberately not a
  * kind: it's an `added` event whose title hasn't been released yet (`waiting`
  * below), so it changes back into an ordinary add on release day by itself —

@@ -22,7 +22,7 @@
 | `src/authz/errors.ts` | Errores de autorización |
 | `src/modules/admin/guard.ts` | `requireAdmin()` — gate del panel Torre de Control |
 | `src/modules/backlog/public.ts` | `getPublicProfile` (+ conteo de seguidores F3.10), superficie pública gated por `users.isPublic` |
-| `src/modules/social/queries.ts` | F3.10: lecturas cross-user CON sesión pero re-gateadas en `isPublic + username` por query (postura público-safe; reglas en AGENTS.md) |
+| `src/modules/social/queries.ts` | F3.10: lecturas cross-user CON sesión pero re-gateadas en `isPublic + username` por query (postura público-safe; reglas en AGENTS.md). Incluye `searchProfiles` (F3.10.2 Buscar gente): busca por handle o **nombre** solo entre perfiles públicos — un privado no se encuentra por nombre igual que no se encuentra por URL; excluye al viewer; metacaracteres de LIKE escapados |
 | `src/modules/reviews/queries.ts` | Feed público de reseñas (excepción authz #4, gated en `isPublic` + `hidden_at IS NULL`) |
 | `src/app/api/auth/**` | Route handlers de auth y OTP |
 | `src/app/api/avatar/[key]/route.ts` | F3.11: sirve la foto de perfil por `key` aleatorio por subida. Gate: dueño **público** → se sirve a cualquiera con la URL; dueño **privado** → solo a su propia sesión; key inválido/inexistente/ajeno = mismo 404 vacío (sin oráculo). `users.image` entra en las listas blancas público-safe (public.ts, social, reviews) bajo el MISMO gate que `username`: es identidad, no estado; en las listas de gente un seguido que se volvió privado devuelve `avatarUrl: null` |

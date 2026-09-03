@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, UserPlus } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getRenderInstant } from "@/modules/catalog/release";
 import {
@@ -8,9 +8,8 @@ import {
   getFollowSuggestions,
 } from "@/modules/social/queries";
 import { AdnAvatar } from "@/components/adn-avatar";
-import { ScreenHeader } from "@/components/ui";
+import { ScreenHeader, glassChipClass } from "@/components/ui";
 import { FeedList } from "./feed-list";
-import { HandleSearch } from "./handle-search";
 import { SuggestionCard, SuggestionRow } from "./suggestions";
 
 /**
@@ -31,7 +30,7 @@ export default async function FeedPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <ScreenHeader title="Tu feed" />
+      <ScreenHeader title="Tu feed" action={<FindPeopleChip />} />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
       ) : page.cards.length === 0 ? (
@@ -70,7 +69,7 @@ async function EmptyNoFollows({ userId }: { userId: string }) {
           </div>
         </>
       )}
-      <HandleSearch />
+      <FindPeopleLine />
     </div>
   );
 }
@@ -132,7 +131,34 @@ async function EmptyNoActivity({
           </div>
         </>
       )}
-      <HandleSearch />
+      <FindPeopleLine />
     </div>
+  );
+}
+
+/**
+ * The header's way into Buscar gente (/feed/gente) — the ONLY discovery
+ * affordance once the feed has content: the empty states' suggestions are
+ * gone by then, and without this there was no way to find a second person.
+ * Same glass chip as /perfil's header controls.
+ */
+function FindPeopleChip() {
+  return (
+    <Link href="/feed/gente" aria-label="Buscar gente" className={glassChipClass}>
+      <UserPlus size={18} />
+    </Link>
+  );
+}
+
+/** The empty states' footer line (design 1b) — now a door to the search
+ *  screen, which finds by @handle OR name and keeps suggesting people. */
+function FindPeopleLine() {
+  return (
+    <Link
+      href="/feed/gente"
+      className="mt-[18px] block w-full text-center font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3 transition-colors hover:text-text-2"
+    >
+      O busca a alguien por su @handle o nombre
+    </Link>
   );
 }

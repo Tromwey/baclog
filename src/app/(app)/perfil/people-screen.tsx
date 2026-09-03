@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { UserPlus } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getFollowCounts, getPeoplePage } from "@/modules/social/queries";
-import { BackButton } from "@/components/ui";
+import { BackButton, glassChipClass } from "@/components/ui";
 import { PeopleList } from "./people-list";
 
 /**
@@ -23,8 +24,15 @@ export async function PeopleScreen({
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <div className="flex px-4 pt-[calc(24px+env(safe-area-inset-top))]">
+      <div className="flex items-center justify-between px-4 pt-[calc(24px+env(safe-area-inset-top))]">
         <BackButton href="/perfil" />
+        <Link
+          href="/feed/gente"
+          aria-label="Buscar gente"
+          className={glassChipClass}
+        >
+          <UserPlus size={18} />
+        </Link>
       </div>
       <header className="px-4 pb-5 pt-[18px]">
         <h1 className="font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
@@ -46,11 +54,14 @@ export async function PeopleScreen({
           <p className="mt-6 text-[14.5px] leading-[1.52] text-pretty text-text-2">
             {mode === "following" ? (
               <>
-                Todavía no sigues a nadie. El{" "}
-                <Link href="/feed" className="text-text underline-offset-2 hover:underline">
-                  feed
+                Todavía no sigues a nadie.{" "}
+                <Link
+                  href="/feed/gente"
+                  className="text-text underline-offset-2 hover:underline"
+                >
+                  Busca a alguien
                 </Link>{" "}
-                te sugiere con quién empezar.
+                por su @handle o nombre.
               </>
             ) : (
               "Todavía nadie te sigue. Comparte tu perfil para que te encuentren."

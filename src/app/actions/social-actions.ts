@@ -10,8 +10,13 @@ import {
   getFeedCards,
   getPeoplePage,
   publicAuthor,
+  searchProfiles,
 } from "@/modules/social/queries";
-import type { FeedCardsPage, PeoplePage } from "@/modules/social/types";
+import type {
+  FeedCardsPage,
+  PeoplePage,
+  PersonRow,
+} from "@/modules/social/types";
 
 /**
  * F3.10 — the follow mutations and the feed's pagination endpoints. Both
@@ -122,4 +127,19 @@ export async function loadMorePeopleAction(input: {
     .safeParse(input);
   if (!parsed.success) return { people: [], privateCount: 0, nextCursor: null };
   return getPeoplePage(user.id, parsed.data.mode, parsed.data.cursor);
+}
+
+/**
+ * Buscar gente — live search over PUBLIC profiles for the caller. The gate
+ * lives inside searchProfiles (publicAuthor + public-safe fields); this only
+ * bounds the needle. Too short or malformed → an empty list, never an error:
+ * the screen treats "nothing yet" and "nothing found" the same way.
+ */
+export async function searchProfilesAction(input: {
+  q: string;
+}): Promise<PersonRow[]> {
+  const user = await assertUser();
+  const parsed = z.string().max(60).safeParse(input.q);
+  if (!parsed.success) return [];
+  return searchProfiles(user.id, parsed.data);
 }
