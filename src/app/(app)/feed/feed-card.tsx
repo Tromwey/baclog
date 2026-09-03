@@ -276,6 +276,15 @@ function Hero({
             background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
           }}
         />
+        {/* The bottom of the art melts into the page bg over its last 160px
+            (under the word panel, so the words keep their glass): a bleed
+            hero otherwise ends in a hard horizontal cut against the dark,
+            and the glow behind it can't hide an edge (founder, 2026-09-03). */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-40"
+          style={{ background: "linear-gradient(to bottom, rgba(11,11,13,0), var(--bg))" }}
+        />
         {/* The art fades into the page bg over its last 160px (founder call
             2026-09-03: the mock's hard bottom edge read as a cut). Under the
             word panel, whose translucent gradient lets it through. Same
