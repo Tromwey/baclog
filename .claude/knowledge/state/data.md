@@ -40,7 +40,7 @@ hay que mantener a mano al agregar un servicio: `schema.ts` (ambos enums), el `z
 `api/links/resolve/route.ts`, el `valid` de `setPreferredServiceAction`, y la unión
 `MusicService`/`buildSearchFallback` en `modules/links/` — más los `SERVICES` de onboarding/settings
 y los botones de `u/[username]/item/`. **0026 `user_avatar`** (F3.11 foto de perfil, 2026-09-02,
-aditiva — tabla nueva `user_avatar(user_id PK→user cascade, key UNIQUE, content_type, bytes bytea,
+aditiva, **aplicada por el founder en la DB compartida el 2026-09-02** con `drizzle-kit migrate` — tabla nueva `user_avatar(user_id PK→user cascade, key UNIQUE, content_type, bytes bytea,
 updated_at)`; los bytes van en tabla propia para que la fila caliente `user` nunca cargue ~40 KB, y
 `users.image` (la columna de Auth.js, antes sin uso) guarda la URL servida `/api/avatar/{key}`). El
 `bytea` es un `customType` en `schema.ts`: sale como texto hex `\x…` (el driver HTTP de Neon
