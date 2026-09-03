@@ -47,6 +47,7 @@ import {
   type FeedCardsPage,
   type FeedEvent,
   type FeedEventKind,
+  type FeedSuggestion,
   type SuggestedProfile,
   type PeoplePage,
   type PersonRow,
@@ -174,6 +175,7 @@ interface RawEvent {
   year: number | null;
   byline: string | null;
   posterUrl: string | null;
+  paletteHex: string[] | null;
   releaseDate: Date | null;
   backlogId: string | null;
   backlogName: string | null;
@@ -237,6 +239,7 @@ async function fetchFeedChunk(
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
         releaseDate: catalogItems.releaseDate,
         backlogId: backlogs.id,
         backlogName: backlogs.name,
@@ -286,6 +289,7 @@ async function fetchFeedChunk(
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
         releaseDate: catalogItems.releaseDate,
         verdict: userItems.verdict,
       })
@@ -320,6 +324,7 @@ async function fetchFeedChunk(
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
         releaseDate: catalogItems.releaseDate,
       })
       .from(userItems)
@@ -355,6 +360,7 @@ async function fetchFeedChunk(
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
         releaseDate: catalogItems.releaseDate,
         body: itemReviews.body,
         hasSpoiler: itemReviews.hasSpoiler,
@@ -461,6 +467,7 @@ async function fetchFeedChunk(
       year: r.year,
       byline: r.byline,
       posterUrl: r.posterUrl,
+      paletteHex: r.paletteHex ?? [],
       waiting:
         r.kind === "added" && isUpcoming(r.releaseDate, now)
           ? waitingLabel(r.releaseDate!, now)
@@ -637,6 +644,183 @@ export async function getFollowSuggestions(
       lastActive: last === null ? null : activityBucket(last, now),
     };
   });
+}
+
+// ---------- the in-feed suggestion (feed v3) ----------
+
+/** "@a y @b" · "@a, @b y 3 más" — the shared follows a suggestion names. */
+function listHandles(handles: string[], total: number): string {
+  const shown = handles.map((h) => `@${h}`);
+  const rest = total - shown.length;
+  if (rest > 0) return `${shown.join(", ")} y ${rest} más`;
+  if (shown.length <= 1) return shown.join("");
+  return `${shown.slice(0, -1).join(", ")} y ${shown.at(-1)}`;
+}
+
+/**
+ * The one "Quizá quieras seguir" card of a populated feed (design "Feed v3",
+ * 2026-09-02). Two candidate pools, in order:
+ *
+ *  1. The follow graph: a public profile the viewer doesn't follow yet who
+ *     follows the MOST of the people the viewer follows (ties → whoever
+ *     followed most recently). That overlap is the card's social proof
+ *     ("Sigue a @a y @b"), which is why it comes first.
+ *  2. The empty states' pool (getFollowSuggestions, most recently active)
+ *     when the graph has nobody to offer — with no overlap line.
+ *
+ * The reason line is the strongest signal available: a title BOTH obsess
+ * over, else how many titles the two libraries share, else their public
+ * backlog count. Every read re-gates on `publicAuthor` and selects the
+ * public-safe list — a private profile is never named here, not even as a
+ * shared follow. Null when nobody qualifies (or the viewer follows nobody —
+ * the empty states own that case).
+ */
+export async function getFeedSuggestion(
+  viewerId: string,
+): Promise<FeedSuggestion | null> {
+  const ids = await getFollowedIds(viewerId);
+  if (ids.length === 0) return null;
+
+  const notFollowed = sql`not exists (select 1 from ${userFollows} v where v.follower_user_id = ${viewerId} and v.followed_user_id = ${userFollows.followerUserId})`;
+  const shared = sql<number>`count(distinct ${userFollows.followedUserId})::int`;
+
+  const [fromGraph] = await db
+    .select({ id: userFollows.followerUserId, shared })
+    .from(userFollows)
+    .innerJoin(
+      users,
+      and(eq(users.id, userFollows.followerUserId), publicAuthor),
+    )
+    .where(
+      and(
+        inArray(userFollows.followedUserId, ids),
+        ne(userFollows.followerUserId, viewerId),
+        notFollowed,
+      ),
+    )
+    .groupBy(userFollows.followerUserId)
+    .orderBy(desc(shared), desc(sql`max(${userFollows.createdAt})`))
+    .limit(1);
+
+  let candidateId = fromGraph?.id ?? null;
+  let sharedCount = fromGraph?.shared ?? 0;
+  if (!candidateId) {
+    const [fallback] = await getFollowSuggestions(viewerId, 1);
+    if (!fallback) return null;
+    const [row] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.username, fallback.username), publicAuthor))
+      .limit(1);
+    if (!row) return null;
+    candidateId = row.id;
+    sharedCount = 0;
+  }
+  const cid = candidateId;
+
+  const [[profile], hexes, commonRows, [sharedObsession], [sharedTitles], [backlogCount], coverRows] =
+    await Promise.all([
+      db
+        .select({ username: users.username, image: users.image })
+        .from(users)
+        .where(and(eq(users.id, cid), publicAuthor))
+        .limit(1),
+      avatarHexesFor([cid]),
+      // The shared follows, newest first — only PUBLIC ones get named.
+      sharedCount > 0
+        ? db
+            .select({ username: users.username })
+            .from(userFollows)
+            .innerJoin(
+              users,
+              and(eq(users.id, userFollows.followedUserId), publicAuthor),
+            )
+            .where(
+              and(
+                eq(userFollows.followerUserId, cid),
+                inArray(userFollows.followedUserId, ids),
+              ),
+            )
+            .orderBy(desc(userFollows.createdAt))
+            .limit(2)
+        : Promise.resolve([] as { username: string | null }[]),
+      // A title both obsess over — the candidate's most recent one.
+      db
+        .select({ title: catalogItems.title })
+        .from(userItems)
+        .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
+        .where(
+          and(
+            eq(userItems.userId, cid),
+            eq(userItems.obsessed, true),
+            sql`exists (select 1 from ${userItems} mine where mine.user_id = ${viewerId} and mine.catalog_item_id = ${userItems.catalogItemId} and mine.obsessed = true)`,
+          ),
+        )
+        .orderBy(desc(userItems.obsessedAt))
+        .limit(1),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(userItems)
+        .where(
+          and(
+            eq(userItems.userId, cid),
+            sql`exists (select 1 from ${userItems} mine where mine.user_id = ${viewerId} and mine.catalog_item_id = ${userItems.catalogItemId})`,
+          ),
+        ),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(backlogs)
+        .where(and(eq(backlogs.userId, cid), eq(backlogs.isPublic, true))),
+      db
+        .select({
+          posterUrl: catalogItems.posterUrl,
+          mediaType: catalogItems.mediaType,
+          paletteHex: catalogItems.paletteHex,
+        })
+        .from(userItems)
+        .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
+        .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+        .where(and(eq(userItems.userId, cid), isNotNull(catalogItems.posterUrl)))
+        .orderBy(desc(userItems.addedAt))
+        .limit(3),
+    ]);
+
+  // Went private between the two reads — nothing to offer, same as absent.
+  if (!profile?.username) return null;
+
+  const handles = commonRows
+    .map((r) => r.username)
+    .filter((u): u is string => Boolean(u));
+  const common =
+    sharedCount > 0 && handles.length > 0
+      ? `Sigue a ${listHandles(handles, sharedCount)}`
+      : null;
+
+  const inCommon = sharedTitles?.n ?? 0;
+  const shelves = backlogCount?.n ?? 0;
+  const reason = sharedObsession
+    ? `También le obsesiona ${sharedObsession.title}`
+    : inCommon > 0
+      ? `${inCommon} ${inCommon === 1 ? "título" : "títulos"} en común`
+      : shelves > 0
+        ? `Tiene ${shelves} ${shelves === 1 ? "backlog" : "backlogs"}`
+        : "Acaba de llegar";
+
+  return {
+    username: profile.username,
+    initial: initialOf(profile.username),
+    avatarHexes: hexes.get(cid) ?? FALLBACK_ADN,
+    avatarUrl: profile.image,
+    common,
+    reason,
+    covers: coverRows
+      .filter((c): c is typeof c & { posterUrl: string } => Boolean(c.posterUrl))
+      .map((c) => ({
+        posterUrl: c.posterUrl,
+        mediaType: c.mediaType,
+        paletteHex: c.paletteHex ?? [],
+      })),
+  };
 }
 
 // ---------- buscar gente ----------

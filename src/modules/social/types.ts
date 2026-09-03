@@ -57,6 +57,11 @@ export interface FeedEvent {
   year: number | null;
   byline: string | null;
   posterUrl: string | null;
+  /** The cover's persisted palette (catalog_item.paletteHex, public-safe —
+   *  the same hexes the public item page auras from). Feed v3 pours it into
+   *  the glow behind the card; empty when nobody has extracted it yet, and the
+   *  card then glows with the author's ADN instead. */
+  paletteHex: string[];
   /** "faltan 12 días" when the title is still unreleased — flips the card to
    *  its "No puede esperar" flavor. Null once it's out. */
   waiting: string | null;
@@ -108,6 +113,30 @@ export interface FeedCardsPage {
   /** How many people the viewer follows — rides along because the feed query
    *  already loads the ids, and the page's empty states branch on it. */
   followingCount: number;
+}
+
+/**
+ * Feed v3 (design "Feed v3", 2026-09-02) — the ONE "Quizá quieras seguir"
+ * card the populated feed slips between its cards. Not a FeedCard: it is not
+ * an event, never pages, and never keys a cursor — the page fetches it beside
+ * the first page and the list decides where it sits. Candidates come from
+ * the follow graph first (someone who follows people you follow — that
+ * overlap is the `common` line), and only then from the empty states' pool.
+ */
+export interface FeedSuggestion {
+  username: string;
+  initial: string;
+  avatarHexes: [string, string];
+  avatarUrl: string | null;
+  /** "Sigue a @a y @b" — the follows you share. Null when the candidate came
+   *  from the activity fallback and there is no overlap to name. */
+  common: string | null;
+  /** The serif line: "También le obsesiona Shōgun" · "3 títulos en común" ·
+   *  "Tiene 4 backlogs" — the strongest signal available, in that order. */
+  reason: string;
+  /** Up to 3 recent covers for the fan, native aspect, with their palettes
+   *  (the card glows from these; the ADN pair is the fallback). */
+  covers: { posterUrl: string; mediaType: MediaType; paletteHex: string[] }[];
 }
 
 /** A public profile offered in the feed's empty states. NOT `FollowSuggestion`:

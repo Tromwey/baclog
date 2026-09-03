@@ -4,6 +4,7 @@ import { requireUser } from "@/auth";
 import { getRenderInstant } from "@/modules/catalog/release";
 import {
   getFeedCards,
+  getFeedSuggestion,
   getFollowingPreview,
   getFollowSuggestions,
 } from "@/modules/social/queries";
@@ -26,7 +27,12 @@ export default async function FeedPage() {
   const now = await getRenderInstant();
   // One entry query: the feed page itself carries followingCount (it loads
   // the followed ids anyway), so the empty states don't pay extra counts.
-  const page = await getFeedCards(user.id, { now });
+  // The v3 suggestion rides beside it (null when following nobody, so the
+  // empty states — which offer people themselves — never pay for it twice).
+  const [page, suggestion] = await Promise.all([
+    getFeedCards(user.id, { now }),
+    getFeedSuggestion(user.id),
+  ]);
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
@@ -39,7 +45,11 @@ export default async function FeedPage() {
           followingCount={page.followingCount}
         />
       ) : (
-        <FeedList initialCards={page.cards} initialCursor={page.nextCursor} />
+        <FeedList
+          initialCards={page.cards}
+          initialCursor={page.nextCursor}
+          suggestion={suggestion}
+        />
       )}
     </main>
   );
