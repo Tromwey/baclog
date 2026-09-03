@@ -87,7 +87,7 @@ export function PeopleList({
 function PersonIdentity({ p }: { p: PersonRow }) {
   return (
     <>
-      <AdnAvatar hexes={p.avatarHexes} className="h-10 w-10" />
+      <AdnAvatar hexes={p.avatarHexes} src={p.avatarUrl} className="h-10 w-10" />
       <span className="min-w-0">
         <span className="block truncate text-[14.5px] font-semibold text-text">
           {p.name}

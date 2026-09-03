@@ -46,7 +46,12 @@ function Header({ author, when }: { author: ReviewAuthor; when: string }) {
   return (
     <div className="flex items-center gap-[9px]">
       <Link href={`/u/${author.username}`} className="flex min-w-0 items-center gap-[9px]">
-        <AdnAvatar hexes={author.avatarHexes} initial={author.initial} className="h-6 w-6 text-[9px]" />
+        <AdnAvatar
+          hexes={author.avatarHexes}
+          initial={author.initial}
+          src={author.avatarUrl}
+          className="h-6 w-6 text-[9px]"
+        />
         <span className="truncate text-[13.5px] font-semibold text-text">@{author.username}</span>
       </Link>
       <span className="ml-auto flex-none font-mono text-[9px] uppercase tracking-[0.1em] text-text-3">
@@ -209,7 +214,11 @@ function CompactCard({ event }: { event: FeedEvent }) {
       : null;
   return (
     <article className="relative flex items-center gap-2.5 rounded-[14px] bg-surface-1 px-3 py-2.5">
-      <AdnAvatar hexes={event.author.avatarHexes} className="mt-px h-[18px] w-[18px] self-start" />
+      <AdnAvatar
+        hexes={event.author.avatarHexes}
+        src={event.author.avatarUrl}
+        className="mt-px h-[18px] w-[18px] self-start"
+      />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex min-w-0 items-baseline gap-[5px] text-[12.5px] leading-[1.3] text-text-2">
           <Link

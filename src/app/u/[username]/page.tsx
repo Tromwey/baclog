@@ -9,6 +9,7 @@ import { getProfileReviews } from "@/modules/reviews/queries";
 import { isFollowing } from "@/modules/social/queries";
 import { FollowButton, followPillClass } from "@/components/follow-button";
 import { ProfileReviews } from "@/components/reviews/profile-reviews";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
 import { UpcomingShelf } from "@/components/upcoming-shelf";
@@ -124,6 +125,15 @@ export default async function PublicProfilePage({
         }`}
       >
         <header className="bl-rise">
+          {/* F3.11 — the same identity disc as /perfil: their photo, or their
+              ADN as an orb (same palette and seed as the hero aura behind it,
+              so orb and aura read as one light). */}
+          <ProfileAvatar
+            src={profile.avatarUrl}
+            palette={profile.palette}
+            seed={7}
+            className="mb-4 h-[68px] w-[68px] shadow-[0_10px_28px_rgba(0,0,0,0.5)]"
+          />
           {/* F3.10 — the @handle replaces baclog.app/… on the profile screens. */}
           <MonoMeta className="text-text-2">@{profile.username}</MonoMeta>
           <div className="mt-2 flex items-end gap-3.5">

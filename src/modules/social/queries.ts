@@ -161,6 +161,8 @@ interface RawEvent {
   at: Date;
   userId: string;
   username: string | null;
+  /** F3.11 — the author's photo URL, gated by the same publicAuthor join. */
+  image: string | null;
   catalogItemId: string;
   title: string;
   mediaType: (typeof catalogItems.$inferSelect)["mediaType"];
@@ -223,6 +225,7 @@ async function fetchFeedChunk(
         at: backlogItems.addedAt,
         userId: backlogItems.userId,
         username: users.username,
+        image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
         mediaType: catalogItems.mediaType,
@@ -271,6 +274,7 @@ async function fetchFeedChunk(
         at: userItems.statusChangedAt,
         userId: userItems.userId,
         username: users.username,
+        image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
         mediaType: catalogItems.mediaType,
@@ -304,6 +308,7 @@ async function fetchFeedChunk(
         at: userItems.obsessedAt,
         userId: userItems.userId,
         username: users.username,
+        image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
         mediaType: catalogItems.mediaType,
@@ -338,6 +343,7 @@ async function fetchFeedChunk(
         at: itemReviews.createdAt,
         userId: itemReviews.userId,
         username: users.username,
+        image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
         mediaType: catalogItems.mediaType,
@@ -441,6 +447,7 @@ async function fetchFeedChunk(
         username,
         initial: initialOf(username),
         avatarHexes: hexCache.get(r.userId) ?? FALLBACK_ADN,
+        avatarUrl: r.image,
       },
       catalogItemId: r.catalogItemId,
       title: r.title,
@@ -518,6 +525,7 @@ export async function getFollowSuggestions(
       username: users.username,
       name: users.name,
       isFounder: users.isFounder,
+      image: users.image,
       lastAt,
     })
     .from(users)
@@ -616,6 +624,7 @@ export async function getFollowSuggestions(
       name: c.name ?? c.username ?? "",
       isFounder: c.isFounder,
       avatarHexes: hexes.get(c.id) ?? FALLBACK_ADN,
+      avatarUrl: c.image,
       backlogCount: backlogMap.get(c.id) ?? 0,
       followerCount: followerMap.get(c.id) ?? 0,
       covers: covers.covers,
@@ -635,9 +644,9 @@ export async function getFollowSuggestions(
 export async function getFollowingPreview(
   viewerId: string,
   limit = 3,
-): Promise<{ avatarHexes: [string, string] }[]> {
+): Promise<{ avatarHexes: [string, string]; avatarUrl: string | null }[]> {
   const rows = await db
-    .select({ userId: users.id, isPublic: users.isPublic })
+    .select({ userId: users.id, isPublic: users.isPublic, image: users.image })
     .from(userFollows)
     .innerJoin(users, eq(users.id, userFollows.followedUserId))
     .where(eq(userFollows.followerUserId, viewerId))
@@ -648,6 +657,7 @@ export async function getFollowingPreview(
   const hexes = await avatarHexesFor(publicIds);
   return rows.map((r) => ({
     avatarHexes: hexes.get(r.userId) ?? FALLBACK_ADN,
+    avatarUrl: r.isPublic ? r.image : null,
   }));
 }
 
@@ -697,6 +707,7 @@ export async function getPeoplePage(
       name: users.name,
       isFounder: users.isFounder,
       isPublic: users.isPublic,
+      image: users.image,
       // In "following" mode this is definitionally true (it IS the edge being
       // listed) — skip the correlated subquery instead of discarding it.
       following:
@@ -773,6 +784,7 @@ export async function getPeoplePage(
     avatarHexes: r.isPublic
       ? (hexes.get(r.userId) ?? FALLBACK_ADN)
       : FALLBACK_ADN,
+    avatarUrl: r.isPublic ? r.image : null,
     backlogCount: r.isPublic ? (backlogMap.get(r.userId) ?? 0) : 0,
     following: r.following,
   }));

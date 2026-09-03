@@ -25,6 +25,8 @@ const publicUser = {
   name: users.name,
   username: users.username,
   isFounder: users.isFounder,
+  // F3.11 — the photo URL is identity, shown wherever the handle is.
+  image: users.image,
 };
 
 export async function getPublicProfile(username: string) {
@@ -117,6 +119,7 @@ export async function getPublicProfile(username: string) {
     displayName: user.name ?? user.username ?? "",
     username: user.username!,
     isFounder: user.isFounder,
+    avatarUrl: user.image,
     followerCount: followerAgg?.n ?? 0,
     // Lima fallback so an owner with no extracted palette still auras.
     palette: palette.length > 0 ? palette : ["#D8FF3E"],

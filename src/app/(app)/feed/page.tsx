@@ -110,6 +110,7 @@ async function EmptyNoActivity({
           <AdnAvatar
             key={i}
             hexes={p.avatarHexes}
+            src={p.avatarUrl}
             className={`h-[22px] w-[22px] ${i > 0 ? "-ml-[18px]" : ""}`}
           />
         ))}

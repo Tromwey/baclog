@@ -22,10 +22,13 @@ export type ReviewMark = "obsessed" | "liked" | "disliked" | null;
 
 export interface ReviewAuthor {
   username: string;
-  /** First grapheme of the username, uppercased — Baclog has no profile photos. */
+  /** First grapheme of the username, uppercased — the fallback when there is
+   *  no photo (F3.11): punched out of the ADN orb. */
   initial: string;
   /** Two ADN hexes for the avatar aura (dominant colors of their library). */
   avatarHexes: [string, string];
+  /** F3.11 — their profile photo (`/api/avatar/{key}`), null for the orb. */
+  avatarUrl: string | null;
 }
 
 export interface FeedReview {

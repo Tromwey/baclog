@@ -22,13 +22,13 @@
 | `src/app/(app)/descubrir/` · `search/` · `para-ti/` · `recap/` | Descubrimiento, búsqueda, recos y recap |
 | `src/components/cover-thumb.tsx` · `src/components/ui/load-more-button.tsx` | Portada a tamaño nombrado (xs/sm/md/lg, aspecto nativo, lazy) y el "Ver más" de las listas keyset (feed, gente, reseñas) |
 | `src/app/(app)/feed/` | F3.10 feed social v2: cards en 4 formas (ráfaga colapsable con tira ≤12 + tile "+N", joyas obsesión/reseña, compacta con link estirado al ítem y @handle/backlog con href propio), vacíos 1b/1c, skeleton v2, error, búsqueda por @handle. Agrupación pura en `modules/social/group.ts`, paginación por CARDS en `getFeedCards`; "Ver más" fallido lo dice en el botón (no error boundary) |
-| `src/app/(app)/perfil/` · `settings/` | Perfil propio (F3.10: forma de perfil público + "Tu gente" + escaparate de estantes; `edit-shelves.tsx` = hoja Privado/Público/Perfil por backlog F3.10.1; `siguiendo/`·`seguidores/`) y Ajustes (absorbió instalar/admin/cerrar sesión tras el chip) |
+| `src/app/(app)/perfil/` · `settings/` | Perfil propio (F3.10: forma de perfil público + "Tu gente" + escaparate de estantes; `edit-shelves.tsx` = hoja Privado/Público/Perfil por backlog F3.10.1; `siguiendo/`·`seguidores/`) y Ajustes (absorbió instalar/admin/cerrar sesión tras el chip; `settings/avatar-picker.tsx` = subir/cambiar/quitar la foto de perfil F3.11, único punto de escritura) |
 | `src/app/(app)/admin/` | Torre de Control: `analytics`, `recos`, `salud`, `trafico`, `usuarios`, `palette-backfill` |
 | `src/app/(auth)/` | `login`, `verify`, `onboarding`, `blocked` |
 | `src/app/(marketing)/` | `waitlist`, `creditos` |
 | `src/app/u/[username]/` | Vistas públicas de perfil, backlog e ítem |
 | `src/components/ui/` | Primitivos: `aura-field.tsx`, `aura-presets.ts`, `surface.tsx`, `button.tsx`, `status-chip.tsx`, `screen-header.tsx`, `back-button.tsx`, `mono-meta.tsx`, `auth-aura-backdrop.tsx` (barrel en `index.ts`) |
-| `src/components/` | Componentes de producto: `backlog-hero`, `item-hero-aura`, `item-row-*`, `item-status`, `card-exporter`, `tracklist`, `cross-media-feedback`, `theme-color-sync`, `glyph-paths`, `follow-button` (F3.10, optimista), `adn-avatar` (orbe ADN a cualquier tamaño), `reviews/` (F3.9) |
+| `src/components/` | Componentes de producto: `backlog-hero`, `item-hero-aura`, `item-row-*`, `item-status`, `card-exporter`, `tracklist`, `cross-media-feedback`, `theme-color-sync`, `glyph-paths`, `follow-button` (F3.10, optimista), `adn-avatar` (orbe ADN a cualquier tamaño; con `src` muestra la foto de perfil F3.11 encima del orbe, que queda como relleno de carga/fallback), `profile-avatar` (disco de identidad de /perfil y /u/*: foto o `AuraField` orb), `reviews/` (F3.9) |
 | `src/hooks/` | `use-long-press.ts`, `use-scroll-into-view-on-keyboard.ts` |
 | `design/item-flow/` | HANDOFF de diseño — origen de las reglas visuales (§7: "el aura es la única fuente de luz") |
 

@@ -298,6 +298,7 @@ export default async function ItemPage({
           inLibrary={entry !== null}
           viewerIsPublic={Boolean(user.username && user.isPublic)}
           viewerHexes={viewerHexes}
+          viewerAvatarUrl={user.image}
           context={reviews}
         />
 

@@ -26,6 +26,7 @@ export default async function PerfilPage() {
     <PerfilScreen
       name={user.name ?? ""}
       username={user.username}
+      avatarUrl={user.image}
       isPublic={user.isPublic}
       stats={stats}
       palette={palette}

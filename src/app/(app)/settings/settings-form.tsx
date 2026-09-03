@@ -10,6 +10,7 @@ import {
   setPublicAction,
   updateDisplayNameAction,
 } from "@/app/actions/account-actions";
+import { AvatarPicker } from "./avatar-picker";
 
 const SERVICES = [
   { id: "spotify", label: "Spotify" },
@@ -22,6 +23,8 @@ type ServiceId = (typeof SERVICES)[number]["id"];
 
 export function SettingsForm({
   initialName,
+  initialAvatarUrl,
+  avatarHexes,
   initialService,
   email,
   initialUsername,
@@ -29,6 +32,10 @@ export function SettingsForm({
   initialNotifyReleases,
 }: {
   initialName: string;
+  /** F3.11 — current photo URL, null for the orb. */
+  initialAvatarUrl: string | null;
+  /** The viewer's ADN pair the picker's orb falls back to. */
+  avatarHexes: [string, string];
   initialService: ServiceId | null;
   email: string;
   initialUsername: string | null;
@@ -82,6 +89,7 @@ export function SettingsForm({
       <section>
         <h2 className="text-sm font-semibold text-text-2">Cuenta</h2>
         <p className="mt-1 text-sm text-text-3">{email}</p>
+        <AvatarPicker initialUrl={initialAvatarUrl} hexes={avatarHexes} />
         <form onSubmit={saveName} className="mt-3 flex gap-2">
           <input
             value={name}

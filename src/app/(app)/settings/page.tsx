@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronRight, LogOut } from "lucide-react";
 import { requireUser } from "@/auth";
+import { getUserPalette } from "@/modules/backlog/queries";
+import { legibleAdnPair } from "@/modules/reviews/format";
 import { signOutAction } from "@/app/actions/account-actions";
 import { BackButton } from "@/components/ui";
 import { InstallAppRow } from "@/app/(app)/perfil/install-app-row";
@@ -14,6 +16,9 @@ import { SettingsForm } from "./settings-form";
  */
 export default async function SettingsPage() {
   const user = await requireUser();
+  // F3.11 — the orb the photo picker falls back to (same pair the viewer's
+  // own review card uses).
+  const avatarHexes = legibleAdnPair(await getUserPalette(user.id, 2));
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(24px+env(safe-area-inset-top))] text-text">
       <BackButton href="/perfil" />
@@ -31,6 +36,8 @@ export default async function SettingsPage() {
 
       <SettingsForm
         initialName={user.name ?? ""}
+        initialAvatarUrl={user.image}
+        avatarHexes={avatarHexes}
         initialService={user.preferredService}
         email={user.email}
         initialUsername={user.username}

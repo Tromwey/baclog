@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, SlidersHorizontal } from "lucide-react";
-import { AuraField, glassChipClass } from "@/components/ui";
+import { glassChipClass } from "@/components/ui";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { plural } from "@/lib/plural";
 import type { UserStats } from "@/modules/backlog/queries";
 import { ShelvesSection } from "./edit-shelves";
@@ -16,6 +17,7 @@ import { ShareProfileChip } from "./share-profile-chip";
 export function PerfilScreen({
   name,
   username,
+  avatarUrl,
   isPublic,
   stats,
   palette,
@@ -24,6 +26,8 @@ export function PerfilScreen({
 }: {
   name: string;
   username: string | null;
+  /** F3.11 — the photo; null keeps the ADN orb. */
+  avatarUrl: string | null;
   /** Gates the share chip and the @handle link — a private profile's public
    *  URL 404s, and offering to share a dead link is worse than no chip. */
   isPublic: boolean;
@@ -53,9 +57,12 @@ export function PerfilScreen({
 
       {/* Identity */}
       <div className="flex flex-col items-center pt-[22px] text-center">
-        <div className="relative h-24 w-24 overflow-hidden rounded-full bg-bg shadow-[0_12px_34px_rgba(0,0,0,0.55)]">
-          <AuraField variant="orb" colors={palette} seed={33} />
-        </div>
+        <ProfileAvatar
+          src={avatarUrl}
+          palette={palette}
+          seed={33}
+          className="h-24 w-24 shadow-[0_12px_34px_rgba(0,0,0,0.55)]"
+        />
         <div className="mt-[18px] font-serif text-[34px] italic leading-none">
           {name || "Sin nombre"}
         </div>

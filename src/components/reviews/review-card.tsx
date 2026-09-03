@@ -69,6 +69,7 @@ export function ReviewAvatar({ author }: { author: ReviewAuthor }) {
     <AdnAvatar
       hexes={author.avatarHexes}
       initial={author.initial}
+      src={author.avatarUrl}
       className="h-[30px] w-[30px] text-[11px]"
     />
   );

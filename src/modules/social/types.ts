@@ -110,6 +110,8 @@ export interface SuggestedProfile {
   name: string;
   isFounder: boolean;
   avatarHexes: [string, string];
+  /** F3.11 — profile photo, null for the ADN orb. */
+  avatarUrl: string | null;
   backlogCount: number;
   followerCount: number;
   /** Up to 3 recent covers, native aspect (2:3 video / 1:1 album). */
@@ -128,6 +130,9 @@ export interface PersonRow {
   /** They went private after the follow — row dims, activity is gone. */
   isPrivate: boolean;
   avatarHexes: [string, string];
+  /** F3.11 — profile photo; null for the orb, and ALWAYS null once they went
+   *  private (their photo is theirs again, like their colors). */
+  avatarUrl: string | null;
   backlogCount: number;
   /** Whether the VIEWER follows them (pre-seeds the button on both tabs). */
   following: boolean;

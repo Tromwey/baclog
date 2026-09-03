@@ -22,6 +22,8 @@ export const getCurrentUser = cache(async () => {
       email: users.email,
       name: users.name,
       username: users.username,
+      // F3.11 — the viewer's own photo URL (null = ADN orb).
+      image: users.image,
       isPublic: users.isPublic,
       notifyReleases: users.notifyReleases,
       preferredService: users.preferredService,

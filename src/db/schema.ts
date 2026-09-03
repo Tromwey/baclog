@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -97,7 +98,14 @@ export const users = pgTable(
     emailVerified: timestamp("email_verified", { mode: "date" }),
     /** Display name (F2.1) — null until onboarding completes */
     name: text("name"),
-    /** Unused in M2 (no OAuth avatars); kept for Auth.js adapter compat */
+    /**
+     * F3.11 foto de perfil — the SERVED URL of the user's photo
+     * (`/api/avatar/{key}`, see `userAvatars`), null when they have none. The
+     * Auth.js adapter column, repurposed: every reader that already joins
+     * `user` (feed, suggestions, lists, public profile, session) gets the
+     * avatar for free by selecting it. Cross-user reads expose it under the
+     * same `isPublic` gate as the username — it is identity, not state.
+     */
     image: text("image"),
     /** F2.2 — never selected into any public-facing query, never displayed */
     birthYear: smallint("birth_year"),
@@ -498,6 +506,54 @@ export const userFollows = pgTable(
     // serves "a quién sigue X" via its leftmost prefix.
     index("user_follow_followed_idx").on(t.followedUserId),
   ],
+);
+
+// ---------- F3.11 foto de perfil ----------
+
+/**
+ * Postgres `bytea` for the Neon HTTP driver: bytes go OUT as the `\\x…` hex
+ * text form (the driver JSON-serializes params, so a Buffer would not survive
+ * the trip) and come BACK as a Buffer (verified against the live driver on
+ * 2026-09-02). The string branch of fromDriver is defensive, for a driver
+ * that returns the text form instead.
+ */
+const bytea = customType<{ data: Uint8Array; driverData: string | Uint8Array }>({
+  dataType() {
+    return "bytea";
+  },
+  toDriver(value) {
+    return `\\x${Buffer.from(value).toString("hex")}`;
+  },
+  fromDriver(value) {
+    if (typeof value === "string") {
+      return Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex");
+    }
+    return value;
+  },
+});
+
+/**
+ * The photo bytes, ONE row per user, in their own table on purpose: `user` is
+ * the hot row (getCurrentUser reads it on every request) and must never carry
+ * ~40 KB of image. The image is resized on-device to a 512px square (WebP,
+ * JPEG fallback) before upload — no server-side image library, same posture
+ * as the on-device palette extraction. `key` is random per upload: it makes
+ * the served URL safely immutable-cacheable in browsers and rotates on every
+ * change, so a replaced or removed photo 404s at its old URL. The row cascades
+ * with the account; `users.image` is the pointer readers use.
+ */
+export const userAvatars = pgTable(
+  "user_avatar",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    contentType: text("content_type").notNull(),
+    bytes: bytea("bytes").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("user_avatar_key_unique").on(t.key)],
 );
 
 // ---------- links module (lazy-resolved deep-link cache — ADR-007) ----------

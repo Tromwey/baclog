@@ -20,7 +20,7 @@ export function SuggestionCard({ s }: { s: SuggestedProfile }) {
           href={`/u/${s.username}`}
           className="flex min-w-0 flex-1 items-center gap-[11px]"
         >
-          <AdnAvatar hexes={s.avatarHexes} className="h-[38px] w-[38px]" />
+          <AdnAvatar hexes={s.avatarHexes} src={s.avatarUrl} className="h-[38px] w-[38px]" />
           <span className="min-w-0">
             <span className="block truncate text-[13.5px] font-semibold text-text">
               @{s.username}
@@ -69,7 +69,7 @@ export function SuggestionRow({ s }: { s: SuggestedProfile }) {
         href={`/u/${s.username}`}
         className="flex min-w-0 flex-1 items-center gap-[11px]"
       >
-        <AdnAvatar hexes={s.avatarHexes} className="h-[34px] w-[34px]" />
+        <AdnAvatar hexes={s.avatarHexes} src={s.avatarUrl} className="h-[34px] w-[34px]" />
         <span className="min-w-0">
           <span className="block truncate text-[13.5px] font-semibold text-text">
             @{s.username}

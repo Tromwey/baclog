@@ -36,6 +36,7 @@ export function ReviewsBlock({
   inLibrary,
   viewerIsPublic,
   viewerHexes,
+  viewerAvatarUrl,
   context,
 }: {
   catalogItemId: string;
@@ -53,6 +54,8 @@ export function ReviewsBlock({
   viewerIsPublic: boolean;
   /** The viewer's own two ADN colors, for their avatar on their own card. */
   viewerHexes: [string, string];
+  /** F3.11 — the viewer's own photo, over the orb when they have one. */
+  viewerAvatarUrl: string | null;
   context: ItemReviewContext;
 }) {
   const { verdict, obsessed } = useItemReaction();
@@ -203,7 +206,12 @@ export function ReviewsBlock({
             hasSpoiler={own.hasSpoiler}
             mark={mark}
             when={own.when}
-            author={{ username: "", initial: "T", avatarHexes: viewerHexes }}
+            author={{
+              username: "",
+              initial: "T",
+              avatarHexes: viewerHexes,
+              avatarUrl: viewerAvatarUrl,
+            }}
             markLabel={ownMarkLabel(mark)}
             displayName="Tú"
             alwaysRevealed

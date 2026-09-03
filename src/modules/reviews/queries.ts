@@ -184,6 +184,7 @@ export async function getReviewFeedPage(
       hasSpoiler: itemReviews.hasSpoiler,
       createdAt: itemReviews.createdAt,
       username: users.username,
+      image: users.image,
       obsessed: userItems.obsessed,
       verdict: userItems.verdict,
     })
@@ -235,6 +236,7 @@ export async function getReviewFeedPage(
         username,
         initial: initialOf(username),
         avatarHexes: hexes.get(row.userId) ?? FALLBACK_ADN,
+        avatarUrl: row.image,
       } satisfies ReviewAuthor,
     };
   });
@@ -335,6 +337,7 @@ export async function getPublicOwnerReview(
       hasSpoiler: itemReviews.hasSpoiler,
       createdAt: itemReviews.createdAt,
       username: users.username,
+      image: users.image,
       obsessed: userItems.obsessed,
       verdict: userItems.verdict,
     })
@@ -369,6 +372,7 @@ export async function getPublicOwnerReview(
       username: name,
       initial: initialOf(name),
       avatarHexes: hexes.get(row.userId) ?? FALLBACK_ADN,
+      avatarUrl: row.image,
     },
   };
 }

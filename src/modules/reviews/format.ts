@@ -110,7 +110,8 @@ export function conversionLine(n: number): string | null {
 /**
  * The 30 px avatar: two ADN colors bleeding over the raised surface, with the
  * initial punched out in the page background color. Same two-lobe recipe as the
- * profile orb, shrunk — no photos anywhere in Baclog.
+ * profile orb, shrunk. Since F3.11 a profile photo sits on top of it when the
+ * author has one; the orb is the fallback and the loading fill.
  */
 /** The lima/mauve pair an author falls back to when their ADN can't serve. */
 export const FALLBACK_ADN: [string, string] = ["#D8FF3E", "#7C3F5E"];
