@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
 import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
-import { MarkGlyph, SpoilerBody } from "@/components/reviews/review-card";
+import { MarkGlyph } from "@/components/reviews/review-card";
 import { rgba } from "@/lib/color";
 import { joinMeta } from "@/lib/format";
 import { dominantHexes } from "@/modules/backlog/palette";
@@ -60,10 +60,10 @@ const COVER_SHADOW =
 
 const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[2/3]");
 
-/** The glow's colors: the cover's palette, else the author's ADN — a card is
- *  never lit by nothing. */
+/** The glow's colors: the cover's two leading hexes (the mock's `hx` pair),
+ *  else the author's ADN — a card is never lit by nothing. */
 const glowHexes = (e: FeedEvent) =>
-  e.paletteHex.length > 0 ? e.paletteHex : e.author.avatarHexes;
+  e.paletteHex.length > 0 ? e.paletteHex.slice(0, 2) : e.author.avatarHexes;
 
 /** Where a cover has no art: the mock's "printed" gradient from the palette
  *  (a soft highlight over a diagonal), surface-2 when there is no palette. */
@@ -145,7 +145,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
 
   return (
     <article className="relative flex flex-col gap-3.5">
-      <FeedGlow hexes={hexes} className="inset-x-0 bottom-0 top-5" />
+      <FeedGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
       <div className="relative flex items-center gap-[9px] px-4">
         <Link href={profileHref(author.username)} className="flex-none">
           <AdnAvatar
@@ -327,13 +327,40 @@ function ReviewedCard({ event }: { event: FeedEvent }) {
         {metaOf(event)}
       </span>
       {event.reviewBody !== null && (
-        // Content hairline (§7-exempt) between the title block and the words;
-        // the only thing in the panel that takes a tap is the spoiler reveal.
-        <span className="pointer-events-auto mt-2 block border-t border-white/[0.12] pt-3">
-          <SpoilerBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} className="" />
-        </span>
+        <HeroReviewBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} />
       )}
     </Hero>
+  );
+}
+
+/**
+ * The review's words inside the hero panel, with the mock's spoiler
+ * treatment (not the reviews block's SpoilerBody, whose plain label was made
+ * for a surface card): the text stays in place at blur 6px / opacity .4 and
+ * a glass pill sits over it at 55% of its height — revealing brings it into
+ * focus without moving the panel. The hairline above is a content divider
+ * (§7-exempt); the pill is borderless like every glass in the app. The only
+ * thing in the pointer-transparent panel that takes a tap is this button.
+ */
+function HeroReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolean }) {
+  const [revealed, setRevealed] = useState(false);
+  const words = "text-[14.5px] leading-[1.45] text-pretty text-text";
+  if (!hasSpoiler || revealed) {
+    return (
+      <p className={`mt-2 border-t border-white/[0.12] pt-3 ${words}`}>{body}</p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setRevealed(true)}
+      className="pointer-events-auto relative mt-2 block w-full border-t border-white/[0.12] pt-3 text-left"
+    >
+      <span className={`block select-none opacity-40 blur-[6px] ${words}`}>{body}</span>
+      <span className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[rgba(20,20,26,.6)] px-3.5 py-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text backdrop-blur-[16px]">
+        Contiene spoiler · Mostrar
+      </span>
+    </button>
   );
 }
 
