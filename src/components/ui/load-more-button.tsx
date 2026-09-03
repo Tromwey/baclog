@@ -13,7 +13,7 @@ const VARIANT = {
   block:
     "block w-full rounded-[14px] bg-surface-2 py-[13px] text-text-2",
   pill:
-    "mx-auto block rounded-full bg-black/[0.28] px-[22px] py-3 text-text backdrop-blur-[18px] hover:bg-black/[0.4]",
+    "mx-auto block rounded-full bg-[rgba(18,18,24,.38)] px-[22px] py-3 text-text backdrop-blur-[16px]",
 } as const;
 
 export function LoadMoreButton({

@@ -12,6 +12,11 @@ import {
  * Optimistic: the chip flips on tap and only reverts if the server says no.
  * Two fills, per the design: lima pill = "Seguir" (the action), neutral
  * surface + accent check = "Siguiendo" (the state). No borders, no glow (§7).
+ *
+ * `variant="glass"` is the feed v3 mock's version for the in-feed suggestion
+ * card: off-white pill (text on bg) that turns into the mock's glass when
+ * following, 9/18 padding, 13px semibold, 200ms color transition — the same
+ * optimistic toggle underneath.
  */
 
 const SIZES = {
@@ -30,15 +35,20 @@ const ACCENT_PILL =
  */
 export const followPillClass = `${ACCENT_PILL} ${SIZES.lg}`;
 
+const GLASS_PILL =
+  "inline-flex flex-none items-center rounded-full px-[18px] py-[9px] font-sans text-[13px] font-semibold leading-none backdrop-blur-[16px] transition-[background-color,color] duration-200 active:scale-[0.97]";
+
 export function FollowButton({
   username,
   initialFollowing,
   size = "md",
+  variant = "accent",
   className = "",
 }: {
   username: string;
   initialFollowing: boolean;
   size?: keyof typeof SIZES;
+  variant?: "accent" | "glass";
   className?: string;
 }) {
   const [following, setFollowing] = useState(initialFollowing);
@@ -62,6 +72,19 @@ export function FollowButton({
         setFollowing(!next);
       }
     });
+  }
+
+  if (variant === "glass") {
+    return (
+      <button
+        onClick={toggle}
+        className={`${GLASS_PILL} ${
+          following ? "bg-[rgba(18,18,24,.38)] text-text" : "bg-text text-bg"
+        } ${className}`}
+      >
+        {following ? "Siguiendo" : "Seguir"}
+      </button>
+    );
   }
 
   if (following) {

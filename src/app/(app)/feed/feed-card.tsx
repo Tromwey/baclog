@@ -36,10 +36,9 @@ import { FeedGlow } from "./feed-glow";
  * takes taps); the compact keeps v2's stretched title link under raised
  * @handle / backlog links. The flame stays the only color; verdicts stay at
  * the metadata tier; covers keep their native aspect (album 1:1, video 2:3).
- * Glass = the app's chip recipe (bg-black/28 + blur), borderless (§7).
- * Gutter: 16px, not the mock's 20 — the mock aligns its header and its cards
- * at 20; the app's ScreenHeader (and every page body) sits at 16, and the
- * alignment is the point, not the number.
+ * Glass = the mock's (rgba(18,18,24,.38) + its per-piece blur/saturate),
+ * borderless (§7 — the one thing the mock draws that we don't). Gutter 20,
+ * the mock's, matched by the feed's glass header (ScreenHeader `glass`).
  */
 
 export function FeedCardView({ card }: { card: FeedCard }) {
@@ -53,7 +52,9 @@ export function FeedCardView({ card }: { card: FeedCard }) {
 // ---------- shared bits ----------
 
 const META = "font-mono text-[8.5px] uppercase tracking-[0.1em]";
-const GLASS = "bg-black/[0.28] backdrop-blur-[18px]";
+/** The mock's `--glass`, with the blur each piece asks for. */
+const GLASS_BG = "bg-[rgba(18,18,24,.38)]";
+const GLASS = `${GLASS_BG} backdrop-blur-[16px]`;
 /** Dark neutral depth under a cover (§7-exempt: no color, no glow). */
 const COVER_SHADOW =
   "shadow-[0_18px_40px_-12px_rgba(0,0,0,.7),inset_0_1px_0_rgba(255,255,255,.18)]";
@@ -146,7 +147,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
   return (
     <article className="relative flex flex-col gap-3.5">
       <FeedGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
-      <div className="relative flex items-center gap-[9px] px-4">
+      <div className="relative flex items-center gap-[9px] px-5">
         <Link href={profileHref(author.username)} className="flex-none">
           <AdnAvatar
             hexes={author.avatarHexes}
@@ -172,12 +173,10 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             </Link>
           </span>
         </span>
-        {/* text-2, not the design's text-3: over the glow the tertiary grey
-            all but vanished on real covers (verified 2026-09-02). */}
-        <span className={`ml-auto flex-none ${META} text-[9px] text-text-2`}>{burst.when}</span>
+        <span className={`ml-auto flex-none ${META} text-[9px] text-text-3`}>{burst.when}</span>
       </div>
 
-      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-4 pb-1.5 pt-1 [scroll-padding-inline:16px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-5 pb-1.5 pt-1 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {strip.map((e) => (
           <Link
             key={e.id}
@@ -204,20 +203,20 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         )}
       </div>
 
-      <div className="relative flex items-center gap-2.5 px-4">
+      <div className="relative flex items-center gap-2.5 px-5">
         <span className={`${META} text-text-3`}>{tally(burst.items)}</span>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text transition-colors hover:bg-black/[0.4] ${GLASS}`}
+          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text ${GLASS}`}
         >
           {expanded ? "Ocultar" : `Ver los ${count}`}
         </button>
       </div>
 
       {expanded && (
-        <div className="bl-rise relative mx-4 flex flex-col gap-2.5 rounded-[18px] bg-black/[0.28] px-3.5 py-3 backdrop-blur-[24px]">
+        <div className={`bl-rise-soft relative mx-5 flex flex-col gap-2.5 rounded-[18px] px-3.5 py-3 backdrop-blur-[24px] backdrop-saturate-[1.4] ${GLASS_BG}`}>
           {burst.items.map((e) => (
             <Link key={e.id} href={itemHref(e.catalogItemId)} className="flex items-center gap-3">
               <Cover event={e} className="w-10 flex-none rounded-[7px]" />
@@ -246,10 +245,17 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
 function Hero({
   event,
   glowOpacity,
+  /** The mock's sheen over the art: obsessed lights the top-RIGHT at .18,
+   *  reviewed the top-LEFT at .16. */
+  highlight,
+  /** Gap of the word panel: 6 for obsessed, 5 for reviewed (the mock's). */
+  panelGap,
   children,
 }: {
   event: FeedEvent;
   glowOpacity: number;
+  highlight: { x: string; alpha: number };
+  panelGap: string;
   children: React.ReactNode;
 }) {
   const { author } = event;
@@ -261,8 +267,7 @@ function Hero({
           aria-hidden
           className="absolute inset-0"
           style={{
-            background:
-              "radial-gradient(120% 80% at 80% 0%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%)",
+            background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
           }}
         />
         <Link
@@ -272,7 +277,7 @@ function Hero({
         />
         <Link
           href={profileHref(author.username)}
-          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 transition-colors hover:bg-black/[0.4] ${GLASS}`}
+          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] ${GLASS_BG}`}
         >
           <AdnAvatar
             hexes={author.avatarHexes}
@@ -284,9 +289,9 @@ function Hero({
           <span className={`flex-none ${META} text-text-2`}>{event.when}</span>
         </Link>
         <span
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-1.5 px-4 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6]"
+          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col px-5 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6] ${panelGap}`}
           style={{
-            background: "linear-gradient(rgba(18,18,24,.22), rgba(18,18,24,.6))",
+            background: "linear-gradient(rgba(18,18,24,.18), rgba(18,18,24,.5))",
             maskImage: "linear-gradient(transparent, #000 14px)",
             WebkitMaskImage: "linear-gradient(transparent, #000 14px)",
           }}
@@ -300,7 +305,7 @@ function Hero({
 
 function ObsessedCard({ event }: { event: FeedEvent }) {
   return (
-    <Hero event={event} glowOpacity={0.55}>
+    <Hero event={event} glowOpacity={0.55} highlight={{ x: "80%", alpha: 0.18 }} panelGap="gap-1.5">
       <span className="flex items-center gap-1.5 text-[13px] leading-[1.3] text-hot">
         <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill="var(--hot)" aria-hidden className="flex-none">
           <path d={FLAME_PATH} />
@@ -317,7 +322,7 @@ function ObsessedCard({ event }: { event: FeedEvent }) {
 
 function ReviewedCard({ event }: { event: FeedEvent }) {
   return (
-    <Hero event={event} glowOpacity={0.5}>
+    <Hero event={event} glowOpacity={0.5} highlight={{ x: "20%", alpha: 0.16 }} panelGap="gap-[5px]">
       <span className="text-[13px] leading-[1.3] text-text-2">Reseñó</span>
       <span className="font-serif text-[30px] italic leading-[1.04] text-pretty text-text">
         {event.title}
@@ -380,7 +385,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className="relative flex items-center gap-[18px] px-4">
+    <article className="relative flex items-center gap-[18px] px-5">
       <FeedGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
       <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">

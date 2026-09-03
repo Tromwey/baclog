@@ -214,9 +214,25 @@
   }
 }
 
+/* The feed v3 mock's softer variant (6px, same duration) for its expanded
+   burst panel — an entrance, not a pulse. */
+@keyframes bl-rise-soft {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .bl-rise {
     animation: bl-rise var(--dur-base) var(--ease-out) both;
+  }
+  .bl-rise-soft {
+    animation: bl-rise-soft var(--dur-base) var(--ease-out) both;
   }
 }
 

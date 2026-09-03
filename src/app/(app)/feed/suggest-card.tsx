@@ -31,7 +31,7 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
   const widest = Math.max(0, ...s.covers.map((c) => fanWidth(c.mediaType)));
   const fanBase = Math.max(0, (FAN_BOX - (widest + (n - 1) * FAN_STEP)) / 2);
   return (
-    <article className="relative flex items-center gap-4 px-4 py-1.5">
+    <article className="relative flex items-center gap-4 px-5 py-1.5">
       <FeedGlow hexes={hexes} opacity={0.35} angle={110} className="inset-x-0 -inset-y-5" />
       <span className="relative flex min-w-0 flex-1 flex-col gap-2.5">
         <span className="font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
@@ -52,7 +52,12 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
         <span className="font-serif text-[22px] italic leading-[1.1] text-pretty text-text">
           {s.reason}
         </span>
-        <FollowButton username={s.username} initialFollowing={false} className="self-start" />
+        <FollowButton
+          username={s.username}
+          initialFollowing={false}
+          variant="glass"
+          className="self-start"
+        />
       </span>
       {s.covers.length > 0 && (
         <span aria-hidden className="relative h-[150px] w-[150px] flex-none">

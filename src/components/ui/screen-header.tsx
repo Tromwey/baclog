@@ -11,20 +11,45 @@ import type { ReactNode } from "react";
  * Side padding is px-4 to match every page body, so the title's left edge
  * lines up with the content below it. Top padding respects the iOS safe area
  * (needs viewportFit:"cover" in the root layout to resolve to non-zero).
+ *
+ * `glass` (feed v3 mock, 2026-09-02): the header sticks to the top over a
+ * scrim that fades the scrolled content — gradient .85→.55→0 with
+ * blur(18px) saturate(1.4), masked to 60% so the blur has no hard edge —
+ * at the mock's 22/20/16 padding (the feed's cards sit at 20 too). The scrim
+ * is a layer UNDER the title, not on the header itself: the mock masks the
+ * whole header, which would also fade the action chip's lower half.
  */
 export function ScreenHeader({
   title,
   action,
+  glass = false,
   className = "",
 }: {
   title: string;
   action?: ReactNode;
+  glass?: boolean;
   className?: string;
 }) {
   return (
     <header
-      className={`px-4 pb-[26px] pt-[calc(24px+env(safe-area-inset-top))] ${className}`}
+      className={`${
+        glass
+          ? "sticky top-0 z-[5] isolate px-5 pb-4 pt-[calc(22px+env(safe-area-inset-top))]"
+          : "px-4 pb-[26px] pt-[calc(24px+env(safe-area-inset-top))]"
+      } ${className}`}
     >
+      {glass && (
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 backdrop-blur-[18px] backdrop-saturate-[1.4]"
+          style={{
+            background:
+              "linear-gradient(rgba(11,11,13,.85), rgba(11,11,13,.55) 70%, rgba(11,11,13,0))",
+            maskImage: "linear-gradient(#000 60%, transparent)",
+            WebkitMaskImage: "linear-gradient(#000 60%, transparent)",
+          }}
+        />
+      )}
       <div className="flex items-start justify-between gap-3.5">
         <h1 className="min-w-0 truncate font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
           {title}

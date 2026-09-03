@@ -36,7 +36,7 @@ export default async function FeedPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <ScreenHeader title="Tu feed" action={<FindPeopleChip />} />
+      <ScreenHeader title="Tu feed" action={<FindPeopleChip />} glass />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
       ) : page.cards.length === 0 ? (
