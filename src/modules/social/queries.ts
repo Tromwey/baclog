@@ -632,10 +632,30 @@ export async function getFollowSuggestions(
 
 // ---------- buscar gente ----------
 
-/** The needle as the query sees it: no "@", no case, no edge whitespace. */
+/** The needle as the query sees it: no "@", no case, no edge whitespace,
+ *  no diacritics ("Jóse" → "jose") — the JS half of the accent fold, same
+ *  NFD-strip the catalog matchers use. Handles are plain ASCII, so folding
+ *  the needle is what lets "jsálvador" still find @jsalvador. */
 export function normalizeProfileQuery(raw: string): string {
-  return raw.trim().replace(/^@/, "").toLowerCase();
+  return raw
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
+
+/**
+ * The SQL half of the accent fold, for `users.name`: `translate()` over the
+ * Latin diacritics a Spanish/Portuguese/French name actually carries, both
+ * cases (libc `lower()` won't touch non-ASCII, and ILIKE does the casing
+ * anyway). Deliberately NOT the `unaccent` extension: that is a migration on
+ * the shared Neon DB for a table of a few hundred names. A name outside this
+ * alphabet simply doesn't fold — the same posture as the catalog matchers.
+ */
+const FOLD_FROM = "ÁÀÄÂÃÅáàäâãåÉÈËÊéèëêÍÌÏÎíìïîÓÒÖÔÕØóòöôõøÚÙÜÛúùüûÝýÿÑñÇç";
+const FOLD_TO = "AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOOooooooUUUUuuuuYyyNnCc";
+const foldedName = sql`translate(${users.name}, ${FOLD_FROM}, ${FOLD_TO})`;
 
 /** Escape LIKE metacharacters (Postgres' default escape is the backslash) —
  *  a handle can legitimately contain "_", which would otherwise match any
@@ -694,7 +714,7 @@ export async function searchProfiles(
       and(
         publicAuthor,
         ne(users.id, viewerId),
-        or(like(users.username, contains), ilike(users.name, contains)),
+        or(like(users.username, contains), ilike(foldedName, contains)),
       ),
     )
     .orderBy(rank, desc(followers), asc(users.username))
