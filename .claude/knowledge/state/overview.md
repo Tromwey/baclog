@@ -41,3 +41,5 @@
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->
+
+- **Feed rankeado (trabajo posterior, sin fecha)**: el founder quiere que el feed se genere por gustos + grafo + azar (Instagram/TikTok) en vez de cronológico "sin algoritmo" (F3.10). Producto lo mapea en el vault `requerimientos/feed-rankeado.md`. Implicación de código a recordar: el cursor keyset `(at, id)` de `getFeedCards` no sobrevive a un ranking global — la opción barata es rankear dentro de ventanas temporales; una lista materializada contradice "el feed es derivado, sin tabla" (`AGENTS.md`). No hay señal de engagement: `analytics_event` no registra taps en cards del feed.
