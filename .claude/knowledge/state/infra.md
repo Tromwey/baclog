@@ -35,6 +35,7 @@
   Tu código de acceso es NNNNNN`. Con eso se entra con una cuenta QA desechable (la DB local ES la de
   prod, ver `AGENTS.md`/memoria: borrar la cuenta al terminar). El route de sesión y las páginas
   autenticadas se prueban así, no con curl.
+- **Browser pane oculto = página a medias**: si el panel del navegador de la app de escritorio está oculto, `document.visibilityState` es `hidden`, `requestAnimationFrame` no dispara y React 19.2 NUNCA revela los Suspense boundaries streameados (`$RC` encola en `$RB` y espera un rAF): la página se queda en el `loading.tsx` y `read_page` ve vacío. Destrabar desde `javascript_tool`: `if ($RB.length) $RV($RB)` y luego `_reactRetry()` en los nodos comentario `<!--$-->` (ver `learnings/2026-09-02-browser-pane-oculto-suspense-no-revela.md`). Los screenshots sí pintan, pero solo el primer paint: para ver toda la página, `resize_window` a un viewport alto (430×5400) en vez de scrollear.
 - **Dev server desde un worktree**: `.claude/launch.json` (y por tanto `preview_start`) arranca el
   árbol principal, no el worktree. Para verificar código de un worktree se lanza `pnpm exec next dev
   -p 3010` ahí (con los symlinks `.env.local` y `node_modules`) y se abre la URL en el navegador.

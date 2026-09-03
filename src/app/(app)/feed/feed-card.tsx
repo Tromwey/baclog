@@ -3,33 +3,40 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
-import { CoverThumb } from "@/components/cover-thumb";
 import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { MarkGlyph, SpoilerBody } from "@/components/reviews/review-card";
+import { rgba } from "@/lib/color";
 import { joinMeta } from "@/lib/format";
+import { dominantHexes } from "@/modules/backlog/palette";
+import type { MediaType } from "@/modules/catalog/types";
 import { markLabel } from "@/modules/reviews/format";
 import type { FeedBurst, FeedCard, FeedEvent } from "@/modules/social/types";
-import type { ReviewAuthor } from "@/modules/reviews/types";
+import { FeedGlow } from "./feed-glow";
 
 /**
- * Feed v2 (design "Feed poblado v2" → Feed.dc.html, 2026-09-02) — FOUR card
- * shapes at two densities, picked from the data:
+ * Feed v3 (design "Feed v3" → "Feed v3 componentes", 2026-09-02) — the cards
+ * lose their surfaces. No fill, no radius: each card is its content over a
+ * palette glow (feed-glow.tsx), separated from the next by 36px of dark. The
+ * cover carries the card, at three sizes:
  *
- *  - BURST   — N consecutive adds by one author to one backlog: header, one
- *              sentence ("Agregó 8 títulos a 2026"), a scrolling strip of
- *              64px covers (capped at STRIP_MAX, then a "+N" tile), the
- *              per-type tally, and "Ver los N" that expands the rows in place
- *              (the mock's chosen 1b: expand, don't leave).
- *  - GEM     — obsessed (flame + serif 27) and reviewed (serif 23 + body):
- *              the rare, precious events get the room and the color.
- *  - COMPACT — a lone add, a "no puede esperar", a completion: one row,
- *              handle + verb on a single line, small cover on the right.
+ *  - HERO    — obsessed and reviewed: the cover FULL-BLEED at its native
+ *              aspect, the author in a glass pill on top, the words in a
+ *              glass panel at the bottom (serif 34 / 30). The rare events get
+ *              the whole width.
+ *  - BURST   — N consecutive adds by one author to one backlog: header with
+ *              the sentence under the handle, a snap strip of 208px covers
+ *              with the title printed on each, the per-type tally and a glass
+ *              "Ver los N" that expands the rows in place (capped strip +
+ *              "+N" tile, feed v2 review).
+ *  - COMPACT — a lone add, a "no puede esperar", a completion: 124px cover
+ *              on the LEFT, handle + verb, serif 24 title, meta · when.
  *
- * Shared header on burst/gem: 24px ADN orb with initial + @handle + relative
- * time. Every card links its @handle to the profile and its title to the
- * item — the compact row does it with a stretched item link under a raised
- * handle link, never nested anchors. The flame stays the only color;
- * verdicts stay at the metadata tier. Covers keep their native aspect.
+ * Links, never nested: the hero is one stretched item link under a raised
+ * profile pill and a pointer-transparent text panel (only the spoiler button
+ * takes taps); the compact keeps v2's stretched title link under raised
+ * @handle / backlog links. The flame stays the only color; verdicts stay at
+ * the metadata tier; covers keep their native aspect (album 1:1, video 2:3).
+ * Glass = the app's chip recipe (bg-black/28 + blur), borderless (§7).
  */
 
 export function FeedCardView({ card }: { card: FeedCard }) {
@@ -42,22 +49,55 @@ export function FeedCardView({ card }: { card: FeedCard }) {
 
 // ---------- shared bits ----------
 
-function Header({ author, when }: { author: ReviewAuthor; when: string }) {
+const META = "font-mono text-[8.5px] uppercase tracking-[0.1em]";
+const GLASS = "bg-black/[0.28] backdrop-blur-[18px]";
+/** Dark neutral depth under a cover (§7-exempt: no color, no glow). */
+const COVER_SHADOW =
+  "shadow-[0_18px_40px_-12px_rgba(0,0,0,.7),inset_0_1px_0_rgba(255,255,255,.18)]";
+
+const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[2/3]");
+
+/** The glow's colors: the cover's palette, else the author's ADN — a card is
+ *  never lit by nothing. */
+const glowHexes = (e: FeedEvent) =>
+  e.paletteHex.length > 0 ? e.paletteHex : e.author.avatarHexes;
+
+/** Where a cover has no art: the mock's "printed" gradient from the palette
+ *  (a soft highlight over a diagonal), surface-2 when there is no palette. */
+function posterFill(hexes: readonly string[]): string | undefined {
+  const [a, b = a] = hexes;
+  if (!a) return undefined;
+  return `radial-gradient(90% 70% at 30% 20%, ${rgba(a, 0.55)} 0%, ${rgba(a, 0)} 70%), linear-gradient(160deg, ${a} 0%, ${b} 100%)`;
+}
+
+/** A cover box at whatever size the caller gives it — the image fills it,
+ *  the palette (then surface-2) stands in when there is none. */
+function Cover({
+  event,
+  className,
+  children,
+}: {
+  event: FeedEvent;
+  className: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-[9px]">
-      <Link href={`/u/${author.username}`} className="flex min-w-0 items-center gap-[9px]">
-        <AdnAvatar
-          hexes={author.avatarHexes}
-          initial={author.initial}
-          src={author.avatarUrl}
-          className="h-6 w-6 text-[9px]"
+    <span
+      className={`relative block overflow-hidden bg-surface-2 ${aspectOf(event.mediaType)} ${className}`}
+      style={{ background: posterFill(event.paletteHex) }}
+    >
+      {event.posterUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
+        <img
+          src={event.posterUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover"
         />
-        <span className="truncate text-[13.5px] font-semibold text-text">@{author.username}</span>
-      </Link>
-      <span className="ml-auto flex-none font-mono text-[9px] uppercase tracking-[0.1em] text-text-3">
-        {when}
-      </span>
-    </div>
+      )}
+      {children}
+    </span>
   );
 }
 
@@ -74,8 +114,8 @@ function metaOf(event: FeedEvent) {
   return joinMeta([event.mediaTypeLabel, tail]);
 }
 
-const META = "font-mono text-[8px] uppercase tracking-[0.1em] text-text-3";
-
+const profileHref = (username: string) => `/u/${username}`;
+const itemHref = (catalogItemId: string) => `/item/${catalogItemId}`;
 const backlogHref = (username: string, backlogId: string) => `/u/${username}/${backlogId}`;
 
 // ---------- burst ----------
@@ -92,25 +132,61 @@ function tally(items: FeedEvent[]): string {
 
 function BurstCard({ burst }: { burst: FeedBurst }) {
   const [expanded, setExpanded] = useState(false);
+  const { author } = burst;
   const count = burst.items.length;
   const strip = burst.items.slice(0, STRIP_MAX);
   const folded = count - strip.length;
+  // The run's dominant colors (palette.ts owns the dedupe), the ADN if none.
+  const mixed = dominantHexes(burst.items, 4);
+  const hexes = mixed.length > 0 ? mixed : author.avatarHexes;
+
   return (
-    <article className="flex flex-col gap-[10px] rounded-[18px] bg-surface-1 px-3.5 py-3">
-      <Header author={burst.author} when={burst.when} />
-      <div className="text-[12.5px] leading-[1.3] text-text-2">
-        Agregó <b className="font-semibold text-text">{count} títulos</b> a{" "}
-        <Link
-          href={backlogHref(burst.author.username, burst.backlogId)}
-          className="font-semibold text-text"
-        >
-          {burst.backlogName}
+    <article className="relative flex flex-col gap-3.5">
+      <FeedGlow hexes={hexes} className="inset-x-0 bottom-0 top-5" />
+      <div className="relative flex items-center gap-[9px] px-5">
+        <Link href={profileHref(author.username)} className="flex-none">
+          <AdnAvatar
+            hexes={author.avatarHexes}
+            initial={author.initial}
+            src={author.avatarUrl}
+            className="h-[26px] w-[26px] text-[9px]"
+          />
         </Link>
+        <span className="flex min-w-0 flex-col gap-px">
+          <Link
+            href={profileHref(author.username)}
+            className="truncate text-[13.5px] font-semibold text-text"
+          >
+            @{author.username}
+          </Link>
+          <span className="truncate text-[12.5px] leading-[1.3] text-text-2">
+            agregó {count} títulos a{" "}
+            <Link
+              href={backlogHref(author.username, burst.backlogId)}
+              className="font-semibold text-text"
+            >
+              {burst.backlogName}
+            </Link>
+          </span>
+        </span>
+        {/* text-2, not the design's text-3: over the glow the tertiary grey
+            all but vanished on real covers (verified 2026-09-02). */}
+        <span className={`ml-auto flex-none ${META} text-[9px] text-text-2`}>{burst.when}</span>
       </div>
-      <div className="-mx-3.5 flex items-end gap-1.5 overflow-x-auto px-3.5 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
+      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-5 pb-1.5 pt-1 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {strip.map((e) => (
-          <Link key={e.id} href={`/item/${e.catalogItemId}`} aria-label={e.title} className="flex-none">
-            <CoverThumb mediaType={e.mediaType} posterUrl={e.posterUrl} size="lg" />
+          <Link
+            key={e.id}
+            href={itemHref(e.catalogItemId)}
+            aria-label={e.title}
+            className="flex-none snap-start"
+          >
+            <Cover event={e} className={`h-[208px] rounded-[14px] ${COVER_SHADOW}`}>
+              <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-black/0 px-2.5 pb-[9px] pt-[22px] font-serif text-sm italic leading-[1.1] text-text">
+                {e.title}
+              </span>
+            </Cover>
           </Link>
         ))}
         {folded > 0 && (
@@ -118,31 +194,35 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             type="button"
             onClick={() => setExpanded(true)}
             aria-label={`Ver los ${count}`}
-            className="flex h-16 w-16 flex-none items-center justify-center rounded-[10px] bg-surface-2 font-mono text-[11px] text-text-2"
+            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[2/3] ${GLASS}`}
           >
             +{folded}
           </button>
         )}
       </div>
-      <div className="flex items-center gap-2.5">
-        <span className={META}>{tally(burst.items)}</span>
+
+      <div className="relative flex items-center gap-2.5 px-5">
+        <span className={`${META} text-text-3`}>{tally(burst.items)}</span>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="ml-auto py-1.5 pl-2.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-2 transition-colors hover:text-text"
+          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text transition-colors hover:bg-black/[0.4] ${GLASS}`}
         >
           {expanded ? "Ocultar" : `Ver los ${count}`}
         </button>
       </div>
+
       {expanded && (
-        <div className="bl-rise flex flex-col gap-1.5 rounded-[12px] bg-surface-2 px-2.5 py-2">
+        <div className="bl-rise relative mx-5 flex flex-col gap-2.5 rounded-[18px] bg-black/[0.28] px-3.5 py-3 backdrop-blur-[24px]">
           {burst.items.map((e) => (
-            <Link key={e.id} href={`/item/${e.catalogItemId}`} className="flex items-center gap-2.5 py-[3px]">
-              <CoverThumb mediaType={e.mediaType} posterUrl={e.posterUrl} size="xs" />
+            <Link key={e.id} href={itemHref(e.catalogItemId)} className="flex items-center gap-3">
+              <Cover event={e} className="w-10 flex-none rounded-[7px]" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-serif text-base italic leading-[1.12] text-text">{e.title}</span>
-                <span className={META}>{metaOf(e)}</span>
+                <span className="truncate font-serif text-[17px] italic leading-[1.12] text-text">
+                  {e.title}
+                </span>
+                <span className={`${META} text-[8px] text-text-3`}>{metaOf(e)}</span>
               </span>
             </Link>
           ))}
@@ -152,48 +232,105 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
   );
 }
 
-// ---------- gems ----------
+// ---------- heroes ----------
+
+/**
+ * The full-bleed cover with the three layers every hero shares: the
+ * stretched item link (z-1) over the art, the profile pill (z-20) and the
+ * pointer-transparent word panel (z-10) — so the whole cover is one tap to
+ * the item, the pill is a tap to the profile, and nothing nests.
+ */
+function Hero({
+  event,
+  glowOpacity,
+  children,
+}: {
+  event: FeedEvent;
+  glowOpacity: number;
+  children: React.ReactNode;
+}) {
+  const { author } = event;
+  return (
+    <article className="relative">
+      <FeedGlow hexes={glowHexes(event)} opacity={glowOpacity} />
+      <Cover event={event} className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)]`}>
+        <span
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 80% at 80% 0%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%)",
+          }}
+        />
+        <Link
+          href={itemHref(event.catalogItemId)}
+          aria-label={event.title}
+          className="absolute inset-0 z-[1]"
+        />
+        <Link
+          href={profileHref(author.username)}
+          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 transition-colors hover:bg-black/[0.4] ${GLASS}`}
+        >
+          <AdnAvatar
+            hexes={author.avatarHexes}
+            initial={author.initial}
+            src={author.avatarUrl}
+            className="h-[22px] w-[22px] text-[8.5px]"
+          />
+          <span className="truncate text-[13px] font-semibold text-text">@{author.username}</span>
+          <span className={`flex-none ${META} text-text-2`}>{event.when}</span>
+        </Link>
+        <span
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-1.5 px-5 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6]"
+          style={{
+            background: "linear-gradient(rgba(18,18,24,.22), rgba(18,18,24,.6))",
+            maskImage: "linear-gradient(transparent, #000 14px)",
+            WebkitMaskImage: "linear-gradient(transparent, #000 14px)",
+          }}
+        >
+          {children}
+        </span>
+      </Cover>
+    </article>
+  );
+}
 
 function ObsessedCard({ event }: { event: FeedEvent }) {
   return (
-    <article className="flex flex-col gap-3 rounded-[18px] bg-surface-1 px-3.5 pb-4 pt-3.5">
-      <Header author={event.author} when={event.when} />
-      <Link href={`/item/${event.catalogItemId}`} className="flex items-start gap-3.5">
-        <CoverThumb mediaType={event.mediaType} posterUrl={event.posterUrl} size="lg" />
-        <span className="flex min-w-0 flex-col gap-1.5 pt-0.5">
-          <span className="flex items-center gap-1.5 text-[13px] leading-[1.3] text-hot">
-            <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill="var(--hot)" aria-hidden className="flex-none">
-              <path d={FLAME_PATH} />
-            </svg>
-            Le obsesiona
-          </span>
-          <span className="font-serif text-[27px] italic leading-[1.08] text-pretty text-text">{event.title}</span>
-          <span className={META}>{metaOf(event)}</span>
-        </span>
-      </Link>
-    </article>
+    <Hero event={event} glowOpacity={0.55}>
+      <span className="flex items-center gap-1.5 text-[13px] leading-[1.3] text-hot">
+        <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill="var(--hot)" aria-hidden className="flex-none">
+          <path d={FLAME_PATH} />
+        </svg>
+        Le obsesiona
+      </span>
+      <span className="font-serif text-[34px] italic leading-[1.02] tracking-[-0.01em] text-pretty text-text">
+        {event.title}
+      </span>
+      <span className={`${META} text-text-2`}>{metaOf(event)}</span>
+    </Hero>
   );
 }
 
 function ReviewedCard({ event }: { event: FeedEvent }) {
   return (
-    <article className="flex flex-col gap-3 rounded-[18px] bg-surface-1 px-3.5 pb-4 pt-3.5">
-      <Header author={event.author} when={event.when} />
-      <Link href={`/item/${event.catalogItemId}`} className="flex items-start gap-3">
-        <CoverThumb mediaType={event.mediaType} posterUrl={event.posterUrl} size="md" />
-        <span className="flex min-w-0 flex-col gap-1">
-          <span className="text-[12.5px] leading-[1.3] text-text-2">Reseñó</span>
-          <span className="font-serif text-[23px] italic leading-[1.1] text-pretty text-text">{event.title}</span>
-          <span className={`flex items-center gap-1.5 ${META}`}>
-            <MarkGlyph mark={event.mark} />
-            {metaOf(event)}
-          </span>
-        </span>
-      </Link>
+    <Hero event={event} glowOpacity={0.5}>
+      <span className="text-[13px] leading-[1.3] text-text-2">Reseñó</span>
+      <span className="font-serif text-[30px] italic leading-[1.04] text-pretty text-text">
+        {event.title}
+      </span>
+      <span className={`flex items-center gap-1.5 ${META} text-text-2`}>
+        <MarkGlyph mark={event.mark} />
+        {metaOf(event)}
+      </span>
       {event.reviewBody !== null && (
-        <SpoilerBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} className="" />
+        // Content hairline (§7-exempt) between the title block and the words;
+        // the only thing in the panel that takes a tap is the spoiler reveal.
+        <span className="pointer-events-auto mt-2 block border-t border-white/[0.12] pt-3">
+          <SpoilerBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} className="" />
+        </span>
       )}
-    </article>
+    </Hero>
   );
 }
 
@@ -213,21 +350,23 @@ function CompactCard({ event }: { event: FeedEvent }) {
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className="relative flex items-center gap-2.5 rounded-[14px] bg-surface-1 px-3 py-2.5">
-      <AdnAvatar
-        hexes={event.author.avatarHexes}
-        src={event.author.avatarUrl}
-        className="mt-px h-[18px] w-[18px] self-start"
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="flex min-w-0 items-baseline gap-[5px] text-[12.5px] leading-[1.3] text-text-2">
-          <Link
-            href={`/u/${event.author.username}`}
-            className="relative z-10 flex-none font-semibold text-text"
-          >
-            @{event.author.username}
-          </Link>
-          <span className="truncate">
+    <article className="relative flex items-center gap-[18px] px-5">
+      <FeedGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
+      <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
+      <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">
+        <span className="flex min-w-0 items-center gap-[7px]">
+          <AdnAvatar
+            hexes={event.author.avatarHexes}
+            src={event.author.avatarUrl}
+            className="h-[18px] w-[18px]"
+          />
+          <span className="truncate text-[12.5px] leading-[1.3] text-text-2">
+            <Link
+              href={profileHref(event.author.username)}
+              className="relative z-10 font-semibold text-text"
+            >
+              @{event.author.username}
+            </Link>{" "}
             {verb}
             {shelf && (
               <>
@@ -241,22 +380,18 @@ function CompactCard({ event }: { event: FeedEvent }) {
               </>
             )}
           </span>
-          <span className="ml-auto flex-none font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-            {event.when}
-          </span>
         </span>
         <Link
-          href={`/item/${event.catalogItemId}`}
-          className="font-serif text-[17.5px] italic leading-[1.12] text-pretty text-text after:absolute after:inset-0 after:content-['']"
+          href={itemHref(event.catalogItemId)}
+          className="font-serif text-2xl italic leading-[1.08] text-pretty text-text after:absolute after:inset-0 after:content-['']"
         >
           {event.title}
         </Link>
-        <span className={`flex items-center gap-1.5 ${META}`}>
+        <span className={`flex items-center gap-1.5 ${META} text-text-3`}>
           {event.kind === "completed" && <MarkGlyph mark={event.mark} />}
-          {metaOf(event)}
+          {metaOf(event)} · {event.when}
         </span>
       </span>
-      <CoverThumb mediaType={event.mediaType} posterUrl={event.posterUrl} size="sm" />
     </article>
   );
 }
