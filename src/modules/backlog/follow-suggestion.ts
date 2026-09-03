@@ -109,6 +109,7 @@ async function byTheirArtists(
       return {
         catalogItemId: pick.catalogItemId,
         title: pick.title,
+        mediaType: "album",
         byline: pick.byline,
         posterUrl: pick.posterUrl,
         releaseDate: row.releaseDate.toISOString(),
@@ -152,6 +153,7 @@ async function anythingComing(
   return {
     catalogItemId: pick.catalogItemId,
     title: pick.title,
+    mediaType: "album",
     byline: pick.byline,
     posterUrl: pick.posterUrl,
     releaseDate: pick.releaseDate.toISOString(),

@@ -11,7 +11,7 @@ import { dominantHexes } from "@/modules/backlog/palette";
 import type { MediaType } from "@/modules/catalog/types";
 import { markLabel } from "@/modules/reviews/format";
 import type { FeedBurst, FeedCard, FeedEvent } from "@/modules/social/types";
-import { FeedGlow } from "./feed-glow";
+import { PaletteGlow } from "@/components/ui/palette-glow";
 
 /**
  * Feed v3 (design "Feed v3" → "Feed v3 componentes", 2026-09-02) — the cards
@@ -152,7 +152,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
 
   return (
     <article className="relative isolate flex flex-col gap-3.5">
-      <FeedGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
+      <PaletteGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
       <div className="relative flex items-center gap-[9px] px-5">
         <Link href={profileHref(author.username)} className="flex-none">
           <AdnAvatar
@@ -267,7 +267,7 @@ function Hero({
   const { author } = event;
   return (
     <article className="relative isolate">
-      <FeedGlow hexes={glowHexes(event)} opacity={glowOpacity} />
+      <PaletteGlow hexes={glowHexes(event)} opacity={glowOpacity} />
       <Cover event={event} className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)]`}>
         <span
           aria-hidden
@@ -401,7 +401,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
       : null;
   return (
     <article className="relative isolate flex items-center gap-[18px] px-5">
-      <FeedGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
+      <PaletteGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
       <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">
         <span className="flex min-w-0 items-center gap-[7px]">

@@ -17,8 +17,8 @@
 
   /* Texto */
   --text: #f4f3ee; /* off-white cálido — NOT pure #fff */
-  --text-2: #a9a8b2; /* secondary — mauve-grey */
-  --text-3: #6c6b76; /* tertiary / metadata / watermark */
+  --text-2: #b9b8c2; /* secondary (Revamp UI 2026-09-03: lifted from #a9a8b2) */
+  --text-3: #8f8e9b; /* tertiary / metadata (Revamp UI 2026-09-03: lifted from #6c6b76) */
 
   /* Firma (lima) */
   --accent: #d8ff3e; /* CTA primario, activos, focus, marca */
@@ -56,7 +56,7 @@
   --s-8: 64px;
 
   /* Glass — SOLO acento sobre fondo controlado. Sin borde (HANDOFF §7). */
-  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.075); /* the Revamp UI mock's borderless `--glass` */
   --glass-blur: blur(20px) saturate(140%);
 
   /* Sombra — profundidad OSCURA únicamente (HANDOFF §7: sin glow;
@@ -361,6 +361,14 @@
 
 /* Glass surface (sistema-diseno §4) — accent only, over bg/aura, never full
    layout. Borderless (HANDOFF §7); the fill + blur do the separation. */
+/* Horizontal strips (Revamp UI): scroll, no scrollbar. */
+.bl-scroll {
+  scrollbar-width: none;
+}
+.bl-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .bl-glass {
   position: relative;
   overflow: hidden;

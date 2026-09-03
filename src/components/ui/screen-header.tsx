@@ -35,7 +35,7 @@ export function ScreenHeader({
       className={`${
         glass
           ? "sticky top-0 z-[5] isolate px-5 pb-4 pt-[calc(22px+env(safe-area-inset-top))]"
-          : "px-4 pb-[26px] pt-[calc(24px+env(safe-area-inset-top))]"
+          : "px-5 pb-[18px] pt-[calc(20px+env(safe-area-inset-top))]"
       } ${className}`}
     >
       {glass && (
@@ -53,7 +53,7 @@ export function ScreenHeader({
           }}
         />
       )}
-      <div className="flex items-start justify-between gap-3.5">
+      <div className={`flex justify-between gap-3.5 ${glass ? "items-start" : "items-end"}`}>
         <h1 className="min-w-0 truncate font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
           {title}
         </h1>

@@ -146,7 +146,7 @@ export function NavDock() {
           a lima background). */}
       <div
         ref={listRef}
-        className={`bl-dock-glass relative flex gap-1.5 rounded-full p-1.5 shadow-[0_14px_44px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.16)] transition-[opacity,transform] duration-300 ease-out ${
+        className={`relative flex gap-1.5 rounded-full bg-white/[0.07] p-1.5 backdrop-blur-[22px] backdrop-saturate-[1.6] transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"
             : "pointer-events-auto translate-y-0 opacity-100"
@@ -157,7 +157,7 @@ export function NavDock() {
         {pill && (
           <span
             aria-hidden
-            className="absolute bottom-1.5 left-0 top-1.5 rounded-full bg-black/40 transition-[transform,width] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
+            className="absolute bottom-1.5 left-0 top-1.5 rounded-full bg-white/[0.08] transition-[transform,width] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
             style={{ transform: `translateX(${pill.x}px)`, width: pill.w }}
           />
         )}

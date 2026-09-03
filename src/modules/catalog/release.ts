@@ -191,3 +191,32 @@ export function isFreshlyReleased(
   const t = new Date(releaseDate).getTime();
   return Number.isFinite(t) && t <= now && now - t < DAY;
 }
+
+/**
+ * The wait as the cover pill spells it (Revamp UI, 2026-09-03): "faltan 12 d",
+ * "faltan 6 sem", "faltan 9 m", "faltan 5 h", "hoy". Rounded to the coarsest
+ * unit that still reads — a pill on a 104px cover has room for one number.
+ * Static (computed once with the server's instant), unlike the ticking
+ * CountdownMono: a strip of covers doesn't need to count seconds.
+ */
+export function shortWait(releaseDate: Date | string, now: number): string {
+  const t = new Date(releaseDate).getTime();
+  const d = t - now;
+  if (!Number.isFinite(t) || d <= 0) return "ya salió";
+  if (d < DAY) return d < HOUR ? "hoy" : `faltan ${Math.ceil(d / HOUR)} h`;
+  const days = Math.floor(d / DAY);
+  if (days < 14) return `faltan ${days} d`;
+  if (days < 60) return `faltan ${Math.round(days / 7)} sem`;
+  return `faltan ${Math.round(days / 30)} m`;
+}
+
+/** "19 dic" — the storefront day, lowercase, for the line under a cover. */
+export function releaseDayShort(releaseDate: Date | string): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    timeZone: STOREFRONT_TZ,
+  })
+    .format(new Date(releaseDate))
+    .replace(".", "");
+}
