@@ -276,6 +276,11 @@ function Hero({
             background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
           }}
         />
+        {/* The art fades into the page bg over its last 160px (founder call
+            2026-09-03: the mock's hard bottom edge read as a cut). Under the
+            word panel, whose translucent gradient lets it through. Same
+            color at alpha 0, never `transparent` (dark-fringe rule). */}
+        <span aria-hidden className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-bg/0 to-bg" />
         <Link
           href={itemHref(event.catalogItemId)}
           aria-label={event.title}
