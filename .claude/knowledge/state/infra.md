@@ -30,6 +30,15 @@
      Regla dura ya documentada en AGENTS.md: los deploys son MANUALES (`vercel --prod`);
      mergear a `main` no despliega, y no hay checks de Vercel en PRs. -->
 
+- **Login local para verificar en runtime**: `.env.local` NO tiene `RESEND_API_KEY`, así que el OTP
+  no se manda por correo — se imprime en el log del dev server como `[dev-mailer] OTP para <email>:
+  Tu código de acceso es NNNNNN`. Con eso se entra con una cuenta QA desechable (la DB local ES la de
+  prod, ver `AGENTS.md`/memoria: borrar la cuenta al terminar). El route de sesión y las páginas
+  autenticadas se prueban así, no con curl.
+- **Dev server desde un worktree**: `.claude/launch.json` (y por tanto `preview_start`) arranca el
+  árbol principal, no el worktree. Para verificar código de un worktree se lanza `pnpm exec next dev
+  -p 3010` ahí (con los symlinks `.env.local` y `node_modules`) y se abre la URL en el navegador.
+
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
 
