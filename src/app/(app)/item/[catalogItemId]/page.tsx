@@ -29,6 +29,7 @@ import { posterFallbackStyle } from "@/components/cover-tile";
 import { StateGlyph } from "@/components/ui/state-glyph";
 import { FillIcon, StrokeIcon } from "@/components/ui/stroke-icon";
 import { EXTERNAL_PATH, PLAY_PATH } from "@/components/glyph-paths";
+import { SeriesStatusPill } from "@/components/series-status-pill";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { Synopsis } from "@/components/synopsis";
 import { BacklogsButton, BacklogsSheetHost } from "./add-to-backlog";
@@ -78,7 +79,7 @@ export default async function ItemPage({
   // from the source provider and cached — shared with the public item page.
   // For an album this also refreshes catalog_item.release_date (F3.8), so read
   // the countdown off the returned value, not the row we loaded before it.
-  const [{ tracks, trackCount, synopsis, releaseDate }, friends] =
+  const [{ tracks, trackCount, synopsis, releaseDate, seriesStatus }, friends] =
     await Promise.all([
       getItemDisplayMedia(item),
       getTitleActivityAmongFollowed(user.id, item.id, {
@@ -222,6 +223,10 @@ export default async function ItemPage({
           )}
 
           <ReactionRow />
+
+          {/* 06c — a series says whether it's over and how long it is (TMDB
+              facts, cached on the row; null → nothing). */}
+          <SeriesStatusPill status={seriesStatus} />
 
           {/* Buttons. Before release, "Dónde ver"/"Reproducir" would be a lie
               — the wait takes the slot (it informs, it doesn't ask), and the

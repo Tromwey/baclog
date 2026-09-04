@@ -63,6 +63,7 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.
      El modelo de datos de ítems en tres niveles (backlog_item = membresía, user_item = estado por
      título, catalog_item.paletteHex = paleta compartida) está documentado en AGENTS.md. -->
+- **`catalog_item.raw` NO es solo el payload de búsqueda.** Para series TMDB se le funden (jsonb `||`) cuatro campos de `GET /tv/{id}` (`status`, `number_of_seasons`, `in_production`, `last_air_date`) más un marcador nuestro `_series_facts_at` (ISO) — ver `modules/catalog/series-status.ts`. El upsert de `search.ts` no toca `raw` en conflicto, así que sobreviven; cualquier código que REEMPLACE `raw` entero (en vez de fundir) borra el enriquecimiento y el siguiente view lo vuelve a pedir a TMDB (se autocura, pero cuesta una llamada). Claves con `_` inicial dentro de `raw` son nuestras, nunca del proveedor.
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->

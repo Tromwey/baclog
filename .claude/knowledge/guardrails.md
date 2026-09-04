@@ -9,6 +9,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 | Guardrail | Dónde corre | Qué previene | Archivo |
 |---|---|---|---|
 | `pnpm tsx scripts/check-album-match.ts` | manual (correr al tocar `resolvers/match.ts`) | Que el link-out exacto a TIDAL mande a un álbum equivocado: containment («Cars» reclamando «Cars 2», como pasó en recs), matching solo por título sin artista, sufijos «- Single»/«(Deluxe)» rompiendo la igualdad, y que un «(Alternative)» legítimo se colapse | `scripts/check-album-match.ts` |
+| `pnpm tsx scripts/check-series-status.ts` | manual (correr al tocar `catalog/series-status.ts`) | Que el pill de serie mienta: un `Ended` con `in_production` viejo en true leyéndose como "En emisión", un `Planned` con 0 temporadas pintando "0 temporadas", un `raw` de `/search/tv` sin marcador contando como "ya enriquecido" (y el pill quedándose vacío para siempre), o una serie terminada re-pegándole a TMDB cada semana | `scripts/check-series-status.ts` |
 
 ## Comandos
 
@@ -16,6 +17,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 - `pnpm build` — `next build`; hoy es también el typecheck de facto (falla ante errores de TS).
 - `npx tsc --noEmit` — typecheck aislado, más rápido que el build (`tsconfig.json`, `strict`).
 - `pnpm tsx scripts/check-album-match.ts` — asserts del matcher de álbumes (puro, sin DB ni red); sale 1 al primer fallo.
+- `pnpm tsx scripts/check-series-status.ts` — asserts del mapeo status TMDB → pill de serie + staleness (puro, sin DB ni red); sale 1 al primer fallo.
 - `pnpm eval:recos` — corre el harness de evaluación de recomendaciones
   (`scripts/eval-crossmedia.ts`); mide calidad de recos, **no** es una suite de tests.
 

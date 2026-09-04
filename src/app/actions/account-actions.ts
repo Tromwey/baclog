@@ -96,8 +96,19 @@ const RESERVED = new Set([
   "feed", "creditos",
 ]);
 
-/** F2.17 — claiming implies opting in to a public page (toggleable). */
-export async function claimUsernameAction(username: string) {
+/**
+ * F2.17 — claiming implies opting in to a public page (toggleable).
+ *
+ * `refresh: false` (onboarding, 2026-09-03): skips the `revalidatePath`. The
+ * public tree is dynamic (never ISR-cached) so the revalidate only ever acted
+ * as a router refresh — and during onboarding that refresh re-requests the
+ * URL the client router still holds from the login redirect chain (`/`),
+ * which now resolves to /backlogs and yanks the user out of step 1.
+ */
+export async function claimUsernameAction(
+  username: string,
+  { refresh = true }: { refresh?: boolean } = {},
+) {
   const user = await assertUser();
   const normalized = username.trim().toLowerCase();
   if (!USERNAME_RE.test(normalized) || RESERVED.has(normalized)) {
@@ -112,7 +123,7 @@ export async function claimUsernameAction(username: string) {
     // unique index violation — someone owns it
     return { error: "taken" as const };
   }
-  revalidatePath(`/u/${normalized}`, "layout");
+  if (refresh) revalidatePath(`/u/${normalized}`, "layout");
   return { ok: true as const, username: normalized };
 }
 

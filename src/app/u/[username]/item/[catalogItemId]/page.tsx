@@ -15,6 +15,7 @@ import { captureView } from "@/modules/analytics/capture";
 import { FillIcon, PaletteGlow, StrokeIcon } from "@/components/ui";
 import { EXTERNAL_PATH, PLAY_PATH } from "@/components/glyph-paths";
 import { coverAspect } from "@/components/cover-tile";
+import { SeriesStatusPill } from "@/components/series-status-pill";
 import { Synopsis } from "@/components/synopsis";
 import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
@@ -129,7 +130,7 @@ export default async function PublicItemPage({
   // because that value is extracted on the VIEWER's device — user-supplied. A
   // release date comes from iTunes server-side, so an anonymous visitor can
   // trigger the refresh but can never influence what gets stored.
-  const { tracks, trackCount, synopsis, releaseDate } =
+  const { tracks, trackCount, synopsis, releaseDate, seriesStatus } =
     await getItemDisplayMedia(item);
 
   const now = await getRenderInstant();
@@ -238,6 +239,10 @@ export default async function PublicItemPage({
       </div>
 
       <main className="relative flex flex-col gap-[22px] px-5 pt-[22px]">
+        {/* 06d — the series status pill leads the body (same catalog fact as
+            the in-app page, same self-healing write). */}
+        <SeriesStatusPill status={seriesStatus} />
+
         {isAlbum ? (
           <>
             {/* "Dónde escuchar": four glass rows, one per service, each to

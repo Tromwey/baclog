@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import type { SeriesFacts } from "./series-status";
 import { TMDB_FIXTURES } from "./tmdb.fixtures";
 import type { ExternalItem, VideoCatalog } from "./types";
 
@@ -19,8 +20,9 @@ const GENRES: Record<number, string> = {
 /**
  * TMDB auth for a request: v4 read tokens are JWTs (start with "eyJ") and go in
  * the Authorization header; v3 keys go in the query. Mutates `url` (adds the v3
- * param) and returns the headers. One place so the three TMDB call sites
- * (TmdbApi.get, getSpanishOverview, links/providers.getWatchLink) can't drift.
+ * param) and returns the headers. One place so the four TMDB call sites
+ * (TmdbApi.get, getSpanishOverview, getSeriesFacts, links/providers.getWatchLink)
+ * can't drift.
  */
 export function tmdbAuth(url: URL, apiKey: string): HeadersInit {
   if (apiKey.startsWith("eyJ")) return { Authorization: `Bearer ${apiKey}` };
@@ -160,6 +162,51 @@ export async function getSpanishOverview(
       es[0];
     return pick.data?.overview?.trim() ?? null;
   } catch {
+    return null;
+  }
+}
+
+/**
+ * Series status facts (Revamp UI 06c/06d): `status`, `number_of_seasons`,
+ * `in_production`, `last_air_date` from `GET /tv/{id}`. The `/search/tv` hit
+ * stored in `catalog_item.raw` carries none of them, so — like the Spanish
+ * overview — they're fetched lazily at item-view time; unlike it, the caller
+ * persists them back onto the row (see `getSeriesStatus`), so this only runs
+ * on a miss or a weekly re-check. Returns ONLY those four fields (never the
+ * whole details payload — nothing else here should leak into `raw`). Fail-open
+ * to null on no key, non-2xx, or a network/parse error: the pill just doesn't
+ * render.
+ */
+export async function getSeriesFacts(tmdbId: string): Promise<SeriesFacts | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const url = new URL(`https://api.themoviedb.org/3/tv/${tmdbId}`);
+  url.searchParams.set("language", "es-MX");
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
+  try {
+    // Short fetch cache: the DB row is the real cache; this only dedupes a
+    // burst of views between the fetch and the persisted write.
+    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
+    if (!res.ok) {
+      console.error(`[catalog] TMDB /tv/${tmdbId} failed: ${res.status}`);
+      return null;
+    }
+    const d = (await res.json()) as {
+      status?: unknown;
+      number_of_seasons?: unknown;
+      in_production?: unknown;
+      last_air_date?: unknown;
+    };
+    return {
+      status: typeof d.status === "string" ? d.status : null,
+      number_of_seasons:
+        typeof d.number_of_seasons === "number" && Number.isFinite(d.number_of_seasons)
+          ? d.number_of_seasons
+          : null,
+      in_production: typeof d.in_production === "boolean" ? d.in_production : null,
+      last_air_date: typeof d.last_air_date === "string" ? d.last_air_date : null,
+    };
+  } catch (err) {
+    console.error(`[catalog] TMDB /tv/${tmdbId} failed:`, err);
     return null;
   }
 }

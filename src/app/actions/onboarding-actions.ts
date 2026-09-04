@@ -6,7 +6,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { assertUser } from "@/authz";
 import { db } from "@/db";
-import { backlogs, userItems } from "@/db/schema";
+import { backlogs, preferredServiceEnum, userItems, users } from "@/db/schema";
 import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
 import { paletteHexSchema } from "@/modules/backlog/palette";
 import { cacheReleaseDate, getCatalogItem } from "@/modules/catalog/cache";
@@ -120,15 +120,25 @@ export async function completePicksAction(
   return { ok: true as const, backlogId };
 }
 
+const serviceSchema = z.enum(preferredServiceEnum.enumValues);
+
 /**
- * Onboarding's terminal step (3, the username claim or its "Ahora no"):
- * server-side redirect on purpose — a client router.push here can replay the
- * stale "/backlogs → /onboarding" redirect cached before onboarding completed
- * (the posture chooseServiceAndFinishAction had when the service step was
- * last). The (app) layout re-gates on `user.name`, so an account that never
- * finished step 1 simply lands back here.
+ * Onboarding's terminal step (3 · servicio preferido, v2 2026-09-03): saves
+ * the music service every album will open in, then finishes. Server-side
+ * redirect on purpose — a client router.push here can replay the stale
+ * "/backlogs → /onboarding" redirect cached before onboarding completed. The
+ * (app) layout re-gates on `user.name`, so an account that never finished
+ * step 1 simply lands back here. Same posture as Ajustes'
+ * `setPreferredServiceAction`: the user comes from the session, the service
+ * from the enum.
  */
-export async function finishOnboardingAction() {
-  await assertUser();
+export async function chooseServiceAndFinishAction(service: string) {
+  const user = await assertUser();
+  const parsed = serviceSchema.safeParse(service);
+  if (!parsed.success) return { error: "invalid" as const };
+  await db
+    .update(users)
+    .set({ preferredService: parsed.data })
+    .where(eq(users.id, user.id));
   redirect("/backlogs");
 }

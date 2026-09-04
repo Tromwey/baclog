@@ -162,21 +162,6 @@ export async function setObsessedAction(
 }
 
 /**
- * "Ocultar recomendación" (detail ⋯ menu) — drops the AI-provenance link so the
- * row stops showing the ✦ destello and the detail stops rendering the "¿Por
- * qué?" narrative. One-way by design: the rec id isn't recoverable.
- */
-export async function hideRecoProvenanceAction(catalogItemId: string) {
-  const { item } = await assertOwnsUserItem(catalogItemId);
-  await db
-    .update(userItems)
-    .set({ sourceCrossMediaRecId: null })
-    .where(eq(userItems.id, item.id));
-  revalidatePath("/backlogs", "layout");
-  return { ok: true as const };
-}
-
-/**
  * F3.9 — a review belongs to a title the user KEEPS. There is no FK from
  * item_review to user_item to cascade from (they're independent tables by
  * design), so the two removes that GC the per-title state clean it up here,

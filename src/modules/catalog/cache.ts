@@ -1,7 +1,8 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import type { SeriesFactsPatch } from "./series-status";
 
 /** ADR-007: re-fetch horizon ≤3 months (TMDB caps caching at 6). */
 const STALE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -61,5 +62,34 @@ export async function cacheReleaseDate(
   } catch (err) {
     // A cache write must never take the page down with it.
     console.error("[catalog] release date cache failed:", err);
+  }
+}
+
+/**
+ * Series status (Revamp UI 06c/06d) — merge the TMDB `/tv/{id}` facts INTO
+ * `catalog_item.raw` (jsonb `||`: existing search-hit keys survive, the four
+ * fact keys + our `_series_facts_at` marker are added/overwritten). No new
+ * column on purpose: migrations on the shared DB need the founder. Same
+ * posture as `cacheReleaseDate`: shared, provider-derived, no user data, so
+ * an anonymous public-page view may trigger it but can't influence what's
+ * stored. `refreshed_at` is bumped too (the row IS fresher), but staleness of
+ * THESE facts is read off the marker, not the column — the search upsert bumps
+ * `refreshed_at` without touching `raw`.
+ */
+export async function cacheSeriesFacts(
+  catalogItemId: string,
+  patch: SeriesFactsPatch,
+): Promise<void> {
+  try {
+    await db
+      .update(catalogItems)
+      .set({
+        raw: sql`coalesce(${catalogItems.raw}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+        refreshedAt: sql`now()`,
+      })
+      .where(eq(catalogItems.id, catalogItemId));
+  } catch (err) {
+    // A cache write must never take the page down with it.
+    console.error("[catalog] series facts cache failed:", err);
   }
 }

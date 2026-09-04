@@ -1,8 +1,15 @@
 import "server-only";
 import type { AlbumTrack } from "./itunes";
 import { getAlbumDetail } from "./itunes";
-import { getSpanishOverview } from "./tmdb";
-import { cacheReleaseDate } from "./cache";
+import { getSeriesFacts, getSpanishOverview } from "./tmdb";
+import { cacheReleaseDate, cacheSeriesFacts } from "./cache";
+import {
+  SERIES_FACTS_AT_KEY,
+  readSeriesFacts,
+  seriesFactsAreStale,
+  seriesStatusFromFacts,
+  type SeriesStatus,
+} from "./series-status";
 
 interface DisplayMediaInput {
   id: string;
@@ -11,6 +18,32 @@ interface DisplayMediaInput {
   externalId: string;
   synopsis: string | null;
   releaseDate: Date | null;
+  /** `catalog_item.raw` — the series facts live inside it (see series-status.ts). */
+  raw: unknown;
+}
+
+/**
+ * Series status pill (Revamp UI 06c/06d): "Terminada · 1 temporada". Reads
+ * the TMDB `/tv/{id}` facts off `raw`; on a miss (never enriched) or a stale
+ * airing series (>7 days, ended ones never re-check) fetches them and merges
+ * them back onto the row, so the next view of this title — by anyone — is a
+ * pure read. Fail-open: any upstream failure keeps the stored facts if there
+ * are any, else null → the pill just doesn't render. Never throws.
+ */
+export async function getSeriesStatus(
+  item: Pick<DisplayMediaInput, "id" | "source" | "mediaType" | "externalId" | "raw">,
+): Promise<SeriesStatus | null> {
+  if (item.mediaType !== "series" || item.source !== "tmdb") return null;
+  const stored = readSeriesFacts(item.raw);
+  if (stored && !seriesFactsAreStale(stored)) return seriesStatusFromFacts(stored);
+
+  const fresh = await getSeriesFacts(item.externalId);
+  if (!fresh) return seriesStatusFromFacts(stored);
+  await cacheSeriesFacts(item.id, {
+    ...fresh,
+    [SERIES_FACTS_AT_KEY]: new Date().toISOString(),
+  });
+  return seriesStatusFromFacts(fresh);
 }
 
 /**
@@ -25,6 +58,9 @@ interface DisplayMediaInput {
  * of zero extra requests (the call was already happening for the tracklist).
  * It's why an album added while unreleased doesn't stay dateless: the first
  * view of its page fills the date in, for every user afterwards.
+ *
+ * A series ALSO carries its status pill facts (`getSeriesStatus`), persisted
+ * the same self-healing way.
  */
 export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
   tracks: AlbumTrack[];
@@ -35,6 +71,8 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
    *  value. Callers derive the countdown from THIS, not from the row they read
    *  a moment ago, so a date that moved takes effect on the same render. */
   releaseDate: Date | null;
+  /** Series only (TMDB): the status pill's data, null for anything else. */
+  seriesStatus: SeriesStatus | null;
 }> {
   const isAlbum = item.mediaType === "album" && item.source === "itunes";
   const detail = isAlbum
@@ -55,15 +93,19 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
     await cacheReleaseDate(item.id, detail.releaseDate, item.releaseDate);
   }
 
-  const synopsis =
-    (item.source === "tmdb" && item.mediaType !== "album"
-      ? await getSpanishOverview(item.externalId, item.mediaType)
-      : null) ?? item.synopsis;
+  const [esOverview, seriesStatus] = await Promise.all([
+    item.source === "tmdb" && item.mediaType !== "album"
+      ? getSpanishOverview(item.externalId, item.mediaType)
+      : null,
+    getSeriesStatus(item),
+  ]);
+  const synopsis = esOverview ?? item.synopsis;
 
   return {
     tracks: detail.tracks,
     trackCount: detail.trackCount,
     synopsis,
     releaseDate: detail.releaseDate ?? item.releaseDate,
+    seriesStatus,
   };
 }
