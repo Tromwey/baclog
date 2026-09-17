@@ -52,10 +52,10 @@ export function ReactionCoach({ pending }: { pending: boolean }) {
   // Only obsession and "me gustó" seed the engine (LOVED_FILTER).
   const unlocked = obsessed || verdict === "liked";
   return (
-    <CoachNote label="Listo" className="-mt-1.5">
+    <CoachNote label={unlocked ? "Listo" : "Anotado"} className="-mt-1.5">
       {unlocked
         ? "Eso ya alimenta tus recomendaciones en Descubrir."
-        : "Anotado. Descubrir aprende solo de lo que te gusta y te obsesiona."}
+        : "Descubrir aprende solo de lo que te gusta y te obsesiona."}
     </CoachNote>
   );
 }
