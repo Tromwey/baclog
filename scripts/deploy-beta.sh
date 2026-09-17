@@ -8,7 +8,9 @@ set -e
 set -o pipefail
 
 echo "→ Deploying beta (preview)…"
-URL=$(vercel deploy --yes | tail -1)
+# The CLI (59.x) prints a JSON block of suggested commands AFTER the URL, so
+# `tail -1` no longer works — take the last deployment URL it printed instead.
+URL=$(vercel deploy --yes | grep -Eo 'https://[a-z0-9-]+\.vercel\.app' | tail -1)
 
 # Fail closed: `tail` masks a failed `vercel deploy` from set -e (pipefail
 # re-exposes it), and a non-URL line would otherwise be aliased as garbage.
