@@ -2,6 +2,7 @@ import { eq, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userItems } from "@/db/schema";
 import { LOVED_FILTER } from "./queries";
+import type { FirstRunCounts } from "./first-run-coach";
 
 /**
  * First-run coach marks — the three moments where the app explains the
@@ -21,51 +22,12 @@ import { LOVED_FILTER } from "./queries";
  * underlying fact changes (complete one title → the glyph legend is gone).
  */
 
-/** How many titles onboarding v2 plants (mirrors picksSchema `.max(3)`). */
-export const ONBOARDING_PICKS = 3;
-
-export interface FirstRunCounts {
-  /** Titles in the library (user_item rows — per-title, not per membership). */
-  items: number;
-  /** Titles the user LOVES (LOVED_FILTER) — what feeds the reco engine. */
-  loved: number;
-  /** Titles marked completed. */
-  completed: number;
-  /**
-   * Reactions onboarding could NOT have planted: a verdict (me gustó / no me
-   * gustó) or a completion. Obsession alone doesn't count — v2 sets it on the
-   * picks, so it says nothing about whether the user has touched the row.
-   */
-  judged: number;
-}
-
-export interface FirstRunCoach {
-  /**
-   * Backlogs list — the library is still just the onboarding picks (a few
-   * titles, all loved, none judged). Explains the "+" chip and that the
-   * picks already light Discover.
-   */
-  shelves: boolean;
-  /** Backlog detail — nothing completed yet. Explains the state glyphs. */
-  grid: boolean;
-  /**
-   * Item detail — no own reaction yet. Explains the reaction row and that
-   * "Completo" opens the review sheet.
-   */
-  item: boolean;
-}
-
-export function firstRunCoach(c: FirstRunCounts): FirstRunCoach {
-  return {
-    shelves:
-      c.items > 0 &&
-      c.items <= ONBOARDING_PICKS &&
-      c.loved === c.items &&
-      c.judged === 0,
-    grid: c.completed === 0,
-    item: c.judged === 0,
-  };
-}
+export {
+  ONBOARDING_PICKS,
+  firstRunCoach,
+  type FirstRunCoach,
+  type FirstRunCounts,
+} from "./first-run-coach";
 
 const COMPLETED_FILTER = eq(userItems.status, "completed");
 const JUDGED_FILTER = or(isNotNull(userItems.verdict), COMPLETED_FILTER);

@@ -30,5 +30,7 @@ INTERFAZ (el "+", los glifos, la fila de reacción) y usan señales que v2 no pu
 veredicto o completado; obsesión sola no cuenta). Sigue siendo derivado y sin "visto" persistido.
 
 ## Guardrail
-Ninguno ejecutable (no hay tests). El `grep` de arriba es la revisión manual; queda anotado en
-`guardrails.md` como "lo que nada atrapa".
+`pnpm tsx scripts/check-first-run.ts` (asserts de `first-run-coach.ts`, pura y sin DB): fija que una
+cuenta recién salida de v2 vea las tres notas y que la obsesión sola no cuente como reacción. La mitad
+de runtime (que las páginas la llamen, que v2 siga escribiendo lo mismo) sigue siendo manual — ver
+`guardrails.md` · Huecos conocidos.

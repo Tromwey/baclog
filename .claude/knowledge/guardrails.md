@@ -10,6 +10,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 |---|---|---|---|
 | `pnpm tsx scripts/check-album-match.ts` | manual (correr al tocar `resolvers/match.ts`) | Que el link-out exacto a TIDAL mande a un álbum equivocado: containment («Cars» reclamando «Cars 2», como pasó en recs), matching solo por título sin artista, sufijos «- Single»/«(Deluxe)» rompiendo la igualdad, y que un «(Alternative)» legítimo se colapse | `scripts/check-album-match.ts` |
 | `pnpm tsx scripts/check-series-status.ts` | manual (correr al tocar `catalog/series-status.ts`) | Que el pill de serie mienta: un `Ended` con `in_production` viejo en true leyéndose como "En emisión", un `Planned` con 0 temporadas pintando "0 temporadas", un `raw` de `/search/tv` sin marcador contando como "ya enriquecido" (y el pill quedándose vacío para siempre), o una serie terminada re-pegándole a TMDB cada semana | `scripts/check-series-status.ts` |
+| `pnpm tsx scripts/check-first-run.ts` | manual (correr al tocar `first-run-coach.ts` o lo que el onboarding ESCRIBE) | Que el coach de primer uso vuelva a morir en silencio: una cuenta recién salida del onboarding v2 (3 títulos, todos `obsessed`, nada juzgado) TIENE que ver las tres notas (v1 no las veía y nadie lo notó dos semanas); que la obsesión sola cuente como "ya reaccionó" (v2 la planta); que la nota de Backlogs mienta con biblioteca vacía o títulos no amados | `scripts/check-first-run.ts` |
 
 ## Comandos
 
@@ -18,6 +19,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 - `npx tsc --noEmit` — typecheck aislado, más rápido que el build (`tsconfig.json`, `strict`).
 - `pnpm tsx scripts/check-album-match.ts` — asserts del matcher de álbumes (puro, sin DB ni red); sale 1 al primer fallo.
 - `pnpm tsx scripts/check-series-status.ts` — asserts del mapeo status TMDB → pill de serie + staleness (puro, sin DB ni red); sale 1 al primer fallo.
+- `pnpm tsx scripts/check-first-run.ts` — asserts de `firstRunCoach` (puro, sin DB ni red); sale 1 al primer fallo.
 - `pnpm eval:recos` — corre el harness de evaluación de recomendaciones
   (`scripts/eval-crossmedia.ts`); mide calidad de recos, **no** es una suite de tests.
 
@@ -40,10 +42,9 @@ automatizable (o qué falta para serlo) y cuál es la verificación manual mient
 check, la entrada se mueve a la tabla de arriba.
 -->
 
-- **Coach marks de primer uso derivados de datos (`modules/backlog/first-run.ts`).** Sus gates ("cero
-  juzgados", "cero completados", "biblioteca = las tres elecciones") no fallan cuando dejan de ser
-  alcanzables: solo dejan de renderizar. No hay test porque no hay suite. Verificación manual cada vez
-  que cambie lo que el onboarding ESCRIBE (backlog inicial, ítems plantados, `obsessed`): crear una
+- **Coach marks de primer uso — la mitad de RUNTIME.** `check-first-run.ts` cubre la lógica pura, pero no
+  que las páginas la llamen ni que el onboarding siga escribiendo lo que el check asume (3 picks
+  `obsessed`, sin veredicto). Verificación manual cada vez que cambie lo que el onboarding ESCRIBE:
   cuenta QA en local (OTP en el log del dev server), pasar el onboarding y confirmar que las tres notas
   aparecen y se levantan al agregar/completar/juzgar. Origen:
   `learnings/2026-09-16-tutorial-derivado-de-datos-muere-si-onboarding-planta-datos.md`.
