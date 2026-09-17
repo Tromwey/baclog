@@ -33,7 +33,7 @@ export default async function InterceptedBacklogZoom({
     <BacklogZoomView
       backlog={data.backlog}
       items={data.items}
-      step={data.step}
+      coach={data.coach}
       now={data.now}
       zoom
     />

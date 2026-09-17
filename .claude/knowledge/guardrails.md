@@ -39,3 +39,11 @@ Lo que sabemos que puede romperse y NADIE atrapa automáticamente. Cada hueco di
 automatizable (o qué falta para serlo) y cuál es la verificación manual mientras tanto. Al crearse el
 check, la entrada se mueve a la tabla de arriba.
 -->
+
+- **Coach marks de primer uso derivados de datos (`modules/backlog/first-run.ts`).** Sus gates ("cero
+  juzgados", "cero completados", "biblioteca = las tres elecciones") no fallan cuando dejan de ser
+  alcanzables: solo dejan de renderizar. No hay test porque no hay suite. Verificación manual cada vez
+  que cambie lo que el onboarding ESCRIBE (backlog inicial, ítems plantados, `obsessed`): crear una
+  cuenta QA en local (OTP en el log del dev server), pasar el onboarding y confirmar que las tres notas
+  aparecen y se levantan al agregar/completar/juzgar. Origen:
+  `learnings/2026-09-16-tutorial-derivado-de-datos-muere-si-onboarding-planta-datos.md`.

@@ -2,12 +2,13 @@ import Link from "next/link";
 import { requireUser } from "@/auth";
 import {
   AuraField,
+  CoachNote,
   ONBOARDING_AURA,
   ScreenHeader,
-  StepMeter,
   StrokeIcon,
   glassChipClass,
 } from "@/components/ui";
+import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { getShelvesForUser } from "@/modules/backlog/shelves";
 import { getLibraryUpcoming } from "@/modules/backlog/library";
 import { getRenderInstant } from "@/modules/catalog/release";
@@ -44,10 +45,12 @@ export default async function BacklogsPage() {
   // (see getReviewInvitation) — it will find them the day they react to
   // something.
   const announce = shouldAnnounce(user);
-  const [invitation, upcoming] = await Promise.all([
+  const [invitation, upcoming, counts] = await Promise.all([
     announce ? getReviewInvitation(user.id) : Promise.resolve(null),
     getLibraryUpcoming(user.id, now),
+    getFirstRunCounts(user.id),
   ]);
+  const coach = firstRunCoach(counts);
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
@@ -63,21 +66,35 @@ export default async function BacklogsPage() {
       {invitation && <NovedadesModal invitation={invitation} />}
 
       <BacklogShelves shelves={shelves} upcoming={upcoming} now={now} />
+
+      {/* First-run moment 1 (first-run.ts): the library is still the
+          onboarding picks. Says what those picks already did and where the
+          next title comes from. Lifts itself on the first add or judgement. */}
+      {coach.shelves && (
+        <CoachNote className="mx-5 mt-[30px]">
+          Empezaste con lo que te obsesiona — eso ya enciende{" "}
+          <Link href="/descubrir" className="text-text-2 underline underline-offset-2">
+            Descubrir
+          </Link>
+          . Con el + de arriba agregas lo que quieres ver, oír o terminar.
+        </CoachNote>
+      )}
     </main>
   );
 }
 
 /**
- * First-use screen (mock #p8, HANDOFF §8): no header actions, a muted fixed-
+ * No-backlogs screen (mock #p8, HANDOFF §8): no header actions, a muted fixed-
  * color aura (there's no content ADN to drive one yet — AuraField would fall
  * back to lima, which is exactly what the mock avoids here), one lima CTA
- * into the create modal and one dark CTA into Discover, then the gesture
- * coach marks — the row model, said once before any rows exist. Kept as-is:
- * the Revamp UI mock defers empty states.
+ * into the create modal and one dark CTA into Discover. Kept because the
+ * Revamp UI mock defers empty states.
  *
- * This screen IS step 1 of the welcome onboarding (no backlogs is the step's
- * definition), so the greeting + meter are unconditional here — reaching it
- * with a backlog is impossible.
+ * Since onboarding v2 (2026-09-03) a NEW account never lands here — "elige
+ * tres" creates the first backlog — so this is the recovery screen for
+ * someone who deleted every backlog, not first use. The v1 step meter and
+ * the row-model coach marks ("toca una fila", "el chevron") described an
+ * interface that no longer exists and were removed with it.
  */
 function FirstUse({ name }: { name: string | null }) {
   return (
@@ -97,17 +114,11 @@ function FirstUse({ name }: { name: string | null }) {
       </div>
 
       <div className="relative px-5 pt-[calc(44px+env(safe-area-inset-top))]">
-        {/* The first moment the app can use the name onboarding just captured. */}
-        {/* justify-end + mr-auto: the meter stays pinned right even when the
-            account has no display name to greet. */}
-        <div className="bl-rise flex items-center justify-end gap-3">
-          {name && (
-            <p className="mr-auto min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
-              Hola, {name}.
-            </p>
-          )}
-          <StepMeter step={1} />
-        </div>
+        {name && (
+          <p className="bl-rise min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
+            Hola, {name}.
+          </p>
+        )}
         <h1 className="mt-4 font-display text-[36px] font-extrabold leading-none tracking-[-0.025em]">
           Empieza tu backlog.
         </h1>
@@ -136,34 +147,6 @@ function FirstUse({ name }: { name: string | null }) {
           </svg>
           Explorar Discover
         </Link>
-      </div>
-
-      {/* Coach marks de primer uso (mock #p8, HANDOFF §8): el modelo de
-          gestos de la fila, dicho una vez antes de que existan filas. */}
-      <div className="relative mx-5 mt-[30px] flex flex-col gap-[11px] border-t border-[#1C1C22] pt-5 font-mono text-[9px] uppercase tracking-[0.05em] text-text-3">
-        <div className="flex items-center gap-[9px]">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M6 4l14 8-14 8z" />
-          </svg>
-          Toca una fila para reproducir
-        </div>
-        <div className="flex items-center gap-[9px]">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M9 5l7 7-7 7"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-            />
-          </svg>
-          El chevron abre el ticket del ítem
-        </div>
-        <div className="flex items-center gap-[9px]">
-          <svg width="12" height="12" viewBox={GLYPH_VIEWBOX} fill="currentColor" aria-hidden>
-            <path d={SPARKLE_PATH} />
-          </svg>
-          El destello marca lo que te recomendamos
-        </div>
       </div>
     </main>
   );

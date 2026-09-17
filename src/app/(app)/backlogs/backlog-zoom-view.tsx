@@ -5,8 +5,9 @@ import { UpcomingShelf, type UpcomingItem } from "@/components/upcoming-shelf";
 import { visibilityOf } from "@/modules/backlog/visibility";
 import { SHARE_PATH } from "@/components/glyph-paths";
 import {
+  CoachNote,
   PaletteGlow,
-  StepMeter,
+  StateGlyph,
   StrokeIcon,
   glassChipClass,
   mixHexes,
@@ -15,11 +16,7 @@ import { plural } from "@/lib/plural";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { getBacklogItems } from "@/modules/backlog/queries";
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
-import {
-  firstRunStep,
-  getFirstRunCounts,
-  type FirstRunStep,
-} from "@/modules/backlog/first-run";
+import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { HideDock } from "./hide-dock";
 import { ZoomBackButton } from "./zoom-back-button";
 import { BacklogGrid, type GridItem } from "./[backlogId]/backlog-grid";
@@ -44,14 +41,14 @@ export async function loadBacklogZoom(backlogId: string) {
   itemsP.catch(() => {}); // no unhandled rejection if the assert throws first
   const { user, backlog } = await assertOwnsBacklog(backlogId);
   const items = await itemsP;
-  // Welcome onboarding: standing inside a backlog means backlogs > 0, so the
-  // step reduces to the library-wide counts. Fetched AFTER the assert (it's a
-  // read for the owner only) but before render, so the guide never flashes in.
+  // First-run moment 2 (first-run.ts): library-wide counts. Fetched AFTER the
+  // assert (it's a read for the owner only) but before render, so the note
+  // never flashes in.
   const counts = await getFirstRunCounts(user.id);
   return {
     backlog,
     items,
-    step: firstRunStep({ backlogs: 1, ...counts }),
+    coach: firstRunCoach(counts).grid,
     // F3.8 — read the clock HERE (the loader is async; the view below is not)
     // so the strip and every wait pill share one instant.
     now: await getRenderInstant(),
@@ -72,7 +69,7 @@ export async function loadBacklogZoom(backlogId: string) {
 export function BacklogZoomView({
   backlog,
   items,
-  step,
+  coach,
   now,
   zoom = false,
 }: {
@@ -84,8 +81,8 @@ export function BacklogZoomView({
     showOnProfile: boolean;
   };
   items: BacklogItemWithCatalog[];
-  /** Welcome onboarding step (0 = activated, no guidance renders). */
-  step: FirstRunStep;
+  /** First-run moment 2: nothing completed yet → explain the glyphs. */
+  coach: boolean;
   /** The render instant from loadBacklogZoom — every wait on this screen is
    *  measured from it. */
   now: number;
@@ -121,13 +118,8 @@ export function BacklogZoomView({
     releaseDate: it.releaseDate ? it.releaseDate.toISOString() : null,
   }));
 
-  // Step 2 = the library is empty account-wide. An ACTIVATED user's empty
-  // backlog keeps the copy — only the meter drops, so this screen never
-  // advertises a step that isn't theirs.
-  const showMeter = step === 2 && !hasItems;
-  // Step 3 lands here once the first title exists: name the two gestures that
-  // actually unlock the engine, next to the grid they apply to.
-  const showReactionCoach = step === 3 && hasItems;
+  // The glyph legend only makes sense next to covers that can carry glyphs.
+  const showGlyphCoach = coach && hasItems;
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-[160px] text-text">
@@ -151,7 +143,6 @@ export function BacklogZoomView({
         >
           <ZoomBackButton />
           <div className="flex items-center gap-2">
-            {showMeter && <StepMeter step={2} />}
             <VisibilityPill />
             {hasItems && (
               <Link
@@ -195,18 +186,23 @@ export function BacklogZoomView({
           className={`relative ${content}`}
         />
 
-        {showReactionCoach && (
-          <div className="bl-rise relative mx-6 mt-[26px]">
-            {/* Content hairline divider (AGENTS §7 exempt: coach marks). */}
-            <div className="h-px bg-line" />
-            <div className="mt-4 flex gap-2.5 font-mono text-[9px] uppercase tracking-[0.16em]">
-              <span className="flex-none text-text-2">Paso 3</span>
-              <span className="leading-[1.7] text-text-3">
-                Abre el título y márcalo «me obsesiona», o «me gusta» en el
-                menú de opciones. Eso enciende las recomendaciones.
+        {/* First-run moment 2 (first-run.ts): what the glyphs on the covers
+            mean, said once, until the first completion. */}
+        {showGlyphCoach && (
+          <CoachNote className="mx-6 mt-[26px]">
+            <span className="flex flex-wrap gap-x-3.5 gap-y-1">
+              <span className="inline-flex items-center gap-1.5">
+                <StateGlyph kind="obsessed" size={10} /> te obsesiona
               </span>
-            </div>
-          </div>
+              <span className="inline-flex items-center gap-1.5">
+                <StateGlyph kind="liked" size={11} /> te gustó
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <StateGlyph kind="done" size={11} /> completo
+              </span>
+            </span>
+            Abre una portada para marcarla · «Agregar título» abajo suma más.
+          </CoachNote>
         )}
 
         <div className={`relative flex flex-col gap-2 px-5 pt-[34px] ${content}`}>

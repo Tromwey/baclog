@@ -1,53 +1,80 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { userItems } from "@/db/schema";
 import { LOVED_FILTER } from "./queries";
 
 /**
- * Welcome onboarding — the guided first run (crear backlog → agregar ítem →
- * reaccionar).
+ * First-run coach marks — the three moments where the app explains the
+ * interface once, and then shuts up.
  *
- * The step is DERIVED from data the app already owns; nothing is persisted.
- * That buys three things for free: it survives reloads and devices, it matches
- * the activation funnel the Torre de Control already measures (Registro → Crea
- * backlog → Agrega ítem), and it self-heals — delete your only title and the
- * step-2 guidance comes back, which is correct, not a bug.
+ * v1 (2026-08-01) was a guided "crear backlog → agregar ítem → reaccionar"
+ * with a step meter. Onboarding v2 (2026-09-03) made that impossible to see:
+ * "elige tres" creates the first backlog, adds three titles and marks them
+ * obsessed, so every new account arrives already activated and the meter
+ * never rendered. v2 does those three steps FOR the user; what's left to
+ * teach is the interface itself (the "+" chip, the state glyphs, the
+ * reaction row + Completar sheet).
  *
- * There is no "dismiss" and no override: the guide is a layer that lifts itself
- * the moment the underlying fact changes. Step 0 = activated, no surface shows
- * anything.
+ * Every moment is DERIVED from data the app already owns; nothing is
+ * persisted. Same posture as v1: it survives reloads and devices, there is
+ * no "dismiss" and no override, and each note lifts itself the instant the
+ * underlying fact changes (complete one title → the glyph legend is gone).
  */
-export type FirstRunStep = 0 | 1 | 2 | 3;
+
+/** How many titles onboarding v2 plants (mirrors picksSchema `.max(3)`). */
+export const ONBOARDING_PICKS = 3;
 
 export interface FirstRunCounts {
   /** Titles in the library (user_item rows — per-title, not per membership). */
   items: number;
-  /** Titles the user LOVES (LOVED_FILTER) — what unlocks the reco engine. */
+  /** Titles the user LOVES (LOVED_FILTER) — what feeds the reco engine. */
   loved: number;
+  /** Titles marked completed. */
+  completed: number;
+  /**
+   * Reactions onboarding could NOT have planted: a verdict (me gustó / no me
+   * gustó) or a completion. Obsession alone doesn't count — v2 sets it on the
+   * picks, so it says nothing about whether the user has touched the row.
+   */
+  judged: number;
 }
 
-/**
- * The step the user is on. `backlogs` is passed in because every caller already
- * holds it (the shelf list, or the mere fact of standing inside a backlog).
- *
- * Order matters: each step is the FIRST unmet precondition of the next one.
- */
-export function firstRunStep(counts: {
-  backlogs: number;
-  items: number;
-  loved: number;
-}): FirstRunStep {
-  if (counts.backlogs === 0) return 1;
-  if (counts.items === 0) return 2;
-  if (counts.loved === 0) return 3;
-  return 0;
+export interface FirstRunCoach {
+  /**
+   * Backlogs list — the library is still just the onboarding picks (a few
+   * titles, all loved, none judged). Explains the "+" chip and that the
+   * picks already light Discover.
+   */
+  shelves: boolean;
+  /** Backlog detail — nothing completed yet. Explains the state glyphs. */
+  grid: boolean;
+  /**
+   * Item detail — no own reaction yet. Explains the reaction row and that
+   * "Completo" opens the review sheet.
+   */
+  item: boolean;
 }
 
+export function firstRunCoach(c: FirstRunCounts): FirstRunCoach {
+  return {
+    shelves:
+      c.items > 0 &&
+      c.items <= ONBOARDING_PICKS &&
+      c.loved === c.items &&
+      c.judged === 0,
+    grid: c.completed === 0,
+    item: c.judged === 0,
+  };
+}
+
+const COMPLETED_FILTER = eq(userItems.status, "completed");
+const JUDGED_FILTER = or(isNotNull(userItems.verdict), COMPLETED_FILTER);
+
 /**
- * Both first-run counts in ONE round trip. `loved` reuses LOVED_FILTER inside a
- * FILTER clause rather than re-spelling "obsessed or liked" — that predicate is
- * centralized in queries.ts so every "amado" read agrees, and this is just
- * another one of those reads.
+ * All first-run counts in ONE round trip. `loved` reuses LOVED_FILTER inside
+ * a FILTER clause rather than re-spelling "obsessed or liked" — that
+ * predicate is centralized in queries.ts so every "amado" read agrees, and
+ * this is just another one of those reads.
  */
 export async function getFirstRunCounts(
   userId: string,
@@ -58,27 +85,20 @@ export async function getFirstRunCounts(
       loved: sql<number>`count(*) filter (where ${LOVED_FILTER})`.mapWith(
         Number,
       ),
-    })
-    .from(userItems)
-    .where(eq(userItems.userId, userId));
-
-  return { items: row?.items ?? 0, loved: row?.loved ?? 0 };
-}
-
-/**
- * Just the loved count, for callers that already know `items > 0` because the
- * page they're rendering couldn't exist otherwise (the item detail of a logged
- * title). Same predicate, one column.
- */
-export async function countLovedItems(userId: string): Promise<number> {
-  const [row] = await db
-    .select({
-      loved: sql<number>`count(*) filter (where ${LOVED_FILTER})`.mapWith(
+      completed: sql<number>`count(*) filter (where ${COMPLETED_FILTER})`.mapWith(
+        Number,
+      ),
+      judged: sql<number>`count(*) filter (where ${JUDGED_FILTER})`.mapWith(
         Number,
       ),
     })
     .from(userItems)
     .where(eq(userItems.userId, userId));
 
-  return row?.loved ?? 0;
+  return {
+    items: row?.items ?? 0,
+    loved: row?.loved ?? 0,
+    completed: row?.completed ?? 0,
+    judged: row?.judged ?? 0,
+  };
 }

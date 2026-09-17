@@ -30,7 +30,7 @@ export default async function BacklogDetailPage({
       <BacklogZoomView
         backlog={data.backlog}
         items={data.items}
-        step={data.step}
+        coach={data.coach}
         now={data.now}
       />
     </main>

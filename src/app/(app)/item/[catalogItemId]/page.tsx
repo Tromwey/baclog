@@ -39,6 +39,8 @@ import { glassButtonClass } from "./glass";
 import { HideDock } from "./hide-dock";
 import { ItemShareMenu } from "./item-share-menu";
 import { KIND_LABEL, SERVICE_LABEL } from "./labels";
+import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
+import { ReactionCoach } from "./reaction-coach";
 import { ItemReactionProvider } from "./reaction-state";
 import { ReactionRow } from "./reaction-row";
 import { RecoProvenance } from "./reco-reasoning-panel";
@@ -61,14 +63,17 @@ export default async function ItemPage({
 }) {
   const user = await requireUser();
   const { catalogItemId } = await params;
-  const [item, userBacklogs, entry, reviews, viewerPalette] = await Promise.all([
-    getCatalogItem(catalogItemId),
-    getBacklogNames(user.id),
-    getUserCatalogEntry(user.id, catalogItemId),
-    // F3.9 — own review + the first page of everyone else's, in one trip.
-    getItemReviewContext(user.id, catalogItemId),
-    getUserPalette(user.id, 2),
-  ]);
+  const [item, userBacklogs, entry, reviews, viewerPalette, counts] =
+    await Promise.all([
+      getCatalogItem(catalogItemId),
+      getBacklogNames(user.id),
+      getUserCatalogEntry(user.id, catalogItemId),
+      // F3.9 — own review + the first page of everyone else's, in one trip.
+      getItemReviewContext(user.id, catalogItemId),
+      getUserPalette(user.id, 2),
+      // First-run moment 3: has the user ever judged a title?
+      getFirstRunCounts(user.id),
+    ]);
   if (!item) notFound();
 
   // The viewer's own ADN, for the avatar on their own review card (same
@@ -223,6 +228,9 @@ export default async function ItemPage({
           )}
 
           <ReactionRow />
+          {/* Rendered unconditionally — it freezes `pending` itself (see the
+              component's note on revalidation). */}
+          <ReactionCoach pending={firstRunCoach(counts).item} />
 
           {/* 06c — a series says whether it's over and how long it is (TMDB
               facts, cached on the row; null → nothing). */}

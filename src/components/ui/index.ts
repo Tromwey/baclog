@@ -16,7 +16,7 @@ export {
 export { AuthAuraBackdrop, AUTH_ADN } from "./auth-aura-backdrop";
 export { ScreenHeader } from "./screen-header";
 export { Sheet } from "./sheet";
-export { StepMeter } from "./step-meter";
+export { CoachNote } from "./coach-note";
 export { BackButton } from "./back-button";
 export { glassChipClass, glassPillClass } from "./glass";
 export { Segmented, type Segment } from "./segmented";
