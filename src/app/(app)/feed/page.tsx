@@ -113,7 +113,7 @@ async function EmptyNoActivity({
 
       <Link
         href="/perfil/siguiendo"
-        className="mt-5 flex items-center gap-2 rounded-[14px] bg-surface-1 px-3.5 py-3 transition-colors hover:bg-surface-2"
+        className="mt-5 flex items-center gap-2 rounded-[14px] bg-surface-1 px-3.5 py-3 transition-colors hover:bg-surface-2 active:bg-surface-3"
       >
         {preview.map((p, i) => (
           <AdnAvatar
@@ -166,7 +166,7 @@ function FindPeopleLine() {
   return (
     <Link
       href="/feed/gente"
-      className="mt-[18px] block w-full text-center font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3 transition-colors hover:text-text-2"
+      className="mt-[18px] block w-full text-center font-mono text-[9.5px] uppercase tracking-[0.1em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
     >
       O busca a alguien por su @handle o nombre
     </Link>

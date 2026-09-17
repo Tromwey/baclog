@@ -30,10 +30,10 @@ const SIZES = {
 } as const;
 
 const ACCENT_PILL =
-  "inline-flex flex-none items-center rounded-full bg-accent font-sans font-semibold leading-none text-bg transition-all active:scale-[0.97] active:bg-accent-press";
+  "inline-flex flex-none items-center rounded-full bg-accent font-sans font-semibold leading-none text-bg bl-press active:bg-accent-press";
 
 const GLASS_PILL =
-  "inline-flex flex-none items-center rounded-full px-[18px] py-[9px] font-sans text-[13px] font-semibold leading-none backdrop-blur-[16px] transition-[background-color,color] duration-200 active:scale-[0.97]";
+  "inline-flex flex-none items-center rounded-full px-[18px] py-[9px] font-sans text-[13px] font-semibold leading-none backdrop-blur-[16px] bl-press";
 
 export function FollowButton({
   username,
@@ -101,7 +101,7 @@ export function FollowButton({
     return (
       <button
         onClick={toggle}
-        className={`inline-flex flex-none items-center gap-1.5 rounded-full bg-surface-2 font-sans font-semibold leading-none text-text transition-colors hover:bg-surface-3 ${SIZES[size]} ${className}`}
+        className={`inline-flex flex-none items-center gap-1.5 rounded-full bg-surface-2 font-sans font-semibold leading-none text-text bl-press hover:bg-surface-3 ${SIZES[size]} ${className}`}
       >
         <svg
           width="12"

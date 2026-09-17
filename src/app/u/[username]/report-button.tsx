@@ -35,7 +35,7 @@ export function ReportButton({ username }: { username: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3 transition-colors hover:text-text-2"
+        className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
       >
         Reportar perfil
       </button>
@@ -57,7 +57,7 @@ export function ReportButton({ username }: { username: string }) {
                     type="button"
                     disabled={busy}
                     onClick={() => report(r.id)}
-                    className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3 disabled:opacity-40"
+                    className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12] disabled:opacity-40"
                   >
                     {r.label}
                   </button>

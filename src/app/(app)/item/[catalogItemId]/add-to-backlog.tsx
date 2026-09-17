@@ -76,7 +76,7 @@ export function BacklogsSheetHost() {
               disabled={busy}
               aria-pressed={pick ? undefined : on}
               onClick={() => void chooseBacklog(b.id)}
-              className={`flex w-full items-center justify-between gap-3 rounded-[var(--r-md)] px-4 py-3.5 text-left transition-colors disabled:opacity-40 ${
+              className={`flex w-full items-center justify-between gap-3 rounded-[var(--r-md)] px-4 py-3.5 text-left transition-colors active:bg-white/[0.12] disabled:opacity-40 ${
                 on
                   ? "bg-accent-soft text-text"
                   : "bg-surface-2 text-text hover:bg-surface-3"
@@ -107,7 +107,7 @@ export function BacklogsSheetHost() {
         <button
           type="submit"
           disabled={busy || !newName.trim()}
-          className="rounded-[var(--r-md)] bg-accent px-4 font-semibold text-bg disabled:opacity-40"
+          className="rounded-[var(--r-md)] bg-accent px-4 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
         >
           Crear
         </button>

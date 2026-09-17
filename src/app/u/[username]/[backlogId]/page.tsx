@@ -93,7 +93,7 @@ export default async function PublicBacklogPage({
                   // returns HERE, not to the profile. Deep-linked/shared item
                   // URLs omit it and fall back to the profile.
                   href={`/u/${username}/item/${item.catalogItemId}?from=${backlogId}`}
-                  className="relative flex items-center gap-3 overflow-hidden rounded-[var(--r-md)] bg-surface-1 p-2.5 transition-colors hover:bg-surface-2"
+                  className="relative flex items-center gap-3 overflow-hidden rounded-[var(--r-md)] bg-surface-1 p-2.5 transition-colors hover:bg-surface-2 active:bg-surface-3"
                 >
                   {leftWash && (
                     <span
@@ -239,7 +239,7 @@ export default async function PublicBacklogPage({
             FAQ allows this in an About/Credits section). */}
         <footer className="mt-10 text-center">
           <MonoMeta className="text-[10px] text-text-3">
-            <Link href="/creditos" className="underline">
+            <Link href="/creditos" className="underline transition-opacity active:opacity-60">
               Créditos
             </Link>
           </MonoMeta>
@@ -256,7 +256,7 @@ export default async function PublicBacklogPage({
       <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
         <Link
           href="/login"
-          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg transition-all active:scale-[0.98] active:bg-accent-press"
+          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
         >
           Empieza tu backlog →
         </Link>

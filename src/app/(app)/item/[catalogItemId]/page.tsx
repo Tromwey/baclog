@@ -261,7 +261,7 @@ export default async function ItemPage({
                 href={linkHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent px-[18px] py-[13px] text-[14px] font-semibold text-bg transition-transform active:scale-[0.98]"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent px-[18px] py-[13px] text-[14px] font-semibold text-bg bl-press active:bg-accent-press"
               >
                 <FillIcon d={PLAY_PATH} size={12} />
                 Reproducir en {SERVICE_LABEL[service]}
@@ -311,7 +311,7 @@ export default async function ItemPage({
                 <Link
                   key={f.username}
                   href={`/u/${f.username}`}
-                  className="flex items-center gap-2.5"
+                  className="flex items-center gap-2.5 transition-opacity active:opacity-70"
                 >
                   <AdnAvatar
                     hexes={f.avatarHexes}

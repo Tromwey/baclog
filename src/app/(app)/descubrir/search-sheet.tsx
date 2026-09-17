@@ -22,6 +22,10 @@ import { extractPalette } from "@/modules/cards/palette";
 import type { CatalogSearchResult, SearchTab } from "@/modules/catalog/types";
 import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
+import {
+  useScrollerTouchAction,
+  useSheetMotion,
+} from "@/hooks/use-sheet-motion";
 import { useHideNavDock } from "@/app/(app)/nav-dock";
 import type { SearchBacklog } from "./descubrir-screen";
 import { workMeta } from "./discover-home";
@@ -94,6 +98,19 @@ export function SearchSheet({
   const hydrated = useHydrated();
   const keyboardInset = useKeyboardInset();
   useHideNavDock(true);
+  // The app-wide sheet motion: rises in, leaves the way it came, and the
+  // handle is a real one — drag the sheet down (or flick it) to dismiss.
+  // A short 56px rise rather than from under the edge: the field is focused
+  // inside the opening tap, and iOS pans the page to chase an input that is
+  // still off-screen. `onClose` fires after the exit has played.
+  const { panelRef, scrimRef, dismiss, panelHandlers } = useSheetMotion({
+    onClose,
+    enterOffset: 56,
+    enterScale: 1,
+    enabled: hydrated,
+  });
+  const resultsRef = useRef<HTMLDivElement>(null);
+  useScrollerTouchAction(resultsRef, hydrated);
 
   const [query, setQuery] = useState(initialQuery);
   const [tab, setTab] = useState<SearchTab>("all");
@@ -152,11 +169,11 @@ export function SearchSheet({
   // Escape closes, matching every other dismissible surface in the app.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [dismiss]);
 
   // The picker scrolls; make sure the active backlog is in view once the
   // portal exists (on a ?buscar=1 arrival the first render is the SSR null).
@@ -334,35 +351,42 @@ export function SearchSheet({
   if (!hydrated) return null;
 
   return createPortal(
-    <div className="bl-fade-in fixed inset-0 z-50">
-      {/* The target backlog's light and a scrim — the page keeps rendering behind. */}
-      <PaletteGlow
-        hexes={target?.paletteHex ?? []}
-        angle={110}
-        opacity={0.25}
-        blur={90}
-        className="inset-0"
-      />
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/50"
-      />
+    <div className="fixed inset-0 z-50">
+      {/* The target backlog's light and a scrim — the page keeps rendering
+          behind. One layer, so both fade together as the sheet is dragged away. */}
+      <div ref={scrimRef} className="absolute inset-0">
+        <PaletteGlow
+          hexes={target?.paletteHex ?? []}
+          angle={110}
+          opacity={0.25}
+          blur={90}
+          className="inset-0"
+        />
+        <button
+          type="button"
+          aria-label="Cerrar"
+          onClick={dismiss}
+          className="absolute inset-0 bg-black/50"
+        />
+      </div>
 
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Buscar y agregar título"
-        className="absolute inset-x-0 bottom-0 top-24 mx-auto flex max-w-md flex-col gap-[18px] rounded-t-[32px] bg-[rgba(18,18,24,.7)] px-5 pt-3 shadow-[var(--shadow-glass)] backdrop-blur-[30px] backdrop-saturate-[1.5]"
+        {...panelHandlers}
+        className="absolute inset-x-0 bottom-0 top-24 mx-auto flex max-w-md touch-none flex-col gap-[18px] rounded-t-[32px] bg-[rgba(18,18,24,.7)] px-5 pt-3 shadow-[var(--shadow-glass)] backdrop-blur-[30px] backdrop-saturate-[1.5] will-change-transform"
         style={
           keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined
         }
       >
-        {/* The handle: a real tap target around the 38×4 bar. */}
+        {/* The handle: a real tap target around the 38×4 bar — and a real
+            handle: it drags the sheet (a tap still closes). */}
         <button
           type="button"
-          onClick={onClose}
+          data-sheet-handle
+          onClick={dismiss}
           aria-label="Cerrar"
           className="-my-2 flex h-6 items-center self-center px-4"
         >
@@ -421,7 +445,10 @@ export function SearchSheet({
           ariaLabel="Tipo"
         />
 
-        <div className="bl-scroll -mx-5 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-5">
+        <div
+          ref={resultsRef}
+          className="bl-scroll -mx-5 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-5"
+        >
           {state === "loading" &&
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex animate-pulse items-center gap-3.5">
@@ -453,7 +480,7 @@ export function SearchSheet({
                     <button
                       type="button"
                       onClick={() => openItem(r.catalogItemId)}
-                      className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+                      className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-opacity active:opacity-70"
                     >
                       <CoverTile
                         posterUrl={r.posterUrl}
@@ -478,7 +505,7 @@ export function SearchSheet({
                         isAdded ? `Quitar ${r.title}` : `Agregar ${r.title}`
                       }
                       aria-pressed={isAdded}
-                      className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full transition-colors disabled:opacity-60 ${
+                      className={`bl-press-sm flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full disabled:opacity-60 ${
                         isAdded
                           ? "bg-accent text-bg"
                           : "bg-[var(--glass-bg)] text-text hover:bg-white/[0.12]"
@@ -535,7 +562,7 @@ export function SearchSheet({
               <button
                 type="submit"
                 disabled={creating || !newName.trim()}
-                className="flex-none rounded-full bg-accent px-4 font-mono text-[10.5px] uppercase tracking-[0.1em] text-bg disabled:opacity-40"
+                className="bl-press flex-none rounded-full bg-accent px-4 font-mono text-[10.5px] uppercase tracking-[0.1em] text-bg active:bg-accent-press disabled:opacity-40"
               >
                 Crear
               </button>

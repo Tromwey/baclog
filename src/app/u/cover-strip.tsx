@@ -40,7 +40,7 @@ export function CoverStrip({
       </div>
       <div className="bl-scroll -mb-[26px] flex gap-2.5 overflow-x-auto px-5 pb-[34px] pt-1">
         {items.map((it) => (
-          <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex-none">
+          <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex-none bl-press-lg">
             <CoverTile
               posterUrl={it.posterUrl}
               paletteHex={it.paletteHex}

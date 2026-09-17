@@ -14,7 +14,7 @@ import type { SuggestedProfile } from "@/modules/social/types";
 /** Rich card (1b): identity row + a strip of their recent covers. */
 export function SuggestionCard({ s }: { s: SuggestedProfile }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[18px] bg-surface-1 p-3.5">
+    <div className="flex flex-col gap-3 rounded-[18px] bg-surface-1 p-3.5 transition-colors has-[a:active]:bg-surface-3">
       <div className="flex items-center gap-[11px]">
         <Link
           href={`/u/${s.username}`}
@@ -64,7 +64,7 @@ export function SuggestionCard({ s }: { s: SuggestedProfile }) {
 /** Compact row (1c): for "gente que sí está activa". */
 export function SuggestionRow({ s }: { s: SuggestedProfile }) {
   return (
-    <div className="flex items-center gap-[11px] rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3">
+    <div className="flex items-center gap-[11px] rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 transition-colors has-[a:active]:bg-surface-3">
       <Link
         href={`/u/${s.username}`}
         className="flex min-w-0 flex-1 items-center gap-[11px]"

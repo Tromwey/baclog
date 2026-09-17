@@ -51,7 +51,7 @@ export function PositionCard({
 
       <button
         onClick={share}
-        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg"
+        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press"
       >
         {copied ? "Link copiado ✓" : "Invitar y subir en la fila"}
       </button>

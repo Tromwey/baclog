@@ -160,7 +160,7 @@ export function ReviewFeed({
               <button
                 key={reason.id}
                 onClick={() => report(reason.id)}
-                className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3"
+                className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
               >
                 {reason.label}
               </button>

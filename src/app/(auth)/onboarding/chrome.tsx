@@ -140,7 +140,7 @@ export function GhostButton({
     <button
       type="button"
       {...rest}
-      className="py-2 text-[14px] text-text-2 transition-colors hover:text-text disabled:opacity-40"
+      className="py-2 text-[14px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-40"
     >
       {children}
     </button>

@@ -65,6 +65,12 @@ const GLASS = `${GLASS_BG} backdrop-blur-[16px]`;
 const COVER_SHADOW =
   "shadow-[0_18px_40px_-12px_rgba(0,0,0,.7),inset_0_1px_0_rgba(255,255,255,.18)]";
 
+/** Press response for a card whose tap target is a STRETCHED link: the
+ *  visible card sinks while `[data-stretch]` is held (the `bl-press-lg` depth
+ *  and timing), and the nested links/buttons keep their own press state. */
+const STRETCH_PRESS =
+  "transition-[scale,opacity] duration-200 ease-[var(--ease-out)] has-[[data-stretch]:active]:scale-[0.985] has-[[data-stretch]:active]:duration-[80ms] motion-reduce:has-[[data-stretch]:active]:scale-100 motion-reduce:has-[[data-stretch]:active]:opacity-80";
+
 const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[2/3]");
 
 /** The glow's colors: the cover's two leading hexes (the mock's `hx` pair),
@@ -154,7 +160,10 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
     <article className="relative isolate flex flex-col gap-3.5">
       <PaletteGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
       <div className="relative flex items-center gap-[9px] px-5">
-        <Link href={profileHref(author.username)} className="flex-none">
+        <Link
+          href={profileHref(author.username)}
+          className="flex-none transition-opacity active:opacity-60"
+        >
           <AdnAvatar
             hexes={author.avatarHexes}
             initial={author.initial}
@@ -165,7 +174,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         <span className="flex min-w-0 flex-col gap-px">
           <Link
             href={profileHref(author.username)}
-            className="truncate text-[13.5px] font-semibold text-text"
+            className="truncate text-[13.5px] font-semibold text-text transition-opacity active:opacity-60"
           >
             @{author.username}
           </Link>
@@ -173,7 +182,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             agregó {count} títulos a{" "}
             <Link
               href={backlogHref(author.username, burst.backlogId)}
-              className="font-semibold text-text"
+              className="font-semibold text-text transition-opacity active:opacity-60"
             >
               {burst.backlogName}
             </Link>
@@ -188,7 +197,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             key={e.id}
             href={itemHref(e.catalogItemId)}
             aria-label={e.title}
-            className="flex-none snap-start"
+            className="flex-none snap-start bl-press-lg"
           >
             <Cover event={e} className={`h-[208px] rounded-[14px] ${COVER_SHADOW}`}>
               <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-black/0 px-2.5 pb-[9px] pt-[22px] font-serif text-sm italic leading-[1.1] text-text">
@@ -202,7 +211,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             type="button"
             onClick={() => setExpanded(true)}
             aria-label={`Ver los ${count}`}
-            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[2/3] ${GLASS}`}
+            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[2/3] bl-press-lg ${GLASS}`}
           >
             +{folded}
           </button>
@@ -215,7 +224,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text ${GLASS}`}
+          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text bl-press ${GLASS}`}
         >
           {expanded ? "Ocultar" : `Ver los ${count}`}
         </button>
@@ -224,7 +233,11 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
       {expanded && (
         <div className={`bl-rise-soft relative mx-5 flex flex-col gap-2.5 rounded-[18px] px-3.5 py-3 backdrop-blur-[24px] backdrop-saturate-[1.4] ${GLASS_BG}`}>
           {burst.items.map((e) => (
-            <Link key={e.id} href={itemHref(e.catalogItemId)} className="flex items-center gap-3">
+            <Link
+              key={e.id}
+              href={itemHref(e.catalogItemId)}
+              className="flex items-center gap-3 transition-opacity active:opacity-70"
+            >
               <Cover event={e} className="w-10 flex-none rounded-[7px]" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate font-serif text-[17px] italic leading-[1.12] text-text">
@@ -268,7 +281,10 @@ function Hero({
   return (
     <article className="relative isolate">
       <PaletteGlow hexes={glowHexes(event)} opacity={glowOpacity} />
-      <Cover event={event} className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)]`}>
+      <Cover
+        event={event}
+        className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)] ${STRETCH_PRESS}`}
+      >
         <span
           aria-hidden
           className="absolute inset-0"
@@ -288,11 +304,12 @@ function Hero({
         <Link
           href={itemHref(event.catalogItemId)}
           aria-label={event.title}
+          data-stretch
           className="absolute inset-0 z-[1]"
         />
         <Link
           href={profileHref(author.username)}
-          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] ${GLASS_BG}`}
+          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG}`}
         >
           <AdnAvatar
             hexes={author.avatarHexes}
@@ -374,7 +391,7 @@ function HeroReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolea
     <button
       type="button"
       onClick={() => setRevealed(true)}
-      className="pointer-events-auto relative mt-2 block w-full border-t border-white/[0.12] pt-3 text-left"
+      className="pointer-events-auto relative mt-2 block w-full border-t border-white/[0.12] pt-3 text-left transition-opacity active:opacity-70"
     >
       <span className={`block select-none opacity-40 blur-[6px] ${words}`}>{body}</span>
       <span className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[rgba(20,20,26,.6)] px-3.5 py-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text backdrop-blur-[16px]">
@@ -400,7 +417,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className="relative isolate flex items-center gap-[18px] px-5">
+    <article className={`relative isolate flex items-center gap-[18px] px-5 ${STRETCH_PRESS}`}>
       <PaletteGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
       <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">
@@ -413,7 +430,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
           <span className="truncate text-[12.5px] leading-[1.3] text-text-2">
             <Link
               href={profileHref(event.author.username)}
-              className="relative z-10 font-semibold text-text"
+              className="relative z-10 font-semibold text-text transition-opacity active:opacity-60"
             >
               @{event.author.username}
             </Link>{" "}
@@ -423,7 +440,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
                 {" "}
                 <Link
                   href={backlogHref(event.author.username, shelf.id)}
-                  className="relative z-10 font-semibold text-text"
+                  className="relative z-10 font-semibold text-text transition-opacity active:opacity-60"
                 >
                   {shelf.name}
                 </Link>
@@ -433,6 +450,7 @@ function CompactCard({ event }: { event: FeedEvent }) {
         </span>
         <Link
           href={itemHref(event.catalogItemId)}
+          data-stretch
           className="font-serif text-2xl italic leading-[1.08] text-pretty text-text after:absolute after:inset-0 after:content-['']"
         >
           {event.title}

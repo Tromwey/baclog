@@ -101,7 +101,7 @@ export function SettingsForm({
           <button
             type="submit"
             disabled={busy || !name.trim()}
-            className="rounded-xl bg-accent px-4 font-medium text-bg disabled:opacity-40"
+            className="rounded-xl bg-accent px-4 font-medium text-bg bl-press active:bg-accent-press disabled:opacity-40"
           >
             {saved ? "✓" : "Guardar"}
           </button>
@@ -120,7 +120,7 @@ export function SettingsForm({
               className={`w-full rounded-xl px-4 py-3 text-left transition-colors ${
                 service === s.id
                   ? "bg-accent-soft font-semibold text-accent"
-                  : "bg-surface-2 hover:bg-surface-3"
+                  : "bg-surface-2 hover:bg-surface-3 active:bg-white/[0.12]"
               }`}
             >
               {s.label}
@@ -131,7 +131,7 @@ export function SettingsForm({
 
       <section>
         <h2 className="text-sm font-semibold text-text-2">Avisos</h2>
-        <label className="mt-3 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+        <label className="mt-3 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 transition-colors active:bg-white/[0.12]">
           <span className="text-sm">Avísame el día que sale un álbum</span>
           <input
             type="checkbox"
@@ -160,14 +160,14 @@ export function SettingsForm({
               <span className="text-text-2">Tu página: </span>
               <a
                 href={`/u/${claimed}`}
-                className="font-mono underline"
+                className="font-mono underline transition-opacity active:opacity-60"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 baclog.app/{claimed}
               </a>
             </p>
-            <label className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+            <label className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 transition-colors active:bg-white/[0.12]">
               <span className="text-sm">Perfil visible públicamente</span>
               <input
                 type="checkbox"
@@ -201,7 +201,7 @@ export function SettingsForm({
               <button
                 type="submit"
                 disabled={busy || username.length < 3}
-                className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-bg disabled:opacity-40"
+                className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
               >
                 Reclamar
               </button>
@@ -218,7 +218,7 @@ export function SettingsForm({
 
       <section className="border-t border-line pt-6">
         <h2 className="text-sm font-semibold text-text-2">Legal</h2>
-        <Link href="/creditos" className="mt-3 inline-block text-sm underline">
+        <Link href="/creditos" className="mt-3 inline-block text-sm underline transition-opacity active:opacity-60">
           Créditos
         </Link>
       </section>
@@ -237,13 +237,13 @@ export function SettingsForm({
                   await deleteAccountAction();
                 }}
                 disabled={busy}
-                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-40"
+                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white bl-press disabled:opacity-40"
               >
                 {busy ? "Borrando…" : "Borrar todo"}
               </button>
               <button
                 onClick={() => setConfirmingDelete(false)}
-                className="rounded-xl bg-surface-2 px-4 py-2 transition-colors hover:bg-surface-3"
+                className="rounded-xl bg-surface-2 px-4 py-2 bl-press hover:bg-surface-3"
               >
                 Cancelar
               </button>
@@ -252,7 +252,7 @@ export function SettingsForm({
         ) : (
           <button
             onClick={() => setConfirmingDelete(true)}
-            className="mt-3 text-sm text-red-400 underline"
+            className="mt-3 text-sm text-red-400 underline transition-opacity active:opacity-60"
           >
             Borrar mi cuenta
           </button>

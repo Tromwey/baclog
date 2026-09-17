@@ -183,11 +183,80 @@
     color: var(--text);
   }
 
+  /* Response (apple-design §1). The grey iOS tap flash is the browser's
+     stand-in for press feedback; the app draws its own on pointer-DOWN
+     (`bl-press*` below, fill changes on rows), so the flash goes.
+     `manipulation` drops the double-tap-zoom wait from every control — a tap
+     is never held back to see if a second one is coming. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :where(a, button, input, select, textarea, label, summary, [role="button"]) {
+    touch-action: manipulation;
+  }
+
   /* Accent focus ring on interactive elements */
   :where(a, button, input, textarea, select):focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
     border-radius: var(--r-sm);
+  }
+}
+
+/* Press response — feedback lives on the PRESS, not the release: the control
+   sinks the instant it is touched (80ms) and eases back out slower when let
+   go. It is a state change, not a pulse or a glow (HANDOFF §7 untouched).
+   Three depths because perceived travel depends on size: a 38px chip needs
+   more scale than a full-width button to read at all, and a big cover needs
+   much less. Uses the `scale` property, so it composes with any `transform`.
+   These own `transition-*` — don't pair them with `transition-colors`.
+   Reduced motion swaps the travel for a dim. */
+@utility bl-press {
+  transition-property: scale, color, background-color, opacity, filter;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled) {
+    scale: 0.97;
+    transition-duration: 80ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active:not(:disabled) {
+      scale: none;
+      opacity: 0.7;
+    }
+  }
+}
+
+@utility bl-press-sm {
+  transition-property: scale, color, background-color, opacity, filter;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled) {
+    scale: 0.9;
+    transition-duration: 80ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active:not(:disabled) {
+      scale: none;
+      opacity: 0.7;
+    }
+  }
+}
+
+@utility bl-press-lg {
+  transition-property: scale, color, background-color, opacity, filter;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled) {
+    scale: 0.985;
+    transition-duration: 80ms;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active:not(:disabled) {
+      scale: none;
+      opacity: 0.8;
+    }
   }
 }
 
@@ -258,22 +327,13 @@
   }
 }
 
-/* Welcome onboarding entrances (one-shot, never loops — HANDOFF §7 bans
-   pulses, not arrivals). bl-sheet is the first-item closing sheet rising into
-   place; bl-chip is the destination chip settling in from above on a guided
-   arrival, so the answer to "¿a dónde va esto?" moves into view instead of
-   being already there. */
-@keyframes bl-sheet {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
+/* One-shot entrance (never loops — HANDOFF §7 bans pulses, not arrivals).
+   bl-chip is the destination chip settling in from above on a guided arrival,
+   so the answer to "¿a dónde va esto?" moves into view instead of being
+   already there.
+   There is deliberately NO sheet keyframe here: sheets are dragged, and a CSS
+   animation with fill-mode `both` out-ranks the inline transform a gesture
+   writes. Their entrance/exit/drag all live in hooks/use-sheet-motion.ts. */
 @keyframes bl-chip {
   from {
     opacity: 0;
@@ -286,11 +346,28 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .bl-sheet {
-    animation: bl-sheet var(--dur-slow) var(--ease-out) both;
-  }
   .bl-chip {
     animation: bl-chip 380ms var(--ease-out) both;
+  }
+}
+
+/* A popover grows out of the control that opened it (spatial consistency):
+   the caller sets `transform-origin` toward its trigger; this only scales and
+   fades. One-shot. */
+@keyframes bl-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bl-pop {
+    animation: bl-pop var(--dur-base) var(--ease-out) both;
   }
 }
 
@@ -469,5 +546,42 @@
   }
   .bl-fade-in {
     animation: bl-fade-in 0.28s ease;
+  }
+}
+
+/* Materials, for the people who asked the OS for less of them.
+   - reduced transparency: every translucent surface goes solid and drops its
+     blur (the dock, sheets, glass pills over art). Hierarchy survives through
+     the fill steps alone.
+   - more contrast: the secondary/tertiary text tiers move up and the glass
+     fill gets heavier. Still borderless — separation comes from fill, which
+     is this system's rule (HANDOFF §7), not from a hairline. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-bg: var(--surface-3);
+  }
+
+  .bl-dock-glass,
+  .bl-glass,
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .bl-dock-glass,
+  [class*="backdrop-blur"] {
+    background-color: var(--surface-2) !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --text-2: #dcdbe3;
+    --text-3: #b9b8c2;
+    --glass-bg: rgba(255, 255, 255, 0.14);
+  }
+
+  .bl-dock-glass {
+    background: rgba(20, 20, 26, 0.92);
   }
 }

@@ -53,7 +53,7 @@ export default async function SettingsPage() {
           </div>
           <Link
             href="/admin"
-            className="relative flex items-center gap-[13px] overflow-hidden rounded-[22px] bl-glass px-[15px] py-[14px] transition-colors hover:bg-white/[0.045]"
+            className="relative flex items-center gap-[13px] overflow-hidden rounded-[22px] bl-glass px-[15px] py-[14px] bl-press-lg hover:bg-white/[0.045]"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-bg">
               <ControlTowerGlyph />
@@ -76,7 +76,7 @@ export default async function SettingsPage() {
       <form action={signOutAction} className="mt-[14px] overflow-hidden rounded-[22px] bl-glass">
         <button
           type="submit"
-          className="relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-[rgba(232,132,108,0.06)]"
+          className="relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-[rgba(232,132,108,0.06)] active:bg-[rgba(232,132,108,0.12)]"
         >
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[rgba(232,132,108,0.14)] text-[#E8846C]">
             <LogOut size={17} strokeWidth={1.8} />

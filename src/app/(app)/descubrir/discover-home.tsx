@@ -81,7 +81,7 @@ export function DiscoverHome({
       <button
         type="button"
         onClick={onSearch}
-        className="mx-5 -mt-1 flex items-center gap-2.5 rounded-full bg-white/[0.07] px-4 py-3 text-left text-text-3 transition-colors hover:bg-white/[0.1]"
+        className="mx-5 -mt-1 flex items-center gap-2.5 rounded-full bg-white/[0.07] px-4 py-3 text-left text-text-3 bl-press hover:bg-white/[0.1]"
       >
         {SEARCH_GLYPH}
         <span className="truncate text-[14px]">
@@ -147,7 +147,7 @@ function RailTile({ work }: { work: RailWork }) {
   return (
     <Link
       href={`/item/${work.catalogItemId}`}
-      className="flex w-[132px] flex-none flex-col gap-[7px]"
+      className="flex w-[132px] flex-none flex-col gap-[7px] bl-press-lg"
     >
       {/* The mock draws every rail tile square, whatever the kind. */}
       <CoverTile
@@ -175,7 +175,7 @@ function TrendingView({ rows }: { rows: TrendingTitle[] }) {
           <Link
             key={r.catalogItemId}
             href={`/item/${r.catalogItemId}`}
-            className="flex items-center gap-3.5"
+            className="flex items-center gap-3.5 transition-opacity active:opacity-70"
           >
             <span className="w-[22px] flex-none text-center font-display text-[22px] font-extrabold text-text-3">
               {i + 1}
@@ -262,7 +262,7 @@ function DoubleFeatureCard({
   );
 
   const shell =
-    "relative mx-5 mt-[34px] block overflow-hidden rounded-[22px] bg-surface-1 text-left transition-transform active:scale-[0.99]";
+    "relative mx-5 mt-[34px] block overflow-hidden rounded-[22px] bg-surface-1 text-left bl-press-lg";
   const body = "relative flex items-center gap-4 p-[18px]";
   const label =
     "font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3";

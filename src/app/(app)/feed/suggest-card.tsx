@@ -37,7 +37,7 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
         <span className="font-mono text-[8.5px] uppercase tracking-[0.12em] text-text-3">
           Quizá quieras seguir
         </span>
-        <Link href={`/u/${s.username}`} className="flex items-center gap-2.5">
+        <Link href={`/u/${s.username}`} className="flex items-center gap-2.5 transition-opacity active:opacity-70">
           <AdnAvatar
             hexes={s.avatarHexes}
             initial={s.initial}

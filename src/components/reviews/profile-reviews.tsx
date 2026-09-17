@@ -40,7 +40,7 @@ export function ProfileReviews({
           <div className="flex items-center gap-2">
             <Link
               href={`/u/${username}/item/${review.catalogItemId}`}
-              className="min-w-0 truncate font-serif text-[19px] italic leading-[1.1] text-text"
+              className="min-w-0 truncate font-serif text-[19px] italic leading-[1.1] text-text transition-opacity active:opacity-60"
             >
               {review.title}
             </Link>

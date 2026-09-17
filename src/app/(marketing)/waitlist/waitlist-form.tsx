@@ -47,7 +47,7 @@ export function WaitlistForm() {
       <button
         type="submit"
         disabled={status === "sending"}
-        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg disabled:opacity-40"
+        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
       >
         {status === "sending" ? "Apartando…" : "Apártame un lugar"}
       </button>

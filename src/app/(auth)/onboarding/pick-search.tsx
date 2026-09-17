@@ -132,7 +132,7 @@ export function PickSearch({
                     isPicked ? `Quitar ${r.title}` : `Elegir ${r.title}`
                   }
                   onClick={() => onChoose(toPick(r))}
-                  className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full transition-colors ${
+                  className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full bl-press-sm ${
                     isPicked
                       ? "bg-accent text-bg"
                       : "bg-[var(--glass-bg)] text-text hover:bg-white/[0.12]"

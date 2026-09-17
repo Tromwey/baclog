@@ -79,7 +79,7 @@ export function UpcomingShelf({
           <Link
             key={it.catalogItemId}
             href={itemHref(it.catalogItemId)}
-            className="flex w-[104px] flex-none flex-col gap-[7px]"
+            className="flex w-[104px] flex-none flex-col gap-[7px] bl-press-lg"
           >
             <CoverTile
               posterUrl={it.posterUrl}

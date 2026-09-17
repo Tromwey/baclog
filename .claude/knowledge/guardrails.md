@@ -11,6 +11,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 | `pnpm tsx scripts/check-album-match.ts` | manual (correr al tocar `resolvers/match.ts`) | Que el link-out exacto a TIDAL mande a un álbum equivocado: containment («Cars» reclamando «Cars 2», como pasó en recs), matching solo por título sin artista, sufijos «- Single»/«(Deluxe)» rompiendo la igualdad, y que un «(Alternative)» legítimo se colapse | `scripts/check-album-match.ts` |
 | `pnpm tsx scripts/check-series-status.ts` | manual (correr al tocar `catalog/series-status.ts`) | Que el pill de serie mienta: un `Ended` con `in_production` viejo en true leyéndose como "En emisión", un `Planned` con 0 temporadas pintando "0 temporadas", un `raw` de `/search/tv` sin marcador contando como "ya enriquecido" (y el pill quedándose vacío para siempre), o una serie terminada re-pegándole a TMDB cada semana | `scripts/check-series-status.ts` |
 | `pnpm tsx scripts/check-first-run.ts` | manual (correr al tocar `first-run-coach.ts` o lo que el onboarding ESCRIBE) | Que el coach de primer uso vuelva a morir en silencio: una cuenta recién salida del onboarding v2 (3 títulos, todos `obsessed`, nada juzgado) TIENE que ver las tres notas (v1 no las veía y nadie lo notó dos semanas); que la obsesión sola cuente como "ya reaccionó" (v2 la planta); que la nota de Backlogs mienta con biblioteca vacía o títulos no amados | `scripts/check-first-run.ts` |
+| `pnpm tsx scripts/check-spring.ts` | manual (correr al tocar `src/lib/spring.ts` o `hooks/use-sheet-motion.ts`) | Que las hojas dejen de SENTIRSE bien sin ningún error de tipos: un spring con damping 1 que rebota al aparecer, un soltado que pierde la velocidad del dedo (costura entre arrastrar y animar), `onRest` disparando dos veces o tras `stop()` (= `onClose` doble / desmontar una hoja que el usuario re-agarró), la proyección cambiada a `v²/2a`, o un dedo que pausó antes de soltar leyéndose como flick | `scripts/check-spring.ts` |
 
 ## Comandos
 
@@ -20,6 +21,7 @@ concreto que ya ocurrió, no describir lo que el test hace.
 - `pnpm tsx scripts/check-album-match.ts` — asserts del matcher de álbumes (puro, sin DB ni red); sale 1 al primer fallo.
 - `pnpm tsx scripts/check-series-status.ts` — asserts del mapeo status TMDB → pill de serie + staleness (puro, sin DB ni red); sale 1 al primer fallo.
 - `pnpm tsx scripts/check-first-run.ts` — asserts de `firstRunCoach` (puro, sin DB ni red); sale 1 al primer fallo.
+- `pnpm tsx scripts/check-spring.ts` — asserts de la física de movimiento (spring/proyección/rubber-band/velocidad de soltado; puro, reloj de frames falso); sale 1 al primer fallo.
 - `pnpm eval:recos` — corre el harness de evaluación de recomendaciones
   (`scripts/eval-crossmedia.ts`); mide calidad de recos, **no** es una suite de tests.
 
@@ -48,3 +50,10 @@ check, la entrada se mueve a la tabla de arriba.
   cuenta QA en local (OTP en el log del dev server), pasar el onboarding y confirmar que las tres notas
   aparecen y se levantan al agregar/completar/juzgar. Origen:
   `learnings/2026-09-16-tutorial-derivado-de-datos-muere-si-onboarding-planta-datos.md`.
+- **Gestos de las hojas — la mitad de NAVEGADOR.** `check-spring.ts` cubre la física, pero no la cascada
+  (una clase con `@keyframes … both` pisando el `transform` del gesto) ni `touch-action` (el navegador
+  reclamando el pan y cancelando el pointer stream), que solo fallan con un dedo real. Verificación manual
+  en un teléfono al tocar `use-sheet-motion.ts`, `sheet.tsx` o `search-sheet.tsx`: arrastrar lento y soltar
+  (regresa), flick (se va), arrastrar hacia arriba (resiste), agarrar a media salida (sigue al dedo), y que
+  una hoja con contenido que desborda siga scrolleando. Origen:
+  `learnings/2026-09-17-hojas-con-gesto-css-keyframes-y-touch-action.md`.

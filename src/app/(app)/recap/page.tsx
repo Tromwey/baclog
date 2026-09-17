@@ -35,7 +35,7 @@ export default async function RecapPage() {
           </p>
           <Link
             href="/descubrir"
-            className="mt-4 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg"
+            className="mt-4 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg bl-press active:bg-accent-press"
           >
             Buscar algo que agregar
           </Link>

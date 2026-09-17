@@ -73,7 +73,7 @@ export function SpoilerBody({
   return (
     <button
       onClick={() => setRevealed(true)}
-      className={`${className} relative block w-full text-left`}
+      className={`${className} relative block w-full text-left transition-opacity active:opacity-70`}
     >
       <span className="block select-none text-[15px] leading-[1.5] text-text opacity-40 blur-[6px] transition-[filter,opacity] duration-[220ms] ease-[var(--ease-out)]">
         {body}
@@ -133,7 +133,7 @@ export function ReviewCard({
           <button
             onClick={onMenu}
             aria-label={menuLabel ?? "Opciones"}
-            className="-mr-2 flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-text-3"
+            className="-mr-2 flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-text-3 bl-press-sm"
           >
             {DOTS}
           </button>

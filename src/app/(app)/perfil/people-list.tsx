@@ -69,7 +69,7 @@ export function PeopleList({
 export function PersonRowView({ p }: { p: PersonRow }) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 ${
+      className={`flex items-center gap-3 rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 transition-colors has-[a:active]:bg-surface-3 ${
         p.isPrivate ? "opacity-55" : ""
       }`}
     >

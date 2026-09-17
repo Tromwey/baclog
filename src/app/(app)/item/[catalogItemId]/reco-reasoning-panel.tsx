@@ -46,7 +46,7 @@ export function RecoProvenance({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5 text-left"
+        className="flex w-full items-center gap-2.5 rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5 text-left transition-colors active:bg-white/[0.12]"
       >
         <FillIcon d={SPARKLE_PATH} size={12} className="flex-none text-accent" />
         <span className="min-w-0 truncate font-mono text-[10.5px] uppercase tracking-[0.1em] text-text">

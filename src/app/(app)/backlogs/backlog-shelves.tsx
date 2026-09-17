@@ -9,6 +9,7 @@ import { plural } from "@/lib/plural";
 import type { MediaType } from "@/modules/catalog/types";
 import { isUpcoming, shortWait } from "@/modules/catalog/release";
 import type { Shelf } from "@/modules/backlog/shelves";
+import { setZoomOrigin } from "./zoom-origin";
 
 /**
  * The Backlogs list (Revamp UI screen 02, 2026-09-03): the kind filter, the
@@ -126,7 +127,9 @@ function ShelfArticle({
 
       <Link
         href={`/backlogs/${shelf.id}`}
-        className="relative flex items-baseline gap-2.5 px-5 text-text"
+        // The detail overlay blooms from where this was tapped (zoom-origin.ts).
+        onClick={(e) => setZoomOrigin(e.clientX, e.clientY)}
+        className="relative flex items-baseline gap-2.5 px-5 text-text transition-opacity active:opacity-70"
       >
         <span className="min-w-0 truncate font-serif text-[28px] italic leading-[1.05]">
           {shelf.name}
@@ -145,7 +148,7 @@ function ShelfArticle({
                 key={c.backlogItemId}
                 href={`/item/${c.catalogItemId}`}
                 aria-label={c.title}
-                className="flex-none"
+                className="flex-none bl-press-lg"
               >
                 <CoverTile
                   posterUrl={c.posterUrl}

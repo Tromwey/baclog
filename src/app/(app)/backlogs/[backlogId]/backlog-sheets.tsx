@@ -15,7 +15,7 @@ import {
 } from "@/app/actions/backlog-actions";
 import { VisibilitySegments } from "@/components/backlog-visibility-segments";
 import { PUBLIC_PATH } from "@/components/glyph-paths";
-import { Sheet, StrokeIcon, glassPillClass } from "@/components/ui";
+import { Sheet, SheetClose, StrokeIcon, glassPillClass } from "@/components/ui";
 
 /**
  * The backlog detail's controls (Revamp UI screen 03, 2026-09-03) — what used
@@ -113,7 +113,7 @@ export function VisibilityPill() {
 }
 
 const ROW =
-  "flex w-full items-center justify-between rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5 text-left text-[14px] font-semibold transition-colors hover:bg-white/[0.12]";
+  "flex w-full items-center justify-between rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5 text-left text-[14px] font-semibold transition-colors hover:bg-white/[0.12] active:bg-white/[0.14]";
 
 /** The settings row: "Visibilidad" + the state, in accent when public. */
 export function VisibilityRow() {
@@ -167,7 +167,7 @@ export function EditBacklogTrigger({
           setVibe(currentVibe ?? "");
           setOpen(true);
         }}
-        className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3 transition-colors hover:text-text"
+        className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3 transition-[color,opacity] hover:text-text active:opacity-60"
       >
         editar
       </button>
@@ -202,7 +202,7 @@ export function EditBacklogTrigger({
             <button
               type="submit"
               disabled={pending || !name.trim()}
-              className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg transition-transform active:scale-[0.98] disabled:opacity-40"
+              className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
             >
               {pending ? "Guardando…" : "Guardar"}
             </button>
@@ -237,17 +237,13 @@ export function DeleteBacklogRow({ backlogId }: { backlogId: string }) {
                 type="button"
                 disabled={pending}
                 onClick={() => startTransition(() => deleteBacklogAction(backlogId))}
-                className="flex-1 rounded-full bg-hot py-3.5 font-semibold text-text disabled:opacity-40"
+                className="flex-1 rounded-full bg-hot py-3.5 font-semibold text-text bl-press disabled:opacity-40"
               >
                 {pending ? "Eliminando…" : "Sí, eliminar"}
               </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-full bg-white/5 px-5 py-3.5 font-semibold text-text"
-              >
+              <SheetClose className="rounded-full bg-white/5 px-5 py-3.5 font-semibold text-text bl-press">
                 Cancelar
-              </button>
+              </SheetClose>
             </div>
           </div>
         </Sheet>

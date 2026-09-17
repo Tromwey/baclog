@@ -103,11 +103,11 @@ export function ItemShareMenu({
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)}>
             <div
               onClick={(e) => e.stopPropagation()}
-              className="bl-rise bl-dock-glass absolute right-4 top-[calc(72px+env(safe-area-inset-top))] w-52 overflow-hidden rounded-[20px] py-1.5 text-sm shadow-[var(--shadow-glass)]"
+              className="bl-pop bl-dock-glass absolute right-4 top-[calc(72px+env(safe-area-inset-top))] w-52 origin-top-right overflow-hidden rounded-[20px] py-1.5 text-sm shadow-[var(--shadow-glass)]"
             >
               <button
                 onClick={onLink}
-                className={`block w-full px-4 py-2.5 text-left hover:bg-white/5 ${
+                className={`block w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5 active:bg-white/[0.08] ${
                   publicUrl ? "" : "text-text-3"
                 }`}
               >
@@ -116,7 +116,7 @@ export function ItemShareMenu({
               <Link
                 href={`/item/${itemId}/card`}
                 onClick={() => setOpen(false)}
-                className="block w-full px-4 py-2.5 text-left hover:bg-white/5"
+                className="block w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5 active:bg-white/[0.08]"
               >
                 Compartir tarjeta
               </Link>

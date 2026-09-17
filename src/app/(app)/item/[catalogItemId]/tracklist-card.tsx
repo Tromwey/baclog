@@ -42,7 +42,7 @@ export function TracklistCard({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 text-left"
+        className="flex w-full items-center gap-3 text-left transition-opacity active:opacity-70"
       >
         <span className="flex flex-1 flex-col gap-[2px]">
           <span className="text-[14px] font-semibold text-text">Tracklist</span>

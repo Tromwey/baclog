@@ -87,14 +87,14 @@ export function PerfilScreen({
               <Link
                 href={publicUrl}
                 title="Ver tu perfil público"
-                className="transition-colors hover:text-text"
+                className="transition-[color,opacity] hover:text-text active:opacity-60"
               >
                 @{username}
               </Link>
             ) : username ? (
               `@${username}`
             ) : (
-              <Link href="/settings" className="transition-colors hover:text-text">
+              <Link href="/settings" className="transition-[color,opacity] hover:text-text active:opacity-60">
                 reclama tu @handle
               </Link>
             )}
@@ -105,10 +105,10 @@ export function PerfilScreen({
           {/* F3.10 — counts here; the LISTS are behind the links and only
               ever rendered for you (counts public, lists private). */}
           <div className="mt-4 flex gap-[18px] text-[13px] text-text-2">
-            <Link href="/perfil/seguidores" className="transition-colors hover:text-text">
+            <Link href="/perfil/seguidores" className="transition-[color,opacity] hover:text-text active:opacity-60">
               <b className="font-semibold text-text">{followCounts.followers}</b> seguidores
             </Link>
-            <Link href="/perfil/siguiendo" className="transition-colors hover:text-text">
+            <Link href="/perfil/siguiendo" className="transition-[color,opacity] hover:text-text active:opacity-60">
               <b className="font-semibold text-text">{followCounts.following}</b> siguiendo
             </Link>
           </div>
@@ -137,7 +137,7 @@ export function PerfilScreen({
 }
 
 const CARD =
-  "absolute flex h-[170px] w-32 flex-col gap-1.5 rounded-[12px] p-2.5 shadow-[0_12px_30px_rgba(0,0,0,.5)] transition-transform active:scale-[0.98]";
+  "absolute flex h-[170px] w-32 flex-col gap-1.5 rounded-[12px] p-2.5 shadow-[0_12px_30px_rgba(0,0,0,.5)] bl-press-lg";
 const CARD_LABEL = "font-mono text-[7px] tracking-[0.08em] text-text-3";
 const CARD_TITLE = "font-serif text-[15px] italic leading-[1.1] text-text";
 

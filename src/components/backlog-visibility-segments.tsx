@@ -62,7 +62,7 @@ export function VisibilitySegments({
           key={s.id}
           onClick={() => set(s.id)}
           aria-pressed={current === s.id}
-          className={`rounded-full px-2 py-[6px] font-mono text-[8.5px] uppercase tracking-[0.06em] transition-colors ${
+          className={`rounded-full px-2 py-[6px] font-mono text-[8.5px] uppercase tracking-[0.06em] transition-colors active:bg-white/[0.12] ${
             current === s.id
               ? "bg-accent-soft text-accent"
               : "text-text-3 hover:text-text-2"

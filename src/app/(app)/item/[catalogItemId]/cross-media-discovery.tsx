@@ -341,7 +341,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         <button
           aria-label="Descartar"
           onClick={props.onDismiss ?? dismiss}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-lg text-text-2 transition-colors hover:bg-surface-3 disabled:opacity-40"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-lg text-text-2 bl-press-sm hover:bg-surface-3 disabled:opacity-40"
           disabled={busy}
         >
           ×
@@ -349,8 +349,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         <button
           onClick={accept}
           disabled={busy || accepted}
-          className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition-all disabled:opacity-70 ${
-            accepted ? "bg-accent/90 text-bg" : "bg-accent text-bg active:scale-[0.97]"
+          className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full font-semibold bl-press disabled:opacity-70 ${
+            accepted ? "bg-accent/90 text-bg" : "bg-accent text-bg active:bg-accent-press"
           }`}
         >
           {accepted ? "✓ Añadido" : "＋ Añadir"}
@@ -358,7 +358,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         <button
           aria-label="Compartir"
           onClick={share}
-          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-surface-2 px-4 font-semibold text-text transition-colors hover:bg-surface-3 disabled:opacity-40"
+          className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-surface-2 px-4 font-semibold text-text bl-press hover:bg-surface-3 disabled:opacity-40"
           disabled={busy}
         >
           ↗ Compartir
@@ -368,7 +368,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       {dismissed && (
         <p className="mt-3.5 text-center font-mono text-[11px] tracking-[0.08em] text-text-3">
           DESCARTADO ·{" "}
-          <button onClick={reset} className="text-accent">
+          <button onClick={reset} className="text-accent transition-opacity active:opacity-60">
             DESHACER
           </button>
         </p>
@@ -390,7 +390,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
           </span>
           <button
             onClick={openSheet}
-            className="font-mono text-[11px] tracking-[0.08em] text-accent"
+            className="font-mono text-[11px] tracking-[0.08em] text-accent transition-opacity active:opacity-60"
           >
             CAMBIAR
           </button>
@@ -408,7 +408,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
           </span>
           <button
             onClick={() => setShareToast(false)}
-            className="font-mono text-[11px] tracking-[0.08em] text-text-2"
+            className="font-mono text-[11px] tracking-[0.08em] text-text-2 transition-opacity active:opacity-60"
           >
             OK
           </button>
@@ -457,7 +457,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                 <button
                   onClick={createBacklog}
                   disabled={busy || !newName.trim()}
-                  className="shrink-0 rounded-xl bg-accent px-4 font-semibold text-bg disabled:opacity-40"
+                  className="shrink-0 rounded-xl bg-accent px-4 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
                 >
                   Crear
                 </button>
@@ -465,7 +465,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             ) : (
               <button
                 onClick={() => setCreating(true)}
-                className="mt-4 flex w-full items-center gap-2 rounded-xl bg-accent-soft px-3.5 py-3.5 font-semibold text-accent"
+                className="mt-4 flex w-full items-center gap-2 rounded-xl bg-accent-soft px-3.5 py-3.5 font-semibold text-accent bl-press"
               >
                 <span className="text-xl leading-none">＋</span> Nuevo backlog
               </button>
@@ -485,7 +485,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                 <button
                   key={b.id}
                   onClick={() => setSel(b.id)}
-                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors active:bg-white/[0.12] ${
                     sel === b.id ? "bg-accent-soft" : "bg-surface-2 hover:bg-surface-3"
                   }`}
                 >
@@ -508,7 +508,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             <button
               onClick={applySheet}
               disabled={busy || !sel}
-              className="mt-5 w-full rounded-full bg-accent py-3.5 font-semibold text-bg shadow-[0_0_26px_var(--accent-soft)] disabled:opacity-40"
+              className="mt-5 w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
             >
               Listo — añadir
             </button>

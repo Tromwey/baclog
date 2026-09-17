@@ -212,7 +212,7 @@ export function PicksStep({
                   aria-pressed={isPicked}
                   aria-label={item.title}
                   onClick={() => toggle(item)}
-                  className={`relative block w-full rounded-[14px] outline outline-2 outline-offset-2 transition-[outline-color] duration-[var(--dur-fast)] ${
+                  className={`relative block w-full rounded-[14px] outline outline-2 outline-offset-2 transition-[outline-color,scale] duration-[var(--dur-fast)] active:scale-[0.97] ${
                     isPicked ? "outline-accent" : "outline-transparent"
                   }`}
                 >

@@ -51,7 +51,7 @@ export function Synopsis({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="self-start font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3 transition-colors hover:text-text-2"
+          className="self-start font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
         >
           {expanded ? "Leer menos" : "Leer más"}
         </button>

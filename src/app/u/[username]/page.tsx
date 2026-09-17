@@ -204,7 +204,7 @@ export default async function PublicProfilePage({
               <Link
                 key={b.id}
                 href={`/u/${profile.username}/${b.id}`}
-                className="flex items-center gap-3.5"
+                className="flex items-center gap-3.5 transition-opacity active:opacity-70"
               >
                 <span className="flex pl-3" aria-hidden>
                   {b.covers.map((c, i) => (
@@ -269,7 +269,7 @@ export default async function PublicProfilePage({
           <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
             <Link
               href="/login"
-              className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg transition-all active:scale-[0.98] active:bg-accent-press"
+              className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
             >
               Regístrate para seguirle →
             </Link>
