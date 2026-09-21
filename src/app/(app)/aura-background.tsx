@@ -22,7 +22,13 @@ export function AuraBackground({ colors }: { colors: string[] }) {
   // "double aura" behind the item hero). The backdrop belongs to the dock
   // destinations (/backlogs list, /descubrir, /perfil) and other chrome-level
   // screens only.
+  //
+  // /feed joined them once its cards became full-bleed heroes with their own
+  // palette glow and tone rising into the header (Feed v3 re-sync,
+  // 2026-09-21): the ADN aura sat behind that and tinted the header twice.
+  // Only the feed itself — /feed/gente is a plain list and keeps the aura.
   const hasOwnHero =
+    pathname === "/feed" ||
     pathname.startsWith("/item/") ||
     (pathname.startsWith("/backlogs/") && pathname !== "/backlogs");
   if (hasOwnHero) return null;

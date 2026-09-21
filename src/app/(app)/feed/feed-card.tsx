@@ -384,23 +384,30 @@ function Hero({
   const toneTop = hx[0] ?? "#0b0b0d";
   const toneEdge = toneEdgeOf(hx);
 
+  // The frame's mask stops are PIXELS, tuned on a 3/4 hero. A square album
+  // cover is a quarter shorter, so the same 120px fade-in plus 140px tail ate
+  // most of its art and a light palette read as a washed band. Scale the
+  // stops by the aspect so every hero loses the same PROPORTION of its art
+  // instead of the same number of pixels.
+  const px = (n: number) => `${Math.round(n * (event.mediaType === "album" ? 0.75 : 1))}px`;
+
   const bandMask = !hasNext
-    ? "linear-gradient(transparent, #000 96px)"
+    ? `linear-gradient(transparent, #000 ${px(96)})`
     : pair
-      ? "linear-gradient(transparent, #000 96px, #000 calc(100% - 160px), transparent 100%)"
-      : "linear-gradient(transparent, #000 96px, #000 calc(100% - 120px), rgba(0,0,0,.5) calc(100% - 60px), transparent 100%)";
+      ? `linear-gradient(transparent, #000 ${px(96)}, #000 calc(100% - ${px(160)}), transparent 100%)`
+      : `linear-gradient(transparent, #000 ${px(96)}, #000 calc(100% - ${px(120)}), rgba(0,0,0,.5) calc(100% - ${px(60)}), transparent 100%)`;
 
   const artMask =
     (ctx.followsHero
-      ? "linear-gradient(180deg, transparent 0px, #000 200px"
+      ? `linear-gradient(180deg, transparent 0px, #000 ${px(200)}`
       : ctx.followsOther
-        ? "linear-gradient(180deg, transparent 0px, #000 120px"
+        ? `linear-gradient(180deg, transparent 0px, #000 ${px(120)}`
         : "linear-gradient(180deg, #000 0px, #000 0px") +
     (!hasNext
       ? ", #000 100%)"
       : pair
-        ? ", #000 calc(100% - 160px), transparent 100%)"
-        : ", #000 calc(100% - 140px), rgba(0,0,0,.6) calc(100% - 70px), rgba(0,0,0,.2) calc(100% - 25px), transparent 100%)");
+        ? `, #000 calc(100% - ${px(160)}), transparent 100%)`
+        : `, #000 calc(100% - ${px(140)}), rgba(0,0,0,.6) calc(100% - ${px(70)}), rgba(0,0,0,.2) calc(100% - ${px(25)}), transparent 100%)`);
 
   return (
     <article className="relative isolate">
