@@ -177,13 +177,14 @@ export default async function PublicItemPage({
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[150px] text-text">
       {/* Hero: the title's own two hexes as the page glow (the mock's
-          `glow()`: 120°, .5, blur 90) hanging off the top edge. */}
+          `glow()`: 120°, .6, blur 90, fading out at 72%) off the top edge. */}
       <div className="relative flex flex-col gap-[22px] px-6 pt-[calc(12px+env(safe-area-inset-top))]">
         <PaletteGlow
           hexes={palette.slice(0, 2)}
           angle={120}
-          opacity={0.5}
+          opacity={0.6}
           blur={90}
+          maskStop={72}
           className="-inset-x-[60px] -top-[120px] h-[460px]"
         />
         <div className="relative flex items-center justify-between">
@@ -284,6 +285,7 @@ export default async function PublicItemPage({
                       ? restArrivesLabel(releaseDate, now)
                       : undefined
                   }
+                  hideHeader
                 />
               </TracklistCard>
             )}

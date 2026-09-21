@@ -30,6 +30,13 @@ export function coverAspect(mediaType: MediaType): string {
   return mediaType === "album" ? "aspect-square" : "aspect-[3/4]";
 }
 
+/**
+ * The mock's default cover shadow (the 104px and grid tiles). Bigger surfaces
+ * get their own recipe — pass `shadow` rather than stacking a second
+ * `shadow-[…]` through `className`: both are arbitrary utilities on the same
+ * property, so which one wins is decided by Tailwind's output order, not by
+ * the order of the class string.
+ */
 export const COVER_SHADOW =
   "shadow-[0_16px_36px_-12px_rgba(0,0,0,.7)]";
 
@@ -43,6 +50,7 @@ export function CoverTile({
   title,
   done = false,
   radius = "rounded-[12px]",
+  shadow = COVER_SHADOW,
   className = "",
   children,
 }: {
@@ -58,13 +66,15 @@ export function CoverTile({
   title?: string;
   done?: boolean;
   radius?: string;
+  /** Override the default cover shadow (see COVER_SHADOW). */
+  shadow?: string;
   className?: string;
   /** Anything else pinned over the art (a grip, a check badge). */
   children?: ReactNode;
 }) {
   return (
     <span
-      className={`relative block flex-none overflow-hidden ${radius} ${COVER_SHADOW} ${className}`}
+      className={`relative block flex-none overflow-hidden ${radius} ${shadow} ${className}`}
       style={{
         ...(posterUrl ? undefined : posterFallbackStyle(paletteHex)),
         opacity: done ? 0.55 : undefined,

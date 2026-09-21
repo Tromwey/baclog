@@ -121,7 +121,13 @@ function SectionLabel({ eyebrow, title }: { eyebrow: string; title: string }) {
 }
 
 function ObsessionRailView({ rail }: { rail: ObsessionRail }) {
-  const glow = mixHexes(rail.items.map((i) => i.paletteHex));
+  // The mock lights this rail with the OBSESSION first, then its recos
+  // (`glowMix(['brat', 'guess', 'goodluck', 'gnx'])`) — the seed is the reason
+  // the rail exists, so it owns the dominant hex.
+  const glow = mixHexes([
+    rail.seed.paletteHex,
+    ...rail.items.map((i) => i.paletteHex),
+  ]);
   return (
     <article className="relative flex flex-col gap-3 pt-[34px]">
       <PaletteGlow

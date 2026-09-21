@@ -25,6 +25,14 @@ export const SPARKLE_PATH =
 /** ✓ "completado" — STROKE, accent, width 3.4, round caps. */
 export const CHECK_PATH = "M4.5 12.5l4.8 4.8L19.5 7";
 
+/**
+ * ✓ inside a filled badge — STROKE, width 3.2, drawn in `--bg` on an accent
+ * circle. The mock keeps this SEPARATE from CHECK_PATH: it is tighter, so it
+ * reads at the 12–14px a badge gives it. Use it for the onboarding pick badge
+ * and the search sheet's "+"→"✓"; CHECK_PATH stays the state glyph.
+ */
+export const BADGE_CHECK_PATH = "M5 12.5l4.5 4.5L19 7";
+
 /** 👍 "me gustó" — FILL, radar. Flip with scaleY(-1) in text-3 for "no me gustó". */
 export const LIKE_PATH =
   "M7.5 10.5v9.5H4.2a1.2 1.2 0 01-1.2-1.2v-7.1a1.2 1.2 0 011.2-1.2h3.3zm2 9.5h7.6a2.2 2.2 0 002.16-1.78l1.24-6.2A2.2 2.2 0 0018.34 9.4H14.2l.7-3.3a2 2 0 00-3.6-1.5L9.5 8.6v11.4z";

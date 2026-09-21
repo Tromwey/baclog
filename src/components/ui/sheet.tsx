@@ -201,7 +201,7 @@ function SheetBody({
             aria-hidden
             className="absolute inset-x-0 top-0 z-10 flex h-[22px] justify-center pt-[9px]"
           >
-            <span className="h-1 w-9 rounded-full bg-white/20" />
+            <span className="h-1 w-[38px] rounded-full bg-white/20" />
           </div>
         )}
         <div

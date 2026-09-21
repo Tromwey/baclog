@@ -231,13 +231,20 @@ function DiscoverIcon() {
   );
 }
 
-/** F3.10 — disco ADN + dos barras: una persona y su actividad (design 1j). */
+/**
+ * F3.10 — disco ADN + dos barras: una persona y su actividad.
+ *
+ * Geometry from `Revamp UI.dc.html` (`ICON.feed`): the bars start at x=16, so
+ * they clear the disc by 3.8u. The older Feed v3 frame draws the same icon
+ * with the bars starting at 14.4 — the two mocks disagree, and the Revamp doc
+ * wins because it is the one that redraws the dock on screens 02/04/09.
+ */
 function FeedIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="8" cy="12" r="4.2" />
-      <rect x="14.4" y="7.6" width="5.6" height="3.2" rx="1.6" />
-      <rect x="14.4" y="13.2" width="3.8" height="3.2" rx="1.6" />
+      <rect x="16" y="7.6" width="4" height="3.2" rx="1.6" />
+      <rect x="16" y="13.2" width="2.2" height="3.2" rx="1.6" />
     </svg>
   );
 }

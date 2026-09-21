@@ -20,9 +20,11 @@ function fmt(ms: number | null): string {
  * survive (01, 04, 09) — the gaps say what's missing better than a muted row
  * would, and the count of what's still coming goes in the closing divider.
  *
- * `hideHeader` is for the in-app card (Revamp UI 06e), which already prints
- * "Tracklist · 15 canciones · 41 min" in its own header; the public item page
- * keeps the heading.
+ * `hideHeader` is for the card wrapper (Revamp UI 06e and its public twin
+ * 06f), which already prints "Tracklist · 15 canciones · 41 min" in its own
+ * header — printing "15 canciones" again inside it just repeats the card. It
+ * suppresses ONLY that plain count: the partial-release header ("Ya puedes
+ * oír · 3 de 12") stays, because no card header can express it.
  */
 export function Tracklist({
   tracks,
@@ -44,21 +46,20 @@ export function Tracklist({
 
   return (
     <section className={hideHeader ? undefined : "mt-7"}>
-      {!hideHeader &&
-        (total ? (
-          <div className="mb-2.5 flex items-baseline justify-between">
-            <h2 className="font-serif text-[22px] italic leading-none text-text">
-              Ya puedes oír
-            </h2>
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-              {tracks.length} de {total}
-            </span>
-          </div>
-        ) : (
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-            {tracks.length} canciones
+      {total ? (
+        <div className="mb-2.5 flex items-baseline justify-between">
+          <h2 className="font-serif text-[22px] italic leading-none text-text">
+            Ya puedes oír
           </h2>
-        ))}
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+            {tracks.length} de {total}
+          </span>
+        </div>
+      ) : hideHeader ? null : (
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+          {tracks.length} canciones
+        </h2>
+      )}
 
       <ol
         className={

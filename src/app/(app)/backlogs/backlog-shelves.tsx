@@ -123,7 +123,7 @@ function ShelfArticle({
 
   return (
     <article className="relative flex flex-col gap-3">
-      <PaletteGlow hexes={glow} angle={110} opacity={0.35} className="inset-x-0 -inset-y-2.5" />
+      <PaletteGlow hexes={glow} angle={110} opacity={0.35} className="inset-x-0 -inset-y-10" />
 
       <Link
         href={`/backlogs/${shelf.id}`}

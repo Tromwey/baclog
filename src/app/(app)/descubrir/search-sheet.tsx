@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { PaletteGlow, Segmented, StrokeIcon, type Segment } from "@/components/ui";
 import { CoverTile, coverAspect } from "@/components/cover-tile";
-import { PLUS_PATH } from "@/components/glyph-paths";
+import { BADGE_CHECK_PATH, PLUS_PATH } from "@/components/glyph-paths";
 import {
   addItemAction,
   removeMembershipAction,
@@ -35,9 +35,6 @@ import {
 } from "./first-item-sheet";
 
 type Target = { id: string; name: string; paletteHex: string[] };
-
-/** The mock's ✓ on an added row (14px, stroke 2.6). */
-const ADDED_PATH = "M5 12.5l4.5 4.5L19 7";
 
 const TABS: { key: SearchTab; label: string }[] = [
   { key: "all", label: "Todo" },
@@ -486,6 +483,7 @@ export function SearchSheet({
                         posterUrl={r.posterUrl}
                         paletteHex={r.paletteHex}
                         radius="rounded-[9px]"
+                        shadow="shadow-[0_12px_26px_-10px_rgba(0,0,0,.7)]"
                         className={`w-12 ${coverAspect(r.mediaType)}`}
                       />
                       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
@@ -512,7 +510,7 @@ export function SearchSheet({
                       }`}
                     >
                       <StrokeIcon
-                        d={isAdded ? ADDED_PATH : PLUS_PATH}
+                        d={isAdded ? BADGE_CHECK_PATH : PLUS_PATH}
                         size={14}
                         strokeWidth={2.6}
                       />

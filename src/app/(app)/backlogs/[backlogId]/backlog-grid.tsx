@@ -174,7 +174,11 @@ export function BacklogGrid({
                     paletteHex={it.paletteHex}
                     alt={`Portada de ${it.title}`}
                     wait={wait}
-                    state={coverState(it)}
+                    // While selecting, the only question the tile answers is
+                    // "picked or not": its own state glyph would sit in the
+                    // corner as a second lime check next to the badge, and a
+                    // completed+selected tile would show both at once.
+                    state={selecting ? null : coverState(it)}
                     done={selecting ? !isSelected : isDone}
                     className="aspect-[3/4] w-full"
                   >

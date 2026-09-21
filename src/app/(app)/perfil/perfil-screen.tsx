@@ -127,7 +127,6 @@ export function PerfilScreen({
           items={obsessions}
           height="h-[170px]"
           itemHref={(id) => `/item/${id}`}
-          className="pt-[30px]"
         />
 
         <CardsFan palette={palette} cards={cards} now={now} />

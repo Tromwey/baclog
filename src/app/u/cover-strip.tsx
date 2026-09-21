@@ -47,7 +47,8 @@ export function CoverStrip({
               alt={`Portada de ${it.title}`}
               title={it.title}
               radius="rounded-[14px]"
-              className={`${height} ${coverAspect(it.mediaType)} shadow-[0_18px_40px_-12px_rgba(0,0,0,.7)]`}
+              shadow="shadow-[0_18px_40px_-12px_rgba(0,0,0,.7)]"
+              className={`${height} ${coverAspect(it.mediaType)}`}
             />
           </Link>
         ))}
