@@ -4,11 +4,12 @@ import { Fragment, useState, useTransition } from "react";
 import { loadMoreFeedAction } from "@/app/actions/social-actions";
 import { LoadMoreButton } from "@/components/ui";
 import type { FeedCard, FeedSuggestion } from "@/modules/social/types";
-import { FeedCardView } from "./feed-card";
+import { FeedCardView, isGemCard } from "./feed-card";
 import { SuggestCard } from "./suggest-card";
 
 /**
- * F3.10 — the populated feed, as CARDS (v3: surfaceless, 36px apart).
+ * F3.10 — the populated feed, as CARDS (v3: surfaceless, spaced by the
+ * frame's four-case rhythm rather than one flat gap — see the map below).
  * "Ver más" pages through the server action with the keyset cursor the
  * server re-encoded from the last event the previous page consumed, so a
  * burst never repeats, and only splits when one run outgrows the whole chunk
@@ -63,17 +64,51 @@ export function FeedList({
     });
   }
 
+  // One flat run, suggestion included: the frame's rhythm is computed over
+  // whatever actually renders, and the suggestion takes part in it.
+  const rows: { key: string; isGem: boolean; card: FeedCard | null }[] = [];
+  cards.forEach((card, i) => {
+    if (i === slot && pinned) rows.push({ key: `s:${pinned.username}`, isGem: false, card: null });
+    rows.push({
+      key: card.kind === "burst" ? card.id : card.event.id,
+      isGem: isGemCard(card),
+      card,
+    });
+  });
+  if (slot === cards.length && pinned)
+    rows.push({ key: `s:${pinned.username}`, isGem: false, card: null });
+
   return (
-    <div className="flex flex-col gap-9 pt-1.5">
-      {cards.map((card, i) => (
-        <Fragment key={card.kind === "burst" ? card.id : card.event.id}>
-          {i === slot && pinned && <SuggestCard key={pinned.username} s={pinned} />}
-          <FeedCardView card={card} />
-        </Fragment>
-      ))}
-      {slot === cards.length && pinned && <SuggestCard key={pinned.username} s={pinned} />}
+    <div className="flex flex-col pt-1.5">
+      {rows.map((r, i) => {
+        const prev = i > 0 ? rows[i - 1] : null;
+        const next = i + 1 < rows.length ? rows[i + 1] : null;
+        // The frame's four cases: heroes breathe (72 between two of them,
+        // 56 before one), the card after a hero tucks in (28), everything
+        // else sits at 36. A single flat gap flattens the whole feed.
+        const gap = !prev ? 0 : prev.isGem && r.isGem ? 72 : prev.isGem ? 28 : r.isGem ? 56 : 36;
+        return (
+          <Fragment key={r.key}>
+            {gap > 0 && <div aria-hidden style={{ height: `${gap}px` }} />}
+            {r.card === null && pinned ? (
+              <SuggestCard key={pinned.username} s={pinned} />
+            ) : (
+              r.card && (
+                <FeedCardView
+                  card={r.card}
+                  ctx={{
+                    nextIsGem: next ? next.isGem : null,
+                    followsHero: !!prev && prev.isGem && r.isGem,
+                    followsOther: !!prev && !prev.isGem && r.isGem,
+                  }}
+                />
+              )
+            )}
+          </Fragment>
+        );
+      })}
       {cursor && (
-        <div className="flex justify-center px-5 pt-1">
+        <div className="flex justify-center px-5 pt-9">
           <LoadMoreButton
             onClick={loadMore}
             loading={loading}
