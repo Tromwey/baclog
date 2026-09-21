@@ -5,4 +5,4 @@
  * page as a client reference, not a class list).
  */
 export const glassButtonClass =
-  "flex items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] text-[14px] font-semibold text-text transition-colors hover:bg-white/[0.12] active:scale-[0.98]";
+  "flex items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] text-[14px] font-semibold text-text bl-press hover:bg-white/[0.12]";

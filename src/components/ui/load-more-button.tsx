@@ -34,7 +34,7 @@ export function LoadMoreButton({
       type="button"
       onClick={onClick}
       disabled={loading}
-      className={`${VARIANT[variant]} font-mono text-[10.5px] uppercase tracking-[0.1em] transition-[opacity,background-color] disabled:opacity-50 ${className}`}
+      className={`${VARIANT[variant]} font-mono text-[10.5px] uppercase tracking-[0.1em] bl-press disabled:opacity-50 ${className}`}
     >
       {loading ? "Cargando…" : label}
     </button>

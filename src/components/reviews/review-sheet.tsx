@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Sheet } from "@/components/ui";
+import { Sheet, SheetClose } from "@/components/ui";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 
 /**
@@ -113,7 +113,7 @@ export function ReviewSheet({
             onClick={() => setHasSpoiler((v) => !v)}
             role="switch"
             aria-checked={hasSpoiler}
-            className="flex items-center gap-2.5"
+            className="flex items-center gap-2.5 transition-opacity active:opacity-70"
           >
             <span
               aria-hidden
@@ -150,19 +150,15 @@ export function ReviewSheet({
       )}
 
       <div className="mt-4 flex gap-[10px]">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-none rounded-full px-5 py-[13px] text-[14px] font-semibold text-text-2"
-        >
+        <SheetClose className="flex-none rounded-full px-5 py-[13px] text-[14px] font-semibold text-text-2 transition-opacity active:opacity-60">
           Cancelar
-        </button>
+        </SheetClose>
         <button
           type="button"
           onClick={() => onSave(body.trim(), hasSpoiler)}
           disabled={disabled}
-          className={`flex-1 rounded-full px-6 py-[13px] text-[14px] font-semibold text-bg transition-opacity ${
-            disabled ? "bg-surface-3 opacity-50" : "bg-accent"
+          className={`flex-1 rounded-full px-6 py-[13px] text-[14px] font-semibold text-bg bl-press ${
+            disabled ? "bg-surface-3 opacity-50" : "bg-accent active:bg-accent-press"
           }`}
         >
           {saving ? "…" : "Guardar"}

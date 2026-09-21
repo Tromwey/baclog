@@ -31,7 +31,7 @@ export default function CreditosPage() {
               href="https://www.themoviedb.org"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline"
+              className="underline transition-opacity active:opacity-60"
             >
               TMDB
             </a>
@@ -50,7 +50,7 @@ export default function CreditosPage() {
               href="https://www.justwatch.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline"
+              className="underline transition-opacity active:opacity-60"
             >
               JustWatch
             </a>
@@ -68,7 +68,7 @@ export default function CreditosPage() {
               href="https://music.apple.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline"
+              className="underline transition-opacity active:opacity-60"
             >
               Apple Music
             </a>

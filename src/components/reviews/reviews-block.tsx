@@ -159,7 +159,7 @@ export function ReviewsBlock({
         <button
           type="button"
           onClick={write}
-          className="flex w-full items-center justify-between gap-3 rounded-[18px] bg-[var(--glass-bg)] px-4 py-[15px] text-left"
+          className="flex w-full items-center justify-between gap-3 rounded-[18px] bg-[var(--glass-bg)] px-4 py-[15px] text-left transition-colors active:bg-white/[0.12]"
         >
           <span className="text-[15px] text-text-3">
             {total === 0 ? "Escribe la primera…" : "Escribe tu reseña…"}
@@ -187,7 +187,7 @@ export function ReviewsBlock({
                   setError(null);
                   setSheet("edit");
                 }}
-                className="text-accent"
+                className="text-accent transition-opacity active:opacity-60"
               >
                 Editarla
               </button>
@@ -217,7 +217,7 @@ export function ReviewsBlock({
             {!viewerIsPublic && (
               <p className="text-xs leading-[1.45] text-text-3">
                 Solo tú la ves.{" "}
-                <Link href="/settings" className="text-accent">
+                <Link href="/settings" className="text-accent transition-opacity active:opacity-60">
                   Hazte público en Ajustes
                 </Link>{" "}
                 y entra a la conversación.
@@ -250,7 +250,7 @@ export function ReviewsBlock({
                 type="button"
                 onClick={loadMore}
                 disabled={loading}
-                className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity disabled:opacity-50"
+                className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity active:opacity-60 disabled:opacity-50"
               >
                 {loading ? "Cargando…" : "Ver todas"}
               </button>
@@ -292,7 +292,7 @@ export function ReviewsBlock({
                 setError(null);
                 setSheet("edit");
               }}
-              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-text transition-colors hover:bg-surface-3"
+              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
             >
               Editar
             </button>
@@ -302,7 +302,7 @@ export function ReviewsBlock({
               type="button"
               onClick={remove}
               disabled={saving}
-              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-hot transition-colors hover:bg-surface-3"
+              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-hot transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
             >
               {armed ? "Toca de nuevo para eliminar" : "Eliminar"}
             </button>

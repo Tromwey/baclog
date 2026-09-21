@@ -73,7 +73,7 @@ export default async function BacklogsPage() {
       {coach.shelves && (
         <CoachNote className="mx-5 mt-[30px]">
           Empezaste con lo que te obsesiona — eso ya enciende{" "}
-          <Link href="/descubrir" className="text-text-2 underline underline-offset-2">
+          <Link href="/descubrir" className="text-text-2 underline underline-offset-2 transition-opacity active:opacity-60">
             Descubrir
           </Link>
           . Con el + de arriba agregas lo que quieres ver, oír o terminar.
@@ -128,13 +128,13 @@ function FirstUse({ name }: { name: string | null }) {
       </div>
 
       <div className="relative flex flex-col gap-2.5 px-5 pt-8">
-        <NewBacklogTrigger className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-[15px] text-[15px] font-semibold text-bg">
+        <NewBacklogTrigger className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-[15px] text-[15px] font-semibold text-bg bl-press active:bg-accent-press">
           <StrokeIcon d={PLUS_PATH} size={18} strokeWidth={2} />
           Crear tu primer backlog
         </NewBacklogTrigger>
         <Link
           href="/descubrir"
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-surface-2 py-3.5 text-[15px] font-semibold text-text"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-surface-2 py-3.5 text-[15px] font-semibold text-text bl-press"
         >
           <svg
             width="16"

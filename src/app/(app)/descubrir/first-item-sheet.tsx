@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { MEDIA_TYPE_LABEL, type MediaType } from "@/modules/catalog/types";
-import { Sheet } from "@/components/ui";
+import { Sheet, SheetClose } from "@/components/ui";
 
 export interface FirstItemCelebration {
   title: string;
@@ -116,16 +116,13 @@ export function FirstItemSheet({
         <div className="mt-6 flex flex-col gap-2.5">
           <button
             onClick={() => router.push(`/backlogs/${item.backlogId}`)}
-            className="flex items-center justify-center rounded-full bg-accent px-5 py-4 text-base font-semibold text-bg transition-transform active:scale-[0.98]"
+            className="flex items-center justify-center rounded-full bg-accent px-5 py-4 text-base font-semibold text-bg bl-press active:bg-accent-press"
           >
             <span className="truncate">Ver {item.backlogName}</span>
           </button>
-          <button
-            onClick={onDismiss}
-            className="flex items-center justify-center rounded-full bg-white/[0.06] px-5 py-3.5 text-[15px] font-medium text-text transition-colors hover:bg-white/[0.12]"
-          >
+          <SheetClose className="flex items-center justify-center rounded-full bg-white/[0.06] px-5 py-3.5 text-[15px] font-medium text-text bl-press hover:bg-white/[0.12]">
             Seguir agregando
-          </button>
+          </SheetClose>
         </div>
       </div>
     </Sheet>

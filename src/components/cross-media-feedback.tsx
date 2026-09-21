@@ -81,7 +81,7 @@ export function CrossMediaFeedback({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="self-start font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3"
+        className="self-start font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3 transition-opacity active:opacity-60"
       >
         {open ? "Ocultar ▴" : "¿Por qué te gustó? ▾"}
       </button>
@@ -106,7 +106,7 @@ export function CrossMediaFeedback({
             type="button"
             onClick={submit}
             disabled={pending || selectedReasons.length === 0}
-            className="rounded-full bg-accent px-3.5 py-[9px] text-[12px] font-semibold text-bg disabled:opacity-40"
+            className="rounded-full bg-accent px-3.5 py-[9px] text-[12px] font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
           >
             Enviar
           </button>

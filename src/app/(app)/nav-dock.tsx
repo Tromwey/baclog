@@ -105,7 +105,20 @@ export function NavDock() {
   // content-hugging: labels differ in width, so fractions won't do.
   const listRef = useRef<HTMLDivElement>(null);
   const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
-  const activeIndex = destinationIndex(pathname);
+  // The tap answers NOW: the pill and the lima glyph move on the press, not
+  // when the destination's server render lands (that wait read as a dead
+  // dock). `pending` is only believed while we're still on the route it was
+  // tapped from — once the pathname changes, the URL is the truth again, so
+  // a navigation that ends somewhere else (a redirect) self-corrects. Dropped
+  // during render (not in an effect) so coming BACK to that route later
+  // can't resurrect a stale tap.
+  const [pending, setPending] = useState<{ from: string; index: number } | null>(
+    null,
+  );
+  if (pending && pending.from !== pathname) setPending(null);
+  const routeIndex = destinationIndex(pathname);
+  const activeIndex =
+    pending && pending.from === pathname ? pending.index : routeIndex;
 
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -168,17 +181,20 @@ export function NavDock() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              onClick={() => {
+              onClick={(e) => {
                 // Carousel direction: which way the destinations are ordered.
-                const from = destinationIndex(pathname);
+                const from = routeIndex;
                 setNavDirection(from >= 0 && from !== i ? Math.sign(i - from) : 0);
+                // Modified clicks open elsewhere — this tab isn't going anywhere.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                setPending({ from: pathname, index: i });
               }}
               // 22px, not the 3-destination 28px: the fourth destination has
               // to fit a 390px viewport with the pill still content-hugging
               // (F3.10 design 1j — 349px wide, was 317). Below 390 (iPhone
               // SE1, page zoom) even 22px overflows a centered fixed pill, so
               // narrow viewports drop to 14px instead of clipping the ends.
-              className={`relative flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 transition-colors duration-300 min-[390px]:px-[22px] ${
+              className={`bl-press-sm relative flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 min-[390px]:px-[22px] ${
                 active ? "text-accent" : "text-text-3"
               }`}
             >
@@ -215,13 +231,20 @@ function DiscoverIcon() {
   );
 }
 
-/** F3.10 — disco ADN + dos barras: una persona y su actividad (design 1j). */
+/**
+ * F3.10 — disco ADN + dos barras: una persona y su actividad.
+ *
+ * Geometry from `Revamp UI.dc.html` (`ICON.feed`): the bars start at x=16, so
+ * they clear the disc by 3.8u. The older Feed v3 frame draws the same icon
+ * with the bars starting at 14.4 — the two mocks disagree, and the Revamp doc
+ * wins because it is the one that redraws the dock on screens 02/04/09.
+ */
 function FeedIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <circle cx="8" cy="12" r="4.2" />
-      <rect x="14.4" y="7.6" width="5.6" height="3.2" rx="1.6" />
-      <rect x="14.4" y="13.2" width="3.8" height="3.2" rx="1.6" />
+      <rect x="16" y="7.6" width="4" height="3.2" rx="1.6" />
+      <rect x="16" y="13.2" width="2.2" height="3.2" rx="1.6" />
     </svg>
   );
 }

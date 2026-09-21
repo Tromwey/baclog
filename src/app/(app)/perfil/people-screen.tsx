@@ -58,7 +58,7 @@ export async function PeopleScreen({
                 Todavía no sigues a nadie.{" "}
                 <Link
                   href="/feed/gente"
-                  className="text-text underline-offset-2 hover:underline"
+                  className="text-text underline-offset-2 transition-opacity hover:underline active:opacity-60"
                 >
                   Busca a alguien
                 </Link>{" "}
@@ -94,7 +94,7 @@ function Tab({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`flex-1 rounded-full py-[9px] text-center font-mono text-[10px] uppercase tracking-[0.1em] transition-colors ${
+      className={`flex-1 rounded-full py-[9px] text-center font-mono text-[10px] uppercase tracking-[0.1em] transition-colors active:bg-white/[0.12] ${
         active ? "bg-accent-soft text-accent" : "text-text-3 hover:text-text-2"
       }`}
     >

@@ -94,7 +94,7 @@ export function PeopleSearch({
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-surface-2 text-text-2 transition-colors hover:bg-surface-1"
+            className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-surface-2 text-text-2 bl-press-sm hover:bg-surface-1"
           >
             <X size={13} />
           </button>

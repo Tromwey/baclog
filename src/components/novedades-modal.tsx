@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sheet } from "@/components/ui/sheet";
+import { Sheet, SheetClose } from "@/components/ui/sheet";
 import {
   ANNOUNCEMENT_COPY,
   invitationCopy,
@@ -110,17 +110,13 @@ export function NovedadesModal({
         <button
           type="button"
           onClick={write}
-          className="mt-[18px] w-full rounded-full bg-accent px-6 py-[15px] text-base font-semibold text-bg transition-transform active:scale-[0.99]"
+          className="mt-[18px] w-full rounded-full bg-accent px-6 py-[15px] text-base font-semibold text-bg bl-press active:bg-accent-press"
         >
           {ANNOUNCEMENT_COPY.cta}
         </button>
-        <button
-          type="button"
-          onClick={spend}
-          className="mt-2 w-full rounded-full px-6 py-3 text-[15px] font-semibold text-text-2 transition-colors hover:text-text"
-        >
+        <SheetClose className="mt-2 w-full rounded-full px-6 py-3 text-[15px] font-semibold text-text-2 transition-[color,opacity] hover:text-text active:opacity-60">
           {ANNOUNCEMENT_COPY.close}
-        </button>
+        </SheetClose>
       </div>
     </Sheet>
   );

@@ -18,6 +18,13 @@ import type { ReactNode } from "react";
  * client component can drive `onSelect`. `scrollable` lets a long picker (the
  * "Agregar a" backlog row) run off the edge instead of squeezing.
  *
+ * A single-select, equal-width track (`value`, not `scrollable`) draws ONE
+ * indicator that SLIDES between segments, like the dock's pill — same look,
+ * same behavior. It needs no measuring (so this stays hook-free and
+ * server-safe): segments are `flex-1`, so the indicator's width and offset
+ * are pure `calc()` from the count, the padding and the gap. A CSS transition
+ * on `transform` retargets from wherever it is, so rapid taps never queue.
+ *
  * `value` lights ONE segment (a picker). `values` lights ANY number of them —
  * the item's reaction row is three independent fields (me gustó · obsesión ·
  * completo) drawn in one track, so several can be on at once; it then reads
@@ -54,24 +61,43 @@ export function Segmented({
 }) {
   const track =
     variant === "actions" ? "gap-1.5 p-1.5" : "gap-1 p-[5px]";
+  // Keep in sync with `track` — the indicator's geometry is derived from them.
+  const pad = variant === "actions" ? 6 : 5;
+  const gap = variant === "actions" ? 6 : 4;
   const seg =
     variant === "actions"
       ? "flex items-center justify-center gap-1.5 py-[11px]"
       : "py-[9px] text-center";
   const width = scrollable ? "flex-none px-4" : "flex-1 min-w-0";
   const multi = values !== undefined;
+  const sliding = !multi && !scrollable;
+  const activeIndex = sliding ? segments.findIndex((s) => s.key === value) : -1;
+  const n = segments.length;
   return (
     <div
       role={onSelect && !multi ? "tablist" : undefined}
       aria-label={ariaLabel}
-      className={`flex rounded-full bg-white/[0.07] ${track} ${
+      className={`relative flex rounded-full bg-white/[0.07] ${track} ${
         scrollable ? "bl-scroll overflow-x-auto" : ""
       } ${className}`}
     >
+      {activeIndex >= 0 && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute rounded-full bg-white/[0.08] transition-transform duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
+          style={{
+            top: pad,
+            bottom: pad,
+            left: pad,
+            width: `calc((100% - ${2 * pad + (n - 1) * gap}px) / ${n})`,
+            transform: `translateX(calc(${activeIndex} * (100% + ${gap}px)))`,
+          }}
+        />
+      )}
       {segments.map((s) => {
         const active = multi ? values.includes(s.key) : s.key === value;
-        const cls = `${seg} ${width} whitespace-nowrap rounded-full font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-[var(--dur-fast)] ${
-          active ? "bg-white/[0.08] text-text" : "text-text-3"
+        const cls = `${seg} ${width} relative whitespace-nowrap rounded-full font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-[var(--dur-fast)] active:bg-white/[0.12] ${
+          active ? `${sliding ? "" : "bg-white/[0.08] "}text-text` : "text-text-3"
         } ${s.className ?? ""}`;
         const body = (
           <>

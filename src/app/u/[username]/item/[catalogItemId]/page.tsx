@@ -83,7 +83,7 @@ const MUSIC_SERVICES = [
 const BAND_PAD = ["#26262c", "#1c1c21", "#141417"];
 
 const GLASS_BUTTON =
-  "flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] font-sans text-[14px] font-semibold text-text transition-colors hover:bg-white/[0.12]";
+  "flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] font-sans text-[14px] font-semibold text-text bl-press hover:bg-white/[0.12]";
 
 /**
  * Screens 06b/06d/06f (Revamp UI, 2026-09-03) — the anonymous-viewer landing
@@ -177,19 +177,20 @@ export default async function PublicItemPage({
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[150px] text-text">
       {/* Hero: the title's own two hexes as the page glow (the mock's
-          `glow()`: 120°, .5, blur 90) hanging off the top edge. */}
+          `glow()`: 120°, .6, blur 90, fading out at 72%) off the top edge. */}
       <div className="relative flex flex-col gap-[22px] px-6 pt-[calc(12px+env(safe-area-inset-top))]">
         <PaletteGlow
           hexes={palette.slice(0, 2)}
           angle={120}
-          opacity={0.5}
+          opacity={0.6}
           blur={90}
+          maskStop={72}
           className="-inset-x-[60px] -top-[120px] h-[460px]"
         />
         <div className="relative flex items-center justify-between">
           <Link
             href="/"
-            className="font-display text-[18px] font-extrabold tracking-[-0.02em] text-text"
+            className="font-display text-[18px] font-extrabold tracking-[-0.02em] text-text transition-opacity active:opacity-60"
           >
             baclog
           </Link>
@@ -257,7 +258,7 @@ export default async function PublicItemPage({
                 <a
                   key={s.id}
                   href={resolve(`&service=${s.id}`)}
-                  className="flex items-center gap-3 rounded-full bg-[var(--glass-bg)] px-4 py-3 transition-colors hover:bg-white/[0.12]"
+                  className="flex items-center gap-3 rounded-full bg-[var(--glass-bg)] px-4 py-3 transition-colors hover:bg-white/[0.12] active:bg-white/[0.14]"
                 >
                   <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-white/10 text-text">
                     <FillIcon d={PLAY_PATH} size={12} />
@@ -284,6 +285,7 @@ export default async function PublicItemPage({
                       ? restArrivesLabel(releaseDate, now)
                       : undefined
                   }
+                  hideHeader
                 />
               </TracklistCard>
             )}
@@ -310,8 +312,11 @@ export default async function PublicItemPage({
         )}
 
         {/* "En Baclog" — the title's counts across the whole app (see
-            title-stats.ts). Hidden until someone has reacted. */}
-        {inBaclog && (
+            title-stats.ts). Hidden until someone has reacted, and NOT on
+            albums: the mock draws this block on 06b (film) and 06d (series)
+            but drops it on 06f, whose screen already carries four service
+            rows plus the tracklist (founder call, 2026-09-21). */}
+        {inBaclog && !isAlbum && (
           <div className="flex flex-col gap-2.5">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
               En Baclog
@@ -334,7 +339,7 @@ export default async function PublicItemPage({
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}
         <p className="text-center font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-          <Link href="/creditos" className="transition-colors hover:text-text-2">
+          <Link href="/creditos" className="transition-[color,opacity] hover:text-text-2 active:opacity-60">
             Créditos
           </Link>
         </p>
@@ -350,7 +355,7 @@ export default async function PublicItemPage({
       <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
         <Link
           href="/login"
-          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg transition-all active:scale-[0.98] active:bg-accent-press"
+          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
         >
           Empieza tu backlog →
         </Link>

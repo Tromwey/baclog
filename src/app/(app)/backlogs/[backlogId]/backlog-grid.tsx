@@ -147,7 +147,7 @@ export function BacklogGrid({
             <button
               type="button"
               onClick={() => (selecting ? exitSelect() : setSelecting(true))}
-              className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-colors hover:text-text"
+              className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
             >
               {selecting ? "Listo" : "Seleccionar"}
             </button>
@@ -174,7 +174,11 @@ export function BacklogGrid({
                     paletteHex={it.paletteHex}
                     alt={`Portada de ${it.title}`}
                     wait={wait}
-                    state={coverState(it)}
+                    // While selecting, the only question the tile answers is
+                    // "picked or not": its own state glyph would sit in the
+                    // corner as a second lime check next to the badge, and a
+                    // completed+selected tile would show both at once.
+                    state={selecting ? null : coverState(it)}
                     done={selecting ? !isSelected : isDone}
                     className="aspect-[3/4] w-full"
                   >
@@ -201,7 +205,7 @@ export function BacklogGrid({
                     type="button"
                     aria-pressed={isSelected}
                     onClick={() => toggle(it.backlogItemId)}
-                    className="flex min-w-0 flex-col gap-1.5 text-left"
+                    className="flex min-w-0 flex-col gap-1.5 text-left bl-press"
                   >
                     {tile}
                     {text}
@@ -210,7 +214,7 @@ export function BacklogGrid({
                   <Link
                     key={it.backlogItemId}
                     href={`/item/${it.catalogItemId}`}
-                    className="flex min-w-0 flex-col gap-1.5"
+                    className="flex min-w-0 flex-col gap-1.5 bl-press"
                   >
                     {tile}
                     {text}
@@ -236,7 +240,7 @@ export function BacklogGrid({
           </p>
           <Link
             href="/para-ti"
-            className="mt-5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-colors hover:text-text"
+            className="mt-5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
           >
             Explorar Para ti
           </Link>
@@ -255,7 +259,7 @@ export function BacklogGrid({
 }
 
 const FLOAT =
-  "pointer-events-auto flex items-center gap-2 rounded-full bg-[rgba(20,20,26,.45)] px-[26px] py-4 font-sans text-[14px] font-semibold text-text shadow-[0_14px_44px_rgba(0,0,0,.55)] backdrop-blur-[26px] backdrop-saturate-[1.7]";
+  "pointer-events-auto flex items-center gap-2 rounded-full bg-[rgba(20,20,26,.45)] px-[26px] py-4 font-sans text-[14px] font-semibold text-text shadow-[0_14px_44px_rgba(0,0,0,.55)] backdrop-blur-[26px] backdrop-saturate-[1.7] bl-press";
 
 /**
  * The bottom fade + the floating button (mock 129), portaled to <body>. The

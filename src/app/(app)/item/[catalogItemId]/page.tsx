@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
-import { capitalize, joinMeta } from "@/lib/format";
+import { joinMeta } from "@/lib/format";
 import {
   getBacklogNames,
   getUserCatalogEntry,
@@ -123,11 +123,12 @@ export default async function ItemPage({
         }
       : null;
 
-  // The mock's meta line: "Cine · 2023 · Wim Wenders" — kind, year, byline,
-  // with ONLY what the catalog stores (no runtime, no director: TMDB's search
-  // payload doesn't carry them, and nothing here invents). The countdown
-  // takes the year's slot while a title is upcoming (F3.8), and the genre
-  // trails when present.
+  // The mock's meta line: kind, year, byline — "Cine · 2023 · Wim Wenders",
+  // "Álbum · 2024 · Charli xcx". ONLY what the catalog stores (no runtime, no
+  // director: TMDB's search payload doesn't carry them, and nothing here
+  // invents). No genre: none of the mock's three meta lines carries one, and
+  // with a null byline it was the whole tail ("Cine · 2023 · Drama"). The
+  // countdown takes the year's slot while a title is upcoming (F3.8).
   const meta = joinMeta([
     KIND_LABEL[item.mediaType],
     upcoming && releaseIso ? (
@@ -142,7 +143,6 @@ export default async function ItemPage({
       item.year
     ),
     item.byline,
-    item.genre && capitalize(item.genre),
   ]);
 
   const isAlbum = item.mediaType === "album";
@@ -261,7 +261,7 @@ export default async function ItemPage({
                 href={linkHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent px-[18px] py-[13px] text-[14px] font-semibold text-bg transition-transform active:scale-[0.98]"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-accent px-[18px] py-[13px] text-[14px] font-semibold text-bg bl-press active:bg-accent-press"
               >
                 <FillIcon d={PLAY_PATH} size={12} />
                 Reproducir en {SERVICE_LABEL[service]}
@@ -311,7 +311,7 @@ export default async function ItemPage({
                 <Link
                   key={f.username}
                   href={`/u/${f.username}`}
-                  className="flex items-center gap-2.5"
+                  className="flex items-center gap-2.5 transition-opacity active:opacity-70"
                 >
                   <AdnAvatar
                     hexes={f.avatarHexes}

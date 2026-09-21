@@ -64,7 +64,7 @@ export function UpcomingShelf({
 
   return (
     <section className={`relative flex flex-col gap-3 pb-[30px] ${className}`}>
-      <PaletteGlow hexes={glow} angle={110} opacity={0.3} className="inset-x-0 -inset-y-2.5" />
+      <PaletteGlow hexes={glow} angle={110} opacity={0.3} className="inset-x-0 -inset-y-10" />
       <div className={`relative flex items-baseline gap-2 ${inset}`}>
         <h2 className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent">
           {heading}
@@ -79,7 +79,7 @@ export function UpcomingShelf({
           <Link
             key={it.catalogItemId}
             href={itemHref(it.catalogItemId)}
-            className="flex w-[104px] flex-none flex-col gap-[7px]"
+            className="flex w-[104px] flex-none flex-col gap-[7px] bl-press-lg"
           >
             <CoverTile
               posterUrl={it.posterUrl}

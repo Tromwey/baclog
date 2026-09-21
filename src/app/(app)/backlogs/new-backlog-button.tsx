@@ -85,7 +85,7 @@ function NewBacklogModal({ onClose }: { onClose: () => void }) {
           <button
             type="submit"
             disabled={busy || !name.trim()}
-            className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg transition-transform active:scale-[0.98] disabled:opacity-40"
+            className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
           >
             {busy ? "Creando…" : "Crear"}
           </button>

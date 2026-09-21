@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { completePicksAction } from "@/app/actions/onboarding-actions";
 import { CoverTile } from "@/components/cover-tile";
-import { CHECK_PATH } from "@/components/glyph-paths";
+import { BADGE_CHECK_PATH } from "@/components/glyph-paths";
 import { Button, StrokeIcon, mixHexes } from "@/components/ui";
 import { extractPalette } from "@/modules/cards/palette";
 import type {
@@ -212,7 +212,7 @@ export function PicksStep({
                   aria-pressed={isPicked}
                   aria-label={item.title}
                   onClick={() => toggle(item)}
-                  className={`relative block w-full rounded-[14px] outline outline-2 outline-offset-2 transition-[outline-color] duration-[var(--dur-fast)] ${
+                  className={`relative block w-full rounded-[14px] outline outline-2 outline-offset-2 transition-[outline-color,scale] duration-[var(--dur-fast)] active:scale-[0.97] ${
                     isPicked ? "outline-accent" : "outline-transparent"
                   }`}
                 >
@@ -221,12 +221,13 @@ export function PicksStep({
                     paletteHex={item.paletteHex}
                     title={item.title}
                     radius="rounded-[14px]"
+                    shadow="shadow-[0_18px_40px_-14px_rgba(0,0,0,.8)]"
                     className="aspect-[3/3.6] w-full"
                   >
                     {isPicked && (
                       <span className="absolute right-2 top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-accent text-bg">
                         <StrokeIcon
-                          d={CHECK_PATH}
+                          d={BADGE_CHECK_PATH}
                           size={12}
                           strokeWidth={3.2}
                         />

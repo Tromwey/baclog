@@ -395,7 +395,7 @@ function RetryButton({
       type="button"
       onClick={onClick}
       disabled={pending}
-      className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
+      className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-50"
     >
       {pending ? pendingLabel : label}
     </button>

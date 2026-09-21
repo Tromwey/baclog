@@ -71,16 +71,17 @@ export function OnboardingShell({
       <PaletteGlow
         hexes={glowHexes.length > 0 ? glowHexes : ONBOARDING_HEXES}
         angle={110}
-        opacity={0.55}
+        opacity={0.65}
         blur={90}
+        maskStop={72}
         className="-inset-x-[60px] -top-[120px] h-[560px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[700px]"
         style={{
           background:
-            "radial-gradient(120% 80% at 80% 0%, rgba(255,255,255,.12), transparent 60%), linear-gradient(rgba(11,11,13,0) 45%, var(--bg))",
+            "radial-gradient(120% 80% at 80% 0%, rgba(255,255,255,.12), transparent 60%), linear-gradient(rgba(11,11,13,0) 40%, var(--bg) 82%)",
         }}
       />
 
@@ -140,7 +141,7 @@ export function GhostButton({
     <button
       type="button"
       {...rest}
-      className="py-2 text-[14px] text-text-2 transition-colors hover:text-text disabled:opacity-40"
+      className="py-2 text-[14px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-40"
     >
       {children}
     </button>

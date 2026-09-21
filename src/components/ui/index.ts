@@ -15,7 +15,7 @@ export {
 } from "./aura-presets";
 export { AuthAuraBackdrop, AUTH_ADN } from "./auth-aura-backdrop";
 export { ScreenHeader } from "./screen-header";
-export { Sheet } from "./sheet";
+export { Sheet, SheetClose, useSheetDismiss } from "./sheet";
 export { CoachNote } from "./coach-note";
 export { BackButton } from "./back-button";
 export { glassChipClass, glassPillClass } from "./glass";

@@ -69,7 +69,7 @@ function VerifyForm() {
               Código incorrecto o expirado.{" "}
               <button
                 type="button"
-                className="underline"
+                className="underline transition-opacity active:opacity-60"
                 onClick={() => router.push("/login")}
               >
                 Pedir otro

@@ -64,7 +64,7 @@ export function PublicReviews({
             type="button"
             onClick={loadAll}
             disabled={loading}
-            className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-colors hover:text-text disabled:opacity-60"
+            className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
           >
             {loading ? "Cargando…" : "Ver todas"}
           </button>

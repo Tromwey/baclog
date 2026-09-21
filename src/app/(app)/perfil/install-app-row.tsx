@@ -2,7 +2,7 @@
 
 import { ChevronRight, Download, SquareArrowUp, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
+import { Sheet, useSheetDismiss } from "@/components/ui/sheet";
 
 /**
  * "Instalar app" row for /perfil — the accessible install entry point.
@@ -73,7 +73,7 @@ export function InstallAppRow({ divider }: { divider?: boolean }) {
       <button
         type="button"
         onClick={onClick}
-        className={`relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-white/[0.045] ${
+        className={`relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-white/[0.045] active:bg-white/[0.06] ${
           divider ? "border-b border-white/[0.07]" : ""
         }`}
       >
@@ -85,11 +85,9 @@ export function InstallAppRow({ divider }: { divider?: boolean }) {
         </span>
         <ChevronRight size={18} className="text-text-3" />
       </button>
-      {sheet &&
-        createPortal(
-          <InstructionSheet kind={sheet} onClose={() => setSheet(null)} />,
-          document.body,
-        )}
+      {sheet && (
+        <InstructionSheet kind={sheet} onClose={() => setSheet(null)} />
+      )}
     </>
   );
 }
@@ -131,45 +129,47 @@ function InstructionSheet({
           </>,
         ];
 
+  // The app's one sheet (it had drifted into a hand-rolled twin): same glass,
+  // same motion, same drag-to-dismiss as every other.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bl-rise bl-dock-glass w-full max-w-md rounded-t-[22px] p-5 pb-[calc(28px+env(safe-area-inset-bottom))] shadow-[var(--shadow-glass)]"
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
-            Instalar Baclog
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="-mr-1.5 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-text-3 transition-colors hover:text-text"
-          >
-            <X size={18} strokeWidth={2} />
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-text-3">
-          Se agrega a tu pantalla de inicio como app — sin tiendas, sin
-          descargas.
-        </p>
-        <ol className="mt-4 space-y-3">
-          {steps.map((s, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-[11px] font-bold text-bg">
-                {i + 1}
-              </span>
-              <span className="pt-0.5 text-sm leading-[1.5] text-text-2">
-                {s}
-              </span>
-            </li>
-          ))}
-        </ol>
+    <Sheet onClose={onClose} label="Instalar Baclog">
+      <div className="flex items-start justify-between">
+        <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
+          Instalar Baclog
+        </h2>
+        <CloseButton />
       </div>
-    </div>
+      <p className="mt-1 text-xs text-text-3">
+        Se agrega a tu pantalla de inicio como app — sin tiendas, sin
+        descargas.
+      </p>
+      <ol className="mt-4 space-y-3">
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-[11px] font-bold text-bg">
+              {i + 1}
+            </span>
+            <span className="pt-0.5 text-sm leading-[1.5] text-text-2">
+              {s}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Sheet>
+  );
+}
+
+/** Inside the <Sheet>, so it can ask for the animated close. */
+function CloseButton() {
+  const dismiss = useSheetDismiss();
+  return (
+    <button
+      type="button"
+      onClick={() => dismiss?.()}
+      aria-label="Cerrar"
+      className="bl-press-sm -mr-1.5 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-text-3 hover:text-text"
+    >
+      <X size={18} strokeWidth={2} />
+    </button>
   );
 }

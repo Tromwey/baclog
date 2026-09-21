@@ -97,7 +97,7 @@ export function AvatarPicker({
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy}
-            className="rounded-lg bg-surface-3 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white/[0.12] disabled:opacity-40"
+            className="rounded-lg bg-surface-3 px-3 py-1.5 text-xs font-semibold bl-press hover:bg-white/[0.12] disabled:opacity-40"
           >
             {busy ? "Guardando…" : url ? "Cambiar foto" : "Subir foto"}
           </button>
@@ -106,7 +106,7 @@ export function AvatarPicker({
               type="button"
               onClick={onRemove}
               disabled={busy}
-              className="text-xs text-text-3 underline transition-colors hover:text-text-2 disabled:opacity-40"
+              className="text-xs text-text-3 underline transition-[color,opacity] hover:text-text-2 active:opacity-60 disabled:opacity-40"
             >
               Quitar
             </button>

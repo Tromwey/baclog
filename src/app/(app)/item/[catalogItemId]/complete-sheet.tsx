@@ -9,6 +9,7 @@ import { PaletteGlow } from "@/components/ui/palette-glow";
 import { Segmented } from "@/components/ui/segmented";
 import { StateGlyph } from "@/components/ui/state-glyph";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
+import { useSheetMotion } from "@/hooks/use-sheet-motion";
 import type { MediaType } from "@/modules/catalog/types";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 import { DONE_VERB, KIND_LABEL, todayShort } from "./labels";
@@ -98,9 +99,20 @@ function CompleteSheet({
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
+  // A full-screen surface, so no drag — but it still rises in and leaves the
+  // way it came (Cancelar / Escape). Publicar closes at once: the page under
+  // it is about to change anyway.
+  const { panelRef, dismiss } = useSheetMotion({
+    onClose: closeComplete,
+    enterOffset: 24,
+    enterScale: 1,
+    draggable: false,
+    enabled: hydrated,
+  });
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeComplete();
+      if (e.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", onKey);
     // The page behind must not scroll under a full-screen surface.
@@ -110,7 +122,7 @@ function CompleteSheet({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [closeComplete]);
+  }, [dismiss]);
 
   const over = body.length > REVIEW_MAX_LENGTH;
   const hasText = body.trim().length > 0;
@@ -179,10 +191,11 @@ function CompleteSheet({
 
   return createPortal(
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="true"
       aria-label="Completar"
-      className="bl-fade-in fixed inset-0 z-50 overflow-hidden bg-bg text-text"
+      className="fixed inset-0 z-50 overflow-hidden bg-bg text-text"
     >
       <PaletteGlow hexes={palette} opacity={0.45} blur={90} className="-inset-[60px]" />
 
@@ -195,8 +208,8 @@ function CompleteSheet({
         <header className="flex flex-none items-center justify-between">
           <button
             type="button"
-            onClick={closeComplete}
-            className="py-1 text-[14px] text-text-2"
+            onClick={dismiss}
+            className="py-1 text-[14px] text-text-2 transition-opacity active:opacity-60"
           >
             Cancelar
           </button>
@@ -207,7 +220,7 @@ function CompleteSheet({
             type="button"
             onClick={publish}
             disabled={!canPublish}
-            className="py-1 text-[14px] font-semibold text-accent transition-opacity disabled:opacity-40"
+            className="py-1 text-[14px] font-semibold text-accent transition-opacity active:opacity-60 disabled:opacity-40"
           >
             {saving ? "Publicando…" : "Publicar"}
           </button>
@@ -279,7 +292,7 @@ function CompleteSheet({
                 role="switch"
                 aria-checked={hasSpoiler}
                 onClick={() => setHasSpoiler((v) => !v)}
-                className="flex items-center gap-2.5"
+                className="flex items-center gap-2.5 transition-opacity active:opacity-60"
               >
                 <Toggle on={hasSpoiler} />
                 <span className="text-[13px] text-text-2">Contiene spoiler</span>
@@ -312,7 +325,7 @@ function CompleteSheet({
           role="switch"
           aria-checked={shareTicket}
           onClick={() => setShareTicket((v) => !v)}
-          className="flex flex-none items-center gap-3 rounded-[18px] bg-surface-1 px-3.5 py-3 text-left"
+          className="bl-press-lg flex flex-none items-center gap-3 rounded-[18px] bg-surface-1 px-3.5 py-3 text-left"
         >
           <span
             aria-hidden

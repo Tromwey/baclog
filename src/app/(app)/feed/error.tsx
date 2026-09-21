@@ -36,7 +36,7 @@ export default function FeedError({
             </Button>
             <Link
               href="/backlogs"
-              className="py-[13px] text-center text-[14.5px] text-text-2 transition-colors hover:text-text"
+              className="py-[13px] text-center text-[14.5px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
             >
               Ir a Backlogs
             </Link>

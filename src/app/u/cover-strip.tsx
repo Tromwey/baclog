@@ -40,14 +40,15 @@ export function CoverStrip({
       </div>
       <div className="bl-scroll -mb-[26px] flex gap-2.5 overflow-x-auto px-5 pb-[34px] pt-1">
         {items.map((it) => (
-          <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex-none">
+          <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex-none bl-press-lg">
             <CoverTile
               posterUrl={it.posterUrl}
               paletteHex={it.paletteHex}
               alt={`Portada de ${it.title}`}
               title={it.title}
               radius="rounded-[14px]"
-              className={`${height} ${coverAspect(it.mediaType)} shadow-[0_18px_40px_-12px_rgba(0,0,0,.7)]`}
+              shadow="shadow-[0_18px_40px_-12px_rgba(0,0,0,.7)]"
+              className={`${height} ${coverAspect(it.mediaType)}`}
             />
           </Link>
         ))}

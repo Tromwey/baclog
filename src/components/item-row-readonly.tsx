@@ -45,7 +45,7 @@ export function ItemRowReadonly({
         href={`/api/links/resolve?catalogItemId=${catalogItemId}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="relative flex min-w-0 flex-1 items-center gap-3"
+        className="relative flex min-w-0 flex-1 items-center gap-3 transition-opacity active:opacity-70"
       >
         <span className="w-[18px] flex-none font-mono text-[13px] tracking-[0.02em] text-text-3">
           {pad(index)}
@@ -69,7 +69,7 @@ export function ItemRowReadonly({
       <Link
         href={`/item/${catalogItemId}`}
         aria-label={`Abrir ${title}`}
-        className="relative flex h-11 w-11 flex-none items-center justify-center text-text-3 transition-colors hover:text-text"
+        className="relative flex h-11 w-11 flex-none items-center justify-center text-text-3 bl-press-sm hover:text-text"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
           <path

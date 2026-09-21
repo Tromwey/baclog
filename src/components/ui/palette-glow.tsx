@@ -54,19 +54,31 @@ export function PaletteGlow({
   /** The mock's blur radius: 70 on cards/sections, 80–90 on page heroes. */
   blur = 70,
   className = "-inset-x-[10px] -inset-y-[30px]",
+  /**
+   * Page-hero glows in the mock fade out at the bottom instead of being cut off:
+   * `mask-image:linear-gradient(#000 72%,transparent 100%)`. Pass the stop (72)
+   * to get that fade; omit it for section glows, which the mock leaves hard-edged.
+   */
+  maskStop,
 }: {
   hexes: readonly string[];
   opacity?: number;
   angle?: number;
   blur?: number;
   className?: string;
+  maskStop?: number;
 }) {
   if (hexes.length === 0) return null;
+  const mask =
+    maskStop === undefined
+      ? undefined
+      : `linear-gradient(#000 ${maskStop}%, transparent 100%)`;
   const style: CSSProperties = {
     background: glowGradient(hexes, angle),
     opacity,
     filter: `blur(${blur}px)`,
     transform: "translateZ(0)",
+    ...(mask ? { maskImage: mask, WebkitMaskImage: mask } : null),
   };
   return (
     <div aria-hidden className={`pointer-events-none absolute ${className}`} style={style} />
