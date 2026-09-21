@@ -312,8 +312,11 @@ export default async function PublicItemPage({
         )}
 
         {/* "En Baclog" — the title's counts across the whole app (see
-            title-stats.ts). Hidden until someone has reacted. */}
-        {inBaclog && (
+            title-stats.ts). Hidden until someone has reacted, and NOT on
+            albums: the mock draws this block on 06b (film) and 06d (series)
+            but drops it on 06f, whose screen already carries four service
+            rows plus the tracklist (founder call, 2026-09-21). */}
+        {inBaclog && !isAlbum && (
           <div className="flex flex-col gap-2.5">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
               En Baclog
