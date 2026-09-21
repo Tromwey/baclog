@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
 import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { MarkGlyph } from "@/components/reviews/review-card";
-import { rgba } from "@/lib/color";
+import { mixToward, rgba, type RGB } from "@/lib/color";
 import { joinMeta } from "@/lib/format";
 import { dominantHexes } from "@/modules/backlog/palette";
 import type { MediaType } from "@/modules/catalog/types";
@@ -16,8 +16,11 @@ import { PaletteGlow } from "@/components/ui/palette-glow";
 /**
  * Feed v3 (design "Feed v3" → "Feed v3 componentes", 2026-09-02) — the cards
  * lose their surfaces. No fill, no radius: each card is its content over a
- * palette glow (feed-glow.tsx), separated from the next by 36px of dark. The
- * cover carries the card, at three sizes:
+ * palette glow, separated from the next by the frame's RHYTHM (feed-list.tsx
+ * owns it: 72px between two heroes, 56 before one, 28 after one, 36
+ * otherwise — never a single flat gap). A hero also bleeds its tone into the
+ * cards around it (`spill`/`rise`) and masks its art and word band by what
+ * follows it; see CardCtx. The cover carries the card, at three sizes:
  *
  *  - HERO    — obsessed and reviewed: the cover FULL-BLEED at its native
  *              aspect, the author in a glass pill on top, the words in a
@@ -41,17 +44,19 @@ import { PaletteGlow } from "@/components/ui/palette-glow";
  * profile pill and a pointer-transparent text panel (only the spoiler button
  * takes taps); the compact keeps v2's stretched title link under raised
  * @handle / backlog links. The flame stays the only color; verdicts stay at
- * the metadata tier; covers keep their native aspect (album 1:1, video 2:3).
- * Glass = the mock's (rgba(18,18,24,.38) + its per-piece blur/saturate),
+ * the metadata tier; covers keep their native aspect (album 1:1, video 3:4).
+ * Every author arrives on the same glass pill (AuthorPill), never loose
+ * beside an avatar. Glass = the mock's (rgba(18,18,24,.38) + per-piece
+ * blur/saturate),
  * borderless (§7 — the one thing the mock draws that we don't). Gutter 20,
  * the mock's, matched by the feed's glass header (ScreenHeader `glass`).
  */
 
-export function FeedCardView({ card }: { card: FeedCard }) {
+export function FeedCardView({ card, ctx = NO_CTX }: { card: FeedCard; ctx?: CardCtx }) {
   if (card.kind === "burst") return <BurstCard burst={card} />;
   const e = card.event;
-  if (e.kind === "obsessed") return <ObsessedCard event={e} />;
-  if (e.kind === "reviewed") return <ReviewedCard event={e} />;
+  if (e.kind === "obsessed") return <ObsessedCard event={e} ctx={ctx} />;
+  if (e.kind === "reviewed") return <ReviewedCard event={e} ctx={ctx} />;
   return <CompactCard event={e} />;
 }
 
@@ -61,9 +66,12 @@ const META = "font-mono text-[8.5px] uppercase tracking-[0.1em]";
 /** The mock's `--glass`, with the blur each piece asks for. */
 const GLASS_BG = "bg-[rgba(18,18,24,.38)]";
 const GLASS = `${GLASS_BG} backdrop-blur-[16px]`;
-/** Dark neutral depth under a cover (§7-exempt: no color, no glow). */
-const COVER_SHADOW =
+/** Dark neutral depth under a cover (§7-exempt: no color, no glow). The
+ *  frame gives each size its own recipe — they are not interchangeable. */
+const BURST_SHADOW =
   "shadow-[0_18px_40px_-12px_rgba(0,0,0,.7),inset_0_1px_0_rgba(255,255,255,.18)]";
+const COMPACT_SHADOW =
+  "shadow-[0_20px_40px_-14px_rgba(0,0,0,.75),inset_0_1px_0_rgba(255,255,255,.18)]";
 
 /** Press response for a card whose tap target is a STRETCHED link: the
  *  visible card sinks while `[data-stretch]` is held (the `bl-press-lg` depth
@@ -71,7 +79,93 @@ const COVER_SHADOW =
 const STRETCH_PRESS =
   "transition-[scale,opacity] duration-200 ease-[var(--ease-out)] has-[[data-stretch]:active]:scale-[0.985] has-[[data-stretch]:active]:duration-[80ms] motion-reduce:has-[[data-stretch]:active]:scale-100 motion-reduce:has-[[data-stretch]:active]:opacity-80";
 
-const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[2/3]");
+const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[3/4]");
+
+/**
+ * The author, in the frame's glass pill: orb + @handle + a trailing mono
+ * label (the "when", or "Sugerencia" on the suggestion). Every card in Feed
+ * v3 introduces its author this way — burst, compact, hero and suggestion —
+ * so the handle always arrives on the same chip instead of loose next to an
+ * avatar. `sm` is the compact card's tighter build (the frame's `4px 10px
+ * 4px 4px` / orb 20 / 12.5px against the standard `5px 12px 5px 5px` /
+ * orb 22 / 13px).
+ */
+export function AuthorPill({
+  username,
+  initial,
+  avatarUrl,
+  avatarHexes,
+  trailing,
+  sm = false,
+  className = "",
+}: {
+  username: string;
+  initial?: string;
+  avatarUrl: string | null;
+  avatarHexes: readonly [string, string];
+  trailing?: string;
+  sm?: boolean;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={profileHref(username)}
+      className={`flex max-w-full items-center rounded-full backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG} ${
+        sm ? "gap-[7px] py-1 pl-1 pr-2.5" : "gap-2 py-[5px] pl-[5px] pr-3"
+      } ${className}`}
+    >
+      <AdnAvatar
+        hexes={avatarHexes}
+        initial={initial}
+        src={avatarUrl}
+        className={sm ? "h-5 w-5 text-[8px]" : "h-[22px] w-[22px] text-[8.5px]"}
+      />
+      <span
+        className={`truncate font-semibold text-text ${sm ? "text-[12.5px]" : "text-[13px]"}`}
+      >
+        @{username}
+      </span>
+      {trailing && (
+        <span
+          className={`flex-none font-mono uppercase tracking-[0.1em] text-text-2 ${
+            sm ? "text-[8px]" : "text-[8.5px]"
+          }`}
+        >
+          {trailing}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/**
+ * Where a card sits in the run. The frame derives real geometry from this:
+ * a hero bleeds its tone DOWN into the card below (`spill`), rises out of a
+ * non-hero above it (`rise`), and masks its art and word band differently
+ * depending on whether the NEXT card is another hero. Without it every hero
+ * is a hard rectangle and the feed loses the colour that joins the cards.
+ */
+export type CardCtx = {
+  /** `null` when nothing follows this card on screen. */
+  nextIsGem: boolean | null;
+  followsHero: boolean;
+  followsOther: boolean;
+};
+
+export const NO_CTX: CardCtx = {
+  nextIsGem: null,
+  followsHero: false,
+  followsOther: false,
+};
+
+/** "gem" in the frame: the two rare events that get the whole width. */
+export const isGemCard = (c: FeedCard) =>
+  c.kind !== "burst" && (c.event.kind === "obsessed" || c.event.kind === "reviewed");
+
+/** The frame's `mixDark(h, .5)`: the tone, halfway to the page dark. */
+const DARK: RGB = { r: 18, g: 18, b: 18 };
+const toneEdgeOf = (hexes: readonly string[]) =>
+  mixToward(hexes[1] ?? hexes[0] ?? "#0b0b0d", DARK, 0.5);
 
 /** The glow's colors: the cover's two leading hexes (the mock's `hx` pair),
  *  else the author's ADN — a card is never lit by nothing. */
@@ -91,27 +185,40 @@ function posterFill(hexes: readonly string[]): string | undefined {
 function Cover({
   event,
   className,
+  artMask,
+  overlay,
   children,
 }: {
   event: FeedEvent;
   className: string;
+  /** The frame's `artMask` — fades the ART only, never the pill or band. */
+  artMask?: string;
+  /** Painted inside the masked art layer (the hero's sheen). */
+  overlay?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  const mask = artMask ? { maskImage: artMask, WebkitMaskImage: artMask } : null;
   return (
     <span
-      className={`relative block overflow-hidden bg-surface-2 ${aspectOf(event.mediaType)} ${className}`}
-      style={{ background: posterFill(event.paletteHex) }}
+      className={`relative block overflow-hidden ${aspectOf(event.mediaType)} ${className}`}
     >
-      {event.posterUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
-        <img
-          src={event.posterUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
+      <span
+        aria-hidden
+        className="absolute inset-0 bg-surface-2"
+        style={{ background: posterFill(event.paletteHex), ...mask }}
+      >
+        {event.posterUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
+          <img
+            src={event.posterUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+        {overlay}
+      </span>
       {children}
     </span>
   );
@@ -159,39 +266,26 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
   return (
     <article className="relative isolate flex flex-col gap-3.5">
       <PaletteGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
-      <div className="relative flex items-center gap-[9px] px-5">
-        <Link
-          href={profileHref(author.username)}
-          className="flex-none transition-opacity active:opacity-60"
-        >
-          <AdnAvatar
-            hexes={author.avatarHexes}
-            initial={author.initial}
-            src={author.avatarUrl}
-            className="h-[26px] w-[26px] text-[9px]"
-          />
-        </Link>
-        <span className="flex min-w-0 flex-col gap-px">
+      <div className="relative flex flex-col items-start gap-2.5 px-5">
+        <AuthorPill
+          username={author.username}
+          initial={author.initial}
+          avatarUrl={author.avatarUrl}
+          avatarHexes={author.avatarHexes}
+          trailing={burst.when}
+        />
+        <span className="text-[13px] leading-[1.3] text-text-2">
+          Agregó {count} títulos a{" "}
           <Link
-            href={profileHref(author.username)}
-            className="truncate text-[13.5px] font-semibold text-text transition-opacity active:opacity-60"
+            href={backlogHref(author.username, burst.backlogId)}
+            className="font-semibold text-text transition-opacity active:opacity-60"
           >
-            @{author.username}
+            {burst.backlogName}
           </Link>
-          <span className="truncate text-[12.5px] leading-[1.3] text-text-2">
-            agregó {count} títulos a{" "}
-            <Link
-              href={backlogHref(author.username, burst.backlogId)}
-              className="font-semibold text-text transition-opacity active:opacity-60"
-            >
-              {burst.backlogName}
-            </Link>
-          </span>
         </span>
-        <span className={`ml-auto flex-none ${META} text-[9px] text-text-3`}>{burst.when}</span>
       </div>
 
-      <div className="relative flex snap-x snap-proximity items-end gap-2.5 overflow-x-auto px-5 pb-1.5 pt-1 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative flex snap-x snap-proximity items-end -mb-[38px] -mt-5 gap-2.5 overflow-x-auto px-5 pb-11 pt-6 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {strip.map((e) => (
           <Link
             key={e.id}
@@ -199,7 +293,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             aria-label={e.title}
             className="flex-none snap-start bl-press-lg"
           >
-            <Cover event={e} className={`h-[208px] rounded-[14px] ${COVER_SHADOW}`}>
+            <Cover event={e} className={`h-[208px] rounded-[14px] ${BURST_SHADOW}`}>
               <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-black/0 px-2.5 pb-[9px] pt-[22px] font-serif text-sm italic leading-[1.1] text-text">
                 {e.title}
               </span>
@@ -211,7 +305,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             type="button"
             onClick={() => setExpanded(true)}
             aria-label={`Ver los ${count}`}
-            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[2/3] bl-press-lg ${GLASS}`}
+            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[3/4] bl-press-lg ${GLASS}`}
           >
             +{folded}
           </button>
@@ -269,38 +363,93 @@ function Hero({
   highlight,
   /** Gap of the word panel: 6 for obsessed, 5 for reviewed (the mock's). */
   panelGap,
+  ctx,
   children,
 }: {
   event: FeedEvent;
   glowOpacity: number;
   highlight: { x: string; alpha: number };
   panelGap: string;
+  ctx: CardCtx;
   children: React.ReactNode;
 }) {
   const { author } = event;
+
+  // The frame's geometry for this position in the run.
+  const hasNext = ctx.nextIsGem !== null;
+  const pair = ctx.nextIsGem === true;
+  const spill = hasNext ? (pair ? 72 : 120) : 0;
+  const rise = ctx.followsOther ? 140 : 0;
+  const hx = glowHexes(event);
+  const toneTop = hx[0] ?? "#0b0b0d";
+  const toneEdge = toneEdgeOf(hx);
+
+  const bandMask = !hasNext
+    ? "linear-gradient(transparent, #000 96px)"
+    : pair
+      ? "linear-gradient(transparent, #000 96px, #000 calc(100% - 160px), transparent 100%)"
+      : "linear-gradient(transparent, #000 96px, #000 calc(100% - 120px), rgba(0,0,0,.5) calc(100% - 60px), transparent 100%)";
+
+  const artMask =
+    (ctx.followsHero
+      ? "linear-gradient(180deg, transparent 0px, #000 200px"
+      : ctx.followsOther
+        ? "linear-gradient(180deg, transparent 0px, #000 120px"
+        : "linear-gradient(180deg, #000 0px, #000 0px") +
+    (!hasNext
+      ? ", #000 100%)"
+      : pair
+        ? ", #000 calc(100% - 160px), transparent 100%)"
+        : ", #000 calc(100% - 140px), rgba(0,0,0,.6) calc(100% - 70px), rgba(0,0,0,.2) calc(100% - 25px), transparent 100%)");
+
   return (
     <article className="relative isolate">
-      <PaletteGlow hexes={glowHexes(event)} opacity={glowOpacity} />
-      <Cover
-        event={event}
-        className={`w-full shadow-[0_30px_60px_-20px_rgba(0,0,0,.8)] ${STRETCH_PRESS}`}
-      >
+      {/* The tone rising out of the ordinary card above (the frame's
+          `riseBg`), so a hero does not start on a hard edge. */}
+      {rise > 0 && (
         <span
           aria-hidden
-          className="absolute inset-0"
+          className="pointer-events-none absolute inset-x-0"
           style={{
-            background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
+            top: `-${rise}px`,
+            height: `${rise + 120}px`,
+            background: `linear-gradient(0deg, ${toneTop} 0px, ${toneTop} 120px, ${rgba(toneTop, 0.8)} 150px, ${rgba(toneTop, 0.5)} 185px, ${rgba(toneTop, 0.22)} 220px, ${rgba(toneTop, 0.06)} 250px, transparent 100%)`,
           }}
         />
-        {/* The art fades into the page bg over its last 224px (founder call
-            2026-09-03: the mock's hard bottom edge read as a cut, and a 160px
-            linear ramp still did — this one eases in and reaches bg sooner).
-            Under the word panel, whose translucent gradient lets it through.
-            Same color at alpha 0, never `transparent` (dark-fringe rule). */}
+      )}
+      {/* …and the tone spilling DOWN onto whatever follows (`spillBg`).
+          Two adjacent heroes skip it: they share an edge instead. */}
+      {spill > 0 && !pair && (
         <span
           aria-hidden
-          className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-bg/0 via-bg/70 via-55% to-bg"
+          className="pointer-events-none absolute inset-x-0"
+          style={{
+            bottom: `-${spill}px`,
+            height: `${spill + 60}px`,
+            background: `linear-gradient(180deg, ${rgba(toneEdge, 0.35)} 0px, ${rgba(toneEdge, 0.55)} 40px, ${rgba(toneEdge, 0.55)} 80px, ${rgba(toneEdge, 0.28)} 120px, ${rgba(toneEdge, 0.1)} 160px, transparent 100%)`,
+          }}
         />
+      )}
+      <PaletteGlow
+        hexes={glowHexes(event)}
+        opacity={glowOpacity}
+        blur={80}
+        className="-inset-x-[10px] -top-[30px] bottom-10"
+      />
+      <Cover
+        event={event}
+        className={`w-full ${STRETCH_PRESS}`}
+        artMask={artMask}
+        overlay={
+          <span
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
+            }}
+          />
+        }
+      >
         <Link
           href={itemHref(event.catalogItemId)}
           aria-label={event.title}
@@ -309,7 +458,7 @@ function Hero({
         />
         <Link
           href={profileHref(author.username)}
-          className={`absolute left-3.5 top-3.5 z-20 flex max-w-[calc(100%-28px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG}`}
+          className={`absolute left-5 top-5 z-20 flex max-w-[calc(100%-40px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG}`}
         >
           <AdnAvatar
             hexes={author.avatarHexes}
@@ -321,11 +470,12 @@ function Hero({
           <span className={`flex-none ${META} text-text-2`}>{event.when}</span>
         </Link>
         <span
-          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col px-5 pb-[22px] pt-[18px] backdrop-blur-[28px] backdrop-saturate-[1.6] ${panelGap}`}
+          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col px-5 pb-[22px] pt-[72px] backdrop-blur-[28px] ${panelGap}`}
           style={{
-            background: "linear-gradient(rgba(18,18,24,.18), rgba(18,18,24,.5))",
-            maskImage: "linear-gradient(transparent, #000 14px)",
-            WebkitMaskImage: "linear-gradient(transparent, #000 14px)",
+            background:
+              "linear-gradient(rgba(18,18,24,0), rgba(18,18,24,.22) 35%, rgba(18,18,24,.5) 80%, rgba(18,18,24,.5))",
+            maskImage: bandMask,
+            WebkitMaskImage: bandMask,
           }}
         >
           {children}
@@ -335,9 +485,15 @@ function Hero({
   );
 }
 
-function ObsessedCard({ event }: { event: FeedEvent }) {
+function ObsessedCard({ event, ctx }: { event: FeedEvent; ctx: CardCtx }) {
   return (
-    <Hero event={event} glowOpacity={0.55} highlight={{ x: "80%", alpha: 0.18 }} panelGap="gap-1.5">
+    <Hero
+      event={event}
+      glowOpacity={0.55}
+      highlight={{ x: "80%", alpha: 0.18 }}
+      panelGap="gap-1.5"
+      ctx={ctx}
+    >
       <span className="flex items-center gap-1.5 text-[13px] leading-[1.3] text-hot">
         <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill="var(--hot)" aria-hidden className="flex-none">
           <path d={FLAME_PATH} />
@@ -352,9 +508,15 @@ function ObsessedCard({ event }: { event: FeedEvent }) {
   );
 }
 
-function ReviewedCard({ event }: { event: FeedEvent }) {
+function ReviewedCard({ event, ctx }: { event: FeedEvent; ctx: CardCtx }) {
   return (
-    <Hero event={event} glowOpacity={0.5} highlight={{ x: "20%", alpha: 0.16 }} panelGap="gap-[5px]">
+    <Hero
+      event={event}
+      glowOpacity={0.5}
+      highlight={{ x: "20%", alpha: 0.16 }}
+      panelGap="gap-[5px]"
+      ctx={ctx}
+    >
       <span className="text-[13px] leading-[1.3] text-text-2">Reseñó</span>
       <span className="font-serif text-[30px] italic leading-[1.04] text-pretty text-text">
         {event.title}
@@ -410,30 +572,35 @@ function HeroReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolea
  * above it (`relative z-10`) with their own hrefs.
  */
 function CompactCard({ event }: { event: FeedEvent }) {
+  // The frame capitalizes the verb: it opens its own line under the pill,
+  // it is not a continuation of "@handle …".
   const verb =
-    event.kind === "completed" ? "completó" : event.waiting ? "no puede esperar" : "agregó a";
+    event.kind === "completed" ? "Completó" : event.waiting ? "No puede esperar" : "Agregó a";
   const shelf =
     event.kind === "added" && !event.waiting && event.backlogId && event.backlogName
       ? { id: event.backlogId, name: event.backlogName }
       : null;
   return (
-    <article className={`relative isolate flex items-center gap-[18px] px-5 ${STRETCH_PRESS}`}>
-      <PaletteGlow hexes={glowHexes(event)} opacity={0.4} className="-inset-y-2.5 left-0 w-3/5" />
-      <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COVER_SHADOW}`} />
-      <span className="relative flex min-w-0 flex-1 flex-col gap-[7px]">
-        <span className="flex min-w-0 items-center gap-[7px]">
-          <AdnAvatar
-            hexes={event.author.avatarHexes}
-            src={event.author.avatarUrl}
-            className="h-[18px] w-[18px]"
-          />
-          <span className="truncate text-[12.5px] leading-[1.3] text-text-2">
-            <Link
-              href={profileHref(event.author.username)}
-              className="relative z-10 font-semibold text-text transition-opacity active:opacity-60"
-            >
-              @{event.author.username}
-            </Link>{" "}
+    <article className={`relative isolate flex flex-col gap-2.5 px-5 ${STRETCH_PRESS}`}>
+      <PaletteGlow
+        hexes={glowHexes(event)}
+        opacity={0.4}
+        blur={60}
+        className="-inset-y-2.5 left-0 w-3/5"
+      />
+      <AuthorPill
+        sm
+        username={event.author.username}
+        initial={event.author.initial}
+        avatarUrl={event.author.avatarUrl}
+        avatarHexes={event.author.avatarHexes}
+        trailing={event.when}
+        className="relative z-10 self-start"
+      />
+      <div className="relative flex items-center gap-[18px]">
+        <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COMPACT_SHADOW}`} />
+        <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
+          <span className="truncate text-[13px] leading-[1.3] text-text-2">
             {verb}
             {shelf && (
               <>
@@ -447,19 +614,19 @@ function CompactCard({ event }: { event: FeedEvent }) {
               </>
             )}
           </span>
+          <Link
+            href={itemHref(event.catalogItemId)}
+            data-stretch
+            className="font-serif text-2xl italic leading-[1.08] text-pretty text-text after:absolute after:inset-0 after:content-['']"
+          >
+            {event.title}
+          </Link>
+          <span className={`flex items-center gap-1.5 ${META} text-text-3`}>
+            {event.kind === "completed" && <MarkGlyph mark={event.mark} />}
+            {metaOf(event)}
+          </span>
         </span>
-        <Link
-          href={itemHref(event.catalogItemId)}
-          data-stretch
-          className="font-serif text-2xl italic leading-[1.08] text-pretty text-text after:absolute after:inset-0 after:content-['']"
-        >
-          {event.title}
-        </Link>
-        <span className={`flex items-center gap-1.5 ${META} text-text-3`}>
-          {event.kind === "completed" && <MarkGlyph mark={event.mark} />}
-          {metaOf(event)} · {event.when}
-        </span>
-      </span>
+      </div>
     </article>
   );
 }
