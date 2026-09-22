@@ -12,6 +12,10 @@ import { FeedCardView, HDR_PX, SuggestCard, cardTailHex, hexesOfCard } from "./f
  * with `position: sticky` under the header, so the header has to live in the
  * SAME scrollport as the cards. The page hands it in as `header`.
  *
+ * The snap is MANDATORY, not proximity: every gesture has to land with a
+ * card's top edge at the header, never half way — the feed reads like tabs
+ * rather than like a scroll that happens to stick.
+ *
  * The container carries the last card's bottom colour (the mock's `tailBg`)
  * so the page continues in the stack's own light instead of ending on a hard
  * edge against the background — and it repaints as pages are appended.
@@ -72,7 +76,7 @@ export function FeedList({
 
   return (
     <div
-      className="bl-scroll box-border h-full overflow-x-hidden overflow-y-auto [scroll-snap-type:y_proximity]"
+      className="bl-scroll box-border h-full overflow-x-hidden overflow-y-auto [scroll-snap-type:y_mandatory]"
       style={{
         background: tail,
         paddingBottom: "120px",

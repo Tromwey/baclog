@@ -38,6 +38,13 @@ import type { FeedBurst, FeedCard, FeedEvent, FeedSuggestion } from "@/modules/s
  *  - the card colour is the title's own palette dragged most of the way to
  *    black (`cardEnds`), so the stack reads as the covers' light rather than
  *    as a set of surfaces.
+ *  - the shadow is SHORT and faint (`0 -8px 18px rgba(0,0,0,.42)`). The long
+ *    one it replaced stacked: every pinned card added its shadow to the one
+ *    below and the pile darkened as you scrolled. Only the card coming in is
+ *    actually visible, so a short one is all the separation that is needed.
+ *  - no 1px edge light: in the mock that hairline became the `edgeLight`
+ *    tweak and ships OFF. The card reads flatter but cleaner, and with the
+ *    120px overlap the shadow alone carries the separation.
  *
  * Founder calls, 2026-09-21: the "Seguir" pill KEEPS the mock's lime glow (an
  * explicit exception to AGENTS.md §7); the v8 greys and Space Mono apply to
@@ -218,7 +225,7 @@ function StackCard({
   const tier = TIER[size];
   return (
     <article
-      className="sticky flex flex-col gap-3.5 overflow-hidden rounded-t-[26px] px-5 pb-[142px] pt-[18px] shadow-[0_-1px_0_rgba(255,255,255,.15),0_-24px_46px_rgba(0,0,0,.72)] [container-type:inline-size] [scroll-snap-align:start]"
+      className="sticky flex flex-col gap-3.5 overflow-hidden rounded-t-[26px] px-5 pb-[142px] pt-[18px] shadow-[0_-8px_18px_rgba(0,0,0,.42)] [container-type:inline-size] [scroll-snap-align:start]"
       style={{
         top: STICKY_TOP,
         height: `calc(min(${tier.h}px, calc(100dvh * ${tier.cap})) + ${EXT_BOTTOM}px)`,
