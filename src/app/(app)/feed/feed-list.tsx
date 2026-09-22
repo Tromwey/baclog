@@ -16,9 +16,13 @@ import { FeedCardView, HDR_PX, SuggestCard, cardTailHex, hexesOfCard } from "./f
  * card's top edge at the header, never half way — the feed reads like tabs
  * rather than like a scroll that happens to stick.
  *
- * The container carries the last card's bottom colour (the mock's `tailBg`)
- * so the page continues in the stack's own light instead of ending on a hard
- * edge against the background — and it repaints as pages are appended.
+ * The last card's bottom colour (the mock's `tailBg`) goes on a SPACER after
+ * the stack, not on the scroller. On the scroller it also painted the strip
+ * behind the header — and since the header has no background of its own, the
+ * title ended up sitting on the tint of a card far below, which read as an
+ * aura (founder report, 2026-09-22). On the spacer it does its actual job:
+ * the page continues in the stack's own light at the BOTTOM instead of
+ * cutting to the background.
  *
  * "Ver más" pages through the server action with the keyset cursor the server
  * re-encoded from the last event the previous page consumed, so a burst never
@@ -78,7 +82,6 @@ export function FeedList({
     <div
       className="bl-scroll box-border h-full overflow-x-hidden overflow-y-auto [scroll-snap-type:y_mandatory]"
       style={{
-        background: tail,
         paddingBottom: "120px",
         scrollPaddingTop: `calc(${HDR_PX}px + env(safe-area-inset-top))`,
       }}
@@ -92,6 +95,8 @@ export function FeedList({
           </Fragment>
         ))}
         {slot === cards.length && pinned && <SuggestCard key={pinned.username} s={pinned} />}
+        {/* The stack's light continues past the last card (see above). */}
+        <div aria-hidden className="h-[120px] flex-none" style={{ background: tail }} />
         {cursor && (
           <div className="flex justify-center px-5 pb-1 pt-3.5">
             <button
