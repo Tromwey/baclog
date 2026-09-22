@@ -1,7 +1,6 @@
 /**
- * Shared hex-color helpers + the deterministic aura seed. Plain, dependency-
- * free module — safe on the server AND in client components (AuraField,
- * ThemeColorSync). NOTE: modules/cards/** keeps its own copies on purpose
+ * Shared hex-color helpers. Plain, dependency-free module — safe on the
+ * server AND in client components (ThemeColorSync). NOTE: modules/cards/** keeps its own copies on purpose
  * (the export pipeline is self-contained); don't fold those in here.
  */
 
@@ -42,12 +41,3 @@ export function mixToward(hex: string, target: RGB, amount: number): string {
   return `#${ch(mix(c.r, target.r))}${ch(mix(c.g, target.g))}${ch(mix(c.b, target.b))}`;
 }
 
-/**
- * Deterministic aura seed from an entity id (backlog, catalog item…) — same
- * id ⇒ same AuraField jitter on every render, server and client.
- */
-export function auraSeed(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}

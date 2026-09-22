@@ -3,7 +3,6 @@ import { requireUser } from "@/auth";
 import { ItemRowReadonly } from "@/components/item-row-readonly";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
-import { AuraField, LENS_AURAS, type FixedAuraLayer } from "@/components/ui";
 import { plural } from "@/lib/plural";
 import { getLensItems, type LensKind } from "@/modules/backlog/lenses";
 import { ZoomBackButton } from "../../zoom-back-button";
@@ -12,16 +11,14 @@ import { ZoomBackButton } from "../../zoom-back-button";
  * Smart-lens views (HANDOFF §4, mocks #p4–#p6): auto-generated filters over
  * the whole library, grouped by shelf of origin ("De Julio '26"…). NOT
  * shelves — they never count toward shelf totals. The row index RUNS across
- * groups (01,02 | 03,04 | 05). The hero aura is the lens's fixed IDENTITY
+ * groups (01,02 | 03,04 | 05). The hero aura is GONE (founder call,
+ * 2026-09-21: no aura anywhere); the lens keeps its identity only in the
+ * status-bar tint. The old note said the fixed IDENTITY
  * gradient from the mock (lens branding, not content ADN) — always on,
  * unlike shelf auras which stay dark until the first item (§5).
  */
 
 /** Darker scrim (#p6/#p7) vs. the standard hero scrim (#p2/#p4/#p5). */
-const SCRIM_DARK =
-  "linear-gradient(180deg, rgba(11,11,13,0.18) 0%, rgba(11,11,13,0.12) 45%, #0B0B0D 96%)";
-const SCRIM =
-  "linear-gradient(180deg, rgba(11,11,13,0.15) 0%, rgba(11,11,13,0.1) 45%, #0B0B0D 96%)";
 
 const LENSES: Record<
   string,
@@ -29,8 +26,6 @@ const LENSES: Record<
     kind: LensKind;
     title: string;
     icon: React.ReactNode;
-    /** Fixed identity gradient (LENS_AURAS preset) + this lens's hero scrim. */
-    aura: { layer: FixedAuraLayer; scrim: string };
     /** Dominant identity hue — tints Safari's status-bar band (ThemeColorSync). */
     themeColor: string;
   }
@@ -49,7 +44,6 @@ const LENSES: Record<
         <path d={FLAME_PATH} />
       </svg>
     ),
-    aura: { layer: LENS_AURAS.obsesiones, scrim: SCRIM },
     themeColor: "#FF2D55",
   },
   "en-progreso": {
@@ -72,7 +66,6 @@ const LENSES: Record<
         />
       </svg>
     ),
-    aura: { layer: LENS_AURAS["en-progreso"], scrim: SCRIM },
     themeColor: "#E8B23A",
   },
   completados: {
@@ -90,7 +83,6 @@ const LENSES: Record<
       </svg>
     ),
     // #p6 is the one lens with the darker scrim (lime is loud).
-    aura: { layer: LENS_AURAS.completados, scrim: SCRIM_DARK },
     themeColor: "#D8FF3E",
   },
   "en-el-radar": {
@@ -103,7 +95,6 @@ const LENSES: Record<
         <circle cx="12" cy="12" r="3.5" fill="#7AA2FF" />
       </svg>
     ),
-    aura: { layer: LENS_AURAS["en-el-radar"], scrim: SCRIM },
     themeColor: "#7AA2FF",
   },
 };
@@ -135,15 +126,7 @@ export default async function LensPage({
 
   return (
     <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      {/* Hero light — the lens's fixed identity gradient (branding, always on). */}
-      <div className="absolute inset-x-0 top-0 h-[300px] overflow-hidden">
-        <ThemeColorSync color={lens.themeColor} />
-        <AuraField layers={[lens.aura.layer]} />
-        <div
-          className="absolute inset-0"
-          style={{ background: lens.aura.scrim }}
-        />
-      </div>
+      <ThemeColorSync color={lens.themeColor} />
 
       {/* top bar */}
       <div className="relative flex items-center justify-between px-4 pt-[calc(24px+env(safe-area-inset-top))]">

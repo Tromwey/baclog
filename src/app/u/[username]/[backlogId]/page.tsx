@@ -7,7 +7,7 @@ import { getPublicBacklog } from "@/modules/backlog/public";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { CountdownMono } from "@/components/countdown";
 import { captureView } from "@/modules/analytics/capture";
-import { auraSeed, parseHex } from "@/lib/color";
+import { parseHex } from "@/lib/color";
 import { BacklogHero } from "@/components/backlog-hero";
 import { ItemStatus } from "@/components/item-status";
 import { BackButton, MonoMeta } from "@/components/ui";
@@ -65,8 +65,6 @@ export default async function PublicBacklogPage({
         vibe={data.vibe}
         itemCount={data.items.length}
         year={data.createdAt.getFullYear()}
-        palette={data.palette}
-        seed={auraSeed(backlogId)}
         controls={<BackButton href={`/u/${username}`} />}
       />
 

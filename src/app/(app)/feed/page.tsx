@@ -34,24 +34,60 @@ export default async function FeedPage() {
     getFeedSuggestion(user.id),
   ]);
 
+  // Feed v8 Stack: the populated feed is its OWN full-height scrollport. The
+  // cards pin with `position: sticky`, so the header and the cards have to
+  // share one scroller — which is why FeedList owns it and takes the header
+  // as a prop instead of the page laying both out. `.feed-v8` scopes the
+  // mock's darker greys and Space Mono to this screen (globals.css).
+  if (page.followingCount > 0 && page.cards.length > 0) {
+    return (
+      <main className="feed-v8 relative isolate mx-auto h-dvh w-full max-w-[430px] overflow-hidden bg-bg text-text">
+        <FeedList
+          initialCards={page.cards}
+          initialCursor={page.nextCursor}
+          suggestion={suggestion}
+          header={<FeedHeader />}
+        />
+      </main>
+    );
+  }
+
+  // The empty states keep the app's chrome and tokens — the v8 mock draws
+  // only the populated feed and defers them.
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <ScreenHeader title="Tu feed" action={<FindPeopleChip />} glass />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
-      ) : page.cards.length === 0 ? (
-        <EmptyNoActivity
-          userId={user.id}
-          followingCount={page.followingCount}
-        />
       ) : (
-        <FeedList
-          initialCards={page.cards}
-          initialCursor={page.nextCursor}
-          suggestion={suggestion}
-        />
+        <EmptyNoActivity userId={user.id} followingCount={page.followingCount} />
       )}
     </main>
+  );
+}
+
+/**
+ * The v8 header: sticky at the top of the feed's own scrollport, 18/20/14
+ * padding, and the title alone.
+ *
+ * NO background (founder call, 2026-09-21 — a deliberate change from the
+ * mock, which paints it `var(--bg)`): the black slab read as a lid on top of
+ * the stack. With nothing painted, the card slides BEHIND the title and the
+ * page keeps the stack's own colour up to the very top.
+ *
+ * No people chip: the mock draws only the title and the founder chose to
+ * match it (2026-09-21). Buscar gente is still reachable from Perfil →
+ * seguidores / siguiendo (`perfil/people-screen.tsx`), and the empty states
+ * below still point at it directly — it costs a tap from a populated feed,
+ * it is not stranded.
+ */
+function FeedHeader() {
+  return (
+    <header className="sticky top-0 z-[7] px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
+      <h1 className="truncate font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
+        Tu feed
+      </h1>
+    </header>
   );
 }
 

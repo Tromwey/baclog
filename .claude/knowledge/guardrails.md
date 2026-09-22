@@ -38,6 +38,14 @@ probablemente exija crear también la capa donde corra.
 
 ## Huecos conocidos (sin guardrail — cuidado manual)
 
+- **Tokens de Tailwind scopeados por pantalla — `@theme inline` los vuelve inertes.** Redefinir un
+  token del bloque `@theme inline` (p. ej. `--font-mono`) en un subárbol compila limpio, emite la
+  regla… y no tiene efecto, porque la utility lleva el VALOR sustituido y nunca lee la variable.
+  Verificación manual al scopear cualquier token: el estilo COMPUTADO en el navegador
+  (`getComputedStyle(el).fontFamily`), dentro y fuera del scope — el CSS emitido no distingue "la
+  regla existe" de "la regla manda". Origen:
+  `learnings/2026-09-21-theme-inline-redefinir-un-token-por-subarbol-no-hace-nada.md`.
+
 <!--
 Lo que sabemos que puede romperse y NADIE atrapa automáticamente. Cada hueco dice por qué no es
 automatizable (o qué falta para serlo) y cuál es la verificación manual mientras tanto. Al crearse el

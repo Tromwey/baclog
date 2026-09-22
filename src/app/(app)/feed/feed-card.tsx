@@ -3,637 +3,490 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
-import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
-import { MarkGlyph } from "@/components/reviews/review-card";
+import {
+  BOOKMARK_PATH,
+  CHECK_FILL_PATH,
+  CLOCK_PATH,
+  FLAME_PATH,
+  GLYPH_VIEWBOX,
+  LIKE_PATH,
+  REVIEW_PATH,
+  USERS_PATH,
+} from "@/components/glyph-paths";
 import { mixToward, rgba, type RGB } from "@/lib/color";
-import { joinMeta } from "@/lib/format";
 import { dominantHexes } from "@/modules/backlog/palette";
 import type { MediaType } from "@/modules/catalog/types";
-import { markLabel } from "@/modules/reviews/format";
-import type { FeedBurst, FeedCard, FeedEvent } from "@/modules/social/types";
-import { PaletteGlow } from "@/components/ui/palette-glow";
+import type { FeedBurst, FeedCard, FeedEvent, FeedSuggestion } from "@/modules/social/types";
 
 /**
- * Feed v3 (design "Feed v3" → "Feed v3 componentes", 2026-09-02) — the cards
- * lose their surfaces. No fill, no radius: each card is its content over a
- * palette glow, separated from the next by the frame's RHYTHM (feed-list.tsx
- * owns it: 72px between two heroes, 56 before one, 28 after one, 36
- * otherwise — never a single flat gap). A hero also bleeds its tone into the
- * cards around it (`spill`/`rise`) and masks its art and word band by what
- * follows it; see CardCtx. The cover carries the card, at three sizes:
+ * Feed v8 Stack (design "Feed v8 Stack", 2026-09-21) — the feed stops being a
+ * column of surfaceless cards and becomes a STACK: every event is its own
+ * sticky, tinted card that pins under the header and is slid over by the next
+ * one. Each card is a little screen of its own — author pill on top, the
+ * artwork filling the middle at its natural aspect, and a text block at the
+ * bottom where every state is a PILL with its glyph (one vocabulary: flame,
+ * thumb, check, bookmark, clock, review, users).
  *
- *  - HERO    — obsessed and reviewed: the cover FULL-BLEED at its native
- *              aspect, the author in a glass pill on top, the words in a
- *              glass panel at the bottom (serif 34 / 30). The rare events get
- *              the whole width.
- *  - BURST   — N consecutive adds by one author to one backlog: header with
- *              the sentence under the handle, a snap strip of 208px covers
- *              with the title printed on each, the per-type tally and a glass
- *              "Ver los N" that expands the rows in place (capped strip +
- *              "+N" tile, feed v2 review).
- *  - COMPACT — a lone add, a "no puede esperar", a completion: 124px cover
- *              on the LEFT, handle + verb, serif 24 title, meta · when.
+ * The geometry is the mock's, and it is load-bearing:
+ *  - each card is `sticky` at HDR with a tier height, `margin-bottom` -EXTB
+ *    against `padding-bottom` EXTB+22: the body runs on BELOW the card's own
+ *    height, so the card rising from underneath always mounts over filled
+ *    colour instead of over the page background.
+ *  - the tier caps height against the viewport (`min(620px, 100dvh * .72)`)
+ *    so the next card's top edge always shows — that edge is what says the
+ *    stack continues.
+ *  - the card colour is the title's own palette dragged most of the way to
+ *    black (`cardEnds`), so the stack reads as the covers' light rather than
+ *    as a set of surfaces.
+ *  - the shadow is SHORT and faint (`0 -8px 18px rgba(0,0,0,.42)`). The long
+ *    one it replaced stacked: every pinned card added its shadow to the one
+ *    below and the pile darkened as you scrolled. Only the card coming in is
+ *    actually visible, so a short one is all the separation that is needed.
+ *  - no 1px edge light: in the mock that hairline became the `edgeLight`
+ *    tweak and ships OFF. The card reads flatter but cleaner, and with the
+ *    120px overlap the shadow alone carries the separation.
  *
- * Every card is its own stacking context (`isolate`): the z-indexes that
- * order its layers (stretched link, pill, panel, raised handle links) must
- * never reach the page, where the sticky glass header sits at z-5 — without
- * it a hero pill scrolled under the header painted OVER it (founder report,
- * 2026-09-03).
- *
- * Links, never nested: the hero is one stretched item link under a raised
- * profile pill and a pointer-transparent text panel (only the spoiler button
- * takes taps); the compact keeps v2's stretched title link under raised
- * @handle / backlog links. The flame stays the only color; verdicts stay at
- * the metadata tier; covers keep their native aspect (album 1:1, video 3:4).
- * Every author arrives on the same glass pill (AuthorPill), never loose
- * beside an avatar. Glass = the mock's (rgba(18,18,24,.38) + per-piece
- * blur/saturate),
- * borderless (§7 — the one thing the mock draws that we don't). Gutter 20,
- * the mock's, matched by the feed's glass header (ScreenHeader `glass`).
+ * Founder calls, 2026-09-21: the "Seguir" pill KEEPS the mock's lime glow (an
+ * explicit exception to AGENTS.md §7); the v8 greys and Space Mono apply to
+ * the feed only (`.feed-v8` in globals.css); film covers stay 3:4 like the
+ * rest of the product instead of the mock's 2:3.
  */
 
-export function FeedCardView({ card, ctx = NO_CTX }: { card: FeedCard; ctx?: CardCtx }) {
-  if (card.kind === "burst") return <BurstCard burst={card} />;
-  const e = card.event;
-  if (e.kind === "obsessed") return <ObsessedCard event={e} ctx={ctx} />;
-  if (e.kind === "reviewed") return <ReviewedCard event={e} ctx={ctx} />;
-  return <CompactCard event={e} />;
+/** Sticky header height in the mock — what every card pins under. */
+export const HDR_PX = 63;
+/** How far a card's body runs past its own height (the mock's EXTB). */
+export const EXT_BOTTOM = 120;
+
+export const STICKY_TOP = `calc(${HDR_PX}px + env(safe-area-inset-top))`;
+
+type Tier = { h: number; cap: number; textMax: number };
+/** [fixed height, ceiling as a fraction of the screen, max height of the text block] */
+const TIER: Record<"L" | "M" | "S", Tier> = {
+  L: { h: 620, cap: 0.72, textMax: 180 },
+  M: { h: 500, cap: 0.58, textMax: 105 },
+  S: { h: 370, cap: 0.44, textMax: 105 },
+};
+
+/** The mock's `tint` slider at its default 45% → `k = 1 - .45 * .78`. */
+const TINT_K = 1 - (45 / 100) * 0.78;
+const TOP_TARGET: RGB = { r: 0x10, g: 0x10, b: 0x13 };
+const BOT_TARGET: RGB = { r: 0x0c, g: 0x0c, b: 0x10 };
+
+/** The mock's `ends()`: the palette pair dragged toward black, top and bottom. */
+function cardEnds(hexes: readonly string[]): [string, string] {
+  const a = hexes[0] ?? "#6C6B76";
+  const b = hexes[1] ?? a;
+  return [
+    mixToward(a, TOP_TARGET, TINT_K),
+    mixToward(b, BOT_TARGET, Math.min(1, TINT_K + 0.08)),
+  ];
 }
 
-// ---------- shared bits ----------
+export function cardBackground(hexes: readonly string[]): string {
+  const [top, bot] = cardEnds(hexes);
+  return `linear-gradient(168deg, ${top} 0%, ${bot} 100%)`;
+}
 
-const META = "font-mono text-[8.5px] uppercase tracking-[0.1em]";
-/** The mock's `--glass`, with the blur each piece asks for. */
-const GLASS_BG = "bg-[rgba(18,18,24,.38)]";
-const GLASS = `${GLASS_BG} backdrop-blur-[16px]`;
-/** Dark neutral depth under a cover (§7-exempt: no color, no glow). The
- *  frame gives each size its own recipe — they are not interchangeable. */
-const BURST_SHADOW =
-  "shadow-[0_18px_40px_-12px_rgba(0,0,0,.7),inset_0_1px_0_rgba(255,255,255,.18)]";
-const COMPACT_SHADOW =
-  "shadow-[0_20px_40px_-14px_rgba(0,0,0,.75),inset_0_1px_0_rgba(255,255,255,.18)]";
-
-/** Press response for a card whose tap target is a STRETCHED link: the
- *  visible card sinks while `[data-stretch]` is held (the `bl-press-lg` depth
- *  and timing), and the nested links/buttons keep their own press state. */
-const STRETCH_PRESS =
-  "transition-[scale,opacity] duration-200 ease-[var(--ease-out)] has-[[data-stretch]:active]:scale-[0.985] has-[[data-stretch]:active]:duration-[80ms] motion-reduce:has-[[data-stretch]:active]:scale-100 motion-reduce:has-[[data-stretch]:active]:opacity-80";
-
-const aspectOf = (m: MediaType) => (m === "album" ? "aspect-square" : "aspect-[3/4]");
-
-/**
- * The author, in the frame's glass pill: orb + @handle + a trailing mono
- * label (the "when", or "Sugerencia" on the suggestion). Every card in Feed
- * v3 introduces its author this way — burst, compact, hero and suggestion —
- * so the handle always arrives on the same chip instead of loose next to an
- * avatar. `sm` is the compact card's tighter build (the frame's `4px 10px
- * 4px 4px` / orb 20 / 12.5px against the standard `5px 12px 5px 5px` /
- * orb 22 / 13px).
- */
-export function AuthorPill({
-  username,
-  initial,
-  avatarUrl,
-  avatarHexes,
-  trailing,
-  sm = false,
-  className = "",
-}: {
-  username: string;
-  initial?: string;
-  avatarUrl: string | null;
-  avatarHexes: readonly [string, string];
-  trailing?: string;
-  sm?: boolean;
-  className?: string;
-}) {
-  return (
-    <Link
-      href={profileHref(username)}
-      className={`flex max-w-full items-center rounded-full backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG} ${
-        sm ? "gap-[7px] py-1 pl-1 pr-2.5" : "gap-2 py-[5px] pl-[5px] pr-3"
-      } ${className}`}
-    >
-      <AdnAvatar
-        hexes={avatarHexes}
-        initial={initial}
-        src={avatarUrl}
-        className={sm ? "h-5 w-5 text-[8px]" : "h-[22px] w-[22px] text-[8.5px]"}
-      />
-      <span
-        className={`truncate font-semibold text-text ${sm ? "text-[12.5px]" : "text-[13px]"}`}
-      >
-        @{username}
-      </span>
-      {trailing && (
-        <span
-          className={`flex-none font-mono uppercase tracking-[0.1em] text-text-2 ${
-            sm ? "text-[8px]" : "text-[8.5px]"
-          }`}
-        >
-          {trailing}
-        </span>
-      )}
-    </Link>
-  );
+/** The colour the page continues in below the last card (the mock's tailBg). */
+export function cardTailHex(hexes: readonly string[]): string {
+  return cardEnds(hexes)[1];
 }
 
 /**
- * Where a card sits in the run. The frame derives real geometry from this:
- * a hero bleeds its tone DOWN into the card below (`spill`), rises out of a
- * non-hero above it (`rise`), and masks its art and word band differently
- * depending on whether the NEXT card is another hero. Without it every hero
- * is a hard rectangle and the feed loses the colour that joins the cards.
+ * Founder call 2026-09-21: the mock fixes film at 2:3, but every other cover
+ * in the product is 3:4 and the feed is not worth splitting that in two.
  */
-export type CardCtx = {
-  /** `null` when nothing follows this card on screen. */
-  nextIsGem: boolean | null;
-  followsHero: boolean;
-  followsOther: boolean;
-};
+const aspectOf = (m: MediaType) => (m === "album" ? "1 / 1" : "3 / 4");
 
-export const NO_CTX: CardCtx = {
-  nextIsGem: null,
-  followsHero: false,
-  followsOther: false,
-};
+/** A card is never lit by nothing: the cover's hexes, else the author's ADN. */
+const cardHexes = (e: FeedEvent): readonly string[] =>
+  e.paletteHex.length > 0 ? e.paletteHex : e.author.avatarHexes;
 
-/** "gem" in the frame: the two rare events that get the whole width. */
-export const isGemCard = (c: FeedCard) =>
-  c.kind !== "burst" && (c.event.kind === "obsessed" || c.event.kind === "reviewed");
-
-/** The frame's `mixDark(h, .5)`: the tone, halfway to the page dark. */
-const DARK: RGB = { r: 18, g: 18, b: 18 };
-const toneEdgeOf = (hexes: readonly string[]) =>
-  mixToward(hexes[1] ?? hexes[0] ?? "#0b0b0d", DARK, 0.5);
-
-/** The glow's colors: the cover's two leading hexes (the mock's `hx` pair),
- *  else the author's ADN — a card is never lit by nothing. */
-const glowHexes = (e: FeedEvent) =>
-  e.paletteHex.length > 0 ? e.paletteHex.slice(0, 2) : e.author.avatarHexes;
-
-/** Where a cover has no art: the mock's "printed" gradient from the palette
- *  (a soft highlight over a diagonal), surface-2 when there is no palette. */
+/** Where a cover has no art: the palette as a printed gradient. */
 function posterFill(hexes: readonly string[]): string | undefined {
   const [a, b = a] = hexes;
   if (!a) return undefined;
   return `radial-gradient(90% 70% at 30% 20%, ${rgba(a, 0.55)} 0%, ${rgba(a, 0)} 70%), linear-gradient(160deg, ${a} 0%, ${b} 100%)`;
 }
 
-/** A cover box at whatever size the caller gives it — the image fills it,
- *  the palette (then surface-2) stands in when there is none. */
-function Cover({
-  event,
-  className,
-  artMask,
-  overlay,
+// ---------- the pill vocabulary ----------
+
+type Pill = { label: string; d: string; color: string; flip?: boolean };
+
+const P = {
+  flame: (label: string): Pill => ({ label, d: FLAME_PATH, color: "var(--hot)" }),
+  up: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--radar)" }),
+  down: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--text-3)", flip: true }),
+  check: (label: string): Pill => ({ label, d: CHECK_FILL_PATH, color: "var(--accent)" }),
+  bookmark: (label: string): Pill => ({ label, d: BOOKMARK_PATH, color: "var(--text-2)" }),
+  clock: (label: string): Pill => ({ label, d: CLOCK_PATH, color: "var(--radar)" }),
+  review: (label: string): Pill => ({ label, d: REVIEW_PATH, color: "var(--text)" }),
+  users: (label: string): Pill => ({ label, d: USERS_PATH, color: "var(--text-2)" }),
+};
+
+const MARK_PILL = {
+  liked: () => P.up("Le gusta"),
+  disliked: () => P.down("No le gusta"),
+  obsessed: () => P.flame("Le obsesiona"),
+} as const;
+
+/**
+ * The mock's pill rules. A waiting add REPLACES the "agregó a" pill instead of
+ * adding to it: two long pills wrap the row and eat the artwork's height.
+ */
+function pillsFor(e: FeedEvent): Pill[] {
+  const out: Pill[] = [];
+  if (e.waiting) out.push(P.clock(`No puede esperar · ${e.waiting}`));
+  else if (e.kind === "added")
+    out.push(P.bookmark(e.backlogName ? `Agregó a ${e.backlogName}` : "Agregó"));
+  else if (e.kind === "completed") out.push(P.check("Completo"));
+  else if (e.kind === "obsessed") out.push(P.flame("Le obsesiona"));
+  else if (e.kind === "reviewed") out.push(P.review("Reseñó"));
+
+  if (e.mark && e.mark !== "obsessed") out.push(MARK_PILL[e.mark]());
+  else if (e.mark === "obsessed" && e.kind !== "obsessed") out.push(MARK_PILL.obsessed());
+  return out;
+}
+
+function PillRow({ pills }: { pills: Pill[] }) {
+  if (pills.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-[7px]">
+      {pills.map((p) => (
+        <span
+          key={p.label}
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-3.5 py-2 font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text backdrop-blur-[20px] backdrop-saturate-[1.5]"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox={GLYPH_VIEWBOX}
+            fill={p.color}
+            aria-hidden
+            className="flex-none"
+            style={p.flip ? { transform: "scaleY(-1)" } : undefined}
+          >
+            <path d={p.d} />
+          </svg>
+          {p.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ---------- shared chrome ----------
+
+function AuthorPill({
+  username,
+  initial,
+  avatarUrl,
+  avatarHexes,
+  trailing,
+}: {
+  username: string;
+  initial?: string;
+  avatarUrl: string | null;
+  avatarHexes: readonly [string, string];
+  trailing: string;
+}) {
+  return (
+    <Link
+      href={`/u/${username}`}
+      className="relative z-10 flex max-w-full flex-none items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] py-1 pl-1 pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press"
+    >
+      <AdnAvatar
+        hexes={avatarHexes}
+        initial={initial}
+        src={avatarUrl}
+        className="h-[22px] w-[22px] font-mono text-[11px]"
+      />
+      <span className="truncate text-[13px] font-semibold text-text">@{username}</span>
+      <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+        {trailing}
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * The card shell: sticky at the header, its own tint, and a body that runs
+ * EXT_BOTTOM past its height so the next card never rises over bare page.
+ */
+function StackCard({
+  hexes,
+  size,
   children,
 }: {
-  event: FeedEvent;
-  className: string;
-  /** The frame's `artMask` — fades the ART only, never the pill or band. */
-  artMask?: string;
-  /** Painted inside the masked art layer (the hero's sheen). */
-  overlay?: React.ReactNode;
-  children?: React.ReactNode;
+  hexes: readonly string[];
+  size: "L" | "M" | "S";
+  children: React.ReactNode;
 }) {
-  const mask = artMask ? { maskImage: artMask, WebkitMaskImage: artMask } : null;
+  const tier = TIER[size];
   return (
-    <span
-      className={`relative block overflow-hidden ${aspectOf(event.mediaType)} ${className}`}
+    <article
+      className="sticky flex flex-col gap-3.5 overflow-hidden rounded-t-[26px] px-5 pb-[142px] pt-[18px] shadow-[0_-8px_18px_rgba(0,0,0,.42)] [container-type:inline-size] [scroll-snap-align:start]"
+      style={{
+        top: STICKY_TOP,
+        height: `calc(min(${tier.h}px, calc(100dvh * ${tier.cap})) + ${EXT_BOTTOM}px)`,
+        marginBottom: `-${EXT_BOTTOM}px`,
+        background: cardBackground(hexes),
+      }}
     >
-      <span
-        aria-hidden
-        className="absolute inset-0 bg-surface-2"
-        style={{ background: posterFill(event.paletteHex), ...mask }}
-      >
-        {event.posterUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
-          <img
-            src={event.posterUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        )}
-        {overlay}
-      </span>
       {children}
+    </article>
+  );
+}
+
+/** The middle band: the artwork, centred, taking whatever height is left. */
+function Art({ children }: { children: React.ReactNode }) {
+  return <div className="relative flex min-h-0 flex-1 items-center justify-center">{children}</div>;
+}
+
+function TextBlock({ size, children }: { size: "L" | "M" | "S"; children: React.ReactNode }) {
+  return (
+    <div
+      className="flex flex-none flex-col gap-[9px] overflow-hidden"
+      style={{ maxHeight: `${TIER[size].textMax}px` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Title({ title, tail }: { title: string; tail: string | null }) {
+  return (
+    <span className="font-serif text-[26px] italic leading-[1.08] text-pretty text-text">
+      {title}
+      {tail && <span className="text-text-3">{` · ${tail}`}</span>}
     </span>
   );
 }
 
-/** "Película · 2023" / "Álbum · Charli xcx" / with mark or countdown. joinMeta
- *  owns the separator, so a missing tail never leaves a "·" dangling. */
-function metaOf(event: FeedEvent) {
-  const tail =
-    event.waiting ??
-    (event.mark
-      ? markLabel(event.mark)
-      : event.mediaType === "album"
-        ? event.byline
-        : event.year);
-  return joinMeta([event.mediaTypeLabel, tail]);
-}
-
-const profileHref = (username: string) => `/u/${username}`;
-const itemHref = (catalogItemId: string) => `/item/${catalogItemId}`;
-const backlogHref = (username: string, backlogId: string) => `/u/${username}/${backlogId}`;
-
-// ---------- burst ----------
-
-/** Covers in the strip before it folds into a "+N" tile. */
-const STRIP_MAX = 12;
-
-/** "Película ×5 · Álbum ×2" — per media type, in run order of first sight. */
-function tally(items: FeedEvent[]): string {
-  const counts = new Map<string, number>();
-  for (const e of items) counts.set(e.mediaTypeLabel, (counts.get(e.mediaTypeLabel) ?? 0) + 1);
-  return [...counts.entries()].map(([k, n]) => `${k} ×${n}`).join(" · ");
-}
-
-function BurstCard({ burst }: { burst: FeedBurst }) {
-  const [expanded, setExpanded] = useState(false);
-  const { author } = burst;
-  const count = burst.items.length;
-  const strip = burst.items.slice(0, STRIP_MAX);
-  const folded = count - strip.length;
-  // The run's dominant colors (palette.ts owns the dedupe), the ADN if none.
-  const mixed = dominantHexes(burst.items, 4);
-  const hexes = mixed.length > 0 ? mixed : author.avatarHexes;
-
-  return (
-    <article className="relative isolate flex flex-col gap-3.5">
-      <PaletteGlow hexes={hexes} angle={110} className="inset-x-0 bottom-0 top-5" />
-      <div className="relative flex flex-col items-start gap-2.5 px-5">
-        <AuthorPill
-          username={author.username}
-          initial={author.initial}
-          avatarUrl={author.avatarUrl}
-          avatarHexes={author.avatarHexes}
-          trailing={burst.when}
-        />
-        <span className="text-[13px] leading-[1.3] text-text-2">
-          Agregó {count} títulos a{" "}
-          <Link
-            href={backlogHref(author.username, burst.backlogId)}
-            className="font-semibold text-text transition-opacity active:opacity-60"
-          >
-            {burst.backlogName}
-          </Link>
-        </span>
-      </div>
-
-      <div className="relative flex snap-x snap-proximity items-end -mb-[38px] -mt-5 gap-2.5 overflow-x-auto px-5 pb-11 pt-6 [scroll-padding-inline:20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {strip.map((e) => (
-          <Link
-            key={e.id}
-            href={itemHref(e.catalogItemId)}
-            aria-label={e.title}
-            className="flex-none snap-start bl-press-lg"
-          >
-            <Cover event={e} className={`h-[208px] rounded-[14px] ${BURST_SHADOW}`}>
-              <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-black/0 px-2.5 pb-[9px] pt-[22px] font-serif text-sm italic leading-[1.1] text-text">
-                {e.title}
-              </span>
-            </Cover>
-          </Link>
-        ))}
-        {folded > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            aria-label={`Ver los ${count}`}
-            className={`flex h-[208px] flex-none snap-start items-center justify-center rounded-[14px] font-mono text-[13px] text-text-2 aspect-[3/4] bl-press-lg ${GLASS}`}
-          >
-            +{folded}
-          </button>
-        )}
-      </div>
-
-      <div className="relative flex items-center gap-2.5 px-5">
-        <span className={`${META} text-text-3`}>{tally(burst.items)}</span>
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className={`ml-auto rounded-full px-3 py-[7px] font-mono text-[9.5px] uppercase tracking-[0.12em] text-text bl-press ${GLASS}`}
-        >
-          {expanded ? "Ocultar" : `Ver los ${count}`}
-        </button>
-      </div>
-
-      {expanded && (
-        <div className={`bl-rise-soft relative mx-5 flex flex-col gap-2.5 rounded-[18px] px-3.5 py-3 backdrop-blur-[24px] backdrop-saturate-[1.4] ${GLASS_BG}`}>
-          {burst.items.map((e) => (
-            <Link
-              key={e.id}
-              href={itemHref(e.catalogItemId)}
-              className="flex items-center gap-3 transition-opacity active:opacity-70"
-            >
-              <Cover event={e} className="w-10 flex-none rounded-[7px]" />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-serif text-[17px] italic leading-[1.12] text-text">
-                  {e.title}
-                </span>
-                <span className={`${META} text-[8px] text-text-3`}>{metaOf(e)}</span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </article>
-  );
-}
-
-// ---------- heroes ----------
-
 /**
- * The full-bleed cover with the three layers every hero shares: the
- * stretched item link (z-1) over the art, the profile pill (z-20) and the
- * pointer-transparent word panel (z-10) — so the whole cover is one tap to
- * the item, the pill is a tap to the profile, and nothing nests.
+ * The hexes a card is tinted from — the list needs them to continue the page
+ * in the LAST card's bottom colour (the mock's `tailBg`), so the stack does
+ * not end on a hard edge against the page background.
  */
-function Hero({
-  event,
-  glowOpacity,
-  /** The mock's sheen over the art: obsessed lights the top-RIGHT at .18,
-   *  reviewed the top-LEFT at .16. */
-  highlight,
-  /** Gap of the word panel: 6 for obsessed, 5 for reviewed (the mock's). */
-  panelGap,
-  ctx,
-  children,
-}: {
-  event: FeedEvent;
-  glowOpacity: number;
-  highlight: { x: string; alpha: number };
-  panelGap: string;
-  ctx: CardCtx;
-  children: React.ReactNode;
-}) {
-  const { author } = event;
+export function hexesOfCard(card: FeedCard): readonly string[] {
+  if (card.kind !== "burst") return cardHexes(card.event);
+  const first = card.items[0]?.paletteHex ?? [];
+  const last = card.items[card.items.length - 1]?.paletteHex ?? [];
+  if (first.length > 0) return [first[0], last[1] ?? last[0] ?? first[0]];
+  const mixed = dominantHexes(card.items, 4);
+  return mixed.length > 0 ? mixed : card.author.avatarHexes;
+}
 
-  // The frame's geometry for this position in the run.
-  const hasNext = ctx.nextIsGem !== null;
-  const pair = ctx.nextIsGem === true;
-  const spill = hasNext ? (pair ? 72 : 120) : 0;
-  const rise = ctx.followsOther ? 140 : 0;
-  const hx = glowHexes(event);
-  const toneTop = hx[0] ?? "#0b0b0d";
-  const toneEdge = toneEdgeOf(hx);
+// ---------- cards ----------
 
-  // The frame's mask stops are PIXELS, tuned on a 3/4 hero. A square album
-  // cover is a quarter shorter, so the same 120px fade-in plus 140px tail ate
-  // most of its art and a light palette read as a washed band. Scale the
-  // stops by the aspect so every hero loses the same PROPORTION of its art
-  // instead of the same number of pixels.
-  const px = (n: number) => `${Math.round(n * (event.mediaType === "album" ? 0.75 : 1))}px`;
+export function FeedCardView({ card }: { card: FeedCard }) {
+  if (card.kind === "burst") return <BurstCard burst={card} />;
+  return <EventCard event={card.event} />;
+}
 
-  const bandMask = !hasNext
-    ? `linear-gradient(transparent, #000 ${px(96)})`
-    : pair
-      ? `linear-gradient(transparent, #000 ${px(96)}, #000 calc(100% - ${px(160)}), transparent 100%)`
-      : `linear-gradient(transparent, #000 ${px(96)}, #000 calc(100% - ${px(120)}), rgba(0,0,0,.5) calc(100% - ${px(60)}), transparent 100%)`;
+/** The mock's tiers: L a review with words, M an obsession or completion, S a quick add. */
+function sizeOf(e: FeedEvent): "L" | "M" | "S" {
+  if (e.reviewBody) return "L";
+  return e.kind === "added" ? "S" : "M";
+}
 
-  const artMask =
-    (ctx.followsHero
-      ? `linear-gradient(180deg, transparent 0px, #000 ${px(200)}`
-      : ctx.followsOther
-        ? `linear-gradient(180deg, transparent 0px, #000 ${px(120)}`
-        : "linear-gradient(180deg, #000 0px, #000 0px") +
-    (!hasNext
-      ? ", #000 100%)"
-      : pair
-        ? `, #000 calc(100% - ${px(160)}), transparent 100%)`
-        : `, #000 calc(100% - ${px(140)}), rgba(0,0,0,.6) calc(100% - ${px(70)}), rgba(0,0,0,.2) calc(100% - ${px(25)}), transparent 100%)`);
+const BODY =
+  "text-[15px] leading-[1.5] text-pretty text-text [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden";
 
+function EventCard({ event }: { event: FeedEvent }) {
+  const size = sizeOf(event);
+  const tail = event.mediaType === "album" ? event.byline : (event.year?.toString() ?? null);
   return (
-    <article className="relative isolate">
-      {/* The tone rising out of the ordinary card above (the frame's
-          `riseBg`), so a hero does not start on a hard edge. */}
-      {rise > 0 && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0"
-          style={{
-            top: `-${rise}px`,
-            height: `${rise + 120}px`,
-            background: `linear-gradient(0deg, ${toneTop} 0px, ${toneTop} 120px, ${rgba(toneTop, 0.8)} 150px, ${rgba(toneTop, 0.5)} 185px, ${rgba(toneTop, 0.22)} 220px, ${rgba(toneTop, 0.06)} 250px, transparent 100%)`,
-          }}
-        />
-      )}
-      {/* …and the tone spilling DOWN onto whatever follows (`spillBg`).
-          Two adjacent heroes skip it: they share an edge instead. */}
-      {spill > 0 && !pair && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0"
-          style={{
-            bottom: `-${spill}px`,
-            height: `${spill + 60}px`,
-            background: `linear-gradient(180deg, ${rgba(toneEdge, 0.35)} 0px, ${rgba(toneEdge, 0.55)} 40px, ${rgba(toneEdge, 0.55)} 80px, ${rgba(toneEdge, 0.28)} 120px, ${rgba(toneEdge, 0.1)} 160px, transparent 100%)`,
-          }}
-        />
-      )}
-      <PaletteGlow
-        hexes={glowHexes(event)}
-        opacity={glowOpacity}
-        blur={80}
-        className="-inset-x-[10px] -top-[30px] bottom-10"
+    <StackCard hexes={cardHexes(event)} size={size}>
+      <AuthorPill
+        username={event.author.username}
+        initial={event.author.initial}
+        avatarUrl={event.author.avatarUrl}
+        avatarHexes={event.author.avatarHexes}
+        trailing={event.when}
       />
-      <Cover
-        event={event}
-        className={`w-full ${STRETCH_PRESS}`}
-        artMask={artMask}
-        overlay={
+      <Art>
+        <Link
+          href={`/item/${event.catalogItemId}`}
+          aria-label={event.title}
+          className="block h-full max-w-full bl-press-lg"
+          style={{ aspectRatio: aspectOf(event.mediaType) }}
+        >
           <span
-            aria-hidden
-            className="absolute inset-0"
+            role="img"
+            aria-label={event.title}
+            className="block h-full w-full rounded-2xl bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_26px_52px_-20px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
             style={{
-              background: `radial-gradient(120% 80% at ${highlight.x} 0%, rgba(255,255,255,${highlight.alpha}), rgba(255,255,255,0) 60%)`,
+              backgroundImage: event.posterUrl
+                ? `url(${event.posterUrl})`
+                : posterFill(event.paletteHex),
             }}
           />
-        }
-      >
-        <Link
-          href={itemHref(event.catalogItemId)}
-          aria-label={event.title}
-          data-stretch
-          className="absolute inset-0 z-[1]"
-        />
-        <Link
-          href={profileHref(author.username)}
-          className={`absolute left-5 top-5 z-20 flex max-w-[calc(100%-40px)] items-center gap-2 rounded-full py-[5px] pl-[5px] pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press ${GLASS_BG}`}
-        >
-          <AdnAvatar
-            hexes={author.avatarHexes}
-            initial={author.initial}
-            src={author.avatarUrl}
-            className="h-[22px] w-[22px] text-[8.5px]"
-          />
-          <span className="truncate text-[13px] font-semibold text-text">@{author.username}</span>
-          <span className={`flex-none ${META} text-text-2`}>{event.when}</span>
         </Link>
-        <span
-          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col px-5 pb-[22px] pt-[72px] backdrop-blur-[28px] ${panelGap}`}
-          style={{
-            background:
-              "linear-gradient(rgba(18,18,24,0), rgba(18,18,24,.22) 35%, rgba(18,18,24,.5) 80%, rgba(18,18,24,.5))",
-            maskImage: bandMask,
-            WebkitMaskImage: bandMask,
-          }}
-        >
-          {children}
-        </span>
-      </Cover>
-    </article>
+      </Art>
+      <TextBlock size={size}>
+        <PillRow pills={pillsFor(event)} />
+        <Title title={event.title} tail={tail} />
+        {event.reviewBody !== null && (
+          <ReviewBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} />
+        )}
+      </TextBlock>
+    </StackCard>
   );
 }
 
-function ObsessedCard({ event, ctx }: { event: FeedEvent; ctx: CardCtx }) {
-  return (
-    <Hero
-      event={event}
-      glowOpacity={0.55}
-      highlight={{ x: "80%", alpha: 0.18 }}
-      panelGap="gap-1.5"
-      ctx={ctx}
-    >
-      <span className="flex items-center gap-1.5 text-[13px] leading-[1.3] text-hot">
-        <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill="var(--hot)" aria-hidden className="flex-none">
-          <path d={FLAME_PATH} />
-        </svg>
-        Le obsesiona
-      </span>
-      <span className="font-serif text-[34px] italic leading-[1.02] tracking-[-0.01em] text-pretty text-text">
-        {event.title}
-      </span>
-      <span className={`${META} text-text-2`}>{metaOf(event)}</span>
-    </Hero>
-  );
-}
-
-function ReviewedCard({ event, ctx }: { event: FeedEvent; ctx: CardCtx }) {
-  return (
-    <Hero
-      event={event}
-      glowOpacity={0.5}
-      highlight={{ x: "20%", alpha: 0.16 }}
-      panelGap="gap-[5px]"
-      ctx={ctx}
-    >
-      <span className="text-[13px] leading-[1.3] text-text-2">Reseñó</span>
-      <span className="font-serif text-[30px] italic leading-[1.04] text-pretty text-text">
-        {event.title}
-      </span>
-      <span className={`flex items-center gap-1.5 ${META} text-text-2`}>
-        <MarkGlyph mark={event.mark} />
-        {metaOf(event)}
-      </span>
-      {event.reviewBody !== null && (
-        <HeroReviewBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} />
-      )}
-    </Hero>
-  );
-}
-
-/**
- * The review's words inside the hero panel, with the mock's spoiler
- * treatment (not the reviews block's SpoilerBody, whose plain label was made
- * for a surface card): the text stays in place at blur 6px / opacity .4 and
- * a glass pill sits over it at 55% of its height — revealing brings it into
- * focus without moving the panel. The hairline above is a content divider
- * (§7-exempt); the pill is borderless like every glass in the app. The only
- * thing in the pointer-transparent panel that takes a tap is this button.
- */
-function HeroReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolean }) {
+function ReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolean }) {
   const [revealed, setRevealed] = useState(false);
-  const words = "text-[14.5px] leading-[1.45] text-pretty text-text";
-  if (!hasSpoiler || revealed) {
-    return (
-      <p className={`mt-2 border-t border-white/[0.12] pt-3 ${words}`}>{body}</p>
-    );
-  }
+  if (!hasSpoiler || revealed) return <p className={`mt-0.5 ${BODY}`}>{body}</p>;
   return (
     <button
       type="button"
       onClick={() => setRevealed(true)}
-      className="pointer-events-auto relative mt-2 block w-full border-t border-white/[0.12] pt-3 text-left transition-opacity active:opacity-70"
+      className="relative mt-0.5 block w-full text-left transition-opacity active:opacity-70"
     >
-      <span className={`block select-none opacity-40 blur-[6px] ${words}`}>{body}</span>
-      <span className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[rgba(20,20,26,.6)] px-3.5 py-2 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text backdrop-blur-[16px]">
+      <span className={`select-none opacity-40 blur-[6px] ${BODY}`}>{body}</span>
+      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[var(--glass-bg)] px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text backdrop-blur-[16px]">
         Contiene spoiler · Mostrar
       </span>
     </button>
   );
 }
 
-// ---------- compact ----------
+/**
+ * N consecutive adds by one author: the covers become a snapping strip that
+ * drops in height until the widest one fits the card's width (the mock's
+ * `maxRatio` against `100cqw` — which is why the card declares a container).
+ */
+function BurstCard({ burst }: { burst: FeedBurst }) {
+  const { author, items } = burst;
+  const first = items[0]?.paletteHex ?? [];
+  const last = items[items.length - 1]?.paletteHex ?? [];
+  const mixed = dominantHexes(items, 4);
+  const hexes =
+    first.length > 0
+      ? [first[0], last[1] ?? last[0] ?? first[0]]
+      : mixed.length > 0
+        ? mixed
+        : author.avatarHexes;
+  // The widest cover decides how short the strip gets: a square album is 1.
+  const maxRatio = items.some((i) => i.mediaType === "album") ? 1 : 3 / 4;
+  return (
+    <StackCard hexes={hexes} size="M">
+      <AuthorPill
+        username={author.username}
+        initial={author.initial}
+        avatarUrl={author.avatarUrl}
+        avatarHexes={author.avatarHexes}
+        trailing={burst.when}
+      />
+      <Art>
+        <div
+          className="bl-scroll -mx-5 flex h-full w-auto items-stretch gap-3.5 self-center overflow-x-auto overflow-y-hidden px-5 [mask-image:linear-gradient(90deg,transparent_0,#000_20px,#000_calc(100%-46px),transparent_100%)] [scroll-padding-left:20px] [scroll-snap-type:x_mandatory]"
+          style={{ maxHeight: `calc(100cqw / ${maxRatio})` }}
+        >
+          {items.map((e) => (
+            <Link
+              key={e.id}
+              href={`/item/${e.catalogItemId}`}
+              aria-label={e.title}
+              className="block h-full flex-none [scroll-snap-align:start] bl-press-lg"
+              style={{ aspectRatio: aspectOf(e.mediaType) }}
+            >
+              <span
+                role="img"
+                aria-label={e.title}
+                className="block h-full w-full overflow-hidden rounded-[14px] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_18px_36px_-16px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
+                style={{
+                  backgroundImage: e.posterUrl ? `url(${e.posterUrl})` : posterFill(e.paletteHex),
+                }}
+              />
+            </Link>
+          ))}
+        </div>
+      </Art>
+      <TextBlock size="M">
+        <PillRow pills={[P.bookmark(`Agregó ${items.length} títulos a ${burst.backlogName}`)]} />
+      </TextBlock>
+    </StackCard>
+  );
+}
 
 /**
- * One row, two destinations, no nested anchors: the ITEM link is stretched
- * over the whole card (`after:inset-0` against the article's `relative`), so
- * the row stays a single tap target; the @handle and the backlog name sit
- * above it (`relative z-10`) with their own hrefs.
+ * "Quizá quieras seguir" — the one non-event card. Three covers fanned behind
+ * the words, the middle one (the title the reason names) in front.
  */
-function CompactCard({ event }: { event: FeedEvent }) {
-  // The frame capitalizes the verb: it opens its own line under the pill,
-  // it is not a continuation of "@handle …".
-  const verb =
-    event.kind === "completed" ? "Completó" : event.waiting ? "No puede esperar" : "Agregó a";
-  const shelf =
-    event.kind === "added" && !event.waiting && event.backlogId && event.backlogName
-      ? { id: event.backlogId, name: event.backlogName }
-      : null;
+export function SuggestCard({ s }: { s: FeedSuggestion }) {
+  const [following, setFollowing] = useState(false);
+  const mixed = dominantHexes(s.covers, 4);
+  const hexes = mixed.length > 0 ? mixed : s.avatarHexes;
+  // The named title goes to the centre and to the front; the others flank it.
+  const order = s.covers.length >= 3 ? [s.covers[1], s.covers[0], s.covers[2]] : s.covers;
   return (
-    <article className={`relative isolate flex flex-col gap-2.5 px-5 ${STRETCH_PRESS}`}>
-      <PaletteGlow
-        hexes={glowHexes(event)}
-        opacity={0.4}
-        blur={60}
-        className="-inset-y-2.5 left-0 w-3/5"
-      />
+    <StackCard hexes={hexes} size="L">
       <AuthorPill
-        sm
-        username={event.author.username}
-        initial={event.author.initial}
-        avatarUrl={event.author.avatarUrl}
-        avatarHexes={event.author.avatarHexes}
-        trailing={event.when}
-        className="relative z-10 self-start"
+        username={s.username}
+        initial={s.initial}
+        avatarUrl={s.avatarUrl}
+        avatarHexes={s.avatarHexes}
+        trailing="Sugerencia"
       />
-      <div className="relative flex items-center gap-[18px]">
-        <Cover event={event} className={`w-[124px] flex-none rounded-[14px] ${COMPACT_SHADOW}`} />
-        <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
-          <span className="truncate text-[13px] leading-[1.3] text-text-2">
-            {verb}
-            {shelf && (
-              <>
-                {" "}
-                <Link
-                  href={backlogHref(event.author.username, shelf.id)}
-                  className="relative z-10 font-semibold text-text transition-opacity active:opacity-60"
-                >
-                  {shelf.name}
-                </Link>
-              </>
-            )}
-          </span>
-          <Link
-            href={itemHref(event.catalogItemId)}
-            data-stretch
-            className="font-serif text-2xl italic leading-[1.08] text-pretty text-text after:absolute after:inset-0 after:content-['']"
-          >
-            {event.title}
-          </Link>
-          <span className={`flex items-center gap-1.5 ${META} text-text-3`}>
-            {event.kind === "completed" && <MarkGlyph mark={event.mark} />}
-            {metaOf(event)}
-          </span>
-        </span>
-      </div>
-    </article>
+      <Art>
+        {order.map((c, i) => (
+          <span
+            key={c.posterUrl}
+            role="img"
+            aria-hidden
+            className="absolute left-1/2 top-1/2 h-[64%] rounded-[14px] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_22px_44px_-18px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
+            style={{
+              aspectRatio: aspectOf(c.mediaType),
+              zIndex: i === 1 ? 3 : 1,
+              transform: `translate(-50%, -50%) translateX(${(i - 1) * 58}px) rotate(${(i - 1) * 8}deg)`,
+              backgroundImage: c.posterUrl ? `url(${c.posterUrl})` : posterFill(c.paletteHex),
+            }}
+          />
+        ))}
+      </Art>
+      <TextBlock size="L">
+        <PillRow pills={[P.users("Sugerencia")]} />
+        <Title title={s.reason} tail={null} />
+        {s.common && <span className="text-[14px] leading-[1.35] text-text-2">{s.common}</span>}
+        <FollowPill
+          username={s.username}
+          following={following}
+          onToggle={() => setFollowing((v) => !v)}
+        />
+      </TextBlock>
+    </StackCard>
+  );
+}
+
+/**
+ * Founder call 2026-09-21: this keeps the mock's lime glow — an explicit,
+ * documented exception to AGENTS.md §7 ("no coloured glows"), and the only
+ * place in the product that has one.
+ */
+function FollowPill({
+  username,
+  following,
+  onToggle,
+}: {
+  username: string;
+  following: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={following ? `Dejar de seguir a @${username}` : `Seguir a @${username}`}
+      onClick={onToggle}
+      className="mt-1 self-start rounded-full px-6 py-3.5 text-[16px] font-semibold transition-colors duration-200 bl-press"
+      style={
+        following
+          ? { background: "transparent", color: "var(--text-2)" }
+          : { background: "var(--accent)", color: "#0B0B0D", boxShadow: "0 0 24px #D8FF3E1A" }
+      }
+    >
+      {following ? "Siguiendo" : "Seguir"}
+    </button>
   );
 }

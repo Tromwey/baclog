@@ -5,7 +5,7 @@ guardrail: none (comportamiento del CLI de Vercel — la verificación es leer l
 status: resolved
 ---
 
-# `pnpm ship` sale con código 1 aunque el deploy haya quedado READY y `baclog.app` ya apunte a él
+# `pnpm ship` (y `pnpm beta`) salen con código 1 aunque el deploy haya quedado READY
 
 ## Síntoma
 
@@ -29,6 +29,20 @@ El fallo es del CLI **después** de que el deployment terminó y de que el alias
 deploy. Los dos deployments creados quedaron en `state: "READY"` con el sha correcto, y
 `baclog.app` / `www.baclog.app` ya colgaban del más nuevo. El CLI local está desactualizado
 (59.11.7 contra 59.23.2) y revienta en un paso posterior; el efecto en prod ya estaba hecho.
+
+## También rompe `pnpm beta`, y ahí SÍ deja el alias viejo
+
+`scripts/deploy-beta.sh` corre con `set -e -o pipefail` y toma la URL de
+`vercel deploy --yes | grep …`. Cuando el CLI sale 1, `pipefail` re-expone el
+fallo y el script aborta **antes de aliasear** — su "fail closed" a propósito.
+Diferencia clave con `ship`: el deployment queda READY pero `beta.baclog.app`
+sigue apuntando al ANTERIOR, así que `curl` devuelve 200 y parece que funcionó.
+El arreglo es aliasear a mano con la URL que el deploy sí imprimió:
+
+```sh
+npx vercel alias set https://baclog-XXXX-communeodevteams-projects.vercel.app baclog-beta.vercel.app
+npx vercel alias set https://baclog-XXXX-communeodevteams-projects.vercel.app beta.baclog.app
+```
 
 ## Prevención
 
