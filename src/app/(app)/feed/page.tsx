@@ -67,9 +67,13 @@ export default async function FeedPage() {
 }
 
 /**
- * The v8 header: sticky at the top of the feed's own scrollport, flat `--bg`
- * (no glass scrim — the stack supplies the depth), 18/20/14 padding, and the
- * title alone.
+ * The v8 header: sticky at the top of the feed's own scrollport, 18/20/14
+ * padding, and the title alone.
+ *
+ * NO background (founder call, 2026-09-21 — a deliberate change from the
+ * mock, which paints it `var(--bg)`): the black slab read as a lid on top of
+ * the stack. With nothing painted, the card slides BEHIND the title and the
+ * page keeps the stack's own colour up to the very top.
  *
  * No people chip: the mock draws only the title and the founder chose to
  * match it (2026-09-21). Buscar gente is still reachable from Perfil →
@@ -79,7 +83,7 @@ export default async function FeedPage() {
  */
 function FeedHeader() {
   return (
-    <header className="sticky top-0 z-[7] bg-bg px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
+    <header className="sticky top-0 z-[7] px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
       <h1 className="truncate font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
         Tu feed
       </h1>
