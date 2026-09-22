@@ -34,24 +34,55 @@ export default async function FeedPage() {
     getFeedSuggestion(user.id),
   ]);
 
+  // Feed v8 Stack: the populated feed is its OWN full-height scrollport. The
+  // cards pin with `position: sticky`, so the header and the cards have to
+  // share one scroller — which is why FeedList owns it and takes the header
+  // as a prop instead of the page laying both out. `.feed-v8` scopes the
+  // mock's darker greys and Space Mono to this screen (globals.css).
+  if (page.followingCount > 0 && page.cards.length > 0) {
+    return (
+      <main className="feed-v8 relative isolate mx-auto h-dvh w-full max-w-[430px] overflow-hidden bg-bg text-text">
+        <FeedList
+          initialCards={page.cards}
+          initialCursor={page.nextCursor}
+          suggestion={suggestion}
+          header={<FeedHeader />}
+        />
+      </main>
+    );
+  }
+
+  // The empty states keep the app's chrome and tokens — the v8 mock draws
+  // only the populated feed and defers them.
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <ScreenHeader title="Tu feed" action={<FindPeopleChip />} glass />
       {page.followingCount === 0 ? (
         <EmptyNoFollows userId={user.id} />
-      ) : page.cards.length === 0 ? (
-        <EmptyNoActivity
-          userId={user.id}
-          followingCount={page.followingCount}
-        />
       ) : (
-        <FeedList
-          initialCards={page.cards}
-          initialCursor={page.nextCursor}
-          suggestion={suggestion}
-        />
+        <EmptyNoActivity userId={user.id} followingCount={page.followingCount} />
       )}
     </main>
+  );
+}
+
+/**
+ * The v8 header: sticky at the top of the feed's own scrollport, flat `--bg`
+ * (no glass scrim — the stack supplies the depth), 18/20/14 padding, title
+ * only in the mock.
+ *
+ * The people chip is the ONE thing here the mock does not draw. It is kept
+ * because it is the only door to /feed/gente once the feed has content
+ * (F3.10.2): dropping it would strand that screen. Flagged for the founder.
+ */
+function FeedHeader() {
+  return (
+    <header className="sticky top-0 z-[7] flex items-start justify-between gap-3.5 bg-bg px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
+      <h1 className="min-w-0 truncate font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
+        Tu feed
+      </h1>
+      <FindPeopleChip />
+    </header>
   );
 }
 

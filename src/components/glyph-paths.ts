@@ -33,6 +33,30 @@ export const CHECK_PATH = "M4.5 12.5l4.8 4.8L19.5 7";
  */
 export const BADGE_CHECK_PATH = "M5 12.5l4.5 4.5L19 7";
 
+/* ---- Feed v8 Stack (2026-09-21) — the pill vocabulary. Every state in the
+   feed is a pill with a glyph, and these are drawn as FILLS at 13px, so they
+   are separate from the stroke glyphs above even where the idea repeats. ---- */
+
+/** ✓ "completo" — FILL, accent. The stroke CHECK_PATH is the cover glyph. */
+export const CHECK_FILL_PATH =
+  "M20.5 6.3a1.1 1.1 0 010 1.6l-9.6 9.6a1.1 1.1 0 01-1.6 0L4.6 12.8a1.1 1.1 0 011.6-1.6l3.9 3.9 8.8-8.8a1.1 1.1 0 011.6 0z";
+
+/** 🔖 "agregó a {backlog}" — FILL, text-2. */
+export const BOOKMARK_PATH =
+  "M7 2.6h10a2.2 2.2 0 012.2 2.2v16.6L12 17.6l-7.2 3.8V4.8A2.2 2.2 0 017 2.6z";
+
+/** ⏱ "no puede esperar · faltan N" — FILL, radar. */
+export const CLOCK_PATH =
+  "M12 2a10 10 0 100 20 10 10 0 000-20zm1.1 4.6v5.8l4.3 2.6-1.1 1.8-5.4-3.2V6.6h2.2z";
+
+/** 💬 "reseñó" — FILL, text. */
+export const REVIEW_PATH =
+  "M4.2 3.4h15.6a1.6 1.6 0 011.6 1.6v10.2a1.6 1.6 0 01-1.6 1.6H9.4l-6.8 4.4V5a1.6 1.6 0 011.6-1.6z";
+
+/** 👥 "sugerencia" — FILL, text-2. */
+export const USERS_PATH =
+  "M8.4 11.4a3.6 3.6 0 100-7.2 3.6 3.6 0 000 7.2zm7.8-.4a3.1 3.1 0 100-6.2 3.1 3.1 0 000 6.2zM1.8 19.6c0-3.1 2.9-5.2 6.6-5.2s6.6 2.1 6.6 5.2H1.8zm14.9 0c0-2.1-.8-3.8-2.1-5 3.2.2 5.4 2.2 5.4 5h-3.3z";
+
 /** 👍 "me gustó" — FILL, radar. Flip with scaleY(-1) in text-3 for "no me gustó". */
 export const LIKE_PATH =
   "M7.5 10.5v9.5H4.2a1.2 1.2 0 01-1.2-1.2v-7.1a1.2 1.2 0 011.2-1.2h3.3zm2 9.5h7.6a2.2 2.2 0 002.16-1.78l1.24-6.2A2.2 2.2 0 0018.34 9.4H14.2l.7-3.3a2 2 0 00-3.6-1.5L9.5 8.6v11.4z";
