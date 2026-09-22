@@ -27,11 +27,18 @@ export function AuraBackground({ colors }: { colors: string[] }) {
   // palette glow and tone rising into the header (Feed v3 re-sync,
   // 2026-09-21): the ADN aura sat behind that and tinted the header twice.
   // Only the feed itself — /feed/gente is a plain list and keeps the aura.
+  //
+  // /perfil too: it paints `ProfileBackdrop` — the same 480px palette glow
+  // (115°, blur 90) + scrim that /u/[username] uses, which never had this
+  // aura behind it because it lives outside the (app) layout. Measured on
+  // 2026-09-21: the app aura AND that glow were both rendering.
   const hasOwnHero =
     pathname === "/feed" ||
+    pathname === "/perfil" ||
     pathname.startsWith("/item/") ||
     (pathname.startsWith("/backlogs/") && pathname !== "/backlogs");
   if (hasOwnHero) return null;
+
 
   return (
     <div

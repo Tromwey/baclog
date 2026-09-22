@@ -98,7 +98,13 @@ export default async function BacklogsPage() {
  */
 function FirstUse({ name }: { name: string | null }) {
   return (
-    <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
+    // `bg-bg` on purpose: this screen paints its OWN muted fixed-color aura,
+    // and the (app) layout's content wrapper is transparent so the app-wide
+    // ADN aura shows through everywhere else. Without an opaque base the two
+    // stacked here (two AuraFields measured on this screen, 2026-09-21) and
+    // the lima fallback washed over the muted one the mock asks for. Only
+    // FirstUse is opaque — the populated /backlogs still shows the aura.
+    <main className="relative mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[300px] overflow-hidden"
