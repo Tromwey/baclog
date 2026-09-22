@@ -68,20 +68,21 @@ export default async function FeedPage() {
 
 /**
  * The v8 header: sticky at the top of the feed's own scrollport, flat `--bg`
- * (no glass scrim — the stack supplies the depth), 18/20/14 padding, title
- * only in the mock.
+ * (no glass scrim — the stack supplies the depth), 18/20/14 padding, and the
+ * title alone.
  *
- * The people chip is the ONE thing here the mock does not draw. It is kept
- * because it is the only door to /feed/gente once the feed has content
- * (F3.10.2): dropping it would strand that screen. Flagged for the founder.
+ * No people chip: the mock draws only the title and the founder chose to
+ * match it (2026-09-21). Buscar gente is still reachable from Perfil →
+ * seguidores / siguiendo (`perfil/people-screen.tsx`), and the empty states
+ * below still point at it directly — it costs a tap from a populated feed,
+ * it is not stranded.
  */
 function FeedHeader() {
   return (
-    <header className="sticky top-0 z-[7] flex items-start justify-between gap-3.5 bg-bg px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
-      <h1 className="min-w-0 truncate font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
+    <header className="sticky top-0 z-[7] bg-bg px-5 pb-[14px] pt-[calc(18px+env(safe-area-inset-top))]">
+      <h1 className="truncate font-display text-[30px] font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
         Tu feed
       </h1>
-      <FindPeopleChip />
     </header>
   );
 }
