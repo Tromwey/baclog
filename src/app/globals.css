@@ -577,29 +577,17 @@
 /**
  * Feed v8 Stack scope. The v8 mock ships its own `:root`: greys one step
  * darker than the Revamp's (it declares exactly the pre-lift #a9a8b2 /
- * #6c6b76), a slightly thinner glass, and Space Mono instead of Red Hat
- * Mono. Founder call 2026-09-21: adopt them IN THE FEED ONLY, so the rest of
- * the product keeps the lifted greys and the Red Hat data voice. Space Mono
- * is already a real document font (the exportable cards' ink, layout.tsx),
- * so it needs no new loading — only a family-name override.
+ * #6c6b76) and a slightly thinner glass. Founder call 2026-09-21: adopt those
+ * IN THE FEED ONLY, so the rest of the product keeps the lifted greys.
+ *
+ * The mock also asks for Space Mono; the founder reversed that on the same
+ * day and the feed stays on Red Hat Mono like every other screen, so there is
+ * no font override here — the data voice is one across the product.
  */
 .feed-v8 {
   --text-2: #a9a8b2;
   --text-3: #6c6b76;
   --glass-bg: rgba(255, 255, 255, 0.07);
-}
-
-/**
- * The mono override has to be a real rule, NOT a `--font-mono` redefinition:
- * the theme block is `@theme inline`, so Tailwind substitutes the token's
- * VALUE into the utility (`.font-mono{font-family:var(--font-red-hat-mono),…}`)
- * instead of emitting `var(--font-mono)`. Re-pointing `--font-mono` on a
- * subtree therefore does nothing at all — it compiled clean and rendered Red
- * Hat Mono anyway. This rule is unlayered, so it beats the utility in
- * `@layer utilities` regardless of specificity.
- */
-.feed-v8 .font-mono {
-  font-family: "Space Mono", ui-monospace, monospace;
 }
 
 @media (prefers-contrast: more) {
