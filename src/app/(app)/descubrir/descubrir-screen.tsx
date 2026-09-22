@@ -16,7 +16,7 @@ import {
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
 import type { ObsessionRail, LatestDoubleFeature } from "@/modules/recs/discover-rails";
 import type { TrendingTitle } from "@/modules/social/trending";
-import { AuraField, AUTH_ADN, StrokeIcon, glassChipClass } from "@/components/ui";
+import { StrokeIcon, glassChipClass } from "@/components/ui";
 import { BACK_PATH } from "@/components/glyph-paths";
 import { DiscoverHome } from "./discover-home";
 import { SearchSheet } from "./search-sheet";
@@ -189,7 +189,7 @@ export function DescubrirScreen({
         />
       )}
 
-      {mode === "loading" && <Loading colors={loadingColors} />}
+      {mode === "loading" && <Loading />}
 
       {mode === "ai" && (
         <AiResults
@@ -222,7 +222,7 @@ const LOADING_MESSAGES = [
   "Cruzando tus títulos…",
   "Destilando tu vibe…",
 ];
-function Loading({ colors }: { colors: string[] }) {
+function Loading() {
   const [i, setI] = useState(0);
   useEffect(() => {
     const t = setInterval(
@@ -235,11 +235,9 @@ function Loading({ colors }: { colors: string[] }) {
   // A richer fixed palette (shared with the auth screens) so the "distilling"
   // moment glows even for sparse profiles — this is the one screen with its own
   // full-bleed background for emphasis.
-  const aura = Array.from(new Set([...colors, ...AUTH_ADN]));
 
   return (
     <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-8 text-center">
-      <AuraField variant="ambient" colors={aura} seed={13} />
       <div className="absolute top-[calc(52px+env(safe-area-inset-top))] font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
         Baclog · Discover
       </div>

@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { AuthAuraBackdrop, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 
 function VerifyForm() {
@@ -29,7 +29,6 @@ function VerifyForm() {
 
   return (
     <main className="relative flex min-h-lvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
-      <AuthAuraBackdrop seed={34} />
       <div className="relative flex w-full max-w-sm flex-col items-center">
         <h1 className="font-mono text-xl font-bold uppercase tracking-[0.35em] text-accent">
           Baclog

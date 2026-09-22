@@ -371,57 +371,6 @@
   }
 }
 
-/* ADN aura — animated "lava-lamp" light (see components/ui/aura-field).
-   Mock technique (app-implementada.dc.html auraDrift/auraBreathe): each aura
-   is 1–2 LAYER divs whose background is a comma-joined multi-stop
-   radial-gradient — softness comes from the gradient fade stops, NEVER from
-   filter:blur — and the only thing that animates is the layer's transform
-   (compositor-only). Animation lives on classes (not inline style) so the
-   reduced-motion override below can win via !important. Opacity is static,
-   set inline per layer, so it stays readable when motion is off. */
-@keyframes bl-aura-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1.02);
-  }
-  33% {
-    transform: translate3d(8%, -6%, 0) scale(1.12);
-  }
-  66% {
-    transform: translate3d(-6%, 5%, 0) scale(1.07);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1.02);
-  }
-}
-
-@keyframes bl-aura-breathe {
-  0%,
-  100% {
-    transform: scale(1.02) translate3d(0, 0, 0);
-  }
-  50% {
-    transform: scale(1.16) translate3d(-4%, 3%, 0);
-  }
-}
-
-.bl-aura-drift {
-  animation: bl-aura-drift var(--aura-dur, 11s) ease-in-out infinite;
-  animation-delay: var(--aura-delay, 0s);
-}
-
-.bl-aura-breathe {
-  animation: bl-aura-breathe var(--aura-dur, 9s) ease-in-out infinite;
-  animation-delay: var(--aura-delay, 0s);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bl-aura-drift,
-  .bl-aura-breathe {
-    animation: none !important;
-    transform: none !important;
-  }
-}
-
 /* Obsession gesture (item detail): the active state's "light" comes ONLY
    from its internal AuraField (HANDOFF §7 — no box-shadow/halo/pulse glow).
    The flame carries a static DARK legibility drop-shadow inline in

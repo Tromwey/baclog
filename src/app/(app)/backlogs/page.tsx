@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
 import {
-  AuraField,
   CoachNote,
-  ONBOARDING_AURA,
   ScreenHeader,
   StrokeIcon,
   glassChipClass,
@@ -98,27 +96,7 @@ export default async function BacklogsPage() {
  */
 function FirstUse({ name }: { name: string | null }) {
   return (
-    // `bg-bg` on purpose: this screen paints its OWN muted fixed-color aura,
-    // and the (app) layout's content wrapper is transparent so the app-wide
-    // ADN aura shows through everywhere else. Without an opaque base the two
-    // stacked here (two AuraFields measured on this screen, 2026-09-21) and
-    // the lima fallback washed over the muted one the mock asks for. Only
-    // FirstUse is opaque — the populated /backlogs still shows the aura.
-    <main className="relative mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[300px] overflow-hidden"
-      >
-        <AuraField layers={[ONBOARDING_AURA]} />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(11,11,13,0.3) 0%, rgba(11,11,13,0.15) 44%, #0B0B0D 92%)",
-          }}
-        />
-      </div>
-
+    <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <div className="relative px-5 pt-[calc(44px+env(safe-area-inset-top))]">
         {name && (
           <p className="bl-rise min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">

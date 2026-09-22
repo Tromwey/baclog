@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
-import { getUserPalette } from "@/modules/backlog/queries";
-import { AuraBackground } from "./aura-background";
 import { NavDock, NavDockVisibilityProvider } from "./nav-dock";
 
 /**
@@ -9,8 +7,12 @@ import { NavDock, NavDockVisibilityProvider } from "./nav-dock";
  * still re-checked per mutation in src/authz — this only guarantees a
  * signed-in, onboarded, non-minor user.
  *
- * Also hosts the persistent ADN aura (behind every page) and the nav dock, so
- * both survive client navigations — only {children} swaps.
+ * Also hosts the nav dock, so it survives client navigations — only
+ * {children} swaps.
+ *
+ * There is no app-wide aura any more (founder call, 2026-09-21: the ADN aura
+ * was removed from every screen). The `relative z-10` wrapper below stays:
+ * it is load-bearing for the backlog-zoom overlay, not for the aura.
  */
 export default async function AppLayout({
   children,
@@ -19,19 +21,15 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
   if (!user.name) redirect("/onboarding");
-  const palette = await getUserPalette(user.id);
   // Each page owns its own bottom clearance (pb-dock-clearance) — the dock is
-  // fixed, so padding on a flow sibling wouldn't clear it anyway. Page <main>s
-  // stay transparent so the aura shows through.
+  // fixed, so padding on a flow sibling wouldn't clear it anyway.
   return (
     <NavDockVisibilityProvider>
-      <AuraBackground colors={palette} />
-      {/* z-10 keeps content above the aura; overflow-x-clip contains the page
-          slide. This is a stacking context, so modals that must sit above the
-          dock (fixed z-10) portal to <body> to escape it (see NewBacklogButton).
-          The intercepted backlog-zoom overlay (backlogs/@modal) DEPENDS on this
-          wrapper staying a stacking context to render UNDER the dock — do not
-          remove relative/z-10 without checking it. */}
+      {/* overflow-x-clip contains the page slide. This is a stacking context,
+          so modals that must sit above the dock (fixed z-10) portal to <body>
+          to escape it (see NewBacklogButton). The intercepted backlog-zoom
+          overlay (backlogs/@modal) DEPENDS on this wrapper staying a stacking
+          context to render UNDER the dock — do not remove relative/z-10. */}
       <div className="relative z-10 overflow-x-clip">{children}</div>
       <NavDock />
     </NavDockVisibilityProvider>
