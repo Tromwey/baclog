@@ -4,6 +4,7 @@ import { getCatalogItems } from "@/modules/catalog/cache";
 import { recCards } from "@/modules/recs/discover-cards";
 import { getObsessionRails } from "@/modules/recs/discover-rails";
 import { getTrendingAmongFollowed } from "@/modules/social/trending";
+import { releaseDatesFor } from "../_lib/catalog";
 import { json } from "../_lib/http";
 import { isoDate } from "../_lib/schemas";
 import { toTitleSummary } from "../_lib/wire";
@@ -31,19 +32,28 @@ export const GET = withApi(async (_req, { user }) => {
     getTrendingAmongFollowed(user.id, new Date(now), 15),
     getLibraryUpcoming(user.id, now, 12),
   ]);
+  const cards = recCards(rails);
   // The upcoming strip's read is cover-only; hydrate the summary fields from
-  // the shared catalog rows (one query, ≤12 ids).
-  const rows = await getCatalogItems(upcoming.map((u) => u.catalogItemId));
+  // the shared catalog rows (one query, ≤12 ids). The rails and trending rows
+  // carry every summary fact but the release date — one slim lookup, in
+  // parallel, so the added `release` costs no extra round-trip.
+  const [rows, releaseDateOf] = await Promise.all([
+    getCatalogItems(upcoming.map((u) => u.catalogItemId)),
+    releaseDatesFor([
+      ...cards.map((c) => c.work.catalogItemId),
+      ...trending.map((t) => t.catalogItemId),
+    ]),
+  ]);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
   return json({
-    recommended: recCards(rails).map((c) => ({
-      title: toTitleSummary(c.work),
+    recommended: cards.map((c) => ({
+      title: toTitleSummary({ ...c.work, releaseDate: releaseDateOf(c.work.catalogItemId) }),
       reason: KICKER(c.because),
       seedTitleId: c.seedTitleId,
     })),
     trending: trending.map((t) => ({
-      title: toTitleSummary(t),
+      title: toTitleSummary({ ...t, releaseDate: releaseDateOf(t.catalogItemId) }),
       saves: t.count,
       people: t.people.map((p) => p.username),
     })),

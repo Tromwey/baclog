@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { releaseDayInstant } from "./release";
 import { tmdbAuth } from "./tmdb";
 import type { ExternalItem } from "./types";
 
@@ -72,7 +73,9 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | 
         title: r.title ?? r.name ?? "Untitled",
         byline: null,
         year: yearOf(r.release_date ?? r.first_air_date),
-        releaseDate: null,
+        // Same day rule as `TmdbApi.search` (tmdb.ts): film `release_date`,
+        // series `first_air_date`, at 06:00Z; invalid → null.
+        releaseDate: releaseDayInstant(q.type === "film" ? r.release_date : r.first_air_date),
         genre: q.genreSlug,
         synopsis: r.overview || null,
         posterUrl: `${IMG}${r.poster_path}`,

@@ -1,7 +1,13 @@
 import { assertUser } from "@/authz";
 import { ApiError, withApi } from "@/authz/api";
 import { getRecapMonth } from "@/modules/backlog/recap";
-import { alsoInMonth, ERA_KEY_RE, monthYear } from "@/modules/backlog/recap-format";
+import {
+  alsoInMonth,
+  ERA_KEY_RE,
+  monthYear,
+  type RecapTitle,
+} from "@/modules/backlog/recap-format";
+import { releaseDatesFor } from "../../_lib/catalog";
 import { json } from "../../_lib/http";
 import { toTitleSummary } from "../../_lib/wire";
 
@@ -22,6 +28,13 @@ export const GET = withApi<{ era: string }>(async (_req, { params }) => {
   const month = await getRecapMonth(user.id, era);
   if (!month) throw new ApiError("not_found", "No hay recap de ese mes.");
 
+  const also = alsoInMonth(month);
+  const releaseDateOf = await releaseDatesFor(
+    [month.top, ...also].flatMap((t) => (t ? [t.catalogItemId] : [])),
+  );
+  const summary = (t: RecapTitle) =>
+    toTitleSummary({ ...t, releaseDate: releaseDateOf(t.catalogItemId) });
+
   return json({
     era: month.key,
     label: monthYear(month.key),
@@ -31,7 +44,7 @@ export const GET = withApi<{ era: string }>(async (_req, { params }) => {
       reviews: month.reviews,
       saved: month.saved,
     },
-    top: month.top ? toTitleSummary(month.top) : null,
-    also: alsoInMonth(month).map(toTitleSummary),
+    top: month.top ? summary(month.top) : null,
+    also: also.map(summary),
   });
 });

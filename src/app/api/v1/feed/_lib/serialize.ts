@@ -19,9 +19,15 @@ import type { FeedEvent, FeedSuggestion } from "@/modules/social/types";
  *    current mark (may be null); `added` is null;
  *  - `collectionId`/`collectionName` only on `added`, `reviewId`/`reviewBody`
  *    only on `reviewed`, `releaseDate` only while the add is "no puede
- *    esperar" (F3.8: it expires by itself on release day).
+ *    esperar" (F3.8: it expires by itself on release day);
+ *  - `title.release` comes from `catalogReleaseDate` — the CATALOG's date,
+ *    passed by the caller — never from `e.releaseDate`, which is gated to
+ *    the unreleased `added` case and would downgrade a known day to `year`.
  */
-export function toWireFeedEvent(e: FeedEvent): WireFeedEvent {
+export function toWireFeedEvent(
+  e: FeedEvent,
+  catalogReleaseDate: Date | null,
+): WireFeedEvent {
   return {
     id: e.id,
     kind: e.kind,
@@ -32,7 +38,7 @@ export function toWireFeedEvent(e: FeedEvent): WireFeedEvent {
       hexes: e.author.avatarHexes,
     },
     titleId: e.catalogItemId,
-    title: toTitleSummary(e),
+    title: toTitleSummary({ ...e, releaseDate: catalogReleaseDate }),
     mark: markOf(e),
     collectionId: e.kind === "added" ? e.backlogId : null,
     collectionName: e.kind === "added" ? e.backlogName : null,

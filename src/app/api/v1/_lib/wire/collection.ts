@@ -89,6 +89,8 @@ export interface CollectionDetailItem {
   byline: string | null;
   posterUrl: string | null;
   paletteHex: string[] | null;
+  /** `catalog_item.releaseDate` → the summary's `release`. */
+  releaseDate: Date | null;
   status: string;
   verdict: string | null;
   obsessed: boolean;

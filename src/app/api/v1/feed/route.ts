@@ -1,6 +1,7 @@
 import { withApi } from "@/authz/api";
 import { json, readCursor } from "@/app/api/v1/_lib/http";
 import { getFeedEventsPage } from "@/modules/social/queries";
+import { releaseDatesFor } from "../_lib/catalog";
 import { toWireFeedEvent } from "./_lib/serialize";
 
 /**
@@ -12,8 +13,11 @@ import { toWireFeedEvent } from "./_lib/serialize";
 export const GET = withApi(async (req, { user }) => {
   const cursor = readCursor(req);
   const page = await getFeedEventsPage(user.id, { cursor });
+  // The event's own `releaseDate` is gated ("no puede esperar" only); the
+  // title summary needs the catalog's, ungated — one slim lookup per page.
+  const releaseDateOf = await releaseDatesFor(page.events.map((e) => e.catalogItemId));
   return json({
-    items: page.events.map(toWireFeedEvent),
+    items: page.events.map((e) => toWireFeedEvent(e, releaseDateOf(e.catalogItemId))),
     nextCursor: page.nextCursor,
   });
 });

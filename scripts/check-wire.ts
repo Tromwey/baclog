@@ -17,6 +17,12 @@ import {
   releaseDateOf,
   runtimeMinutesOf,
 } from "../src/modules/catalog/film-facts";
+import {
+  RELEASE_DAY_UTC_HOUR,
+  isUpcoming,
+  releaseDayInstant,
+  releaseDayLong,
+} from "../src/modules/catalog/release";
 import { decodeCursor, encodeCursor } from "../src/modules/reviews/cursor";
 import {
   CollectionSchema,
@@ -86,6 +92,7 @@ check("toTitleSummary cumple TitleSchema (resumen, paleta null → [])", () => {
       byline: "Master Mind",
       posterUrl: "https://image.tmdb.org/t/p/w500/x.jpg",
       paletteHex: null,
+      releaseDate: null,
     }),
   );
   assert.deepEqual(t.palette, []);
@@ -100,6 +107,7 @@ check("toTitleSummary cumple TitleSchema (resumen, paleta null → [])", () => {
       byline: null,
       posterUrl: null,
       paletteHex: ["#112233", "#AABBCC"],
+      releaseDate: null,
     }),
   );
   assert.throws(() =>
@@ -112,6 +120,7 @@ check("toTitleSummary cumple TitleSchema (resumen, paleta null → [])", () => {
         byline: null,
         posterUrl: null,
         paletteHex: ["not-a-hex"],
+        releaseDate: null,
       }),
     ),
   );
@@ -128,9 +137,38 @@ check("toTitleSummary: catalogItemId GANA sobre id (una fila de membresía trae 
       byline: "FX",
       posterUrl: null,
       paletteHex: [],
+      releaseDate: null,
     }),
   );
   assert.equal(t.id, "cat-1", "el id del catálogo, nunca el de la fila");
+});
+
+check("toTitleSummary lleva `release`: releaseDate → day · solo year → year · nada → null", () => {
+  const base = {
+    catalogItemId: "cat-r",
+    title: "O My Beloved",
+    mediaType: "album" as const,
+    byline: "Artista",
+    posterUrl: null,
+    paletteHex: [],
+  };
+  // A known day travels as `day` whatever the clock says — past or future.
+  const day = TitleSchema.parse(toTitleSummary({ ...base, year: 2026, releaseDate: T1 }));
+  assert.deepEqual(day.release, { kind: "day", date: "2026-09-25T09:30:00Z" });
+  const past = TitleSchema.parse(toTitleSummary({ ...base, year: 1999, releaseDate: T0 }));
+  assert.equal(past.release?.kind, "day", "un día pasado sigue siendo day, no year");
+  // Only the year (film/series today — ios/API.md §7.8) → `year` on Jan 1 UTC.
+  const year = TitleSchema.parse(toTitleSummary({ ...base, year: 2023, releaseDate: null }));
+  assert.deepEqual(year.release, { kind: "year", date: "2023-01-01T00:00:00Z" });
+  // Nothing known → null (NOT `{kind:"unknown"}`: the app's merge keeps a
+  // known release over a null one, and `release != nil` lights Descubrir).
+  const none = TitleSchema.parse(toTitleSummary({ ...base, year: null, releaseDate: null }));
+  assert.equal(none.release, null);
+  assert.ok("release" in none, "el resumen SIEMPRE trae la llave `release`");
+  // The key is required in the contract: a summary without it must not parse.
+  const { release: _drop, ...withoutRelease } = none;
+  void _drop;
+  assert.throws(() => TitleSchema.parse(withoutRelease));
 });
 
 check("releaseOf: day siempre con fecha (pasada o futura), year, null", () => {
@@ -220,8 +258,8 @@ check("toCollectionDetail: { collection, titles, states } coherentes y en orden"
   const d = toCollectionDetail(
     { id: "c1", name: "Noche", vibe: null, isPublic: true, showOnProfile: false, createdAt: T0, updatedAt: T1 },
     [
-      { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), title: "Old", mediaType: "film", year: 2001, byline: null, posterUrl: "https://x/old.jpg", paletteHex: null, status: "completed", verdict: "liked", obsessed: false, savedAt: new Date("2025-12-01T00:00:00Z"), reviewId: "r1" },
-      { catalogItemId: "new", addedAt: T1, title: "New", mediaType: "album", year: null, byline: "Someone", posterUrl: null, paletteHex: ["#112233"], status: "on_my_radar", verdict: null, obsessed: true, savedAt: T1, reviewId: null },
+      { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), title: "Old", mediaType: "film", year: 2001, byline: null, posterUrl: "https://x/old.jpg", paletteHex: null, releaseDate: null, status: "completed", verdict: "liked", obsessed: false, savedAt: new Date("2025-12-01T00:00:00Z"), reviewId: "r1" },
+      { catalogItemId: "new", addedAt: T1, title: "New", mediaType: "album", year: null, byline: "Someone", posterUrl: null, paletteHex: ["#112233"], releaseDate: T1, status: "on_my_radar", verdict: null, obsessed: true, savedAt: T1, reviewId: null },
     ],
   );
   CollectionSchema.parse(d.collection);
@@ -235,6 +273,9 @@ check("toCollectionDetail: { collection, titles, states } coherentes y en orden"
   assert.equal(d.states.old.reviewId, "r1");
   assert.equal(d.states.old.mark, "liked");
   assert.equal(d.states.new.mark, "obsessed");
+  const [newT, oldT] = d.titles;
+  assert.deepEqual(newT.release, { kind: "day", date: "2026-09-25T09:30:00Z" }, "la colección trae el día (relojes)");
+  assert.deepEqual(oldT.release, { kind: "year", date: "2001-01-01T00:00:00Z" });
 });
 
 check("profileTint: featuredTitleId = la obsesión que tiñe; null si tiñe la biblioteca", () => {
@@ -397,6 +438,26 @@ check("cursor keyset: round trip; instante = lo que emite encodeCursor, año ≥
     "2026-09-24T15:00:00.000+02:00|x",
   ]) {
     assert.equal(decodeCursor(bad), null, `rechaza ${JSON.stringify(bad)}`);
+  }
+});
+
+check("releaseDayInstant: día TMDB → 06:00Z (medianoche CDMX), inválido → null; el día se imprime igual", () => {
+  assert.equal(RELEASE_DAY_UTC_HOUR, 6);
+  const d = releaseDayInstant("2026-10-01");
+  assert.equal(d?.toISOString(), "2026-10-01T06:00:00.000Z");
+  for (const bad of ["", "2026-02-30", "2026-13-01", "2026-10-01T00:00:00Z", "pronto", 20261001, null]) {
+    assert.equal(releaseDayInstant(bad), null, `rechaza ${JSON.stringify(bad)}`);
+  }
+  // Wire: a video day is a `day` whose UTC date IS the release day (the app
+  // reads it by UTC components).
+  assert.deepEqual(ReleaseSchema.parse(releaseOf(d, 2026)), { kind: "day", date: "2026-10-01T06:00:00Z" });
+  // "Hoy" in CDMX is never future: 00:30 CDMX on the day = 06:30Z.
+  assert.equal(isUpcoming(d, Date.parse("2026-10-01T06:30:00Z")), false);
+  // …and the evening before still is: 23:30 CDMX = 05:30Z.
+  assert.equal(isUpcoming(d, Date.parse("2026-10-01T05:30:00Z")), true);
+  // Every stored shape prints its own day (albums 07/08/12/00Z, video 06Z).
+  for (const iso of ["2026-10-01T00:00:00Z", "2026-10-01T06:00:00Z", "2026-10-01T07:00:00Z", "2026-10-01T08:00:00Z", "2026-10-01T12:00:00Z"]) {
+    assert.equal(releaseDayLong(iso), "1 de octubre", iso);
   }
 });
 

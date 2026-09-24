@@ -91,9 +91,12 @@ export async function cacheExternalItems(
         title: sql`excluded.title`,
         byline: sql`coalesce(excluded.byline, ${catalogItems.byline})`,
         year: sql`excluded.year`,
-        // coalesce, unlike `year`: search NEVER carries a pre-order's date, so
-        // an incoming null here means "this payload doesn't know", not "there
-        // is no date" — overwriting would erase what getAlbumDetail resolved.
+        // coalesce, unlike `year`: search NEVER carries a pre-order's date and
+        // TMDB sends "" when it doesn't know, so an incoming null here means
+        // "this payload doesn't know", not "there is no date" — overwriting
+        // would erase what getAlbumDetail (or an earlier TMDB hit) resolved.
+        // A KNOWN incoming date always wins: TMDB and labels move releases,
+        // and every search is the chance to correct a stale day.
         releaseDate: sql`coalesce(excluded.release_date, ${catalogItems.releaseDate})`,
         genre: sql`coalesce(excluded.genre, ${catalogItems.genre})`,
         synopsis: sql`coalesce(excluded.synopsis, ${catalogItems.synopsis})`,

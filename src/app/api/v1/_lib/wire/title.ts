@@ -3,7 +3,9 @@ import { isoDate, type Release, type Title, type Track } from "../schemas";
 
 /**
  * `Title` SUMMARY (§3) from the shared `catalog_item` facts every list query
- * already selects. Detail fields (synopsis, tracks, counts, watch…) are NOT
+ * already selects — including `release` (from `releaseDate`/`year`), so the
+ * app's "no puede esperar" lens and collection/profile clocks work on any
+ * list without opening the title. Detail fields (synopsis, tracks, counts, watch…) are NOT
  * this module's job — `GET /titles/{id}` layers them on top.
  *
  * Pure: no "server-only", no DB — the wire check runs it under tsx.
@@ -17,6 +19,14 @@ interface TitleSummaryFacts {
   byline: string | null;
   posterUrl: string | null;
   paletteHex: string[] | null;
+  /**
+   * The CATALOG's `catalog_item.releaseDate`, ungated — feeds `release`
+   * (`releaseOf`). NOT a module's derived date: the feed's
+   * `FeedEvent.releaseDate` is null once released / on non-`added` events,
+   * which would silently downgrade a known day to `year`. Producers whose
+   * row lacks the column look it up with `_lib/catalog.ts` `releaseDatesFor`.
+   */
+  releaseDate: Date | string | null;
 }
 
 /**
@@ -39,6 +49,7 @@ export function toTitleSummary(row: TitleSummaryInput): Title {
     creator: row.byline,
     palette: row.paletteHex ?? [],
     coverUrl: row.posterUrl,
+    release: releaseOf(row.releaseDate, row.year),
   };
 }
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { releaseDateOf, runtimeMinutesOf, type FilmFacts } from "./film-facts";
+import { releaseDayInstant } from "./release";
 import type { SeriesFacts } from "./series-status";
 import { TMDB_FIXTURES } from "./tmdb.fixtures";
 import type { ExternalItem, VideoCatalog } from "./types";
@@ -102,10 +103,12 @@ class TmdbApi implements VideoCatalog {
       title: r.title ?? r.name ?? "Untitled",
       byline: null, // studio needs a details call — filled lazily on item view
       year: yearOf(r.release_date ?? r.first_air_date),
-      // F3.8 is albums-only in v1 (see ExternalItem.releaseDate): TMDB's date is
-      // a per-region theatrical date that "released" doesn't make watchable, so
-      // it stays out of the countdown and out of the release cron.
-      releaseDate: null,
+      // F3.8 for video (founder, 2026-09-24): the DAY TMDB knows — film
+      // `release_date`, series `first_air_date` (the show's premiere; a new
+      // season is not a release) — stored at 06:00Z (release.ts
+      // `RELEASE_DAY_UTC_HOUR`). "" / garbage → null, and a null never erases
+      // a known date in the upsert (search.ts), while a known one corrects it.
+      releaseDate: releaseDayInstant(type === "film" ? r.release_date : r.first_air_date),
       genre: r.genre_ids?.map((g) => GENRES[g]).find(Boolean) ?? null,
       synopsis: r.overview || null,
       posterUrl: r.poster_path ? `${IMG}${r.poster_path}` : null,

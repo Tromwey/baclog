@@ -35,13 +35,75 @@ const DAY = 86_400_000;
 const pad2 = (v: number) => String(v).padStart(2, "0");
 
 /**
- * The storefront's own timezone. iTunes hands us 07:00Z, which is midnight in
- * America/Los_Angeles — the date is a US storefront date, not a local one, so
- * formatting the LABEL in any other zone would print a day the store doesn't
- * agree with. The countdown itself is absolute (a timestamp difference), so
- * only this human-readable label needs pinning.
+ * The zone a release DAY label is printed in: UTC. Every `release_date` we
+ * store is an instant INSIDE its release day's UTC calendar day — iTunes
+ * sends 07:00Z / 08:00Z (midnight Los Angeles, PDT/PST), 12:00Z (older
+ * albums) or 00:00Z (the charts feed's bare date), and video is stored at
+ * 06:00Z (see `RELEASE_DAY_UTC_HOUR`) — so the UTC date IS the day, for
+ * every provider. Printing in America/Los_Angeles (the old pin) turned the
+ * 00:00Z/06:00Z shapes into "the day before". The countdown itself is
+ * absolute (a timestamp difference); only these human-readable labels need
+ * the pin. `components/kura/tint.ts` keeps the same constant for the same
+ * reason — change both or neither. Same rule as the iOS app, which reads a
+ * `day` by its UTC components (`KuraJSON.dayAtNoon`).
  */
-const STOREFRONT_TZ = "America/Los_Angeles";
+const STOREFRONT_TZ = "UTC";
+
+/**
+ * The hour (UTC) at which a DAY-granular release date is stored: 06:00Z =
+ * 00:00 in America/Mexico_City (fixed UTC−6, no DST since 2022) — the
+ * product's home zone, the same one the feed's "hoy/ayer" uses. TMDB (film
+ * `release_date`, series `first_air_date`) only knows the calendar day, and
+ * the whole feature derives from `releaseDate > now` (`isUpcoming`, `setMark`'s
+ * `not_released`, the feed, the release cron), so the instant decides WHEN the
+ * day starts: at 06:00Z the ficha flips from "sale el …" to "hoy" exactly at
+ * midnight in CDMX — never the evening before (00:00Z would be 18:00 CDMX of
+ * the previous day) and never hours into the day (12:00Z would 409 a mark at
+ * 02:00 CDMX that the app, which compares by local calendar day, allows).
+ * West of CDMX the day starts a little early (lenient); east of it, late.
+ * Albums keep the instant iTunes gives (midnight Los Angeles).
+ */
+export const RELEASE_DAY_UTC_HOUR = 6;
+
+const YMD_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * A provider's calendar day (`YYYY-MM-DD`, TMDB) → the stored instant (that
+ * day at `RELEASE_DAY_UTC_HOUR` UTC). Anything else — TMDB's "" for unknown,
+ * a timestamp, garbage, or an impossible day like 2024-02-30 (which
+ * `Date.UTC` would silently roll into March) — is null: no date beats a
+ * wrong one, and a null never erases a known date in the catalog upsert.
+ */
+export function releaseDayInstant(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const m = YMD_RE.exec(value);
+  if (!m) return warnUnparsedDay(value);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const t = new Date(Date.UTC(y, mo - 1, d, RELEASE_DAY_UTC_HOUR));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === mo - 1 && t.getUTCDate() === d
+    ? t
+    : warnUnparsedDay(value);
+}
+
+let warnedUnparsedDay = false;
+
+/**
+ * "TMDB doesn't know" and "TMDB changed its format" both end in null, but only
+ * the first is normal: `""` (and a missing field) is TMDB's unknown and stays
+ * silent; a NON-EMPTY string we can't read means every film/series stops
+ * getting a date — countdowns, 409s and release emails vanish without an
+ * error anywhere. Warned ONCE per process: this runs per search hit, and one
+ * line with a sample is the signal; a thousand is noise.
+ */
+function warnUnparsedDay(value: string): null {
+  if (value !== "" && !warnedUnparsedDay) {
+    warnedUnparsedDay = true;
+    console.warn(
+      `[catalog] releaseDayInstant: unparseable non-empty day ${JSON.stringify(value.slice(0, 40))} — not a real YYYY-MM-DD day; further ones are not logged in this process`,
+    );
+  }
+  return null;
+}
 
 export function formatCountdown(
   releaseDate: Date | string,
@@ -156,7 +218,9 @@ export function restArrivesLabel(
     : `el ${releaseDayLong(releaseDate)}`;
 }
 
-/** "14 de agosto" — the same day, spelled out for prose and email. */
+/** "14 de agosto" — the same day, spelled out for prose and email. ONLY for
+ *  a stored release date: an arbitrary instant (when someone added a title)
+ *  is a local moment, not a day — print that with `homeDayLong`. */
 export function releaseDayLong(releaseDate: Date | string): string {
   return new Intl.DateTimeFormat("es-MX", {
     day: "numeric",
@@ -165,10 +229,25 @@ export function releaseDayLong(releaseDate: Date | string): string {
   }).format(new Date(releaseDate));
 }
 
+/** "3 de septiembre" — the calendar day an INSTANT fell on in the product's
+ *  home zone (America/Mexico_City, as the feed's "hoy/ayer"). For the release
+ *  email's "lo guardaste el …": an add at 20:00 CDMX is already the next day
+ *  in UTC, so `releaseDayLong` would print the wrong day for it. */
+export function homeDayLong(instant: Date | string): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Mexico_City",
+  }).format(new Date(instant));
+}
+
 /**
- * THE predicate the whole feature derives from. Null-safe by design: a missing
- * date means the countdown, the shelf entry, the suppressed action bar and the
- * notice all simply don't happen, and the item renders exactly as it does today.
+ * THE predicate the whole feature derives from — for albums AND video (film,
+ * series: since 2026-09-24 the TMDB day is persisted, see
+ * `RELEASE_DAY_UTC_HOUR` for when that day "starts"). Null-safe by design: a
+ * missing date means the countdown, the shelf entry, the suppressed action
+ * bar and the notice all simply don't happen, and the item renders exactly as
+ * it does today.
  */
 export function isUpcoming(
   releaseDate: Date | string | null | undefined,

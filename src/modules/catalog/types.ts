@@ -32,12 +32,13 @@ export interface ExternalItem {
   byline: string | null;
   year: number | null;
   /**
-   * F3.8 — exact release timestamp when the provider gives one. iTunes' search
+   * F3.8 — the release instant when the provider gives one. iTunes' search
    * payload carries it for RELEASED albums (so this backfills for free on every
    * search) but omits it entirely for pre-orders, which is why an unreleased
-   * album needs the lookup in getAlbumDetail. Null for video: v1 of "No puedo
-   * esperar" is albums-only, and storing a TMDB date here would put films in
-   * the release cron's scan without any of the UI that makes them make sense.
+   * album needs the lookup in getAlbumDetail. Video (since 2026-09-24): TMDB's
+   * calendar day — film `release_date`, series `first_air_date` — stored at
+   * 06:00Z (`releaseDayInstant`, release.ts), so films and series get the
+   * countdown, "no puede esperar", `not_released` and the release email too.
    */
   releaseDate: Date | null;
   genre: string | null;

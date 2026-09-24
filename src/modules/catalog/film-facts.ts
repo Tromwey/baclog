@@ -8,9 +8,10 @@
  * per title and merges it INTO `raw` next to a `_film_facts_at` marker — no
  * new column on purpose (migrations on the shared DB need the founder). The
  * details payload's `release_date` rides along inside `raw` too (it's the same
- * key the search hit already stored), so a future backfill of the
- * `release_date` COLUMN for video (founder question 8, ios/API.md §7) can read
- * it without calling TMDB again. It is never written to the column here.
+ * key the search hit already stored). The `release_date` COLUMN for video is
+ * filled by the search/discover upsert since 2026-09-24 (founder question 8;
+ * rows cached before that were backfilled from this `raw` key); it is never
+ * written to the column here.
  *
  * Freshness is read off the marker, never `refreshed_at` (the search upsert
  * bumps that without touching `raw`). A runtime never changes once TMDB knows
@@ -28,7 +29,7 @@ export interface FilmFacts {
   /** Minutes; null when TMDB doesn't know it yet (0 or absent). */
   runtime: number | null;
   /** `YYYY-MM-DD` as TMDB sends it (anything else → null, `releaseDateOf`);
-   *  kept in `raw` only (see above). */
+   *  kept in `raw` (see above). */
   release_date: string | null;
 }
 
@@ -48,7 +49,7 @@ export type FilmFactsWrite = {
 const RELEASE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** `YYYY-MM-DD` or null — TMDB sends "" for unknown, and a garbage string
- *  must never reach `raw` (a future backfill of the column reads it). */
+ *  must never reach `raw` (the column backfill read it). */
 export function releaseDateOf(value: unknown): string | null {
   return typeof value === "string" && RELEASE_DATE_RE.test(value) ? value : null;
 }

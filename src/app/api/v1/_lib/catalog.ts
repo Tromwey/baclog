@@ -2,6 +2,7 @@ import "server-only";
 import {
   findCatalogItemByRef,
   getCatalogItem,
+  getCatalogReleaseDates,
   type CatalogItemRow,
 } from "@/modules/catalog/cache";
 import type { ExternalRef } from "./schemas";
@@ -25,4 +26,17 @@ export async function resolveCatalogItem(
   const byId = uuid ? await getCatalogItem(uuid) : null;
   if (byId) return byId;
   return ref ? findCatalogItemByRef(ref.source, ref.externalId) : null;
+}
+
+/**
+ * `catalog_item.releaseDate` for summary rows whose module read doesn't carry
+ * it (discover rails/trending, feed events, recap, onboarding pool) — one slim
+ * query for the whole response. The lookup answers null for an id the catalog
+ * doesn't have (then `release` falls back to `year`, like a title with no day).
+ */
+export async function releaseDatesFor(
+  ids: string[],
+): Promise<(catalogItemId: string) => Date | null> {
+  const dates = await getCatalogReleaseDates(ids);
+  return (catalogItemId) => dates.get(catalogItemId) ?? null;
 }

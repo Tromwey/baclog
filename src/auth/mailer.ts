@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import type { mediaTypeEnum } from "@/db/schema";
 
 /**
  * Email transport seam (launch dep: founder provides RESEND_API_KEY).
@@ -54,11 +55,16 @@ export function sendOtpEmail(email: string, code: string): Promise<void> {
  * to be past), and the sentence is simply dropped rather than faked.
  *
  * The footer carries the opt-out (users.notifyReleases, toggled in /settings)
- * so the only way to stop the notice isn't deleting the album you waited for.
+ * so the only way to stop the notice isn't deleting the title you waited for
+ * (album, film or series — the copy follows `format`).
  */
 export function sendReleaseEmail(
   email: string,
-  album: {
+  title: {
+    /** Drives the copy: an album is heard, a film or series is watched.
+     *  Typed off the DB enum so a new media type reaches `releaseCopyFor`'s
+     *  exhaustiveness check instead of a hand-kept union. */
+    format: ReleaseFormat;
     title: string;
     byline: string | null;
     itemUrl: string;
@@ -66,18 +72,50 @@ export function sendReleaseEmail(
     waitedDays: number | null;
   },
 ): Promise<void> {
-  const artist = album.byline ? `, de ${album.byline}` : "";
+  const { artist, pronoun, cta } = releaseCopyFor(title.format, title.byline);
   const waited =
-    album.addedOn && album.waitedDays != null && album.waitedDays > 0
-      ? `Lo guardaste en una colección el ${album.addedOn}, cuando faltaban ${album.waitedDays} días. La espera terminó.\n\n`
+    title.addedOn && title.waitedDays != null && title.waitedDays > 0
+      ? `${pronoun} guardaste en una colección el ${title.addedOn}, cuando faltaban ${title.waitedDays} días. La espera terminó.\n\n`
       : "";
   const body =
-    `Hoy sale ${album.title}${artist}.\n\n` +
+    `Hoy sale ${title.title}${artist}.\n\n` +
     waited +
-    `Escúchalo: ${album.itemUrl}\n\n` +
+    `${cta}: ${title.itemUrl}\n\n` +
     `—\nTe avisamos porque está en tus colecciones. Si no quieres estos avisos, ` +
     `apágalos en https://baclog.app/settings`;
-  return send(email, `${album.title} ya salió ✦`, body, "RELEASE");
+  return send(email, `${title.title} ya salió ✦`, body, "RELEASE");
+}
+
+type ReleaseFormat = (typeof mediaTypeEnum.enumValues)[number];
+
+/**
+ * The per-format words of the release email. A `switch` with a `never` arm on
+ * purpose: a new media type must fail `tsc` here, not silently get the film
+ * copy ("Mira dónde verla" for, say, a book).
+ */
+function releaseCopyFor(
+  format: ReleaseFormat,
+  byline: string | null,
+): { artist: string; pronoun: string; cta: string } {
+  switch (format) {
+    case "album":
+      // The artist says who ("el álbum" → lo).
+      return {
+        artist: byline ? `, de ${byline}` : "",
+        pronoun: "Lo",
+        cta: "Escúchalo",
+      };
+    case "film":
+    case "series":
+      // A film/series byline is the studio or network, which reads like a
+      // credit roll in a one-line email — so no byline. "la película" /
+      // "la serie" → la.
+      return { artist: "", pronoun: "La", cta: "Mira dónde verla" };
+    default: {
+      const unhandled: never = format;
+      throw new Error(`sendReleaseEmail: no copy for format ${String(unhandled)}`);
+    }
+  }
 }
 
 /** F3.3 — monthly recap notification. */

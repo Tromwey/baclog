@@ -99,7 +99,11 @@ export function sealInitials(name: string): string {
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
-const STOREFRONT_TZ = "America/Los_Angeles";
+/** A release DAY prints in UTC: every stored `release_date` sits inside its
+ *  day's UTC calendar day (iTunes 07:00Z/08:00Z/12:00Z/00:00Z, video 06:00Z).
+ *  Same constant and reason as `modules/catalog/release.ts` — change both or
+ *  neither. */
+const STOREFRONT_TZ = "UTC";
 
 /**
  * The release as Kura writes it (notes-no-puedo-esperar, agreed with the

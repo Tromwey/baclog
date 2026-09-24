@@ -165,9 +165,10 @@ export const WatchOptionSchema = z.object({
 export type WatchOption = z.infer<typeof WatchOptionSchema>;
 
 /**
- * A catalog title. The SUMMARY fields (id…coverUrl) are always present —
- * inside collections, feed events, search results and rails. The DETAIL
- * fields are optional and only `GET /titles/{id}` fills them.
+ * A catalog title. The SUMMARY fields (id…coverUrl, plus `release`) are always
+ * present — inside collections, feed events and rails (search answers its own
+ * `SearchResult`). The DETAIL fields are optional and only `GET /titles/{id}`
+ * fills them.
  */
 export const TitleSchema = z.object({
   id: z.string().min(1),
@@ -180,11 +181,14 @@ export const TitleSchema = z.object({
   palette: z.array(HexSchema),
   /** Hotlinked TMDB / mzstatic URL (ADR-007), never proxied. */
   coverUrl: z.string().url().nullable(),
+  /** Summary since 2026-09-24 (`toTitleSummary` → `releaseOf`): `day` when the
+   *  catalog knows the date, `year` from `year` alone, null with neither. The
+   *  detail read may refine it with the provider's fresher date. */
+  release: ReleaseSchema.nullable(),
   genre: z.string().nullable().optional(),
   synopsis: z.string().nullable().optional(),
   /** "125 min" · "2 temporadas" · "18 canciones" — server-formatted meta. */
   detail: z.string().nullable().optional(),
-  release: ReleaseSchema.nullable().optional(),
   tracks: z.array(TrackSchema).optional(),
   /** Album: full song count, may exceed `tracks.length` before release. */
   trackCount: z.number().int().nonnegative().nullable().optional(),
@@ -433,3 +437,18 @@ export const AuthSessionSchema = z.object({
   user: MeSchema,
 });
 export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+/** `POST auth/web-session` body (optional): where the web should land.
+ *  Validated against the handoff allow-list (`src/authz/handoff.ts`
+ *  `parseHandoffTarget`) in the handler; absent = `/recap/tarjeta`. */
+export const WebSessionBodySchema = z.object({
+  to: z.string().max(200, "Ese destino es demasiado largo.").optional(),
+});
+export type WebSessionBody = z.infer<typeof WebSessionBodySchema>;
+
+/** `POST auth/web-session` → a one-shot absolute URL (60 s) that opens the
+ *  web already signed in and lands on the allow-listed path. */
+export const WebSessionSchema = z.object({
+  url: z.string().url(),
+});
+export type WebSession = z.infer<typeof WebSessionSchema>;

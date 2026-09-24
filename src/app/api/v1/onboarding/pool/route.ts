@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError, withApi } from "@/authz/api";
+import { releaseDatesFor } from "@/app/api/v1/_lib/catalog";
 import { json, readQuery } from "@/app/api/v1/_lib/http";
 import { toTitleSummary } from "@/app/api/v1/_lib/wire";
 import {
@@ -26,8 +27,11 @@ export const GET = withApi(async (req) => {
   const { page } = readQuery(req, QuerySchema);
   const pool = await getOnboardingPoolPage(page);
   if (pool.unavailable) throw new ApiError("unavailable");
+  const releaseDateOf = await releaseDatesFor(pool.items.map((i) => i.catalogItemId));
   return json({
-    items: pool.items.map(toTitleSummary),
+    items: pool.items.map((i) =>
+      toTitleSummary({ ...i, releaseDate: releaseDateOf(i.catalogItemId) }),
+    ),
     nextPage: pool.nextPage,
   });
 });

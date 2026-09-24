@@ -88,9 +88,10 @@ export async function cacheSeriesFacts(
  * Film facts (API v1 `Title.detail`, film-facts.ts) — the same `raw || patch`
  * merge as `cacheSeriesFacts`, with `runtime`, `release_date` and the
  * `_film_facts_at` marker (build it with `filmFactsWrite`: a null fact is
- * omitted, so it never erases a stored one). `release_date` stays INSIDE
- * `raw`: the column is video-null on purpose until the founder decides
- * (ios/API.md §7 q8).
+ * omitted, so it never erases a stored one). The `release_date` COLUMN for
+ * video is written by the search/discover upsert (tmdb.ts, day at 06:00Z),
+ * not here; the copy inside `raw` is what the one-off backfill of rows cached
+ * before 2026-09-24 read.
  */
 export async function cacheFilmFacts(
   catalogItemId: string,
@@ -129,6 +130,25 @@ async function mergeIntoRaw(
 export async function getCatalogItems(ids: string[]): Promise<CatalogItemRow[]> {
   if (ids.length === 0) return [];
   return db.select().from(catalogItems).where(inArray(catalogItems.id, ids));
+}
+
+/**
+ * API v1 — `catalog_item.releaseDate` for a set of ids, in ONE slim query
+ * (id + date, no `raw`). For summary producers whose module row doesn't carry
+ * the date (discover rails/trending, feed events, recap, onboarding pool), so
+ * every `Title` summary can travel with `release`. Unknown ids are absent from
+ * the map; an empty list never hits the DB. Shared catalog facts only.
+ */
+export async function getCatalogReleaseDates(
+  ids: string[],
+): Promise<Map<string, Date | null>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+  const rows = await db
+    .select({ id: catalogItems.id, releaseDate: catalogItems.releaseDate })
+    .from(catalogItems)
+    .where(inArray(catalogItems.id, unique));
+  return new Map(rows.map((r) => [r.id, r.releaseDate]));
 }
 
 /**
