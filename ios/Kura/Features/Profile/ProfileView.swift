@@ -25,7 +25,9 @@ struct ProfileView: View {
                     .padding(.horizontal, 20)
             }
             .ignoresSafeArea(.container, edges: .top)
-        } else if store.collections.isEmpty && obsessions.isEmpty && store.loadState == .loaded {
+        } else if store.collections.isEmpty && store.libraryIDs.isEmpty && store.loadState == .loaded {
+            // E2 only when there's truly nothing: a title marked from its ficha without saving it
+            // lives in your library with no collection, and the ribbon has to count it.
             EmptyOwnProfile()
         } else {
             full

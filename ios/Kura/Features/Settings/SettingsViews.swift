@@ -73,7 +73,10 @@ struct SettingsView: View {
                             KuraSwitch(label: "Estrenos de no puedo esperar", isOn: $store.notifyReleases)
                         }
                         ListDivider()
-                        SettingsRow(title: "Tu recap está listo") { KuraSwitch(label: "Tu recap está listo", isOn: $store.notifyRecap) }
+                        // Server-owned (`PATCH /me { notifyRecap }`), like the releases switch: off = no monthly email.
+                        SettingsRow(title: "Correo del recap mensual", note: "Una vez al mes, con lo que viste.") {
+                            KuraSwitch(label: "Correo del recap mensual", isOn: $store.notifyRecap)
+                        }
                     }
 
                     #if DEBUG

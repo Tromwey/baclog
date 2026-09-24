@@ -169,7 +169,6 @@ struct CompleteSheet: View {
 
     private func save(_ t: Title) {
         let choice = ReactionSlider.stops[stop].mark
-        let wasSaved = store.isSaved(t.id)
         // "La vi en preestreno": the server needs `preview: true` before the release (409 not_released otherwise).
         // Release day counts too: the app decides by Mexico City calendar day, the server by the
         // stored instant — an album keeps iTunes' hour (07/08/12Z), so for a few hours of "hoy" the
@@ -181,14 +180,10 @@ struct CompleteSheet: View {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             return
         }
-        let done = {
-            store.dismissSheet()
-            if !wasSaved {
-                store.showToast(ToastModel(text: "\(choice.myLabel). ¿Lo guardas en una colección?", kind: .info))
-            }
-        }
+        let done = { store.dismissSheet() }
         // No review (or an unchanged one under Completo): fire-and-forget, as before (the store
-        // reverts/retries on its own).
+        // reverts/retries on its own, and once the server confirms it suggests "Guardar en…" for
+        // a title in no collection — the mark stands either way).
         guard !review.isEmpty, choice != .completed else {
             withAnimation(KMotion.spring) { store.setMark(t.id, choice, haptic: false, preview: preview) }
             done()
@@ -212,7 +207,14 @@ struct CompleteSheet: View {
                 if case .complete(let id, _)? = store.sheet, id == t.id { stillOpen = true } else { stillOpen = false }
                 switch failure {
                 case .cancelled, .unauthorized: break
-                case .notFound where !store.isSaved(t.id): break // the store opened "guardar en"
+                case .notFound where ExternalRef.parse(localID: t.id) != nil: break // the store opened "guardar en"
+                case .notFound:
+                    // The catalog doesn't know this id anymore.
+                    if stillOpen {
+                        withAnimation(KMotion.short) { saveError = AppStore.unknownTitleNote }
+                    } else {
+                        store.showToast(ToastModel(text: AppStore.unknownTitleNote, kind: .info))
+                    }
                 default:
                     if stillOpen {
                         withAnimation(KMotion.short) { saveError = failure.toast }
@@ -224,6 +226,7 @@ struct CompleteSheet: View {
             }
             store.publishReview(titleID: t.id, text: review, spoiler: spoiler)
             done()
+            store.suggestSaving(t.id)
         }
     }
 }

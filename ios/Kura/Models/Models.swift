@@ -630,6 +630,8 @@ struct Me: Hashable, Decodable {
     var email: String?
     var preferredService: String?
     var notifyReleases: Bool
+    /// The monthly recap email (`notify_recap`). Absent on an older server → assumed on (its default).
+    var notifyRecap: Bool
     var isPublic: Bool
     var avatarURL: URL?
     var isFounder: Bool
@@ -644,17 +646,18 @@ struct Me: Hashable, Decodable {
     }
 
     init(person p: Person, email: String? = nil, preferredService: String? = nil, notifyReleases: Bool = true,
-         isPublic: Bool = true, onboarded: Bool = true) {
+         notifyRecap: Bool = true, isPublic: Bool = true, onboarded: Bool = true) {
         handle = p.handle.isEmpty ? nil : p.handle
         name = p.name; initials = p.initials; hexes = p.hexes; featuredTitleID = p.featuredTitleID
         followers = p.followers; followingCount = p.followingCount; stats = p.stats
         self.email = email; self.preferredService = preferredService; self.notifyReleases = notifyReleases
+        self.notifyRecap = notifyRecap
         self.isPublic = isPublic; avatarURL = p.avatarURL; isFounder = false; self.onboarded = onboarded
     }
 
     private enum CodingKeys: String, CodingKey {
         case handle, username, name, displayName, initials, hexes, featuredTitleId, followers, followersCount, followingCount,
-             stats, email, preferredService, notifyReleases, isPublic, avatarUrl, isFounder, onboardingComplete
+             stats, email, preferredService, notifyReleases, notifyRecap, isPublic, avatarUrl, isFounder, onboardingComplete
     }
 
     init(from decoder: Decoder) throws {
@@ -672,6 +675,7 @@ struct Me: Hashable, Decodable {
         email = try c.decodeIfPresent(String.self, forKey: .email)
         preferredService = try c.decodeIfPresent(String.self, forKey: .preferredService)
         notifyReleases = try c.decodeIfPresent(Bool.self, forKey: .notifyReleases) ?? true
+        notifyRecap = try c.decodeIfPresent(Bool.self, forKey: .notifyRecap) ?? true
         isPublic = try c.decodeIfPresent(Bool.self, forKey: .isPublic) ?? true
         avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
         isFounder = try c.decodeIfPresent(Bool.self, forKey: .isFounder) ?? false

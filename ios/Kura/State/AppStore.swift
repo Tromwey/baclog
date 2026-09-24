@@ -172,7 +172,6 @@ final class AppStore {
     var recentSearches: [String]
     var showCommon = true
     var notifyFollowers = true
-    var notifyRecap = true
     var defaultPrivacy: Privacy = .onlyMe
     /// "Avísame cuando llegue" (E4) — titles you asked to be told about.
     var alerts: Set<String> = []
@@ -188,6 +187,7 @@ final class AppStore {
     // Settings the API owns (`PATCH /me`) — stored locally, patched on change.
     private var _profilePrivate = false
     private var _notifyReleases = true
+    private var _notifyRecap = true
     private var _musicApp = "Apple Music"
 
     var profilePrivate: Bool {
@@ -205,6 +205,16 @@ final class AppStore {
             guard _notifyReleases != newValue else { return }
             _notifyReleases = newValue
             patchMe(MePatch(notifyReleases: newValue))
+        }
+    }
+
+    /// "Correo del recap mensual" — the monthly recap email (`notify_recap`), off = unsubscribed.
+    var notifyRecap: Bool {
+        get { _notifyRecap }
+        set {
+            guard _notifyRecap != newValue else { return }
+            _notifyRecap = newValue
+            patchMe(MePatch(notifyRecap: newValue))
         }
     }
 
@@ -391,6 +401,7 @@ final class AppStore {
         if !p.id.isEmpty { people[p.id] = p }
         _profilePrivate = !m.isPublic
         _notifyReleases = m.notifyReleases
+        _notifyRecap = m.notifyRecap
         if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
@@ -415,13 +426,13 @@ final class AppStore {
 
     /// Titles of your library that `GET /titles?ids=` couldn't bring at launch.
     var libraryIncomplete: Bool {
-        loadState == .loaded && collections.contains { c in c.titleIDs.contains { titles[$0] == nil && ExternalRef.parse(localID: $0) == nil } }
+        loadState == .loaded && libraryIDs.contains { titles[$0] == nil && ExternalRef.parse(localID: $0) == nil }
     }
 
     /// Reintentar on a launch whose library arrived but whose titles didn't.
     func retryLibraryTitles() async {
         loadErrors[.library] = nil
-        if await hydrateTitles(collections.flatMap(\.titleIDs), for: .library) { online() }
+        if await hydrateTitles(libraryIDs, for: .library) { online() }
     }
 
     // MARK: Errors
@@ -487,7 +498,7 @@ final class AppStore {
                 lastUsedCollectionID = collections.first(where: \.pinned)?.id
             }
             applyMe(account)
-            await hydrateTitles(collections.flatMap(\.titleIDs) + [account.featuredTitleID].compactMap { $0 }, for: .library)
+            await hydrateTitles(Array(libraryIDs) + [account.featuredTitleID].compactMap { $0 }, for: .library)
             if me.hexes.isEmpty, let id = me.featuredTitleID, let t = titles[id] { me.hexes = t.palette }
             if !keepLoading { loadState = .loaded }
         } catch {
@@ -884,7 +895,14 @@ final class AppStore {
         orderedCollections.filter { $0.titleIDs.contains(titleID) }
     }
 
+    /// In at least one collection ("Guardado"). Not the same as being in your library: a mark from
+    /// an unsaved ficha creates your state with no collection (see `libraryIDs`).
     func isSaved(_ titleID: String) -> Bool { !collectionsContaining(titleID).isEmpty }
+
+    /// Your library: every title with your state (`GET /me/titles`, in a collection or not) plus the
+    /// memberships whose state hasn't landed yet. Counts, "no puedo esperar" and hydration read
+    /// THIS, never `collections` alone.
+    var libraryIDs: Set<String> { Set(userTitles.keys).union(collections.flatMap(\.titleIDs)) }
 
     /// Reviews you wrote: the server count until the local list catches up.
     var reviewCount: Int { max(account?.stats.reviews ?? 0, reviews.filter { $0.authorID == me.id }.count) }
@@ -984,8 +1002,7 @@ final class AppStore {
     /// the wire sends `release` for every dated title, past or future, so without this an old
     /// album you never completed would land here the moment you opened its ficha.
     var waitingTitles: [Title] {
-        let saved = Set(collections.flatMap(\.titleIDs))
-        let list = saved.compactMap { titles[$0] }.filter { t in
+        let list = libraryIDs.compactMap { titles[$0] }.filter { t in
             guard let r = t.release, mark(t.id) == nil else { return false }
             if isUnreleased(t) || t.upcomingSeason != nil { return true }
             guard let out = releaseStart(r) else { return false }
@@ -1306,7 +1323,9 @@ final class AppStore {
         if userTitles[titleID] == nil { userTitles[titleID] = UserTitleState(savedAt: Date()) }
     }
 
-    /// If a title is in no collection anymore its state goes with it.
+    /// A title leaving its LAST collection loses its state too: the server GCs `user_item` on that
+    /// remove (`removeTitleFromBacklog`). Deleting a whole collection doesn't, and neither does a
+    /// title marked without ever being saved: those stay in `libraryIDs` with no collection.
     private func gcUserState(_ titleID: String) {
         if !isSaved(titleID) {
             userTitles[titleID] = nil
@@ -1502,7 +1521,10 @@ final class AppStore {
     // MARK: Reactions
 
     func setMark(_ titleID: String, _ mark: Mark?, haptic: Bool = true, preview: Bool = false) {
+        // An `ext:` search result isn't in the catalog until it's saved: nothing to mark yet.
+        if ExternalRef.parse(localID: titleID) != nil { askToSaveFirst(titleID); return }
         let previous = userTitles[titleID]?.mark
+        let hadState = userTitles[titleID] != nil
         ensureUserState(titleID)
         userTitles[titleID]?.mark = mark
         if haptic {
@@ -1513,17 +1535,23 @@ final class AppStore {
             }
         }
         sync(titleID: titleID, onError: { [weak self] e in
-            // "Todavía no sale" is not retryable: revert and say so.
+            guard let self else { return true }
+            // Neither is retryable. The optimistic state goes: an unsaved title leaves the library
+            // it had just entered; a saved one gets its previous mark back.
+            let revert = {
+                if hadState { self.userTitles[titleID]?.mark = previous } else if !self.isSaved(titleID) { self.userTitles[titleID] = nil }
+            }
+            // "Todavía no sale": say so.
             if case .conflict(let code, _) = e, code == "not_released" {
-                self?.userTitles[titleID]?.mark = previous
-                self?.showToast(ToastModel(text: e.toast, kind: .info))
+                revert()
+                self.showToast(ToastModel(text: e.toast, kind: .info))
                 return true
             }
-            // No membership yet (`PUT mark` needs a `user_item`): revert and offer "guardar en".
-            if case .notFound = e, let self, !self.isSaved(titleID) {
-                self.userTitles[titleID] = nil
-                self.showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
-                self.present(.saveTo(titleID))
+            // The catalog doesn't know this id (a mark on an unsaved title now CREATES your state,
+            // so a 404 means the title itself is gone).
+            if case .notFound = e {
+                revert()
+                self.showToast(ToastModel(text: AppStore.unknownTitleNote, kind: .info))
                 return true
             }
             return false
@@ -1537,15 +1565,38 @@ final class AppStore {
                 // The ficha's "obsesionados / completos" are server aggregates (formatted "12,4 k"):
                 // re-read them instead of guessing +1/−1.
                 if self.loadedTitles.contains(titleID) { Task { await self.loadTitle(titleID, force: true) } }
+                // Marked from a ficha you hadn't saved: the mark stands on its own (the title is in
+                // your library, in no collection); "Guardar en…" is only a suggestion.
+                if mark != nil { self.suggestSaving(titleID) }
             }
         }
+    }
+
+    /// "No encontramos este título": `PUT mark` answered 404 for a catalog id.
+    static let unknownTitleNote = "No encontramos este título. Búscalo de nuevo."
+
+    /// After a mark on a title in no collection: open "Guardar en…" as a suggestion. Closing it
+    /// without choosing leaves the title marked and out of every collection. Never over another sheet.
+    func suggestSaving(_ titleID: String) {
+        guard mark(titleID) != nil, !isSaved(titleID), sheet == nil else { return }
+        present(.saveTo(titleID))
+    }
+
+    /// An `ext:` result has no catalog id to mark yet: save it first (the membership PUT materializes it).
+    private func askToSaveFirst(_ titleID: String) {
+        showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
+        // After the caller's own dismiss (the complete sheet closes right after calling setMark).
+        Task { @MainActor [weak self] in self?.present(.saveTo(titleID)) }
     }
 
     /// Completar + reseña in one go: the server refuses a review before a reaction
     /// (`409 reaction_required`), so the mark is AWAITED here and the caller sends the review only
     /// on `nil`. Optimistic like `setMark`; on failure the mark is reverted and the error returned
-    /// (the sheet keeps the text). "No membership yet" still reverts and opens "guardar en".
+    /// (the sheet keeps the text; a 404 is `unknownTitleNote`). An `ext:` result can't be marked
+    /// before it's saved: that opens "guardar en" and returns `.notFound`. The caller suggests
+    /// "Guardar en…" after the review (`suggestSaving`), so a sheet it's about to close doesn't eat it.
     func setMarkConfirmed(_ titleID: String, _ mark: Mark?, preview: Bool) async -> KuraAPIError? {
+        if ExternalRef.parse(localID: titleID) != nil { askToSaveFirst(titleID); return .notFound }
         let hadState = userTitles[titleID]
         ensureUserState(titleID)
         userTitles[titleID]?.mark = mark
@@ -1562,12 +1613,7 @@ final class AppStore {
             return nil
         } catch {
             let e = noteError(error)
-            if hadState == nil { userTitles[titleID] = nil } else { userTitles[titleID]?.mark = hadState?.mark }
-            if case .notFound = e, !isSaved(titleID) {
-                userTitles[titleID] = nil
-                showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
-                present(.saveTo(titleID))
-            }
+            if hadState != nil { userTitles[titleID]?.mark = hadState?.mark } else if !isSaved(titleID) { userTitles[titleID] = nil }
             return e
         }
     }
@@ -1856,7 +1902,7 @@ final class AppStore {
     // MARK: Counters (profile ribbon)
 
     func count(of mark: Mark) -> Int { userTitles.values.filter { $0.mark == mark }.count }
-    var savedCount: Int { Set(collections.flatMap(\.titleIDs)).count }
+    var savedCount: Int { libraryIDs.count }
 
     // MARK: Session
 

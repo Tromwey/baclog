@@ -62,6 +62,11 @@ protocol KuraAPI: Sendable {
     func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage
     func titles(ids: [String]) async throws -> [Title]
     func myTitles() async throws -> [String: UserTitleState]
+    /// `PUT /me/titles/{id}/mark`. On a catalog title you haven't saved it CREATES your state
+    /// (200: the title enters `GET /me/titles` in no collection); `mark: nil` on an unsaved title
+    /// is 404, as is an id the catalog doesn't know (the app reverts: "búscalo de nuevo"). An
+    /// `ext:` search result isn't in the catalog yet, so the store never sends it here: it has to
+    /// be saved first. `409 not_released` without `preview` while it isn't out.
     func setMark(titleID: String, mark: Mark?, preview: Bool) async throws -> UserTitleState
     func saveReview(titleID: String, body: String, hasSpoiler: Bool) async throws -> Review
     func deleteReview(titleID: String) async throws
@@ -90,6 +95,8 @@ struct MePatch: Encodable, Sendable {
     var name: String? = nil
     var preferredService: String? = nil
     var notifyReleases: Bool? = nil
+    /// The monthly recap email on/off.
+    var notifyRecap: Bool? = nil
     var isPublic: Bool? = nil
 }
 
@@ -156,7 +163,14 @@ struct MockAPI: KuraAPI {
 
     // Account
     func me() async throws -> Me { Me(person: MockData.me) }
-    func updateMe(_ patch: MePatch) async throws -> Me { try await write(); return Me(person: MockData.me) }
+    func updateMe(_ patch: MePatch) async throws -> Me {
+        try await write()
+        var m = Me(person: MockData.me)
+        if let v = patch.notifyReleases { m.notifyReleases = v }
+        if let v = patch.notifyRecap { m.notifyRecap = v }
+        if let v = patch.isPublic { m.isPublic = v }
+        return m
+    }
     func checkUsername(_ username: String) async throws -> UsernameStatus {
         let clean = username.lowercased()
         if clean.count < 3 { return .invalid }
