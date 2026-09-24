@@ -19,8 +19,8 @@ export const GET = withApi(async () => {
 });
 
 /**
- * PATCH /api/v1/me { name?, preferredService?, notifyReleases?, isPublic? }
- * → Me. Same validation as the four web actions (`modules/account/profile.ts`
+ * PATCH /api/v1/me { name?, preferredService?, notifyReleases?, notifyRecap?,
+ * isPublic? } → Me. Same validation as the five web actions (`modules/account/profile.ts`
  * is the one write path); a field left out is left alone, an empty body is a
  * no-op that still returns the current `Me`.
  */

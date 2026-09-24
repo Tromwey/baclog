@@ -17,9 +17,14 @@ const BodySchema = z.object({
  * (`modules/backlog/state.ts`): any mark completes; `obsessed` leaves the
  * verdict alone; `null` returns the title to the radar. Idempotent.
  *
- * 404 when the title isn't in the caller's library (mark a saved title only —
- * membership first) — a malformed id is the same 404. 409 `not_released`
- * when `releaseDate > now` and the app didn't say `preview`.
+ * Mark without saving (phase 4b): a non-null mark on a catalog title that
+ * isn't in the caller's library CREATES its per-title state (a `user_item`
+ * with no collection) and answers 200 like any other mark — the app offers
+ * "guardar en" next. 404 when the catalog doesn't know the id (a malformed
+ * id is the same 404) and for `mark: null` on a title that isn't in the
+ * library (clearing nothing creates nothing). 409 `not_released` when
+ * `releaseDate > now` and the app didn't say `preview` — checked BEFORE
+ * anything is created.
  */
 export const PUT = withApi<{ id: string }>(async (request, { user, params }) => {
   const id = parseId(params.id);

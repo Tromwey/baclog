@@ -7,7 +7,8 @@ import { preferredServiceEnum, users } from "@/db/schema";
 /**
  * Editable account fields — the ONE write path behind the web's
  * `updateDisplayNameAction` / `setPreferredServiceAction` /
- * `setNotifyReleasesAction` / `setPublicAction` and the API's `PATCH /me`.
+ * `setNotifyReleasesAction` / `setNotifyRecapAction` / `setPublicAction` and
+ * the API's `PATCH /me`.
  *
  * Takes a `userId` on purpose, so it must NEVER live in a "use server" file
  * (see the note in modules/backlog/membership.ts): callers derive the id via
@@ -25,6 +26,8 @@ export const profilePatchSchema = z.object({
   name: displayNameSchema.optional(),
   preferredService: preferredServiceSchema.optional(),
   notifyReleases: z.boolean().optional(),
+  /** Phase 4b — the monthly recap email's opt-out (`api/cron/recap`). */
+  notifyRecap: z.boolean().optional(),
   isPublic: z.boolean().optional(),
 });
 export type ProfilePatch = z.infer<typeof profilePatchSchema>;
@@ -43,6 +46,7 @@ export async function updateProfile(
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.preferredService !== undefined) set.preferredService = patch.preferredService;
   if (patch.notifyReleases !== undefined) set.notifyReleases = Boolean(patch.notifyReleases);
+  if (patch.notifyRecap !== undefined) set.notifyRecap = Boolean(patch.notifyRecap);
   if (patch.isPublic !== undefined) set.isPublic = Boolean(patch.isPublic);
   if (Object.keys(set).length === 0) return;
   await db.update(users).set(set).where(eq(users.id, userId));

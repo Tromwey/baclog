@@ -2,6 +2,8 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems, itemReviews, userItems } from "@/db/schema";
+import { getCatalogItem } from "@/modules/catalog/cache";
+import { backfillPreorderDate } from "@/modules/catalog/preorder";
 import { isUpcoming } from "@/modules/catalog/release";
 import type { KuraMark } from "./mark";
 
@@ -30,6 +32,18 @@ import type { KuraMark } from "./mark";
  * is refused with `not_released` unless the caller says `preview` ("La vi en
  * preestreno"). On the web this rule only lived in the UI (the action bar is
  * hidden while upcoming); here it is enforced.
+ *
+ * Mark WITHOUT saving (phase 4b, founder 2026-09-24): a non-null mark on a
+ * catalog title the caller has no `user_item` for CREATES that row — per-title
+ * state with NO membership in any collection (the same shape a title has after
+ * its collection is deleted); the app offers "guardar en" afterwards. Order:
+ * unknown catalog id → `not_found`; the release rule runs BEFORE the insert
+ * (a 409 creates nothing); then `INSERT … ON CONFLICT DO NOTHING` + re-read,
+ * so two racing PUTs converge on one row. `mark: null` on a title with no
+ * `user_item` is `not_found`, NOT a no-op: "quitar la marca" of something
+ * that isn't in the library must never create a row. The web actions don't
+ * go through here and still require a saved title. `removeTitleFromLibrary`
+ * (DELETE /me/titles/{id}) removes such a row like any other.
  */
 
 export type SetMarkResult = { ok: true } | { error: "not_found" | "not_released" };
@@ -42,19 +56,14 @@ export async function setMark(
 ): Promise<SetMarkResult> {
   const now = opts.now ?? new Date();
 
-  const [row] = await db
-    .select({
-      id: userItems.id,
-      status: userItems.status,
-      verdict: userItems.verdict,
-      obsessed: userItems.obsessed,
-      releaseDate: catalogItems.releaseDate,
-    })
-    .from(userItems)
-    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
-    .where(and(eq(userItems.userId, userId), eq(userItems.catalogItemId, catalogItemId)))
-    .limit(1);
-  if (!row) return { error: "not_found" };
+  let row = await readMarkRow(userId, catalogItemId);
+  if (!row) {
+    // Nothing to clear on a title that isn't in the library.
+    if (mark === null) return { error: "not_found" };
+    const created = await createUnsavedState(userId, catalogItemId, now, opts.preview ?? false);
+    if ("error" in created) return created;
+    row = created.row;
+  }
 
   if (mark !== null && !opts.preview && isUpcoming(row.releaseDate, now.getTime())) {
     return { error: "not_released" };
@@ -95,6 +104,64 @@ export async function setMark(
       .where(and(eq(userItems.id, row.id), eq(userItems.userId, userId)));
   }
   return { ok: true };
+}
+
+async function readMarkRow(userId: string, catalogItemId: string) {
+  const [row] = await db
+    .select({
+      id: userItems.id,
+      status: userItems.status,
+      verdict: userItems.verdict,
+      obsessed: userItems.obsessed,
+      releaseDate: catalogItems.releaseDate,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(and(eq(userItems.userId, userId), eq(userItems.catalogItemId, catalogItemId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * The "mark without saving" half of `setMark`: the bare `user_item` (default
+ * state = on the radar; `setMark` then applies the mark like on any saved
+ * title), no `backlog_item`. The pre-order backfill runs first — it's the ONE
+ * copy every path that puts a title into a library shares (catalog/preorder.ts),
+ * and a pre-order album only learns its date there, so skipping it would let
+ * a mark through the release rule on an album that isn't out yet.
+ */
+async function createUnsavedState(
+  userId: string,
+  catalogItemId: string,
+  now: Date,
+  preview: boolean,
+): Promise<
+  | { row: NonNullable<Awaited<ReturnType<typeof readMarkRow>>> }
+  | { error: "not_found" | "not_released" }
+> {
+  const item = await getCatalogItem(catalogItemId);
+  if (!item) return { error: "not_found" };
+
+  let releaseDate = item.releaseDate;
+  if (releaseDate === null) {
+    await backfillPreorderDate(catalogItemId);
+    releaseDate = (await getCatalogItem(catalogItemId))?.releaseDate ?? null;
+  }
+  if (!preview && isUpcoming(releaseDate, now.getTime())) return { error: "not_released" };
+
+  await db
+    .insert(userItems)
+    .values({ userId, catalogItemId, addedAt: now, statusChangedAt: now })
+    .onConflictDoNothing({ target: [userItems.userId, userItems.catalogItemId] });
+  const row = await readMarkRow(userId, catalogItemId);
+  if (!row) {
+    // ON CONFLICT DO NOTHING means the row exists unless something deleted
+    // it between the two statements — say so loudly, never a silent 404.
+    throw new Error(
+      `user_item missing right after upsert (userId=${userId}, catalogItemId=${catalogItemId})`,
+    );
+  }
+  return { row };
 }
 
 /**

@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: YYYY-MM-DD
+> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap`)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -22,7 +22,7 @@
 | `drizzle.config.ts` | Config de drizzle-kit (dialecto, rutas, credenciales) |
 | `scripts/seed-curators.ts` | Único script de siembra del repo |
 
-Tablas principales en `schema.ts`: `users` (con `token_version` desde 0027), `sessions`/`accounts`/`verificationTokens` (adapter de
+Tablas principales en `schema.ts`: `users` (con `token_version` y `notify_recap` desde 0027), `sessions`/`accounts`/`verificationTokens` (adapter de
 NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews`, `userFollows`,
 `mediaLinks`, `crossMediaLinks`, `crossMediaRecs`, `crossMediaRecUsage`, `crossMediaRecSeen`,
 `crossMediaRecoFeedback`, `llmCallLog`, `analyticsEvents`, `waitlistEntries`, `waitlistReferrals`,
@@ -48,13 +48,17 @@ serializa params a JSON, un Buffer no sobrevive) y vuelve como Buffer. ⚠️ 00
 snapshot en `drizzle/meta/`, así que el `generate` de 0026 re-emitió los `ADD VALUE 'tidal'` — se
 quitaron del SQL a mano y el snapshot 0026 es el primero que incluye `tidal` (learning
 `2026-09-02-migracion-a-mano-sin-snapshot-reemite-cambios.md`).
-**0027 `user_token_version`** (fase 4b Kura iOS, 2026-09-24, aditiva sin backfill —
-`ALTER TABLE "user" ADD COLUMN "token_version" integer DEFAULT 0 NOT NULL;`, generada con
-`drizzle-kit generate`, SQL de una sola línea revisado). Revocación del bearer móvil: cada bearer y
-cada handoff web llevan el `tv` con que se acuñaron y la relectura por request lo compara; el ÚNICO
-escritor es `POST /api/v1/auth/logout` (`token_version + 1` atómico). La columna viaja AL LADO del
-usuario (`loadUserWithTokenVersion` en `src/auth/user-row.ts`), nunca en `CurrentUser`/`Me`; la
-cookie web no la lee. **Pendiente de aplicar** (ver "En progreso").
+**0027 `user_token_version_notify_recap`** (fase 4b Kura iOS, **aplicada en la DB compartida el
+2026-09-24**, aditiva sin backfill — dos `ALTER TABLE "user" ADD COLUMN`: `token_version integer DEFAULT 0
+NOT NULL` y `notify_recap boolean DEFAULT true NOT NULL`; reemplazó a la `0027_user_token_version` que se
+generó primero y nunca se aplicó, así que journal y snapshot 0027 ya llevan las dos columnas y `schema.ts` las
+declara: `drizzle-kit generate` vuelve a ser seguro — no se corrió para comprobarlo en el cierre de 4b).
+`token_version`: revocación del bearer móvil Y de la cookie web — cada bearer, cookie y handoff lleva el `tv`
+con que se acuñó y la relectura por request lo compara; el ÚNICO escritor es `POST /api/v1/auth/logout`
+(`token_version + 1` atómico). Viaja AL LADO del usuario (`loadUserWithTokenVersion` en
+`src/auth/user-row.ts`), nunca en `CurrentUser`/`Me`. `notify_recap`: baja del correo mensual del recap
+(default `true` como `notify_releases`, porque el correo ya existía); SÍ va en `USER_COLUMNS` → `CurrentUser`
+→ `Me`, nunca en `Person`; lectores: `api/cron/recap` (audiencia) y Ajustes.
 
 Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
 (escanean por `user_id` y ordenan). Costo por página de `/feed` (feed v2): 1 query de ids seguidos + por
@@ -77,13 +81,6 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
-- **Migración 0027 `user_token_version` generada y SIN aplicar (2026-09-24).** `drizzle/0027_user_token_version.sql`
-  + `meta/0027_snapshot.json` + journal existen, pero la línea `tokenVersion` en `schema.ts` va **comentada** y
-  `TOKEN_VERSION_LIVE = false` en `src/auth/user-row.ts`: con la columna declarada y sin migrar, TODO insert en
-  `user` (Drizzle nombra cada columna, con DEFAULT — el alta de cuentas incluida) y todo select que la lea dan
-  42703 en la DB compartida. Al aplicar, en este orden: (1) `drizzle-kit migrate`, (2) descomentar la línea,
-  (3) `TOKEN_VERSION_LIVE = true`. **Mientras siga comentada NADIE corre `drizzle-kit generate`**: el snapshot
-  0027 ya tiene la columna y el diff emitiría `DROP COLUMN "token_version"`. Vaciar esta entrada al aplicar.
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->

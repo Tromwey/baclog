@@ -299,6 +299,9 @@ export const MeSchema = z.object({
   isPublic: z.boolean(),
   preferredService: PreferredServiceSchema.nullable(),
   notifyReleases: z.boolean(),
+  /** Phase 4b — the monthly recap email's opt-out (`PATCH /me`). Own
+   *  preference: never on `Person`. */
+  notifyRecap: z.boolean(),
   isFounder: z.boolean(),
   /** `name` is set — the app skips onboarding. */
   onboardingComplete: z.boolean(),

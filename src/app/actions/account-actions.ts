@@ -111,6 +111,17 @@ export async function setNotifyReleasesAction(notifyReleases: boolean) {
 }
 
 /**
+ * Phase 4b — the monthly recap email's opt-out. Same posture as
+ * `setNotifyReleasesAction`: nothing cached renders it, the only reader is
+ * the monthly cron (`api/cron/recap`).
+ */
+export async function setNotifyRecapAction(notifyRecap: boolean) {
+  const user = await assertUser();
+  await updateProfile(user.id, { notifyRecap: Boolean(notifyRecap) });
+  return { ok: true as const };
+}
+
+/**
  * F2.4 — deletes the account (modules/account/delete.ts: the row + every
  * cascade). Two-step: clear the JWT cookie, then redirect (signOut's own
  * redirect isn't trusted).

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   deleteAccountAction,
+  setNotifyRecapAction,
   setNotifyReleasesAction,
   setPublicAction,
 } from "@/app/actions/account-actions";
@@ -128,8 +129,22 @@ export function ReleasesSwitch({ initial }: { initial: boolean }) {
   const [on, setOn, error] = useSetting(initial, setNotifyReleasesAction);
   return (
     <SwitchRow
-      title="Estrenos de álbumes que esperas"
-      note="Un correo el día que sale un álbum en preventa que guardaste."
+      title="Estrenos que esperas"
+      note="Un correo el día que sale un álbum, una película o una serie que guardaste antes de su estreno."
+      checked={on}
+      onChange={setOn}
+      error={error}
+    />
+  );
+}
+
+/** Phase 4b — the monthly recap email's opt-out, same row as the releases one. */
+export function RecapSwitch({ initial }: { initial: boolean }) {
+  const [on, setOn, error] = useSetting(initial, setNotifyRecapAction);
+  return (
+    <SwitchRow
+      title="Correo del recap mensual"
+      note="Un correo al empezar el mes con lo que hiciste en el anterior."
       checked={on}
       onChange={setOn}
       error={error}

@@ -206,7 +206,7 @@ export const SECTIONS: Section[] = [
       },
       {
         kind: "p",
-        text: `Para negarte a cualquiera de estas dos, escríbenos a ${CONTACT_EMAIL} (el resumen mensual todavía no tiene un interruptor propio en Ajustes). No usamos tus datos para publicidad, no los vendemos ni los rentamos, y no armamos perfiles tuyos para terceros.`,
+        text: `El resumen mensual se desactiva en Ajustes › notificaciones; para negarte a las estadísticas, escríbenos a ${CONTACT_EMAIL}. No usamos tus datos para publicidad, no los vendemos ni los rentamos, y no armamos perfiles tuyos para terceros.`,
       },
     ],
   },

@@ -8,7 +8,7 @@ import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { InstallAppRow } from "@/app/(app)/perfil/install-app-row";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
-import { DeleteAccount, PrivacySwitch, ReleasesSwitch } from "./settings-form";
+import { DeleteAccount, PrivacySwitch, RecapSwitch, ReleasesSwitch } from "./settings-form";
 import { SERVICE_LABEL } from "./services";
 
 /**
@@ -21,7 +21,8 @@ import { SERVICE_LABEL } from "./services";
  *
  * Only what the product has (§ "lo que el mock pide y el producto no tiene se
  * omite"): no "Quién ve lo que te obsesiona", no "País para dónde ver", no
- * "Nuevos seguidores" / "Tu recap está listo" notices, no follow approval.
+ * "Nuevos seguidores" notices, no follow approval. "notificaciones" holds the
+ * two mail opt-outs the product has: release day and the monthly recap.
  */
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -100,6 +101,8 @@ export default async function SettingsPage() {
         <Section label="notificaciones">
           <Group>
             <ReleasesSwitch initial={user.notifyReleases} />
+            <Divider />
+            <RecapSwitch initial={user.notifyRecap} />
           </Group>
         </Section>
 

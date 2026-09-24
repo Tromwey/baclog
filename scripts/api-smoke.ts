@@ -243,7 +243,17 @@ const l3: { ownPerson: z.infer<typeof PersonSchema> | null } = { ownPerson: null
 /** Keys a cross-user payload must never carry, at ANY depth. `id` is legal
  *  on titles/collections, so the scan also rejects the caller's own user id
  *  appearing as any string value (a Person is keyed by handle, never id). */
-const LEAK_KEYS = new Set(["email", "birthYear", "userId", "isAdmin", "preferredService", "isPrivate"]);
+const LEAK_KEYS = new Set([
+  "email",
+  "birthYear",
+  "userId",
+  "isAdmin",
+  "preferredService",
+  // Own mail preferences (`Me` only, phase 4b): never on a Person.
+  "notifyReleases",
+  "notifyRecap",
+  "isPrivate",
+]);
 /** `allow`: keys legal on THIS payload only — `isPrivate` exists solely on the
  *  caller's own following/followers lists (PersonSchema). */
 function assertNoPeopleLeak(body: unknown, path = "$", allow: ReadonlySet<string> = new Set()): void {
@@ -1797,6 +1807,7 @@ const writes: Case[] = [
       });
       const err = expectError(bad, 400, "invalid");
       assert.ok(err.fields && "preferredService" in err.fields, "fields.preferredService presente");
+      assert.equal(ctx.me?.notifyRecap ?? true, true, "notifyRecap nace en true (default de la columna)");
       const res = await call("PATCH", "/me", {
         token: ctx.token,
         body: { name: "QA API dos", preferredService: "tidal", notifyReleases: false, isPublic: false },
@@ -1818,6 +1829,22 @@ const writes: Case[] = [
       // Empty patch → no-op, still a Me.
       expectOk(await call("PATCH", "/me", { token: ctx.token, body: {} }), 200, MeSchema);
       ctx.me = partial;
+    },
+  },
+  {
+    name: "E1 PATCH /me { notifyRecap } → Me.notifyRecap (baja del recap mensual); no booleano → 400",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      // qaCall: E1 alone brushes the 60 writes/min ceiling (see qaCall).
+      const off = expectOk(await qaCall("PATCH", "/me", { body: { notifyRecap: false } }), 200, MeSchema);
+      assert.equal(off.notifyRecap, false);
+      assert.equal(off.notifyReleases, ctx.me?.notifyReleases ?? off.notifyReleases, "no toca el de estrenos");
+      assert.equal(expectOk(await qaCall("GET", "/me"), 200, MeSchema).notifyRecap, false, "GET /me lo refleja");
+      const bad = expectError(await qaCall("PATCH", "/me", { body: { notifyRecap: "no" } }), 400, "invalid");
+      assert.ok(bad.fields && "notifyRecap" in bad.fields, "fields.notifyRecap presente");
+      const on = expectOk(await qaCall("PATCH", "/me", { body: { notifyRecap: true } }), 200, MeSchema);
+      assert.equal(on.notifyRecap, true);
+      ctx.me = on;
     },
   },
   {
@@ -2048,21 +2075,21 @@ const writes: Case[] = [
     run: async () => {
       assert.ok(ctx.token && ctx.me?.handle, "hace falta token y handle");
       const before = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
-      const put = await call("PUT", "/me/following/eric", { token: ctx.token });
+      const put = await qaCall("PUT", "/me/following/eric");
       assert.equal(put.status, 204, `esperaba 204, llegó ${put.status}: ${put.text}`);
       expectNoStore(put);
-      const again = await call("PUT", "/me/following/eric", { token: ctx.token });
+      const again = await qaCall("PUT", "/me/following/eric");
       assert.equal(again.status, 204, "seguir dos veces es una fila");
       const after = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
       assert.equal(after, before + 1);
       // Own handle, nonexistent and (indistinguishably) private → the same 404.
-      const self = await call("PUT", `/me/following/${ctx.me.handle}`, { token: ctx.token });
-      const nobody = await call("PUT", "/me/following/nadieexiste12345", { token: ctx.token });
+      const self = await qaCall("PUT", `/me/following/${ctx.me.handle}`);
+      const nobody = await qaCall("PUT", "/me/following/nadieexiste12345");
       expectSameError(self, nobody, 404, "not_found", "propio e inexistente son el mismo 404");
-      const malformed = await call("PUT", "/me/following/ab", { token: ctx.token });
+      const malformed = await qaCall("PUT", "/me/following/ab");
       expectSameError(malformed, nobody, 404, "not_found", "malformado es el mismo 404 (sin oráculo de forma)");
       // `@eric` and `ERIC` normalize to the same handle: still one row.
-      assert.equal((await call("PUT", "/me/following/%40ERIC", { token: ctx.token })).status, 204);
+      assert.equal((await qaCall("PUT", "/me/following/%40ERIC")).status, 204);
       // The follow shows up in the own list.
       const list = await call("GET", "/me/following", { token: ctx.token });
       const parsed = expectOk(list, 200, z.object({ items: z.array(z.object({ handle: z.string() })) }));
@@ -2074,16 +2101,16 @@ const writes: Case[] = [
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const before = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
-      const del = await call("DELETE", "/me/following/eric", { token: ctx.token });
+      const del = await qaCall("DELETE", "/me/following/eric");
       assert.equal(del.status, 204, `esperaba 204, llegó ${del.status}: ${del.text}`);
       expectNoStore(del);
       const after = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
       assert.equal(after, before - 1);
-      const again = await call("DELETE", "/me/following/eric", { token: ctx.token });
+      const again = await qaCall("DELETE", "/me/following/eric");
       assert.equal(again.status, 204, "dejar de seguir dos veces no falla");
-      const nobody = await call("DELETE", "/me/following/nadieexiste12345", { token: ctx.token });
+      const nobody = await qaCall("DELETE", "/me/following/nadieexiste12345");
       assert.equal(nobody.status, 204, "handle desconocido → 204, la respuesta nunca varía");
-      expectError(await call("DELETE", "/me/following/ab", { token: ctx.token }), 404, "not_found");
+      expectError(await qaCall("DELETE", "/me/following/ab"), 404, "not_found");
     },
   },
   {
@@ -2307,6 +2334,52 @@ const writes: Case[] = [
       const gone = await e2call("DELETE", `/collections/${e2.collection}/titles/${upcoming}`);
       assert.equal(gone.status, 204);
       assert.ok(!(await e2Library()).has(upcoming), "última membresía → user_item GC");
+
+      // Mark WITHOUT saving (4b) keeps the release rule, and checks it BEFORE
+      // creating the state: the 409 leaves nothing in the library.
+      const unsaved = await e2call("PUT", `/me/titles/${upcoming}/mark`, { body: { mark: "liked" } });
+      assert.equal(expectError(unsaved, 409, "conflict").reason, "not_released");
+      assert.ok(!(await e2Library()).has(upcoming), "el 409 sin guardar no creó user_item");
+    },
+  },
+  {
+    name: "E2 PUT /me/titles/{id}/mark sin guardar → 200 crea el estado sin colección; null sin estado → 404; DELETE → 204",
+    run: async () => {
+      const lib0 = await e2Library();
+      const fresh = (await e2Search("the matrix")).filter((h) => !lib0.has(h.id!));
+      assert.ok(fresh.length >= 2, `hacen falta 2 títulos buscados fuera de la biblioteca; hay ${fresh.length}`);
+      const [marked, untouched] = [fresh[0].id!, fresh[1].id!];
+
+      const state = expectOk(
+        await e2call("PUT", `/me/titles/${marked}/mark`, { body: { mark: "liked" } }),
+        200,
+        TitleStateSchema,
+      );
+      assert.equal(state.titleId, marked);
+      assert.equal(state.mark, "liked", "el servidor creó el estado con la marca");
+      const again = expectOk(
+        await e2call("PUT", `/me/titles/${marked}/mark`, { body: { mark: "liked" } }),
+        200,
+        TitleStateSchema,
+      );
+      assert.equal(again.savedAt, state.savedAt, "repetir no re-crea el user_item");
+      assert.equal((await e2Library()).get(marked)?.mark, "liked", "aparece en GET /me/titles");
+      assert.ok(
+        (await e2Collections()).every((c) => !c.titleIds.includes(marked)),
+        "no está en ninguna colección (GET /collections)",
+      );
+
+      // "Quitar la marca" of a title with no state creates nothing.
+      expectError(
+        await e2call("PUT", `/me/titles/${untouched}/mark`, { body: { mark: null } }),
+        404,
+        "not_found",
+      );
+      assert.ok(!(await e2Library()).has(untouched), "el 404 no creó user_item");
+
+      const del = await e2call("DELETE", `/me/titles/${marked}`);
+      assert.equal(del.status, 204, del.text);
+      assert.ok(!(await e2Library()).has(marked), "DELETE /me/titles lo quita");
     },
   },
   {

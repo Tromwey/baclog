@@ -13,6 +13,12 @@ export const maxDuration = 60;
  * via the recap_send unique(user_id, era_key): the INSERT ... ON CONFLICT
  * DO NOTHING RETURNING is the atomic claim, safe against at-least-once
  * delivery and manual re-triggers. One user's failure never aborts the batch.
+ *
+ * Phase 4b — only users with `notifyRecap` on (the opt-out: Ajustes web,
+ * `PATCH /me`). Filtered in the audience query, NOT at send time — the same
+ * posture as cron/release's `pendingRecipient`: an opted-out user never
+ * claims a `recap_send` row, so switching it back on before a re-run of the
+ * same month doesn't find that month already "sent".
  */
 export async function GET(request: Request) {
   if (request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
@@ -22,7 +28,8 @@ export async function GET(request: Request) {
   const eraKey = previousMonthKey();
   const allUsers = await db
     .select({ id: users.id, email: users.email, username: users.username })
-    .from(users);
+    .from(users)
+    .where(eq(users.notifyRecap, true));
 
   let sent = 0;
   let skipped = 0;

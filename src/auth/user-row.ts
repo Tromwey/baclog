@@ -24,6 +24,9 @@ const USER_COLUMNS = {
   image: users.image,
   isPublic: users.isPublic,
   notifyReleases: users.notifyReleases,
+  // Phase 4b — the recap email's opt-out: an own preference (Ajustes, `Me`),
+  // never on `Person` or any cross-user read.
+  notifyRecap: users.notifyRecap,
   preferredService: users.preferredService,
   isMinor: users.isMinor,
   isFounder: users.isFounder,
@@ -45,17 +48,22 @@ export async function loadUserById(id: string) {
 export type UserRow = NonNullable<Awaited<ReturnType<typeof loadUserById>>>;
 
 /**
- * Phase 4b switch. FALSE until drizzle/0027_user_token_version.sql is applied
- * to the shared Neon DB (local = beta = prod): while false the column is
- * never read, every token's `tv` reads as 0 against a version of 0 (= the
- * pre-4b behaviour: nothing is revocable) and `auth/logout` does not bump.
- * TODO(migración 0027): after `drizzle-kit migrate`, uncomment
- * `tokenVersion` in src/db/schema.ts and flip this to `true`.
+ * Phase 4b kill-switch — LIVE since 2026-09-24, when migration
+ * 0027_user_token_version_notify_recap reached the shared Neon DB (local =
+ * beta = prod). While true, `auth/logout` bumps `token_version` and every
+ * bearer AND web cookie carrying an older `tv` is refused: revocation is
+ * active. Kept as a documented kill-switch, not a transitional flag: flipping
+ * it to false restores the pre-4b behaviour (every `tv` reads 0 against 0,
+ * logout revokes nothing) with a code deploy and NO schema change — only
+ * reach for it if the column read itself breaks sign-in. Never set it true
+ * on a DB without the column (every sign-in would 42703);
+ * `scripts/api-smoke.ts` (W2's precondition) checks both halves agree.
  */
 export const TOKEN_VERSION_LIVE = true;
 
-/** Raw on purpose: it compiles whether or not `schema.ts` declares the
- *  column yet (see TOKEN_VERSION_LIVE). */
+/** Raw (not `users.tokenVersion`, which `schema.ts` declares since 0027):
+ *  harmless, and it keeps this file independent of the schema line, which is
+ *  what let the switch ship before the migration. */
 const TOKEN_VERSION = sql<number>`"user"."token_version"`.mapWith(Number);
 
 /**

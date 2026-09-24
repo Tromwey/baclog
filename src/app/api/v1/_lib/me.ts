@@ -34,6 +34,7 @@ export async function buildMe(user: CurrentUser): Promise<Me> {
     isPublic: user.isPublic,
     preferredService: user.preferredService,
     notifyReleases: user.notifyReleases,
+    notifyRecap: user.notifyRecap,
     isFounder: user.isFounder,
     onboardingComplete: user.name !== null,
     hexes: tint.hexes,
