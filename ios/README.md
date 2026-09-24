@@ -50,6 +50,10 @@ Al arrancar en DEBUG se verifica que las 9 fuentes estén registradas (`[Kura] f
 ```
 ios/
   project.yml                 xcodegen (bundle io.communeo.kura, iOS 17, portrait, UIAppFonts, Dark)
+  Config/                     Kura.xcconfig (base del target: DEVELOPMENT_TEAM = $(KURA_TEAM_ID)),
+                              Team.xcconfig.example (copia → Team.xcconfig, gitignoreado)
+  ExportOptions.plist         plantilla de export app-store-connect (el script pone el teamID)
+  scripts/archive.sh          archive + .ipa para TestFlight (ver TestFlight)
   Kura/
     App/                      KuraApp, RootView (router splash → onboarding → tabs, SheetHost/ToastHost), DebugLaunch
     DesignSystem/
@@ -91,13 +95,68 @@ ios/
 3. La autorización se queda en el servidor (como en la web): la app nunca manda un `userId`; las escrituras van por título (`catalogItemId`) o por colección.
 4. `MockData` se queda para previews y para `-kuraScreen`.
 
+## TestFlight
+
+### `scripts/archive.sh`
+
+```sh
+export KURA_TEAM_ID=ABCDE12345        # tu Team ID (Membership details)
+ios/scripts/archive.sh                # → ios/build/export/Kura.ipa
+ios/scripts/archive.sh --upload       # además lo sube (necesita la llave ASC, abajo)
+```
+
+En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) → exige `KURA_TEAM_ID` → revisa que el llavero tenga una identidad de firma y un certificado **Apple Distribution** → corre `xcodegen generate` → `xcodebuild archive` (Release, `generic/platform=iOS`, `-allowProvisioningUpdates`, DerivedData propio en `build/DerivedData`) → `xcodebuild -exportArchive` con una copia de `ExportOptions.plist` (`method app-store-connect`, `signingStyle automatic`, `uploadSymbols`) con el `teamID` ya puesto → imprime la ruta del `.ipa`, la versión, el build y la base de la API que quedó en el binario. Entre el archive y el export **revisa el binario**: si `KuraAPIBase` del `.app` archivado no es exactamente `https://baclog.app/api/v1` (p. ej. `localhost`), o si el build no es el que se pidió, aborta sin exportar ni subir nada. No dice "Listo." hasta ver `** EXPORT SUCCEEDED **` en el log y además el `.ipa` en `build/export`, o, con `--upload`, la confirmación de subida en el log. Si no aparece, imprime el final del log y falla. Todo sale en `ios/build/` (gitignoreado), con `archive.log` / `export.log`. Si xcodebuild falla, el script no te avienta el log: resume la causa probable (sin cuenta en Xcode para ese team, no hay App ID, no hay iPhone registrado, falta el certificado, acuerdo pendiente, build repetido…), muestra las líneas `error:` y te dice dónde está el log completo.
+
+| variable | |
+|---|---|
+| `KURA_TEAM_ID` | **Obligatoria.** Si no está en el entorno, la lee de `Config/Team.xcconfig`. |
+| `KURA_BUILD_NUMBER` | `CFBundleVersion`. Por defecto `git rev-list --count HEAD`, que siempre crece en `main`. Si subes dos veces sin commit, pon uno mayor. |
+| `KURA_ASC_KEY_ID` · `KURA_ASC_ISSUER_ID` · `KURA_ASC_KEY_PATH` | Llave de la App Store Connect API (`AuthKey_….p8`). Obligatoria con `--upload`; si está, xcodebuild también la usa para firmar y aprovisionar, así que no hace falta la cuenta en Xcode. |
+| `KURA_CLOUD_SIGNING=1` | No exigir el certificado Apple Distribution en el llavero: el export usa el certificado que Apple administra en la nube (necesitas ser Account Holder o Admin). |
+
+**Versión:** `MARKETING_VERSION` (`1.0.0`, en `project.yml`) se sube a mano en cada versión de la App Store. `CURRENT_PROJECT_VERSION` vale `"1"` en `project.yml` solo como respaldo; el script lo pisa en la línea de xcodebuild.
+
+**Firma (`DEVELOPMENT_TEAM`):** el Team ID nunca se versiona. `Config/Kura.xcconfig` (versionado, es la configuración base del target) tiene `#include? "Team.xcconfig"` y `DEVELOPMENT_TEAM = $(KURA_TEAM_ID)`. Sin `Config/Team.xcconfig`, el team queda vacío y el build de simulador se hace sin firma, igual que siempre. El script no depende de ese archivo: pasa `DEVELOPMENT_TEAM=$KURA_TEAM_ID` directo a xcodebuild, y eso le gana a cualquier xcconfig. Para correr en un iPhone físico desde Xcode, copia `Config/Team.xcconfig.example` → `Config/Team.xcconfig`, pon tu ID y regenera. Firma automática, **sin entitlements**: nada de Sign in with Apple, push ni Keychain compartido. No fijes `CODE_SIGN_IDENTITY`/perfiles en `project.yml`, porque con Automatic chocan.
+
+### Lo que solo puede hacer el founder (Apple ID), en orden
+
+1. **Apple Developer Program activo** (developer.apple.com › Account; la renovación es anual).
+2. **Aceptar los acuerdos pendientes**: el banner de developer.apple.com y App Store Connect › Business. El de Paid Apps no hace falta porque la app es gratis.
+3. **Anotar el Team ID**: developer.apple.com › Account › Membership details.
+4. **Registrar el Bundle ID** en developer.apple.com › Certificates, IDs & Profiles › Identifiers › + › App IDs › App: Bundle ID **explícito** `io.communeo.kura`, descripción "Kura", **sin capacidades** (no marques Sign in with Apple, Push ni nada más).
+5. **Crear la app** en App Store Connect › Apps › + › New App: plataforma iOS, nombre "Kura" (si ya está tomado, "Kura: …"), idioma principal **Spanish (Mexico)**, Bundle ID `io.communeo.kura`, SKU p. ej. `kura-ios`, acceso completo. Categoría principal: Entertainment (secundaria: Lifestyle o Music).
+6. **Tu Apple ID en Xcode** (Xcode › Settings › Accounts › +) y, en Manage Certificates, crea **Apple Distribution**. Si el team no tiene ningún iPhone registrado, conecta el tuyo y ábrelo una vez en Xcode: la firma automática necesita un dispositivo para el perfil de desarrollo del archive.
+7. **Generar el build**: `export KURA_TEAM_ID=…` y `ios/scripts/archive.sh`.
+8. **Subir el `.ipa`**, con una de estas tres:
+   - **Transporter** (app gratis de la Mac App Store): arrastra `ios/build/export/Kura.ipa` › Deliver.
+   - `xcrun altool` **sin la contraseña a la vista** (en la línea de comandos queda en el historial y en `ps`):
+     - con la llave ASC: pon el `.p8` en `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8` y corre `xcrun altool --upload-app -f ios/build/export/Kura.ipa -t ios --apiKey <KEY_ID> --apiIssuer <ISSUER_ID>`;
+     - con contraseña de app (se crea en account.apple.com › Sign-In and Security): guárdala una vez en el llavero con `security add-generic-password -a <apple-id> -s AC_PASSWORD -l AC_PASSWORD -w` (sin valor después de `-w`, así te la pide sin mostrarla) y sube con `xcrun altool --upload-app -f ios/build/export/Kura.ipa -t ios -u <apple-id> -p @keychain:AC_PASSWORD`.
+   - `ios/scripts/archive.sh --upload` con la llave de App Store Connect › Users and Access › Integrations › App Store Connect API › + (rol App Manager; el `.p8` solo se descarga una vez; guárdalo fuera del repo).
+9. **TestFlight › el build** (tarda de 5 a 30 min en procesarse): el cumplimiento de exportación ya viene resuelto porque `ITSAppUsesNonExemptEncryption = false` (solo HTTPS). En "Test Information" pon el correo de feedback y la descripción beta.
+10. **Grupo interno** (TestFlight › Internal Testing › +): hasta 100 personas que ya estén en el equipo de App Store Connect, sin revisión de Apple. Un grupo **externo** (link público) pasa por Beta App Review y necesita lo del checklist de abajo.
+
+### Checklist antes del primer envío
+
+- [x] Ícono 1024 (`Resources/Assets.xcassets/AppIcon.appiconset`, sin transparencia).
+- [x] `UILaunchScreen` → `UIColorName: LaunchBackground` (color en el catálogo), idéntico en `Info.plist` e `Info-Debug.plist`.
+- [x] `ITSAppUsesNonExemptEncryption = false`, `LSRequiresIPhoneOS`, solo iPhone (`TARGETED_DEVICE_FAMILY 1`), solo vertical, `CFBundleDevelopmentRegion es-MX`.
+- [x] Release apunta a `https://baclog.app/api/v1`, sin excepciones de ATS (solo Debug permite `localhost`).
+- [x] dSYM en Release (`dwarf-with-dsym`) + `uploadSymbols`, para que los crashes de TestFlight vengan simbolizados.
+- [ ] `PrivacyInfo.xcprivacy` (APIs de razón requerida como UserDefaults, sin tracking): lo agrega el carril iOS de la fase 4a. Confirma que el archivo esté en el target antes de subir.
+- [ ] **URL de la política de privacidad: no existe todavía.** `https://baclog.app/privacidad` y `/privacy` dan 404, y en `src/app` no hay página de privacidad. App Store Connect la pide para la app, y también para TestFlight externo. Pendiente del founder: redactarla y publicarla (p. ej. `(marketing)/privacidad`).
+- [ ] **App Privacy** (App Store Connect › App Privacy): declarar correo, nombre de usuario, foto de perfil, contenido del usuario (reseñas) e identificadores, ligados a la identidad y sin tracking.
+- [ ] **Cuenta para la revisión**: el acceso es solo con código por correo, así que Beta App Review (TestFlight externo) y App Review necesitan una cuenta demo cuyo código puedan recibir, o un acceso para el revisor. Hay que decidirlo antes del primer grupo externo.
+- [ ] Clasificación por edad (el cuestionario; las reseñas son UGC, así que hay que declarar moderación y reporte) y borrar la cuenta desde la app (Ajustes › Borrar cuenta, requisito 5.1.1(v)): confirmar que funcione contra prod.
+
 ## Pendiente
 
+Cerrado en la fase 4a (2026-09-24): fotos de perfil (`DesignSystem/Components/Avatar.swift`, subida desde Editar perfil con recorte a 512 px y JPEG ≤ 400 KB), colección pública ajena (`Features/People/PublicCollectionView.swift`), "más reseñas" paginado (`GET /titles/{id}/reviews`), estados vacío/error/sin conexión en cada `load*` (`loadErrors`, `RetryStrip`, reintento al volver la red), Dynamic Type (escala con tope `xxxLarge`; mono, wordmark, sello y dock fijos a propósito), `PrivacyInfo.xcprivacy`, ventana pintada con `bg` desde el primer frame, y el recorrido real contra `next dev` de punta a punta (dos veces, cuenta QA borrada).
+
 - Apple / Google (API.md §2.2, fase 4): hoy solo correo → código; esos botones avisan.
-- Recorrido real contra `pnpm dev` (fase 3 del plan) todavía no ejercitado de punta a punta.
-- Fotos de perfil (hoy todo es sello), bloquear/reportar (hoy un aviso), push real (hoy notificación local).
-- Recap: datos fijos de agosto; la tarjeta se comparte como link, falta exportarla como imagen. Compartir → "Historia" igual.
+- Bloquear/reportar (hoy un aviso), push real (hoy notificación local; `device_token` es fase 4b).
+- Recap: la tarjeta se comparte como link, falta exportarla como imagen (`POST /auth/web-session` es fase 4b). Compartir → "Historia" igual.
 - Modo ordenar usa el `List` del sistema para arrastrar (asa y levantado nativos, no los del frame).
-- Tipografía fija (`fixedSize`) para calzar con los frames; falta decidir la escala con Dynamic Type.
-- Persistencia local / sincronización real del modo sin conexión (hoy "Simular sin conexión" en Ajustes solo muestra la franja).
+- Persistencia local / sincronización real del modo sin conexión (hoy la franja + reintento; no hay caché de datos).
 - Tests (unitarios del `AppStore`: undo, no puedo esperar, membresías) y snapshot tests por pantalla.
+- "Más reseñas" no se ha visto con una segunda página real: ningún título de la base tiene más de una reseña pública.

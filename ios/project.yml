@@ -1,6 +1,9 @@
 name: Kura
 options:
   bundleIdPrefix: io.communeo
+  # The app is Spanish-only: CFBundleDevelopmentRegion = es-MX so system UI (share sheet,
+  # text-field menus, alerts) matches the copy and App Store Connect lists Spanish.
+  developmentLanguage: es-MX
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -8,13 +11,22 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
+    # Version the user sees (CFBundleShortVersionString). Bump by hand per App Store release.
+    MARKETING_VERSION: "1.0.0"
+    # Fallback only: scripts/archive.sh overrides it on the xcodebuild line with the commit
+    # count (`git rev-list --count HEAD`), so every TestFlight upload gets a higher build number.
     CURRENT_PROJECT_VERSION: "1"
 targets:
   Kura:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
+    # Signing: DEVELOPMENT_TEAM = $(KURA_TEAM_ID) from Config/Kura.xcconfig, which optionally
+    # includes the gitignored Config/Team.xcconfig. No team → unsigned simulator builds work as
+    # before; scripts/archive.sh passes DEVELOPMENT_TEAM on the command line and fails without it.
+    configFiles:
+      Debug: Config/Kura.xcconfig
+      Release: Config/Kura.xcconfig
     sources:
       - path: Kura
         excludes:
@@ -25,6 +37,7 @@ targets:
       path: Kura/Info.plist
       properties:
         CFBundleDisplayName: Kura
+        LSRequiresIPhoneOS: true
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -55,7 +68,12 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_PREVIEWS: YES
+        # Automatic signing: archive signs with Apple Development, the export (ExportOptions.plist,
+        # method app-store-connect) re-signs with Apple Distribution. Do NOT pin CODE_SIGN_IDENTITY /
+        # PROVISIONING_PROFILE_SPECIFIER here: with Automatic they conflict and the archive fails.
+        # No entitlements file on purpose: no Sign in with Apple, no push, no keychain sharing.
         CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: NO
       configs:
         Debug:
           KURA_API_SCHEME: http
@@ -72,3 +90,10 @@ schemes:
         Kura: all
     run:
       config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+      revealArchiveInOrganizer: true

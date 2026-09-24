@@ -1,0 +1,4 @@
+// Copia este archivo a Config/Team.xcconfig (gitignoreado) y pon tu Team ID
+// (developer.apple.com › Account › Membership details › Team ID, 10 caracteres).
+// Después: cd ios && /opt/homebrew/bin/xcodegen generate
+KURA_TEAM_ID = ABCDE12345

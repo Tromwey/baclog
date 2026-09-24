@@ -1,0 +1,15 @@
+// Kura · base xcconfig del target (versionado). xcodegen lo enlaza como
+// baseConfigurationReference de Debug y Release (project.yml › targets.Kura.configFiles).
+//
+// Firma: el Team ID NO se versiona. Vive en Config/Team.xcconfig (gitignoreado; copia
+// Config/Team.xcconfig.example). `#include?` es opcional: si el archivo no existe,
+// KURA_TEAM_ID queda vacío, DEVELOPMENT_TEAM queda vacío y el build de simulador
+// sigue funcionando sin firma, igual que antes.
+//
+// scripts/archive.sh NO depende de este archivo: pasa DEVELOPMENT_TEAM=$KURA_TEAM_ID en
+// la línea de xcodebuild (los settings de línea de comandos ganan a cualquier xcconfig).
+// Team.xcconfig sirve para abrir el proyecto en Xcode y correr en un iPhone físico.
+
+#include? "Team.xcconfig"
+
+DEVELOPMENT_TEAM = $(KURA_TEAM_ID)

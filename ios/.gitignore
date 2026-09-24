@@ -3,3 +3,11 @@ xcuserdata/
 *.xcuserstate
 build/
 DerivedData/
+
+# TestFlight / archive (scripts/archive.sh escribe en build/)
+*.xcarchive
+*.ipa
+# Team ID local (plantilla versionada: Config/Team.xcconfig.example)
+Config/Team.xcconfig
+# Llaves de App Store Connect API, por si alguien las deja aquí
+*.p8
