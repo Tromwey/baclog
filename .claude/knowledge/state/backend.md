@@ -58,6 +58,7 @@
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
+- **API `v1` para la app iOS** — especificada, no implementada (2026-09-24): `ios/API.md` es el contrato y el plan por fases (0 cimientos + auth bearer · 1 lecturas · 2 escrituras · 3 `LiveAPI` en iOS · 4 Apple/APNs). Reglas: handlers en `src/app/api/v1/**` que reutilizan `src/modules/**` (nunca server actions), `requireApiUser` en `src/authz/api.ts` (bearer HS256 con `AUTH_SECRET`, relee la fila del usuario), cero excepciones nuevas de authz, sin migraciones en la primera entrega. Cuando se implemente, mover este punto al mapa y a `security.md`.
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->

@@ -1,5 +1,7 @@
 # Kura · iOS
 
+> **Backend real:** la especificación de la API y el plan por fases para conectarla están en [`API.md`](API.md). Hoy la app corre con `MockAPI`.
+
 App nativa (SwiftUI, iOS 17+, sin dependencias) que implementa el sistema de diseño **Kura** y los **Flujos v2** con datos mock. Fuentes de verdad: `BRIEF.md`, `design/kura/sistema-de-diseno.dc.html`, `design/kura/flujos-v2.dc.html`.
 
 ## Generar y correr
