@@ -12,18 +12,20 @@ import type { AuthSession } from "../../_lib/schemas";
  *
  * Rotation happens ONLY inside the token's last 7 days
  * (`MOBILE_TOKEN_REFRESH_WINDOW_SECONDS`): then the caller gets a fresh
- * 30-day token with a new `jti`. Earlier, the SAME token comes back (with
- * the same fresh `Me`) — the app calls this on every launch, and minting a
- * new 30-day token each time would keep an unbounded number of them alive.
- * The old token stays valid until its own `exp` either way: there is no
- * per-token revocation until phase 4 (see src/authz/api.ts).
+ * 30-day token with a new `jti`, minted at the account's CURRENT
+ * `token_version` (= the bearer's `tv`: `withApi` has just checked they
+ * match). Earlier, the SAME token comes back (with the same fresh `Me`) —
+ * the app calls this on every launch, and minting a new 30-day token each
+ * time would keep an unbounded number of them alive. The old token is not
+ * revoked by a refresh; it dies at its own `exp` or at the next
+ * `auth/logout` of the account (which bumps the version under every token).
  */
 export const POST = withApi(async (_request, { user, bearer }) => {
   const now = Math.floor(Date.now() / 1000);
   const remaining = bearer.claims.exp - now;
   const token =
     remaining < MOBILE_TOKEN_REFRESH_WINDOW_SECONDS
-      ? await issueMobileToken(user.id)
+      ? await issueMobileToken(user.id, bearer.claims.tv)
       : bearer.token;
   const body: AuthSession = { token, user: await buildMe(user) };
   return json(body);

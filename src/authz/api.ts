@@ -3,9 +3,10 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { ZodError } from "zod";
-import { loadUserById, type CurrentUser } from "@/auth/session";
-import { env } from "@/lib/env";
+import type { CurrentUser } from "@/auth/session";
+import { loadUserWithTokenVersion } from "@/auth/user-row";
 import { apiContext } from "./api-context";
+import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
 
 export { apiContext } from "./api-context";
@@ -17,17 +18,20 @@ export { apiContext } from "./api-context";
  * every v1 request carries `Authorization: Bearer <JWT>`:
  *
  *   HS256 signed with AUTH_SECRET · sub = user.id · aud = "kura-ios"
- *   iat · exp = +30 days · jti random. No session table.
+ *   tv = users.token_version at mint · iat · exp = +30 days · jti random.
+ *   No session table.
  *
- * Revocation is the same as the web's JWT cookie: `requireApiUser` re-reads
- * the user row on EVERY request (`loadUserById`, the same field list the
- * cookie session uses — never `birthYear`), so a deleted account or a blocked
- * minor is a 401 on the next call even with a valid signature. What does NOT
- * exist yet is per-token revocation: `auth/refresh` only issues a new token
- * when the current one is inside its last 7 days (otherwise it hands the
- * same one back), and an old token stays valid until its own `exp`. Real
- * revocation (a `users.token_version` claim checked here, bumped on logout
- * / password-less "sign out everywhere") is phase 4 (ios/API.md §2.1).
+ * Revocation: every request re-reads the user row (`loadUserWithTokenVersion`,
+ * the same field list the cookie session uses — never `birthYear` — plus the
+ * version, in ONE query), so a deleted account or a blocked minor is a 401
+ * on the next call even with a valid signature, AND a token whose `tv` is
+ * not the row's current `token_version` is the same 401. `auth/logout`
+ * bumps the version: "cerrar sesión en todos lados", account-level (there is
+ * no per-device state). Tokens minted before phase 4b carry no `tv` and read
+ * as 0 — the column's default — so they live until the account's first
+ * logout. `auth/refresh` only issues a new token inside the last 7 days
+ * (otherwise it hands the same one back); a refresh never revokes the old
+ * one — only its `exp` or a logout does.
  *
  * The user comes from the token and ONLY the token. No handler ever accepts
  * a userId in a body, query or path. `withApi` runs the handler inside
@@ -195,27 +199,11 @@ export interface RequestMeta {
 export const MOBILE_TOKEN_AUDIENCE = "kura-ios";
 const MOBILE_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-/** HS256 wants ≥ 256 bits of key. A shorter AUTH_SECRET still signs (the
- *  web must not fall over for it — the DB is shared and the prod value is
- *  not ours to know here), but it is said ONCE in the log so it gets fixed. */
-let warnedShortSecret = false;
-const MIN_SECRET_CHARS = 32;
-
-function secretKey(): Uint8Array {
-  const secret = env.AUTH_SECRET;
-  if (!warnedShortSecret && secret.length < MIN_SECRET_CHARS) {
-    warnedShortSecret = true;
-    console.warn(
-      `[api/v1] AUTH_SECRET tiene ${secret.length} caracteres; HS256 quiere al menos ${MIN_SECRET_CHARS}. Rótalo a un valor más largo (openssl rand -base64 32).`,
-    );
-  }
-  return new TextEncoder().encode(secret);
-}
-
-/** A fresh 30-day bearer for `userId` (new `jti` every call — refresh rotates it). */
-export async function issueMobileToken(userId: string): Promise<string> {
+/** A fresh 30-day bearer for `userId` at the account's current
+ *  `token_version` (new `jti` every call — refresh rotates it). */
+export async function issueMobileToken(userId: string, tokenVersion: number): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({})
+  return new SignJWT({ tv: tokenVersion })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setAudience(MOBILE_TOKEN_AUDIENCE)
@@ -230,6 +218,9 @@ export interface MobileTokenClaims {
   jti: string;
   /** Unix seconds. */
   exp: number;
+  /** `users.token_version` the token was minted at. A pre-4b token has no
+   *  `tv` claim and reads as 0 (the column default). */
+  tv: number;
 }
 
 /** `auth/refresh` rotates only inside this window before `exp`; earlier it
@@ -253,7 +244,11 @@ export async function verifyMobileToken(
     if (typeof payload.sub !== "string" || !payload.sub) return null;
     if (typeof payload.jti !== "string" || !payload.jti) return null;
     if (typeof payload.exp !== "number") return null;
-    return { sub: payload.sub, jti: payload.jti, exp: payload.exp };
+    // Absent = a pre-4b token = version 0. Present but not a non-negative
+    // integer = forged or broken: refused like any other bad claim.
+    const tv = payload.tv === undefined ? 0 : payload.tv;
+    if (typeof tv !== "number" || !Number.isInteger(tv) || tv < 0) return null;
+    return { sub: payload.sub, jti: payload.jti, exp: payload.exp, tv };
   } catch {
     return null;
   }
@@ -274,7 +269,8 @@ export interface ApiBearer {
 }
 
 /**
- * Step 1 of the gate — signature, algorithm, audience, expiry; NO database.
+ * Step 1 of the gate — signature, algorithm, audience, expiry, `tv` shape;
+ * NO database.
  * Throws `UnauthorizedError` on any failure. Split from the user re-read so
  * the rate limiter can key on the verified `sub` BEFORE the first query: an
  * attacker with a real token can't turn the limiter's own lookup into load.
@@ -290,20 +286,34 @@ export async function requireBearer(request: Request): Promise<ApiBearer> {
 /**
  * The v1 gate. Same `CurrentUser` as `requireUser()`; throws
  * `UnauthorizedError` (→ 401 via `withApi`) on any failure: no header, bad
- * signature, wrong `aud`, expired, user row gone, or `isMinor`.
+ * signature, wrong `aud`, expired, user row gone, `isMinor`, or `tv` behind
+ * the account's `token_version`.
  */
 export async function requireApiUser(request: Request): Promise<CurrentUser> {
   const { claims } = await requireBearer(request);
-  const user = await loadUserById(claims.sub);
+  const user = await userForClaims(claims);
   if (!user) throw new UnauthorizedError();
   return user;
+}
+
+/**
+ * Step 2 of the gate — the revocation re-read: the row by `sub` (gone or
+ * `isMinor` → null) AND its `token_version` equal to the token's `tv`
+ * (behind → null: the account logged out after this token was minted).
+ * Null is the ONLY failure signal; callers turn it into the uniform 401.
+ */
+async function userForClaims(claims: MobileTokenClaims): Promise<CurrentUser | null> {
+  const row = await loadUserWithTokenVersion(claims.sub);
+  if (!row || row.tokenVersion !== claims.tv) return null;
+  return row.user;
 }
 
 /**
  * Soft twin of `requireApiUser` for routes OUTSIDE v1 that serve both the web
  * (cookie) and the app (bearer) — today only `/api/avatar/[key]`. Returns the
  * bearer user or null (no header, bad token, unknown/blocked user): the
- * caller falls back to `getCurrentUser()` for the cookie. No rate limit and
+ * caller falls back to `getCurrentUser()` for the cookie. Same `tv` check as
+ * `requireApiUser` — a logged-out bearer is no bearer here either. No rate limit and
  * no `apiContext` — it identifies, it does not wrap.
  */
 export async function readApiUser(request: Request): Promise<CurrentUser | null> {
@@ -311,7 +321,7 @@ export async function readApiUser(request: Request): Promise<CurrentUser | null>
   if (!token) return null;
   const claims = await verifyMobileToken(token);
   if (!claims) return null;
-  return loadUserById(claims.sub);
+  return userForClaims(claims);
 }
 
 // ---------- rate limit ----------
@@ -364,7 +374,9 @@ export function checkRateLimit(
   return { ok: true };
 }
 
-function clientIp(request: Request): string {
+/** First hop of `x-forwarded-for` (Vercel sets it), else `x-real-ip`. For
+ *  rate-limit keys only — never for identity. */
+export function clientIp(request: Request): string {
   const fwd = request.headers.get("x-forwarded-for");
   if (fwd) return fwd.split(",")[0].trim() || "unknown";
   return request.headers.get("x-real-ip") ?? "unknown";
@@ -428,7 +440,8 @@ function pathOf(request: Request): string {
  *   1. `requireBearer` — signature/aud/exp, no DB (401 on any failure);
  *   2. rate limit by the verified `sub` (429 with `retryAfterSeconds`),
  *      BEFORE the user row is read, so the limiter costs no query;
- *   3. `loadUserById` — the revocation re-read (401 when gone / minor);
+ *   3. `userForClaims` — the revocation re-read (401 when gone / minor /
+ *      `tv` behind `users.token_version`);
  *   4. handler inside `apiContext.run({ user })` so existing authz/modules
  *      resolve the same user via `getCurrentUser()`;
  *   5. thrown errors → the §1 contract; `Cache-Control: private, no-store`
@@ -449,7 +462,7 @@ export function withApi<P extends ApiParams = ApiParams>(
           requestId,
         );
       }
-      const user = await loadUserById(bearer.claims.sub);
+      const user = await userForClaims(bearer.claims);
       if (!user) throw new UnauthorizedError();
       userId = user.id;
       const params = await context.params;

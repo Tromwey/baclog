@@ -161,6 +161,31 @@ export const users = pgTable(
      */
     announcementSeen: text("announcement_seen"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    /**
+     * Phase 4b (Kura iOS) — revocation for the mobile bearer. Every bearer
+     * (`src/authz/api.ts`) and every one-shot web handoff
+     * (`src/authz/handoff.ts`) carries the value it was minted at as the `tv`
+     * claim, and the per-request re-read compares them: a token whose `tv`
+     * is behind this column is the uniform 401. The ONLY writer is
+     * `POST /api/v1/auth/logout`, one atomic `token_version + 1` — "cerrar
+     * sesión en todos lados", account-level (no device table). Tokens minted
+     * before this column existed have no `tv` and read as 0 = this default,
+     * so they survive until the account's first logout. Never selected by
+     * the cookie path and never on `CurrentUser`/`Me`: it travels beside the
+     * user (`loadUserWithTokenVersion`), not on it. The web's Auth.js cookie
+     * does NOT read it.
+     *
+     * ⚠️ PENDIENTE DE MIGRACIÓN (drizzle/0027_user_token_version.sql, ya
+     * generada): la línea va comentada hasta que 0027 esté aplicada en la
+     * base compartida. Con la columna declarada y sin migrar, TODO insert en
+     * `user` (Drizzle nombra cada columna, con DEFAULT) y todo select que la
+     * lea revienta con 42703 — el alta de cuentas nuevas incluida. Al migrar:
+     * (1) `drizzle-kit migrate`, (2) descomentar esta línea, (3)
+     * `TOKEN_VERSION_LIVE = true` en src/auth/user-row.ts. Mientras siga
+     * comentada NO corras `drizzle-kit generate`: el snapshot 0027 ya la
+     * tiene y el diff emitiría un DROP COLUMN.
+     */
+    // tokenVersion: integer("token_version").notNull().default(0),
   },
   (t) => [
     uniqueIndex("user_email_unique").on(t.email),

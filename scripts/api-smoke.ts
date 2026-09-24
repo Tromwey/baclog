@@ -14,10 +14,15 @@
  *   --code <NNNNNN>   use this code instead of reading the log
  *   --token <jwt>     skip the OTP flow entirely (auth section still runs the
  *                     negative cases + refresh/logout on this token)
- *   --only a,b        run only these sections: auth · reads · writes
+ *   --only a,b        run only these sections: auth · reads · writes.
+ *                     `writes` REQUIRES `--email qa-api-<epoch>@baclog.dev`
+ *                     (exit 2 otherwise, and the token's /me is re-checked):
+ *                     it logs out for real (W2) and deletes the account.
  *   --grep <text>     run only the cases whose name contains <text> (case-
- *                     insensitive; combines with --only). Cases that hand
- *                     state to each other (e.g. E2) may need their producers.
+ *                     insensitive; combines with --only; `a|b` = either).
+ *                     Cases that hand state to each other (e.g. E2) may need
+ *                     their producers. In `writes` always include the cleanup:
+ *                     `--grep "W1|E1 DELETE /me →"` · `--grep "W2|W3|E1 DELETE /me →"`.
  *   --verbose         print every request line
  *
  * Structure: phases 1–2 ADD cases to `reads` / `writes` below (each case is a
@@ -95,6 +100,17 @@ function skip(reason: string): never {
 
 if (!opts.email && !opts.token) {
   console.error("Falta --email (o --token).");
+  process.exit(2);
+}
+/** Disposable accounts only: `writes` logs out for real (W2 revokes EVERY
+ *  bearer of the account — the founder's iPhone included) and ends deleting
+ *  the account (E1 DELETE /me). The account is re-checked by `/me` before the
+ *  section runs, so a `--token` of another account can't slip through. */
+const QA_PREFIX = "qa-api-";
+if (opts.only.includes("writes") && !opts.email.startsWith(QA_PREFIX)) {
+  console.error(
+    `--only writes exige --email ${QA_PREFIX}<epoch>@baclog.dev (una cuenta desechable): la sección hace logout real y borra la cuenta. Llegó: ${opts.email || "(sin --email)"}`,
+  );
   process.exit(2);
 }
 
@@ -212,6 +228,14 @@ interface Ctx {
   me: Me | null;
 }
 const ctx: Ctx = { token: opts.token ?? null, me: null };
+
+/** The `tv` claim of a bearer (phase 4b), read WITHOUT verifying — the
+ *  server verifies; the smoke only needs it to mint look-alike tokens at the
+ *  account's current version. A pre-4b token has none = 0. */
+function tvOf(token: string): number {
+  const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { tv?: unknown };
+  return typeof payload.tv === "number" ? payload.tv : 0;
+}
 
 // L3 — what crosses between the people/feed cases, and the leak scan.
 const l3: { ownPerson: z.infer<typeof PersonSchema> | null } = { ownPerson: null };
@@ -332,6 +356,7 @@ const auth: Case[] = [
       expectError(await call("GET", "/me"), 401, "unauthorized");
       expectError(await call("POST", "/auth/refresh"), 401, "unauthorized");
       expectError(await call("POST", "/auth/logout"), 401, "unauthorized");
+      expectError(await call("POST", "/auth/web-session"), 401, "unauthorized");
     },
   },
   {
@@ -414,7 +439,9 @@ const auth: Case[] = [
       if (!secret) skip("sin AUTH_SECRET en el entorno para firmar un token a punto de vencer");
       const key = new TextEncoder().encode(secret);
       const now = Math.floor(Date.now() / 1000);
-      const expiring = await new SignJWT({})
+      // At the account's CURRENT version (phase 4b): without `tv` it would
+      // read as 0 and be refused once this account has ever logged out.
+      const expiring = await new SignJWT({ tv: tvOf(ctx.token) })
         .setProtectedHeader({ alg: "HS256" })
         .setSubject(ctx.me.id)
         .setAudience("kura-ios")
@@ -424,20 +451,81 @@ const auth: Case[] = [
         .sign(key);
       const rotated = expectOk(await call("POST", "/auth/refresh", { token: expiring }), 200, AuthSessionSchema);
       assert.notEqual(rotated.token, expiring, "a menos de 7 días el refresh rota el token");
-      const payload = JSON.parse(Buffer.from(rotated.token.split(".")[1], "base64url").toString("utf8")) as { exp: number; jti: string };
+      const payload = JSON.parse(Buffer.from(rotated.token.split(".")[1], "base64url").toString("utf8")) as { exp: number; jti: string; tv?: unknown };
       assert.ok(payload.exp > now + 29 * 86400, "el token nuevo vive 30 días");
       assert.notEqual(payload.jti, "smoke-expiring", "jti nuevo");
+      assert.equal(payload.tv, tvOf(ctx.token), "el token rotado se acuña con el token_version actual");
       const me = expectOk(await call("GET", "/me", { token: rotated.token }), 200, MeSchema);
       assert.equal(me.id, ctx.me.id);
     },
   },
+  // Phase 4b: `auth/logout` REVOKES every bearer of the account
+  // (users.token_version + 1). `auth` runs as the founder's real account and
+  // `reads` reuses this very token (ctx.token), so a real logout here would
+  // kill the rest of the run AND the founder's iPhone session. The real
+  // logout lives in `writes` (W2, disposable QA account); here only the
+  // `tv` comparison is probed, with look-alike tokens that change nothing.
   {
-    name: "auth/logout → 204",
+    name: "bearer con tv distinto al token_version de la cuenta → 401 idéntico (sin tocar la cuenta)",
     run: async () => {
-      assert.ok(ctx.token, "hace falta un token");
-      const res = await call("POST", "/auth/logout", { token: ctx.token });
-      assert.equal(res.status, 204, `esperaba 204, llegó ${res.status}: ${res.text}`);
-      expectNoStore(res);
+      assert.ok(ctx.token && ctx.me, "hace falta un token");
+      const tv = tvOf(ctx.token);
+      assert.ok(Number.isInteger(tv) && tv >= 0, "el bearer lleva un tv entero ≥ 0 (o ninguno = 0)");
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET en el entorno para firmar tokens con otro tv");
+      const key = new TextEncoder().encode(secret);
+      const now = Math.floor(Date.now() / 1000);
+      const mint = (claims: Record<string, unknown>) =>
+        new SignJWT(claims)
+          .setProtectedHeader({ alg: "HS256" })
+          .setSubject(ctx.me!.id)
+          .setAudience("kura-ios")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 3600)
+          .setJti("smoke-tv")
+          .sign(key);
+      const none = await call("GET", "/me");
+      for (const [label, claims] of [
+        ["tv adelantado", { tv: tv + 1 }],
+        ["tv como string", { tv: String(tv) }],
+        ["tv negativo", { tv: -1 }],
+        ["tv fraccionario", { tv: tv + 0.5 }],
+      ] as const) {
+        const res = await call("GET", "/me", { token: await mint(claims) });
+        expectSameError(res, none, 401, "unauthorized", `${label}: el 401 no dice qué falló`);
+      }
+      // Control: the SAME minting at the current version is accepted — the
+      // check compares, it doesn't reject every minted token.
+      const ok = expectOk(await call("GET", "/me", { token: await mint({ tv }) }), 200, MeSchema);
+      assert.equal(ok.id, ctx.me.id);
+    },
+  },
+  // Phase 4b (A1): the WEB cookie carries `tv` too and `getCurrentUser`
+  // compares it with `token_version` — so "cerrar sesión en todos lados"
+  // also kills cookies (the real logout → cookie death is W3, QA account).
+  // Here, read-only on this account: Auth.js cookies minted with AUTH_SECRET
+  // at a version ≠ the account's read as signed out; at the current one (or
+  // none = a pre-4b cookie = 0, while the account is at 0) they're a session.
+  {
+    name: "cookie web con tv distinto al token_version → página con sesión redirige a /login; tv vigente → sesión",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me, "hace falta un token");
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET en el entorno para cifrar cookies de Auth.js");
+      const { encode } = await import("next-auth/jwt");
+      const origin = opts.base.replace(/\/api\/v1$/, "");
+      const name = origin.startsWith("https:") ? "__Secure-authjs.session-token" : "authjs.session-token";
+      const tv = tvOf(ctx.token);
+      const landing = async (claims: Record<string, unknown>) => {
+        const jwe = await encode({ token: { sub: ctx.me!.id, ...claims }, secret, salt: name, maxAge: 600 });
+        const r = await fetch(`${origin}/backlogs`, { headers: { Cookie: `${name}=${jwe}` }, redirect: "manual" });
+        const loc = r.headers.get("location");
+        return r.status >= 300 && r.status < 400 && loc ? new URL(loc, origin).pathname : `${r.status}`;
+      };
+      assert.equal(await landing({ tv: tv + 1 }), "/login", "tv adelantado → /login (como cookie inválida)");
+      assert.notEqual(await landing({ tv }), "/login", "control: tv vigente → sesión");
+      if (tv === 0) assert.notEqual(await landing({}), "/login", "cookie pre-4b (sin tv = 0) sigue viva mientras la cuenta está en 0");
+      else assert.equal(await landing({}), "/login", "cookie pre-4b (sin tv = 0) muere tras el primer logout de la cuenta");
     },
   },
 ];
@@ -496,6 +584,21 @@ async function smokeSql<T>(query: string, params: unknown[] = []): Promise<T[] |
   const { neon } = await import("@neondatabase/serverless");
   const sql = neon(url);
   return (await sql.query(query, params)) as unknown as T[];
+}
+
+/** A film with a known release day at least a week out: SMOKE_UPCOMING_TITLE_ID
+ *  when set, else found by a read-only query (a week of margin so it can't
+ *  turn "released" mid-run or across a time-zone edge). Skips the case when
+ *  there is none — never a hard-coded id that silently goes stale. */
+async function upcomingFilmId(): Promise<string> {
+  const pinned = process.env.SMOKE_UPCOMING_TITLE_ID;
+  if (pinned) return pinned;
+  const rows = await smokeSql<{ id: string }>(
+    `select id from catalog_item where media_type = 'film' and release_date > now() + interval '7 days' order by release_date limit 1`,
+  );
+  if (rows === null) skip("sin SMOKE_UPCOMING_TITLE_ID ni DATABASE_URL para buscar una película por estrenarse");
+  if (rows.length === 0) skip("ninguna película del catálogo se estrena en más de 7 días (y no hay SMOKE_UPCOMING_TITLE_ID)");
+  return rows[0].id;
 }
 
 /** Plausible values for each dynamic segment of the v1 tree. A segment not
@@ -1346,6 +1449,19 @@ const reads: Case[] = [
       expectError(await call("GET", "/onboarding/pool?page=abc", { token: ctx.token }), 400, "invalid");
     },
   },
+  // Fase 4b (carril estrenos de video): a FILM with a known future day is a
+  // `day` release, not a bare `year` (`upcomingFilmId()`).
+  {
+    name: "GET /titles/{id} de un título con estreno futuro → release.kind \"day\" con fecha futura",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const upcoming = await upcomingFilmId();
+      const d = expectOk(await call("GET", `/titles/${upcoming}`, { token: ctx.token }), 200, TitleDetailResponseSchema);
+      assert.ok(d.title.release, "el título lleva release");
+      assert.equal(d.title.release.kind, "day", `release.kind: ${JSON.stringify(d.title.release)}`);
+      assert.ok(d.title.release.date && Date.parse(d.title.release.date) > Date.now(), "release.date en el futuro");
+    },
+  },
 ];
 
 // E2 — helpers + the ids the collection/membership/mark cases hand to each other.
@@ -1528,6 +1644,121 @@ async function e1CountQaRows(): Promise<number> {
   const sql = neon(url);
   const rows = (await sql`select count(*)::int as n from "user" where email like 'qa-api-%'`) as { n: number }[];
   return rows[0]?.n ?? 0;
+}
+
+// ---------- W helpers (fase 4b: logout real · web-session/handoff) ----------
+
+const WebSessionResponseSchema = z.object({ url: z.string().url() });
+
+/** What W2 hands to W3: an Auth.js cookie minted BEFORE the logout. */
+const w: { cookieBeforeLogout: string | null } = { cookieBeforeLogout: null };
+
+/**
+ * `TOKEN_VERSION_LIVE` as the SERVER sees it. `src/auth/user-row.ts` imports
+ * `server-only`, so it can't be imported here: its declaration line is read
+ * and parsed instead (a changed shape fails loudly rather than guessing).
+ */
+async function tokenVersionLiveInSource(): Promise<boolean> {
+  const src = await readFile(resolvePath("src/auth/user-row.ts"), "utf8");
+  const m = /^export const TOKEN_VERSION_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
+  assert.ok(m, "no encuentro `export const TOKEN_VERSION_LIVE = true|false;` en src/auth/user-row.ts");
+  return m[1] === "true";
+}
+
+/**
+ * The precondition of every case that needs a REAL logout: migration 0027
+ * applied. Column missing + switch off = skip (the pre-migration state).
+ * Column missing + switch ON = FAIL — the server would be selecting a column
+ * that doesn't exist (every sign-in breaks). Column present + switch off
+ * fails later, in the case itself (logout is a no-op → `tv` doesn't move).
+ */
+async function wRequireTokenVersionColumn(): Promise<void> {
+  const col = await smokeSql<{ n: number }>(
+    `select count(*)::int as n from information_schema.columns where table_name = 'user' and column_name = 'token_version'`,
+  );
+  if (col === null) skip("sin DATABASE_URL para saber si la migración 0027 (token_version) está aplicada");
+  if (col[0]?.n !== 1) {
+    assert.equal(
+      await tokenVersionLiveInSource(),
+      false,
+      "TOKEN_VERSION_LIVE = true pero la columna users.token_version NO existe: aplica la migración 0027 o regresa el switch a false",
+    );
+    skip("migración 0027 (users.token_version) sin aplicar: logout todavía no revoca");
+  }
+}
+
+/** Pathname a 3xx points at (null when not a redirect). */
+function wLandsOn(r: { status: number; location: string | null }): string | null {
+  if (r.status < 300 || r.status >= 400 || !r.location) return null;
+  return new URL(r.location, e1Origin).pathname;
+}
+
+/** A raw GET/POST against the WEB origin (outside v1) that does NOT follow
+ *  redirects: the handoff's contract is its 302 + Set-Cookie.
+ *
+ *  Built on `node:http(s)`, NOT `fetch`: undici's fetch always sends
+ *  `Sec-Fetch-Mode: cors` (and can't be told otherwise), which the handoff
+ *  route refuses as an embedded request (login-CSRF mitigation). Here the
+ *  headers on the wire are exactly the ones passed — none by default, like
+ *  an old client — so each W1 refusal is the one the case names. */
+async function wRaw(
+  method: string,
+  url: string,
+  init: { cookie?: string; form?: Record<string, string>; headers?: Record<string, string> } = {},
+): Promise<{ status: number; location: string | null; cookies: string[]; headers: Headers; text: string }> {
+  const headers: Record<string, string> = { ...init.headers };
+  if (init.cookie) headers.Cookie = init.cookie;
+  let body: string | undefined;
+  if (init.form) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    body = new URLSearchParams(init.form).toString();
+    headers["Content-Length"] = String(Buffer.byteLength(body));
+  }
+  const target = new URL(url);
+  const { request } = target.protocol === "https:" ? await import("node:https") : await import("node:http");
+  const res = await new Promise<{ status: number; raw: Record<string, string | string[] | undefined>; text: string }>((ok, fail) => {
+    const req = request(target, { method, headers }, (r) => {
+      const chunks: Buffer[] = [];
+      r.on("data", (c: Buffer) => chunks.push(c));
+      r.on("end", () => ok({ status: r.statusCode ?? 0, raw: r.headers, text: Buffer.concat(chunks).toString("utf8") }));
+      r.on("error", fail);
+    });
+    req.on("error", fail);
+    if (body !== undefined) req.write(body);
+    req.end();
+  });
+  const out = new Headers();
+  for (const [k, v] of Object.entries(res.raw)) {
+    if (v === undefined || k === "set-cookie") continue;
+    out.set(k, Array.isArray(v) ? v.join(", ") : v);
+  }
+  const setCookie = res.raw["set-cookie"];
+  const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  if (opts.verbose) console.log(`   ${method} ${url.replace(/([?&]t=)[^&]+/, "$1…")} → ${res.status}`);
+  return { status: res.status, location: out.get("location"), cookies, headers: out, text: res.text };
+}
+
+/** The Auth.js session cookie (`authjs.session-token`, `__Secure-` on
+ *  https) with a NON-empty value, as a `name=value` pair — or null. */
+function wSessionCookie(setCookies: string[]): string | null {
+  for (const c of setCookies) {
+    const m = /^((?:__Secure-)?authjs\.session-token)=([^;]+)/.exec(c);
+    if (m && m[2]) return `${m[1]}=${m[2]}`;
+  }
+  return null;
+}
+
+/** "Landed on /login and got no session" — the ONE failure shape of the
+ *  handoff, whatever failed. */
+function wExpectRefused(r: Awaited<ReturnType<typeof wRaw>>, label: string) {
+  assert.equal(r.status, 302, `${label}: esperaba 302, llegó ${r.status}`);
+  assert.equal(r.location ? new URL(r.location, e1Origin).pathname : null, "/login", `${label}: aterriza en /login`);
+  assert.equal(wSessionCookie(r.cookies), null, `${label}: NO emite cookie de sesión`);
+}
+
+async function wWebSession(body?: unknown): Promise<URL> {
+  const res = await qaCall("POST", "/auth/web-session", body === undefined ? {} : { body });
+  return new URL(expectOk(res, 200, WebSessionResponseSchema).url);
 }
 
 const writes: Case[] = [
@@ -1882,8 +2113,8 @@ const writes: Case[] = [
   // onboarding just named. Leaves the library the way E3 needs it: one title
   // WITH a reaction (an onboarding pick, obsessed) and one WITHOUT (a plain
   // save). A title with a future `releaseDate` is needed for the 409
-  // `not_released` case: pass it as SMOKE_UPCOMING_TITLE_ID (from the DB:
-  // `select id from catalog_item where release_date > now()`), else skipped.
+  // `not_released` case: `upcomingFilmId()` (SMOKE_UPCOMING_TITLE_ID, else a
+  // read-only query), skipped when the catalog has none.
   {
     name: "E2 POST /me/onboarding/picks → { collection } con 3 obsessed; re-entrada no duplica; 400/404",
     run: async () => {
@@ -2054,8 +2285,7 @@ const writes: Case[] = [
   {
     name: "E2 marca sobre un estreno futuro → 409 not_released; con preview:true → 200",
     run: async () => {
-      const upcoming = process.env.SMOKE_UPCOMING_TITLE_ID;
-      if (!upcoming) skip("sin SMOKE_UPCOMING_TITLE_ID (un catalog_item con release_date > now())");
+      const upcoming = await upcomingFilmId();
       expectOk(
         await e2call("PUT", `/collections/${e2.collection}/titles/${upcoming}`),
         200,
@@ -2240,6 +2470,186 @@ const writes: Case[] = [
       assert.equal(clean.status, 204);
     },
   },
+  // W1 (fase 4b) — bearer → cookie web. Runs as the QA account (it signs
+  // the QA account into the web; nothing to clean: the cookie lives only in
+  // this process).
+  {
+    name: "W1 POST /auth/web-session → { url } de un solo uso: 302 + cookie Auth.js; reuso, destino ajeno y bearer como t → /login sin cookie",
+    run: async () => {
+      const me = await e3Me();
+      // Shape + the allow-list on the mint side.
+      const url = await wWebSession();
+      assert.equal(url.origin, e1Origin, "la URL apunta al mismo origen que la API");
+      assert.equal(url.pathname, "/api/auth/handoff");
+      assert.equal(url.searchParams.get("to"), "/recap/tarjeta", "sin body → /recap/tarjeta");
+      const t = url.searchParams.get("t") ?? "";
+      const claims = JSON.parse(Buffer.from(t.split(".")[1] ?? "", "base64url").toString("utf8")) as {
+        aud: string; sub: string; exp: number; iat: number; jti: string; tv: number;
+      };
+      assert.equal(claims.aud, "kura-web-handoff");
+      assert.equal(claims.sub, me.id);
+      assert.ok(claims.exp - claims.iat <= 60, "vive 60 s como máximo");
+      assert.equal(claims.tv, tvOf(ctx.token!), "acuñado con el token_version actual");
+      assert.equal(
+        (await wWebSession({ to: "/recap?mes=2026-08" })).searchParams.get("to"),
+        "/recap?mes=2026-08",
+      );
+      for (const bad of ["https://evil.example/", "//evil.example", "/\\evil.example", "/admin", "/", "/recap?next=/admin", "/recap/tarjeta#x", "recap"]) {
+        const err = expectError(await qaCall("POST", "/auth/web-session", { body: { to: bad } }), 400, "invalid");
+        assert.ok(err.fields && "to" in err.fields, `fields.to para ${JSON.stringify(bad)}`);
+      }
+
+      // A tampered `to` in the URL → /login, and it does NOT burn the token.
+      const tampered = new URL(url);
+      tampered.searchParams.set("to", "https://evil.example/");
+      wExpectRefused(await wRaw("GET", tampered.toString()), "to ajeno en la URL");
+      // Login-CSRF mitigation: a cross-site or embedded navigation is refused
+      // WITHOUT burning the token (the first open below still works).
+      wExpectRefused(await wRaw("GET", url.toString(), { headers: { "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate" } }), "navegación cross-site");
+      wExpectRefused(await wRaw("GET", url.toString(), { headers: { "Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "no-cors" } }), "petición embebida (mode ≠ navigate)");
+
+      // First open: 302 to the target + a session cookie for THIS account.
+      const first = await wRaw("GET", url.toString(), { headers: { "Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate" } });
+      assert.equal(first.status, 302, `esperaba 302, llegó ${first.status}: ${first.text}`);
+      assert.equal(new URL(first.location ?? "", e1Origin).pathname, "/recap/tarjeta");
+      assert.equal(new URL(first.location ?? "", e1Origin).origin, e1Origin, "nunca sale del origen");
+      assert.match(first.headers.get("cache-control") ?? "", /no-store/);
+      assert.equal(first.headers.get("referrer-policy"), "no-referrer");
+      const cookie = wSessionCookie(first.cookies);
+      assert.ok(cookie, "emite la cookie de sesión de Auth.js");
+      const session = await fetch(`${e1Origin}/api/auth/session`, { headers: { Cookie: cookie } });
+      const sessionBody = (await session.json()) as { user?: { id?: string }; tv?: unknown } | null;
+      assert.equal(sessionBody?.user?.id, me.id, "la cookie autentica a la cuenta del bearer");
+      // A1 (fase 4b): the cookie carries the bearer's token_version, so a
+      // later logout (W3) can revoke it too.
+      assert.equal(sessionBody?.tv, tvOf(ctx.token!), "la cookie lleva el tv vigente de la cuenta");
+      const page = await wRaw("GET", `${e1Origin}/backlogs`, { cookie });
+      assert.notEqual(wLandsOn(page), "/login", `la cookie del handoff abre una página con sesión (llegó ${page.status} → ${page.location})`);
+
+      // Second open of the SAME URL: single use.
+      wExpectRefused(await wRaw("GET", url.toString()), "segundo GET de la misma URL");
+
+      // The used token straight at the Credentials callback (the bypass the
+      // consume-inside-authorize design closes): still no session.
+      const csrf = await wRaw("GET", `${e1Origin}/api/auth/csrf`);
+      const csrfToken = (JSON.parse(csrf.text) as { csrfToken: string }).csrfToken;
+      const csrfCookie = csrf.cookies.map((c) => c.split(";")[0]).join("; ");
+      const replay = await wRaw("POST", `${e1Origin}/api/auth/callback/otp`, {
+        cookie: csrfCookie,
+        form: { handoff: t, csrfToken, callbackUrl: "/recap/tarjeta" },
+      });
+      assert.equal(wSessionCookie(replay.cookies), null, "un handoff usado no da sesión ni por el callback directo");
+      // Control: the SAME callback request with a FRESH token does sign in —
+      // so the refusal above is single-use, not a CSRF/shape miss.
+      const freshT = (await wWebSession()).searchParams.get("t") ?? "";
+      const direct = await wRaw("POST", `${e1Origin}/api/auth/callback/otp`, {
+        cookie: csrfCookie,
+        form: { handoff: freshT, csrfToken, callbackUrl: "/recap/tarjeta" },
+      });
+      assert.ok(wSessionCookie(direct.cookies), "control: un handoff fresco por el callback sí da sesión (la ruta está viva)");
+      const replayDirect = await wRaw("POST", `${e1Origin}/api/auth/callback/otp`, {
+        cookie: csrfCookie,
+        form: { handoff: freshT, csrfToken, callbackUrl: "/recap/tarjeta" },
+      });
+      assert.equal(wSessionCookie(replayDirect.cookies), null, "y ese mismo token, repetido por el callback, ya no");
+
+      // The iOS bearer as `t` (aud kura-ios) → refused.
+      const asBearer = new URL(url);
+      asBearer.searchParams.set("t", ctx.token!);
+      wExpectRefused(await wRaw("GET", asBearer.toString()), "bearer normal como t");
+      wExpectRefused(await wRaw("GET", `${e1Origin}/api/auth/handoff?to=/recap/tarjeta`), "sin t");
+
+      // A well-signed handoff whose jti was never registered → refused: the
+      // signature alone is not enough, the single-use row is.
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET para firmar un handoff sin fila (el resto de W1 corrió)");
+      const now = Math.floor(Date.now() / 1000);
+      const forged = await new SignJWT({ tv: tvOf(ctx.token!) })
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject(me.id)
+        .setAudience("kura-web-handoff")
+        .setIssuedAt(now)
+        .setExpirationTime(now + 60)
+        .setJti(crypto.randomUUID())
+        .sign(new TextEncoder().encode(secret));
+      const unregistered = new URL(url);
+      unregistered.searchParams.set("t", forged);
+      wExpectRefused(await wRaw("GET", unregistered.toString()), "handoff firmado sin fila de un solo uso");
+    },
+  },
+  // W2 (fase 4b) — the REAL logout, only ever on the disposable QA account
+  // (it revokes EVERY bearer of the account). Signs back in right after the
+  // logout so the cases after it — and E1 DELETE /me — have a live token even
+  // if an assertion below fails.
+  {
+    name: "W2 POST /auth/logout → 204: todos los bearers de la cuenta → 401 idéntico, handoff pendiente muerto, nuevo login con tv+1",
+    run: async () => {
+      if (!opts.email || !opts.log) skip("hace falta --email y --log para volver a entrar tras el logout");
+      await wRequireTokenVersionColumn();
+      const me = await e3Me();
+      const old = ctx.token!;
+      const tvBefore = tvOf(old);
+      const pending = await wWebSession();
+      // W3 — a web cookie minted from this bearer BEFORE the logout; its
+      // control (it IS a session now) and its death are checked in W3.
+      const handoff = await wRaw("GET", (await wWebSession()).toString());
+      w.cookieBeforeLogout = wSessionCookie(handoff.cookies);
+      assert.ok(w.cookieBeforeLogout, "el handoff previo al logout emite cookie");
+      const before = await wRaw("GET", `${e1Origin}/backlogs`, { cookie: w.cookieBeforeLogout });
+      assert.notEqual(wLandsOn(before), "/login", "control: antes del logout la cookie SÍ es una sesión");
+
+      const out = await qaCall("POST", "/auth/logout");
+      assert.equal(out.status, 204, `esperaba 204, llegó ${out.status}: ${out.text}`);
+      expectNoStore(out);
+      // If the re-login below throws, the QA bearer is dead and no new one
+      // came: `ctx.token` is deliberately left as-is so the runner's cleanup
+      // (DB delete by email + verification) runs and reports.
+      const fresh = await e1SignInAs(opts.email);
+      ctx.token = fresh.token;
+      ctx.me = fresh.me;
+      assert.equal(fresh.me.id, me.id, "el nuevo login es la misma cuenta");
+      assert.equal(tvOf(fresh.token), tvBefore + 1, "otp/verify acuña con el token_version nuevo");
+
+      const none = await call("GET", "/me");
+      expectSameError(await call("GET", "/me", { token: old }), none, 401, "unauthorized", "el bearer revocado es el mismo 401 que sin bearer");
+      expectSameError(await call("POST", "/auth/refresh", { token: old }), await call("POST", "/auth/refresh"), 401, "unauthorized", "refresh con el revocado = sin bearer");
+      expectError(await call("POST", "/auth/logout", { token: old }), 401, "unauthorized");
+      wExpectRefused(await wRaw("GET", pending.toString()), "handoff acuñado antes del logout");
+      expectOk(await call("GET", "/me", { token: fresh.token }), 200, MeSchema);
+
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET para firmar tokens con tv viejo (el logout real corrió)");
+      const key = new TextEncoder().encode(secret);
+      const now = Math.floor(Date.now() / 1000);
+      const mint = (claims: Record<string, unknown>) =>
+        new SignJWT(claims)
+          .setProtectedHeader({ alg: "HS256" })
+          .setSubject(me.id)
+          .setAudience("kura-ios")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 3600)
+          .setJti("smoke-w2")
+          .sign(key);
+      expectSameError(await call("GET", "/me", { token: await mint({ tv: tvBefore }) }), none, 401, "unauthorized", "tv viejo = sin bearer");
+      expectSameError(await call("GET", "/me", { token: await mint({}) }), none, 401, "unauthorized", "token pre-4b (sin tv = 0) muere tras el primer logout");
+      expectOk(await call("GET", "/me", { token: await mint({ tv: tvBefore + 1 }) }), 200, MeSchema);
+    },
+  },
+  // W3 (fase 4b, A1) — the logout also kills WEB cookies: a cookie minted
+  // by a handoff before W2's logout (`w.cookieBeforeLogout`) is compared by
+  // `getCurrentUser` against `token_version` and reads as signed out.
+  {
+    name: "W3 cookie web del handoff + POST /auth/logout con un bearer → la cookie ya no es sesión (GET /backlogs → /login)",
+    run: async () => {
+      await wRequireTokenVersionColumn();
+      if (!w.cookieBeforeLogout) skip("W2 no corrió en esta pasada (usa --grep \"W2|W3|E1 DELETE\")");
+      const after = await wRaw("GET", `${e1Origin}/backlogs`, { cookie: w.cookieBeforeLogout });
+      assert.equal(wLandsOn(after), "/login", `la cookie previa al logout aterriza en /login (llegó ${after.status} → ${after.location})`);
+      const session = await fetch(`${e1Origin}/api/auth/session`, { headers: { Cookie: w.cookieBeforeLogout } });
+      const body = (await session.json()) as { tv?: unknown } | null;
+      assert.ok(body && typeof body.tv === "number" && body.tv < tvOf(ctx.token!), "la cookie revocada lleva un tv viejo (la sesión de Auth.js sigue descifrable; la revocación es la relectura)");
+    },
+  },
 ];
 
 /**
@@ -2248,16 +2658,118 @@ const writes: Case[] = [
  * cases other lanes append to `writes` still run with a live token.
  */
 const e1DeleteMe: Case = {
-    name: "E1 DELETE /me → 204, después GET /me → 401 y ninguna fila qa-api- en la DB",
+    name: "E1 DELETE /me → 204, después GET /me → 401 y ninguna fila qa-api- en la DB (ni su correo en waitlist/verificationToken, ni su handle en analytics; un rename se lleva sus eventos)",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
-      const del = await e3call("DELETE", "/me");
-      assert.equal(del.status, 204, `esperaba 204, llegó ${del.status}: ${del.text}`);
-      expectNoStore(del);
-      expectError(await e3call("GET", "/me"), 401, "unauthorized");
-      assert.equal(await e1CountQaRows(), 0, "no queda ninguna cuenta qa-api- en la DB");
-      ctx.token = null;
-      ctx.me = null;
+      const url = process.env.DATABASE_URL;
+      assert.ok(url, "hace falta DATABASE_URL en el entorno para sembrar y verificar la limpieza");
+      const { neon } = await import("@neondatabase/serverless");
+      const sql = neon(url);
+      // Seed what `deleteAccount` must scrub (tables with the email/handle as
+      // TEXT, no FK → no cascade): a waitlist entry with the QA email, a live
+      // login code for it, a profile-view event for its handle — plus a
+      // CONTROL event for another handle that must survive. Seeded rows are
+      // removed by id at the end, whatever happens (the DB is prod).
+      const me = expectOk(await e3call("GET", "/me"), 200, MeSchema);
+      const email = me.email.toLowerCase();
+      const seededEventIds: string[] = [];
+      const controlId = crypto.randomUUID();
+      let caseError: unknown = null;
+      try {
+        // The analytics scrub is only verifiable with a handle. Under
+        // `--grep` the E1 claim may not have run: claim one HERE rather than
+        // pass without checking analytics.
+        let handle = me.handle;
+        if (!handle) {
+          const claimed = expectOk(
+            await e3call("PUT", "/me/username", { body: { username: `qadel${e1Epoch}` } }),
+            200,
+            MeSchema,
+          );
+          handle = claimed.handle;
+        }
+        assert.ok(handle, "la cuenta QA tiene handle antes del borrado");
+
+        await sql`insert into waitlist_entry (id, email, referral_code, sequence)
+          values (${crypto.randomUUID()}, ${email}, ${crypto.randomUUID().replace(/-/g, "").slice(0, 8)},
+                  (select coalesce(max(sequence), 0) + 1 from waitlist_entry))
+          on conflict (email) do nothing`;
+        const eventId = crypto.randomUUID();
+        seededEventIds.push(eventId);
+        await sql`insert into analytics_event (id, event_type, target_username) values (${eventId}, 'public_profile_view', ${handle})`;
+        await sql`insert into analytics_event (id, event_type, target_username) values (${controlId}, 'public_profile_view', ${`qactl${e1Epoch}`})`;
+
+        // Fase 4b — a rename carries the events old → new in the same
+        // transaction (`claimUsername`), so none stay under the released one.
+        const renamed = `${handle}r`.slice(0, 30);
+        const afterRename = expectOk(await e3call("PUT", "/me/username", { body: { username: renamed } }), 200, MeSchema);
+        assert.equal(afterRename.handle, renamed);
+        const target = (await sql`select target_username from analytics_event where id = ${eventId}`) as { target_username: string | null }[];
+        assert.equal(target[0]?.target_username, renamed, "el rename se lleva los eventos del handle viejo al nuevo");
+        handle = renamed;
+
+        const otp = await call("POST", "/auth/otp/request", { body: { email } });
+        // 429 = cooldown = a live code already exists (e.g. cleanup after a
+        // failed re-login): the precondition holds either way.
+        assert.ok(otp.status === 204 || otp.status === 429, `otp/request para sembrar un código vivo: ${otp.status} ${otp.text}`);
+        const live = (await sql`select count(*)::int as n from "verificationToken" where identifier = ${email}`) as { n: number }[];
+        assert.equal(live[0]?.n, 1, "hay un código vivo para el correo antes del borrado");
+
+        const del = await e3call("DELETE", "/me");
+        assert.equal(del.status, 204, `esperaba 204, llegó ${del.status}: ${del.text}`);
+        expectNoStore(del);
+        expectError(await e3call("GET", "/me"), 401, "unauthorized");
+        assert.equal(await e1CountQaRows(), 0, "no queda ninguna cuenta qa-api- en la DB");
+        ctx.token = null;
+        ctx.me = null;
+
+        const count = async (q: Promise<unknown>) => ((await q) as { n: number }[])[0]?.n ?? -1;
+        assert.equal(await count(sql`select count(*)::int as n from waitlist_entry where lower(email) = ${email}`), 0, "waitlist_entry con el correo borrada");
+        assert.equal(await count(sql`select count(*)::int as n from "verificationToken" where identifier = ${email}`), 0, "verificationToken del correo borrado");
+        assert.equal(await count(sql`select count(*)::int as n from analytics_event where lower(target_username) = ${handle}`), 0, "analytics_event sin el handle");
+        assert.equal(await count(sql`select count(*)::int as n from analytics_event where id = ${eventId} and target_username is null`), 1, "el evento sembrado sigue (conteo) pero sin handle");
+        assert.equal(await count(sql`select count(*)::int as n from analytics_event where id = ${controlId} and target_username = ${`qactl${e1Epoch}`}`), 1, "la fila de control (otro handle) sigue viva");
+      } catch (err) {
+        caseError = err;
+      }
+      // Cleanup ALWAYS runs every step and logs each failure with what it
+      // was about (the DB is prod): a seeding/precondition failure must not
+      // leave the QA account or seeded rows alive. `ctx.token` is only
+      // cleared once the account is verifiably gone, so the runner can still
+      // shout "limpieza FALLÓ" otherwise.
+      const cleanupFailures: string[] = [];
+      const attempt = async (label: string, step: () => Promise<unknown>) => {
+        try {
+          await step();
+        } catch (err) {
+          const msg = `${label}: ${err instanceof Error ? err.message : String(err)}`;
+          cleanupFailures.push(msg);
+          console.error(`   (limpieza E1 FALLÓ — ${msg})`);
+        }
+      };
+      if (ctx.token) {
+        await attempt(`DELETE /me de ${email}`, async () => {
+          const r = await e3call("DELETE", "/me");
+          if (r.status !== 204 && r.status !== 401) throw new Error(`→ ${r.status}: ${r.text}`);
+        });
+        await attempt(`delete from "user" where email = ${email}`, () => e1DeleteUserRow(email));
+        await attempt(`verificar que ${email} ya no existe`, async () => {
+          const left = (await sql`select count(*)::int as n from "user" where email = ${email}`) as { n: number }[];
+          if (left[0]?.n !== 0) throw new Error(`sigue la fila de ${email}`);
+          ctx.token = null;
+          ctx.me = null;
+        });
+      }
+      const ids = [...seededEventIds, controlId];
+      await attempt(`delete analytics_event ids ${ids.join(",")}`, () => sql`delete from analytics_event where id = any(${ids})`);
+      await attempt(`delete waitlist_entry de ${email}`, () => sql`delete from waitlist_entry where lower(email) = ${email}`);
+      if (caseError) {
+        if (cleanupFailures.length > 0 && caseError instanceof Error) {
+          caseError.message += `\n   + además falló la limpieza de E1: ${cleanupFailures.join(" · ")}`;
+        }
+        throw caseError;
+      }
+      assert.equal(cleanupFailures.length, 0, `limpieza de E1: ${cleanupFailures.join(" · ")}`);
     },
   };
 
@@ -2266,6 +2778,39 @@ writes.push(e1DeleteMe);
 const sections: Record<string, Case[]> = { auth, reads, writes };
 
 // ---------- runner ----------
+
+/**
+ * After a FAIL in `writes`: the QA account must not survive. First the API
+ * path (E1 DELETE /me — also scrubs its seeded rows) while a bearer is
+ * around; whatever that did, then the DB path by email (covers a dead bearer,
+ * e.g. W2 failing between logout and re-login) and a verification. Every
+ * failure is printed with the email; "limpieza FALLÓ" is printed unless the
+ * row is verifiably gone.
+ */
+async function writesCleanupAfterFail(): Promise<void> {
+  const email = opts.email;
+  if (ctx.token) {
+    try {
+      await e1DeleteMe.run();
+      console.error(`   (limpieza: ${email} borrada con E1 DELETE /me)`);
+    } catch (err) {
+      console.error(`   (limpieza vía E1 DELETE /me de ${email} falló: ${err instanceof Error ? err.message : err} — sigo por la DB)`);
+    }
+  }
+  try {
+    await e1DeleteUserRow(email);
+    const rows = await smokeSql<{ n: number }>(`select count(*)::int as n from "user" where email = $1`, [email]);
+    if (rows === null) throw new Error("sin DATABASE_URL para verificar");
+    if (rows[0]?.n !== 0) throw new Error(`la fila de ${email} sigue en la DB`);
+    console.error(`   (limpieza: ninguna fila de ${email} en la DB)`);
+  } catch (err) {
+    console.error(
+      `   (limpieza FALLÓ para ${email} — borra a mano: delete from "user" where email = '${email}') ${
+        err instanceof Error ? err.message : err
+      }`,
+    );
+  }
+}
 
 async function main() {
   console.log(`api-smoke → ${opts.base} (${opts.email || "token"}) · secciones: ${opts.only.join(", ")}`);
@@ -2283,8 +2828,21 @@ async function main() {
       console.error(`Sección desconocida: ${section}`);
       process.exit(2);
     }
-    const cases = opts.grep ? all.filter((c) => c.name.toLowerCase().includes(opts.grep)) : all;
+    // `--grep a|b` = any of the alternatives (so a `writes` subset can
+    // still include its cleanup case: `--grep "W1|E1 DELETE /me →"`).
+    const alternatives = opts.grep.split("|").map((g) => g.trim()).filter(Boolean);
+    const cases = alternatives.length
+      ? all.filter((c) => alternatives.some((g) => c.name.toLowerCase().includes(g)))
+      : all;
     console.log(`\n[${section}]${cases.length === 0 ? " (sin casos)" : ""}`);
+    if (section === "writes" && cases.length > 0) {
+      const who = await call("GET", "/me", { token: ctx.token });
+      const email = (who.body as { email?: unknown } | null)?.email;
+      if (who.status !== 200 || typeof email !== "string" || !email.startsWith(QA_PREFIX) || email !== opts.email) {
+        console.error(`   writes NO corre: el token no es de ${opts.email} (GET /me → ${who.status} ${typeof email === "string" ? email : ""})`);
+        process.exit(2);
+      }
+    }
     for (const c of cases) {
       const t0 = Date.now();
       try {
@@ -2300,19 +2858,8 @@ async function main() {
         console.error(`   FAIL ${c.name}`);
         console.error(err instanceof Error ? err.message : err);
         // A FAIL in `writes` aborts before `e1DeleteMe` — the QA account would
-        // stay alive in the DB (= prod). Best-effort cleanup, then exit 1.
-        if (section === "writes" && c !== e1DeleteMe && ctx.token) {
-          try {
-            await e1DeleteMe.run();
-            console.error("   (limpieza: cuenta QA borrada con E1 DELETE /me)");
-          } catch (cleanupErr) {
-            console.error(
-              `   (limpieza FALLÓ — borra a mano: select email from "user" where email like 'qa-api-%') ${
-                cleanupErr instanceof Error ? cleanupErr.message : cleanupErr
-              }`,
-            );
-          }
-        }
+        // stay alive in the DB (= prod). Cleanup, then exit 1.
+        if (section === "writes" && c !== e1DeleteMe) await writesCleanupAfterFail();
         process.exit(1);
       }
     }

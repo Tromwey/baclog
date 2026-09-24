@@ -1,4 +1,4 @@
-import { loadUserById } from "@/auth/session";
+import { loadUserWithTokenVersion } from "@/auth/user-row";
 import { verifyOtp } from "@/auth/otp";
 import { apiError, issueMobileToken, withPublicApi } from "@/authz/api";
 import { json, readJson } from "../../../_lib/http";
@@ -31,11 +31,14 @@ export const POST = withPublicApi(async (request) => {
   }
 
   // Re-read through the one user loader (explicit field list, no birthYear)
-  // so the `Me` here is byte-for-byte what `GET /me` will return.
-  const user = await loadUserById(account.id);
-  if (!user) return apiError("unauthorized");
+  // so the `Me` here is byte-for-byte what `GET /me` will return — plus the
+  // account's current `token_version`, which the new bearer carries as `tv`
+  // (a later `auth/logout` bumps it and this token dies with the rest).
+  const row = await loadUserWithTokenVersion(account.id);
+  if (!row) return apiError("unauthorized");
+  const { user, tokenVersion } = row;
 
-  const token = await issueMobileToken(user.id);
+  const token = await issueMobileToken(user.id, tokenVersion);
   // Structured, and WITHOUT `device.name`: it is free text the client chose
   // (PII — people name their phone after themselves — and a log-injection
   // vector). Platform + version are enum/short-validated.

@@ -1,10 +1,11 @@
 import "server-only";
 import { createHash, randomInt } from "node:crypto";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, verificationTokens } from "@/db/schema";
 import { convertOnSignup } from "@/modules/growth/waitlist";
 import { assignFounderIfEligible } from "@/modules/growth/founder";
+import { HANDOFF_IDENTIFIER_PREFIX } from "@/authz/handoff";
 import { sendOtpEmail } from "./mailer";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -20,6 +21,36 @@ export class OtpCooldownError extends Error {
   constructor() {
     super("Wait before requesting another code");
     this.name = "OtpCooldownError";
+  }
+}
+
+/**
+ * Deletes EVERY expired `verificationToken` row — anyone's OTP and expired
+ * web-handoff rows (`handoff:<jti>`) alike. Live rows (`expires >= now`,
+ * which includes every still-usable handoff) are never touched. Returns the
+ * number of rows removed.
+ *
+ * Three callers: `issueOtp` and `verifyOtp` (opportunistic, non-blocking) and
+ * the daily cron (`src/app/api/cron/**`), which is what lets the privacy
+ * notice promise an unused code is gone "a más tardar al día siguiente" even
+ * if nobody signs in for a while. Keep this exact signature — the cron
+ * imports it.
+ */
+export async function sweepExpiredVerificationTokens(): Promise<number> {
+  const deleted = await db
+    .delete(verificationTokens)
+    .where(lt(verificationTokens.expires, new Date()))
+    .returning({ identifier: verificationTokens.identifier });
+  return deleted.length;
+}
+
+/** The sweep is housekeeping, not part of the auth decision: a failure must
+ *  never block issuing or verifying a code. Logged loudly, then ignored. */
+async function sweepExpiredNonBlocking(): Promise<void> {
+  try {
+    await sweepExpiredVerificationTokens();
+  } catch (err) {
+    console.error("[otp] sweep", err);
   }
 }
 
@@ -44,6 +75,9 @@ export async function issueOtp(email: string): Promise<void> {
   await db
     .delete(verificationTokens)
     .where(eq(verificationTokens.identifier, normalized));
+  // Every expired row, anyone's (see `sweepExpiredVerificationTokens`) —
+  // non-blocking: a failed sweep never stops a code from being sent.
+  await sweepExpiredNonBlocking();
   await db.insert(verificationTokens).values({
     identifier: normalized,
     token: hashCode(code),
@@ -52,6 +86,21 @@ export async function issueOtp(email: string): Promise<void> {
 
   await sendOtpEmail(normalized, code);
 }
+
+/** What `verifyOtp` hands back — only what its two callers read (Auth.js
+ *  `authorize`: id/email/name; `POST /api/v1/auth/otp/verify`: id/isMinor).
+ *  Explicit on purpose: a bare `select()` pulled `birthYear` and every future
+ *  column — and a column added to `schema.ts` before its migration is applied
+ *  then broke every existing-account sign-in. (The INSERT for a brand-new
+ *  account still names every column, as Drizzle does; that one is unavoidable
+ *  until the migration lands.) */
+const OTP_USER_COLUMNS = {
+  id: users.id,
+  email: users.email,
+  name: users.name,
+  emailVerified: users.emailVerified,
+  isMinor: users.isMinor,
+};
 
 /** Wrong-code guesses allowed before the live code is invalidated. */
 const MAX_ATTEMPTS = 5;
@@ -65,6 +114,15 @@ const MAX_ATTEMPTS = 5;
  */
 export async function verifyOtp(email: string, code: string) {
   const normalized = email.trim().toLowerCase();
+  // `verificationToken` also holds the one-shot web handoff rows
+  // (src/authz/handoff.ts) under `handoff:<jti>`. An email never has that
+  // shape; refusing it here keeps the web form (whose `email` is free text)
+  // from ever reading, burning attempts on, or deleting a handoff row.
+  if (normalized.startsWith(HANDOFF_IDENTIFIER_PREFIX)) return null;
+  // Same housekeeping as `issueOtp` (non-blocking). An expired code for
+  // THIS email goes too — the lookup below then misses, which is the same
+  // null an expired code already got.
+  await sweepExpiredNonBlocking();
   const [row] = await db
     .select()
     .from(verificationTokens)
@@ -98,7 +156,7 @@ export async function verifyOtp(email: string, code: string) {
     .where(eq(verificationTokens.identifier, normalized));
 
   let [user] = await db
-    .select()
+    .select(OTP_USER_COLUMNS)
     .from(users)
     .where(eq(users.email, normalized))
     .limit(1);
@@ -106,7 +164,7 @@ export async function verifyOtp(email: string, code: string) {
     [user] = await db
       .insert(users)
       .values({ email: normalized, emailVerified: new Date() })
-      .returning();
+      .returning(OTP_USER_COLUMNS);
     // One-time-at-account-creation hooks (F3.1 waitlist link + F3.2 badge).
     // Best-effort: a failure here must not block sign-in.
     try {
