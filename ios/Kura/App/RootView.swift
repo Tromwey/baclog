@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// RootRouter: splash → onboarding (first time) → main tabs. Sheets and toasts
 /// are hosted here, above everything (including the dock).
@@ -8,6 +9,7 @@ struct RootView: View {
     var body: some View {
         ZStack {
             KColor.bg.ignoresSafeArea()
+                .background(WindowBackground())
 
             switch store.phase {
             case .splash:
@@ -30,6 +32,28 @@ struct RootView: View {
             #endif
         }
         .animation(.easeInOut(duration: 0.2), value: store.phase)
+        // Dynamic Type scales the Kura faces (Typography.swift); past xxxLarge the
+        // fixed frames (covers, 44 chips, sheets) would break, so growth stops there.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
+/// Paints the UIWindow itself in `bg` (#0b0b0d, same as `LaunchBackground`), so
+/// nothing between the launch screen and the first SwiftUI frame — or behind a
+/// keyboard / sheet / rotation snapshot — can show the system background.
+private struct WindowBackground: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isUserInteractionEnabled = false
+        v.backgroundColor = .clear
+        return v
+    }
+
+    func updateUIView(_ v: UIView, context: Context) {
+        DispatchQueue.main.async {
+            guard let w = v.window, w.backgroundColor != KColor.bgUI else { return }
+            w.backgroundColor = KColor.bgUI
+        }
     }
 }
 
@@ -96,6 +120,7 @@ struct RouteView: View {
             case .changeCover(let id): ChangeCoverView(collectionID: id)
             case .automatic: WaitingCollectionView()
             case .person(let id): PersonProfileView(personID: id)
+            case .publicCollection(let handle, let id): PublicCollectionView(handle: handle, collectionID: id)
             case .followers(let id, let f): FollowersView(personID: id, showFollowing: f)
             case .creator(let name): CreatorView(name: name)
             case .notifications: NotificationsView()

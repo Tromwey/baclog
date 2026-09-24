@@ -159,7 +159,7 @@ struct SaveToSheet: View {
                     CoverView(title: t, width: 44, height: t.format == .album ? 44 : 66, radius: KRadius.coverS)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t.name).font(.kura.newsItalic(20)).foregroundStyle(KColor.text).lineLimit(1)
-                        Text([t.format.metaLabel, t.year.map(String.init), t.creator.components(separatedBy: " ").last]
+                        Text([t.format.metaLabel, t.year.map(String.init), t.creatorShort]
                             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).monoLabel().lineLimit(1)
                     }
                 }

@@ -11,6 +11,8 @@ struct CollectionsView: View {
             switch (store.loadState, store.collections.isEmpty) {
             case (.loading, _):
                 CollectionsSkeleton()
+            case (.failed, _):
+                failed
             case (.loaded, true):
                 NoCollectionsView()
             case (.loaded, false):
@@ -35,12 +37,35 @@ struct CollectionsView: View {
         .padding(.bottom, 18)
     }
 
+    /// The launch read failed (offline, server down): say so and offer Reintentar —
+    /// never a skeleton that doesn't end. Reconnecting retries on its own too.
+    private var failed: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                LoadErrorBlock(error: store.loadError(.library) ?? .server("")) {
+                    Task { await store.bootstrap() }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 40)
+            }
+            .padding(.bottom, 140)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
     private var content: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
                 header
                 if store.offline {
                     OfflineStrip().padding(.horizontal, 12).padding(.bottom, 16)
+                } else if store.libraryIncomplete, let e = store.loadError(.library) {
+                    // The collections arrived but some of their titles didn't (`GET /titles?ids=`).
+                    RetryStrip(error: e, text: "Faltan títulos en tus colecciones.") {
+                        Task { await store.retryLibraryTitles() }
+                    }
+                    .padding(.horizontal, 12).padding(.bottom, 16)
                 }
                 MonoSegmented(options: [(nil, "Todas"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
                               selection: $filter)

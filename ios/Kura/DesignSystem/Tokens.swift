@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Hex color math
 
@@ -59,6 +60,8 @@ enum KColor {
     static let textHex = "#f4f3ee"
 
     static let bg = Color(hex: bgHex)
+    /// `bg` for UIKit (the window behind SwiftUI).
+    static let bgUI = UIColor(red: 0x0b / 255, green: 0x0b / 255, blue: 0x0d / 255, alpha: 1)
     static let s1 = Color(hex: s1Hex)
     static let s2 = Color(hex: s2Hex)
     static let text = Color(hex: textHex)

@@ -1,5 +1,36 @@
 import Foundation
 import UIKit
+import os
+
+/// Contract drift and server failures, in every configuration (TestFlight included):
+/// method, path, HTTP status and the server's `X-Request-Id` — never a body, never a token.
+enum KuraLog {
+    static let api = Logger(subsystem: "io.communeo.kura", category: "api")
+}
+
+/// Redirects never carry the bearer to another origin (scheme + host + port). `URLSession`
+/// copies `Authorization` onto the redirected request; this strips it when the origin changes.
+final class SameOriginRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        var next = request
+        let from = task.originalRequest?.url
+        if !SameOriginRedirects.sameOrigin(from, request.url) {
+            next.setValue(nil, forHTTPHeaderField: "Authorization")
+        }
+        return next
+    }
+
+    static func sameOrigin(_ a: URL?, _ b: URL?) -> Bool {
+        guard let a, let b else { return false }
+        return a.scheme?.lowercased() == b.scheme?.lowercased() && a.host?.lowercased() == b.host?.lowercased()
+            && (a.port ?? defaultPort(a)) == (b.port ?? defaultPort(b))
+    }
+
+    private static func defaultPort(_ u: URL) -> Int? {
+        switch u.scheme?.lowercased() { case "https": return 443; case "http": return 80; default: return nil }
+    }
+}
 
 // MARK: - Endpoint
 
@@ -12,6 +43,8 @@ struct Endpoint {
     var path: String
     var query: [URLQueryItem] = []
     var body: Data? = nil
+    /// `Content-Type` of `body` (JSON unless a raw upload says otherwise).
+    var contentType = "application/json"
     /// `auth/*` runs without a bearer.
     var auth = true
     /// A token to send instead of the session's (logout sends the one it just forgot).
@@ -72,7 +105,7 @@ final class APIClient: @unchecked Sendable {
         config.timeoutIntervalForRequest = 20
         config.waitsForConnectivity = false
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        urlSession = URLSession(configuration: config)
+        urlSession = URLSession(configuration: config, delegate: SameOriginRedirects(), delegateQueue: nil)
     }
 
     private struct ErrorEnvelope: Decodable {
@@ -100,7 +133,7 @@ final class APIClient: @unchecked Sendable {
         r.setValue("ios/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")", forHTTPHeaderField: "X-Kura-Client")
         if let body = e.body {
             r.httpBody = body
-            r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            r.setValue(e.contentType, forHTTPHeaderField: "Content-Type")
         }
         if let token = e.explicitBearer {
             r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -112,7 +145,10 @@ final class APIClient: @unchecked Sendable {
     }
 
     /// Runs the call and returns the raw body (empty on 204).
-    func data(_ e: Endpoint) async throws -> Data {
+    func data(_ e: Endpoint) async throws -> Data { try await fetch(e).data }
+
+    /// The body plus the server's `X-Request-Id` (for the log).
+    private func fetch(_ e: Endpoint) async throws -> (data: Data, requestID: String?) {
         let req = try request(for: e)
         var attempt = 0
         while true {
@@ -127,7 +163,7 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    private func perform(_ req: URLRequest, endpoint e: Endpoint) async throws -> Data {
+    private func perform(_ req: URLRequest, endpoint e: Endpoint) async throws -> (data: Data, requestID: String?) {
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await urlSession.data(for: req)
@@ -139,7 +175,11 @@ final class APIClient: @unchecked Sendable {
             throw KuraAPIError.server(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw KuraAPIError.server("Respuesta inválida") }
-        if (200..<300).contains(http.statusCode) { return data }
+        let rid = http.value(forHTTPHeaderField: "X-Request-Id")
+        if (200..<300).contains(http.statusCode) { return (data, rid) }
+        if http.statusCode >= 500 {
+            KuraLog.api.error("\(e.method.rawValue, privacy: .public) \(e.path, privacy: .public) → HTTP \(http.statusCode, privacy: .public) rid=\(rid ?? "-", privacy: .public)")
+        }
         let env = try? KuraJSON.decoder.decode(ErrorEnvelope.self, from: data)
         let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
         if case .unauthorized = err, e.auth, !e.suppressExpiry {
@@ -150,10 +190,13 @@ final class APIClient: @unchecked Sendable {
     }
 
     func decode<T: Decodable>(_ e: Endpoint) async throws -> T {
-        let data = try await self.data(e)
+        let (data, rid) = try await fetch(e)
         do {
             return try KuraJSON.decoder.decode(T.self, from: data)
         } catch {
+            // A contract change must leave a trace outside DEBUG too: where it broke (type + key
+            // path), never the payload.
+            KuraLog.api.error("decode \(e.method.rawValue, privacy: .public) \(e.path, privacy: .public) as \(String(describing: T.self), privacy: .public) rid=\(rid ?? "-", privacy: .public): \(APIClient.describe(error), privacy: .public)")
             #if DEBUG
             print("[Kura] decode \(e.method.rawValue) \(e.path) failed: \(error)\n\(String(data: data.prefix(600), encoding: .utf8) ?? "")")
             #endif
@@ -161,12 +204,16 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    /// Like `decode`, but `null` / empty / 204 → nil.
-    func decodeOptional<T: Decodable>(_ e: Endpoint) async throws -> T? {
-        let data = try await self.data(e)
-        let trimmed = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.isEmpty || trimmed == "null" { return nil }
-        return try KuraJSON.decoder.decode(T.self, from: data)
+    /// `DecodingError` without its `debugDescription` values (which can quote the payload).
+    static func describe(_ error: Error) -> String {
+        func path(_ c: DecodingError.Context) -> String { c.codingPath.map(\.stringValue).joined(separator: ".") }
+        switch error {
+        case DecodingError.keyNotFound(let k, let c): return "keyNotFound \(k.stringValue) at \(path(c))"
+        case DecodingError.typeMismatch(let t, let c): return "typeMismatch \(t) at \(path(c))"
+        case DecodingError.valueNotFound(let t, let c): return "valueNotFound \(t) at \(path(c))"
+        case DecodingError.dataCorrupted(let c): return "dataCorrupted at \(path(c))"
+        default: return String(describing: type(of: error))
+        }
     }
 
     func send(_ e: Endpoint) async throws {
@@ -335,6 +382,16 @@ struct LiveAPI: KuraAPI {
         return page.items
     }
 
+    /// Raw body with the image's own `Content-Type` (API.md §4: multipart or raw; the
+    /// server sniffs magic bytes either way).
+    func uploadAvatar(_ data: Data, contentType: String) async throws -> Me {
+        try await client.decode(Endpoint(method: .put, path: "me/avatar", body: data, contentType: contentType))
+    }
+
+    func deleteAvatar() async throws -> Me {
+        try await client.decode(.delete("me/avatar"))
+    }
+
     func deleteAccount() async throws {
         try await client.send(.delete("me"))
         session.clear()
@@ -413,6 +470,12 @@ struct LiveAPI: KuraAPI {
         try await client.decode(.get("titles/\(id)"))
     }
 
+    /// `GET /titles/{id}/reviews?cursor=` → `{ items, nextCursor }` (pages of 10; only public
+    /// reviews, never the caller's own — that one is pinned in `GET /titles/{id}`).
+    func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage {
+        try await client.decode(.get("titles/\(titleID)/reviews", [URLQueryItem(name: "cursor", value: cursor)]))
+    }
+
     func titles(ids: [String]) async throws -> [Title] {
         var out: [Title] = []
         for chunk in stride(from: 0, to: ids.count, by: 50).map({ Array(ids[$0..<min($0 + 50, ids.count)]) }) {
@@ -461,6 +524,10 @@ struct LiveAPI: KuraAPI {
 
     func person(handle: String) async throws -> Person {
         try await client.decode(.get("people/\(handle)"))
+    }
+
+    func personCollection(handle: String, id: String) async throws -> CollectionDetail {
+        try await client.decode(.get("people/\(handle)/collections/\(id)"))
     }
 
     func people(kind: PeopleKind, cursor: String?) async throws -> PeoplePage {

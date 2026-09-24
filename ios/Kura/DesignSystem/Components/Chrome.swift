@@ -15,7 +15,7 @@ struct Dock: View {
                 } label: {
                     VStack(spacing: 3) {
                         DockIcon(tab: tab)
-                        Text(tab.label).font(.kura.ui(10, .medium))
+                        Text(tab.label).font(.kura.ui(10, .medium, fixed: true))
                     }
                     .foregroundStyle(on ? KColor.text : KColor.text2)
                     .padding(.vertical, 10)
@@ -26,6 +26,7 @@ struct Dock: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.label)
                 .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
+                .accessibilityShowsLargeContentViewer { DockIcon(tab: tab); Text(tab.label) }
             }
         }
         .padding(6)

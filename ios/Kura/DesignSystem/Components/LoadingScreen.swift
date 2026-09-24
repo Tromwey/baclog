@@ -54,3 +54,86 @@ struct GoneView: View {
         .ignoresSafeArea(.container, edges: .top)
     }
 }
+
+// MARK: - Load errors (offline · catalog down · anything else)
+
+extension KuraAPIError {
+    /// Headline + note for a screen whose read failed. Kura voice: what
+    /// happened and what to do, lowercase headline with a period, no "!".
+    var loadCopy: (title: String, note: String) {
+        switch self {
+        case .offline: return ("sin conexión.", "Revisa tu red y vuelve a intentarlo.")
+        case .unavailable: return ("no disponible por ahora.", "El catálogo no responde. Inténtalo de nuevo en un momento.")
+        case .rateLimited: return ("un momento.", "Van muchas peticiones seguidas. Espera unos segundos y vuelve a intentarlo.")
+        default: return ("no se pudo cargar.", "Algo falló de nuestro lado. Vuelve a intentarlo.")
+        }
+    }
+}
+
+/// The error block inside a screen that keeps its own header (tabs, lists).
+struct LoadErrorBlock: View {
+    let error: KuraAPIError
+    var titleSize: CGFloat = 28
+    let retry: () -> Void
+
+    var body: some View {
+        let copy = error.loadCopy
+        VStack(alignment: .leading, spacing: 10) {
+            Text(copy.title).font(.kura.news(titleSize)).foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(copy.note).font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", action: retry).padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A pushed screen whose read failed: same shape as `GoneView`, plus Reintentar.
+struct LoadErrorScreen: View {
+    let error: KuraAPIError
+    let retry: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            LoadErrorBlock(error: error, retry: retry)
+                .padding(.horizontal, 24)
+                .padding(.top, 140)
+            TopChrome { EmptyView() }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+/// Content is on screen but its refresh failed: one quiet line with Reintentar
+/// (the offline case already has the franja; this is for the rest).
+struct RetryStrip: View {
+    let error: KuraAPIError
+    var text: String? = nil
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: error == .offline ? "wifi.slash" : "arrow.clockwise").font(.system(size: 14, weight: .medium))
+                .foregroundStyle(KColor.text)
+            Text(text ?? (error == .offline ? "Sin conexión. Esto puede no estar al día." : "No se pudo actualizar."))
+                .font(.kura.ui(14))
+                .foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button(action: retry) {
+                Text("Reintentar").monoLabel(11, color: KColor.text)
+                    .padding(.horizontal, 6)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(minHeight: 44)
+        .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+    }
+}

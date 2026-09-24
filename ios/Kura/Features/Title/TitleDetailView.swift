@@ -12,8 +12,8 @@ struct TitleDetailView: View {
                 detail(t)
             } else if store.missingTitles.contains(titleID) {
                 GoneView(title: "este título ya no está.", note: "Se quitó del catálogo o dejó de estar disponible.")
-            } else if store.unavailableTitles.contains(titleID) {
-                UnavailableView(retry: { Task { await store.loadTitle(titleID, force: true) } })
+            } else if let e = store.loadError(.title(titleID)) {
+                LoadErrorScreen(error: e) { Task { await store.loadTitle(titleID, force: true) } }
             } else {
                 LoadingScreen()
             }
@@ -27,6 +27,13 @@ struct TitleDetailView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         TitleHeader(title: t)
+                        if let e = store.loadError(.title(t.id)) {
+                            RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar toda la ficha.") {
+                                Task { await store.loadTitle(t.id, force: true) }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 4)
+                        }
                         TitleSections(title: t)
                             .padding(.top, 10)
                             .padding(.horizontal, 24)
@@ -82,7 +89,9 @@ private struct TitleHeader: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 10)
                 .accessibilityAddTraits(.isHeader)
-            Text(t.lowerCreator).font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
+            if let c = t.lowerCreator {
+                Text(c).font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
+            }
             Text(metaLine(t, unreleased: unreleased)).monoLabel()
 
             if let c = t.counts {
@@ -341,7 +350,27 @@ private struct TitleSections: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(text: "reseñas")
                 ForEach(reviews) { r in ReviewCard(review: r) }
+                moreReviews(t)
             }
+        }
+    }
+
+    /// "Más reseñas" while the server says there's a next page; a failure keeps the button and says so.
+    @ViewBuilder
+    private func moreReviews(_ t: Title) -> some View {
+        if store.reviewCursors[t.id] != nil {
+            let busy = store.reviewsPaging.contains(t.id)
+            VStack(alignment: .leading, spacing: 8) {
+                GlassButton(title: busy ? "Cargando…" : "Más reseñas", systemImage: busy ? nil : "chevron.down") {
+                    Task { await store.loadMoreReviews(t.id) }
+                }
+                .disabled(busy)
+                if let e = store.loadError(.moreReviews(t.id)), !busy {
+                    Text(e == .offline ? "Sin conexión. Inténtalo de nuevo." : "No se pudieron cargar. Inténtalo de nuevo.")
+                        .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                }
+            }
+            .padding(.top, 2)
         }
     }
 
@@ -370,11 +399,11 @@ private struct TitleSections: View {
 
     @ViewBuilder
     private func alsoBy(_ t: Title) -> some View {
-        let others = t.creator.isEmpty ? [] : store.catalogOrder.compactMap { store.title($0) }.filter { $0.creator == t.creator && $0.id != t.id }
+        let others = t.creator == nil ? [] : store.catalogOrder.compactMap { store.title($0) }.filter { $0.creator == t.creator && $0.id != t.id }
         if !others.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Button { store.push(.creator(t.creator)) } label: {
-                    SectionTitle(text: "también de \(t.lowerCreator)")
+                Button { store.push(.creator(t.creator ?? "")) } label: {
+                    SectionTitle(text: "también de \(t.lowerCreator ?? "")")
                 }
                 .buttonStyle(.plain)
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -648,26 +677,34 @@ private struct AlbumSections: View {
             }
 
             if !t.tracks.isEmpty {
-                let shown = unreleased ? t.tracks.filter(\.available) : t.tracks
+                // Every track in order. Before release, `available: false` = not out yet (partial
+                // pre-order): dimmed with "pronto". After release it only means album-only / not in
+                // this country, and the track draws like the rest.
+                let shown = t.tracks
+                let availableCount = t.tracks.filter(\.available).count
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(unreleased ? "tracks" : "canciones").font(.kura.news(24)).foregroundStyle(KColor.text)
                         Spacer()
                         if unreleased {
-                            Text("\(shown.count) de \(t.trackCount ?? t.tracks.count) disponibles").monoLabel()
+                            Text("\(availableCount) de \(t.trackCount ?? t.tracks.count) disponibles").monoLabel()
                         }
                     }
                     .padding(.bottom, unreleased ? 4 : 6)
                     ForEach(shown) { tr in
+                        let soon = unreleased && !tr.available
                         HStack(spacing: 14) {
                             Text(unreleased ? "\(tr.number)" : String(format: "%02d", tr.number))
                                 .monoLabel(unreleased ? 11 : 12)
                                 .frame(width: 22, alignment: .leading)
-                            Text(tr.name).font(.kura.ui(unreleased ? 16 : 15)).foregroundStyle(KColor.text).lineLimit(1)
+                            Text(tr.name).font(.kura.ui(unreleased ? 16 : 15))
+                                .foregroundStyle(soon ? KColor.text3 : KColor.text).lineLimit(1)
                             Spacer()
+                            if soon { Text("pronto").monoLabel(10, color: KColor.text3) }
                         }
                         .frame(minHeight: 48)
                         .accessibilityElement(children: .combine)
+                        .accessibilityHint(soon ? "Todavía no disponible" : "")
                     }
                     if let total = t.trackCount, total > t.tracks.count {
                         Text("Ver las \(total) en \(store.musicApp)")
@@ -689,7 +726,7 @@ private struct AlbumSections: View {
     private func musicURL(_ t: Title) -> URL {
         // The API resolves the preferred service's link (`watch[].url`); otherwise search it.
         if let u = t.watch.first?.url { return u }
-        let q = "\(t.name) \(t.creator)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let q = [t.name, t.creator].compactMap { $0 }.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         switch store.musicApp {
         case "Spotify": return URL(string: "https://open.spotify.com/search/\(q)")!
         case "YouTube Music": return URL(string: "https://music.youtube.com/search?q=\(q)")!
@@ -701,26 +738,4 @@ private struct AlbumSections: View {
 
 extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
-}
-
-/// The catalog provider is down for this title (503 / offline): "no disponible · reintentar".
-struct UnavailableView: View {
-    let retry: () -> Void
-    var body: some View {
-        ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("no disponible por ahora.").font(.kura.news(28)).foregroundStyle(KColor.text)
-                Text("El catálogo no responde. Inténtalo de nuevo en un momento.")
-                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", action: retry).padding(.top, 6)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 140)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            TopChrome { EmptyView() }
-        }
-        .ignoresSafeArea(.container, edges: .top)
-    }
 }

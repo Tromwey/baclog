@@ -13,8 +13,13 @@ struct FeedView: View {
 
     var body: some View {
         Group {
-            if store.following.isEmpty && store.me.followingCount == 0 {
+            if store.loadState == .failed {
+                // The launch failed: "nobody you follow" would be a lie — we don't know yet.
+                failed(store.loadError(.library) ?? .server("")) { Task { await store.bootstrap() } }
+            } else if store.following.isEmpty && store.me.followingCount == 0 {
                 FeedEmptyView()
+            } else if !store.feedLoaded && store.visibleFeed.isEmpty, let e = store.loadError(.feed) {
+                failed(e) { Task { await store.loadFeed(force: true) } }
             } else if !store.feedLoaded && store.visibleFeed.isEmpty {
                 loading
             } else if store.visibleFeed.isEmpty {
@@ -52,6 +57,19 @@ struct FeedView: View {
         .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
+    /// `GET /feed` failed before anything arrived.
+    private func failed(_ e: KuraAPIError, retry: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            header
+            LoadErrorBlock(error: e, titleSize: 32, retry: retry)
+                .padding(.horizontal, 28)
+                .padding(.top, 60)
+            Spacer()
+        }
+        .background(KColor.bg.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+    }
+
     /// The stack's shape while `GET /feed` runs.
     private var loading: some View {
         VStack(spacing: 0) {
@@ -77,6 +95,15 @@ struct FeedView: View {
     private var stack: some View {
         VStack(spacing: 0) {
             header
+            if let e = store.loadError(.feed) {
+                // A refresh (or its titles) failed over a feed already on screen: say it's old.
+                RetryStrip(error: e, text: e == .offline ? nil : "No se pudo actualizar tu feed.") {
+                    Task { await store.loadFeed(force: true) }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+                .background(KColor.bg)
+            }
             GeometryReader { geo in
                 let events = store.visibleFeed
                 ScrollView(showsIndicators: false) {
@@ -101,7 +128,17 @@ struct FeedView: View {
                         // The stack's light continues past the last card.
                         Tint.ends(palette(events.last)).1.color
                             .frame(height: max(geo.size.height - tierHeight(events.last?.tier ?? .M, viewport: geo.size.height), 0) + ext)
-                            .zIndex(-1)
+                            .overlay(alignment: .top) {
+                                // The next page failed: no auto-retry on scroll, the end of the stack offers it.
+                                if let e = store.loadError(.feedMore) {
+                                    RetryStrip(error: e, text: e == .offline ? "Sin conexión. No se cargó lo anterior." : "No se cargó lo anterior.") {
+                                        Task { await store.loadMoreFeed(retry: true) }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.top, ext + 16)
+                                }
+                            }
+                            .zIndex(store.loadError(.feedMore) == nil ? -1 : Double(events.count))
                     }
                     .scrollTargetLayout()
                 }
@@ -284,7 +321,7 @@ private struct FeedCard: View {
             default:
                 if let t = title {
                     (Text(t.name).foregroundColor(KColor.text)
-                     + Text(" · \(t.creator)").foregroundColor(KColor.text2))
+                     + Text(t.creator.map { " · \($0)" } ?? "").foregroundColor(KColor.text2))
                         .font(.kura.newsItalic(26))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)

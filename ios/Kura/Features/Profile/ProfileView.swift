@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - 20c Perfil propio · E2 vacío
 
@@ -12,7 +13,19 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        if store.collections.isEmpty && obsessions.isEmpty && store.loadState == .loaded {
+        if store.loadState == .failed {
+            // The launch read failed: nothing honest to draw yet (no name, no counts).
+            ZStack(alignment: .topTrailing) {
+                KColor.bg.ignoresSafeArea()
+                LoadErrorBlock(error: store.loadError(.library) ?? .server("")) { Task { await store.bootstrap() } }
+                    .padding(.horizontal, 28)
+                    .padding(.top, 140)
+                IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") { store.push(.settings) }
+                    .padding(.top, KSize.chromeTop)
+                    .padding(.horizontal, 20)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+        } else if store.collections.isEmpty && obsessions.isEmpty && store.loadState == .loaded {
             EmptyOwnProfile()
         } else {
             full
@@ -60,17 +73,19 @@ struct ProfileView: View {
                             RibbonPill(glyph: .thumb, value: store.count(of: .liked))
                             RibbonPill(glyph: .review, value: store.reviewCount)
                         }
-                        Button { store.push(.recap) } label: {
-                            HStack(spacing: 8) {
-                                Text(store.recapButtonLabel).font(.kura.news(17))
-                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                        if let recapLabel = store.recapButtonLabel {
+                            Button { store.push(.recap) } label: {
+                                HStack(spacing: 8) {
+                                    Text(recapLabel).font(.kura.news(17))
+                                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                                }
+                                .foregroundStyle(KColor.text)
+                                .padding(.horizontal, 16)
+                                .frame(height: 40)
+                                .background(KColor.glassBg, in: Capsule())
                             }
-                            .foregroundStyle(KColor.text)
-                            .padding(.horizontal, 16)
-                            .frame(height: 40)
-                            .background(KColor.glassBg, in: Capsule())
+                            .kPress()
                         }
-                        .kPress()
                     }
                     .padding(.top, KSize.chromeTop)
                     .padding(.horizontal, 24)
@@ -121,6 +136,7 @@ struct ProfileView: View {
             }
             .ignoresSafeArea(.container, edges: .top)
         }
+        .task(id: store.loadState) { if store.loadState == .loaded { await store.loadRecapMonths() } }
     }
 }
 
@@ -136,7 +152,7 @@ private struct EmptyOwnProfile: View {
                     IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") { store.push(.settings) }
                 }
                 .padding(.horizontal, 20)
-                InitialsSeal(initials: me.initials, size: 112)
+                Seal(person: me, size: 112)
                 Text(me.name).font(.kura.news(30)).foregroundStyle(KColor.text).padding(.top, 6)
                 Text("@\(me.handle)").monoLabel()
                 HStack(spacing: 18) {
@@ -204,6 +220,7 @@ struct EditProfileView: View {
     @State private var isPrivate = false
     @State private var showCommon = true
     @State private var loaded = false
+    @State private var photo: PhotosPickerItem?
 
     private var candidates: [Title] {
         let ids = store.userTitles.filter { $0.value.mark == .obsessed || $0.value.mark == .liked }.map(\.key).sorted()
@@ -227,13 +244,45 @@ struct EditProfileView: View {
                         .kPress()
                     }
                     .padding(.horizontal, 4)
-                    Seal(person: Person(handle: handle, name: name, initials: initials(name),
-                                        hexes: palette ?? store.me.hexes), size: 104)
-                    Button("Cambiar foto") {
-                        store.showToast(ToastModel(text: "Las fotos de perfil llegan con la API real.", kind: .info))
+                    Seal(person: preview(palette), size: 104)
+                        .opacity(store.avatarBusy ? 0.5 : 1)
+                        .overlay { if store.avatarBusy { ProgressView().tint(KColor.text) } }
+                    let photoLabel = store.avatarBusy ? "Subiendo…" : (store.me.avatarURL == nil ? "Poner foto" : "Cambiar foto")
+                    HStack(spacing: 20) {
+                        PhotosPicker(selection: $photo, matching: .images, photoLibrary: .shared()) {
+                            Text(photoLabel)
+                                .font(.kura.ui(15, .semibold))
+                                .foregroundStyle(KColor.text)
+                                .frame(minHeight: 44)
+                        }
+                        .disabled(store.avatarBusy)
+                        if store.me.avatarURL != nil && !store.avatarBusy {
+                            Button("Quitar foto") { Task { await store.removeAvatar() } }
+                                .font(.kura.ui(15, .semibold))
+                                .foregroundStyle(KColor.text2)
+                                .frame(minHeight: 44)
+                        }
                     }
-                    .font(.kura.ui(15, .semibold))
-                    .foregroundStyle(KColor.text)
+                    .onChange(of: photo) { _, item in
+                        guard let item else { return }
+                        photo = nil
+                        Task {
+                            // Two different failures: the photo didn't arrive (iCloud / red) vs. it
+                            // arrived but isn't an image we can read.
+                            let data: Data?
+                            do {
+                                data = try await item.loadTransferable(type: Data.self)
+                            } catch {
+                                store.showToast(ToastModel(text: "No se pudo descargar la foto. Revisa tu red.", kind: .info))
+                                return
+                            }
+                            guard let data, let img = UIImage(data: data) else {
+                                store.showToast(ToastModel(text: "Esa imagen no se pudo leer. Prueba con otra.", kind: .info))
+                                return
+                            }
+                            await store.uploadAvatar(img)
+                        }
+                    }
                 }
                 .padding(.top, KSize.chromeTop)
                 .padding(.horizontal, 20)
@@ -331,6 +380,13 @@ struct EditProfileView: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 56)
+    }
+
+    /// The seal as it will look: the name being typed, the tint being tried, your photo.
+    private func preview(_ palette: [String]?) -> Person {
+        var p = Person(handle: handle, name: name, initials: initials(name), hexes: palette ?? store.me.hexes)
+        p.avatarURL = store.me.avatarURL
+        return p
     }
 
     private func initials(_ s: String) -> String {

@@ -22,6 +22,8 @@ struct KuraApp: App {
             origin?.path = ""
             origin?.query = nil
             KuraRuntime.apiOrigin = origin?.url
+            let session = client.session
+            KuraRuntime.bearer = { session.token }
             api = LiveAPI(client: client)
         }
         let store = AppStore(api: api, now: mock ? MockData.now : Date())

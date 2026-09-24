@@ -95,7 +95,11 @@ struct DiscoverView: View {
                     .padding(.top, 14)
 
                 VStack(alignment: .leading, spacing: 34) {
-                    if let d = store.discover, d.recommended.isEmpty, d.trending.isEmpty, d.upcoming.isEmpty {
+                    if store.discover == nil, !store.discoverLoading, let e = store.loadError(.discover) {
+                        LoadErrorBlock(error: e) { Task { await store.loadDiscover(force: true) } }
+                            .padding(.horizontal, 28)
+                            .padding(.top, 20)
+                    } else if let d = store.discover, d.recommended.isEmpty, d.trending.isEmpty, d.upcoming.isEmpty {
                         // A fresh account: nothing to recommend yet.
                         VStack(alignment: .leading, spacing: 10) {
                             Text("todavía no hay nada que recomendarte.").font(.kura.news(28)).foregroundStyle(KColor.text)
@@ -124,7 +128,7 @@ struct DiscoverView: View {
     /// The subtitle under a recommendation: the creator, or the series length.
     private func recSubtitle(_ t: Title) -> String {
         if t.format == .series, let d = t.detail { return d }
-        return t.lowerCreator
+        return t.lowerCreator ?? ""
     }
 
     // "recomendado para ti" — a tinted card with the reason.
@@ -232,7 +236,7 @@ struct DiscoverView: View {
     }
 
     private func metaShort(_ t: Title) -> String {
-        [t.format.metaLabel, t.year.map(String.init), t.format == .album ? t.creator : t.creator.components(separatedBy: " ").last]
+        [t.format.metaLabel, t.year.map(String.init), t.format == .album ? t.creator : t.creatorShort]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
@@ -537,7 +541,7 @@ private struct SearchMode: View {
                                                 .frame(width: 48)
                                             VStack(alignment: .leading, spacing: 5) {
                                                 Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
-                                                Text([t.format.metaLabel, t.year.map(String.init), t.creator.components(separatedBy: " ").last]
+                                                Text([t.format.metaLabel, t.year.map(String.init), t.creatorShort]
                                                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).monoLabel().lineLimit(1)
                                             }
                                             Spacer(minLength: 8)
@@ -698,7 +702,7 @@ struct InitialsSeal: View {
     var size: CGFloat
     var body: some View {
         Text(initials)
-            .font(.kura.newsMediumItalic(size * 0.42))
+            .font(.kura.newsMediumItalic(size * 0.42, fixed: true))
             .tracking(-size * 0.42 * 0.035)
             .foregroundStyle(KColor.text)
             .frame(width: size, height: size)
@@ -716,7 +720,7 @@ enum SearchIndex {
         let f = fold(q.trimmingCharacters(in: .whitespaces))
         guard !f.isEmpty else { return [] }
         return store.catalogOrder.compactMap { store.title($0) }
-            .filter { fold($0.name).contains(f) || fold($0.creator).contains(f) }
+            .filter { fold($0.name).contains(f) || fold($0.creator ?? "").contains(f) }
     }
 
     @MainActor static func creators(_ q: String, _ store: AppStore) -> [Creator] {
@@ -738,7 +742,7 @@ enum SearchIndex {
         let f = fold(q)
         var words = Set<String>()
         for t in store.catalogOrder.compactMap({ store.title($0) }) {
-            for w in (t.name + " " + t.creator).split(separator: " ") { words.insert(fold(String(w)).trimmingCharacters(in: .punctuationCharacters)) }
+            for w in (t.name + " " + (t.creator ?? "")).split(separator: " ") { words.insert(fold(String(w)).trimmingCharacters(in: .punctuationCharacters)) }
         }
         let best = words.filter { $0.count > 2 }.map { ($0, distance($0, f)) }.min { $0.1 < $1.1 }
         guard let best, best.1 > 0, best.1 <= 2 else { return nil }

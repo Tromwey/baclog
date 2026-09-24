@@ -21,6 +21,8 @@ enum DebugLaunch {
     @MainActor
     static func configure(_ store: AppStore) {
         #if DEBUG
+        // `-kuraFailHydrate YES`: every `GET /titles?ids=` fails (live), to see the "incompleto" strips.
+        store.debugFailHydrate = UserDefaults.standard.bool(forKey: "kuraFailHydrate")
         guard let screen = UserDefaults.standard.string(forKey: "kuraScreen") else { return }
         func main(_ tab: Tab = .collections, _ routes: [Route] = [], sheet: SheetRoute? = nil) {
             store.phase = .main

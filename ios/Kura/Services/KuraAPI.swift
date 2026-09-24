@@ -28,6 +28,10 @@ protocol KuraAPI: Sendable {
     func onboardingGrid() async throws -> [Title]
     func onboardingPicks(_ refs: [TitleRef]) async throws -> KCollection
     func onboardingPeople() async throws -> [Person]
+    /// `PUT /me/avatar` — the photo already cropped and reduced on the device (≤ 400 KB).
+    func uploadAvatar(_ data: Data, contentType: String) async throws -> Me
+    /// `DELETE /me/avatar`.
+    func deleteAvatar() async throws -> Me
     func deleteAccount() async throws
 
     // MARK: Collections
@@ -41,6 +45,9 @@ protocol KuraAPI: Sendable {
 
     // MARK: Titles and your state (keyed on the title, identical across collections)
     func title(id: String) async throws -> TitleDetail
+    /// "Más reseñas": the next page of a title's reviews (`GET /titles/{id}/reviews?cursor=`,
+    /// same `paginated(ReviewSchema)` as the ficha's first page).
+    func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage
     func titles(ids: [String]) async throws -> [Title]
     func myTitles() async throws -> [String: UserTitleState]
     func setMark(titleID: String, mark: Mark?, preview: Bool) async throws -> UserTitleState
@@ -54,6 +61,8 @@ protocol KuraAPI: Sendable {
 
     // MARK: People and feed
     func person(handle: String) async throws -> Person
+    /// Someone's public collection; `states` are the OWNER's (read-only).
+    func personCollection(handle: String, id: String) async throws -> CollectionDetail
     func people(kind: PeopleKind, cursor: String?) async throws -> PeoplePage
     func setFollowing(handle: String, following: Bool) async throws
     func feed(cursor: String?) async throws -> FeedPage
@@ -160,6 +169,8 @@ struct MockAPI: KuraAPI {
             return p
         }
     }
+    func uploadAvatar(_ data: Data, contentType: String) async throws -> Me { try await write(); return Me(person: MockData.me) }
+    func deleteAvatar() async throws -> Me { try await write(); return Me(person: MockData.me) }
     func deleteAccount() async throws { try await write() }
 
     // Collections
@@ -196,6 +207,7 @@ struct MockAPI: KuraAPI {
         return TitleDetail(title: t, state: MockData.userTitles[id], following: MockData.peopleMarks[id] ?? [],
                            reviews: MockData.reviews.filter { $0.titleID == id }, collections: cols)
     }
+    func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage { ReviewPage(items: []) }
     func titles(ids: [String]) async throws -> [Title] { MockData.titles.filter { ids.contains($0.id) } }
     func myTitles() async throws -> [String: UserTitleState] { MockData.userTitles }
     func setMark(titleID: String, mark: Mark?, preview: Bool) async throws -> UserTitleState {
@@ -218,7 +230,7 @@ struct MockAPI: KuraAPI {
         guard !q.isEmpty else { return [] }
         return MockData.titles
             .filter { kind == nil || $0.format == kind }
-            .filter { fold($0.name).contains(q) || fold($0.creator).contains(q) }
+            .filter { fold($0.name).contains(q) || fold($0.creator ?? "").contains(q) }
             .map(SearchResult.init(title:))
     }
     func discover() async throws -> DiscoverPayload {
@@ -238,6 +250,18 @@ struct MockAPI: KuraAPI {
         guard var p = MockData.people.first(where: { $0.id == handle }) else { throw KuraAPIError.notFound }
         p.isFollowing = MockData.following.contains(handle)
         return p
+    }
+    func personCollection(handle: String, id: String) async throws -> CollectionDetail {
+        guard let p = MockData.people.first(where: { $0.id == handle }),
+              let pc = p.collections.first(where: { ($0.remoteID ?? $0.name) == id }),
+              pc.privacy != .onlyMe else { throw KuraAPIError.notFound }
+        let titles = pc.titleIDs.compactMap { tid in MockData.titles.first { $0.id == tid } }
+        let states = Dictionary(uniqueKeysWithValues: p.obsessions.filter(pc.titleIDs.contains).map {
+            ($0, UserTitleState(mark: .obsessed, savedAt: MockData.now))
+        })
+        return CollectionDetail(collection: KCollection(id: id, name: pc.name, titleIDs: pc.titleIDs, privacy: pc.privacy,
+                                                        createdAt: MockData.now),
+                                titles: titles, states: states)
     }
     func people(kind: PeopleKind, cursor: String?) async throws -> PeoplePage {
         func list(_ ids: [String]) -> [Person] { ids.compactMap { id in MockData.people.first { $0.id == id } } }

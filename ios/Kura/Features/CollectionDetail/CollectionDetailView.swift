@@ -10,12 +10,28 @@ struct CollectionDetailView: View {
     var body: some View {
         Group {
             if let c = store.collection(collectionID) {
-                content(c)
+                if !c.titleIDs.isEmpty && store.titles(in: c).isEmpty {
+                    // Ids known, titles not (yet): never draw "repisa vacía" for a full collection.
+                    if let e = loadError(c) {
+                        LoadErrorScreen(error: e) { Task { await store.loadCollection(c.id, force: true) } }
+                    } else {
+                        LoadingScreen()
+                    }
+                } else {
+                    content(c)
+                }
             } else {
                 GoneView()
             }
         }
         .task(id: collectionID) { await store.loadCollection(collectionID) }
+    }
+
+    /// This collection's read failed, or the launch couldn't bring titles it has.
+    private func loadError(_ c: KCollection) -> KuraAPIError? {
+        if let e = store.loadError(.collection(c.id)) { return e }
+        let missing = c.titleIDs.contains { store.title($0) == nil }
+        return missing ? store.loadError(.library) : nil
     }
 
     private func content(_ c: KCollection) -> some View {
@@ -37,6 +53,13 @@ struct CollectionDetailView: View {
                             formats: formats.map { f in (f, all.filter { $0.format == f }.count) },
                             filter: $filter
                         )
+                        if let e = loadError(c) {
+                            RetryStrip(error: e, text: e == .offline ? nil : "Faltan títulos de esta colección.") {
+                                Task { await store.loadCollection(c.id, force: true) }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.top, 12)
+                        }
                         bodyContent(c, titles: visible, formats: filter == nil ? formats : [filter!])
                     }
                 }
@@ -83,6 +106,8 @@ struct CollectionHeader<Lead: View>: View {
     @ViewBuilder var lead: Lead
     let formats: [(MediaFormat, Int)]
     @Binding var filter: MediaFormat?
+    /// Under the name (someone else's collection: "de @handle", tappable).
+    var byline: (text: String, action: () -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 12) {
@@ -93,6 +118,15 @@ struct CollectionHeader<Lead: View>: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 8)
                 .accessibilityAddTraits(.isHeader)
+            if let byline {
+                Button(action: byline.action) {
+                    Text(byline.text).monoLabel(11, color: KColor.text2)
+                        .frame(minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, -10)
+            }
             if !formats.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(formats, id: \.0) { f, n in
@@ -151,6 +185,10 @@ struct ShelfItem: View {
     /// nil → fill the grid column.
     var width: CGFloat? = nil
     var showsSub = true
+    /// Someone else's collection: their mark instead of yours.
+    var badgeOverride: CoverBadge? = nil
+    /// Replaces the 18c actions (e.g. "Guardar en…" from a collection that isn't yours).
+    var longPress: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -177,23 +215,31 @@ struct ShelfItem: View {
         .contentShape(Rectangle())
         .onTapGesture { store.push(.title(title.id)) }
         .onLongPressGesture(minimumDuration: 0.4) {
+            if let longPress {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                longPress()
+                return
+            }
             guard !collectionID.isEmpty else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             store.present(.titleActions(titleID: title.id, collectionID: collectionID))
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Opciones") {
-            store.present(.titleActions(titleID: title.id, collectionID: collectionID))
+        .accessibilityAction(named: longPress == nil ? "Opciones" : "Guardar en…") {
+            if let longPress { longPress() } else if !collectionID.isEmpty {
+                store.present(.titleActions(titleID: title.id, collectionID: collectionID))
+            }
         }
     }
 
     private var sub: String {
-        [title.year.map(String.init), title.format == .album ? title.creator : title.creator.components(separatedBy: " ").last]
-            .compactMap { $0 }.joined(separator: " · ")
+        [title.year.map(String.init), title.format == .album ? title.creator : title.creatorShort]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") // `creator` is often "" on film/series
     }
 
     private var badge: CoverBadge {
+        if let badgeOverride { return badgeOverride }
         if let m = store.mark(title.id) { return .mark(m) }
         if store.isUnreleased(title), let l = store.releaseLabel(title) { return .waiting(l) }
         return .none
@@ -294,7 +340,7 @@ struct TitleList: View {
     private func meta(_ t: Title) -> String {
         var parts = [t.format.metaLabel]
         if let y = t.year { parts.append(String(y)) }
-        parts.append(t.creator)
+        if let cr = t.creator { parts.append(cr) }
         if store.isUnreleased(t), let l = store.releaseLabel(t) { parts.append(l) }
         return parts.joined(separator: " · ")
     }

@@ -551,7 +551,24 @@ struct YourPeopleView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     hero
                     VStack(spacing: 0) {
-                        if store.onboardingPeople.isEmpty {
+                        if !store.onboardingPeopleLoaded, let e = store.loadError(.onboardingPeople) {
+                            LoadErrorBlock(error: e, titleSize: 24) { Task { await store.loadOnboardingPeople(force: true) } }
+                                .padding(.vertical, 24)
+                        } else if !store.onboardingPeopleLoaded {
+                            ForEach(0..<3, id: \.self) { _ in
+                                HStack(spacing: 14) {
+                                    Skeleton(radius: 999).frame(width: 44, height: 44)
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Skeleton(radius: 6).frame(width: 130, height: 14)
+                                        Skeleton(radius: 5).frame(width: 180, height: 10)
+                                    }
+                                    Spacer()
+                                }
+                                .frame(minHeight: 72)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Buscando gente con tus obsesiones")
+                        } else if store.onboardingPeople.isEmpty {
                             Text("Todavía no hay gente con tus obsesiones. Tu feed se llena cuando la encuentres en Descubrir.")
                                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                                 .fixedSize(horizontal: false, vertical: true)

@@ -22,24 +22,55 @@ enum KFontName {
 
 enum UIWeight { case regular, medium, semibold }
 
-/// `Font.kura.*` — sizes are fixed (the DS is specified in px at 390 pt wide).
+/// `Font.kura.*` — sizes are the DS values (specified in px at 390 pt wide) at
+/// the default text size, and they follow Dynamic Type: each size scales with
+/// the text style it sits closest to (`relativeTo:`). `RootView` caps the growth
+/// at `xxxLarge` so the fixed frames (covers, chips 44, sheets) keep holding.
+///
+/// What stays FIXED on purpose (`fixed: true` / `mono`):
+/// - Red Hat Mono is the data voice: uppercase labels on cover badges, the
+///   spine (rotated to the card's exact height), ribbons and counters live in
+///   fixed geometry and are secondary to the title/name next to them, which
+///   does scale.
+/// - The wordmark, the seal's initials and the dock labels are drawn into a
+///   fixed shape (brand mark, circle, floating bar with Large Content Viewer).
 struct KuraFonts {
-    // Newsreader — brand voice, always lowercase in titles.
-    func news(_ size: CGFloat) -> Font { .custom(KFontName.newsRegular, fixedSize: size) }
-    func newsMedium(_ size: CGFloat) -> Font { .custom(KFontName.newsMedium, fixedSize: size) }
-    func newsItalic(_ size: CGFloat) -> Font { .custom(KFontName.newsItalic, fixedSize: size) }
-    func newsMediumItalic(_ size: CGFloat) -> Font { .custom(KFontName.newsMediumItalic, fixedSize: size) }
-
-    // Hanken Grotesk — interface.
-    func ui(_ size: CGFloat, _ weight: UIWeight = .regular) -> Font {
-        switch weight {
-        case .regular: return .custom(KFontName.hankRegular, fixedSize: size)
-        case .medium: return .custom(KFontName.hankMedium, fixedSize: size)
-        case .semibold: return .custom(KFontName.hankSemiBold, fixedSize: size)
+    /// The text style whose Dynamic Type curve a DS size follows.
+    static func style(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case 34...: return .largeTitle
+        case 28..<34: return .title
+        case 22..<28: return .title2
+        case 20..<22: return .title3
+        case 17..<20: return .body
+        case 16..<17: return .callout
+        case 15..<16: return .subheadline
+        case 13..<15: return .footnote
+        case 12..<13: return .caption
+        default: return .caption2
         }
     }
 
-    // Red Hat Mono — data.
+    private func face(_ name: String, _ size: CGFloat, fixed: Bool) -> Font {
+        fixed ? .custom(name, fixedSize: size) : .custom(name, size: size, relativeTo: KuraFonts.style(for: size))
+    }
+
+    // Newsreader — brand voice, always lowercase in titles.
+    func news(_ size: CGFloat, fixed: Bool = false) -> Font { face(KFontName.newsRegular, size, fixed: fixed) }
+    func newsMedium(_ size: CGFloat, fixed: Bool = false) -> Font { face(KFontName.newsMedium, size, fixed: fixed) }
+    func newsItalic(_ size: CGFloat, fixed: Bool = false) -> Font { face(KFontName.newsItalic, size, fixed: fixed) }
+    func newsMediumItalic(_ size: CGFloat, fixed: Bool = false) -> Font { face(KFontName.newsMediumItalic, size, fixed: fixed) }
+
+    // Hanken Grotesk — interface.
+    func ui(_ size: CGFloat, _ weight: UIWeight = .regular, fixed: Bool = false) -> Font {
+        switch weight {
+        case .regular: return face(KFontName.hankRegular, size, fixed: fixed)
+        case .medium: return face(KFontName.hankMedium, size, fixed: fixed)
+        case .semibold: return face(KFontName.hankSemiBold, size, fixed: fixed)
+        }
+    }
+
+    // Red Hat Mono — data. Fixed (see above).
     func mono(_ size: CGFloat, medium: Bool = false) -> Font {
         .custom(medium ? KFontName.monoMedium : KFontName.monoRegular, fixedSize: size)
     }
@@ -75,7 +106,7 @@ struct Wordmark: View {
     var size: CGFloat
     var body: some View {
         Text("kura")
-            .font(.kura.newsMediumItalic(size))
+            .font(.kura.newsMediumItalic(size, fixed: true))
             .tracking(-size * 0.035)
             .foregroundStyle(KColor.text)
             .accessibilityLabel("kura")

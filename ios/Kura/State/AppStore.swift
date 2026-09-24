@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import UIKit
+import Network
 
 enum AppPhase: Hashable {
     case splash
@@ -55,7 +56,25 @@ struct ToastModel: Identifiable, Equatable {
     static func == (a: ToastModel, b: ToastModel) -> Bool { a.id == b.id }
 }
 
-enum LoadState { case loading, loaded }
+enum LoadState: Equatable { case loading, loaded, failed }
+
+/// A per-screen read that can fail. A 404 is not a load error (the screen
+/// shows its "ya no existe" shape); everything else — offline, 5xx, 429 — is,
+/// and the screen offers Reintentar until a retry succeeds.
+enum LoadKey: Hashable {
+    case library
+    case collection(String)
+    case title(String)
+    case feed
+    case feedMore
+    case discover
+    case person(String)
+    case peopleList(String)
+    case recap
+    case onboardingPeople
+    case publicCollection(String)
+    case moreReviews(String)
+}
 
 @MainActor
 @Observable
@@ -99,12 +118,19 @@ final class AppStore {
     var titleActivity: [String: [PeopleMark]] = [:]
 
     // Per-screen loads
+    /// Failed reads by screen (see `LoadKey`); cleared when the same read succeeds.
+    var loadErrors: [LoadKey: KuraAPIError] = [:]
     var loadedCollections: Set<String> = []
     var loadedTitles: Set<String> = []
     var loadingTitles: Set<String> = []
     var missingTitles: Set<String> = []
-    /// `GET /titles/{id}` answered 503/offline (album whose provider lookup failed): Reintentar.
-    var unavailableTitles: Set<String> = []
+    /// `GET /titles/{id}.reviews.nextCursor` (and each "más reseñas" page after it).
+    var reviewCursors: [String: String] = [:]
+    var reviewsPaging: Set<String> = []
+    /// Someone else's public collections, by `publicKey(handle:id:)`; `states` are the owner's.
+    var publicCollections: [String: CollectionDetail] = [:]
+    var missingPublicCollections: Set<String> = []
+    var avatarBusy = false
     var loadedPeople: Set<String> = []
     var loadingPeople: Set<String> = []
     var missingPeople: Set<String> = []
@@ -126,6 +152,7 @@ final class AppStore {
     /// `GET /onboarding/pool` failed (503 when every provider is down): the grid offers Reintentar.
     var onboardingGridError: KuraAPIError?
     var onboardingPeople: [Person] = []
+    var onboardingPeopleLoaded = false
     var recapMonths: [RecapMonth]?
     var recaps: [String: RecapPayload] = [:]
     var recapLoading = false
@@ -146,6 +173,7 @@ final class AppStore {
     var dockHidden = false
     var recentlyViewed: [String]
     @ObservationIgnored var debugEmptyRecap = false
+    @ObservationIgnored var debugFailHydrate = false
     @ObservationIgnored var debugEmptyFollowing = false
     var debugOverlay: DebugOverlay?
     @ObservationIgnored var debugDiscoverQuery: (text: String, submit: Bool)?
@@ -224,6 +252,8 @@ final class AppStore {
     /// Titles with a write in flight (a read must not clobber the optimistic state).
     @ObservationIgnored private var inflight: [String: Int] = [:]
     @ObservationIgnored private var expiryObserver: NSObjectProtocol?
+    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private var pathSatisfied = true
 
     init(api: KuraAPI = MockAPI(), now: Date = MockData.now) {
         self.api = api
@@ -244,6 +274,52 @@ final class AppStore {
         }
         expiryObserver = NotificationCenter.default.addObserver(forName: .kuraSessionExpired, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.sessionExpired() }
+        }
+        if !mock { watchConnectivity() }
+    }
+
+    /// The network came back: drop the offline strip and retry a launch that failed.
+    private func watchConnectivity() {
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let ok = path.status == .satisfied
+            Task { @MainActor in self?.connectivityChanged(ok) }
+        }
+        monitor.start(queue: DispatchQueue(label: "io.communeo.kura.path"))
+        pathMonitor = monitor
+    }
+
+    private func connectivityChanged(_ satisfied: Bool) {
+        defer { pathSatisfied = satisfied }
+        guard satisfied, !pathSatisfied else { return }
+        offline = false
+        // Screens that said "sin conexión." stop saying it and the visible tab reloads.
+        let wasOffline = loadErrors.filter { $0.value == .offline }.map(\.key)
+        for k in wasOffline { loadErrors[k] = nil }
+        guard phase == .main else { return }
+        if loadState == .failed { Task { await bootstrap() }; return }
+        Task { await reloadVisible(after: Set(wasOffline)) }
+    }
+
+    /// After reconnecting: re-run the reads of what's on screen that failed offline.
+    private func reloadVisible(after keys: Set<LoadKey>) async {
+        if let route = path(tab).last {
+            switch route {
+            case .title(let id) where keys.contains(.title(id)): await loadTitle(id, force: true)
+            case .collection(let id) where keys.contains(.collection(id)): await loadCollection(id, force: true)
+            case .person(let h) where keys.contains(.person(h)): await loadPerson(h, force: true)
+            case .publicCollection(let h, let id) where keys.contains(.publicCollection(AppStore.publicKey(handle: h, id: id))):
+                await loadPublicCollection(handle: h, id: id, force: true)
+            case .recap where keys.contains(.recap): await loadRecap()
+            default: break
+            }
+            return
+        }
+        switch tab {
+        case .feed where keys.contains(.feed): await loadFeed(force: true)
+        case .discover where keys.contains(.discover): await loadDiscover(force: true)
+        case .collections where keys.contains(.library): await retryLibraryTitles()
+        default: break
         }
     }
 
@@ -289,15 +365,34 @@ final class AppStore {
         if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
-    /// Fetches the titles we don't know yet (`GET /titles?ids=`), ≤ 50 per call.
-    func hydrateTitles(_ ids: some Sequence<String>) async {
+    /// Fetches the titles we don't know yet (`GET /titles?ids=`), ≤ 50 per call. A failure is
+    /// recorded on `key` (the screen that needed them) so it says "incompleto · Reintentar"
+    /// instead of drawing an empty shelf as if it were the truth.
+    @discardableResult
+    func hydrateTitles(_ ids: some Sequence<String>, for key: LoadKey) async -> Bool {
         let missing = Array(Set(ids.filter { titles[$0] == nil && ExternalRef.parse(localID: $0) == nil }))
-        guard !missing.isEmpty else { return }
+        guard !missing.isEmpty else { return true }
         do {
+            #if DEBUG
+            if debugFailHydrate { throw KuraAPIError.server("hydrate simulado (-kuraFailHydrate)") }
+            #endif
             for t in try await api.titles(ids: missing) { register(t) }
+            return true
         } catch {
-            noteError(error)
+            fail(key, error)
+            return false
         }
+    }
+
+    /// Titles of your library that `GET /titles?ids=` couldn't bring at launch.
+    var libraryIncomplete: Bool {
+        loadState == .loaded && collections.contains { c in c.titleIDs.contains { titles[$0] == nil && ExternalRef.parse(localID: $0) == nil } }
+    }
+
+    /// Reintentar on a launch whose library arrived but whose titles didn't.
+    func retryLibraryTitles() async {
+        loadErrors[.library] = nil
+        if await hydrateTitles(collections.flatMap(\.titleIDs), for: .library) { online() }
     }
 
     // MARK: Errors
@@ -318,17 +413,36 @@ final class AppStore {
 
     private func online() { if offline { offline = false } }
 
+    func loadError(_ key: LoadKey) -> KuraAPIError? { loadErrors[key] }
+
+    /// Records a failed read for its screen (not 404/401/cancel, which have their own shapes).
+    @discardableResult
+    private func fail(_ key: LoadKey, _ error: Error) -> KuraAPIError {
+        let e = noteError(error)
+        switch e {
+        case .cancelled, .unauthorized, .notFound: break
+        default: loadErrors[key] = e
+        }
+        return e
+    }
+
+    private func loaded(_ key: LoadKey) {
+        if loadErrors[key] != nil { loadErrors[key] = nil }
+        online()
+    }
+
     // MARK: Loading
 
     func bootstrap(emptyLibrary: Bool = false, keepLoading: Bool = false) async {
         loadState = .loading
+        loadErrors[.library] = nil
         do {
             async let m = api.me()
             async let cols = api.collections()
             async let states = api.myTitles()
             async let fol = api.people(kind: .following, cursor: nil)
             let (account, library, myStates, followingPage) = try await (m, cols, states, fol)
-            online()
+            loaded(.library)
             for p in followingPage.items { register(p) }
             following = Set(followingPage.items.map(\.id)).union(following)
             var merged = myStates
@@ -344,15 +458,25 @@ final class AppStore {
                 lastUsedCollectionID = collections.first(where: \.pinned)?.id
             }
             applyMe(account)
-            await hydrateTitles(collections.flatMap(\.titleIDs) + [account.featuredTitleID].compactMap { $0 })
+            await hydrateTitles(collections.flatMap(\.titleIDs) + [account.featuredTitleID].compactMap { $0 }, for: .library)
             if me.hexes.isEmpty, let id = me.featuredTitleID, let t = titles[id] { me.hexes = t.palette }
             if !keepLoading { loadState = .loaded }
         } catch {
-            let e = noteError(error)
-            guard e != .unauthorized else { return }
-            showToast(ToastModel(text: "No se pudo cargar", kind: .retry) { [weak self] in
-                Task { await self?.bootstrap() }
-            })
+            // The launch failed (offline, 5xx): the collections tab shows the error with
+            // Reintentar instead of a skeleton that never ends. 401 already went to the entrance.
+            let e = fail(.library, error)
+            if e == .unauthorized { return }
+            if e == .cancelled {
+                // The task went away mid-launch: never leave the skeleton up for good. Let the
+                // next appearance start over, and meanwhile show Reintentar.
+                didBootstrap = false
+                guard phase == .main else { return }
+                loadErrors[.library] = .server("cancelado")
+                loadState = .failed
+                return
+            }
+            if loadErrors[.library] == nil { loadErrors[.library] = e }
+            loadState = .failed
         }
     }
 
@@ -361,7 +485,7 @@ final class AppStore {
         guard force || !loadedCollections.contains(id), pendingCollections[id] == nil else { return }
         do {
             let d = try await api.collection(id: id)
-            online()
+            loaded(.collection(id))
             for t in d.titles { register(t) }
             for (tid, s) in d.states where inflight[tid, default: 0] == 0 {
                 var merged = s
@@ -380,7 +504,7 @@ final class AppStore {
             }
             loadedCollections.insert(id)
         } catch {
-            let e = noteError(error)
+            let e = fail(.collection(id), error)
             if case .notFound = e { collections.removeAll { $0.id == id } }
         }
     }
@@ -393,7 +517,8 @@ final class AppStore {
         defer { loadingTitles.remove(id) }
         do {
             let d = try await api.title(id: id)
-            online()
+            loaded(.title(id))
+            loadErrors[.moreReviews(id)] = nil
             register(d.title)
             if inflight[id, default: 0] == 0 {
                 if let s = d.state {
@@ -409,15 +534,39 @@ final class AppStore {
             for r in d.reviews { if let a = r.author { register(a) } }
             reviews.removeAll { $0.titleID == id && !(inflight[id, default: 0] > 0 && $0.authorID == me.id) }
             reviews.append(contentsOf: d.reviews.filter { r in !reviews.contains { $0.id == r.id } })
+            reviewCursors[id] = d.reviewsCursor
             missingTitles.remove(id)
-            unavailableTitles.remove(id)
             loadedTitles.insert(id)
         } catch {
-            let e = noteError(error)
-            switch e {
-            case .notFound: missingTitles.insert(id)
-            case .unavailable, .offline, .server: unavailableTitles.insert(id)
-            default: break
+            let e = fail(.title(id), error)
+            if case .notFound = e { missingTitles.insert(id) }
+        }
+    }
+
+    /// "Más reseñas": `GET /titles/{id}/reviews?cursor=` after `reviewCursors[id]` (pages of 10;
+    /// your own review never comes back here — it's pinned in the ficha).
+    func loadMoreReviews(_ id: String) async {
+        guard let cursor = reviewCursors[id], !reviewsPaging.contains(id) else { return }
+        reviewsPaging.insert(id)
+        defer { reviewsPaging.remove(id) }
+        do {
+            let page = try await api.moreReviews(titleID: id, cursor: cursor)
+            loaded(.moreReviews(id))
+            for r in page.items { if let a = r.author { register(a) } }
+            reviews.append(contentsOf: page.items.filter { r in !reviews.contains { $0.id == r.id } })
+            reviewCursors[id] = page.nextCursor
+        } catch {
+            switch fail(.moreReviews(id), error) {
+            case .notFound:
+                // The title itself is gone: nothing more to page.
+                reviewCursors[id] = nil
+            case .invalid:
+                // The server rejected the cursor: retrying it would loop. Start over from the ficha.
+                reviewCursors[id] = nil
+                loadErrors[.moreReviews(id)] = nil
+                await loadTitle(id, force: true)
+            default:
+                break // keeps the button; the ficha says it failed
             }
         }
     }
@@ -426,6 +575,7 @@ final class AppStore {
     func loadFeed(force: Bool = false) async {
         guard force || !feedLoaded, !feedLoading else { return }
         feedLoading = true
+        loadErrors[.feed] = nil
         defer { feedLoading = false }
         do {
             async let page = api.feed(cursor: nil)
@@ -435,34 +585,38 @@ final class AppStore {
             if let s = try await sug {
                 events.insert(ingest(s), at: min(3, events.count))
             }
-            online()
+            loaded(.feed)
+            loadErrors[.feedMore] = nil
             var ids: [String] = []
             for e in events {
                 if let id = e.titleID { ids.append(id) }
                 if case .burst(_, let more) = e.kind { ids += more }
                 if case .suggestion(_, _, _, let more) = e.kind { ids += more }
             }
-            await hydrateTitles(ids)
+            await hydrateTitles(ids, for: .feed)
             feed = events
             feedLoaded = true
             feedFollowingKey = following
         } catch {
-            noteError(error)
+            fail(.feed, error)
         }
     }
 
-    func loadMoreFeed() async {
-        guard let cursor = feedCursor, !feedLoading else { return }
+    /// Next page when the stack nears its end. A failure doesn't retry on its own
+    /// (every card appearing would hammer the API): the end of the stack offers Reintentar.
+    func loadMoreFeed(retry: Bool = false) async {
+        guard let cursor = feedCursor, !feedLoading, retry || loadErrors[.feedMore] == nil else { return }
         feedLoading = true
         defer { feedLoading = false }
         do {
             let page = try await api.feed(cursor: cursor)
+            loaded(.feedMore)
             let events = page.items.map(ingest)
             feedCursor = page.nextCursor
-            await hydrateTitles(events.compactMap(\.titleID))
+            await hydrateTitles(events.compactMap(\.titleID), for: .feedMore)
             feed += events.filter { e in !feed.contains { $0.id == e.id } }
         } catch {
-            noteError(error)
+            fail(.feedMore, error)
         }
     }
 
@@ -486,11 +640,11 @@ final class AppStore {
         defer { discoverLoading = false }
         do {
             let d = try await api.discover()
-            online()
+            loaded(.discover)
             for t in d.allTitles { register(t) }
             discover = d
         } catch {
-            noteError(error)
+            fail(.discover, error)
         }
     }
 
@@ -535,14 +689,38 @@ final class AppStore {
         defer { loadingPeople.remove(handle) }
         do {
             let p = try await api.person(handle: handle)
-            online()
+            loaded(.person(handle))
             register(p)
-            await hydrateTitles(p.obsessions + p.common + p.collections.flatMap(\.titleIDs) + [p.featuredTitleID].compactMap { $0 })
+            await hydrateTitles(p.obsessions + p.common + p.collections.flatMap(\.titleIDs) + [p.featuredTitleID].compactMap { $0 },
+                                for: .person(handle))
             missingPeople.remove(handle)
             loadedPeople.insert(handle)
         } catch {
-            let e = noteError(error)
+            let e = fail(.person(handle), error)
             if case .notFound = e { missingPeople.insert(handle) }
+        }
+    }
+
+    static func publicKey(handle: String, id: String) -> String { "\(handle)|\(id)" }
+
+    /// `GET /people/{handle}/collections/{id}` — read-only. 404 for private and
+    /// nonexistent alike (the screen never says which). The owner's `states` stay
+    /// with the collection; they never touch your `userTitles`.
+    func loadPublicCollection(handle: String, id: String, force: Bool = false) async {
+        let key = AppStore.publicKey(handle: handle, id: id)
+        guard force || publicCollections[key] == nil else { return }
+        do {
+            let d = try await api.personCollection(handle: handle, id: id)
+            loaded(.publicCollection(key))
+            for t in d.titles { register(t) }
+            missingPublicCollections.remove(key)
+            publicCollections[key] = d
+        } catch {
+            let e = fail(.publicCollection(key), error)
+            if case .notFound = e {
+                missingPublicCollections.insert(key)
+                publicCollections[key] = nil
+            }
         }
     }
 
@@ -564,23 +742,11 @@ final class AppStore {
             } else {
                 items = []
             }
-            online()
+            loaded(.peopleList(key))
             for p in items { register(p) }
             peopleLists[key] = items
         } catch {
-            noteError(error)
-        }
-    }
-
-    func loadSuggestions() async {
-        let key = "suggestions"
-        guard peopleLists[key] == nil else { return }
-        do {
-            let page = try await api.people(kind: .suggestions, cursor: nil)
-            for p in page.items { register(p) }
-            peopleLists[key] = page.items
-        } catch {
-            noteError(error)
+            fail(.peopleList(key), error)
         }
     }
 
@@ -592,27 +758,39 @@ final class AppStore {
         defer { recapLoading = false }
         do {
             if recapMonths == nil { recapMonths = try await api.recapMonths() }
+            loaded(.recap)
             guard let target = era ?? recapMonths?.first?.era else { return }
             if recaps[target] == nil {
                 let r = try await api.recap(era: target)
-                online()
+                loaded(.recap)
                 if let t = r.top { register(t) }
                 for t in r.also { register(t) }
                 recaps[target] = r
             }
         } catch {
-            noteError(error)
+            fail(.recap, error)
         }
     }
 
     var currentRecap: RecapPayload? { recapMonths?.first.flatMap { recaps[$0.era] } }
 
     /// "recap de agosto" — the newest month, or the previous calendar month before it loads.
-    var recapButtonLabel: String {
-        if let m = recapMonths?.first { return "recap de \(m.label.split(separator: " ").first ?? "")" }
-        let names = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-        let m = cal.component(.month, from: now)
-        return "recap de \(names[(m + 10) % 12])"
+    /// "recap de septiembre" once the months arrive; "tu recap" before; nil (no button)
+    /// when there's no month with activity yet.
+    var recapButtonLabel: String? {
+        guard let months = recapMonths else { return "tu recap" }
+        guard let m = months.first else { return nil }
+        return "recap de \(m.label.split(separator: " ").first ?? "")"
+    }
+
+    /// `GET /recap/months` alone (the profile button); the month itself loads in the recap.
+    func loadRecapMonths() async {
+        guard recapMonths == nil, !recapLoading else { return }
+        do {
+            recapMonths = try await api.recapMonths()
+        } catch {
+            noteError(error) // the button keeps "tu recap"; the recap screen has its own error state
+        }
     }
 
     // MARK: Lookups
@@ -1076,9 +1254,10 @@ final class AppStore {
 
     private func syncAdd(_ titleID: String, to collectionID: String) {
         sync(titleID: titleID) { [weak self] api in
-            let cid = try await self?.resolveCollectionID(collectionID) ?? collectionID
+            let store = self
+            let cid = try await store?.resolveCollectionID(collectionID) ?? collectionID
             let r = try await api.createTitleMembership(collectionID: cid, ref: TitleRef.from(localID: titleID))
-            await MainActor.run { self?.absorb(r, localID: titleID) }
+            await MainActor.run { store?.absorb(r, localID: titleID) }
         }
     }
 
@@ -1252,11 +1431,15 @@ final class AppStore {
             }
             return false
         }) { [weak self] api in
+            let store = self
             let s = try await api.setMark(titleID: titleID, mark: mark, preview: preview)
             await MainActor.run {
-                guard let self, self.userTitles[titleID]?.mark == mark else { return }
+                guard let self = store, self.userTitles[titleID]?.mark == mark else { return }
                 if let rid = s.reviewID { self.userTitles[titleID]?.reviewID = rid }
                 self.userTitles[titleID]?.savedAt = s.savedAt
+                // The ficha's "obsesionados / completos" are server aggregates (formatted "12,4 k"):
+                // re-read them instead of guessing +1/−1.
+                if self.loadedTitles.contains(titleID) { Task { await self.loadTitle(titleID, force: true) } }
             }
         }
     }
@@ -1280,9 +1463,10 @@ final class AppStore {
             localID = r.id
         }
         sync(titleID: titleID) { [weak self] api in
+            let store = self
             let saved = try await api.saveReview(titleID: titleID, body: trimmed, hasSpoiler: spoiler)
             await MainActor.run {
-                guard let self, let i = self.reviews.firstIndex(where: { $0.id == localID }) else { return }
+                guard let self = store, let i = self.reviews.firstIndex(where: { $0.id == localID }) else { return }
                 var r = saved
                 r.author = nil
                 let merged = Review(id: saved.id, authorID: self.me.id, titleID: titleID, text: self.reviews[i].text,
@@ -1416,9 +1600,11 @@ final class AppStore {
         let newHandle = cleanHandle.isEmpty ? oldHandle : cleanHandle
         let handleChanged = newHandle != oldHandle
         if handleChanged {
+            let avatar = updated.avatarURL
             updated = Person(handle: newHandle, name: updated.name, initials: updated.initials, hexes: updated.hexes,
                              featuredTitleID: updated.featuredTitleID, isPrivate: updated.isPrivate,
                              followers: updated.followers, followingCount: updated.followingCount, stats: updated.stats)
+            updated.avatarURL = avatar
             people[oldHandle] = nil
         }
         me = updated
@@ -1433,11 +1619,61 @@ final class AppStore {
                 self?.showToast(ToastModel(text: "@\(newHandle) ya está tomado", kind: .info))
                 return true
             }) { [weak self] api in
+                let store = self
                 let m = try await api.claimUsername(newHandle)
-                await MainActor.run { self?.account = m }
+                await MainActor.run { store?.account = m }
             }
         }
         showToast(ToastModel(text: "Perfil actualizado", kind: .info))
+    }
+
+    /// 20f · Cambiar foto: square crop + 512 px + JPEG on the device (the server only
+    /// re-checks size and sniffs magic bytes, AGENTS.md F3.11), then `PUT /me/avatar`.
+    func uploadAvatar(_ picked: UIImage) async {
+        guard !avatarBusy else { return }
+        guard let (data, preview) = AvatarEncoder.encode(picked) else {
+            showToast(ToastModel(text: "Esa imagen no se pudo leer. Prueba con otra.", kind: .info))
+            return
+        }
+        avatarBusy = true
+        defer { avatarBusy = false }
+        do {
+            let m = try await api.uploadAvatar(data, contentType: "image/jpeg")
+            if let url = m.avatarURL { AvatarStore.shared.prime(url, preview) }
+            adoptAvatar(from: m)
+            online()
+            showToast(ToastModel(text: "Foto actualizada", kind: .info))
+        } catch {
+            let e = noteError(error)
+            guard e != .unauthorized, e != .cancelled else { return }
+            let text: String
+            if case .invalid(_, let m) = e, !m.isEmpty { text = m } else { text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto" }
+            showToast(ToastModel(text: text, kind: .retry) { [weak self] in
+                Task { await self?.uploadAvatar(picked) }
+            })
+        }
+    }
+
+    /// Only the photo changes: `applyMe` would replace `me` whole and undo a featured
+    /// obsession / tint chosen locally or a name PATCH still in flight.
+    private func adoptAvatar(from m: Me) {
+        account = m
+        me.avatarURL = m.avatarURL
+        if !me.id.isEmpty { people[me.id]?.avatarURL = m.avatarURL }
+    }
+
+    func removeAvatar() async {
+        guard !avatarBusy, me.avatarURL != nil else { return }
+        avatarBusy = true
+        defer { avatarBusy = false }
+        do {
+            adoptAvatar(from: try await api.deleteAvatar())
+            showToast(ToastModel(text: "Foto quitada", kind: .info))
+        } catch {
+            let e = noteError(error)
+            guard e != .unauthorized, e != .cancelled else { return }
+            showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
+        }
     }
 
     /// C3 · the second irreversible action (typing your @ confirms it).
@@ -1606,14 +1842,16 @@ final class AppStore {
         }
     }
 
-    func loadOnboardingPeople() async {
-        guard onboardingPeople.isEmpty else { return }
+    func loadOnboardingPeople(force: Bool = false) async {
+        guard force || !onboardingPeopleLoaded else { return }
         do {
             let list = try await api.onboardingPeople()
+            loaded(.onboardingPeople)
             for p in list { register(p) }
             onboardingPeople = list
+            onboardingPeopleLoaded = true
         } catch {
-            noteError(error)
+            fail(.onboardingPeople, error)
         }
     }
 
@@ -1696,6 +1934,12 @@ final class AppStore {
         onboardingPicks = []
         onboardingGrid = []
         onboardingPeople = []
+        onboardingPeopleLoaded = false
+        loadErrors = [:]
+        reviewCursors = [:]
+        publicCollections = [:]
+        missingPublicCollections = []
+        AvatarStore.shared.clear()
         recapMonths = nil
         recaps = [:]
         requested = []
@@ -1783,5 +2027,33 @@ private extension KuraAPIError {
         case .conflict(_, let m): return m.isEmpty ? "No se pudo completar." : m
         default: return "No se pudo entrar. Inténtalo de nuevo."
         }
+    }
+}
+
+/// The on-device half of F3.11: center square crop, 512 px, JPEG under the
+/// server's 400 KB cap (`AVATAR_MAX_BYTES`). Returns the bytes and the decoded
+/// preview (to seed `AvatarStore` so the new photo shows without a round trip).
+enum AvatarEncoder {
+    static let side: CGFloat = 512
+    static let maxBytes = 400 * 1024
+
+    static func encode(_ image: UIImage) -> (Data, UIImage)? {
+        let px = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        guard px.width > 0, px.height > 0 else { return nil }
+        let crop = min(px.width, px.height)
+        let target = min(side, crop)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let out = UIGraphicsImageRenderer(size: CGSize(width: target, height: target), format: format).image { _ in
+            // Scale so the short side fills `target`, centered (draw() honors the orientation).
+            let k = target / crop
+            let w = px.width * k, h = px.height * k
+            image.draw(in: CGRect(x: (target - w) / 2, y: (target - h) / 2, width: w, height: h))
+        }
+        for q in [0.85, 0.75, 0.6, 0.45] {
+            if let d = out.jpegData(compressionQuality: q), d.count <= maxBytes { return (d, out) }
+        }
+        return nil
     }
 }

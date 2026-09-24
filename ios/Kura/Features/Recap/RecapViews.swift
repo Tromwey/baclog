@@ -26,6 +26,8 @@ struct RecapView: View {
                 EmptyRecapView()
             } else if let r = store.currentRecap, let top = r.top {
                 content(r, top: top)
+            } else if !store.recapLoading, let e = store.loadError(.recap) {
+                LoadErrorScreen(error: e) { Task { await store.loadRecap() } }
             } else if store.recapMonths != nil && !store.recapLoading {
                 EmptyRecapView()
             } else {
@@ -53,7 +55,7 @@ struct RecapView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Lo más tuyo").monoLabel(11, tracking: 0.1)
                             Text(top.name).font(.kura.newsItalic(26)).foregroundStyle(KColor.text)
-                            Text(top.lowerCreator).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                            if let c = top.lowerCreator { Text(c).font(.kura.ui(14)).foregroundStyle(KColor.text2) }
                         }
                     }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 18) {

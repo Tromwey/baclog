@@ -13,6 +13,8 @@ struct PersonProfileView: View {
             } else if store.missingPeople.contains(personID) {
                 // Private and nonexistent are the same 404 (API.md §3): never say which.
                 GoneView(title: "@\(personID) no está disponible.", note: "El perfil es privado o ya no existe.")
+            } else if let e = store.loadError(.person(personID)) {
+                LoadErrorScreen(error: e) { Task { await store.loadPerson(personID, force: true) } }
             } else {
                 LoadingScreen(square: true)
             }
@@ -33,6 +35,14 @@ struct PersonProfileView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     header(p, following: following, locked: locked)
+                    if let e = store.loadError(.person(p.id)) {
+                        // What's on screen came from a list (counts 0, no collections): say it's partial.
+                        RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar todo el perfil.") {
+                            Task { await store.loadPerson(p.id, force: true) }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                    }
                     if locked {
                         LockedCollections(firstName: firstName(p))
                             .padding(.top, 10)
@@ -173,7 +183,7 @@ struct PersonProfileView: View {
                     let visible = p.collections.filter { $0.privacy == .publicAccess || following }
                     let hidden = p.collections.count - visible.count
                     VStack(spacing: 12) {
-                        ForEach(visible) { pc in PersonCollectionCard(collection: pc, coverHeight: 104) }
+                        ForEach(visible) { pc in PersonCollectionCard(collection: pc, ownerHandle: p.handle, coverHeight: 104) }
                         if hidden > 0 {
                             FollowersOnlyCard(count: hidden, note: "Síguela para verla.").padding(.horizontal, 12)
                         }
@@ -188,15 +198,29 @@ struct PersonProfileView: View {
 struct PersonCollectionCard: View {
     @Environment(AppStore.self) private var store
     let collection: PersonCollection
+    var ownerHandle: String = ""
     var coverHeight: CGFloat = 104
 
     var body: some View {
         let titles = collection.titleIDs.compactMap { store.title($0) }
         let c = KCollection(id: "p-\(collection.name)", name: collection.name, titleIDs: collection.titleIDs,
                             privacy: collection.privacy, createdAt: .distantPast)
-        CollectionCard(collection: c, titles: titles, marks: [:], palette: titles.first?.palette,
-                       coverHeight: coverHeight, spineSize: 11,
-                       onTap: {}, onTitleTap: { store.push(.title($0.id)) })
+        let cover = collection.coverTitleID.flatMap { store.title($0) } ?? titles.first
+        // With a backend id the whole card opens the collection (like your own cards);
+        // without one (mock people) the covers open each ficha.
+        if let id = collection.remoteID, !ownerHandle.isEmpty {
+            CollectionCard(collection: c, titles: titles, marks: [:], palette: cover?.palette,
+                           coverHeight: coverHeight, spineSize: 11,
+                           onTap: { store.push(.publicCollection(handle: ownerHandle, id: id)) })
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(collection.name), \(titles.count) títulos")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { store.push(.publicCollection(handle: ownerHandle, id: id)) }
+        } else {
+            CollectionCard(collection: c, titles: titles, marks: [:], palette: cover?.palette,
+                           coverHeight: coverHeight, spineSize: 11,
+                           onTap: {}, onTitleTap: { store.push(.title($0.id)) })
+        }
     }
 }
 
@@ -360,7 +384,12 @@ struct FollowersView: View {
                 .background(KColor.glassBg, in: Capsule())
                 SearchPill(placeholder: "Buscar", text: $query)
                 VStack(alignment: .leading, spacing: 0) {
-                    if loaded == nil {
+                    if loaded == nil, let e = store.loadError(.peopleList(key)) {
+                        LoadErrorBlock(error: e, titleSize: 24) {
+                            Task { await store.loadPeopleList(of: personID, following: showFollowing) }
+                        }
+                        .padding(.top, 12)
+                    } else if loaded == nil {
                         ForEach(0..<4, id: \.self) { _ in
                             HStack(spacing: 14) {
                                 Skeleton(radius: 999).frame(width: 48, height: 48)

@@ -123,13 +123,13 @@ struct AddTitlesSheet: View {
     /// Same creators / formats as what the collection already has, not yet in it.
     private func suggestions(_ c: KCollection) -> [Title] {
         let inside = store.titles(in: c)
-        let creators = Set(inside.map(\.creator))
+        let creators = Set(inside.compactMap(\.creator))
         let formats = Set(inside.map(\.format))
         let pool = store.catalogOrder.compactMap { store.title($0) }
             .filter { format == nil || $0.format == format }
         let scored = pool.map { t -> (Title, Int) in
             var s = 0
-            if creators.contains(t.creator) { s += 2 }
+            if let cr = t.creator, creators.contains(cr) { s += 2 }
             if formats.contains(t.format) { s += 1 }
             if c.titleIDs.contains(t.id) { s -= 1 }
             return (t, s)
@@ -178,7 +178,7 @@ struct AddTitlesSheet: View {
     private func meta(_ t: Title) -> String {
         var parts = [t.format.metaLabel]
         if let y = t.year { parts.append(String(y)) }
-        parts.append(t.creator)
+        if let cr = t.creator { parts.append(cr) }
         return parts.joined(separator: " · ")
     }
 

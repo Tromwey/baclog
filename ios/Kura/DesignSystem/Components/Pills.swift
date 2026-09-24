@@ -49,12 +49,15 @@ struct Seal: View {
     var body: some View {
         let colors = Seal.colors(for: person)
         Text(person.initials.lowercased())
-            .font(.kura.newsMediumItalic(size * 0.42))
+            .font(.kura.newsMediumItalic(size * 0.42, fixed: true))
             .tracking(-size * 0.42 * 0.035)
             .foregroundStyle(colors.1)
             .padding(.trailing, size * 0.42 * 0.04)
             .frame(width: size, height: size)
             .background(colors.0, in: Circle())
+            // The profile photo, when there is one, covers the initials; if it
+            // can't load (private, gone, offline) the seal stays. No border, no glow.
+            .overlay { if let url = person.avatarURL { AvatarPhoto(url: url, size: size) } }
             .accessibilityHidden(true)
     }
 

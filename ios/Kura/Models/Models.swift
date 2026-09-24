@@ -88,6 +88,9 @@ enum KuraRuntime {
     nonisolated(unsafe) static var usesMock = false
     /// Origin of `KURA_API_BASE` (no `/api/v1`): relative `avatarUrl`s resolve against it.
     nonisolated(unsafe) static var apiOrigin: URL?
+    /// The session's bearer, for requests outside `APIClient` (profile photos on
+    /// `/api/avatar`, which serve a private account's photo only to its owner).
+    nonisolated(unsafe) static var bearer: @Sendable () -> String? = { nil }
 
     /// `avatarUrl` may come relative (`/api/avatar/{key}`).
     static func resolve(_ raw: String?) -> URL? {
@@ -325,7 +328,9 @@ struct Title: Identifiable, Hashable, Decodable {
     var name: String
     var format: MediaFormat
     var year: Int?
-    var creator: String
+    /// `byline` on the wire (`String | null`): studio/network on video (often null), artist on music.
+    /// Never "" — an empty byline decodes to nil so no "·" is left hanging.
+    var creator: String?
     /// "125 min", "2 temporadas", "18 canciones".
     var detail: String? = nil
     var palette: [String]
@@ -350,12 +355,14 @@ struct Title: Identifiable, Hashable, Decodable {
     var genre: String? = nil
     var seriesStatus: SeriesStatus? = nil
 
-    var lowerCreator: String { creator.lowercased() }
+    var lowerCreator: String? { creator?.lowercased() }
+    /// The creator's last word ("Miyazaki") for tight meta lines; nil when there's no creator.
+    var creatorShort: String? { creator?.split(separator: " ").last.map(String.init) }
     var isExternal: Bool { externalRef != nil }
     /// `GET /titles/{id}` filled the detail fields (summary payloads don't).
     var isDetailed: Bool { synopsis != nil || counts != nil || !watch.isEmpty || !tracks.isEmpty }
 
-    init(id: String, name: String, format: MediaFormat, year: Int? = nil, creator: String, detail: String? = nil,
+    init(id: String, name: String, format: MediaFormat, year: Int? = nil, creator: String?, detail: String? = nil,
          palette: [String], coverURL: URL? = nil, synopsis: String? = nil, release: Release? = nil,
          upcomingSeason: Int? = nil, tracks: [Track] = [], trackCount: Int? = nil, seasons: [Season] = [],
          counts: TitleCounts? = nil, watch: [WatchOption] = [], musicLink: String? = nil,
@@ -380,7 +387,8 @@ struct Title: Identifiable, Hashable, Decodable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? c.decodeIfPresent(String.self, forKey: .title) ?? ""
         format = try c.decodeIfPresent(MediaFormat.self, forKey: .format) ?? .film
         year = try c.decodeIfPresent(Int.self, forKey: .year)
-        creator = try c.decodeIfPresent(String.self, forKey: .creator) ?? c.decodeIfPresent(String.self, forKey: .byline) ?? ""
+        let byline = try c.decodeIfPresent(String.self, forKey: .creator) ?? c.decodeIfPresent(String.self, forKey: .byline)
+        creator = byline.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         detail = try c.decodeIfPresent(String.self, forKey: .detail)
         palette = try c.decodeIfPresent([String].self, forKey: .palette) ?? []
         coverURL = try c.decodeIfPresent(String.self, forKey: .coverUrl).flatMap(URL.init(string:))
@@ -1044,6 +1052,21 @@ struct CollectionDetail: Decodable {
     }
 }
 
+/// `{ items: [Review], nextCursor }` — the reviews block of `GET /titles/{id}`
+/// and the page of "más reseñas" (`GET /titles/{id}/reviews?cursor=`).
+struct ReviewPage: Decodable {
+    var items: [Review]
+    var nextCursor: String?
+    init(items: [Review], nextCursor: String? = nil) { self.items = items; self.nextCursor = nextCursor }
+    init(from decoder: Decoder) throws {
+        if let list = try? decoder.singleValueContainer().decode([Review].self) { items = list; nextCursor = nil; return }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        items = try c.decode([Review].self, forKey: .items)
+        nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+    private enum CodingKeys: String, CodingKey { case items, nextCursor }
+}
+
 /// `GET /titles/{id}`.
 struct TitleDetail: Decodable {
     var title: Title
@@ -1058,17 +1081,6 @@ struct TitleDetail: Decodable {
     }
 
     private enum CodingKeys: String, CodingKey { case title, state, following, reviews, collections }
-    private struct ReviewPage: Decodable {
-        let items: [Review]
-        let nextCursor: String?
-        init(from decoder: Decoder) throws {
-            if let list = try? decoder.singleValueContainer().decode([Review].self) { items = list; nextCursor = nil; return }
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decodeIfPresent([Review].self, forKey: .items) ?? []
-            nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
-        }
-        private enum CodingKeys: String, CodingKey { case items, nextCursor }
-    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1265,6 +1277,8 @@ enum Route: Hashable {
     case changeCover(String)
     case automatic
     case person(String)
+    /// Someone else's public collection (`GET /people/{handle}/collections/{id}`), read-only.
+    case publicCollection(handle: String, id: String)
     case followers(String, showFollowing: Bool)
     case creator(String)
     case notifications
