@@ -22,7 +22,12 @@ export { apiContext } from "./api-context";
  * Revocation is the same as the web's JWT cookie: `requireApiUser` re-reads
  * the user row on EVERY request (`loadUserById`, the same field list the
  * cookie session uses — never `birthYear`), so a deleted account or a blocked
- * minor is a 401 on the next call even with a valid signature.
+ * minor is a 401 on the next call even with a valid signature. What does NOT
+ * exist yet is per-token revocation: `auth/refresh` only issues a new token
+ * when the current one is inside its last 7 days (otherwise it hands the
+ * same one back), and an old token stays valid until its own `exp`. Real
+ * revocation (a `users.token_version` claim checked here, bumped on logout
+ * / password-less "sign out everywhere") is phase 4 (ios/API.md §2.1).
  *
  * The user comes from the token and ONLY the token. No handler ever accepts
  * a userId in a body, query or path. `withApi` runs the handler inside
@@ -82,7 +87,7 @@ export const API_MESSAGES: Record<ApiErrorCode, string> = {
 
 export interface ApiErrorExtra {
   /** Sub-code for a `forbidden`/`conflict` the app branches on
-   *  ("underage", "not_released", "reaction_required"). */
+   *  ("underage" · "not_released", "reaction_required", "taken"). */
   reason?: string;
   /** `invalid` only: field → message. */
   fields?: Record<string, string>;
@@ -149,20 +154,40 @@ export function apiError(
 }
 
 /** Maps anything a handler can throw onto the contract. Unknown → 500 + log. */
-export function errorToResponse(err: unknown): Response {
+export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   if (err instanceof ApiError) return apiError(err.code, err.message, err.extra);
   if (err instanceof UnauthorizedError) return apiError("unauthorized");
   if (err instanceof NotFoundError) return apiError("not_found");
   if (err instanceof ZodError) {
     const fields: Record<string, string> = {};
     for (const issue of err.issues) {
-      const key = issue.path.map(String).join(".") || "_";
+      // A scalar at the root (a body that isn't an object) has no path.
+      const key = issue.path.map(String).join(".") || "body";
       if (!(key in fields)) fields[key] = issue.message;
     }
     return apiError("invalid", API_MESSAGES.invalid, { fields });
   }
-  console.error("[api/v1] unhandled error:", err);
+  // Anything else is a bug. The line carries what a log search needs to
+  // find this request again (rid = the X-Request-Id the client saw), and
+  // the user id so the founder can reach out — never the token.
+  console.error(
+    `[api/v1] 500 ${JSON.stringify({
+      rid: meta?.rid ?? null,
+      method: meta?.method ?? null,
+      path: meta?.path ?? null,
+      userId: meta?.userId ?? null,
+    })}`,
+    err,
+  );
   return apiError("internal");
+}
+
+/** What `errorToResponse` logs beside a 500. */
+export interface RequestMeta {
+  rid: string;
+  method: string;
+  path: string;
+  userId?: string | null;
 }
 
 // ---------- bearer tokens ----------
@@ -170,8 +195,21 @@ export function errorToResponse(err: unknown): Response {
 export const MOBILE_TOKEN_AUDIENCE = "kura-ios";
 const MOBILE_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
+/** HS256 wants ≥ 256 bits of key. A shorter AUTH_SECRET still signs (the
+ *  web must not fall over for it — the DB is shared and the prod value is
+ *  not ours to know here), but it is said ONCE in the log so it gets fixed. */
+let warnedShortSecret = false;
+const MIN_SECRET_CHARS = 32;
+
 function secretKey(): Uint8Array {
-  return new TextEncoder().encode(env.AUTH_SECRET);
+  const secret = env.AUTH_SECRET;
+  if (!warnedShortSecret && secret.length < MIN_SECRET_CHARS) {
+    warnedShortSecret = true;
+    console.warn(
+      `[api/v1] AUTH_SECRET tiene ${secret.length} caracteres; HS256 quiere al menos ${MIN_SECRET_CHARS}. Rótalo a un valor más largo (openssl rand -base64 32).`,
+    );
+  }
+  return new TextEncoder().encode(secret);
 }
 
 /** A fresh 30-day bearer for `userId` (new `jti` every call — refresh rotates it). */
@@ -193,6 +231,12 @@ export interface MobileTokenClaims {
   /** Unix seconds. */
   exp: number;
 }
+
+/** `auth/refresh` rotates only inside this window before `exp`; earlier it
+ *  returns the same token (ios/API.md §2.1: the app refreshes when < 7 days
+ *  remain — the server enforces the same line so a chatty client can't mint
+ *  a fresh 30-day token on every launch). */
+export const MOBILE_TOKEN_REFRESH_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 
 /**
  * Signature + algorithm + audience + expiry, nothing else (the user row is
@@ -222,16 +266,34 @@ function bearerOf(request: Request): string | null {
   return match ? match[1] : null;
 }
 
+/** The bearer as `withApi` hands it to a handler: the raw token (so
+ *  `auth/refresh` can return the same one) and its verified claims. */
+export interface ApiBearer {
+  token: string;
+  claims: MobileTokenClaims;
+}
+
+/**
+ * Step 1 of the gate — signature, algorithm, audience, expiry; NO database.
+ * Throws `UnauthorizedError` on any failure. Split from the user re-read so
+ * the rate limiter can key on the verified `sub` BEFORE the first query: an
+ * attacker with a real token can't turn the limiter's own lookup into load.
+ */
+export async function requireBearer(request: Request): Promise<ApiBearer> {
+  const token = bearerOf(request);
+  if (!token) throw new UnauthorizedError();
+  const claims = await verifyMobileToken(token);
+  if (!claims) throw new UnauthorizedError();
+  return { token, claims };
+}
+
 /**
  * The v1 gate. Same `CurrentUser` as `requireUser()`; throws
  * `UnauthorizedError` (→ 401 via `withApi`) on any failure: no header, bad
  * signature, wrong `aud`, expired, user row gone, or `isMinor`.
  */
 export async function requireApiUser(request: Request): Promise<CurrentUser> {
-  const token = bearerOf(request);
-  if (!token) throw new UnauthorizedError();
-  const claims = await verifyMobileToken(token);
-  if (!claims) throw new UnauthorizedError();
+  const { claims } = await requireBearer(request);
   const user = await loadUserById(claims.sub);
   if (!user) throw new UnauthorizedError();
   return user;
@@ -320,6 +382,10 @@ export type ApiParams = Record<string, string | string[] | undefined>;
 export interface ApiContext<P extends ApiParams = ApiParams> {
   user: CurrentUser;
   params: P;
+  /** The verified bearer this request came in with. */
+  bearer: ApiBearer;
+  /** `X-Request-Id` of this response — for logs the app can quote back. */
+  requestId: string;
 }
 
 export type ApiHandler<P extends ApiParams = ApiParams> = (
@@ -329,7 +395,7 @@ export type ApiHandler<P extends ApiParams = ApiParams> = (
 
 export type PublicApiHandler<P extends ApiParams = ApiParams> = (
   request: NextRequest,
-  ctx: { params: P },
+  ctx: { params: P; requestId: string },
 ) => Promise<Response>;
 
 type RouteHandler<P extends ApiParams> = (
@@ -337,59 +403,96 @@ type RouteHandler<P extends ApiParams> = (
   context: { params: Promise<P> },
 ) => Promise<Response>;
 
+/** Every v1 response — success, error, 429 — carries the request id. */
+function withRequestId(res: Response, rid: string): Response {
+  try {
+    res.headers.set("X-Request-Id", rid);
+    return res;
+  } catch {
+    const headers = new Headers(res.headers);
+    headers.set("X-Request-Id", rid);
+    return new Response(res.body, { status: res.status, headers });
+  }
+}
+
+function pathOf(request: Request): string {
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return request.url;
+  }
+}
+
 /**
  * Bearer-gated wrapper — the ONLY way a v1 handler runs:
- *   1. `requireApiUser` (401 on any failure);
- *   2. rate limit by `sub` (429 with `retryAfterSeconds`);
- *   3. handler inside `apiContext.run({ user })` so existing authz/modules
+ *   1. `requireBearer` — signature/aud/exp, no DB (401 on any failure);
+ *   2. rate limit by the verified `sub` (429 with `retryAfterSeconds`),
+ *      BEFORE the user row is read, so the limiter costs no query;
+ *   3. `loadUserById` — the revocation re-read (401 when gone / minor);
+ *   4. handler inside `apiContext.run({ user })` so existing authz/modules
  *      resolve the same user via `getCurrentUser()`;
- *   4. thrown errors → the §1 contract; `Cache-Control: private, no-store` on
- *      every response, success or not.
+ *   5. thrown errors → the §1 contract; `Cache-Control: private, no-store`
+ *      and `X-Request-Id` on every response, success or not.
  */
 export function withApi<P extends ApiParams = ApiParams>(
   handler: ApiHandler<P>,
 ): RouteHandler<P> {
   return async (request, context) => {
+    const requestId = randomUUID();
+    let userId: string | null = null;
     try {
-      const user = await requireApiUser(request);
-      const rl = checkRateLimit(`u:${user.id}`, limitFor(request.method));
+      const bearer = await requireBearer(request);
+      const rl = checkRateLimit(`u:${bearer.claims.sub}`, limitFor(request.method));
       if (!rl.ok) {
-        return apiError("rate_limited", undefined, {
-          retryAfterSeconds: rl.retryAfterSeconds,
-        });
+        return withRequestId(
+          apiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds }),
+          requestId,
+        );
       }
+      const user = await loadUserById(bearer.claims.sub);
+      if (!user) throw new UnauthorizedError();
+      userId = user.id;
       const params = await context.params;
       const res = await apiContext.run({ user }, () =>
-        handler(request, { user, params }),
+        handler(request, { user, params, bearer, requestId }),
       );
-      return finalizeApiResponse(res);
+      return withRequestId(finalizeApiResponse(res), requestId);
     } catch (err) {
-      return errorToResponse(err);
+      return withRequestId(
+        errorToResponse(err, { rid: requestId, method: request.method, path: pathOf(request), userId }),
+        requestId,
+      );
     }
   };
 }
 
 /**
  * Unauthenticated wrapper for `auth/*` only (OTP request/verify): no bearer,
- * rate limit by client IP (write limit — they're all POSTs), same error
- * contract and cache policy. Nothing else in v1 may use it.
+ * rate limit by client IP BEFORE anything else runs (write limit — they're
+ * all POSTs), same error contract, cache policy and request id. Nothing else
+ * in v1 may use it.
  */
 export function withPublicApi<P extends ApiParams = ApiParams>(
   handler: PublicApiHandler<P>,
 ): RouteHandler<P> {
   return async (request, context) => {
+    const requestId = randomUUID();
     try {
       const rl = checkRateLimit(`ip:${clientIp(request)}`, RATE_LIMIT_WRITES);
       if (!rl.ok) {
-        return apiError("rate_limited", undefined, {
-          retryAfterSeconds: rl.retryAfterSeconds,
-        });
+        return withRequestId(
+          apiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds }),
+          requestId,
+        );
       }
       const params = await context.params;
-      const res = await handler(request, { params });
-      return finalizeApiResponse(res);
+      const res = await handler(request, { params, requestId });
+      return withRequestId(finalizeApiResponse(res), requestId);
     } catch (err) {
-      return errorToResponse(err);
+      return withRequestId(
+        errorToResponse(err, { rid: requestId, method: request.method, path: pathOf(request) }),
+        requestId,
+      );
     }
   };
 }

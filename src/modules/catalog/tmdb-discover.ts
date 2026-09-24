@@ -17,6 +17,10 @@ const IMG = "https://image.tmdb.org/t/p/w342";
  * Same stored shape as `TmdbApi.search` (English titles: the link graph
  * matches soundtracks against the stored title, see `getSpanishOverview`),
  * so a pool tile that gets picked is indistinguishable from a searched one.
+ *
+ * Three answers: rows; `[]` when there is no key (TMDB was not consulted —
+ * the pool fills with albums); `null` when TMDB was asked and failed
+ * (logged), so the caller can tell a dead provider from an empty shelf.
  */
 export interface DiscoverQuery {
   type: "film" | "series";
@@ -40,7 +44,7 @@ interface TmdbDiscoverResult {
   vote_average?: number;
 }
 
-export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[]> {
+export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | null> {
   if (!env.TMDB_API_KEY) return [];
   const kind = q.type === "film" ? "movie" : "tv";
   const url = new URL(`https://api.themoviedb.org/3/discover/${kind}`);
@@ -56,7 +60,7 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[]> {
     const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
     if (!res.ok) {
       console.error(`[catalog] TMDB discover/${kind} failed: ${res.status}`);
-      return [];
+      return null;
     }
     const data = (await res.json()) as { results?: TmdbDiscoverResult[] };
     return (data.results ?? [])
@@ -79,7 +83,7 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[]> {
       }));
   } catch (err) {
     console.error(`[catalog] TMDB discover/${kind} failed:`, err);
-    return [];
+    return null;
   }
 }
 

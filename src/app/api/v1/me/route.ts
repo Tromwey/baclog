@@ -3,8 +3,7 @@ import { withApi } from "@/authz/api";
 import { deleteAccount } from "@/modules/account/delete";
 import { profilePatchSchema, updateProfile } from "@/modules/account/profile";
 import { json, noContent, readJson } from "../_lib/http";
-import { buildMe } from "../_lib/me";
-import { freshMe } from "./_lib/fresh-me";
+import { buildMe, freshMe } from "../_lib/me";
 
 /**
  * GET /api/v1/me → Me (§4 Cuenta).

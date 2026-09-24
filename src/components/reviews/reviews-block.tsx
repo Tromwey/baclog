@@ -115,6 +115,10 @@ export function ReviewsBlock({
         hasSpoiler,
         mark,
         when: "ahora",
+        // Client clock, on purpose: the optimistic copy lives until the
+        // next server read brings the real instants.
+        createdAt: own?.createdAt ?? new Date(),
+        updatedAt: new Date(),
         // Editing does NOT re-publish a review moderation hid (founder,
         // 2026-09-02) — the note on the card says exactly that.
         hidden: own?.hidden ?? false,

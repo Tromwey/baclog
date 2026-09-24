@@ -1,7 +1,8 @@
 import "server-only";
-import type { CurrentUser } from "@/auth/session";
+import { loadUserById, type CurrentUser } from "@/auth/session";
+import { ApiError } from "@/authz/api";
 import { getObsessions, getReactionCounts } from "@/modules/backlog/profile-stats";
-import { profileHexes } from "@/modules/backlog/profile-hexes";
+import { profileTint } from "@/modules/backlog/profile-hexes";
 import { getUserPalette } from "@/modules/backlog/queries";
 import { countOwnReviews } from "@/modules/reviews/queries";
 import { getFollowCounts } from "@/modules/social/queries";
@@ -21,10 +22,8 @@ export async function buildMe(user: CurrentUser): Promise<Me> {
     getObsessions(user.id),
     getUserPalette(user.id),
   ]);
-  // The obsession that tints the profile (profile-hexes.ts): the newest one
-  // with a cover palette; failing that, the newest obsession at all.
-  const featured =
-    obsessions.find((o) => (o.paletteHex?.length ?? 0) > 0) ?? obsessions[0];
+  // One rule for the tint AND the title it names (profile-hexes.ts).
+  const tint = profileTint(obsessions, palette);
 
   return {
     id: user.id,
@@ -37,8 +36,8 @@ export async function buildMe(user: CurrentUser): Promise<Me> {
     notifyReleases: user.notifyReleases,
     isFounder: user.isFounder,
     onboardingComplete: user.name !== null,
-    hexes: profileHexes(obsessions, palette),
-    featuredTitleId: featured?.catalogItemId ?? null,
+    hexes: tint.hexes,
+    featuredTitleId: tint.featuredTitleId,
     followers: follow.followers,
     followingCount: follow.following,
     stats: {
@@ -49,4 +48,17 @@ export async function buildMe(user: CurrentUser): Promise<Me> {
     },
     createdAt: isoDate(user.createdAt),
   };
+}
+
+/**
+ * `Me` AFTER a write to the account: re-reads the user through the one loader
+ * (explicit field list, no `birthYear`) so the payload reflects the write and
+ * is byte-for-byte what `GET /me` returns next. A row that vanished or got
+ * blocked between the write and the read is a 401 (the bearer is already
+ * revoked), never a half-built `Me`.
+ */
+export async function freshMe(userId: string): Promise<Me> {
+  const user = await loadUserById(userId);
+  if (!user) throw new ApiError("unauthorized");
+  return buildMe(user);
 }

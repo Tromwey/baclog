@@ -84,6 +84,8 @@ enum KuraAPIError: Error, Equatable {
     case unsupported
     case unavailable
     case offline
+    /// The task was cancelled (a view went away): never retried, never shown.
+    case cancelled
     case server(String)
 
     /// Text for the toast, in the Kura voice (what happened, what to do).

@@ -95,9 +95,22 @@ struct DiscoverView: View {
                     .padding(.top, 14)
 
                 VStack(alignment: .leading, spacing: 34) {
-                    recommended
-                    trends
-                    upcoming
+                    if let d = store.discover, d.recommended.isEmpty, d.trending.isEmpty, d.upcoming.isEmpty {
+                        // A fresh account: nothing to recommend yet.
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("todavía no hay nada que recomendarte.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("Guarda y completa lo que te obsesiona; con eso aparece lo tuyo aquí. Mientras, busca arriba.")
+                                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.top, 20)
+                    } else {
+                        recommended
+                        trends
+                        upcoming
+                    }
                 }
                 .padding(.top, 26)
                 .padding(.bottom, 150)
@@ -220,7 +233,7 @@ struct DiscoverView: View {
 
     private func metaShort(_ t: Title) -> String {
         [t.format.metaLabel, t.year.map(String.init), t.format == .album ? t.creator : t.creator.components(separatedBy: " ").last]
-            .compactMap { $0 }.joined(separator: " · ")
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 
@@ -525,7 +538,7 @@ private struct SearchMode: View {
                                             VStack(alignment: .leading, spacing: 5) {
                                                 Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
                                                 Text([t.format.metaLabel, t.year.map(String.init), t.creator.components(separatedBy: " ").last]
-                                                    .compactMap { $0 }.joined(separator: " · ")).monoLabel().lineLimit(1)
+                                                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).monoLabel().lineLimit(1)
                                             }
                                             Spacer(minLength: 8)
                                             SaveChip(titleID: t.id)

@@ -17,6 +17,9 @@ import type { ExternalItem } from "./types";
  * the iTunes Search collection shape (`collectionViewUrl`, `artistId`, …) so
  * the link resolver and the artist-upcoming lookup read it like any other
  * album row.
+ *
+ * Null on an upstream failure (logged) — distinct from an honest empty
+ * chart — so the pool can tell "Apple is down" from "nothing to show".
  */
 export type Storefront = "mx" | "us";
 
@@ -33,13 +36,13 @@ interface RssAlbum {
 
 export async function mostPlayedAlbums(
   storefront: Storefront,
-): Promise<ExternalItem[]> {
+): Promise<ExternalItem[] | null> {
   const url = `https://rss.marketingtools.apple.com/api/v2/${storefront}/music/most-played/100/albums.json`;
   try {
     const res = await fetch(url, { next: { revalidate: 60 * 60 } });
     if (!res.ok) {
       console.error(`[catalog] Apple chart ${storefront} failed: ${res.status}`);
-      return [];
+      return null;
     }
     const data = (await res.json()) as { feed?: { results?: RssAlbum[] } };
     const out: ExternalItem[] = [];
@@ -79,6 +82,6 @@ export async function mostPlayedAlbums(
     return out;
   } catch (err) {
     console.error(`[catalog] Apple chart ${storefront} failed:`, err);
-    return [];
+    return null;
   }
 }

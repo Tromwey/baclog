@@ -300,9 +300,11 @@ export async function getLovedSeeds(
 
 /** The shared field list of a backlog's item rows: membership id + per-title
  *  state (user_item) + the shared catalog facts. One constant so the two
- *  readers below can't drift, and so `getBacklogItems`' inferred type — which
- *  recap.ts and the card page build BY HAND (`BacklogItemWithCatalog`) — stays
- *  exactly this shape when a reader needs an extra column. */
+ *  readers below can't drift, and so `getBacklogItems`' inferred type
+ *  (`BacklogItemWithCatalog`, which `era.ts`/`recap.ts` take as a parameter
+ *  and `library.ts`'s `getUserLibrary` satisfies STRUCTURALLY with its own
+ *  select) stays exactly this shape when a reader needs an extra column —
+ *  a new column here would become a missing property over there. */
 const backlogItemColumns = {
   id: backlogItems.id,
   status: userItems.status,
@@ -349,8 +351,9 @@ export async function getBacklogItems(backlogId: string) {
  * (one review per user+title; `hidden_at` is NOT filtered because this is an
  * own-user read and the author keeps seeing their text). Caller must have
  * verified ownership (assertOwnsBacklog) first. A separate reader on purpose:
- * adding columns to `getBacklogItems` would change the type its by-hand
- * builders (recap.ts, card page) construct.
+ * adding columns to `getBacklogItems` would widen `BacklogItemWithCatalog`,
+ * which `getUserLibrary` (library.ts) satisfies with its own select (see
+ * learnings/2026-09-24-campo-aditivo-en-select-rompe-tipos-construidos-a-mano).
  */
 export async function getBacklogItemsWithState(backlogId: string) {
   return db

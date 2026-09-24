@@ -17,11 +17,39 @@ struct FeedView: View {
                 FeedEmptyView()
             } else if !store.feedLoaded && store.visibleFeed.isEmpty {
                 loading
+            } else if store.visibleFeed.isEmpty {
+                quiet
             } else {
                 stack
             }
         }
         .task { await store.loadFeed() }
+        // Every tab is mounted at launch, so the first load may predate the first follow:
+        // reload when the tab is shown with a stale followed set.
+        .onChange(of: store.tab) { _, tab in
+            if tab == .feed && store.feedStale { Task { await store.loadFeed(force: true) } }
+        }
+    }
+
+    /// Followed people, nothing from them yet.
+    private var quiet: some View {
+        VStack(spacing: 0) {
+            header
+            VStack(alignment: .leading, spacing: 14) {
+                Text("tu gente todavía no hace nada.").font(.kura.news(32)).foregroundStyle(KColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Cuando completen, se obsesionen o reseñen algo, aparece aquí.")
+                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                GlassButton(title: "Buscar más gente", systemImage: "magnifyingglass") { store.select(.discover) }
+                    .padding(.top, 6)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 60)
+            Spacer()
+        }
+        .background(KColor.bg.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
     /// The stack's shape while `GET /feed` runs.
@@ -152,7 +180,7 @@ private struct FeedCard: View {
         VStack(alignment: .leading, spacing: 14) {
             if let author {
                 Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
-                    AuthorChip(person: author, age: ageLabel(event.ageHours))
+                    AuthorChip(person: author, age: { if case .suggestion = event.kind { return "para ti" }; return ageLabel(event.ageHours) }())
                 }
                 .buttonStyle(.plain)
             }

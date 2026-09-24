@@ -30,6 +30,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "invalid_page" }, { status: 400 });
   }
 
+  // Fail-open like the rest of the web: a page the providers couldn't fill is
+  // an emptier grid, never an error (`unavailable` is the mobile API's).
   const page = await getOnboardingPoolPage(parsed.data.page);
-  return NextResponse.json(page);
+  return NextResponse.json({ items: page.items, nextPage: page.nextPage });
 }

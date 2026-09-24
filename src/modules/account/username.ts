@@ -24,8 +24,24 @@ export const RESERVED = new Set([
   "feed", "creditos",
 ]);
 
+/** Trim, lowercase, and drop a leading `@` — the ONE normalization every
+ *  handle goes through (claim, check, follow, `/people/{handle}`). */
 export function normalizeUsername(raw: string): string {
-  return raw.trim().toLowerCase();
+  return raw.trim().replace(/^@/, "").toLowerCase();
+}
+
+/**
+ * A handle as a PATH/lookup key: normalized and shape-checked (`USERNAME_RE`
+ * only — RESERVED words simply never match a row). Null when malformed, so a
+ * caller can answer the same 404 it gives a nonexistent handle: the shape is
+ * public knowledge, but a distinct 400 would still tell a prober which
+ * strings are worth trying. Shared by `modules/social/follow.ts` and the API's
+ * `parseHandle` (`api/v1/_lib/http.ts`).
+ */
+export function parseHandleOrNull(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const normalized = normalizeUsername(raw);
+  return USERNAME_RE.test(normalized) ? normalized : null;
 }
 
 /** Null when the handle can never be claimed (shape or reserved). */

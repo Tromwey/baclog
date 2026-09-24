@@ -401,7 +401,7 @@ struct TitleActionsSheet: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(t.name).font(.kura.newsItalic(22)).foregroundStyle(KColor.text)
                     Text([t.format.metaLabel, t.year.map(String.init), t.creator.components(separatedBy: " ").last]
-                        .compactMap { $0 }.joined(separator: " · ")).monoLabel()
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).monoLabel()
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 10)

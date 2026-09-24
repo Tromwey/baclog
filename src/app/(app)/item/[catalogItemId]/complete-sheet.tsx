@@ -190,6 +190,10 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           hasSpoiler: allowSpoiler && hasSpoiler,
           mark: nextObsessed ? "obsessed" : nextVerdict,
           when: "ahora",
+          // Client clock, on purpose: the optimistic copy lives until the
+          // refresh below brings the server's instants.
+          createdAt: ownReview?.createdAt ?? new Date(),
+          updatedAt: new Date(),
           // Editing never re-publishes a hidden review (founder, 2026-09-02).
           hidden: ownReview?.hidden ?? false,
         });

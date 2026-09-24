@@ -363,7 +363,23 @@ struct PickThreeView: View {
                         .foregroundStyle(KColor.text2)
                     SearchPill(placeholder: "Buscar películas, series o música", text: $query)
                     if grid.isEmpty {
-                        if store.searchLoading || (query.isEmpty && store.onboardingGrid.isEmpty) {
+                        if query.isEmpty, let e = store.onboardingGridError {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(e == .offline ? "sin conexión." : "el catálogo no responde.")
+                                    .font(.kura.news(24)).foregroundStyle(KColor.text)
+                                Text("Inténtalo de nuevo en un momento; también puedes buscar arriba.")
+                                    .font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { Task { await store.loadOnboardingGrid() } }
+                            }
+                            .padding(.top, 12)
+                        } else if !query.isEmpty, let e = store.searchError, e == .unavailable || e == .offline {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(e == .offline ? "sin conexión." : "el catálogo no responde.")
+                                    .font(.kura.news(24)).foregroundStyle(KColor.text)
+                                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { Task { await store.runSearch(query) } }
+                            }
+                            .padding(.top, 12)
+                        } else if store.searchLoading || (query.isEmpty && store.onboardingGrid.isEmpty) {
                             pickSkeleton.padding(.top, 4)
                         } else if !query.isEmpty {
                             Text("nada con “\(query)”.").font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 12)

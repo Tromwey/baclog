@@ -14,6 +14,10 @@ struct Endpoint {
     var body: Data? = nil
     /// `auth/*` runs without a bearer.
     var auth = true
+    /// A token to send instead of the session's (logout sends the one it just forgot).
+    var explicitBearer: String? = nil
+    /// True when a 401 must NOT end the session (logout).
+    var suppressExpiry = false
 
     static func get(_ path: String, _ query: [URLQueryItem] = []) -> Endpoint {
         Endpoint(method: .get, path: path, query: query)
@@ -98,7 +102,9 @@ final class APIClient: @unchecked Sendable {
             r.httpBody = body
             r.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        if e.auth {
+        if let token = e.explicitBearer {
+            r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else if e.auth {
             guard let token = session.token else { throw KuraAPIError.unauthorized }
             r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -111,19 +117,22 @@ final class APIClient: @unchecked Sendable {
         var attempt = 0
         while true {
             do {
-                return try await perform(req, auth: e.auth)
+                return try await perform(req, endpoint: e)
             } catch let err as KuraAPIError {
                 guard e.method == .get, attempt < retryDelays.count, err.isRetryable else { throw err }
-                try? await Task.sleep(for: retryDelays[attempt])
+                // A throwing sleep: cancelling the task cuts the retry loop.
+                do { try await Task.sleep(for: retryDelays[attempt]) } catch { throw KuraAPIError.cancelled }
                 attempt += 1
             }
         }
     }
 
-    private func perform(_ req: URLRequest, auth: Bool) async throws -> Data {
+    private func perform(_ req: URLRequest, endpoint e: Endpoint) async throws -> Data {
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await urlSession.data(for: req)
+        } catch is CancellationError {
+            throw KuraAPIError.cancelled
         } catch let u as URLError {
             throw APIClient.map(u)
         } catch {
@@ -133,7 +142,7 @@ final class APIClient: @unchecked Sendable {
         if (200..<300).contains(http.statusCode) { return data }
         let env = try? KuraJSON.decoder.decode(ErrorEnvelope.self, from: data)
         let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
-        if case .unauthorized = err, auth {
+        if case .unauthorized = err, e.auth, !e.suppressExpiry {
             session.clear()
             await MainActor.run { NotificationCenter.default.post(name: .kuraSessionExpired, object: nil) }
         }
@@ -170,7 +179,7 @@ final class APIClient: @unchecked Sendable {
              .dnsLookupFailed, .timedOut, .internationalRoamingOff, .dataNotAllowed, .secureConnectionFailed:
             return .offline
         case .cancelled:
-            return .server("cancelado")
+            return .cancelled
         default:
             return .server(u.localizedDescription)
         }
@@ -207,6 +216,7 @@ final class APIClient: @unchecked Sendable {
 }
 
 private extension KuraAPIError {
+    /// Transport trouble and 5xx retry; a cancelled task never does.
     var isRetryable: Bool {
         switch self {
         case .offline, .unavailable, .server: return true
@@ -260,8 +270,16 @@ struct LiveAPI: KuraAPI {
     }
 
     func logout() async throws {
-        defer { session.clear() }
-        try? await client.send(.post("auth/logout"))
+        // Forget the token FIRST, then tell the server with the token it had; a 401 here
+        // (already-expired token) must not broadcast "session expired" to the store.
+        let token = session.token
+        session.clear()
+        guard let token else { return }
+        var e = Endpoint.post("auth/logout")
+        e.auth = false
+        e.explicitBearer = token
+        e.suppressExpiry = true
+        try? await client.send(e)
     }
 
     // MARK: Account
@@ -295,7 +313,7 @@ struct LiveAPI: KuraAPI {
         private enum CodingKeys: String, CodingKey { case items, nextPage }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decodeIfPresent([Title].self, forKey: .items) ?? []
+            items = try c.decode([Title].self, forKey: .items)
             nextPage = try c.decodeIfPresent(Int.self, forKey: .nextPage)
         }
     }
@@ -324,12 +342,13 @@ struct LiveAPI: KuraAPI {
 
     // MARK: Collections
 
+    /// `{ items: [T] }` (or a bare array). A body without `items` is a decoding error, not an empty list.
     private struct Items<T: Decodable>: Decodable {
         let items: [T]
         init(from decoder: Decoder) throws {
             if let list = try? decoder.singleValueContainer().decode([T].self) { items = list; return }
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decodeIfPresent([T].self, forKey: .items) ?? []
+            items = try c.decode([T].self, forKey: .items)
         }
         private enum CodingKeys: String, CodingKey { case items }
     }
@@ -463,22 +482,22 @@ struct LiveAPI: KuraAPI {
         try await client.decode(.get("feed", cursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? []))
     }
 
+    /// `{ event: FeedEvent | null }` — any other shape is a decoding error.
     private struct SuggestionEnvelope: Decodable {
         let event: FeedEvent?
         init(from decoder: Decoder) throws {
-            // Real shape: `{ event: FeedEvent | null }`. A bare event / `null` is tolerated.
-            if let c = try? decoder.container(keyedBy: Keys.self), c.contains(.event) {
-                event = try c.decodeIfPresent(FeedEvent.self, forKey: .event)
-            } else {
-                event = try? FeedEvent(from: decoder)
+            let c = try decoder.container(keyedBy: Keys.self)
+            guard c.contains(.event) else {
+                throw DecodingError.keyNotFound(Keys.event, .init(codingPath: c.codingPath, debugDescription: "feed/suggestion sin `event`"))
             }
+            event = try c.decodeIfPresent(FeedEvent.self, forKey: .event)
         }
         enum Keys: String, CodingKey { case event }
     }
 
     func feedSuggestion() async throws -> FeedEvent? {
-        let env: SuggestionEnvelope? = try await client.decodeOptional(.get("feed/suggestion"))
-        return env?.event
+        let env: SuggestionEnvelope = try await client.decode(.get("feed/suggestion"))
+        return env.event
     }
 
     // MARK: Recap

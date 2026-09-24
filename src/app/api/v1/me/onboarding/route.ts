@@ -1,7 +1,7 @@
 import { ApiError, withApi } from "@/authz/api";
 import { completeOnboarding, onboardingSchema } from "@/modules/account/onboarding";
 import { json, readJson } from "../../_lib/http";
-import { freshMe } from "../_lib/fresh-me";
+import { freshMe } from "../../_lib/me";
 
 /**
  * POST /api/v1/me/onboarding { name, birthYear } → Me (§4 Cuenta). F2.1

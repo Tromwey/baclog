@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   assertOwnsBacklog,
@@ -21,16 +21,22 @@ type ItemStatus = (typeof itemStatusEnum.enumValues)[number];
 
 const paletteSchema = paletteHexSchema.optional();
 
+export type AddItemResult =
+  | { id: string }
+  | { error: "invalid" | "backlog_not_found" | "title_not_found" };
+
 /**
  * Membership add — `modules/backlog/membership.ts` (`addTitleToBacklog`) does
  * the work (palette → user_item → membership → F3.8 pre-order backfill); this
- * wrapper only asserts ownership and revalidates.
+ * wrapper only asserts ownership and revalidates. The module's error travels
+ * AS IS (`title_not_found` ≠ a bad palette), and nothing is revalidated on a
+ * failed add — there is nothing new to show.
  */
 export async function addItemAction(input: {
   backlogId: string;
   catalogItemId: string;
   paletteHex?: string[];
-}) {
+}): Promise<AddItemResult> {
   const { user, backlog } = await assertOwnsBacklog(input.backlogId);
   const palette = paletteSchema.safeParse(input.paletteHex);
   if (!palette.success) return { error: "invalid" as const };
@@ -41,13 +47,14 @@ export async function addItemAction(input: {
     input.catalogItemId,
     palette.data ?? null,
   );
+  if (!res.ok) return { error: res.error };
 
   // "layout" over the /backlogs segment: one call covers the shelf list, both
   // zoom twins ([backlogId] + the intercepted @modal) and the lenses.
   revalidatePath("/backlogs", "layout");
   // Return the membership id (new OR pre-existing) so the caller can still mark
   // it as added / allow removal (the Descubrir search toggle relies on this).
-  return res.ok ? { id: res.membershipId } : { error: "invalid" as const };
+  return { id: res.membershipId };
 }
 
 // F2.8 custom status is retired (item-flow redesign): only the three real
@@ -60,6 +67,11 @@ const STATUSES: ItemStatus[] = ["on_my_radar", "in_progress", "completed"];
  * every mutation below is keyed on the catalog item and resolves the caller's
  * single user_item, so the change is the same across every backlog the title is
  * filed under. `assertOwnsUserItem` is the authz choke point.
+ *
+ * Each `*ChangedAt` / `obsessedAt` moves ONLY when its value changes — the
+ * "no change" guard is in the WHERE, same as `completePicks` and the API's
+ * `setMark`: `obsessedAt` is a feed-event instant and `statusChangedAt` the
+ * recap's era bucket, and a re-tap on the same state must not move either.
  */
 export async function setStatusAction(catalogItemId: string, status: ItemStatus) {
   const { item } = await assertOwnsUserItem(catalogItemId);
@@ -68,7 +80,7 @@ export async function setStatusAction(catalogItemId: string, status: ItemStatus)
   await db
     .update(userItems)
     .set({ status, statusChangedAt: new Date() })
-    .where(eq(userItems.id, item.id));
+    .where(and(eq(userItems.id, item.id), ne(userItems.status, status)));
   revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
@@ -91,7 +103,14 @@ export async function setVerdictAction(
   await db
     .update(userItems)
     .set({ verdict: parsed.data, verdictChangedAt: new Date() })
-    .where(eq(userItems.id, item.id));
+    // `is distinct from`: a plain `<>` is NULL (no match) when there is no
+    // verdict yet, and that first set MUST land.
+    .where(
+      and(
+        eq(userItems.id, item.id),
+        sql`${userItems.verdict} is distinct from ${parsed.data}`,
+      ),
+    );
   revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
@@ -102,7 +121,7 @@ export async function clearVerdictAction(catalogItemId: string) {
   await db
     .update(userItems)
     .set({ verdict: null, verdictChangedAt: new Date() })
-    .where(eq(userItems.id, item.id));
+    .where(and(eq(userItems.id, item.id), isNotNull(userItems.verdict)));
   revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }
@@ -125,7 +144,7 @@ export async function setObsessedAction(
       obsessed: parsed.data,
       obsessedAt: parsed.data ? new Date() : null,
     })
-    .where(eq(userItems.id, item.id));
+    .where(and(eq(userItems.id, item.id), ne(userItems.obsessed, parsed.data)));
   revalidatePath("/backlogs", "layout");
   return { ok: true as const };
 }

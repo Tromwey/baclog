@@ -1,5 +1,9 @@
 import "server-only";
-import { isoDate, type FeedEvent as WireFeedEvent } from "@/app/api/v1/_lib/schemas";
+import {
+  isoDate,
+  type FeedEvent as WireFeedEvent,
+  type PublicMark,
+} from "@/app/api/v1/_lib/schemas";
 import { toTitleSummary } from "@/app/api/v1/_lib/wire";
 import type { FeedEvent, FeedSuggestion } from "@/modules/social/types";
 
@@ -9,8 +13,10 @@ import type { FeedEvent, FeedSuggestion } from "@/modules/social/types";
  * and, for adds, `backlogs.isPublic`); this only reshapes:
  *  - `author` keeps handle + photo + the two ADN hexes, nothing else;
  *  - the title travels as a SUMMARY so the app needn't hydrate;
- *  - `mark`: an `obsessed` event IS the mark; completions/reviews carry the
- *    author's mark the module already computed (verdict gated to completed);
+ *  - `mark`: an `obsessed` event IS the mark; a `completed` event carries
+ *    the verdict the module computed or, without one, "completed" (the
+ *    event itself is the completion); `reviewed` carries the author's
+ *    current mark (may be null); `added` is null;
  *  - `collectionId`/`collectionName` only on `added`, `reviewId`/`reviewBody`
  *    only on `reviewed`, `releaseDate` only while the add is "no puede
  *    esperar" (F3.8: it expires by itself on release day).
@@ -26,16 +32,8 @@ export function toWireFeedEvent(e: FeedEvent): WireFeedEvent {
       hexes: e.author.avatarHexes,
     },
     titleId: e.catalogItemId,
-    title: toTitleSummary({
-      id: e.catalogItemId,
-      title: e.title,
-      mediaType: e.mediaType,
-      year: e.year,
-      byline: e.byline,
-      posterUrl: e.posterUrl,
-      paletteHex: e.paletteHex,
-    }),
-    mark: e.kind === "obsessed" ? "obsessed" : e.mark,
+    title: toTitleSummary(e),
+    mark: markOf(e),
     collectionId: e.kind === "added" ? e.backlogId : null,
     collectionName: e.kind === "added" ? e.backlogName : null,
     releaseDate: e.kind === "added" && e.releaseDate ? isoDate(e.releaseDate) : null,
@@ -44,6 +42,17 @@ export function toWireFeedEvent(e: FeedEvent): WireFeedEvent {
     hasSpoiler: e.kind === "reviewed" ? e.hasSpoiler : false,
     suggest: null,
   };
+}
+
+function markOf(e: FeedEvent): PublicMark | null {
+  switch (e.kind) {
+    case "obsessed":
+      return "obsessed";
+    case "completed":
+      return e.mark ?? "completed";
+    default:
+      return e.mark;
+  }
 }
 
 /** The one "Quizá quieras seguir" card as a `suggest` event: `author` is the

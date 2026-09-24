@@ -10,55 +10,27 @@ import {
 } from "@/modules/backlog/collections";
 import { getBacklogItemsWithState } from "@/modules/backlog/queries";
 import { visibilityFromWire } from "@/modules/backlog/visibility";
-import { json, noContent, readJson } from "../../_lib/http";
-import { VisibilitySchema, type TitleState } from "../../_lib/schemas";
-import { toCollection, toTitleState, toTitleSummary } from "../../_lib/wire";
+import { json, noContent, parseId, readJson } from "../../_lib/http";
+import { VisibilitySchema } from "../../_lib/schemas";
+import { toCollection, toCollectionDetail } from "../../_lib/wire";
 
 /**
  * GET /api/v1/collections/{id} → { collection, titles: [Title], states }
- * (§4 Colecciones). Ownership via `assertOwnsBacklog` — someone else's or a
- * nonexistent id is the same 404. `titles` are summaries in the collection's
- * order; `states` is keyed by titleId and comes off `user_item` (state never
- * lives on the membership row).
+ * (§4 Colecciones). Ownership via `assertOwnsBacklog` — someone else's, a
+ * nonexistent or a malformed id is the same 404. `titles` are summaries in
+ * the collection's order; `states` is keyed by titleId and comes off
+ * `user_item` (state never lives on the membership row): `savedAt` is the
+ * FIRST membership (`user_item.addedAt`).
  */
 export const GET = withApi<{ id: string }>(async (_req, { params }) => {
-  const { backlog } = await assertOwnsBacklog(params.id);
+  const { backlog } = await assertOwnsBacklog(parseId(params.id));
   const items = await getBacklogItemsWithState(backlog.id);
-
-  const states: Record<string, TitleState> = {};
-  for (const it of items) {
-    states[it.catalogItemId] = toTitleState({
-      catalogItemId: it.catalogItemId,
-      status: it.status,
-      verdict: it.verdict,
-      obsessed: it.obsessed,
-      addedAt: it.userItemAddedAt,
-      reviewId: it.reviewId,
-    });
-  }
-
-  return json({
-    collection: toCollection({
-      ...backlog,
-      memberships: items.map((it) => ({
-        catalogItemId: it.catalogItemId,
-        addedAt: it.addedAt,
-        posterUrl: it.posterUrl,
-      })),
-    }),
-    titles: items.map((it) =>
-      toTitleSummary({
-        id: it.catalogItemId,
-        title: it.title,
-        mediaType: it.mediaType,
-        year: it.year,
-        byline: it.byline,
-        posterUrl: it.posterUrl,
-        paletteHex: it.paletteHex,
-      }),
+  return json(
+    toCollectionDetail(
+      backlog,
+      items.map((it) => ({ ...it, savedAt: it.userItemAddedAt })),
     ),
-    states,
-  });
+  );
 });
 
 const PatchBodySchema = z.object({
@@ -71,11 +43,12 @@ const PatchBodySchema = z.object({
 /**
  * PATCH /api/v1/collections/{id} { name?, vibe?, visibility? } → Collection
  * (re-read). `renameBacklogAction` + `setBacklogVisibilityAction` in one
- * body; a field left out is left alone, an empty body is a no-op that still
- * returns the resource. Visibility lands as the F3.10.1 pair.
+ * body; a field left out is left alone, an empty body writes nothing (not
+ * even `updatedAt`) and still returns the resource. Visibility lands as the
+ * F3.10.1 pair.
  */
 export const PATCH = withApi<{ id: string }>(async (request, { user, params }) => {
-  const { backlog } = await assertOwnsBacklog(params.id);
+  const { backlog } = await assertOwnsBacklog(parseId(params.id));
   const body = await readJson(request, PatchBodySchema);
   const ok = await updateBacklog(user.id, backlog.id, {
     ...(body.name !== undefined ? { name: body.name } : {}),
@@ -97,7 +70,7 @@ export const PATCH = withApi<{ id: string }>(async (request, { user, params }) =
  * the app.
  */
 export const DELETE = withApi<{ id: string }>(async (_req, { user, params }) => {
-  const { backlog } = await assertOwnsBacklog(params.id);
+  const { backlog } = await assertOwnsBacklog(parseId(params.id));
   await deleteBacklog(user.id, backlog.id);
   return noContent();
 });

@@ -413,6 +413,8 @@ struct FollowersView: View {
     private func row(_ p: Person) -> some View {
         let f = store.isFollowing(p.id)
         let n = p.common.count
+        // A followed profile that went private (`isPrivate` on the owner lists): dimmed, like the web.
+        let dimmed = p.isPrivate && f
         return HStack(spacing: 14) {
             Seal(person: p, size: 48)
             VStack(alignment: .leading, spacing: 4) {
@@ -432,7 +434,8 @@ struct FollowersView: View {
         }
         .frame(minHeight: 68)
         .contentShape(Rectangle())
-        .onTapGesture { store.push(.person(p.id)) }
+        .opacity(dimmed ? 0.5 : 1)
+        .onTapGesture { if !dimmed { store.push(.person(p.id)) } }
     }
 }
 

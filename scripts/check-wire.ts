@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { kuraMarkOf, publicMarkOf } from "../src/modules/backlog/mark";
+import { profileTint } from "../src/modules/backlog/profile-hexes";
 import {
   CollectionSchema,
   PersonSchema,
@@ -17,6 +18,7 @@ import {
 import {
   releaseOf,
   toCollection,
+  toCollectionDetail,
   toPersonLite,
   toTitleState,
   toTitleSummary,
@@ -96,6 +98,22 @@ check("toTitleSummary cumple TitleSchema (resumen, paleta null → [])", () => {
       }),
     ),
   );
+});
+
+check("toTitleSummary: catalogItemId GANA sobre id (una fila de membresía trae ambos)", () => {
+  const t = TitleSchema.parse(
+    toTitleSummary({
+      id: "membership-row-id",
+      catalogItemId: "cat-1",
+      title: "Shōgun",
+      mediaType: "series",
+      year: 2024,
+      byline: "FX",
+      posterUrl: null,
+      paletteHex: [],
+    }),
+  );
+  assert.equal(t.id, "cat-1", "el id del catálogo, nunca el de la fila");
 });
 
 check("releaseOf: day siempre con fecha (pasada o futura), year, null", () => {
@@ -181,6 +199,43 @@ check("toCollection: orden addedAt desc, coverTitleId = más reciente con portad
   assert.equal(empty.visibility, "private");
 });
 
+check("toCollectionDetail: { collection, titles, states } coherentes y en orden", () => {
+  const d = toCollectionDetail(
+    { id: "c1", name: "Noche", vibe: null, isPublic: true, showOnProfile: false, createdAt: T0, updatedAt: T1 },
+    [
+      { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), title: "Old", mediaType: "film", year: 2001, byline: null, posterUrl: "https://x/old.jpg", paletteHex: null, status: "completed", verdict: "liked", obsessed: false, savedAt: new Date("2025-12-01T00:00:00Z"), reviewId: "r1" },
+      { catalogItemId: "new", addedAt: T1, title: "New", mediaType: "album", year: null, byline: "Someone", posterUrl: null, paletteHex: ["#112233"], status: "on_my_radar", verdict: null, obsessed: true, savedAt: T1, reviewId: null },
+    ],
+  );
+  CollectionSchema.parse(d.collection);
+  d.titles.forEach((t) => TitleSchema.parse(t));
+  Object.values(d.states).forEach((st) => TitleStateSchema.parse(st));
+  assert.deepEqual(d.collection.titleIds, ["new", "old"]);
+  assert.deepEqual(d.titles.map((t) => t.id), ["new", "old"], "titles en el orden de la colección");
+  assert.equal(d.collection.visibility, "link");
+  assert.equal(d.collection.coverTitleId, "old", "el más reciente sin portada no es la portada");
+  assert.equal(d.states.old.savedAt, "2025-12-01T00:00:00Z", "savedAt sale de savedAt, no del addedAt de la membresía");
+  assert.equal(d.states.old.reviewId, "r1");
+  assert.equal(d.states.old.mark, "liked");
+  assert.equal(d.states.new.mark, "obsessed");
+});
+
+check("profileTint: featuredTitleId = la obsesión que tiñe; null si tiñe la biblioteca", () => {
+  const fromObsession = profileTint(
+    [
+      { catalogItemId: "no-palette", paletteHex: null },
+      { catalogItemId: "tints", paletteHex: ["#123456", "#d8ff3e"] },
+    ],
+    ["#aaaaaa"],
+  );
+  assert.equal(fromObsession.featuredTitleId, "tints", "la primera obsesión CON paleta, no la más reciente sin ella");
+  assert.deepEqual(fromObsession.hexes, ["#123456"], "la lima se filtra");
+  const fromLibrary = profileTint([{ catalogItemId: "no-palette", paletteHex: [] }], ["#aaaaaa"]);
+  assert.equal(fromLibrary.featuredTitleId, null, "sin obsesión con paleta no hay título destacado");
+  assert.deepEqual(fromLibrary.hexes, ["#aaaaaa"]);
+  assert.deepEqual(profileTint([], []), { hexes: [], featuredTitleId: null });
+});
+
 check("toPersonLite cumple PersonSchema (defaults en cero, name null → '')", () => {
   const p = PersonSchema.parse(toPersonLite({ username: "ana", name: null, avatarUrl: null }));
   assert.equal(p.name, "");
@@ -205,6 +260,11 @@ check("toPersonLite cumple PersonSchema (defaults en cero, name null → '')", (
   assert.equal(full.followingCount, 7);
   assert.equal(full.isFollowing, true);
   assert.ok(!("id" in full) && !("email" in full), "Person jamás lleva id ni email");
+  assert.ok(!("isPrivate" in p) && !("isPrivate" in full), "isPrivate no viaja salvo que sea true");
+  const priv = PersonSchema.parse(
+    toPersonLite({ username: "ana", name: "Ana", avatarUrl: null, avatarHexes: [], isPrivate: true }),
+  );
+  assert.equal(priv.isPrivate, true);
 });
 
 console.log(failures === 0 ? "\ncheck-wire ok" : `\n${failures} fallos`);

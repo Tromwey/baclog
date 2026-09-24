@@ -1,6 +1,6 @@
 import { withApi } from "@/authz/api";
-import { json } from "@/app/api/v1/_lib/http";
-import { buildPerson, parseHandle } from "../_lib/person";
+import { json, parseHandle } from "@/app/api/v1/_lib/http";
+import { buildPerson } from "../_lib/person";
 
 /**
  * GET /api/v1/people/{handle} → Person (§4 Gente y feed).

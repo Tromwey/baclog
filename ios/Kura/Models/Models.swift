@@ -468,6 +468,8 @@ struct Person: Identifiable, Hashable, Decodable {
     /// Featured obsession tones [oscuro, claro]. Empty → no obsession yet.
     var hexes: [String]
     var featuredTitleID: String? = nil
+    /// Only on `GET /me/following|followers`: a followed profile that went private
+    /// (its card is dimmed; `GET /people/{handle}` would be a 404). Mock: request flow.
     var isPrivate = false
     var followers = 0
     var followingCount = 0

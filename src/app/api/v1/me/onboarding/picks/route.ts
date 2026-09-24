@@ -3,7 +3,7 @@ import { ApiError, withApi } from "@/authz/api";
 import { getOwnCollection } from "@/modules/backlog/collections";
 import { paletteHexSchema } from "@/modules/backlog/palette";
 import { completePicks, type Pick } from "@/modules/backlog/picks";
-import { findCatalogItemByRef, getCatalogItems } from "@/modules/catalog/cache";
+import { resolveCatalogItem } from "../../../_lib/catalog";
 import { json, readJson } from "../../../_lib/http";
 import { ExternalRefSchema } from "../../../_lib/schemas";
 import { toCollection } from "../../../_lib/wire";
@@ -34,22 +34,16 @@ const NOT_IN_CATALOG =
  * (1..3) → { collection: Collection }. "Elige tres": the picks become
  * obsessions inside the account's first collection ("Obsesiones") — or its
  * newest one on re-entry (`modules/backlog/picks.ts`, same rule as the web).
- * Every title is resolved BEFORE anything is written, so a stale id can't
- * leave the first two picks in and fail on the third.
+ * Every title is resolved BEFORE anything is written (`resolveCatalogItem`,
+ * the same rule as the membership PUT), so a stale id can't leave the first
+ * two picks in and fail on the third.
  */
 export const POST = withApi(async (request, { user }) => {
   const body = await readJson(request, BodySchema);
 
-  const ids = body.titles.flatMap((t) => (t.id ? [t.id] : []));
-  const cached = new Map((await getCatalogItems(ids)).map((r) => [r.id, r]));
-
   const picks: Pick[] = [];
   for (const t of body.titles) {
-    const row =
-      (t.id ? cached.get(t.id) : undefined) ??
-      (t.externalRef
-        ? await findCatalogItemByRef(t.externalRef.source, t.externalRef.externalId)
-        : null);
+    const row = await resolveCatalogItem(t.id, t.externalRef);
     if (!row) throw new ApiError("not_found", NOT_IN_CATALOG);
     picks.push({ catalogItemId: row.id, paletteHex: t.paletteHex });
   }

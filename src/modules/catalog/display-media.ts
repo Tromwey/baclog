@@ -73,6 +73,10 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
   releaseDate: Date | null;
   /** Series only (TMDB): the status pill's data, null for anything else. */
   seriesStatus: SeriesStatus | null;
+  /** Album only: iTunes did not answer, so `tracks`/`trackCount` are UNKNOWN
+   *  rather than empty. The web renders without the section (fail-open); the
+   *  mobile API turns it into a 503 when there is nothing cached to show. */
+  mediaUnavailable: boolean;
 }> {
   const isAlbum = item.mediaType === "album" && item.source === "itunes";
   const detail = isAlbum
@@ -87,6 +91,7 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
         trackCount: 0,
         releaseDate: null,
         posterUrl: null,
+        unavailable: false,
       };
 
   if (isAlbum) {
@@ -107,5 +112,6 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
     synopsis,
     releaseDate: detail.releaseDate ?? item.releaseDate,
     seriesStatus,
+    mediaUnavailable: detail.unavailable,
   };
 }

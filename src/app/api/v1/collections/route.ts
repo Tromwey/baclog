@@ -32,7 +32,8 @@ const CreateBodySchema = z.object({
 });
 
 /**
- * POST /api/v1/collections { name, vibe?, visibility } → 201 Collection.
+ * POST /api/v1/collections { name, vibe?, visibility } → 200 Collection
+ * (every v1 write answers 200 with the resource, §1 — no 201s).
  * Same validation as `createBacklogAction` (`modules/backlog/collections.ts`
  * is the one write path); the wire visibility is translated to the DB triad
  * here and written as a pair, never as two loose booleans.
@@ -46,5 +47,5 @@ export const POST = withApi(async (request, { user }) => {
   });
   const row = await getOwnCollection(user.id, id);
   if (!row) throw new ApiError("internal");
-  return json(toCollection(row), 201);
+  return json(toCollection(row));
 });

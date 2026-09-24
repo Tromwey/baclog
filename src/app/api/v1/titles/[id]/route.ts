@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { withApi, ApiError } from "@/authz/api";
 import { SERVICE_LABEL } from "@/app/(app)/item/[catalogItemId]/labels";
 import { getUserCatalogEntry } from "@/modules/backlog/queries";
@@ -8,8 +7,11 @@ import { getItemDisplayMedia } from "@/modules/catalog/display-media";
 import type { AlbumTrack } from "@/modules/catalog/itunes";
 import type { SeriesStatus } from "@/modules/catalog/series-status";
 import { getItemReviewContext } from "@/modules/reviews/queries";
-import { getTitleActivityAmongFollowed } from "@/modules/social/title-activity";
-import { json } from "../../_lib/http";
+import {
+  getTitleActivityAmongFollowed,
+  type ActivityState,
+} from "@/modules/social/title-activity";
+import { json, parseId } from "../../_lib/http";
 import {
   isoDate,
   type PublicMark,
@@ -36,9 +38,19 @@ import { releaseOf, toTitleState, toTitleSummary } from "../../_lib/wire";
  * gates itself (title-activity.ts + reviews/queries.ts re-check
  * `publicAuthor` inside the query; title-stats.ts is a bare count). Nothing
  * new is exposed.
+ *
+ * 503 `unavailable` for an ALBUM whose iTunes lookup failed and for which
+ * there is no tracklist to show (`mediaUnavailable`): the ficha's core is the
+ * tracklist, and an empty one would read as "no songs". The web keeps its
+ * fail-open render; video titles never 503 here (their detail is cached).
  */
 
-const IdSchema = z.string().uuid();
+/** title-activity's glyph state → the wire's public mark. */
+const ACTIVITY_MARK: Record<ActivityState, PublicMark> = {
+  obsessed: "obsessed",
+  done: "completed",
+  liked: "liked",
+};
 
 /** "125 min" · "2 temporadas" · "18 canciones" — null when we have no data. */
 function detailOf(
@@ -102,10 +114,8 @@ function watchOf(
 }
 
 export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
-  const parsed = IdSchema.safeParse(params.id);
   // A malformed id is the same 404 as an unknown one — no shape oracle.
-  if (!parsed.success) throw new ApiError("not_found");
-  const id = parsed.data;
+  const id = parseId(params.id);
 
   const [item, entry, reviewCtx, stats] = await Promise.all([
     getCatalogItem(id),
@@ -122,6 +132,9 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
       mediaType: item.mediaType,
     }),
   ]);
+  if (item.mediaType === "album" && media.mediaUnavailable && media.tracks.length === 0) {
+    throw new ApiError("unavailable");
+  }
 
   const title: Title = {
     ...toTitleSummary(item),
@@ -150,7 +163,7 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
 
   const following = activity.rows.map((r) => ({
     handle: r.username,
-    mark: (r.state === "done" ? "completed" : r.state) as PublicMark | null,
+    mark: r.state ? ACTIVITY_MARK[r.state] : null,
   }));
 
   // Own review first (its author always sees it, hidden or not), then the
@@ -159,15 +172,13 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
   if (own) {
     items.push({
       id: own.id,
-      authorHandle: user.username ?? "",
+      authorHandle: user.username,
       titleId: item.id,
       body: own.body,
       hasSpoiler: own.hasSpoiler,
       mark: own.mark,
-      // The server read always sets both; the optional-ness is for the web's
-      // optimistic client copy of this shape (reviews/types.ts).
-      createdAt: isoDate(own.createdAt ?? own.updatedAt ?? new Date()),
-      updatedAt: isoDate(own.updatedAt ?? own.createdAt ?? new Date()),
+      createdAt: isoDate(own.createdAt),
+      updatedAt: isoDate(own.updatedAt),
       hidden: own.hidden,
     });
   }

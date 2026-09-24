@@ -95,7 +95,15 @@ export async function ensureUserItemAndMembership(opts: {
     membershipId = existing?.id ?? null;
   }
 
-  return { membershipId, userItemId: ui!.id };
+  if (!ui) {
+    // The insert above is ON CONFLICT DO NOTHING, so the row exists unless
+    // something deleted it between the two statements — say so loudly
+    // rather than crash on a null a line later.
+    throw new Error(
+      `user_item missing right after upsert (userId=${opts.userId}, catalogItemId=${opts.catalogItemId})`,
+    );
+  }
+  return { membershipId, userItemId: ui.id };
 }
 
 // ---------- the three membership operations (web actions + API v1) ----------
@@ -159,18 +167,21 @@ async function gcUserItem(userId: string, catalogItemId: string): Promise<void> 
 }
 
 /**
- * Quitar de ESTE backlog — deletes one membership. If it was the title's last
- * membership, GC the per-title state (user_item, which cascades its reco
- * feedback) and the review. Idempotent: no membership → nothing happens.
- * Scoped by `userId` on the membership row itself (denormalized column), so a
- * backlog id the caller doesn't own matches nothing.
+ * Quitar de ESTE backlog — deletes one membership. If the title has no
+ * membership left afterwards, GC the per-title state (user_item, which
+ * cascades its reco feedback) and the review. The GC runs EVEN when nothing
+ * was deleted (a retried DELETE, or a first call that died between the two
+ * statements): idempotence covers the GC, so a repeat converges on the same
+ * end state instead of leaving an orphaned user_item behind. Scoped by
+ * `userId` on the membership row itself (denormalized column), so a backlog
+ * id the caller doesn't own matches nothing.
  */
 export async function removeTitleFromBacklog(
   userId: string,
   backlogId: string,
   catalogItemId: string,
 ): Promise<void> {
-  const deleted = await db
+  await db
     .delete(backlogItems)
     .where(
       and(
@@ -178,9 +189,7 @@ export async function removeTitleFromBacklog(
         eq(backlogItems.backlogId, backlogId),
         eq(backlogItems.catalogItemId, catalogItemId),
       ),
-    )
-    .returning({ id: backlogItems.id });
-  if (deleted.length === 0) return;
+    );
 
   const [remaining] = await db
     .select({ id: backlogItems.id })

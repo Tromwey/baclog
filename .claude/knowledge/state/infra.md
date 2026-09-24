@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-24 (API v1 · fase 0)
+> Actualizado: 2026-09-24 (API v1 · fases 0–3)
 
 ## Qué cubre este dominio
 <!-- Build, deploy, entornos, variables de entorno y dependencias.
@@ -41,10 +41,20 @@
 - **Dev server desde un worktree**: `.claude/launch.json` (y por tanto `preview_start`) arranca el
   árbol principal, no el worktree. Para verificar código de un worktree se lanza `pnpm exec next dev
   -p 3010` ahí (con los symlinks `.env.local` y `node_modules`) y se abre la URL en el navegador.
+- **Un solo `next dev` por árbol de trabajo.** Next 16 toma un flock sobre `.next/dev/lock`
+  (`{pid, port, appUrl}`) por `distDir`, no por puerto: un segundo `next dev -p <otro>` sobre el mismo
+  directorio imprime `✓ Ready` y muere con "Another next dev server is already running". Antes de
+  arrancar uno: `cat .next/dev/lock` y `curl -s -o /dev/null -w "%{http_code}"
+  <appUrl>/api/v1/me` — `401` = vivo, úsalo (sirve el mismo árbol con HMR). Nunca borrar el lock a
+  mano (mata el HMR del que lo tiene). Dos servidores a la vez = dos worktrees.
+  Learning: `2026-09-24-next-dev-lock-un-servidor-por-arbol.md`.
+- **OTP cuando el dev server lo levantó otro proceso**: sin stdout propio, el `[dev-mailer]` queda en
+  `.next/dev/logs/next-development.log` (líneas JSON con `"message":"[dev-mailer] OTP para …"`); el
+  `--log` de `scripts/api-smoke.ts` lo lee tal cual.
 
 ## Decisiones tomadas (y por qué)
 
-- **API v1 para iOS vive en el mismo deploy (`src/app/api/v1/**`, 2026-09-24)** — aditiva: no toca la web, así que desplegarla no rompe nada; el smoke (`scripts/api-smoke.ts`, ver `guardrails.md`) corre contra un `next dev` local antes de `pnpm ship`. Los handlers son Node runtime (usan `node:async_hooks`), nunca edge.
+- **API v1 para iOS vive en el mismo deploy (`src/app/api/v1/**`, 2026-09-24, fases 0–3 en `main`)** — aditiva: no toca la web, así que desplegarla no rompe nada; `pnpm ship` se corre **desde el repo padre** (no desde un worktree — ver memoria `baclog-beta-deploy`) con el smoke verde (`scripts/api-smoke.ts --only reads` y `--only writes`, ver `guardrails.md`) contra el `next dev` local. Los handlers son Node runtime (usan `node:async_hooks`), nunca edge. La app iOS (`ios/`) apunta en Release a `https://baclog.app/api/v1` y en Debug a `http://localhost:3010/api/v1` (`KURA_API_SCHEME`/`KURA_API_HOST` en `ios/project.yml`); `jose` ^6.2.12 es dependencia directa por el bearer HS256.
 
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
 

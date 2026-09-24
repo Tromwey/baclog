@@ -4,7 +4,7 @@ import { ApiError, withApi } from "@/authz/api";
 import { publicMarkOf } from "@/modules/backlog/mark";
 import { deleteOwnReview, getOwnReview, saveReview } from "@/modules/reviews/write";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
-import { json, noContent, readJson } from "../../../../_lib/http";
+import { json, noContent, parseId, readJson } from "../../../../_lib/http";
 import { isoDate, type Review } from "../../../../_lib/schemas";
 
 /**
@@ -16,9 +16,10 @@ import { isoDate, type Review } from "../../../../_lib/schemas";
  * web action runs): react first (409 `reaction_required`), no links (400),
  * ≤280 (400), albums never carry a spoiler, editing keeps `hiddenAt`.
  *
- * `authorHandle` is the caller's handle or `""` while they have none — never
- * an id (nothing on the wire carries a user id). `mark` is the caller's
- * reaction at write time (`publicMarkOf`, so a `disliked` review says so).
+ * `authorHandle` is `users.username` as is — null while the caller has no
+ * handle — never an id (nothing on the wire carries a user id). `mark` is
+ * the caller's reaction at write time (`publicMarkOf`, so a `disliked`
+ * review says so).
  */
 
 const PutReviewBody = z.object({
@@ -32,7 +33,7 @@ const NO_LINKS = "Las reseñas no llevan enlaces.";
 const BAD_BODY = `Escribe entre 1 y ${REVIEW_MAX_LENGTH} caracteres.`;
 
 export const PUT = withApi<{ id: string }>(async (request, { user, params }) => {
-  const { item } = await assertOwnsUserItem(params.id);
+  const { item } = await assertOwnsUserItem(parseId(params.id));
   const input = await readJson(request, PutReviewBody);
 
   const result = await saveReview(user.id, item.catalogItemId, input);
@@ -54,7 +55,7 @@ export const PUT = withApi<{ id: string }>(async (request, { user, params }) => 
 
   const review: Review = {
     id: own.id,
-    authorHandle: user.username ?? "",
+    authorHandle: user.username,
     titleId: item.catalogItemId,
     body: own.body,
     hasSpoiler: own.hasSpoiler,
@@ -67,7 +68,7 @@ export const PUT = withApi<{ id: string }>(async (request, { user, params }) => 
 });
 
 export const DELETE = withApi<{ id: string }>(async (_request, { user, params }) => {
-  const { item } = await assertOwnsUserItem(params.id);
+  const { item } = await assertOwnsUserItem(parseId(params.id));
   await deleteOwnReview(user.id, item.catalogItemId);
   return noContent();
 });

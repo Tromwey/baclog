@@ -9,9 +9,12 @@ import type { KuraMark } from "./mark";
  * The Kura "mark" as ONE write (API v1 `PUT /me/titles/{id}/mark`, ios/API.md
  * §4). The web keeps its per-field actions (status / verdict / obsession —
  * `backlog-item-actions.ts`) and composes them in `completeItemAction`; this
- * module is the same semantics collapsed into a single UPDATE on the caller's
- * `user_item`, keyed on the catalog item (state is per-TITLE, never on the
- * membership — AGENTS.md).
+ * module is a single UPDATE on the caller's `user_item`, keyed on the catalog
+ * item (state is per-TITLE, never on the membership — AGENTS.md). NOT the
+ * same semantics as the web's per-field writes: a mark is one picker state,
+ * so `completed` (and `null`) CLEAR the verdict and the obsession, where the
+ * web's `setStatusAction` leaves both axes alone. What the two share is the
+ * timestamp rule below.
  *
  *   obsessed  → status=completed · obsessed=true (+obsessedAt) · verdict UNTOUCHED
  *               (the web rule: obsession and verdict are independent axes)

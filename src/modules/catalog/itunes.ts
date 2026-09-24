@@ -28,29 +28,38 @@ interface ItunesCollection {
  * under entity=album for any query — yet its song index still matches them,
  * because song search also matches on the parent collectionName. Song→album
  * folding is what makes those specific albums findable at all.
+ *
+ * One index failing is absorbed (the other's hits still come back); BOTH
+ * failing THROWS — that is the "provider down" signal `unifiedSearchDetailed`
+ * reports as `failed`, so the mobile API can answer 503 instead of an honest
+ * looking empty result. The web search catches it (`safe`) and stays [].
  */
 export async function searchAlbums(query: string): Promise<ExternalItem[]> {
   const [albums, songs] = await Promise.all([
     fetchAlbums(query, "album"),
     fetchAlbums(query, "song"),
   ]);
+  if (albums === null && songs === null) {
+    throw new Error("iTunes search: both the album and the song index failed");
+  }
 
   // Album-entity results first (cleanest album-level relevance), then albums
   // surfaced only through their tracks — deduped on collectionId so a title
   // present in both indexes isn't listed twice.
   const byId = new Map<string, ExternalItem>();
-  for (const item of [...albums, ...songs]) {
+  for (const item of [...(albums ?? []), ...(songs ?? [])]) {
     if (!byId.has(item.externalId)) byId.set(item.externalId, item);
   }
   return [...byId.values()];
 }
 
 /** One index (album or song), mapped to albums and pre-deduped per collection.
- *  Independently resilient: a failure here can't blank the other index. */
+ *  Null on an upstream failure (logged) — distinct from an honest empty [] —
+ *  so `searchAlbums` can tell "no hits" from "iTunes is down". */
 async function fetchAlbums(
   query: string,
   entity: "album" | "song",
-): Promise<ExternalItem[]> {
+): Promise<ExternalItem[] | null> {
   const url = new URL("https://itunes.apple.com/search");
   url.searchParams.set("term", query);
   url.searchParams.set("entity", entity);
@@ -78,7 +87,7 @@ async function fetchAlbums(
     return out;
   } catch (err) {
     console.error(`[catalog] iTunes ${entity} search failed:`, err);
-    return [];
+    return null;
   }
 }
 
@@ -209,6 +218,10 @@ export interface AlbumDetail {
    *  pre-order (iTunes counted 8, listed 7 for "Hermoso"). Drives "3 DE 11". */
   trackCount: number;
   tracks: AlbumTrack[];
+  /** True when iTunes did not answer (HTTP error, network, bad JSON): the
+   *  empty fields above mean "unknown", not "no tracks". False on a real
+   *  answer — including one that genuinely lists nothing (a pre-order). */
+  unavailable: boolean;
 }
 
 /** iTunes' placeholder for an unreleased track: literally "Track 4", never
@@ -223,8 +236,10 @@ function isPlaceholderTrack(name: string, streamable: boolean): boolean {
  * (ADR-007). Track names are the album equivalent of a film's synopsis:
  * metadata/FACTS, the "receipt" safe zone (ADR-008) — fetched server-side like
  * the rest of the catalog. This is text, not artwork, so the "never proxy
- * images" rule (images only) does not apply. Returns an empty detail on any
- * failure — the caller just omits the section and the countdown.
+ * images" rule (images only) does not apply. On any failure returns an empty
+ * detail flagged `unavailable` (and logs it with the album id): the web pages
+ * omit the section and the countdown (fail-open), the mobile API answers
+ * 503 when it has nothing cached to show instead.
  *
  * ONE call serves both: the response's first row is the collection (carrying
  * releaseDate + trackCount), the rest are its tracks. That's why F3.8 costs no
@@ -238,11 +253,12 @@ export async function getAlbumDetail(
   collectionId: string,
   freshness: DetailFreshness = "pending",
 ): Promise<AlbumDetail> {
-  const EMPTY: AlbumDetail = {
+  const FAILED: AlbumDetail = {
     releaseDate: null,
     posterUrl: null,
     trackCount: 0,
     tracks: [],
+    unavailable: true,
   };
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", collectionId);
@@ -261,7 +277,10 @@ export async function getAlbumDetail(
             },
           },
     );
-    if (!res.ok) return EMPTY;
+    if (!res.ok) {
+      console.error(`[catalog] iTunes lookup ${collectionId} (${freshness}) failed: ${res.status}`);
+      return FAILED;
+    }
     const data = await res.json();
     const rows = (data.results ?? []) as Array<{
       wrapperType?: string;
@@ -308,8 +327,10 @@ export async function getAlbumDetail(
       // `tracks` is only what iTunes is willing to name today.
       trackCount: collection?.trackCount ?? tracks.length,
       tracks,
+      unavailable: false,
     };
-  } catch {
-    return EMPTY;
+  } catch (err) {
+    console.error(`[catalog] iTunes lookup ${collectionId} (${freshness}) failed:`, err);
+    return FAILED;
   }
 }

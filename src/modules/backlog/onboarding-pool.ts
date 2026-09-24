@@ -1,4 +1,5 @@
 import "server-only";
+import { env } from "@/lib/env";
 import { mostPlayedAlbums } from "@/modules/catalog/itunes-charts";
 import { cacheExternalItems } from "@/modules/catalog/search";
 import { discoverVideo } from "@/modules/catalog/tmdb-discover";
@@ -41,6 +42,14 @@ export interface OnboardingPoolItem {
 export interface OnboardingPoolPage {
   items: OnboardingPoolItem[];
   nextPage: number | null;
+  /**
+   * Every provider that was CONSULTED failed and there is nothing to show:
+   * TMDB (film + series, only when a key is set) and Apple's charts (both
+   * storefronts). The web ignores it (fail-open: an emptier grid); the
+   * mobile API answers 503 `unavailable`. A partial failure — one provider
+   * down, the other's tiles present — is NOT this: the grid just has holes.
+   */
+  unavailable: boolean;
 }
 
 /** Tiles per kind per page (× 3 kinds = 12 tiles, four rows of the grid). */
@@ -72,7 +81,7 @@ const MIN_VOTES = {
 export async function getOnboardingPoolPage(
   page: number,
 ): Promise<OnboardingPoolPage> {
-  if (page < 1 || page > POOL_PAGE_COUNT) return { items: [], nextPage: null };
+  if (page < 1 || page > POOL_PAGE_COUNT) return { items: [], nextPage: null, unavailable: false };
 
   const cycle = GENRE_CYCLE.length + 1; // + the plain-popular page
   const idx = (page - 1) % cycle;
@@ -87,11 +96,13 @@ export async function getOnboardingPoolPage(
       genreSlug: genre?.slug ?? null,
       minVotes: genre ? MIN_VOTES.genre[type] : MIN_VOTES.popular[type],
       page: 1,
-    }).then((rows) => rows.slice(from, from + PER_KIND));
+    }).then((rows) => (rows === null ? null : rows.slice(from, from + PER_KIND)));
 
+  // Both storefronts down = the album provider failed; one down = the other's
+  // chart still fills the slots.
   const albums = Promise.all([mostPlayedAlbums("mx"), mostPlayedAlbums("us")])
-    .then(([mx, us]) => dedupe([...mx, ...us]))
-    .then((rows) => rows.slice((page - 1) * PER_KIND, page * PER_KIND));
+    .then(([mx, us]) => (mx === null && us === null ? null : dedupe([...(mx ?? []), ...(us ?? [])])))
+    .then((rows) => (rows === null ? null : rows.slice((page - 1) * PER_KIND, page * PER_KIND)));
 
   const [films, series, records] = await Promise.all([
     video("film"),
@@ -99,8 +110,11 @@ export async function getOnboardingPoolPage(
     albums,
   ]);
 
+  const consulted = (env.TMDB_API_KEY ? 2 : 0) + 1;
+  const failed = [films, series, records].filter((r) => r === null).length;
+
   const cached = await cacheExternalItems(
-    interleave([films, series, records]).filter((e) => e.posterUrl),
+    interleave([films ?? [], series ?? [], records ?? []]).filter((e) => e.posterUrl),
   );
 
   return {
@@ -114,6 +128,7 @@ export async function getOnboardingPoolPage(
       byline: r.byline,
     })),
     nextPage: page < POOL_PAGE_COUNT ? page + 1 : null,
+    unavailable: cached.length === 0 && failed >= consulted,
   };
 }
 

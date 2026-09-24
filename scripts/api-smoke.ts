@@ -15,6 +15,9 @@
  *   --token <jwt>     skip the OTP flow entirely (auth section still runs the
  *                     negative cases + refresh/logout on this token)
  *   --only a,b        run only these sections: auth · reads · writes
+ *   --grep <text>     run only the cases whose name contains <text> (case-
+ *                     insensitive; combines with --only). Cases that hand
+ *                     state to each other (e.g. E2) may need their producers.
  *   --verbose         print every request line
  *
  * Structure: phases 1–2 ADD cases to `reads` / `writes` below (each case is a
@@ -22,8 +25,10 @@
  * runs only against a disposable QA account (the DB is prod) — it is empty
  * until phase 2 and guarded by `--only writes` on purpose.
  *
- * No AUTH_SECRET in the environment → the "wrong audience" / "expired" cases
- * are skipped with a warning (they need to mint a token locally).
+ * A case that can't run in this environment (no AUTH_SECRET to mint tokens,
+ * no private collection on the account, no SMOKE_UPCOMING_TITLE_ID…) calls
+ * `skip(reason)`: it is counted as SKIPPED in the summary, never as ok, so a
+ * run that silently exercised less than it claims can't read as green.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -72,8 +77,20 @@ const opts = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  grep: (flag("grep") ?? "").toLowerCase(),
   verbose: argv.includes("--verbose"),
 };
+
+/** Thrown by a case that can't run here; the runner counts it as skipped. */
+class SkipCase extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "SkipCase";
+  }
+}
+function skip(reason: string): never {
+  throw new SkipCase(reason);
+}
 
 if (!opts.email && !opts.token) {
   console.error("Falta --email (o --token).");
@@ -120,6 +137,11 @@ function expectNoStore(res: Res) {
     res.headers.get("cache-control"),
     "private, no-store",
     "toda respuesta de v1 lleva Cache-Control: private, no-store",
+  );
+  assert.match(
+    res.headers.get("x-request-id") ?? "",
+    /^[0-9a-f-]{36}$/,
+    "toda respuesta de v1 lleva X-Request-Id",
   );
 }
 
@@ -184,15 +206,17 @@ const l3: { ownPerson: z.infer<typeof PersonSchema> | null } = { ownPerson: null
  *  on titles/collections, so the scan also rejects the caller's own user id
  *  appearing as any string value (a Person is keyed by handle, never id). */
 const LEAK_KEYS = new Set(["email", "birthYear", "userId", "isAdmin", "preferredService", "isPrivate"]);
-function assertNoPeopleLeak(body: unknown, path = "$"): void {
+/** `allow`: keys legal on THIS payload only — `isPrivate` exists solely on the
+ *  caller's own following/followers lists (PersonSchema). */
+function assertNoPeopleLeak(body: unknown, path = "$", allow: ReadonlySet<string> = new Set()): void {
   if (Array.isArray(body)) {
-    body.forEach((v, i) => assertNoPeopleLeak(v, `${path}[${i}]`));
+    body.forEach((v, i) => assertNoPeopleLeak(v, `${path}[${i}]`, allow));
     return;
   }
   if (body && typeof body === "object") {
     for (const [k, v] of Object.entries(body)) {
-      assert.ok(!LEAK_KEYS.has(k), `fuga: ${path}.${k}`);
-      assertNoPeopleLeak(v, `${path}.${k}`);
+      assert.ok(!LEAK_KEYS.has(k) || allow.has(k), `fuga: ${path}.${k}`);
+      assertNoPeopleLeak(v, `${path}.${k}`, allow);
     }
     return;
   }
@@ -268,10 +292,7 @@ const auth: Case[] = [
   {
     name: "otp/request + otp/verify → { token, user: Me }",
     run: async () => {
-      if (opts.token) {
-        console.log("   (--token: salto el flujo OTP)");
-        return;
-      }
+      if (opts.token) skip("--token: el flujo OTP no se ejercita");
       await signIn();
     },
   },
@@ -319,10 +340,7 @@ const auth: Case[] = [
     name: "aud distinto / expirado (firmados con AUTH_SECRET) → 401",
     run: async () => {
       const secret = process.env.AUTH_SECRET;
-      if (!secret) {
-        console.log("   (sin AUTH_SECRET en el entorno — salto los casos de aud/exp)");
-        return;
-      }
+      if (!secret) skip("sin AUTH_SECRET en el entorno para firmar tokens de aud/exp");
       assert.ok(ctx.me, "hace falta el usuario");
       const key = new TextEncoder().encode(secret);
       const now = Math.floor(Date.now() / 1000);
@@ -364,16 +382,35 @@ const auth: Case[] = [
     },
   },
   {
-    name: "auth/refresh → token nuevo (jti distinto) con el mismo Me",
+    name: "auth/refresh: token fresco → el MISMO token; a < 7 días de exp → uno nuevo",
     run: async () => {
-      assert.ok(ctx.token, "hace falta un token");
+      assert.ok(ctx.token && ctx.me, "hace falta un token");
+      // Just issued (30 days ahead): no rotation, same token, fresh Me.
       const res = await call("POST", "/auth/refresh", { token: ctx.token });
       const session = expectOk(res, 200, AuthSessionSchema);
-      assert.notEqual(session.token, ctx.token, "el refresh rota el token");
-      const me = expectOk(await call("GET", "/me", { token: session.token }), 200, MeSchema);
-      assert.equal(me.id, session.user.id);
-      ctx.token = session.token;
+      assert.equal(session.token, ctx.token, "con más de 7 días por delante el refresh devuelve el mismo token");
+      assert.equal(session.user.id, ctx.me.id);
       ctx.me = session.user;
+
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET en el entorno para firmar un token a punto de vencer");
+      const key = new TextEncoder().encode(secret);
+      const now = Math.floor(Date.now() / 1000);
+      const expiring = await new SignJWT({})
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject(ctx.me.id)
+        .setAudience("kura-ios")
+        .setIssuedAt(now - 28 * 86400)
+        .setExpirationTime(now + 2 * 86400)
+        .setJti("smoke-expiring")
+        .sign(key);
+      const rotated = expectOk(await call("POST", "/auth/refresh", { token: expiring }), 200, AuthSessionSchema);
+      assert.notEqual(rotated.token, expiring, "a menos de 7 días el refresh rota el token");
+      const payload = JSON.parse(Buffer.from(rotated.token.split(".")[1], "base64url").toString("utf8")) as { exp: number; jti: string };
+      assert.ok(payload.exp > now + 29 * 86400, "el token nuevo vive 30 días");
+      assert.notEqual(payload.jti, "smoke-expiring", "jti nuevo");
+      const me = expectOk(await call("GET", "/me", { token: rotated.token }), 200, MeSchema);
+      assert.equal(me.id, ctx.me.id);
     },
   },
   {
@@ -486,10 +523,7 @@ const reads: Case[] = [
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const era = l4.eras[0];
-      if (!era) {
-        console.log("   (sin meses con actividad — salto el detalle)");
-        return;
-      }
+      if (!era) skip("la cuenta no tiene meses con actividad");
       const res = await call("GET", `/recap/${era}`, { token: ctx.token });
       const recap = expectOk(res, 200, RecapMonthSchema);
       assert.equal(recap.era, era);
@@ -542,10 +576,7 @@ const reads: Case[] = [
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const first = smoke.collections.find((c) => c.titleIds.length > 0) ?? smoke.collections[0];
-      if (!first) {
-        console.log("   (la cuenta no tiene colecciones — salto)");
-        return;
-      }
+      if (!first) skip("la cuenta no tiene colecciones");
       const res = await call("GET", `/collections/${first.id}`, { token: ctx.token });
       const body = expectOk(
         res,
@@ -772,10 +803,7 @@ const reads: Case[] = [
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const res = await call("GET", "/people/eric", { token: ctx.token });
-      if (res.status === 404) {
-        console.log("   (no existe @eric público en esta base — salto)");
-        return;
-      }
+      if (res.status === 404) skip("no existe @eric público en esta base");
       const person = expectOk(res, 200, PersonSchema);
       assertNoPeopleLeak(res.body);
       assert.equal(person.handle, "eric");
@@ -800,10 +828,7 @@ const reads: Case[] = [
     run: async () => {
       assert.ok(ctx.token && ctx.me?.handle, "hace falta un token y un handle propio");
       const first = l3.ownPerson?.collections[0];
-      if (!first) {
-        console.log("   (la cuenta no tiene colecciones en el perfil — salto)");
-        return;
-      }
+      if (!first) skip("la cuenta no tiene colecciones en el perfil");
       const res = await call("GET", `/people/${ctx.me.handle}/collections/${first.id}`, { token: ctx.token });
       const body = expectOk(
         res,
@@ -827,6 +852,41 @@ const reads: Case[] = [
       // A private or foreign backlog id under a valid handle is the same 404.
       const other = await call("GET", `/people/${ctx.me.handle}/collections/00000000-0000-0000-0000-000000000000`, { token: ctx.token });
       expectError(other, 404, "not_found");
+    },
+  },
+  {
+    name: "GET /people/{propio}/collections/{privada} → 404 (una colección privada no existe para nadie)",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me?.handle, "hace falta un token y un handle propio");
+      const priv = smoke.collections.find((c) => c.visibility === "private");
+      if (!priv) skip("la cuenta no tiene ninguna colección privada");
+      const res = await call("GET", `/people/${ctx.me.handle}/collections/${priv.id}`, { token: ctx.token });
+      const a = expectError(res, 404, "not_found");
+      const b = expectError(
+        await call("GET", `/people/${ctx.me.handle}/collections/00000000-0000-0000-0000-000000000000`, { token: ctx.token }),
+        404,
+        "not_found",
+      );
+      assert.deepEqual(a, b, "privada e inexistente son el mismo 404, incluso para su dueño");
+      // The owner still sees it through the private route.
+      expectOk(await call("GET", `/collections/${priv.id}`, { token: ctx.token }), 200, z.object({ collection: CollectionSchema }));
+    },
+  },
+  {
+    name: "solo cookie de Auth.js (sin bearer) → 401; bearer + Cookie basura → 200 (el bearer manda)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const cookie = "authjs.session-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..garbage; __Secure-authjs.session-token=garbage";
+      const onlyCookie = await fetch(`${opts.base}/me`, { headers: { Accept: "application/json", Cookie: cookie } });
+      assert.equal(onlyCookie.status, 401, "una cookie nunca autentica en v1");
+      const onlyCookieBody = ErrorBodySchema.parse(await onlyCookie.json());
+      assert.equal(onlyCookieBody.error.code, "unauthorized");
+      const both = await fetch(`${opts.base}/me`, {
+        headers: { Accept: "application/json", Cookie: cookie, Authorization: `Bearer ${ctx.token}` },
+      });
+      assert.equal(both.status, 200, `bearer válido + cookie basura: ${both.status}`);
+      const me = MeSchema.parse(await both.json());
+      assert.equal(me.id, ctx.me?.id, "el usuario sale del bearer, no de la cookie");
     },
   },
   {
@@ -867,20 +927,32 @@ const reads: Case[] = [
     run: async () => {
       assert.ok(ctx.token && ctx.me, "hace falta un token");
       const schema = paginated(PersonSchema).extend({ privateCount: z.number().int().nonnegative() });
+      // `isPrivate` is legal ONLY on these two own lists (PersonSchema).
+      const ownList = new Set(["isPrivate"]);
       const following = await call("GET", "/me/following", { token: ctx.token });
       const f = expectOk(following, 200, schema);
-      assertNoPeopleLeak(following.body);
-      for (const p of f.items) assert.equal(p.isFollowing, true, "siguiendo = following:true");
+      assertNoPeopleLeak(following.body, "$", ownList);
+      for (const p of f.items) {
+        assert.equal(p.isFollowing, true, "siguiendo = following:true");
+        if (p.isPrivate) {
+          assert.equal(p.avatarUrl, null, "un seguido privado viaja sin foto");
+          assert.deepEqual(p.hexes, [], "un seguido privado viaja sin colores");
+        }
+      }
       const followers = await call("GET", "/me/followers", { token: ctx.token });
       const g = expectOk(followers, 200, schema);
-      assertNoPeopleLeak(followers.body);
+      assertNoPeopleLeak(followers.body, "$", ownList);
       assert.ok(
         g.items.length + g.privateCount <= Math.max(ctx.me.followers, g.items.length + g.privateCount),
         "listados + anónimos no exceden el conteo",
       );
-      // Garbage cursor → page 1, never an error.
-      const junk = expectOk(await call("GET", "/me/following?cursor=garbage", { token: ctx.token }), 200, schema);
-      assert.deepEqual(junk.items.map((p) => p.handle), f.items.map((p) => p.handle));
+      // Garbage cursor → 400 with fields.cursor (a cursor we didn't mint is a client bug).
+      const junk = expectError(await call("GET", "/me/following?cursor=garbage", { token: ctx.token }), 400, "invalid");
+      assert.ok(junk.fields && "cursor" in junk.fields, "fields.cursor presente");
+      expectError(await call("GET", "/me/followers?cursor=garbage", { token: ctx.token }), 400, "invalid");
+      // Empty cursor = page 1.
+      const empty = expectOk(await call("GET", "/me/following?cursor=", { token: ctx.token }), 200, schema);
+      assert.deepEqual(empty.items.map((p) => p.handle), f.items.map((p) => p.handle));
       if (f.nextCursor) {
         const p2 = expectOk(await call("GET", `/me/following?cursor=${encodeURIComponent(f.nextCursor)}`, { token: ctx.token }), 200, schema);
         const seen = new Set(f.items.map((p) => p.handle));
@@ -930,6 +1002,8 @@ const reads: Case[] = [
           assert.ok(e.reviewId && e.id === `reviewed:${e.reviewId}`, "reviewId = id de la fila");
         }
         if (e.kind === "obsessed") assert.equal(e.mark, "obsessed");
+        if (e.kind === "completed") assert.ok(e.mark !== null, "un completed siempre lleva marca (veredicto o completed)");
+        if (e.kind === "added") assert.equal(e.mark, null, "un added no lleva marca");
         if (e.releaseDate) assert.ok(new Date(e.releaseDate) > new Date(), "releaseDate solo si aún no sale");
       }
       // Newest first.
@@ -943,8 +1017,8 @@ const reads: Case[] = [
         const last = page.items.at(-1)!;
         for (const e of p2.items) assert.ok(e.at <= last.at, "página 2 es más vieja");
       }
-      const junk = expectOk(await call("GET", "/feed?cursor=garbage", { token: ctx.token }), 200, schema);
-      assert.deepEqual(junk.items.map((e) => e.id), page.items.map((e) => e.id), "cursor inválido = página 1");
+      const junk = expectError(await call("GET", "/feed?cursor=garbage", { token: ctx.token }), 400, "invalid");
+      assert.ok(junk.fields && "cursor" in junk.fields, "cursor inválido = 400 con fields.cursor");
     },
   },
   {
@@ -1049,13 +1123,6 @@ async function e3call(method: string, path: string, init: { body?: unknown } = {
   console.log(`   (429 en ${method} ${path} — espero ${wait}s)`);
   await new Promise((r) => setTimeout(r, wait * 1000));
   return call(method, path, { token: ctx.token, ...init });
-}
-
-/** `ReviewSchema` as-is when the QA account has a handle; while it has none the
- *  handler emits `authorHandle: ""` (never an id), which `min(1)` rejects — the
- *  contract gap is reported, not hidden: the relaxed schema only applies then. */
-function e3ReviewSchema() {
-  return ctx.me?.handle ? ReviewSchema : ReviewSchema.extend({ authorHandle: z.literal("") });
 }
 
 /** `--token` mode skips the login, so `ctx.me` is empty: read it once. */
@@ -1373,7 +1440,7 @@ const writes: Case[] = [
     },
   },
   {
-    name: "E1 PUT /me/following/eric → 204 (idempotente) · propio/inexistente → 404 · malformado → 400",
+    name: "E1 PUT /me/following/eric → 204 (idempotente) · propio/inexistente/malformado → 404 idéntico",
     run: async () => {
       assert.ok(ctx.token && ctx.me?.handle, "hace falta token y handle");
       const before = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
@@ -1388,15 +1455,14 @@ const writes: Case[] = [
       const self = expectError(await call("PUT", `/me/following/${ctx.me.handle}`, { token: ctx.token }), 404, "not_found");
       const nobody = expectError(await call("PUT", "/me/following/nadieexiste12345", { token: ctx.token }), 404, "not_found");
       assert.deepEqual(self, nobody, "propio e inexistente son el mismo 404");
-      expectError(await call("PUT", "/me/following/ab", { token: ctx.token }), 400, "invalid");
-      // If L3's list is live, the follow shows up there.
+      const malformed = expectError(await call("PUT", "/me/following/ab", { token: ctx.token }), 404, "not_found");
+      assert.deepEqual(malformed, nobody, "malformado es el mismo 404 (sin oráculo de forma)");
+      // `@eric` and `ERIC` normalize to the same handle: still one row.
+      assert.equal((await call("PUT", "/me/following/%40ERIC", { token: ctx.token })).status, 204);
+      // The follow shows up in the own list.
       const list = await call("GET", "/me/following", { token: ctx.token });
-      if (list.status === 200) {
-        const parsed = z.object({ items: z.array(z.object({ handle: z.string() })) }).parse(list.body);
-        assert.ok(parsed.items.some((p) => p.handle === "eric"), "@eric aparece en GET /me/following");
-      } else {
-        console.log(`   (GET /me/following → ${list.status}: aún no está, salto la comprobación de lista)`);
-      }
+      const parsed = expectOk(list, 200, z.object({ items: z.array(z.object({ handle: z.string() })) }));
+      assert.ok(parsed.items.some((p) => p.handle === "eric"), "@eric aparece en GET /me/following");
     },
   },
   {
@@ -1413,7 +1479,7 @@ const writes: Case[] = [
       assert.equal(again.status, 204, "dejar de seguir dos veces no falla");
       const nobody = await call("DELETE", "/me/following/nadieexiste12345", { token: ctx.token });
       assert.equal(nobody.status, 204, "handle desconocido → 204, la respuesta nunca varía");
-      expectError(await call("DELETE", "/me/following/ab", { token: ctx.token }), 400, "invalid");
+      expectError(await call("DELETE", "/me/following/ab", { token: ctx.token }), 404, "not_found");
     },
   },
   {
@@ -1487,7 +1553,7 @@ const writes: Case[] = [
     },
   },
   {
-    name: "E2 POST /collections (link) → 201 Collection; nombre vacío → 400",
+    name: "E2 POST /collections (link) → 200 Collection; nombre vacío → 400",
     run: async () => {
       const bad = await e2call("POST", "/collections", { body: { name: "   ", visibility: "link" } });
       const err = expectError(bad, 400, "invalid");
@@ -1496,7 +1562,7 @@ const writes: Case[] = [
       const res = await e2call("POST", "/collections", {
         body: { name: "Smoke E2", vibe: "temporal", visibility: "link" },
       });
-      const c = expectOk(res, 201, CollectionSchema);
+      const c = expectOk(res, 200, CollectionSchema);
       assert.equal(c.name, "Smoke E2");
       assert.equal(c.vibe, "temporal");
       assert.equal(c.visibility, "link");
@@ -1615,10 +1681,7 @@ const writes: Case[] = [
     name: "E2 marca sobre un estreno futuro → 409 not_released; con preview:true → 200",
     run: async () => {
       const upcoming = process.env.SMOKE_UPCOMING_TITLE_ID;
-      if (!upcoming) {
-        console.log("   (sin SMOKE_UPCOMING_TITLE_ID — salto)");
-        return;
-      }
+      if (!upcoming) skip("sin SMOKE_UPCOMING_TITLE_ID (un catalog_item con release_date > now())");
       expectOk(
         await e2call("PUT", `/collections/${e2.collection}/titles/${upcoming}`),
         200,
@@ -1750,13 +1813,13 @@ const writes: Case[] = [
         body: { body: "  Primera versión, smoke E3.  ", hasSpoiler: true },
       });
       const me = await e3Me();
-      const a = expectOk(first, 200, e3ReviewSchema());
+      const a = expectOk(first, 200, ReviewSchema);
       assert.equal(a.titleId, reacted);
       assert.equal(a.body, "Primera versión, smoke E3.", "el body llega trimmed");
       // TitleState.mark folds `disliked` into `completed`; Review.mark keeps it.
       assert.ok(a.mark !== null, "mark = la reacción del autor (publicMarkOf)");
       if (reactedMark !== "completed") assert.equal(a.mark, reactedMark);
-      assert.equal(a.authorHandle, me.handle ?? "", "authorHandle = handle propio o \"\"");
+      assert.equal(a.authorHandle, me.handle ?? null, "authorHandle = handle propio, o null sin handle (nunca un id)");
       assert.equal(a.hidden, false);
       assert.ok(!first.text.includes("\"userId\""), "ningún userId viaja");
       e3.review = a;
@@ -1764,7 +1827,7 @@ const writes: Case[] = [
       const second = await e3call("PUT", `/me/titles/${reacted}/review`, {
         body: { body: "Segunda versión, editada.", hasSpoiler: false },
       });
-      const b = expectOk(second, 200, e3ReviewSchema());
+      const b = expectOk(second, 200, ReviewSchema);
       assert.equal(b.id, a.id, "editar conserva el id (upsert)");
       assert.equal(b.body, "Segunda versión, editada.");
       assert.equal(b.hasSpoiler, false);
@@ -1797,7 +1860,7 @@ const writes: Case[] = [
       const back = await e3call("PUT", `/me/titles/${reacted}/review`, {
         body: { body: "Tercera, tras borrar.", hasSpoiler: false },
       });
-      const c = expectOk(back, 200, e3ReviewSchema());
+      const c = expectOk(back, 200, ReviewSchema);
       assert.notEqual(c.id, e3.review?.id, "tras DELETE, un PUT crea otra fila");
       const clean = await e3call("DELETE", `/me/titles/${reacted}/review`);
       assert.equal(clean.status, 204);
@@ -1839,13 +1902,15 @@ async function main() {
     console.log("   ok");
   }
   let ran = 0;
+  let skipped = 0;
   for (const section of opts.only) {
-    const cases = sections[section];
-    if (!cases) {
+    const all = sections[section];
+    if (!all) {
       console.error(`Sección desconocida: ${section}`);
       process.exit(2);
     }
-    console.log(`\n[${section}]${cases.length === 0 ? " (sin casos todavía)" : ""}`);
+    const cases = opts.grep ? all.filter((c) => c.name.toLowerCase().includes(opts.grep)) : all;
+    console.log(`\n[${section}]${cases.length === 0 ? " (sin casos)" : ""}`);
     for (const c of cases) {
       const t0 = Date.now();
       try {
@@ -1853,13 +1918,18 @@ async function main() {
         console.log(`   ok   ${c.name} (${Date.now() - t0} ms)`);
         ran++;
       } catch (err) {
+        if (err instanceof SkipCase) {
+          console.log(`   SKIP ${c.name} — ${err.message}`);
+          skipped++;
+          continue;
+        }
         console.error(`   FAIL ${c.name}`);
         console.error(err instanceof Error ? err.message : err);
         process.exit(1);
       }
     }
   }
-  console.log(`\n${ran} casos ok`);
+  console.log(`\n${ran} ok · ${skipped} skipped`);
 }
 
 main().catch((err) => {

@@ -1,4 +1,5 @@
 import "server-only";
+import { plural } from "@/lib/plural";
 import {
   and,
   asc,
@@ -808,7 +809,7 @@ export async function getFeedSuggestion(
     : inCommon > 0
       ? `${inCommon} ${inCommon === 1 ? "título" : "títulos"} en común`
       : shelves > 0
-        ? `Tiene ${shelves} ${shelves === 1 ? "backlog" : "backlogs"}`
+        ? `Tiene ${shelves} ${plural(shelves, "colección", "colecciones")}`
         : "Acaba de llegar";
 
   return {

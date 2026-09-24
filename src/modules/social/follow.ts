@@ -1,8 +1,8 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "@/db";
 import { userFollows, users } from "@/db/schema";
+import { parseHandleOrNull } from "@/modules/account/username";
 import { publicAuthor } from "./queries";
 
 /**
@@ -13,12 +13,9 @@ import { publicAuthor } from "./queries";
  * "use server" file. Idempotent both ways.
  */
 
-export const handleSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[a-z0-9_.]{3,30}$/);
-
+/** `invalid` = the handle can't even be a username (`parseHandleOrNull`,
+ *  the one grammar shared with the claim). The API folds it into the same
+ *  404 as `not_found`; the web actions return it as is. */
 export type FollowResult = { ok: true } | { error: "not_found" | "invalid" };
 
 /**
@@ -35,13 +32,13 @@ export async function followUser(
   viewerId: string,
   username: string,
 ): Promise<FollowResult> {
-  const parsed = handleSchema.safeParse(username);
-  if (!parsed.success) return { error: "invalid" };
+  const handle = parseHandleOrNull(username);
+  if (!handle) return { error: "invalid" };
 
   const [target] = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.username, parsed.data), publicAuthor))
+    .where(and(eq(users.username, handle), publicAuthor))
     .limit(1);
   if (!target || target.id === viewerId) return { error: "not_found" };
 
@@ -63,13 +60,13 @@ export async function unfollowUser(
   viewerId: string,
   username: string,
 ): Promise<FollowResult> {
-  const parsed = handleSchema.safeParse(username);
-  if (!parsed.success) return { error: "invalid" };
+  const handle = parseHandleOrNull(username);
+  if (!handle) return { error: "invalid" };
 
   const [target] = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.username, parsed.data))
+    .where(eq(users.username, handle))
     .limit(1);
   if (target) {
     await db

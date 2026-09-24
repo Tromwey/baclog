@@ -8,8 +8,7 @@ import { isoDate, type Release, type Title } from "../schemas";
  * Pure: no "server-only", no DB — the wire check runs it under tsx.
  */
 
-export interface TitleSummaryInput {
-  id: string;
+interface TitleSummaryFacts {
   title: string;
   mediaType: "film" | "series" | "album";
   year: number | null;
@@ -19,9 +18,20 @@ export interface TitleSummaryInput {
   paletteHex: string[] | null;
 }
 
+/**
+ * The catalog id arrives under two names: `id` on a bare `catalog_item` row
+ * and `catalogItemId` on every JOINED row (feed events, memberships, rails,
+ * recap, pool…) — where a sibling `id` is usually the membership or
+ * user_item row. So `catalogItemId` WINS whenever it is present; `id` is
+ * only read on rows that have no `catalogItemId` at all.
+ */
+export type TitleSummaryInput =
+  | (TitleSummaryFacts & { catalogItemId: string; id?: string })
+  | (TitleSummaryFacts & { id: string; catalogItemId?: undefined });
+
 export function toTitleSummary(row: TitleSummaryInput): Title {
   return {
-    id: row.id,
+    id: row.catalogItemId ?? row.id,
     name: row.title,
     format: row.mediaType,
     year: row.year,

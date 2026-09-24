@@ -2,7 +2,7 @@ import { ApiError, withApi } from "@/authz/api";
 import { AVATAR_MAX_BYTES, AVATAR_TYPES } from "@/modules/avatar/shared";
 import { removeAvatar, storeAvatar } from "@/modules/avatar/write";
 import { json } from "../../_lib/http";
-import { freshMe } from "../_lib/fresh-me";
+import { freshMe } from "../../_lib/me";
 
 const INVALID_MSG =
   "La foto tiene que ser WebP, JPEG o PNG. Elige otra imagen.";
@@ -63,7 +63,7 @@ async function readImageBody(request: Request): Promise<Uint8Array> {
     }
     const file = form.get("file");
     if (!(file instanceof File)) {
-      throw new ApiError("invalid", "Falta la parte `file` con la imagen.", {
+      throw new ApiError("invalid", "No llegó ninguna imagen. Elige una foto e inténtalo de nuevo.", {
         fields: { file: "invalid" },
       });
     }
@@ -77,9 +77,6 @@ async function readImageBody(request: Request): Promise<Uint8Array> {
     return new Uint8Array(await request.arrayBuffer());
   }
 
-  throw new ApiError(
-    "invalid",
-    "Manda la imagen como multipart/form-data (parte `file`) o como cuerpo con Content-Type image/webp, image/jpeg o image/png.",
-    { fields: { file: "invalid" } },
-  );
+  // Neither a form nor an image body: the app sent something we can't read.
+  throw new ApiError("invalid", INVALID_MSG, { fields: { file: "invalid" } });
 }

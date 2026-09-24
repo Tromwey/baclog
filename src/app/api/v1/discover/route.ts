@@ -2,10 +2,10 @@ import { withApi } from "@/authz/api";
 import { getLibraryUpcoming } from "@/modules/backlog/library";
 import { getCatalogItems } from "@/modules/catalog/cache";
 import { recCards } from "@/modules/recs/discover-cards";
-import { getObsessionRails, type RailWork } from "@/modules/recs/discover-rails";
+import { getObsessionRails } from "@/modules/recs/discover-rails";
 import { getTrendingAmongFollowed } from "@/modules/social/trending";
 import { json } from "../_lib/http";
-import { isoDate, type Title } from "../_lib/schemas";
+import { isoDate } from "../_lib/schemas";
 import { toTitleSummary } from "../_lib/wire";
 
 /**
@@ -24,18 +24,6 @@ import { toTitleSummary } from "../_lib/wire";
 
 const KICKER = (seedTitle: string) => `Porque te obsesiona ${seedTitle}`;
 
-function railTitle(w: RailWork): Title {
-  return toTitleSummary({
-    id: w.catalogItemId,
-    title: w.title,
-    mediaType: w.mediaType,
-    year: w.year,
-    byline: w.byline,
-    posterUrl: w.posterUrl,
-    paletteHex: w.paletteHex,
-  });
-}
-
 export const GET = withApi(async (_req, { user }) => {
   const now = Date.now();
   const [rails, trending, upcoming] = await Promise.all([
@@ -50,20 +38,12 @@ export const GET = withApi(async (_req, { user }) => {
 
   return json({
     recommended: recCards(rails).map((c) => ({
-      title: railTitle(c.work),
+      title: toTitleSummary(c.work),
       reason: KICKER(c.because),
       seedTitleId: c.seedTitleId,
     })),
     trending: trending.map((t) => ({
-      title: toTitleSummary({
-        id: t.catalogItemId,
-        title: t.title,
-        mediaType: t.mediaType,
-        year: t.year,
-        byline: t.byline,
-        posterUrl: t.posterUrl,
-        paletteHex: t.paletteHex,
-      }),
+      title: toTitleSummary(t),
       saves: t.count,
       people: t.people.map((p) => p.username),
     })),

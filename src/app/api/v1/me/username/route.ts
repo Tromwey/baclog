@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ApiError, withApi } from "@/authz/api";
 import { claimUsername } from "@/modules/account/username";
 import { json, readJson } from "../../_lib/http";
-import { freshMe } from "../_lib/fresh-me";
+import { freshMe } from "../../_lib/me";
 
 const bodySchema = z.object({ username: z.string().max(200) });
 

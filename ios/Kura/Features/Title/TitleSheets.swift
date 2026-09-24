@@ -160,7 +160,7 @@ struct SaveToSheet: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t.name).font(.kura.newsItalic(20)).foregroundStyle(KColor.text).lineLimit(1)
                         Text([t.format.metaLabel, t.year.map(String.init), t.creator.components(separatedBy: " ").last]
-                            .compactMap { $0 }.joined(separator: " · ")).monoLabel().lineLimit(1)
+                            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")).monoLabel().lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 8)

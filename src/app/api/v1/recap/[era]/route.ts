@@ -1,12 +1,7 @@
 import { assertUser } from "@/authz";
 import { ApiError, withApi } from "@/authz/api";
 import { getRecapMonth } from "@/modules/backlog/recap";
-import {
-  alsoInMonth,
-  ERA_KEY_RE,
-  monthYear,
-  type RecapTitle,
-} from "@/modules/backlog/recap-format";
+import { alsoInMonth, ERA_KEY_RE, monthYear } from "@/modules/backlog/recap-format";
 import { json } from "../../_lib/http";
 import { toTitleSummary } from "../../_lib/wire";
 
@@ -18,17 +13,6 @@ import { toTitleSummary } from "../../_lib/wire";
  * `top` is "lo más tuyo" and `also` the "también en tu mes" strip, both by
  * the exact rule the web screen draws (`pickTop`, `alsoInMonth`).
  */
-const titleOf = (t: RecapTitle) =>
-  toTitleSummary({
-    id: t.catalogItemId,
-    title: t.title,
-    mediaType: t.mediaType,
-    year: t.year,
-    byline: t.byline,
-    posterUrl: t.posterUrl,
-    paletteHex: t.paletteHex,
-  });
-
 export const GET = withApi<{ era: string }>(async (_req, { params }) => {
   const user = await assertUser();
   const era = params.era;
@@ -47,7 +31,7 @@ export const GET = withApi<{ era: string }>(async (_req, { params }) => {
       reviews: month.reviews,
       saved: month.saved,
     },
-    top: month.top ? titleOf(month.top) : null,
-    also: alsoInMonth(month).map(titleOf),
+    top: month.top ? toTitleSummary(month.top) : null,
+    also: alsoInMonth(month).map(toTitleSummary),
   });
 });

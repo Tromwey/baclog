@@ -1,8 +1,7 @@
 import "server-only";
-import { z } from "zod";
 import { ApiError } from "@/authz/api";
 import type { CurrentUser } from "@/auth/session";
-import { profileHexes } from "@/modules/backlog/profile-hexes";
+import { profileTint } from "@/modules/backlog/profile-hexes";
 import {
   getPublicProfile,
   getPublicReactionCounts,
@@ -22,16 +21,9 @@ import type { Person } from "@/app/api/v1/_lib/schemas";
  * `isPrivate` on the wire and no distinguishable body.
  */
 
-/** The handle grammar `claimUsernameAction` enforces. Anything else is a
- *  404, not a 400: a validation error on the path would tell a prober which
- *  strings are even worth trying. */
-const HandleSchema = z.string().regex(/^[a-z0-9_.]{3,30}$/);
-
-export function parseHandle(raw: string | string[] | undefined): string {
-  const parsed = HandleSchema.safeParse(typeof raw === "string" ? raw : "");
-  if (!parsed.success) throw new ApiError("not_found");
-  return parsed.data;
-}
+/** `{handle}` path segments go through `parseHandle` in `_lib/http.ts` (the
+ *  one username grammar; malformed = the same 404). */
+export { parseHandle } from "@/app/api/v1/_lib/http";
 
 export async function buildPerson(
   viewer: CurrentUser,
@@ -52,19 +44,17 @@ export async function buildPerson(
     countPublicReviewsByAuthor(profile.username),
   ]);
 
-  // The obsession that tints the profile (profile-hexes.ts): the newest one
-  // with a cover palette; failing that, the newest obsession at all. The
-  // lima fallback of public.ts is not a Kura colour — profileHexes drops it.
-  const featured =
-    profile.obsessions.find((o) => (o.paletteHex?.length ?? 0) > 0) ??
-    profile.obsessions[0];
+  // One rule for the tint AND the title it names (profile-hexes.ts, shared
+  // with `Me`). The lima fallback of public.ts is not a Kura colour — the
+  // rule drops it.
+  const tint = profileTint(profile.obsessions, profile.palette);
 
   return {
     handle: profile.username,
     name: profile.displayName,
     avatarUrl: profile.avatarUrl,
-    hexes: profileHexes(profile.obsessions, profile.palette),
-    featuredTitleId: featured?.catalogItemId ?? null,
+    hexes: tint.hexes,
+    featuredTitleId: tint.featuredTitleId,
     isFounder: profile.isFounder,
     followers: profile.followerCount,
     followingCount: profile.followingCount,

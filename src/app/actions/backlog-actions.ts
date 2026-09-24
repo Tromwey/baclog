@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { assertOwnsBacklog, assertUser } from "@/authz";
+import { assertOwnsBacklog, assertUser, NotFoundError } from "@/authz";
 import {
   backlogNameSchema,
   backlogVibeSchema,
@@ -55,10 +55,12 @@ export async function renameBacklogAction(
   const parsed = nameSchema.safeParse(name);
   const parsedVibe = vibeSchema.safeParse(vibe);
   if (!parsed.success || !parsedVibe.success) return { error: "invalid" as const };
-  await updateBacklog(user.id, backlog.id, {
+  const ok = await updateBacklog(user.id, backlog.id, {
     name: parsed.data,
     ...(parsedVibe.data !== undefined ? { vibe: parsedVibe.data } : {}),
   });
+  // Deleted between the assert and the write: say so, never a silent "ok".
+  if (!ok) throw new NotFoundError();
   revalidatePath(`/backlogs/${backlog.id}`);
   revalidatePath("/backlogs");
   return { ok: true as const };
@@ -79,7 +81,8 @@ export async function setBacklogVisibilityAction(
   const parsed = z.enum(["private", "public", "featured"]).safeParse(visibility);
   if (!parsed.success) return { error: "invalid" as const };
 
-  await updateBacklog(user.id, backlog.id, { visibility: parsed.data });
+  const ok = await updateBacklog(user.id, backlog.id, { visibility: parsed.data });
+  if (!ok) throw new NotFoundError();
 
   revalidatePath("/perfil");
   revalidatePath("/feed");

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ApiError, withApi } from "@/authz/api";
 import { getOwnTitleState, setMark } from "@/modules/backlog/state";
-import { json, readJson } from "../../../../_lib/http";
+import { json, parseId, readJson } from "../../../../_lib/http";
 import { MarkSchema } from "../../../../_lib/schemas";
 import { toTitleState } from "../../../../_lib/wire";
 
@@ -18,12 +18,13 @@ const BodySchema = z.object({
  * verdict alone; `null` returns the title to the radar. Idempotent.
  *
  * 404 when the title isn't in the caller's library (mark a saved title only —
- * membership first). 409 `not_released` when `releaseDate > now` and the
- * app didn't say `preview`.
+ * membership first) — a malformed id is the same 404. 409 `not_released`
+ * when `releaseDate > now` and the app didn't say `preview`.
  */
 export const PUT = withApi<{ id: string }>(async (request, { user, params }) => {
+  const id = parseId(params.id);
   const body = await readJson(request, BodySchema);
-  const res = await setMark(user.id, params.id, body.mark, { preview: body.preview });
+  const res = await setMark(user.id, id, body.mark, { preview: body.preview });
   if ("error" in res) {
     if (res.error === "not_released") {
       throw new ApiError(
@@ -34,7 +35,7 @@ export const PUT = withApi<{ id: string }>(async (request, { user, params }) => 
     }
     throw new ApiError("not_found");
   }
-  const state = await getOwnTitleState(user.id, params.id);
+  const state = await getOwnTitleState(user.id, id);
   if (!state) throw new ApiError("not_found");
   return json(toTitleState(state));
 });

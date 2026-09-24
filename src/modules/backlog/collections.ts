@@ -64,19 +64,31 @@ export interface UpdateBacklogInput {
 /**
  * Patch name / vibe / visibility. Returns false when the (backlogId, userId)
  * pair matched nothing — the caller decides whether that is a 404 (it always
- * is: ownership failures are indistinguishable from nonexistence).
+ * is: ownership failures are indistinguishable from nonexistence). An EMPTY
+ * patch writes nothing (not even `updatedAt` — "updated" means a field
+ * changed) and only answers whether the row is the user's.
  */
 export async function updateBacklog(
   userId: string,
   backlogId: string,
   input: UpdateBacklogInput,
 ): Promise<boolean> {
-  const patch: Partial<typeof backlogs.$inferInsert> = { updatedAt: new Date() };
+  const patch: Partial<typeof backlogs.$inferInsert> = {};
   if (input.name !== undefined) patch.name = backlogNameSchema.parse(input.name);
   if (input.vibe !== undefined) {
     patch.vibe = input.vibe === null ? null : backlogVibeSchema.parse(input.vibe) || null;
   }
   if (input.visibility !== undefined) Object.assign(patch, VISIBILITY[input.visibility]);
+
+  if (Object.keys(patch).length === 0) {
+    const [own] = await db
+      .select({ id: backlogs.id })
+      .from(backlogs)
+      .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
+      .limit(1);
+    return Boolean(own);
+  }
+  patch.updatedAt = new Date();
 
   const updated = await db
     .update(backlogs)
@@ -102,14 +114,14 @@ export async function deleteBacklog(userId: string, backlogId: string): Promise<
 
 /**
  * ONE backlog of the user with all its memberships — what a write handler
- * returns after mutating (ios/API.md §1: writes return the resource). Reuses
- * the `GET /collections` reader and picks the row, so the wire shape can't
- * drift from the list. Null when the id isn't the user's.
+ * returns after mutating (ios/API.md §1: writes return the resource). The
+ * same reader as `GET /collections`, narrowed to the one id, so the wire
+ * shape can't drift from the list. Null when the id isn't the user's.
  */
 export async function getOwnCollection(
   userId: string,
   backlogId: string,
 ): Promise<CollectionWithMemberships | null> {
-  const rows = await getCollectionsWithMemberships(userId);
-  return rows.find((r) => r.id === backlogId) ?? null;
+  const [row] = await getCollectionsWithMemberships(userId, { backlogId });
+  return row ?? null;
 }

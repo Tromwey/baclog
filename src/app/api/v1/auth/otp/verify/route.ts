@@ -36,8 +36,15 @@ export const POST = withPublicApi(async (request) => {
   if (!user) return apiError("unauthorized");
 
   const token = await issueMobileToken(user.id);
+  // Structured, and WITHOUT `device.name`: it is free text the client chose
+  // (PII — people name their phone after themselves — and a log-injection
+  // vector). Platform + version are enum/short-validated.
   console.log(
-    `[api/v1] sign-in ${device.platform} · ${device.name} · v${device.appVersion} · user ${user.id}`,
+    `[api/v1] sign-in ${JSON.stringify({
+      platform: device.platform,
+      appVersion: device.appVersion,
+      userId: user.id,
+    })}`,
   );
   const body: AuthSession = { token, user: await buildMe(user) };
   return json(body);

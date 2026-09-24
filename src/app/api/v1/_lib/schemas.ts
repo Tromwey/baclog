@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// Every zod message the API emits (`fields` on a 400 `invalid`) is Spanish:
+// configured ONCE here, the module every handler and the smoke import.
+// `_lib/http.ts` imports this file for the side effect, so a route that
+// parses input without touching a wire schema still gets the locale.
+z.config(z.locales.es());
+
 /**
  * /api/v1 wire contract (ios/API.md §3) — THE source of truth for what goes
  * over the wire to the Kura iOS app. Every handler serializes INTO one of
@@ -89,8 +95,8 @@ export const ErrorBodySchema = z.object({
     code: ErrorCodeSchema,
     /** Final Spanish copy — show as is. */
     message: z.string().min(1),
-    /** Sub-code the app branches on: "underage" (forbidden), "not_released"
-     *  / "reaction_required" (conflict). */
+    /** Sub-code the app branches on — `forbidden`: "underage" · `conflict`:
+     *  "not_released", "reaction_required", "taken". */
     reason: z.string().optional(),
     /** `invalid` only: field → message. */
     fields: z.record(z.string(), z.string()).optional(),
@@ -240,8 +246,17 @@ export type PersonCollection = z.infer<typeof PersonCollectionSchema>;
 
 /**
  * Someone else — ONLY ever a public profile (`users.isPublic AND username`).
- * A private or nonexistent handle is the same 404; there is no `isPrivate`
- * on the wire. Never carries an id or an email.
+ * A private or nonexistent handle is the same 404 on `GET /people/{handle}`.
+ * Never carries an id or an email.
+ *
+ * LISTS (people search, suggestions, following, followers, onboarding
+ * people) ship the LITE card: identity + what the list query knows. Counts
+ * it does not know (`followers`, `followingCount`, the four `stats`) are 0,
+ * and `obsessions` / `common` / `collections` are empty — only
+ * `GET /people/{handle}` fills them. `isPrivate` appears ONLY in the
+ * caller's own `GET /me/following` / `GET /me/followers`, on a row whose
+ * account went private after the follow (the viewer's own edge stays listed
+ * so it stays removable; photo, hexes and counts are stripped).
  */
 export const PersonSchema = z.object({
   handle: z.string().min(1),
@@ -263,6 +278,8 @@ export const PersonSchema = z.object({
   isFollowing: z.boolean(),
   /** Discovery line ("le obsesiona El viaje de Chihiro"), suggestions only. */
   why: z.string().nullable().optional(),
+  /** Own following/followers lists only: they went private after the follow. */
+  isPrivate: z.boolean().optional(),
 });
 export type Person = z.infer<typeof PersonSchema>;
 
@@ -294,7 +311,9 @@ export type Me = z.infer<typeof MeSchema>;
 
 export const ReviewSchema = z.object({
   id: z.string().min(1),
-  authorHandle: z.string().min(1),
+  /** `users.username` as is — null while the author has no handle (only
+   *  ever the caller's OWN review: public reviews always have one). */
+  authorHandle: z.string().min(1).nullable(),
   titleId: z.string().min(1),
   body: z.string(),
   hasSpoiler: z.boolean(),
@@ -343,12 +362,16 @@ export const FeedEventSchema = z.object({
   titleId: z.string().nullable(),
   /** Summary title (no detail fields) so the app needn't hydrate. */
   title: TitleSchema.nullable(),
-  /** The author's mark on the title (completed/obsessed/reviewed). */
+  /** The author's mark on the title: `obsessed` events are always
+   *  "obsessed"; `completed` events carry the verdict or "completed";
+   *  `reviewed` carries the author's current mark (may be null); `added`
+   *  and `suggest` are null. */
   mark: PublicMarkSchema.nullable(),
   /** `added` only. */
   collectionId: z.string().nullable(),
   collectionName: z.string().nullable(),
-  /** `added` only: set when the title had not been released at add time. */
+  /** `added` only: the title's release date, set ONLY while it is still
+   *  ahead at read time (F3.8 "no puede esperar" — it expires by itself). */
   releaseDate: IsoDateSchema.nullable(),
   /** `reviewed` only. */
   reviewId: z.string().nullable(),

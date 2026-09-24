@@ -6,15 +6,14 @@ import { getPeoplePage } from "@/modules/social/queries";
 /**
  * `GET /me/following` · `GET /me/followers` — the viewer's OWN lists
  * (F3.10: counts are public, lists are private; getPeoplePage never runs
- * for anyone but the bearer user). A cursor that doesn't decode simply
- * serves page 1 (decodeCursor → null), never an error.
+ * for anyone but the bearer user). The handler validates the cursor
+ * (`readCursor`): a corrupt one is a 400, never a silent page 1.
  *
  * A followed account that went private keeps its row (it's the viewer's own
- * edge — hiding it would make the follow unremovable, AGENTS.md) but the
- * module already stripped its photo, colours and counts. The wire has no
- * `isPrivate` flag (PersonSchema is "public profiles only"), so such a row
- * travels as a plain card with `avatarUrl: null`, empty hexes and zero
- * counts — reported as a contract gap, not papered over here.
+ * edge — hiding it would make the follow unremovable, AGENTS.md); the
+ * module already stripped its photo, colours and counts, and the card says
+ * `isPrivate: true` so the app can dim it — the ONE place that flag exists
+ * on the wire (PersonSchema).
  */
 export async function buildPeoplePage(
   viewerId: string,
@@ -31,6 +30,7 @@ export async function buildPeoplePage(
         avatarHexes: p.isPrivate ? [] : p.avatarHexes,
         isFounder: p.isFounder,
         following: p.following,
+        isPrivate: p.isPrivate,
       }),
     ),
     nextCursor: page.nextCursor,

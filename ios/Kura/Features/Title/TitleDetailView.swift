@@ -12,6 +12,8 @@ struct TitleDetailView: View {
                 detail(t)
             } else if store.missingTitles.contains(titleID) {
                 GoneView(title: "este título ya no está.", note: "Se quitó del catálogo o dejó de estar disponible.")
+            } else if store.unavailableTitles.contains(titleID) {
+                UnavailableView(retry: { Task { await store.loadTitle(titleID, force: true) } })
             } else {
                 LoadingScreen()
             }
@@ -253,7 +255,8 @@ private struct TitleSections: View {
                 .accessibilityLabel("\(w.name), \(w.kind)")
             }
             if unreleased, let sentence = store.releaseLabel(t) {
-                Text("Te avisamos el \(sentence) y cuando llegue a streaming.")
+                Text({ if case .day = t.release { return "Te avisamos el \(sentence) y cuando llegue a streaming." }
+                       return "Te avisamos cuando salga y cuando llegue a streaming." }())
                     .font(.kura.ui(13)).foregroundStyle(KColor.text2)
             } else if let note = t.watchNote, label != "hoy" {
                 Text(note).font(.kura.ui(13)).foregroundStyle(KColor.text2)
@@ -367,7 +370,7 @@ private struct TitleSections: View {
 
     @ViewBuilder
     private func alsoBy(_ t: Title) -> some View {
-        let others = store.catalogOrder.compactMap { store.title($0) }.filter { $0.creator == t.creator && $0.id != t.id }
+        let others = t.creator.isEmpty ? [] : store.catalogOrder.compactMap { store.title($0) }.filter { $0.creator == t.creator && $0.id != t.id }
         if !others.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 Button { store.push(.creator(t.creator)) } label: {
@@ -411,7 +414,11 @@ struct ReviewCard: View {
             HStack(spacing: 10) {
                 if let p = store.person(review.authorID) {
                     Seal(person: p, size: 32)
-                    Text("@\(p.handle)").font(.kura.ui(15, .medium)).foregroundStyle(KColor.text)
+                    // `authorHandle` is null for an account without a handle: fall back to the name, or "tú".
+                    Text(p.handle.isEmpty ? (p.name.isEmpty ? "tú" : p.name) : "@\(p.handle)")
+                        .font(.kura.ui(15, .medium)).foregroundStyle(KColor.text)
+                } else if review.authorID.isEmpty {
+                    Text("tú").font(.kura.ui(15, .medium)).foregroundStyle(KColor.text)
                 }
                 Spacer()
                 if let m = review.mark { GlyphView(glyph: m.glyph, size: 14) }
@@ -694,4 +701,26 @@ private struct AlbumSections: View {
 
 extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/// The catalog provider is down for this title (503 / offline): "no disponible · reintentar".
+struct UnavailableView: View {
+    let retry: () -> Void
+    var body: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 12) {
+                Text("no disponible por ahora.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                Text("El catálogo no responde. Inténtalo de nuevo en un momento.")
+                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", action: retry).padding(.top, 6)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 140)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            TopChrome { EmptyView() }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
 }

@@ -56,11 +56,11 @@ export interface OwnReview {
   hasSpoiler: boolean;
   mark: ReviewMark;
   when: string;
-  /** Raw instants (the mobile API serializes them). Optional ONLY because the
-   *  web builds this shape optimistically on the client after a save, where
-   *  it has no server clock; the server reads always set both. */
-  createdAt?: Date;
-  updatedAt?: Date;
+  /** Raw instants (the mobile API serializes them). The web's optimistic
+   *  client copy after a save fills them with the CLIENT clock (the only
+   *  clock it has) — the next server read replaces them. */
+  createdAt: Date;
+  updatedAt: Date;
   /** Hidden by moderation: out of the feed, still visible to its author. */
   hidden: boolean;
 }

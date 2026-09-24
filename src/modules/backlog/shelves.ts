@@ -175,7 +175,11 @@ export interface CollectionWithMemberships {
 
 export async function getCollectionsWithMemberships(
   userId: string,
+  opts: { backlogId?: string } = {},
 ): Promise<CollectionWithMemberships[]> {
+  // `backlogId` narrows BOTH reads (the row and its memberships) so a write
+  // handler re-reading one collection doesn't load the whole library.
+  const one = opts.backlogId;
   const rows = await db
     .select({
       id: backlogs.id,
@@ -187,7 +191,7 @@ export async function getCollectionsWithMemberships(
       updatedAt: backlogs.updatedAt,
     })
     .from(backlogs)
-    .where(eq(backlogs.userId, userId))
+    .where(and(eq(backlogs.userId, userId), one ? eq(backlogs.id, one) : undefined))
     .orderBy(desc(backlogs.createdAt));
 
   if (rows.length === 0) return [];
@@ -201,7 +205,9 @@ export async function getCollectionsWithMemberships(
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-    .where(eq(backlogItems.userId, userId))
+    .where(
+      and(eq(backlogItems.userId, userId), one ? eq(backlogItems.backlogId, one) : undefined),
+    )
     .orderBy(desc(backlogItems.addedAt));
 
   const byBacklog = new Map<string, CollectionWithMemberships>(

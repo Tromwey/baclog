@@ -103,6 +103,8 @@ final class AppStore {
     var loadedTitles: Set<String> = []
     var loadingTitles: Set<String> = []
     var missingTitles: Set<String> = []
+    /// `GET /titles/{id}` answered 503/offline (album whose provider lookup failed): Reintentar.
+    var unavailableTitles: Set<String> = []
     var loadedPeople: Set<String> = []
     var loadingPeople: Set<String> = []
     var missingPeople: Set<String> = []
@@ -110,6 +112,9 @@ final class AppStore {
     var feedLoaded = false
     var feedLoading = false
     var feedCursor: String?
+    /// The followed set the feed was built from — a follow/unfollow makes it stale.
+    @ObservationIgnored private var feedFollowingKey: Set<String> = []
+    var feedStale: Bool { feedLoaded && feedFollowingKey != following }
     var discover: DiscoverPayload?
     var discoverLoading = false
     var searchQuery = ""
@@ -118,6 +123,8 @@ final class AppStore {
     var searchLoading = false
     var searchError: KuraAPIError?
     var onboardingGrid: [Title] = []
+    /// `GET /onboarding/pool` failed (503 when every provider is down): the grid offers Reintentar.
+    var onboardingGridError: KuraAPIError?
     var onboardingPeople: [Person] = []
     var recapMonths: [RecapMonth]?
     var recaps: [String: RecapPayload] = [:]
@@ -299,6 +306,7 @@ final class AppStore {
     /// (401 → entrance, transport → offline banner) and returns it.
     @discardableResult
     func noteError(_ error: Error) -> KuraAPIError {
+        if error is CancellationError { return .cancelled }
         let e = (error as? KuraAPIError) ?? .server(String(describing: error))
         switch e {
         case .unauthorized: sessionExpired()
@@ -402,10 +410,15 @@ final class AppStore {
             reviews.removeAll { $0.titleID == id && !(inflight[id, default: 0] > 0 && $0.authorID == me.id) }
             reviews.append(contentsOf: d.reviews.filter { r in !reviews.contains { $0.id == r.id } })
             missingTitles.remove(id)
+            unavailableTitles.remove(id)
             loadedTitles.insert(id)
         } catch {
             let e = noteError(error)
-            if case .notFound = e { missingTitles.insert(id) }
+            switch e {
+            case .notFound: missingTitles.insert(id)
+            case .unavailable, .offline, .server: unavailableTitles.insert(id)
+            default: break
+            }
         }
     }
 
@@ -432,6 +445,7 @@ final class AppStore {
             await hydrateTitles(ids)
             feed = events
             feedLoaded = true
+            feedFollowingKey = following
         } catch {
             noteError(error)
         }
@@ -723,7 +737,8 @@ final class AppStore {
         case "ya salió", "hoy", "sin fecha": return text
         default:
             if text.hasSuffix(" h") || text.hasSuffix(" d") { return "sale en \(text)" }
-            return "sale el \(text)"
+            if case .day = r { return "sale el \(text)" }
+            return "sale en \(text)" // "sale en oct 2026" / "sale en 2027"
         }
     }
 
@@ -791,7 +806,7 @@ final class AppStore {
                     let e = self.noteError(error)
                     if let onError, onError(e) { return }
                     switch e {
-                    case .unauthorized, .notFound, .unsupported:
+                    case .unauthorized, .notFound, .unsupported, .cancelled:
                         return
                     default:
                         self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
@@ -1228,6 +1243,13 @@ final class AppStore {
                 self?.showToast(ToastModel(text: e.toast, kind: .info))
                 return true
             }
+            // No membership yet (`PUT mark` needs a `user_item`): revert and offer "guardar en".
+            if case .notFound = e, let self, !self.isSaved(titleID) {
+                self.userTitles[titleID] = nil
+                self.showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
+                self.present(.saveTo(titleID))
+                return true
+            }
             return false
         }) { [weak self] api in
             let s = try await api.setMark(titleID: titleID, mark: mark, preview: preview)
@@ -1552,12 +1574,14 @@ final class AppStore {
 
     func loadOnboardingGrid() async {
         guard onboardingGrid.isEmpty else { return }
+        onboardingGridError = nil
         do {
             let g = try await api.onboardingGrid()
             for t in g { registerPartial(t) }
             onboardingGrid = g
         } catch {
-            noteError(error)
+            let e = noteError(error)
+            if e != .cancelled { onboardingGridError = e }
         }
     }
 
