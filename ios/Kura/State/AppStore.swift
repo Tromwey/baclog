@@ -2,6 +2,7 @@ import SwiftUI
 import Observation
 import UIKit
 import Network
+import SafariServices
 
 enum AppPhase: Hashable {
     case splash
@@ -89,6 +90,9 @@ final class AppStore {
     var tab: Tab = .collections
     var paths: [Tab: [Route]] = [:]
     var sheet: SheetRoute?
+    /// A sheet mid-write (Completar + reseña): the scrim tap and the grabber drag don't close it,
+    /// so the text and the outcome aren't lost behind the user's back.
+    var sheetLocked = false
     var toast: ToastModel?
     var offline = false
     var loadState: LoadState = .loading
@@ -96,6 +100,9 @@ final class AppStore {
     // MARK: Account / session
     var me: Person
     var account: Me?
+    /// `POST auth/logout` in flight: the app waits for it before letting anyone sign in again
+    /// (a late logout would revoke the NEW token too, it's account-wide).
+    var signingOut = false
     /// Entrance flow (O1c/O1a): the email the code was sent to, busy flag, inline error.
     var authEmail = ""
     var authBusy = false
@@ -251,6 +258,8 @@ final class AppStore {
     @ObservationIgnored private var deferredWrites: [String: Task<Void, Never>] = [:]
     /// Titles with a write in flight (a read must not clobber the optimistic state).
     @ObservationIgnored private var inflight: [String: Int] = [:]
+    /// A write on this title is still on its way to the server.
+    func isInflight(_ titleID: String) -> Bool { inflight[titleID, default: 0] > 0 }
     @ObservationIgnored private var expiryObserver: NSObjectProtocol?
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
     @ObservationIgnored private var pathSatisfied = true
@@ -327,8 +336,28 @@ final class AppStore {
 
     /// Full title from any payload wins over a partial one already known.
     func register(_ t: Title) {
-        if titles[t.id] == nil { catalogOrder.append(t.id) }
-        titles[t.id] = t
+        guard let old = titles[t.id] else {
+            catalogOrder.append(t.id)
+            titles[t.id] = t
+            return
+        }
+        // Summary payloads (`GET /titles?ids=`, discover, feed, people) carry no detail: they must
+        // never erase what `GET /titles/{id}` brought, or the ficha loses its synopsis/tracks/dónde
+        // ver. They DO carry `release` (every summary since 4b, API.md §3), and the newest one wins:
+        // a date TMDB/iTunes moved must replace the old one (a stale "hoy" would send `preview`).
+        // Only a payload without `release` keeps the one we had.
+        var merged = t
+        if !t.isDetailed && old.isDetailed {
+            merged = old
+            merged.name = t.name
+            merged.format = t.format
+            merged.year = t.year ?? old.year
+            merged.creator = t.creator ?? old.creator
+            if !t.palette.isEmpty { merged.palette = t.palette }
+            merged.coverURL = t.coverURL ?? old.coverURL
+        }
+        merged.release = t.release ?? old.release
+        titles[t.id] = merged
     }
 
     /// A partial title (search result) never overwrites a fuller one.
@@ -642,6 +671,14 @@ final class AppStore {
             let d = try await api.discover()
             loaded(.discover)
             for t in d.allTitles { register(t) }
+            // `upcoming` = your library's titles with a release day still ahead (web's
+            // `getLibraryUpcoming`). Its summaries carry no `release`, so seed the day here:
+            // it's what "no puedo esperar" and the clock labels read.
+            for u in d.upcoming {
+                if let rd = u.releaseDate, titles[u.title.id]?.release == nil {
+                    titles[u.title.id]?.release = .day(KuraJSON.dayAtNoon(rd))
+                }
+            }
             discover = d
         } catch {
             fail(.discover, error)
@@ -875,6 +912,13 @@ final class AppStore {
         }
     }
 
+    /// Release day on the Mexico City calendar ("hoy"): the server compares the stored instant,
+    /// so for a few hours it still says "upcoming" and a mark needs `preview: true`.
+    func isReleaseDay(_ t: Title) -> Bool {
+        guard case .day(let d)? = t.release else { return false }
+        return cal.startOfDay(for: d) == cal.startOfDay(for: now)
+    }
+
     /// The DS countdown: "14 h", "3 d", "16 oct", "oct 2026", "2027", "sin fecha", "hoy", "ya salió".
     func label(for r: Release) -> String {
         switch r {
@@ -920,14 +964,36 @@ final class AppStore {
         }
     }
 
+    /// The first moment of the release period, on the Mexico City calendar (nil = no date).
+    func releaseStart(_ r: Release) -> Date? {
+        switch r {
+        case .day(let d): return cal.startOfDay(for: d)
+        case .month(let y, let m): return cal.date(from: DateComponents(year: y, month: m, day: 1))
+        case .year(let y): return cal.date(from: DateComponents(year: y, month: 1, day: 1))
+        case .unknown: return nil
+        }
+    }
+
     func releaseSentence(_ t: Title) -> String? {
         t.release.map(sentence(for:))
     }
 
     /// The automatic collection: announced titles you saved, until you complete them.
+    /// Once out, a title stays ("ya salió") only if you saved it while it was still announced
+    /// (or while we don't know yet when you saved it):
+    /// the wire sends `release` for every dated title, past or future, so without this an old
+    /// album you never completed would land here the moment you opened its ficha.
     var waitingTitles: [Title] {
         let saved = Set(collections.flatMap(\.titleIDs))
-        let list = saved.compactMap { titles[$0] }.filter { $0.release != nil && mark($0.id) == nil }
+        let list = saved.compactMap { titles[$0] }.filter { t in
+            guard let r = t.release, mark(t.id) == nil else { return false }
+            if isUnreleased(t) || t.upcomingSeason != nil { return true }
+            guard let out = releaseStart(r) else { return false }
+            // No `savedAt` yet (your library state hasn't arrived): "don't know yet", so it stays
+            // instead of silently dropping out until `me/titles` answers.
+            guard let savedAt = userTitles[t.id]?.savedAt else { return true }
+            return savedAt < out
+        }
         func key(_ t: Title) -> (Int, Date) {
             guard let r = t.release else { return (9, .distantFuture) }
             if !isUnreleased(t) && t.upcomingSeason == nil { return (0, .distantPast) }
@@ -939,6 +1005,28 @@ final class AppStore {
             }
         }
         return list.sorted { key($0) < key($1) }
+    }
+
+    // MARK: Public links (yours)
+
+    /// Said instead of a link while your profile is private: every public URL would 404.
+    static let privateProfileShareNote = "Tu perfil es privado. Hazlo público en Ajustes para compartirlo."
+
+    /// Your profile — nil while it's private.
+    var myProfileLink: URL? {
+        profilePrivate ? nil : PublicLinks.profile(me.handle)
+    }
+
+    /// One of your collections — nil while your profile is private, the collection is "Solo yo",
+    /// or it's still a local id waiting for the server's.
+    func myCollectionLink(_ c: KCollection) -> URL? {
+        guard !profilePrivate, c.privacy != .onlyMe, pendingCollections[c.id] == nil else { return nil }
+        return PublicLinks.collection(me.handle, id: c.id)
+    }
+
+    /// A title "as sent by you" (`/{handle}/item/{id}`) — nil while your profile is private.
+    func myItemLink(_ titleID: String) -> URL? {
+        profilePrivate ? nil : PublicLinks.item(me.handle, titleID: titleID)
     }
 
     // MARK: Toasts
@@ -1012,6 +1100,15 @@ final class AppStore {
 
     func dismissSheet() {
         withAnimation(KMotion.sheetOut) { sheet = nil }
+    }
+
+    /// Scrim tap / grabber drag: ignored while the sheet is mid-write (`sheetLocked`).
+    /// Returns false when the sheet stays.
+    @discardableResult
+    func dismissSheetInteractively() -> Bool {
+        guard !sheetLocked else { return false }
+        dismissSheet()
+        return true
     }
 
     func path(_ tab: Tab) -> [Route] { paths[tab] ?? [] }
@@ -1444,12 +1541,45 @@ final class AppStore {
         }
     }
 
+    /// Completar + reseña in one go: the server refuses a review before a reaction
+    /// (`409 reaction_required`), so the mark is AWAITED here and the caller sends the review only
+    /// on `nil`. Optimistic like `setMark`; on failure the mark is reverted and the error returned
+    /// (the sheet keeps the text). "No membership yet" still reverts and opens "guardar en".
+    func setMarkConfirmed(_ titleID: String, _ mark: Mark?, preview: Bool) async -> KuraAPIError? {
+        let hadState = userTitles[titleID]
+        ensureUserState(titleID)
+        userTitles[titleID]?.mark = mark
+        inflight[titleID, default: 0] += 1
+        defer { inflight[titleID, default: 1] -= 1 }
+        do {
+            let s = try await api.setMark(titleID: titleID, mark: mark, preview: preview)
+            online()
+            if userTitles[titleID]?.mark == mark {
+                if let rid = s.reviewID { userTitles[titleID]?.reviewID = rid }
+                userTitles[titleID]?.savedAt = s.savedAt
+                if loadedTitles.contains(titleID) { Task { await loadTitle(titleID, force: true) } }
+            }
+            return nil
+        } catch {
+            let e = noteError(error)
+            if hadState == nil { userTitles[titleID] = nil } else { userTitles[titleID]?.mark = hadState?.mark }
+            if case .notFound = e, !isSaved(titleID) {
+                userTitles[titleID] = nil
+                showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
+                present(.saveTo(titleID))
+            }
+            return e
+        }
+    }
+
     func publishReview(titleID: String, text: String, spoiler: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         ensureUserState(titleID)
         let mark = self.mark(titleID)
         let localID: String
+        let previous = reviews.first(where: { $0.titleID == titleID && $0.authorID == me.id })
+        let previousReviewID = userTitles[titleID]?.reviewID
         if let i = reviews.firstIndex(where: { $0.titleID == titleID && $0.authorID == me.id }) {
             reviews[i].text = trimmed
             reviews[i].spoiler = spoiler
@@ -1462,7 +1592,18 @@ final class AppStore {
             userTitles[titleID]?.reviewID = r.id
             localID = r.id
         }
-        sync(titleID: titleID) { [weak self] api in
+        sync(titleID: titleID, onError: { [weak self] e in
+            // No reaction on the server (`obsessed || verdict != null`): the review never existed
+            // there. Put back what was before and say the real rule — never a "Reintentar" that
+            // can only fail again.
+            guard case .conflict(let code, _) = e, code == "reaction_required", let self else { return false }
+            if let i = self.reviews.firstIndex(where: { $0.id == localID }) {
+                if let previous { self.reviews[i] = previous } else { self.reviews.remove(at: i) }
+            }
+            self.userTitles[titleID]?.reviewID = previousReviewID
+            self.showToast(ToastModel(text: e.toast, kind: .info))
+            return true
+        }) { [weak self] api in
             let store = self
             let saved = try await api.saveReview(titleID: titleID, body: trimmed, hasSpoiler: spoiler)
             await MainActor.run {
@@ -1682,13 +1823,34 @@ final class AppStore {
             guard let self else { return }
             do {
                 try await api.deleteAccount()
-                prefs.clear()
-                signOut(message: "Tu cuenta se borró.")
             } catch {
-                let e = noteError(error)
-                showToast(ToastModel(text: e.toast, kind: .info))
+                // Only a 204 confirms the deletion. A 401 is a revoked/expired bearer (logout on
+                // another device, token past `exp`) on an account that is still ALIVE: say so and
+                // send them to sign in again — never "Tu cuenta se borró.".
+                let e = error is CancellationError ? .cancelled : ((error as? KuraAPIError) ?? .server(String(describing: error)))
+                switch e {
+                case .cancelled:
+                    return
+                case .unauthorized:
+                    api.forgetSession()
+                    sessionExpired(message: "Tu sesión terminó. Entra de nuevo para borrar tu cuenta.")
+                default:
+                    if e == .offline { offline = true }
+                    let text = e == .offline ? "Sin conexión. Tu cuenta sigue aquí." : "No se pudo borrar tu cuenta."
+                    showToast(ToastModel(text: text, kind: .retry) { [weak self] in self?.deleteAccount() })
+                }
+                return
             }
+            await leaveDeletedAccount()
         }
+    }
+
+    /// After a 204 on `DELETE /me`: forget the token, local prefs, avatar cache, the web
+    /// session of the in-app browser and every loaded resource, and go back to the welcome.
+    /// No `POST auth/logout`: the account is gone, there's nothing left to revoke.
+    private func leaveDeletedAccount() async {
+        api.forgetSession()
+        leaveSession(message: "Tu cuenta se borró.")
     }
 
     // MARK: Counters (profile ribbon)
@@ -1888,25 +2050,64 @@ final class AppStore {
         }
     }
 
-    func signOut(message: String? = nil) {
+    /// Cerrar sesión. `global` (Ajustes) = `POST auth/logout`, which revokes every bearer of the
+    /// account: it's AWAITED before leaving (a logout landing after a new sign-in would revoke
+    /// the new token too), and if the server didn't confirm it the local session ends anyway but
+    /// the user is told the other devices may still be in. `global: false` only forgets this
+    /// device's token — for an account just created here (Volver in onboarding, underage), which
+    /// must never sign out other devices.
+    func signOut(global: Bool = true, message: String? = nil) {
+        guard !signingOut else { return }
+        guard global else {
+            api.forgetSession()
+            leaveSession(message: message)
+            return
+        }
+        signingOut = true
         let api = self.api
-        Task { try? await api.logout() }
+        Task { [weak self] in
+            var confirmed = true
+            do { try await api.logout() } catch { confirmed = false }
+            guard let self else { return }
+            self.signingOut = false
+            self.leaveSession(message: confirmed
+                ? message
+                : "No pudimos cerrar tu sesión en otros dispositivos. Vuelve a entrar y prueba de nuevo.")
+        }
+    }
+
+    /// The common exit: nothing of the old account stays on the device.
+    private func leaveSession(message: String?) {
         resetData()
         prefs.clear()
+        clearWebSession()
         withAnimation(KMotion.short) { phase = .onboarding }
         if let message { showToast(ToastModel(text: message, kind: .info)) }
     }
 
+    /// The `SFSafariViewController` jar (its own, not Safari's) keeps the Auth.js cookie the
+    /// recap-card handoff left: without this, the web stays signed in as the old account after
+    /// the app signs out.
+    private func clearWebSession() {
+        SFSafariViewController.DataStore.default.clearWebsiteData {
+            KuraLog.api.info("web session cleared (SFSafariViewController data store)")
+        }
+    }
+
     /// A 401 anywhere: the token is already gone, back to the entrance.
-    private func sessionExpired() {
+    private func sessionExpired(message: String = "Tu sesión terminó. Entra de nuevo.") {
+        // A sign-out in flight already cleared the token: the 401s it causes aren't news.
+        guard !signingOut else { return }
         guard phase != .onboarding || didBootstrap else { return }
         resetData()
+        clearWebSession()
         withAnimation(KMotion.short) { phase = .onboarding }
-        showToast(ToastModel(text: "Tu sesión terminó. Entra de nuevo.", kind: .info))
+        showToast(ToastModel(text: message, kind: .info))
     }
 
     private func resetData() {
         sheet = nil
+        sheetLocked = false
         onboardingStep = .welcome
         paths = [:]
         tab = .collections

@@ -11,11 +11,30 @@ struct CompleteSheet: View {
     @State private var text = ""
     @State private var spoiler = false
     @State private var loaded = false
+    @State private var saving = false
+    @State private var saveError: String?
     @FocusState private var focused: Bool
 
     private let limit = 280
 
     private var stop: Int { min(2, max(0, Int(value.rounded()))) }
+
+    /// The server unlocks reviews only with a reaction (`obsessed || verdict != null`): "Completo"
+    /// saves `verdict = null`, so a NEW or edited review can't go out with it. An unchanged review
+    /// you already had stays as it is (only the mark changes).
+    private static let reactionNeeded = "Para reseñar, elige Me gusta o Me obsesiona."
+
+    private var trimmedReview: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var reviewChanged: Bool {
+        guard let r = store.myReview(titleID) else { return !trimmedReview.isEmpty }
+        return trimmedReview != r.text || spoiler != r.spoiler
+    }
+
+    /// Completo + a review to publish: nothing is sent, the sheet says why.
+    private var reviewBlocked: Bool {
+        ReactionSlider.stops[stop].mark == .completed && !trimmedReview.isEmpty && reviewChanged
+    }
 
     var body: some View {
         if let t = store.title(titleID) {
@@ -83,15 +102,33 @@ struct CompleteSheet: View {
                 .frame(minHeight: 52)
                 .padding(.top, 6)
 
+                if reviewBlocked {
+                    Text(Self.reactionNeeded)
+                        .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8).padding(.top, 8)
+                        .transition(.opacity)
+                } else if let saveError {
+                    Text(saveError)
+                        .font(.kura.ui(13)).foregroundStyle(KColor.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8).padding(.top, 8)
+                        .transition(.opacity)
+                }
+
                 Button { save(t) } label: {
-                    Text(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Guardar" : "Publicar")
-                        .font(.kura.ui(16, .semibold))
-                        .foregroundStyle(KColor.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(KColor.glassBg, in: Capsule())
+                    Group {
+                        if saving { ProgressView().tint(KColor.text) }
+                        else { Text(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Guardar" : "Publicar") }
+                    }
+                    .font(.kura.ui(16, .semibold))
+                    .foregroundStyle(KColor.text)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(KColor.glassBg, in: Capsule())
                 }
                 .kPress()
+                .disabled(saving)
                 .padding(.horizontal, 4)
                 .padding(.top, 14)
 
@@ -107,6 +144,7 @@ struct CompleteSheet: View {
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
+                    .disabled(saving)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 4)
                 }
@@ -133,13 +171,59 @@ struct CompleteSheet: View {
         let choice = ReactionSlider.stops[stop].mark
         let wasSaved = store.isSaved(t.id)
         // "La vi en preestreno": the server needs `preview: true` before the release (409 not_released otherwise).
-        withAnimation(KMotion.spring) {
-            store.setMark(t.id, choice, haptic: false, preview: store.isUnreleased(t))
+        // Release day counts too: the app decides by Mexico City calendar day, the server by the
+        // stored instant — an album keeps iTunes' hour (07/08/12Z), so for a few hours of "hoy" the
+        // server still says upcoming. `preview` only lifts that gate; it isn't stored.
+        let preview = store.isUnreleased(t) || store.isReleaseDay(t)
+        let review = trimmedReview
+        // Completo can't carry a new review (409 `reaction_required`): send nothing, the note says why.
+        if reviewBlocked {
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return
         }
-        store.publishReview(titleID: t.id, text: text, spoiler: spoiler)
-        store.dismissSheet()
-        if !wasSaved {
-            store.showToast(ToastModel(text: "\(choice.myLabel). ¿Lo guardas en una colección?", kind: .info))
+        let done = {
+            store.dismissSheet()
+            if !wasSaved {
+                store.showToast(ToastModel(text: "\(choice.myLabel). ¿Lo guardas en una colección?", kind: .info))
+            }
+        }
+        // No review (or an unchanged one under Completo): fire-and-forget, as before (the store
+        // reverts/retries on its own).
+        guard !review.isEmpty, choice != .completed else {
+            withAnimation(KMotion.spring) { store.setMark(t.id, choice, haptic: false, preview: preview) }
+            done()
+            return
+        }
+        // With a review: the server needs the reaction first (`409 reaction_required`), so the
+        // review goes out only once the mark is confirmed; if the mark fails the text stays here.
+        // The mark is ALWAYS confirmed first, even if it already matches locally: the local one may
+        // be optimistic and not yet on the server, and the PUT is idempotent.
+        saving = true
+        store.sheetLocked = true
+        saveError = nil
+        Task {
+            let failure = await store.setMarkConfirmed(t.id, choice, preview: preview)
+            saving = false
+            store.sheetLocked = false
+            if let failure {
+                // The sheet may be gone anyway (the session ended, another sheet took its place):
+                // then the error goes to a toast instead of vanishing with it.
+                let stillOpen: Bool
+                if case .complete(let id, _)? = store.sheet, id == t.id { stillOpen = true } else { stillOpen = false }
+                switch failure {
+                case .cancelled, .unauthorized: break
+                case .notFound where !store.isSaved(t.id): break // the store opened "guardar en"
+                default:
+                    if stillOpen {
+                        withAnimation(KMotion.short) { saveError = failure.toast }
+                    } else {
+                        store.showToast(ToastModel(text: failure == .offline ? "Sin conexión. Tu reseña no se guardó." : "Tu reseña no se guardó.", kind: .info))
+                    }
+                }
+                return
+            }
+            store.publishReview(titleID: t.id, text: review, spoiler: spoiler)
+            done()
         }
     }
 }
@@ -269,7 +353,6 @@ struct TitleMoreSheet: View {
 
     var body: some View {
         if let t = store.title(titleID) {
-            let url = URL(string: "https://kura.app/t/\(t.id)")!
             VStack(alignment: .leading, spacing: 2) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(t.name).font(.kura.newsItalic(22)).foregroundStyle(KColor.text)
@@ -292,18 +375,27 @@ struct TitleMoreSheet: View {
                         store.present(.complete(titleID: t.id, focusReview: true))
                     }
                 }
-                ShareLink(item: url, message: Text("\(t.name) en kura")) {
-                    HStack(spacing: 14) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 17)).frame(width: 24)
-                        Text("Compartir").font(.kura.ui(16, .medium))
-                        Spacer()
+                // `/{you}/item/{id}` — only while your profile is public (otherwise it 404s).
+                if let url = store.myItemLink(t.id) {
+                    ShareLink(item: url, message: Text("\(t.name) en kura")) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 17)).frame(width: 24)
+                            Text("Compartir").font(.kura.ui(16, .medium))
+                            Spacer()
+                        }
+                        .foregroundStyle(KColor.text)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 54)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(KColor.text)
-                    .padding(.horizontal, 10)
-                    .frame(minHeight: 54)
-                    .contentShape(Rectangle())
+                    .buttonStyle(SheetRowStyle())
+                } else if store.profilePrivate {
+                    // Same note as the collection's share sheet: the link would 404.
+                    Text(AppStore.privateProfileShareNote)
+                        .font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 4)
                 }
-                .buttonStyle(SheetRowStyle())
             }
             .padding(.horizontal, 12)
         }

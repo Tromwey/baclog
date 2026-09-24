@@ -246,9 +246,10 @@ struct UsernameView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Volver on O1b = logout (API.md §5): the token was already issued.
+            // Volver on O1b = forget this device's token (API.md §5: it was already issued). Never
+            // the global logout: backing out of a sign-up must not sign out your other devices.
             OnboardingChrome(step: "2 de 2") {
-                if store.account == nil { store.onboardingStep = .signup } else { store.signOut() }
+                if store.account == nil { store.onboardingStep = .signup } else { store.signOut(global: false) }
             }
 
             ScrollView(showsIndicators: false) {
@@ -257,7 +258,7 @@ struct UsernameView: View {
                         .font(.kura.news(40))
                         .foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
-                    Text("Es tu link: kura.app/@\(clean.isEmpty ? "usuario" : clean)")
+                    Text("Es tu link: baclog.app/\(clean.isEmpty ? "usuario" : clean)")
                         .font(.kura.ui(14))
                         .foregroundStyle(KColor.text2)
                     VStack(spacing: 10) {
@@ -272,7 +273,7 @@ struct UsernameView: View {
                         }
                     }
                     .padding(.top, 14)
-                    Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. El año solo confirma que tienes 13 o más; no se guarda."
+                    Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. El año solo confirma que tienes 13 o más. No se muestra a nadie."
                                    : "Tu nombre se puede cambiar después en Editar perfil.")
                         .font(.kura.ui(13))
                         .foregroundStyle(KColor.text2)
@@ -780,7 +781,7 @@ struct UnderageView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             GlassButton(title: "Entendido", height: 52, fontSize: 16, fullWidth: true) {
-                store.signOut()
+                store.signOut(global: false) // local only: never touches other devices
             }
         }
         .padding(.horizontal, 28)

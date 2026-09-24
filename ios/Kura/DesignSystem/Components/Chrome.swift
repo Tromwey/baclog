@@ -110,7 +110,7 @@ struct SheetHost: View {
             if let route = store.sheet {
                 KColor.scrim
                     .ignoresSafeArea()
-                    .onTapGesture { store.dismissSheet() }
+                    .onTapGesture { store.dismissSheetInteractively() }
                     .transition(.opacity)
                     .accessibilityLabel("Cerrar")
                     .accessibilityAddTraits(.isButton)
@@ -128,8 +128,7 @@ struct SheetHost: View {
         DragGesture(minimumDistance: 8)
             .onChanged { v in drag = v.translation.height }
             .onEnded { v in
-                if v.translation.height > 110 || v.predictedEndTranslation.height > 260 {
-                    store.dismissSheet()
+                if (v.translation.height > 110 || v.predictedEndTranslation.height > 260), store.dismissSheetInteractively() {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { drag = 0 }
                 } else {
                     withAnimation(KMotion.spring) { drag = 0 }

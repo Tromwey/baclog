@@ -241,7 +241,7 @@ enum MockData {
         var d: [String: UserTitleState] = [:]
         let saved: [(String, Mark?, Double)] = [
             ("chihiro", .obsessed, 24 * 300), ("mononoke", .completed, 24 * 290), ("totoro", .liked, 24 * 280),
-            ("pearl", .liked, 24 * 20), ("spiderman3", nil, 24 * 6), ("odyssey", nil, 24 * 6),
+            ("pearl", .liked, 24 * 20), ("spiderman3", nil, 24 * 6), ("odyssey", nil, 24 * 75),
             ("severance", nil, 24 * 6), ("ycse", nil, 24 * 6), ("doomsday", nil, 24 * 2),
             ("ma", nil, 24 * 200), ("mindofmine", nil, 24 * 190), ("eduardo", nil, 24 * 30), ("nube", nil, 24 * 12),
             ("mala", nil, 24 * 60), ("showgirl", nil, 24 * 40)

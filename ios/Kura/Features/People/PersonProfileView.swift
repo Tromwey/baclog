@@ -84,13 +84,16 @@ struct PersonProfileView: View {
             }
             HStack(spacing: 8) {
                 followButton(p, following: following)
-                ShareLink(item: URL(string: "https://kura.app/@\(p.handle)")!) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(KColor.text)
-                        .frame(width: 44, height: 44)
-                        .background(KColor.glassBg, in: Circle())
+                // Someone else's profile we can open is public, so its link is live.
+                if let link = PublicLinks.profile(p.handle) {
+                    ShareLink(item: link) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(KColor.text)
+                            .frame(width: 44, height: 44)
+                            .background(KColor.glassBg, in: Circle())
+                    }
+                    .accessibilityLabel("Compartir perfil")
                 }
-                .accessibilityLabel("Compartir perfil")
             }
         }
         .padding(.top, KSize.chromeTop)
@@ -271,9 +274,9 @@ private struct LockedCollections: View {
             .padding(.horizontal, 12)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(firstName) guarda sus colecciones en privado.")
+                Text("\(firstName) tiene su perfil en privado.")
                     .font(.kura.news(24)).foregroundStyle(KColor.text)
-                Text("Cuando acepte tu solicitud vas a ver sus obsesiones, colecciones y lo que tienen en común.")
+                Text("Mientras sea privado, nadie más ve sus obsesiones ni sus colecciones.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -299,10 +302,12 @@ struct PersonOptionsSheet: View {
                     }
                 }
                 .padding(.bottom, 10)
-                ShareLink(item: URL(string: "https://kura.app/@\(p.handle)")!) {
-                    optionRow("square.and.arrow.up", "Compartir perfil", note: nil)
+                if let link = PublicLinks.profile(p.handle) {
+                    ShareLink(item: link) {
+                        optionRow("square.and.arrow.up", "Compartir perfil", note: nil)
+                    }
+                    .buttonStyle(SheetRowStyle())
                 }
-                .buttonStyle(SheetRowStyle())
                 Button {
                     store.dismissSheet()
                     store.toggleMute(p.id)
@@ -579,15 +584,9 @@ struct CreatorView: View {
                 }
             }
             .ignoresSafeArea(.container, edges: .top)
-            TopChrome {
-                ShareLink(item: URL(string: "https://kura.app/p/\(name.lowercased().replacingOccurrences(of: " ", with: "-"))")!) {
-                    Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(KColor.text)
-                        .frame(width: 44, height: 44)
-                        .background(KColor.glassBg, in: Circle())
-                }
-                .accessibilityLabel("Opciones")
-            }
+            // No share here: the web has no public page for a creator (only /{handle},
+            // /{handle}/{collectionId} and /{handle}/item/{id}), so any link would 404.
+            TopChrome { EmptyView() }
         }
     }
 }
@@ -598,6 +597,30 @@ struct ProfileAsStrangerView: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
+        // Private = nobody else can open it: the web and the API answer the same 404 as a
+        // profile that doesn't exist (no requests, no "approve who follows you").
+        if store.profilePrivate { privateNotice } else { publicPreview }
+    }
+
+    private var privateNotice: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 10) {
+                Text("este perfil no existe o es privado.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Así te ve cualquiera mientras tu perfil sea privado. Se cambia en Ajustes › privacidad.")
+                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 140)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            TopChrome { Text("vista previa").monoLabel() }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    @ViewBuilder private var publicPreview: some View {
         let me = store.me
         let publicCols = store.orderedCollections.filter { $0.privacy == .publicAccess && !$0.titleIDs.isEmpty }
         let followersOnly = store.collections.filter { $0.privacy == .followers }.count
@@ -618,12 +641,6 @@ struct ProfileAsStrangerView: View {
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 14) {
-                        if store.profilePrivate {
-                            Text("\(me.name.split(separator: " ").first ?? "") aprueba a quien la sigue.")
-                                .font(.kura.ui(14)).foregroundStyle(KColor.text2)
-                                .frame(maxWidth: .infinity)
-                                .padding(.bottom, 6)
-                        }
                         Text("colecciones").font(.kura.section).foregroundStyle(KColor.text).padding(.horizontal, 8)
                         ForEach(publicCols) { c in
                             CollectionCard(collection: c, titles: store.titles(in: c), marks: [:], palette: store.palette(of: c),
@@ -631,8 +648,7 @@ struct ProfileAsStrangerView: View {
                                 .padding(.horizontal, -12)
                         }
                         if followersOnly > 0 {
-                            FollowersOnlyCard(count: followersOnly,
-                                              note: store.profilePrivate ? "Cuando acepte tu solicitud vas a verla." : "Síguela para verla.")
+                            FollowersOnlyCard(count: followersOnly, note: "Síguela para verla.")
                         }
                     }
                     .padding(.horizontal, 12)

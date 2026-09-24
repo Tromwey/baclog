@@ -16,7 +16,19 @@ protocol KuraAPI: Sendable {
     func requestCode(email: String) async throws
     func signIn(email: String, code: String) async throws -> Me
     func refresh() async throws -> Me
+    /// `POST auth/logout` — "en todos tus dispositivos" (bumps `token_version`, API.md §2.1).
+    /// Forgets the stored token FIRST and sends the old one explicitly. Throws when the server
+    /// did not confirm (offline, 5xx, 429): the local session is gone anyway, but the other
+    /// devices may still be signed in, and the caller must say so. A 401 is not an error here
+    /// (that token was already dead: nothing left to revoke with it).
     func logout() async throws
+    /// Forgets the stored token without telling the server (closing an account just created
+    /// on this device, or after `DELETE /me` / a 401): never touches other devices.
+    func forgetSession()
+    /// `POST auth/web-session` → a one-shot (60 s) URL that opens the web already signed in
+    /// and lands on `to` (server allow-list: `/recap/tarjeta`, `/recap`; the recap pair
+    /// optionally with `?mes=YYYY-MM`). Open it in an `SFSafariViewController`, never share it.
+    func webSession(to: String) async throws -> URL
 
     // MARK: Account
     func me() async throws -> Me
@@ -104,7 +116,9 @@ enum KuraAPIError: Error, Equatable {
         case .rateLimited: return "Demasiado rápido. Espera un momento"
         case .unavailable: return "El catálogo no responde"
         case .conflict(let code, _) where code == "not_released": return "Todavía no sale. Márcala como preestreno"
-        case .conflict(let code, _) where code == "reaction_required": return "Primero completa para reseñar"
+        // The server unlocks reviews only with a reaction (`obsessed || verdict != null`):
+        // "Completo" alone saves `verdict = null`, so it never unlocks them.
+        case .conflict(let code, _) where code == "reaction_required": return "Para reseñar, elige Me gusta o Me obsesiona."
         case .invalid(_, let m) where !m.isEmpty: return m
         default: return "No se pudo guardar"
         }
@@ -134,6 +148,11 @@ struct MockAPI: KuraAPI {
     func signIn(email: String, code: String) async throws -> Me { try await write(); return Me(person: MockData.me) }
     func refresh() async throws -> Me { Me(person: MockData.me) }
     func logout() async throws {}
+    func forgetSession() {}
+    func webSession(to: String) async throws -> URL {
+        try await write()
+        return URL(string: "https://baclog.app\(to)") ?? URL(string: "https://baclog.app/recap/tarjeta")!
+    }
 
     // Account
     func me() async throws -> Me { Me(person: MockData.me) }

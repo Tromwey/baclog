@@ -1,3 +1,4 @@
+import SafariServices
 import SwiftUI
 
 /// The four stat tiles of a recap, in frame order.
@@ -233,36 +234,75 @@ func recapGradient(_ palette: [String]) -> LinearGradient {
 
 struct RecapShareView: View {
     @Environment(AppStore.self) private var store
-    @State private var signed = false
+    @State private var opening = false
+    @State private var webCard: WebCardURL?
+
+    private func openWebCard() {
+        guard !opening else { return }
+        opening = true
+        let era = store.currentRecap?.era
+        let to = era.map { "/recap/tarjeta?mes=\($0)" } ?? "/recap/tarjeta"
+        Task {
+            defer { opening = false }
+            do {
+                webCard = WebCardURL(url: try await store.api.webSession(to: to))
+            } catch {
+                // Through `noteError`: a 401 ends the session (entrance), offline lights the strip.
+                let e = store.noteError(error)
+                guard e != .unauthorized, e != .cancelled else { return }
+                store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Inténtalo de nuevo.", kind: .info))
+            }
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
             VStack(spacing: 22) {
-                Group {
-                    if signed { SignedRecapCard() } else { RecapCard() }
+                // Preview only: what gets exported is the web's card (no "Firmar con tu @" here —
+                // the web decides the signature, so a local switch would promise what it can't change).
+                RecapCard()
+                // The exportable card lives on the web (`/recap/tarjeta`, the card exporter):
+                // `POST auth/web-session` gives a one-shot signed-in URL, opened in-app.
+                Button { openWebCard() } label: {
+                    Group {
+                        if opening { ProgressView().tint(KColor.bg) } else { Text("Compartir") }
+                    }
+                    .font(.kura.ui(16, .semibold)).foregroundStyle(KColor.bg)
+                    .frame(maxWidth: .infinity).frame(height: 52)
+                    .background(KColor.text, in: Capsule())
                 }
-                .transition(.opacity)
-                .animation(KMotion.tint, value: signed)
-                HStack(spacing: 14) {
-                    Text("Firmar con tu @").font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
-                    Spacer()
-                    KuraSwitch(label: "Firmar con tu @", isOn: $signed)
-                }
-                .padding(.horizontal, 28)
-                ShareLink(item: URL(string: "https://kura.app/@\(store.me.handle)/recap/\(store.currentRecap?.era ?? "")")!,
-                          message: Text("mi recap de \(store.currentRecap?.month ?? "") en kura")) {
-                    Text("Compartir").font(.kura.ui(16, .semibold)).foregroundStyle(KColor.bg)
-                        .frame(maxWidth: .infinity).frame(height: 52)
-                        .background(KColor.text, in: Capsule())
-                }
+                .disabled(opening)
                 .padding(.horizontal, 24)
             }
             .padding(.top, 118)
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
+        // Opened straight (deep link / `-kuraScreen recapcard`) the recap isn't loaded yet.
+        .task { if store.currentRecap == nil { await store.loadRecap() } }
+        .fullScreenCover(item: $webCard) { card in
+            SafariView(url: card.url).ignoresSafeArea()
+        }
     }
+}
+
+/// The one-shot handoff URL (single use, 60 s) — identifiable only to drive the cover.
+struct WebCardURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// `SFSafariViewController`: own cookie jar (not Safari's), so the handoff's session cookie
+/// stays inside the app.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.dismissButtonStyle = .close
+        return vc
+    }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
 
 /// 360×640 exportable card (scaled to fit).
@@ -311,33 +351,3 @@ struct RecapCard: View {
     }
 }
 
-/// C2 · tarjeta firmada.
-struct SignedRecapCard: View {
-    @Environment(AppStore.self) private var store
-    var body: some View {
-        let r = store.currentRecap
-        let top = r?.top
-        VStack(alignment: .leading) {
-            Text("KURA · recap \(r.map { String(format: "%02d.%d", ($0.era.split(separator: "-").last.flatMap { Int($0) } ?? 0), $0.year) } ?? "")")
-                .font(.kura.mono(11)).tracking(1.5).foregroundStyle(KColor.text2)
-            Spacer()
-            if let top { CoverView(title: top, width: 180, height: 180).frame(maxWidth: .infinity) }
-            Spacer()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("recap de \(r?.month ?? "")").font(.kura.news(34)).foregroundStyle(KColor.text)
-                Text("\(r?.stats.completed ?? 0) completos · \(r?.stats.obsessed ?? 0) obsesiones").monoLabel()
-            }
-            VStack(alignment: .leading, spacing: 5) {
-                Rectangle().fill(KColor.text.opacity(0.18)).frame(height: 1).padding(.bottom, 14)
-                Text("recap de").monoLabel(10, tracking: 0.1)
-                Text("@\(store.me.handle)").font(.kura.newsItalic(26)).foregroundStyle(KColor.text)
-                Text("kura.app/@\(store.me.handle)").font(.kura.mono(11)).foregroundStyle(KColor.text2)
-            }
-            .padding(.top, 14)
-        }
-        .padding(26)
-        .frame(width: 300, height: 533)
-        .background(recapGradient(top?.palette ?? []), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-}

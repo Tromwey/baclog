@@ -318,7 +318,9 @@ struct LiveAPI: KuraAPI {
 
     func logout() async throws {
         // Forget the token FIRST, then tell the server with the token it had; a 401 here
-        // (already-expired token) must not broadcast "session expired" to the store.
+        // (already-revoked or expired token) must not broadcast "session expired" to the store,
+        // and isn't a failure: that token can't revoke anything anymore. Anything else
+        // (offline, 5xx, 429) propagates — the other devices are still signed in.
         let token = session.token
         session.clear()
         guard let token else { return }
@@ -326,7 +328,25 @@ struct LiveAPI: KuraAPI {
         e.auth = false
         e.explicitBearer = token
         e.suppressExpiry = true
-        try? await client.send(e)
+        #if DEBUG
+        // `-kuraFailLogout YES`: the POST "fails" (as offline), to see the honest warning.
+        if UserDefaults.standard.bool(forKey: "kuraFailLogout") { throw KuraAPIError.offline }
+        #endif
+        do {
+            try await client.send(e)
+        } catch KuraAPIError.unauthorized {
+            return
+        }
+    }
+
+    func forgetSession() { session.clear() }
+
+    private struct WebSessionBody: Encodable { let to: String }
+    private struct WebSessionResponse: Decodable { let url: URL }
+
+    func webSession(to: String) async throws -> URL {
+        let r: WebSessionResponse = try await client.decode(try .post("auth/web-session", WebSessionBody(to: to)))
+        return r.url
     }
 
     // MARK: Account
@@ -393,7 +413,16 @@ struct LiveAPI: KuraAPI {
     }
 
     func deleteAccount() async throws {
-        try await client.send(.delete("me"))
+        // Only a 204 means "deleted". A 401 is a revoked/expired bearer on a LIVE account
+        // (logout on another device, token past `exp`): the store handles it itself — no global
+        // "session expired" broadcast, which would race its own message.
+        var e = Endpoint.delete("me")
+        e.suppressExpiry = true
+        #if DEBUG
+        // `-kuraDelete401 YES`: send a bearer the server rejects, to see the honest 401 path.
+        if UserDefaults.standard.bool(forKey: "kuraDelete401") { e.explicitBearer = "debug.invalid.bearer" }
+        #endif
+        try await client.send(e)
         session.clear()
     }
 

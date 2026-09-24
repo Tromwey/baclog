@@ -15,7 +15,7 @@ xcrun simctl install booted <DerivedData>/Build/Products/Debug-iphonesimulator/K
 xcrun simctl launch booted io.communeo.kura
 ```
 
-`Kura.xcodeproj` se regenera desde `project.yml`: no lo edites a mano. Si agregas un archivo, vuelve a correr `xcodegen generate`.
+`Kura.xcodeproj` se regenera desde `project.yml`: no lo edites a mano. Para probar en el simulador una build que conserve la sesión entre lanzamientos, firma ad-hoc (`CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`): con `CODE_SIGNING_ALLOWED=NO` el Keychain no persiste y cada relanzamiento cae en la bienvenida. Si agregas un archivo, vuelve a correr `xcodegen generate`.
 
 ## Backend real
 
@@ -80,7 +80,7 @@ ios/
 
 - **Estado real en `AppStore`**: toda mutación se aplica optimista en memoria y luego llama a la API. Deshacer funciona de verdad (cada operación guarda su inversa) con aviso de 5 s; si la API falla sale "No se pudo guardar · Reintentar" con el triángulo.
 - **El estado del título es por título, no por colección** (igual que `user_item` en la web): la reacción y la reseña son idénticas en todas las colecciones; si un título sale de su última colección, su estado se va con él.
-- **No puedo esperar es derivada**: títulos anunciados que guardaste y no has completado. Orden: lo que ya salió → lo más próximo → "sin fecha". Etiquetas: `14 h`, `3 d`, `16 oct`, `oct 2026`, `2027`, `sin fecha`, `hoy`, `ya salió`. Antes del estreno la ficha muestra el reloj (indicador, no botón) y no hay Completar; "La vi en preestreno" en Opciones abre la hoja.
+- **No puedo esperar es derivada**: títulos guardados y sin completar cuyo estreno no ha llegado, o que guardaste antes del estreno (`savedAt < inicio del estreno`; lo que ya había salido cuando lo guardaste nunca entra). Orden: lo que ya salió → lo más próximo → "sin fecha". Etiquetas: `14 h`, `3 d`, `16 oct`, `oct 2026`, `2027`, `sin fecha`, `hoy`, `ya salió`. Antes del estreno la ficha muestra "Sale el …". En **álbum** no hay Completar (37c); en **cine/series** sí (37a, preestreno o festival), y tanto Completar como "La vi en preestreno" mandan `preview: true`, también el día del estreno.
 - **Hojas propias** (`SheetHost`), no `.sheet` del sistema, para calzar con los frames: inset 8, radio 36, s2, velo `rgba(5,5,6,.62)`, asa 36×5, 280 ms; se cierran arrastrando o tocando fuera. "Agregar" es la hoja alta (s1, a 54 del borde).
 - **Navegación**: un `NavigationStack` por tab (cambio de tab instantáneo), chrome propio (Volver/Opciones a 64/24) y swipe-back conservado. En iOS 18+ la portada crece a la ficha/colección con la transición zoom (`matchedTransitionSource`); en iOS 17 es el push normal. En el onboarding las 3 portadas elegidas viajan de 32a a 32b con `matchedGeometryEffect`.
 - **Completar** es el slider de tres paradas de 26a (Completo → Me gusta → Me obsesiona): relleno en el tono de la parada, imán con spring y háptica (ligera; media en Me obsesiona).
@@ -144,7 +144,7 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 - [x] Release apunta a `https://baclog.app/api/v1`, sin excepciones de ATS (solo Debug permite `localhost`).
 - [x] dSYM en Release (`dwarf-with-dsym`) + `uploadSymbols`, para que los crashes de TestFlight vengan simbolizados.
 - [ ] `PrivacyInfo.xcprivacy` (APIs de razón requerida como UserDefaults, sin tracking): lo agrega el carril iOS de la fase 4a. Confirma que el archivo esté en el target antes de subir.
-- [ ] **URL de la política de privacidad: no existe todavía.** `https://baclog.app/privacidad` y `/privacy` dan 404, y en `src/app` no hay página de privacidad. App Store Connect la pide para la app, y también para TestFlight externo. Pendiente del founder: redactarla y publicarla (p. ej. `(marketing)/privacidad`).
+- [ ] **URL de la política de privacidad: `https://baclog.app/privacidad`** — la página ya existe (aviso de privacidad integral, pública y sin sesión; texto en `src/app/(marketing)/privacidad/content.ts`). Va en App Store Connect › App Information › Privacy Policy URL (también la pide TestFlight externo). Antes de mandarla, el founder rellena `[RAZÓN SOCIAL]`, `[DOMICILIO]` y `[CORREO DE CONTACTO]` en ese archivo y despliega. En la app, Ajustes › privacidad › "Aviso de privacidad" ya abre esa URL en `SFSafariViewController`.
 - [ ] **App Privacy** (App Store Connect › App Privacy): declarar correo, nombre de usuario, foto de perfil, contenido del usuario (reseñas) e identificadores, ligados a la identidad y sin tracking.
 - [ ] **Cuenta para la revisión**: el acceso es solo con código por correo, así que Beta App Review (TestFlight externo) y App Review necesitan una cuenta demo cuyo código puedan recibir, o un acceso para el revisor. Hay que decidirlo antes del primer grupo externo.
 - [ ] Clasificación por edad (el cuestionario; las reseñas son UGC, así que hay que declarar moderación y reporte) y borrar la cuenta desde la app (Ajustes › Borrar cuenta, requisito 5.1.1(v)): confirmar que funcione contra prod.

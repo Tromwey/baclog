@@ -50,8 +50,12 @@ enum KuraJSON {
     }()
 
     /// A calendar day pinned to 12:00 UTC so `startOfDay` lands on the same
-    /// date in every time zone the app can run in (the backend sends release
-    /// days as UTC midnight, which is "yesterday" in Mexico City).
+    /// date in every time zone the app can run in. The wire's `release.date`
+    /// is an instant whose hour varies by source — video arrives at 06:00Z
+    /// (midnight in Mexico City), albums keep iTunes' hour (00, 07, 08 or
+    /// 12Z) — but the release DAY is always the UTC calendar date of that
+    /// instant, so we keep only that date and re-anchor it at noon. Never
+    /// read the wire hour: 00:00Z would be "yesterday" in Mexico City.
     static func utcNoon(year: Int, month: Int, day: Int) -> Date? {
         var c = Calendar(identifier: .gregorian)
         c.timeZone = TimeZone(identifier: "UTC")!
@@ -97,6 +101,45 @@ enum KuraRuntime {
         guard let raw, !raw.isEmpty else { return nil }
         if raw.hasPrefix("/") { return URL(string: raw, relativeTo: apiOrigin)?.absoluteURL }
         return URL(string: raw)
+    }
+}
+
+// MARK: - Public links
+
+/// The web's public URLs, built in ONE place. Exact shapes = the clean URLs of `next.config.ts`
+/// (fallback rewrites onto `src/app/u/[username]/**`):
+/// profile `/{handle}` · public collection `/{handle}/{collectionId}` (the collection's id, never a
+/// slug) · public item `/{handle}/item/{titleId}`. Every one 404s unless the handle's profile is
+/// public (and, for a collection, the collection too) — callers decide whether to offer it.
+/// Base = the API origin (Debug → `localhost:3010`, Release → `baclog.app`); mock → `baclog.app`.
+enum PublicLinks {
+    static var base: URL { KuraRuntime.apiOrigin ?? URL(string: "https://baclog.app")! }
+
+    static func profile(_ handle: String) -> URL? {
+        guard let h = clean(handle) else { return nil }
+        return base.appending(path: h)
+    }
+
+    static func collection(_ handle: String, id: String) -> URL? {
+        guard let h = clean(handle), !id.isEmpty else { return nil }
+        return base.appending(path: h).appending(path: id)
+    }
+
+    static func item(_ handle: String, titleID: String) -> URL? {
+        guard let h = clean(handle), !titleID.isEmpty, ExternalRef.parse(localID: titleID) == nil else { return nil }
+        return base.appending(path: h).appending(path: "item").appending(path: titleID)
+    }
+
+    /// "baclog.app/mariel.ok/…" — the link as printed on a card (no scheme).
+    static func display(_ url: URL) -> String {
+        let s = url.absoluteString
+        if let r = s.range(of: "://") { return String(s[r.upperBound...]) }
+        return s
+    }
+
+    private static func clean(_ handle: String) -> String? {
+        let h = handle.trimmingCharacters(in: .whitespaces).drop(while: { $0 == "@" })
+        return h.isEmpty ? nil : String(h)
     }
 }
 

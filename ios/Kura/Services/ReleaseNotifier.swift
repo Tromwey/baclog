@@ -12,7 +12,13 @@ enum ReleaseNotifier {
             guard granted else { return }
             let content = UNMutableNotificationContent()
             content.title = "Ya salió \(t.name)"
-            content.body = "La guardaste en no puedo esperar. " + (t.format == .album ? "Ya puedes escucharla." : "Está en cines desde hoy.")
+            content.body = "La guardaste en no puedo esperar. " + {
+                switch t.format {
+                case .album: return "Ya puedes escucharla."
+                case .series: return "Ya puedes verla."
+                case .film: return "Está en cines desde hoy."
+                }
+            }()
             var comps = MockData.calendar.dateComponents([.year, .month, .day], from: d)
             comps.hour = 9
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)

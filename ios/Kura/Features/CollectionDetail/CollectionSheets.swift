@@ -284,8 +284,8 @@ struct ShareCollectionSheet: View {
 
     var body: some View {
         if let c = store.collection(collectionID) {
-            let link = "kura.app/c/\(c.slug)"
-            let url = URL(string: "https://\(link)")!
+            // `/{you}/{collectionId}` — nil while it would 404 (private profile, "Solo yo", unsaved id).
+            let url = store.myCollectionLink(c)
             VStack(alignment: .leading, spacing: 6) {
                 SheetHeader(title: "compartir")
                 HStack(spacing: 0) {
@@ -299,7 +299,10 @@ struct ShareCollectionSheet: View {
                         Text("de @\(store.me.handle) · \(c.titleIDs.count) \(c.titleIDs.count == 1 ? "título" : "títulos")")
                             .font(.kura.ui(13))
                             .foregroundStyle(KColor.text2)
-                        Text(link).font(.kura.mono(12)).foregroundStyle(KColor.text)
+                        if let url {
+                            Text(PublicLinks.display(url)).font(.kura.mono(12)).foregroundStyle(KColor.text)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
                     }
                     .padding(16)
                     Spacer(minLength: 0)
@@ -307,7 +310,13 @@ struct ShareCollectionSheet: View {
                 .background(store.palette(of: c).map { AnyShapeStyle(Tint.card($0)) } ?? AnyShapeStyle(KColor.s1))
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
-                HStack(spacing: 8) {
+                if url == nil {
+                    Text(unshareableNote(c))
+                        .font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8).padding(.top, 14).padding(.bottom, 8)
+                }
+                if let url { HStack(spacing: 8) {
                     shareAction("link", "Copiar link") {
                         UIPasteboard.general.string = url.absoluteString
                         store.dismissSheet()
@@ -322,10 +331,17 @@ struct ShareCollectionSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.top, 18)
+                .padding(.top, 18) }
             }
             .padding(.horizontal, 20)
         }
+    }
+
+    /// Why there's no link (the web would answer 404, same as a collection that doesn't exist).
+    private func unshareableNote(_ c: KCollection) -> String {
+        if store.profilePrivate { return AppStore.privateProfileShareNote }
+        if c.privacy == .onlyMe { return "Está en Solo yo. Cambia quién la ve en sus opciones para compartirla." }
+        return "Todavía se está guardando. Inténtalo en un momento."
     }
 
     private func shareAction(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {

@@ -4,6 +4,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
+    @State private var showPrivacyNotice = false
+
+    /// The integral privacy notice (public, no session; text in the web's `(marketing)/privacidad`).
+    /// Same URL App Store Connect carries as the Privacy Policy URL, so it never points at Debug's localhost.
+    static let privacyNoticeURL = URL(string: "https://baclog.app/privacidad")!
 
     var body: some View {
         @Bindable var store = store
@@ -39,13 +44,20 @@ struct SettingsView: View {
                     }
 
                     section("privacidad") {
-                        SettingsRow(title: "Perfil privado", note: "Apruebas a quien te sigue.") {
+                        SettingsRow(title: "Perfil privado", note: "Nadie más ve tu perfil ni tus colecciones.") {
                             KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
                         }
                         ListDivider()
                         SettingsRow(title: "Quién ve lo que te obsesiona", action: { store.push(.settingsPrivacy) }) {
-                            RowValue(text: store.profilePrivate ? "Seguidores" : "Todos")
+                            RowValue(text: store.profilePrivate ? "Solo tú" : "Todos")
                         }
+                        ListDivider()
+                        SettingsRow(title: "Aviso de privacidad", action: { showPrivacyNotice = true }) {
+                            Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(KColor.text2)
+                                .accessibilityHidden(true)
+                        }
+                        .accessibilityHint("Se abre en la web")
                     }
 
                     section("apps") {
@@ -73,8 +85,23 @@ struct SettingsView: View {
                     #endif
 
                     VStack(spacing: 4) {
-                        Button("Cerrar sesión") { store.signOut() }
-                            .font(.kura.ui(16, .medium)).foregroundStyle(KColor.text).frame(minHeight: 44)
+                        // `POST auth/logout` revokes every bearer of the account (server-wide, not per device).
+                        // Awaits the POST before leaving (see `AppStore.signOut`): a spinner meanwhile.
+                        Button { store.signOut() } label: {
+                            VStack(spacing: 2) {
+                                if store.signingOut {
+                                    ProgressView().tint(KColor.text)
+                                } else {
+                                    Text("Cerrar sesión").font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
+                                    Text("En todos tus dispositivos.").font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                                }
+                            }
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
+                        }
+                        .disabled(store.signingOut)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Cerrar sesión en todos tus dispositivos")
                         Button("Borrar cuenta") { store.present(.deleteAccount) }
                             .font(.kura.ui(15)).foregroundStyle(KColor.text2).frame(minHeight: 44)
                         HStack(spacing: 6) {
@@ -94,6 +121,9 @@ struct SettingsView: View {
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
+        .fullScreenCover(isPresented: $showPrivacyNotice) {
+            SafariView(url: Self.privacyNoticeURL).ignoresSafeArea()
+        }
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -117,7 +147,7 @@ struct PrivacySettingsView: View {
                 Text("privacidad").font(.kura.screenTitle).foregroundStyle(KColor.text)
                     .padding(.horizontal, 20).padding(.bottom, 18)
                     .accessibilityAddTraits(.isHeader)
-                row("Perfil privado", note: "Apruebas a quien te sigue.") {
+                row("Perfil privado", note: "Nadie más ve tu perfil ni tus colecciones.") {
                     KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
                 }
                 Button {

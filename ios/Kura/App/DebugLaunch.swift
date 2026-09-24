@@ -5,7 +5,7 @@ import Foundation
 ///
 /// splash · onboarding · signup · username · pick · people · login ·
 /// collections · loading · empty · offline · newcollection · collection ·
-/// list · auto · more · actions · add · title · series · album · waiting ·
+/// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
 /// complete · feed · discover · profile
 enum DebugLaunch {
     /// `-kuraScreen <name>` or `-kuraMock` → the app runs on `MockAPI` (DEBUG only).
@@ -22,6 +22,8 @@ enum DebugLaunch {
     static func configure(_ store: AppStore) {
         #if DEBUG
         // `-kuraFailHydrate YES`: every `GET /titles?ids=` fails (live), to see the "incompleto" strips.
+        // (Read directly by `LiveAPI`: `-kuraDelete401 YES` makes `DELETE /me` answer 401 with a
+        // live account; `-kuraFailLogout YES` makes `POST auth/logout` fail as offline.)
         store.debugFailHydrate = UserDefaults.standard.bool(forKey: "kuraFailHydrate")
         guard let screen = UserDefaults.standard.string(forKey: "kuraScreen") else { return }
         func main(_ tab: Tab = .collections, _ routes: [Route] = [], sheet: SheetRoute? = nil) {
@@ -71,6 +73,10 @@ enum DebugLaunch {
             main(.collections, [.automatic])
         case "more":
             main(.collections, [.collection("hermana")], sheet: .more("hermana"))
+        case "share":
+            main(.collections, [.collection("hermana")], sheet: .share("hermana"))
+        case "shareprivate":
+            main(.collections, [.collection("pendientes")], sheet: .share("pendientes"))
         case "actions":
             main(.collections, [.collection("hermana")], sheet: .titleActions(titleID: "chihiro", collectionID: "hermana"))
         case "add":
@@ -161,7 +167,8 @@ enum DebugLaunch {
         case "stranger":
             main(.profile, [.settings, .settingsPrivacy, .profileAsStranger])
         case "strangerprivate":
-            store.profilePrivate = true
+            // After the launch: bootstrap re-reads `me.isPublic` and would undo it.
+            store.pendingAction = { [weak store] in store?.profilePrivate = true }
             main(.profile, [.settings, .settingsPrivacy, .profileAsStranger])
         // Flujo 09 · tu perfil
         case "editprofile":

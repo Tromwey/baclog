@@ -37,6 +37,13 @@ struct ProfileView: View {
         return obsessions.first?.palette
     }
 
+    private var shareChip: some View {
+        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
+            .foregroundStyle(KColor.text)
+            .frame(width: 44, height: 44)
+            .background(KColor.glassBg, in: Circle())
+    }
+
     private var full: some View {
         let me = store.me
         return ZStack(alignment: .top) {
@@ -46,13 +53,17 @@ struct ProfileView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         HStack(spacing: 8) {
                             Spacer()
-                            ShareLink(item: URL(string: "https://kura.app/@\(me.handle)")!) {
-                                Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(KColor.text)
-                                    .frame(width: 44, height: 44)
-                                    .background(KColor.glassBg, in: Circle())
+                            // Private profile: its link would 404, so say why instead of sharing it.
+                            if let link = store.myProfileLink {
+                                ShareLink(item: link) { shareChip }
+                                    .accessibilityLabel("Compartir perfil")
+                            } else {
+                                Button {
+                                    store.showToast(ToastModel(text: AppStore.privateProfileShareNote, kind: .info))
+                                } label: { shareChip }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Compartir perfil")
                             }
-                            .accessibilityLabel("Compartir perfil")
                             IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") {
                                 store.push(.settings)
                             }
@@ -222,9 +233,10 @@ struct EditProfileView: View {
     @State private var loaded = false
     @State private var photo: PhotosPickerItem?
 
+    /// Only what you marked "Me obsesiona" — never "Me gusta", and never "it's in a collection
+    /// called Obsesiones" (onboarding picks start obsessed, but you can change them later).
     private var candidates: [Title] {
-        let ids = store.userTitles.filter { $0.value.mark == .obsessed || $0.value.mark == .liked }.map(\.key).sorted()
-        return (store.onboardingPicks + ids).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        store.userTitles.filter { $0.value.mark == .obsessed }.map(\.key).sorted()
             .compactMap { store.title($0) }
     }
 
@@ -359,7 +371,8 @@ struct EditProfileView: View {
             loaded = true
             name = store.me.name
             handle = store.me.handle
-            featured = store.me.featuredTitleID ?? candidates.first?.id
+            let ids = candidates.map(\.id)
+            featured = store.me.featuredTitleID.flatMap { ids.contains($0) ? $0 : nil } ?? ids.first
             isPrivate = store.profilePrivate
             showCommon = store.showCommon
         }
