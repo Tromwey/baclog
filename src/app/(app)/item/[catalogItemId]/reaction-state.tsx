@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -12,37 +13,45 @@ import { createBacklogAction } from "@/app/actions/backlog-actions";
 import {
   addItemAction,
   clearVerdictAction,
+  removeFromLibraryAction,
   setObsessedAction,
   setVerdictAction,
 } from "@/app/actions/backlog-item-actions";
 import { setMembershipAction } from "@/app/actions/complete-actions";
 import { extractPalette } from "@/modules/cards/palette";
 import type { OwnReview } from "@/modules/reviews/types";
+import type { CollectionsIndex } from "./collections-index";
 
 /**
- * The item detail's shared client state (Revamp UI 06/08, 2026-09-03).
+ * The ficha's shared client state (Kura 24a–d, 26a, 37a, C4 — 2026-09-24).
  *
- * Reaction is TWO INDEPENDENT axes (F3.7): a `verdict` (me gustó / no me
- * gustó) and an `obsessed` flag; completion is a third. Each axis runs through
- * `useOptimisticAxis` — its own state, ref and compare-before-revert guard —
- * so a failed write from one surface never clobbers a newer optimistic write.
+ * Reaction is TWO INDEPENDENT axes (F3.7): a `verdict` and an `obsessed` flag;
+ * completion is a third. Each axis runs through `useOptimisticAxis` — its own
+ * state, ref and compare-before-revert guard — so a failed write never
+ * clobbers a newer optimistic one. In Kura the only way to react is the
+ * Completar slider (Completo → Me gusta → Me obsesiona), which writes all
+ * three in one server call and mirrors them here with `settleFromComplete`.
  *
- * Since the revamp the same provider also owns what used to be scattered
- * across the page:
- *  - LIBRARY membership. A title that isn't in the library yet still shows
- *    the reaction row; the first tap adds it (`ensureInLibrary`) and then
- *    applies the reaction. Membership per backlog (`memberIds`) drives the
- *    "En N backlogs" button and its sheet without a server round-trip.
- *  - The viewer's OWN review, because the Completar sheet (opened from the
- *    reaction row) writes it and the reviews block (further down) shows it.
- *  - Which overlay is open: the Completar sheet, or the backlogs sheet in
- *    "manage" mode (toggle memberships) or "pick" mode (choose where the
- *    title goes before a reaction can be saved).
+ * The provider also owns:
+ *  - MEMBERSHIP. `memberIds` drives "Guardar"/"En N colecciones", the "en tus
+ *    colecciones" pills and the "guardar en" sheet without a round-trip. The
+ *    sheet is STAGED (check what you want, then Guardar) — `commitMemberships`
+ *    diffs and writes, adds before removes so a move never passes through zero
+ *    (which would GC the per-title state on the server).
+ *  - The viewer's OWN review (Completar writes it, the reviews block shows it).
+ *  - Which sheet is open. "Nunca dos hojas a la vez": Completar, guardar en
+ *    and Opciones are mutually exclusive, EXCEPT that Completar on a title that
+ *    isn't saved yet asks "guardar en" (pick mode) and stays mounted, hidden,
+ *    until the pick resolves.
+ *  - The one toast ("Deshacer" / "Reintentar", 5 s, one at a time).
+ *  - "Quitar de tus colecciones" with a real Deshacer: the page goes dark at
+ *    once, the write waits out the toast (5 s) and is flushed early by any
+ *    other membership write, or on unmount.
  *
  * Nothing here calls router.refresh() on add: the provider is keyed on the
  * entry id in page.tsx, and a refresh that swaps `none → id` would remount
- * this tree mid-flow and drop an open sheet. The state IS the truth for the
- * visit; the actions revalidate the other screens.
+ * this tree mid-flow and drop an open sheet
+ * (learnings/2026-09-02-revalidatepath-cambia-props-bajo-estado-cliente).
  */
 
 export type ItemVerdictValue = "disliked" | "liked" | null;
@@ -54,12 +63,6 @@ export interface BacklogOption {
 
 type ActionResult = { ok: true } | { error: string };
 
-/**
- * One optimistic axis: sets `value` immediately, persists, and rolls back on
- * failure — but ONLY if our optimistic write is still current
- * (compare-before-revert), so a slow failure never clobbers a newer write from
- * a fast re-tap. `persist` must be a stable (module-level) reference.
- */
 function useOptimisticAxis<T>(
   catalogItemId: string,
   enabledRef: React.RefObject<boolean>,
@@ -67,8 +70,6 @@ function useOptimisticAxis<T>(
   persist: (id: string, next: T) => Promise<ActionResult>,
 ): [T, (next: T) => Promise<boolean>, (next: T) => void] {
   const [value, setValue] = useState<T>(initial);
-  // Mirror kept in sync HERE (mutate is the only writer), so a snapshot never
-  // needs a render-time ref read.
   const ref = useRef<T>(initial);
 
   const mutate = useCallback(
@@ -76,7 +77,7 @@ function useOptimisticAxis<T>(
       if (!enabledRef.current) return false;
       const prev = ref.current;
       ref.current = next;
-      setValue(next); // optimistic — revert on failure
+      setValue(next);
       const revert = () => {
         if (ref.current === next) ref.current = prev;
         setValue((current) => (current === next ? prev : current));
@@ -96,8 +97,6 @@ function useOptimisticAxis<T>(
     [catalogItemId, enabledRef, persist],
   );
 
-  // A write that already landed elsewhere (the Completar sheet's one action)
-  // — set without persisting.
   const settle = useCallback((next: T) => {
     ref.current = next;
     setValue(next);
@@ -106,62 +105,70 @@ function useOptimisticAxis<T>(
   return [value, mutate, settle];
 }
 
-// Stable persisters (module-level) so the hook's callback deps don't churn.
-const persistVerdict = (
-  id: string,
-  next: ItemVerdictValue,
-): Promise<ActionResult> =>
+const persistVerdict = (id: string, next: ItemVerdictValue): Promise<ActionResult> =>
   next === null ? clearVerdictAction(id) : setVerdictAction(id, next);
 const persistObsessed = (id: string, next: boolean): Promise<ActionResult> =>
   setObsessedAction(id, next);
 const persistNothing = async (): Promise<ActionResult> => ({ ok: true });
 
-export type BacklogsSheetMode = "manage" | "pick" | null;
+export type SaveSheetMode = "manage" | "pick" | null;
+
+export interface ToastState {
+  key: number;
+  text: string;
+  /** "Deshacer" for the reversible, "Reintentar" (with the triangle) for failures. */
+  action?: { label: string; run: () => void; failure?: boolean };
+}
 
 interface ItemReactionState {
   catalogItemId: string;
   inLibrary: boolean;
-  /** Backlogs the title is filed under. */
   memberIds: readonly string[];
-  /** The user's backlogs — grows when the sheet creates one. */
   backlogs: readonly BacklogOption[];
+  collections: CollectionsIndex;
   verdict: ItemVerdictValue;
   obsessed: boolean;
   completed: boolean;
-  /**
-   * Optimistically sets the verdict and persists it. Resolves `true` when
-   * saved; `false` on failure — after reverting the optimistic value, but ONLY
-   * if no newer write landed in between (callers show their own error copy).
-   */
   mutateVerdict: (next: ItemVerdictValue) => Promise<boolean>;
-  /** Same optimistic contract as mutateVerdict, for the obsession flag. */
   mutateObsessed: (next: boolean) => Promise<boolean>;
-  /** Mirror a write the Completar sheet already made in one server call. */
+  /** Mirror a write the Completar sheet already made on the server. */
   settleFromComplete: (next: {
     verdict: ItemVerdictValue;
     obsessed: boolean;
+    completed: boolean;
   }) => void;
   /**
-   * Make sure the title is in the library before a reaction is saved: already
-   * there → true; one backlog → adds straight to it; several → opens the
-   * picker and resolves when the user chose (false if they dismissed it).
+   * Make sure the title is in the library before completing: already there →
+   * true; one collection → adds straight to it; several → "guardar en" in pick
+   * mode (last used pre-checked), resolving when the user saved (false if they
+   * dismissed it).
    */
   ensureInLibrary: () => Promise<boolean>;
-  /** The "En N backlogs" sheet. */
-  backlogsSheet: BacklogsSheetMode;
-  openBacklogs: () => void;
-  closeBacklogs: () => void;
-  /** Sheet rows: pick mode adds and resolves; manage mode toggles. */
-  chooseBacklog: (backlogId: string) => Promise<void>;
-  createBacklogAndAdd: (name: string) => Promise<boolean>;
+  saveSheet: SaveSheetMode;
+  openSave: () => void;
+  closeSave: () => void;
+  /** Write the staged selection of the "guardar en" sheet. */
+  commitMemberships: (ids: string[]) => Promise<boolean>;
+  createCollection: (name: string) => Promise<BacklogOption | null>;
   busy: boolean;
   ownReview: OwnReview | null;
   setOwnReview: (next: OwnReview | null) => void;
+  /** The review's own sheets (edit / its ⋯ menu), opened from the block or Reseñar. */
+  reviewSheet: "edit" | "menu" | null;
+  setReviewSheet: (next: "edit" | "menu" | null) => void;
   completeOpen: boolean;
   openComplete: () => void;
   closeComplete: () => void;
+  optionsOpen: boolean;
+  openOptions: () => void;
+  closeOptions: () => void;
   recoHidden: boolean;
   setRecoHidden: (hidden: boolean) => void;
+  toast: ToastState | null;
+  showToast: (text: string, action?: ToastState["action"]) => void;
+  clearToast: () => void;
+  /** "Quitar de tus colecciones" — optimistic, with a 5 s Deshacer. */
+  removeFromLibrary: () => void;
 }
 
 const Ctx = createContext<ItemReactionState | null>(null);
@@ -171,6 +178,7 @@ export function ItemReactionProvider({
   posterUrl,
   paletteHex,
   backlogs: initialBacklogs,
+  collections,
   initialMemberIds,
   initialVerdict,
   initialObsessed,
@@ -183,6 +191,7 @@ export function ItemReactionProvider({
   /** Cached cover palette (catalog_item) — present ⇒ skip on-device extraction on add. */
   paletteHex: string[] | null;
   backlogs: BacklogOption[];
+  collections: CollectionsIndex;
   /** Empty ⇒ not in the library. */
   initialMemberIds: string[];
   initialVerdict: ItemVerdictValue;
@@ -191,21 +200,25 @@ export function ItemReactionProvider({
   initialOwnReview: OwnReview | null;
   children: ReactNode;
 }) {
-  const [memberIds, setMemberIds] = useState<string[]>(initialMemberIds);
+  const [memberIds, setMemberIdsState] = useState<string[]>(initialMemberIds);
   const [backlogs, setBacklogs] = useState<BacklogOption[]>(initialBacklogs);
   const inLibrary = memberIds.length > 0;
-  // Read by the axes at mutate time. Kept in step by the two writers of
-  // memberIds (addTo, chooseBacklog) — set synchronously by addTo BEFORE the
-  // reaction that follows the add is applied, never during render.
+  // Read by the axes at mutate time; every writer of memberIds goes through
+  // setMemberIds below, which keeps it in step (never during render).
   const inLibraryRef = useRef(inLibrary);
+  const memberRef = useRef<string[]>(initialMemberIds);
+  const setMemberIds = useCallback((ids: string[]) => {
+    memberRef.current = ids;
+    inLibraryRef.current = ids.length > 0;
+    setMemberIdsState(ids);
+  }, []);
 
-  const [verdict, mutateVerdict, settleVerdict] =
-    useOptimisticAxis<ItemVerdictValue>(
-      catalogItemId,
-      inLibraryRef,
-      initialVerdict,
-      persistVerdict,
-    );
+  const [verdict, mutateVerdict, settleVerdict] = useOptimisticAxis<ItemVerdictValue>(
+    catalogItemId,
+    inLibraryRef,
+    initialVerdict,
+    persistVerdict,
+  );
   const [obsessed, mutateObsessed, settleObsessed] = useOptimisticAxis<boolean>(
     catalogItemId,
     inLibraryRef,
@@ -220,20 +233,130 @@ export function ItemReactionProvider({
   );
 
   const [ownReview, setOwnReview] = useState<OwnReview | null>(initialOwnReview);
+  const [reviewSheet, setReviewSheet] = useState<"edit" | "menu" | null>(null);
   const [recoHidden, setRecoHidden] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
-  const [backlogsSheet, setBacklogsSheet] = useState<BacklogsSheetMode>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [saveSheet, setSaveSheet] = useState<SaveSheetMode>(null);
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastKey = useRef(0);
   const pendingPick = useRef<((ok: boolean) => void) | null>(null);
 
+  const showToast = useCallback((text: string, action?: ToastState["action"]) => {
+    toastKey.current += 1;
+    setToast({ key: toastKey.current, text, action });
+  }, []);
+  const clearToast = useCallback(() => setToast(null), []);
+
   // Palette is cover-derived + cached on catalog_item; extract on-device only
-  // when this title has none yet ([] on CORS failure).
+  // when this title has none yet ([] on CORS failure). Once per visit.
   const needsPalette = !paletteHex || paletteHex.length === 0;
-  const paletteFor = useCallback(async () => {
-    if (!needsPalette || !posterUrl) return undefined;
-    const hex = await extractPalette(posterUrl);
-    return hex.length > 0 ? hex : undefined;
+  const extracted = useRef<Promise<string[] | undefined> | null>(null);
+  const paletteFor = useCallback(() => {
+    if (!needsPalette || !posterUrl) return Promise.resolve(undefined);
+    extracted.current ??= extractPalette(posterUrl)
+      .then((hex) => (hex.length > 0 ? hex : undefined))
+      .catch(() => undefined);
+    return extracted.current;
   }, [needsPalette, posterUrl]);
+
+  /* ---------------------------------------------- quitar, con Deshacer */
+
+  // Latest `removeFromLibrary`, for the Reintentar and the uncheck-all path
+  // (both run later, from closures made before the latest render).
+  const removeFromLibraryRef = useRef<() => void>(() => {});
+  const pendingRemoval = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    commit: () => Promise<void>;
+  } | null>(null);
+
+  const clearLocalState = useCallback(() => {
+    setMemberIds([]);
+    settleVerdict(null);
+    settleObsessed(false);
+    settleCompleted(false);
+    setOwnReview(null);
+  }, [setMemberIds, settleCompleted, settleObsessed, settleVerdict]);
+
+  const flushRemoval = useCallback(async () => {
+    const pending = pendingRemoval.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    await pending.commit();
+  }, []);
+
+  const removeFromLibrary = useCallback(() => {
+    if (pendingRemoval.current || memberRef.current.length === 0) return;
+    const snapshot = {
+      memberIds: memberRef.current,
+      verdict,
+      obsessed,
+      completed,
+      ownReview,
+    };
+    const restore = () => {
+      setMemberIds(snapshot.memberIds);
+      settleVerdict(snapshot.verdict);
+      settleObsessed(snapshot.obsessed);
+      settleCompleted(snapshot.completed);
+      setOwnReview(snapshot.ownReview);
+    };
+    const commit = async () => {
+      pendingRemoval.current = null;
+      try {
+        await removeFromLibraryAction(catalogItemId);
+      } catch {
+        restore();
+        showToast("No se pudo quitar de tus colecciones.", {
+          label: "Reintentar",
+          failure: true,
+          run: () => removeFromLibraryRef.current(),
+        });
+      }
+    };
+    clearLocalState();
+    pendingRemoval.current = { timer: setTimeout(() => void commit(), 5000), commit };
+    showToast("Ya no está en tus colecciones.", {
+      label: "Deshacer",
+      run: () => {
+        const pending = pendingRemoval.current;
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        pendingRemoval.current = null;
+        restore();
+      },
+    });
+  }, [
+    catalogItemId,
+    clearLocalState,
+    completed,
+    obsessed,
+    ownReview,
+    setMemberIds,
+    settleCompleted,
+    settleObsessed,
+    settleVerdict,
+    showToast,
+    verdict,
+  ]);
+  useEffect(() => {
+    removeFromLibraryRef.current = removeFromLibrary;
+  });
+
+  // Leaving the ficha inside the Deshacer window still removes: the toast
+  // promised it. Fire-and-forget — the action revalidates /backlogs itself.
+  useEffect(
+    () => () => {
+      const pending = pendingRemoval.current;
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      void pending.commit();
+    },
+    [],
+  );
+
+  /* ------------------------------------------------------ membresía */
 
   const addTo = useCallback(
     async (backlogId: string): Promise<boolean> => {
@@ -245,8 +368,8 @@ export function ItemReactionProvider({
           paletteHex: await paletteFor(),
         });
         if (!("id" in res)) return false;
-        inLibraryRef.current = true;
-        setMemberIds((ids) => (ids.includes(backlogId) ? ids : [...ids, backlogId]));
+        const ids = memberRef.current;
+        setMemberIds(ids.includes(backlogId) ? ids : [...ids, backlogId]);
         return true;
       } catch {
         return false;
@@ -254,7 +377,7 @@ export function ItemReactionProvider({
         setBusy(false);
       }
     },
-    [catalogItemId, paletteFor],
+    [catalogItemId, paletteFor, setMemberIds],
   );
 
   const resolvePick = useCallback((ok: boolean) => {
@@ -263,101 +386,81 @@ export function ItemReactionProvider({
   }, []);
 
   const ensureInLibrary = useCallback(async (): Promise<boolean> => {
+    await flushRemoval();
     if (inLibraryRef.current) return true;
     if (backlogs.length === 1) return addTo(backlogs[0].id);
     return new Promise<boolean>((resolve) => {
       resolvePick(false); // a stale waiter, if any, is told no
       pendingPick.current = resolve;
-      setBacklogsSheet("pick");
+      setOptionsOpen(false);
+      setSaveSheet("pick");
     });
-  }, [addTo, backlogs, resolvePick]);
+  }, [addTo, backlogs, flushRemoval, resolvePick]);
 
-  const closeBacklogs = useCallback(() => {
-    setBacklogsSheet(null);
+  const closeSave = useCallback(() => {
+    setSaveSheet(null);
     resolvePick(false);
   }, [resolvePick]);
 
-  const chooseBacklog = useCallback(
-    async (backlogId: string) => {
-      if (backlogsSheet === "pick") {
-        const ok = await addTo(backlogId);
-        setBacklogsSheet(null);
-        resolvePick(ok);
-        return;
+  const commitMemberships = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      await flushRemoval();
+      const before = memberRef.current;
+      // Unchecking everything IS "quitar de tus colecciones": same Deshacer.
+      if (ids.length === 0 && before.length > 0) {
+        removeFromLibraryRef.current();
+        return true;
       }
-      // manage: toggle, optimistically
-      const wasMember = memberIds.includes(backlogId);
-      const before = memberIds;
-      const after = wasMember
-        ? memberIds.filter((id) => id !== backlogId)
-        : [...memberIds, backlogId];
-      setMemberIds(after);
-      inLibraryRef.current = after.length > 0;
+      const adds = ids.filter((id) => !before.includes(id));
+      const removes = before.filter((id) => !ids.includes(id));
+      let current = before;
       setBusy(true);
       try {
-        const res = await setMembershipAction({
-          backlogId,
-          catalogItemId,
-          member: !wasMember,
-          paletteHex: wasMember ? undefined : await paletteFor(),
-        });
-        if ("error" in res) throw new Error(res.error);
-        // Leaving the last backlog GC's the per-title state on the server
-        // (removeMembershipAction) — mirror it so the row goes dark.
-        if (after.length === 0) {
-          settleVerdict(null);
-          settleObsessed(false);
-          settleCompleted(false);
-          setOwnReview(null);
+        const palette = adds.length > 0 ? await paletteFor() : undefined;
+        // Adds first: a move between collections never passes through zero.
+        for (const backlogId of adds) {
+          const res = await setMembershipAction({ backlogId, catalogItemId, member: true, paletteHex: palette });
+          if ("error" in res) throw new Error(res.error);
+          current = [...current, backlogId];
+          setMemberIds(current);
         }
-      } catch {
-        setMemberIds(before);
-        inLibraryRef.current = before.length > 0;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [
-      addTo,
-      backlogsSheet,
-      catalogItemId,
-      memberIds,
-      paletteFor,
-      resolvePick,
-      settleCompleted,
-      settleObsessed,
-      settleVerdict,
-    ],
-  );
-
-  const createBacklogAndAdd = useCallback(
-    async (name: string): Promise<boolean> => {
-      setBusy(true);
-      try {
-        const res = await createBacklogAction({ name });
-        const id = "id" in res ? res.id : null;
-        if (!id) return false;
-        setBacklogs((list) => [{ id, name }, ...list]);
-        const ok = await addTo(id);
-        if (backlogsSheet === "pick") {
-          setBacklogsSheet(null);
-          resolvePick(ok);
+        for (const backlogId of removes) {
+          const res = await setMembershipAction({ backlogId, catalogItemId, member: false });
+          if ("error" in res) throw new Error(res.error);
+          current = current.filter((id) => id !== backlogId);
+          setMemberIds(current);
         }
-        return ok;
+        if (pendingPick.current) resolvePick(current.length > 0);
+        return true;
       } catch {
         return false;
       } finally {
         setBusy(false);
       }
     },
-    [addTo, backlogsSheet, resolvePick],
+    [catalogItemId, flushRemoval, paletteFor, resolvePick, setMemberIds],
   );
 
+  const createCollection = useCallback(async (name: string): Promise<BacklogOption | null> => {
+    setBusy(true);
+    try {
+      const res = await createBacklogAction({ name });
+      if (!("id" in res) || !res.id) return null;
+      const made = { id: res.id, name };
+      setBacklogs((list) => [made, ...list]);
+      return made;
+    } catch {
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const settleFromComplete = useCallback(
-    (next: { verdict: ItemVerdictValue; obsessed: boolean }) => {
+    (next: { verdict: ItemVerdictValue; obsessed: boolean; completed: boolean }) => {
       settleVerdict(next.verdict);
       settleObsessed(next.obsessed);
-      settleCompleted(true);
+      settleCompleted(next.completed);
     },
     [settleCompleted, settleObsessed, settleVerdict],
   );
@@ -369,6 +472,7 @@ export function ItemReactionProvider({
         inLibrary,
         memberIds,
         backlogs,
+        collections,
         verdict,
         obsessed,
         completed,
@@ -376,19 +480,34 @@ export function ItemReactionProvider({
         mutateObsessed,
         settleFromComplete,
         ensureInLibrary,
-        backlogsSheet,
-        openBacklogs: () => setBacklogsSheet("manage"),
-        closeBacklogs,
-        chooseBacklog,
-        createBacklogAndAdd,
+        saveSheet,
+        openSave: () => {
+          setOptionsOpen(false);
+          setSaveSheet("manage");
+        },
+        closeSave,
+        commitMemberships,
+        createCollection,
         busy,
         ownReview,
         setOwnReview,
+        reviewSheet,
+        setReviewSheet,
         completeOpen,
-        openComplete: () => setCompleteOpen(true),
+        openComplete: () => {
+          setOptionsOpen(false);
+          setCompleteOpen(true);
+        },
         closeComplete: () => setCompleteOpen(false),
+        optionsOpen,
+        openOptions: () => setOptionsOpen(true),
+        closeOptions: () => setOptionsOpen(false),
         recoHidden,
         setRecoHidden,
+        toast,
+        showToast,
+        clearToast,
+        removeFromLibrary,
       }}
     >
       {children}
@@ -398,7 +517,6 @@ export function ItemReactionProvider({
 
 export function useItemReaction(): ItemReactionState {
   const ctx = useContext(Ctx);
-  if (!ctx)
-    throw new Error("useItemReaction must be used inside ItemReactionProvider");
+  if (!ctx) throw new Error("useItemReaction must be used inside ItemReactionProvider");
   return ctx;
 }

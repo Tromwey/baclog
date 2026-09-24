@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search as SearchIcon, X } from "lucide-react";
 import { searchProfilesAction } from "@/app/actions/social-actions";
 import { PersonRowView } from "@/app/(app)/perfil/people-list";
 import { SuggestionRow } from "@/app/(app)/feed/suggestions";
@@ -71,20 +70,23 @@ export function PeopleSearch({
       <form
         role="search"
         onSubmit={(e) => e.preventDefault()}
-        className="flex items-center gap-2.5 rounded-full bg-surface-3 px-4 py-[11px]"
+        className="flex h-12 items-center gap-2.5 rounded-full bg-[var(--glass-bg)] px-4 transition-colors focus-within:bg-white/[0.11]"
       >
-        <SearchIcon size={15} className="flex-none text-text-3" />
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="flex-none text-text-2" aria-hidden>
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-3.5-3.5" />
+        </svg>
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="@handle o nombre"
-          aria-label="Buscar gente por @handle o nombre"
+          placeholder="Buscar por @usuario o nombre"
+          aria-label="Buscar gente por @usuario o nombre"
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
           enterKeyHint="search"
-          className="min-w-0 flex-1 bg-transparent font-sans text-[15px] text-text outline-none placeholder:text-text-3"
+          className="min-w-0 flex-1 bg-transparent font-sans text-[16px] text-text outline-none placeholder:text-text-2"
         />
         {query && (
           <button
@@ -94,9 +96,11 @@ export function PeopleSearch({
               setQuery("");
               inputRef.current?.focus();
             }}
-            className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-surface-2 text-text-2 bl-press-sm hover:bg-surface-1"
+            className="-mr-2 flex h-11 w-11 flex-none items-center justify-center rounded-full text-text-2 bl-press-sm hover:text-text"
           >
-            <X size={13} />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         )}
       </form>
@@ -108,14 +112,17 @@ export function PeopleSearch({
         // "searching", never a stale "nobody found" for a needle in flight.
         <Eyebrow>Buscando…</Eyebrow>
       ) : errored ? (
-        <p className="mt-6 text-[14.5px] leading-[1.52] text-pretty text-text-2">
+        <p className="mt-6 text-[15px] leading-[1.5] text-pretty text-text-2">
           No se pudo buscar. Revisa tu conexión y escribe de nuevo.
         </p>
       ) : !rows || rows.length === 0 ? (
-        <p className="mt-6 text-[14.5px] leading-[1.52] text-pretty text-text-2">
-          Nadie con ese @handle o nombre. Los perfiles privados no aparecen
-          aquí — pídele su link a quien quieras seguir.
-        </p>
+        <div className="mt-8 flex flex-col gap-2">
+          <p className="font-brand text-[28px] leading-[1.1] text-text">nadie con ese nombre.</p>
+          <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
+            Los perfiles privados no aparecen aquí: pídele su link a quien
+            quieras seguir.
+          </p>
+        </div>
       ) : (
         <>
           <Eyebrow>
@@ -124,7 +131,7 @@ export function PeopleSearch({
               : "Resultados"}
           </Eyebrow>
           <div
-            className={`mt-3 flex flex-col gap-2 transition-opacity ${
+            className={`mt-1 flex flex-col transition-opacity ${
               loading ? "opacity-60" : ""
             }`}
           >
@@ -147,9 +154,9 @@ function Suggestions({
 }) {
   if (suggestions.length === 0) {
     return (
-      <p className="mt-6 text-[14.5px] leading-[1.52] text-pretty text-text-2">
+      <p className="mt-6 text-[15px] leading-[1.5] text-pretty text-text-2">
         Ya sigues a toda la gente pública que hay por ahora. Busca a alguien
-        por su @handle o nombre cuando llegue.
+        por su @usuario o nombre cuando llegue.
       </p>
     );
   }
@@ -160,7 +167,7 @@ function Suggestions({
           ? `Escribe ${PROFILE_SEARCH_MIN_CHARS} letras o más`
           : "Para seguir"}
       </Eyebrow>
-      <div className="mt-3 flex flex-col gap-2">
+      <div className="mt-1 flex flex-col">
         {suggestions.map((s) => (
           <SuggestionRow key={s.username} s={s} />
         ))}
@@ -171,7 +178,7 @@ function Suggestions({
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-6 font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
+    <div className="mt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-text-3">
       {children}
     </div>
   );

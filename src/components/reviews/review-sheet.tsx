@@ -1,18 +1,20 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Sheet, SheetClose } from "@/components/ui";
+import { SOLID_BUTTON } from "@/components/kura/components";
+import {
+  KuraSheet,
+  useKuraSheetDismiss,
+} from "@/app/(app)/item/[catalogItemId]/kura-sheet";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 
 /**
- * F3.9 — EDITING an existing review (Revamp UI, 2026-09-03: writing a new one
- * moved to the Completar sheet, 08). Reuses the app's one Sheet (bottom
- * variant, portaled to <body>); the field is the 08 glass card at the sheet's
- * scale — 16px/1.5 text, accent caret, the mock's 36×22 spoiler switch and
- * the "142 / 280" counter under it, hot past the limit.
+ * F3.9 — EDITING an existing review (writing a new one lives in the Completar
+ * sheet, 26a). The Kura floating sheet: title in Newsreader 22, the field as
+ * 26a draws it (white 6%, radius 18, 15/1.5), the system's 51×31 switch for
+ * spoilers, the "142 / 280" counter, and the solid Guardar at the end.
  *
- * Nothing is ever truncated. The excess is tinted with `--hot-soft` inside
- * the field so you can see exactly what's over, and you decide what to cut.
+ * Nothing is ever truncated. The excess is tinted inside the field so you can see exactly what's over, and you decide what to cut.
  * That tint needs a mirror layer behind a transparent-text textarea (a
  * textarea can't style a range of its own value); the mirror only renders
  * while over the limit, so the ordinary case is a plain textarea.
@@ -63,107 +65,137 @@ export function ReviewSheet({
     if (mirrorRef.current) mirrorRef.current.style.height = el.style.height;
   }, [body]);
 
+  return (
+    <KuraSheet onClose={onCancel} label="Edita tu reseña" className="px-5">
+      <EditBody
+        itemTitle={itemTitle}
+        body={body}
+        setBody={setBody}
+        hasSpoiler={hasSpoiler}
+        setHasSpoiler={setHasSpoiler}
+        allowSpoiler={allowSpoiler}
+        over={over}
+        disabled={disabled}
+        saving={saving}
+        error={error}
+        fieldRef={ref}
+        mirrorRef={mirrorRef}
+        onSave={onSave}
+      />
+    </KuraSheet>
+  );
+}
+
+function EditBody({
+  itemTitle,
+  body,
+  setBody,
+  hasSpoiler,
+  setHasSpoiler,
+  allowSpoiler,
+  over,
+  disabled,
+  saving,
+  error,
+  fieldRef,
+  mirrorRef,
+  onSave,
+}: {
+  itemTitle: string;
+  body: string;
+  setBody: (v: string) => void;
+  hasSpoiler: boolean;
+  setHasSpoiler: (fn: (v: boolean) => boolean) => void;
+  allowSpoiler: boolean;
+  over: boolean;
+  disabled: boolean;
+  saving: boolean;
+  error: string | null;
+  fieldRef: React.RefObject<HTMLTextAreaElement | null>;
+  mirrorRef: React.RefObject<HTMLDivElement | null>;
+  onSave: (body: string, hasSpoiler: boolean) => void;
+}) {
+  const dismiss = useKuraSheetDismiss();
   const fieldClasses =
-    "w-full resize-none rounded-[18px] p-4 text-[16px] leading-[1.5] outline-none";
+    "w-full resize-none rounded-[var(--r-surface)] px-4 py-3.5 text-[15px] leading-[1.5] outline-none";
 
   return (
-    <Sheet onClose={onCancel} label="Edita tu reseña">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-display text-[18px] font-bold tracking-[-0.01em] text-text">
-          Edita tu reseña
-        </span>
-      </div>
-      <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
+    <>
+      <h2 className="pt-1 font-brand text-[22px] leading-[1.1] text-text">edita tu reseña</h2>
+      <p className="mt-1.5 truncate font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
         Sobre {itemTitle}
       </p>
 
-      <div className="relative mt-[14px]">
+      <div className="relative mt-3.5">
         {/* Painted BEHIND the textarea, which goes transparent (background and
             all — an opaque field would simply hide this) while over the limit. */}
         {over && (
           <div
             ref={mirrorRef}
             aria-hidden
-            className={`${fieldClasses} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words bg-[var(--glass-bg)] text-text`}
+            className={`${fieldClasses} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words bg-white/[0.06] text-text`}
           >
             {body.slice(0, REVIEW_MAX_LENGTH)}
-            <span className="bg-[var(--hot-soft)] text-text">
-              {body.slice(REVIEW_MAX_LENGTH)}
-            </span>
+            <span className="bg-white/[0.16] text-text">{body.slice(REVIEW_MAX_LENGTH)}</span>
           </div>
         )}
         <textarea
-          ref={ref}
+          ref={fieldRef}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="¿Qué se te quedó?"
+          placeholder="Escribe tu reseña"
+          aria-label="Tu reseña"
           autoFocus
-          className={`${fieldClasses} relative min-h-[120px] caret-accent placeholder:text-text-3 ${
-            over
-              ? "bg-transparent text-transparent"
-              : "bg-[var(--glass-bg)] text-text"
+          className={`${fieldClasses} relative min-h-24 caret-text placeholder:text-text-2 ${
+            over ? "bg-transparent text-transparent" : "bg-white/[0.06] text-text"
           }`}
         />
       </div>
 
-      <div className="mt-2.5 flex items-center justify-between px-1">
+      <div className="mt-1 flex min-h-[52px] items-center justify-between gap-3">
         {allowSpoiler ? (
           <button
             type="button"
             onClick={() => setHasSpoiler((v) => !v)}
             role="switch"
             aria-checked={hasSpoiler}
-            className="flex items-center gap-2.5 transition-opacity active:opacity-70"
+            className="flex flex-1 items-center gap-3.5 text-left"
           >
+            <span className="flex-1 text-[16px] font-medium text-text">Contiene spoilers</span>
             <span
               aria-hidden
-              className={`relative block h-[22px] w-9 flex-none rounded-full transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] ${
-                hasSpoiler ? "bg-accent" : "bg-surface-2"
-              }`}
+              className={`relative block h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 ${hasSpoiler ? "bg-text" : "bg-white/[0.16]"}`}
             >
               <span
-                className={`absolute top-[2px] rounded-full transition-[left,width,height] duration-[var(--dur-base)] ease-[var(--ease-out)] ${
-                  hasSpoiler
-                    ? "left-4 h-[18px] w-[18px] bg-bg"
-                    : "left-[2px] h-4 w-4 bg-text-3"
-                }`}
+                className={`absolute top-[2px] h-[27px] w-[27px] rounded-full transition-[left,background-color] duration-200 ${hasSpoiler ? "left-[22px] bg-bg" : "left-[2px] bg-text"}`}
               />
             </span>
-            <span className="text-[13px] text-text-2">Contiene spoiler</span>
           </button>
         ) : (
           <span />
         )}
-        <span
-          className={`font-mono text-[10.5px] uppercase tracking-[0.1em] ${
-            over ? "text-hot" : "text-text-3"
-          }`}
-        >
+        <span className={`flex-none font-mono text-[11px] ${over ? "text-text" : "text-text-3"}`}>
           {body.length} / {REVIEW_MAX_LENGTH}
         </span>
       </div>
 
-      {error && (
-        <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-hot">
-          {error}
-        </p>
-      )}
+      {error && <p className="mt-1 text-[14px] leading-[1.4] text-text-2">{error}</p>}
 
-      <div className="mt-4 flex gap-[10px]">
-        <SheetClose className="flex-none rounded-full px-5 py-[13px] text-[14px] font-semibold text-text-2 transition-opacity active:opacity-60">
-          Cancelar
-        </SheetClose>
-        <button
-          type="button"
-          onClick={() => onSave(body.trim(), hasSpoiler)}
-          disabled={disabled}
-          className={`flex-1 rounded-full px-6 py-[13px] text-[14px] font-semibold text-bg bl-press ${
-            disabled ? "bg-surface-3 opacity-50" : "bg-accent active:bg-accent-press"
-          }`}
-        >
-          {saving ? "…" : "Guardar"}
-        </button>
-      </div>
-    </Sheet>
+      <button
+        type="button"
+        onClick={() => onSave(body.trim(), hasSpoiler)}
+        disabled={disabled}
+        className={`${SOLID_BUTTON} mt-3.5 w-full`}
+      >
+        {saving ? "Guardando…" : "Guardar"}
+      </button>
+      <button
+        type="button"
+        onClick={dismiss}
+        className="mt-1 flex min-h-11 items-center self-center px-3 text-[15px] font-medium text-text-2 transition-opacity active:opacity-60"
+      >
+        Cancelar
+      </button>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { Sheet, LoadMoreButton } from "@/components/ui";
+import { LoadMoreButton } from "@/components/ui";
+import { KuraSheet } from "@/app/(app)/item/[catalogItemId]/kura-sheet";
 import {
   loadMoreReviewsAction,
   reportReviewAction,
@@ -149,24 +150,24 @@ export function ReviewFeed({
       )}
 
       {target && (
-        <Sheet onClose={() => setTarget(null)} label="Reportar reseña">
-          <div className="font-display text-[18px] font-bold tracking-[-0.01em] text-text">
-            ¿Qué pasa con esta reseña?
-          </div>
-          <div className="mt-[14px] flex flex-col gap-2">
+        <KuraSheet onClose={() => setTarget(null)} label="Reportar reseña" className="px-5">
+          <h2 className="pb-2 pt-1 font-brand text-[22px] leading-[1.1] text-text">
+            ¿qué pasa con esta reseña?
+          </h2>
+          <div className="flex flex-col">
             {REVIEW_REPORT_REASONS.filter(
               (reason) => allowSpoiler || reason.id !== "unmarked_spoiler",
             ).map((reason) => (
               <button
                 key={reason.id}
                 onClick={() => report(reason.id)}
-                className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
+                className="flex min-h-[52px] w-full items-center text-left text-[16px] font-medium text-text transition-opacity active:opacity-60"
               >
                 {reason.label}
               </button>
             ))}
           </div>
-        </Sheet>
+        </KuraSheet>
       )}
     </>
   );

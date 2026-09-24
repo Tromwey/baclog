@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
-import { LoadMoreButton } from "@/components/ui";
+import { GLASS_BUTTON } from "@/components/kura/components";
 import { FollowButton } from "@/components/follow-button";
 import { loadMorePeopleAction } from "@/app/actions/social-actions";
 import { plural } from "@/lib/plural";
@@ -41,75 +41,77 @@ export function PeopleList({
   }
 
   return (
-    <div className="mt-3.5 flex flex-col gap-2">
+    <div className="flex flex-col">
       {people.map((p) => (
         <PersonRowView key={p.username} p={p} />
       ))}
 
       {privateCount > 0 && (
-        <div className="py-2 text-center font-mono text-[9px] uppercase tracking-[0.1em] text-text-3">
+        <div className="py-3 text-center font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
           +{privateCount}{" "}
           {plural(privateCount, "cuenta privada", "cuentas privadas")}
         </div>
       )}
 
       {cursor && (
-        <LoadMoreButton onClick={loadMore} loading={loading} className="mt-0.5" />
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loading}
+          className={`${GLASS_BUTTON} mt-3 self-center disabled:opacity-60`}
+        >
+          {loading ? "Cargando…" : "Ver más"}
+        </button>
       )}
     </div>
   );
 }
 
 /**
- * One person row — identity (orb, name, @handle · meta) plus the follow chip.
- * Shared with Buscar gente (/feed/gente), so a search result and a list row
- * are the same object; a private row (only possible in the owner's lists)
- * dims and loses its link, since a private profile has no page to land on.
+ * One person row (20e / 32b) — seal 44, @usuario 16/600, a 13 line of
+ * context, and the glass follow pill; 72 tall, no surface (separation by
+ * air, not by fill). Shared with Tu gente (/feed/gente), so a search result
+ * and a list row are the same object. A private row (only possible in the
+ * owner's lists) dims and loses its link — a private profile has no page to
+ * land on — but KEEPS its pill, or that follow would be unremovable.
  */
 export function PersonRowView({ p }: { p: PersonRow }) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 transition-colors has-[a:active]:bg-surface-3 ${
+      className={`flex min-h-[72px] items-center gap-3.5 transition-colors has-[a:active]:opacity-70 ${
         p.isPrivate ? "opacity-55" : ""
       }`}
     >
       {p.isPrivate ? (
-        <span className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="flex min-w-0 flex-1 items-center gap-3.5">
           <PersonIdentity p={p} />
         </span>
       ) : (
-        <Link
-          href={`/u/${p.username}`}
-          className="flex min-w-0 flex-1 items-center gap-3"
-        >
+        <Link href={`/u/${p.username}`} className="flex min-w-0 flex-1 items-center gap-3.5">
           <PersonIdentity p={p} />
         </Link>
       )}
-      <FollowButton
-        username={p.username}
-        initialFollowing={p.following}
-        size="sm"
-      />
+      <FollowButton username={p.username} initialFollowing={p.following} variant="row" />
     </div>
   );
 }
 
 function PersonIdentity({ p }: { p: PersonRow }) {
+  const meta = p.isPrivate
+    ? "perfil privado"
+    : [
+        p.name && p.name !== p.username ? p.name : null,
+        p.isFounder ? "fundador" : null,
+        `${p.backlogCount} ${plural(p.backlogCount, "colección", "colecciones")}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
   return (
     <>
-      <AdnAvatar hexes={p.avatarHexes} src={p.avatarUrl} className="h-10 w-10" />
-      <span className="min-w-0">
-        <span className="block truncate text-[14.5px] font-semibold text-text">
-          {p.name}
-        </span>
-        <span className="mt-[3px] block truncate font-mono text-[9px] uppercase tracking-[0.1em] text-text-3">
-          @{p.username} ·{" "}
-          {p.isPrivate
-            ? "perfil privado"
-            : p.isFounder
-              ? "fundador"
-              : `${p.backlogCount} ${plural(p.backlogCount, "backlog", "backlogs")}`}
-        </span>
+      <AdnAvatar hexes={p.avatarHexes} name={p.name || p.username} src={p.avatarUrl} className="h-11 w-11" />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="truncate text-[16px] font-semibold text-text">@{p.username}</span>
+        <span className="truncate text-[13px] text-text-2">{meta}</span>
       </span>
     </>
   );

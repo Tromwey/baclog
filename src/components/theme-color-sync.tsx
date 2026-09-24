@@ -25,7 +25,14 @@ function darken(hex: string, amount = 0.28): string {
  * with the aura instead of chopping it. (Home-screen installs don't need
  * this — black-translucent lets the real aura bleed underneath.)
  */
-export function ThemeColorSync({ color }: { color: string | null | undefined }) {
+export function ThemeColorSync({
+  color,
+  exact = false,
+}: {
+  color: string | null | undefined;
+  /** Kura: `color` is already a tinted-surface end (tint.ts) — use it as is. */
+  exact?: boolean;
+}) {
   useEffect(() => {
     if (!color) return;
     let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -34,11 +41,11 @@ export function ThemeColorSync({ color }: { color: string | null | undefined }) 
       meta.name = "theme-color";
       document.head.appendChild(meta);
     }
-    meta.content = darken(color);
+    meta.content = exact ? color : darken(color);
     return () => {
       meta.content = BASE;
     };
-  }, [color]);
+  }, [color, exact]);
 
   return null;
 }

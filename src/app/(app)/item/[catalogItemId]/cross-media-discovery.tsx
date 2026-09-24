@@ -444,14 +444,14 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
               </span>
             </div>
 
-            {/* Nuevo backlog */}
+            {/* Nueva colección */}
             {creating ? (
               <div className="mt-4 flex gap-2">
                 <input
                   value={newName}
                   maxLength={60}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Nombre del backlog"
+                  placeholder="nombre de la colección"
                   className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3.5 py-3 outline-none focus:bg-surface-3"
                 />
                 <button
@@ -467,7 +467,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                 onClick={() => setCreating(true)}
                 className="mt-4 flex w-full items-center gap-2 rounded-xl bg-accent-soft px-3.5 py-3.5 font-semibold text-accent bl-press"
               >
-                <span className="text-xl leading-none">＋</span> Nuevo backlog
+                <span className="text-xl leading-none">＋</span> Nueva colección
               </button>
             )}
 

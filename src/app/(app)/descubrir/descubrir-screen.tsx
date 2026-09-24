@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { flushSync } from "react-dom";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
+import { createPortal, flushSync } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import {
   discoverNextRecoAction,
@@ -11,93 +18,279 @@ import {
   type DiscoverFeedResult,
 } from "@/app/actions/crossmedia-actions";
 import {
+  addItemAction,
+  removeMembershipAction,
+} from "@/app/actions/backlog-item-actions";
+import { createBacklogAction } from "@/app/actions/backlog-actions";
+import {
   CrossMediaDiscovery,
   type DiscoveryBacklog,
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
-import type { ObsessionRail, LatestDoubleFeature } from "@/modules/recs/discover-rails";
+import { extractPalette } from "@/modules/cards/palette";
+import type { LatestDoubleFeature } from "@/modules/recs/discover-rails";
 import type { TrendingTitle } from "@/modules/social/trending";
-import { StrokeIcon, glassChipClass } from "@/components/ui";
+import type { UpcomingItem } from "@/components/upcoming-shelf";
+import {
+  CHIP_44,
+  GLASS_BUTTON,
+  SOLID_BUTTON,
+} from "@/components/kura/components";
 import { BACK_PATH } from "@/components/glyph-paths";
-import { DiscoverHome } from "./discover-home";
+import { DiscoverHome, type RecCard } from "./discover-home";
+import { SearchView } from "./search-view";
 import { SearchSheet } from "./search-sheet";
-import { FeatureAura } from "./feature-aura";
+import { SaveSheet, type SaveWork } from "./save-sheet";
+import { DoubleFeatureTint } from "./double-feature-tint";
+import { FirstItemSheet, type FirstItemCelebration } from "./first-item-sheet";
+import { pushSeen, type SeenWork } from "./recents";
+import { withMemberships, type LibraryIndex, type Membership } from "./library";
+import { TriangleGlyph } from "./kura-bits";
 
-type Mode = "home" | "loading" | "ai";
+type Mode = "home" | "search" | "loading" | "ai";
 
 export interface SearchBacklog extends DiscoveryBacklog {
-  /** ADN of the backlog — the search sheet glows in the target's colors. */
+  /** The collection's palette — what its thumbnail falls back to without a cover. */
   paletteHex: string[];
 }
 
+interface Toast {
+  id: number;
+  text: string;
+  undo?: () => Promise<void>;
+}
+
 /**
- * Discover (Revamp UI, 2026-09-03 — mock 04 + 07). The home is the rails +
- * the Double Feature card; the search field opens the search SHEET (mock 07)
- * over it; the card runs the cross-media engine (cache-first, then at most
- * one generation) and lands on the Double Feature screen — one narrative
- * pairing at a time, the × walks to the next.
+ * Descubrir (Kura · flujos-v2 19a–19h). Four modes on one route:
+ *
+ *  - `home`   — 19a (discover-home.tsx);
+ *  - `search` — the full-screen search, 19d–19g (search-view.tsx);
+ *  - `loading` / `ai` — the Double Feature: the cross-media engine (cache
+ *    first, at most one generation) and its one-pairing-at-a-time screen.
+ *
+ * Every "guardar" in the area opens ONE sheet, 19h (save-sheet.tsx), and this
+ * component owns the write, the library index it patches, the "Deshacer"
+ * pill and the one-time "primer título guardado" moment. `?buscar=1&to=` (the
+ * guided hand-off from a collection) still opens the add sheet (search-sheet)
+ * pinned to that collection.
  */
 export function DescubrirScreen({
   username,
   backlogs,
+  library: initialLibrary,
   totalTitles,
   hasLoved,
-  loadingColors,
-  rails,
+  recs,
   trending,
+  upcoming,
+  now,
   doubleFeature,
 }: {
   username: string;
   backlogs: SearchBacklog[];
+  library: LibraryIndex;
   totalTitles: number;
   /**
-   * The user has at least one "me gusta"/"me obsesiona" — i.e. the reco engine
-   * has a seed to work from. False ⇒ the card states its unlock instead of
-   * spending the tap on the `no_loved` dead end.
+   * At least one "me gusta"/"me obsesiona" — the reco engine has a seed. False
+   * ⇒ the Double Feature card states its unlock instead of spending the tap.
    */
   hasLoved: boolean;
-  /** User ADN palette — the loading screen's full-bleed aura + the generic card's glow. */
-  loadingColors: string[];
-  rails: ObsessionRail[];
+  recs: RecCard[];
   trending: TrendingTitle[];
+  upcoming: UpcomingItem[];
+  now: number;
   doubleFeature: LatestDoubleFeature | null;
 }) {
   // ?q= is what survives a trip into an item: the search writes it before
-  // pushing /item/…, so the ✕ (router.back) lands back on the SAME list.
+  // pushing /item/…, so the item's back lands on the SAME results.
   const params = useSearchParams();
-  const restoredQuery = params.get("q") ?? "";
-  // ?buscar=1&to= — the guided handoff from a backlog: open the sheet directly
-  // with that backlog pinned as the add target.
+  const restored = (params.get("q") ?? "").trim();
+  const restoredQuery = restored.length >= 2 ? restored : "";
   const guided = params.get("buscar") === "1";
   const pinnedBacklogId = params.get("to");
-  const [mode, setMode] = useState<Mode>("home");
-  const [searchOpen, setSearchOpen] = useState(
-    Boolean(restoredQuery) || guided,
-  );
+
+  const [mode, setMode] = useState<Mode>(restoredQuery ? "search" : "home");
+  const [addOpen, setAddOpen] = useState(guided);
   const [feed, setFeed] = useState<DiscoverFeedResult | null>(null);
   const [aiIndex, setAiIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
 
+  // Pinned for the visit (learnings/2026-09-02-revalidatepath…): the client
+  // copy is the truth after the first save, the server prop never overrides it.
+  const [library, setLibrary] = useState<LibraryIndex>(initialLibrary);
+  const [collections, setCollections] = useState<SearchBacklog[]>(backlogs);
+  const [saving, setSaving] = useState<SaveWork | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [celebration, setCelebration] = useState<FirstItemCelebration | null>(null);
+  const queuedCelebration = useRef<FirstItemCelebration | null>(null);
+  const libraryWasEmpty = useRef(totalTitles === 0);
+
   const openSearch = () => {
-    // iOS only raises the keyboard for a focus() that runs inside the tap's own
-    // task. Mount the sheet synchronously (flushSync) so the input exists right
-    // here, then focus it from the handler — an `autoFocus` or a focus deferred
-    // to an effect left the field with a caret and NO keyboard.
-    flushSync(() => setSearchOpen(true));
+    // iOS only raises the keyboard for a focus() inside the tap's own task:
+    // mount the search synchronously, then focus from the handler.
+    flushSync(() => setMode("search"));
     searchInputRef.current?.focus();
   };
 
   const closeSearch = () => {
-    // Leaving search for real — drop ?q=/?buscar= so the next visit is clean.
     window.history.replaceState(null, "", "/descubrir");
-    setSearchOpen(false);
+    setMode("home");
+  };
+
+  const closeAdd = () => {
+    window.history.replaceState(null, "", "/descubrir");
+    setAddOpen(false);
+  };
+
+  const seen = (w: SeenWork) => pushSeen(w);
+
+  const toastSeq = useRef(0);
+  const say = useCallback((text: string, undo?: () => Promise<void>) => {
+    toastSeq.current += 1;
+    setToast({ id: toastSeq.current, text, undo });
+  }, []);
+  // Only clears the pill it was called for: a "no se pudo deshacer" raised
+  // while an undo runs must survive that undo's own dismissal.
+  const dropToast = useCallback(
+    (id: number) => setToast((t) => (t && t.id === id ? null : t)),
+    [],
+  );
+
+  const nameOf = (id: string) =>
+    collections.find((c) => c.id === id)?.name ?? "tu colección";
+
+  /**
+   * Put `work` in exactly `backlogIds`. Adds run BEFORE removals: moving a
+   * title between collections must never pass through "in none", which GC's
+   * its per-title state (removeMembershipAction). Returns false when a write
+   * failed — the index keeps whatever did land.
+   */
+  const saveTo = async (work: SaveWork, backlogIds: string[]): Promise<boolean> => {
+    const id = work.catalogItemId;
+    const before = library.byTitle[id] ?? [];
+    const toAdd = backlogIds.filter((b) => !before.some((m) => m.backlogId === b));
+    const toRemove = before.filter((m) => !backlogIds.includes(m.backlogId));
+    let current: Membership[] = [...before];
+    const added: Membership[] = [];
+    let ok = true;
+
+    try {
+      // Palette is cover-derived and cached on catalog_item: extract on-device
+      // only when this title has none yet.
+      let paletteHex: string[] | undefined;
+      if (toAdd.length > 0 && !(work.paletteHex?.length) && work.posterUrl) {
+        const p = await extractPalette(work.posterUrl);
+        if (p.length > 0) paletteHex = p;
+      }
+      for (const b of toAdd) {
+        const res = await addItemAction({ backlogId: b, catalogItemId: id, paletteHex });
+        const newId = "id" in res ? res.id : undefined;
+        if (!newId) throw new Error("add failed");
+        const m: Membership = { backlogId: b, backlogItemId: newId };
+        added.push(m);
+        current = [...current, m];
+      }
+      for (const m of toRemove) {
+        await removeMembershipAction(m.backlogItemId);
+        current = current.filter((x) => x.backlogItemId !== m.backlogItemId);
+      }
+    } catch {
+      ok = false;
+    }
+
+    const landed = current;
+    setLibrary((lib) => {
+      const next = withMemberships(lib, id, landed);
+      if (added.length === 0) return next;
+      const thumbs = { ...next.thumbs };
+      for (const m of added) {
+        thumbs[m.backlogId] = {
+          posterUrl: work.posterUrl,
+          paletteHex: work.paletteHex ?? [],
+          mediaType: work.mediaType,
+        };
+      }
+      return { ...next, thumbs, lastUsedBacklogId: added[added.length - 1].backlogId };
+    });
+    if (!ok) return false;
+
+    const removed = toRemove;
+    const text =
+      added.length > 0 && removed.length === 0
+        ? added.length === 1
+          ? `Guardado en ${nameOf(added[0].backlogId)}`
+          : `Guardado en ${added.length} colecciones`
+        : removed.length > 0 && added.length === 0
+          ? removed.length === 1
+            ? `Quitado de ${nameOf(removed[0].backlogId)}`
+            : `Quitado de ${removed.length} colecciones`
+          : "Colecciones actualizadas";
+
+    say(text, async () => {
+      // Reverse, in the same safe order: put back what left, then take out
+      // what arrived.
+      let cur = landed;
+      try {
+        for (const m of removed) {
+          const res = await addItemAction({ backlogId: m.backlogId, catalogItemId: id });
+          const newId = "id" in res ? res.id : undefined;
+          if (!newId) throw new Error("undo failed");
+          cur = [...cur, { backlogId: m.backlogId, backlogItemId: newId }];
+        }
+        for (const m of added) {
+          await removeMembershipAction(m.backlogItemId);
+          cur = cur.filter((x) => x.backlogItemId !== m.backlogItemId);
+        }
+      } catch {
+        say("No se pudo deshacer. Revisa tu conexión.");
+      }
+      const final = cur;
+      setLibrary((lib) => withMemberships(lib, id, final));
+    });
+
+    // The first title of the account → the closing moment, once, AFTER the
+    // save sheet has left (never two sheets at a time).
+    if (libraryWasEmpty.current && added.length > 0) {
+      libraryWasEmpty.current = false;
+      queuedCelebration.current = {
+        title: work.title,
+        mediaType: work.mediaType,
+        year: work.year,
+        posterUrl: work.posterUrl,
+        paletteHex: work.paletteHex ?? [],
+        backlogId: added[0].backlogId,
+        backlogName: nameOf(added[0].backlogId),
+      };
+    }
+    return true;
+  };
+
+  const createCollection = async (name: string): Promise<SearchBacklog | null> => {
+    try {
+      const res = await createBacklogAction({ name });
+      const newId = "id" in res ? res.id : undefined;
+      if (!newId) return null;
+      const fresh: SearchBacklog = { id: newId, name, itemCount: 0, paletteHex: [] };
+      setCollections((c) => [fresh, ...c]);
+      return fresh;
+    } catch {
+      return null;
+    }
+  };
+
+  const closeSave = () => {
+    setSaving(null);
+    if (queuedCelebration.current) {
+      setCelebration(queuedCelebration.current);
+      queuedCelebration.current = null;
+    }
   };
 
   const recomendar = () => {
     setMode("loading");
     start(async () => {
-      // Hold the loading screen (its own aura) for a beat even on a cache hit,
-      // so the "distilling your vibe" moment reads instead of flashing by.
+      // Hold the loading screen a beat even on a cache hit, so the moment
+      // reads instead of flashing by.
       const [res] = await Promise.all([
         getDiscoverFeedAction(),
         new Promise((r) => setTimeout(r, 1100)),
@@ -112,61 +305,44 @@ export function DescubrirScreen({
   const current = readyItems[Math.min(aiIndex, readyItems.length - 1)] ?? null;
   const currentRecId = current?.recId ?? null;
 
-  // F3.5.9 — stamp the seen ledger for whatever pairing is on screen, so the
-  // NEXT visit leads with something they haven't been shown. Fire-and-forget:
-  // being seen only deprioritizes (a re-serve is still free), so a lost call
-  // costs nothing. Keyed on recId — re-runs when the × advances the card.
+  // F3.5.9 — stamp the seen ledger for the pairing on screen, so the NEXT
+  // visit leads with something new. Fire-and-forget.
   useEffect(() => {
     if (!currentRecId) return;
     void markRecoSeenAction(currentRecId);
   }, [currentRecId]);
 
-  // The × / "otra conexión": DISMISS the current pairing (permanently, per the
-  // button's own "Descartar" label), then walk the remaining cached pairings for
-  // free, and only spend a generation when they run out.
+  // The × / "otra conexión": DISMISS the current pairing, walk the remaining
+  // cached ones for free, and only spend a generation when they run out.
   const next = () => {
-    // .catch: the promise floats on the cheap advance path below, and an expired
-    // session must not surface as an unhandled rejection over the card.
     const dismissing = current
       ? dismissRecoAction(current.recId).catch(() => {})
       : Promise.resolve();
     if (aiIndex < readyItems.length - 1) {
-      // Advancing uses the list we already hold, so the write can land whenever.
       setAiIndex(aiIndex + 1);
       return;
     }
     start(async () => {
-      // AWAIT the × here: the re-read below filters dismissed pairings, so a
-      // still-in-flight write would hand the just-dismissed card straight back.
+      // AWAIT the × here: the re-read below filters dismissed pairings.
       await dismissing;
-      // Pass the seed on screen so "otra conexión" re-rolls THIS title instead
-      // of only filling in titles that had no pairing yet.
       const { result, seedCatalogItemId } = await discoverNextRecoAction(
         current?.seed.catalogItemId ?? null,
       );
-      // A transient generation failure surfaces its own retryable state instead
-      // of silently dropping back. A charge never happened.
       if (result === "failed") {
         setFeed({ kind: "failed" });
         return;
       }
-      // We DID spend a discovery (ADR-009 charges the LLM call) but the proposal
-      // didn't ground to a real title. Its own state, so the meter drop isn't silent.
       if (result === "spent_no_match") {
         setFeed({ kind: "spent_no_match" });
         return;
       }
       const res = await getDiscoverFeedAction();
       setFeed(res);
-      // Land on the pairing we just generated by LOCATING its seed in the
-      // re-read feed — never a positional guess (getCrossMediaFeed orders by
-      // seed, not append order). Fall back to the last item when nothing new
-      // was generated (cap_reached / no_more).
+      // Land on the pairing just generated by LOCATING its seed — never a
+      // positional guess (the feed orders by seed, not append order).
       if (res.kind === "ready") {
         const generatedIndex = seedCatalogItemId
-          ? res.items.findIndex(
-              (it) => it.seed.catalogItemId === seedCatalogItemId,
-            )
+          ? res.items.findIndex((it) => it.seed.catalogItemId === seedCatalogItemId)
           : -1;
         setAiIndex(generatedIndex >= 0 ? generatedIndex : res.items.length - 1);
       }
@@ -177,15 +353,29 @@ export function DescubrirScreen({
     <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip text-text">
       {mode === "home" && (
         <DiscoverHome
-          rails={rails}
+          recs={recs}
           trending={trending}
+          upcoming={upcoming}
+          now={now}
           doubleFeature={doubleFeature}
           hasLoved={hasLoved}
           totalTitles={totalTitles}
-          adnHexes={loadingColors}
+          library={library}
           pending={pending}
           onSearch={openSearch}
+          onSave={setSaving}
+          onOpen={seen}
           onRecomendar={recomendar}
+        />
+      )}
+
+      {mode === "search" && (
+        <SearchView
+          inputRef={searchInputRef}
+          initialQuery={restoredQuery}
+          library={library}
+          onCancel={closeSearch}
+          onSave={setSaving}
         />
       )}
 
@@ -196,54 +386,124 @@ export function DescubrirScreen({
           feed={feed}
           index={aiIndex}
           username={username}
-          backlogs={backlogs}
+          backlogs={collections}
           pending={pending}
           onBack={() => setMode("home")}
           onNext={next}
         />
       )}
 
-      {searchOpen && (
+      {addOpen && (
         <SearchSheet
           inputRef={searchInputRef}
-          initialQuery={restoredQuery}
-          backlogs={backlogs}
+          initialQuery=""
+          backlogs={collections}
           pinnedBacklogId={pinnedBacklogId}
           libraryEmpty={totalTitles === 0}
-          onClose={closeSearch}
+          library={library}
+          onMembershipChange={(catalogItemId, backlogId, backlogItemId) =>
+            setLibrary((lib) => {
+              const rest = (lib.byTitle[catalogItemId] ?? []).filter(
+                (m) => m.backlogId !== backlogId,
+              );
+              return withMemberships(
+                lib,
+                catalogItemId,
+                backlogItemId ? [...rest, { backlogId, backlogItemId }] : rest,
+              );
+            })
+          }
+          onClose={closeAdd}
         />
       )}
+
+      {saving && (
+        <SaveSheet
+          key={saving.catalogItemId}
+          work={saving}
+          collections={collections}
+          library={library}
+          onSave={saveTo}
+          onCreate={createCollection}
+          onClose={closeSave}
+        />
+      )}
+
+      {celebration && (
+        <FirstItemSheet item={celebration} onDismiss={() => setCelebration(null)} />
+      )}
+
+      {toast && <UndoToast key={toast.id} toast={toast} onDone={dropToast} />}
     </main>
   );
 }
 
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * §patrones · confirmar y deshacer: an `--s2` pill over the dock, 5 s, one at
+ * a time (a new one replaces the old by key). Portaled: the content wrapper
+ * would trap it under the dock.
+ */
+function UndoToast({ toast, onDone }: { toast: Toast; onDone: (id: number) => void }) {
+  const hydrated = useHydrated();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => onDone(toast.id), 5000);
+    return () => clearTimeout(t);
+  }, [onDone, toast.id]);
+  if (!hydrated) return null;
+  return createPortal(
+    <div
+      role="status"
+      className="bl-rise-soft fixed inset-x-4 bottom-[calc(var(--dock-clearance)-22px)] z-40 mx-auto flex min-h-[52px] max-w-[calc(28rem-32px)] items-center gap-3 rounded-full bg-surface-2 pl-[18px] pr-2 shadow-float"
+    >
+      <span className="min-w-0 flex-1 truncate text-[15px] text-text">{toast.text}</span>
+      {toast.undo && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await toast.undo?.();
+            onDone(toast.id);
+          }}
+          className="min-h-11 flex-none px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-text disabled:opacity-50"
+        >
+          Deshacer
+        </button>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
 const LOADING_MESSAGES = [
-  "Leyendo tu perfil…",
-  "Cruzando tus títulos…",
-  "Destilando tu vibe…",
+  "leyendo lo que te obsesiona…",
+  "cruzando cine, series y música…",
+  "buscando la pareja…",
 ];
+
 function Loading() {
   const [i, setI] = useState(0);
   useEffect(() => {
-    const t = setInterval(
-      () => setI((x) => (x + 1) % LOADING_MESSAGES.length),
-      1600,
-    );
+    const t = setInterval(() => setI((x) => (x + 1) % LOADING_MESSAGES.length), 1600);
     return () => clearInterval(t);
   }, []);
-
-  // A richer fixed palette (shared with the auth screens) so the "distilling"
-  // moment glows even for sparse profiles — this is the one screen with its own
-  // full-bleed background for emphasis.
-
   return (
-    <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center px-8 text-center">
-      <div className="absolute top-[calc(52px+env(safe-area-inset-top))] font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
-        Baclog · Discover
-      </div>
-      <div className="relative font-serif text-[26px] italic text-text">
+    <div className="flex min-h-dvh flex-col items-center justify-center px-8 text-center">
+      <span className="absolute top-[max(64px,calc(20px+env(safe-area-inset-top)))] font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+        Double feature
+      </span>
+      <p role="status" className="font-display text-[28px] leading-[1.15] text-text text-balance">
         {LOADING_MESSAGES[i]}
-      </div>
+      </p>
     </div>
   );
 }
@@ -269,8 +529,8 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="Los descubrimientos están calentando motores."
-        body="Estamos afinando las recomendaciones cross-media. Vuelve en un momento — mientras tanto, sigue amando cosas."
+        title="las conexiones no están listas."
+        body="El motor de recomendaciones no respondió. Vuelve en un rato."
       />
     );
   }
@@ -278,8 +538,8 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="Todavía no amas nada — al menos no en el registro."
-        body="Reacciona con 'me gusta' o 'me obsesiona' a algo, y volvemos con una conexión que no veías venir."
+        title="todavía no hay nada que te guste."
+        body="Marca un título con «me gusta» o «me obsesiona» y volvemos con una conexión."
       />
     );
   }
@@ -287,8 +547,9 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="No pudimos generar tu conexión ahora."
-        body="Fue un tropiezo del momento, no tú. Reintenta y volvemos a buscar — no gastaste ningún descubrimiento."
+        failure
+        title="no pudimos generar tu conexión."
+        body="Falló el motor en este intento. No se gastó ningún descubrimiento: vuelve a intentarlo."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
@@ -297,35 +558,30 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="Gastamos un intento, pero no encontramos un match real."
-        body="Propusimos una conexión que no existe (todavía) en el catálogo, así que este intento sí contó. Reintenta — a la próxima puede aterrizar."
+        failure
+        title="la conexión no existe en el catálogo."
+        body="Propusimos una obra que no encontramos, y ese intento sí contó. Vuelve a intentarlo."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
   }
   if (feed.kind === "pending") {
+    const out = feed.remaining <= 0;
     return (
       <EmptyState
         onBack={onBack}
-        title={
-          feed.remaining <= 0
-            ? "Se te acabaron los descubrimientos del mes."
-            : "Estamos afinando tu próxima conexión."
-        }
+        title={out ? "se acabaron los descubrimientos del mes." : "todavía no hay una conexión para ti."}
         body={
-          feed.remaining <= 0
-            ? "Tu gusto no descansa, pero el medidor sí. Volvemos el mes que viene."
-            : "Dale al botón para que busquemos la pareja cross-media de algo que amas."
+          out
+            ? "Vuelven el mes que viene."
+            : "Buscamos la pareja de algo que te gusta: una película para un disco, un disco para una serie."
         }
         action={
-          feed.remaining > 0 ? (
-            <RetryButton
-              onClick={onNext}
-              pending={pending}
-              label="Descúbreme una"
-              pendingLabel="Buscando…"
-            />
-          ) : undefined
+          out ? undefined : (
+            <button type="button" onClick={onNext} disabled={pending} className={`${SOLID_BUTTON} mt-2`}>
+              {pending ? "Buscando…" : "Descúbreme una"}
+            </button>
+          )
         }
       />
     );
@@ -339,18 +595,18 @@ function AiResults({
   }));
 
   return (
-    <div className="relative z-10 flex min-h-dvh flex-col px-4 pb-dock-clearance pt-[calc(16px+env(safe-area-inset-top))]">
-      <FeatureAura
+    <div className="relative flex min-h-dvh flex-col px-4 pb-dock-clearance pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
+      <DoubleFeatureTint
         key={cur.seed.catalogItemId}
         seedPosterUrl={cur.seed.posterUrl}
         recoPosterUrl={cur.reco.posterUrl}
       />
-      <div className="relative z-30 flex items-center justify-between">
-        <BackChip onClick={onBack} />
-        <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-text-2">
-          Tu descubrimiento
+      <div className="relative z-30 flex items-center justify-between px-2">
+        <BackButton onClick={onBack} />
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          Double feature
         </span>
-        <span className="font-mono text-[10px] tracking-[0.1em] text-text-3">
+        <span className="w-11 text-right font-mono text-[12px] text-text-2">
           {feed.remaining}/{feed.cap}
         </span>
       </div>
@@ -368,7 +624,7 @@ function AiResults({
           onDismiss={onNext}
         />
         {pending && (
-          <p className="mt-4 text-center text-sm text-text-2">
+          <p role="status" className="mt-4 text-center text-[15px] text-text-2">
             Buscando otra conexión…
           </p>
         )}
@@ -377,53 +633,41 @@ function AiResults({
   );
 }
 
-function RetryButton({
-  onClick,
-  pending,
-  label = "Reintentar",
-  pendingLabel = "Reintentando…",
-}: {
-  onClick: () => void;
-  pending: boolean;
-  label?: string;
-  pendingLabel?: string;
-}) {
+function RetryButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={pending}
-      className="mt-6 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-50"
-    >
-      {pending ? pendingLabel : label}
+    <button type="button" onClick={onClick} disabled={pending} className={`${GLASS_BUTTON} mt-2 disabled:opacity-50`}>
+      {pending ? "Reintentando…" : "Reintentar"}
     </button>
   );
 }
 
+/** §estados · vacío/error: the Newsreader sentence, one line of what to do. */
 function EmptyState({
   onBack,
   title,
   body,
   action,
+  failure = false,
 }: {
   onBack: () => void;
   title: string;
   body: string;
   action?: React.ReactNode;
+  failure?: boolean;
 }) {
   return (
-    <div className="relative z-10 min-h-dvh">
-      <div className="px-4 pt-[calc(48px+env(safe-area-inset-top))]">
-        <BackChip onClick={onBack} />
-      </div>
-      <div className="flex flex-col items-center px-8 pt-[18vh] text-center">
-        <p className="mb-6 font-mono text-[10px] uppercase tracking-[0.24em] text-accent">
-          Discover
-        </p>
-        <p className="font-serif text-xl italic text-text">{title}</p>
-        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-text-2">
-          {body}
-        </p>
+    <div className="min-h-dvh px-6 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
+      <BackButton onClick={onBack} />
+      <div className="flex flex-col items-start gap-4 px-1 pt-[16vh]">
+        {failure && (
+          <span className="text-text-2">
+            <TriangleGlyph size={22} />
+          </span>
+        )}
+        <h2 className="font-display text-[32px] font-normal leading-[1.1] text-text text-balance">
+          {title}
+        </h2>
+        <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">{body}</p>
         {action}
       </div>
     </div>
@@ -431,19 +675,15 @@ function EmptyState({
 }
 
 /**
- * The AI mode's back control is an in-page mode switch, not a route change,
- * so it can't be the router-backed BackButton — but it IS the same glass
- * chip (glassChipClass + the mock's back glyph), so nothing looks bespoke.
+ * Volver (§componentes: 44, glass). A mode switch inside the page, not a
+ * route, so it's a button — the Kura `BackChip` is a link.
  */
-function BackChip({ onClick }: { onClick: () => void }) {
+function BackButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Volver"
-      className={glassChipClass}
-    >
-      <StrokeIcon d={BACK_PATH} size={16} strokeWidth={2.4} />
+    <button type="button" onClick={onClick} aria-label="Volver" className={CHIP_44}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d={BACK_PATH} />
+      </svg>
     </button>
   );
 }

@@ -1,102 +1,57 @@
 import type { AlbumTrack } from "@/modules/catalog/itunes";
-
-function fmt(ms: number | null): string {
-  if (!ms) return "";
-  const s = Math.round(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
+import { SectionTitle } from "@/components/kura/components";
 
 /**
- * Album tracklist — the album's answer to a film's synopsis (metadata/facts,
- * ADR-008 safe zone). Numbered rows separated by a content hairline divider,
- * which the borderless design system explicitly exempts (§7: content dividers
- * are fine; only surface borders/glows are banned). Renders nothing when the
- * lookup came back empty, so callers can drop it in unconditionally.
+ * "canciones" (Kura 24c / 37c) — the album's answer to a film's synopsis
+ * (metadata/facts, ADR-008 safe zone): the section title in Newsreader 24,
+ * then rows 48 tall — the number in mono (22 wide, two digits) and the name at
+ * 15. No dividers: rows separate by rhythm. The aside carries the running time
+ * when iTunes gave durations.
  *
- * F3.8 adds the PARTIAL mode for an album that hasn't come out. iTunes lists a
- * pre-order's advance singles by name and everything else as "Track 4" with
- * isStreamable false; getAlbumDetail already dropped those placeholders, so
- * what arrives here is only what you can actually play. The real track numbers
- * survive (01, 04, 09) — the gaps say what's missing better than a muted row
- * would, and the count of what's still coming goes in the closing divider.
- *
- * `hideHeader` is for the card wrapper (Revamp UI 06e and its public twin
- * 06f), which already prints "Tracklist · 15 canciones · 41 min" in its own
- * header — printing "15 canciones" again inside it just repeats the card. It
- * suppresses ONLY that plain count: the partial-release header ("Ya puedes
- * oír · 3 de 12") stays, because no card header can express it.
+ * PARTIAL mode (F3.8 / 37c "álbum anunciado"): iTunes lists a pre-order's
+ * advance singles by name and everything else as placeholders, which
+ * getAlbumDetail already dropped — so what arrives is only what you can play.
+ * The real numbers survive (01, 04, 09), the aside reads "3 de 12
+ * disponibles" and one closing mono line says when the rest arrives.
+ * Server-safe; renders nothing for an empty list.
  */
 export function Tracklist({
   tracks,
   totalCount,
   pendingLabel,
-  hideHeader = false,
 }: {
   tracks: AlbumTrack[];
   /** The album's full song count. Greater than tracks.length ⇒ partial mode. */
   totalCount?: number;
   /** When the rest arrives: "el 14 de agosto" / "esta noche". Partial only. */
   pendingLabel?: string;
-  hideHeader?: boolean;
 }) {
   if (tracks.length === 0) return null;
 
   const total = totalCount && totalCount > tracks.length ? totalCount : null;
   const pending = total ? total - tracks.length : 0;
+  const minutes = Math.round(tracks.reduce((ms, t) => ms + (t.durationMs ?? 0), 0) / 60_000);
+  const aside = total ? `${tracks.length} de ${total} disponibles` : minutes > 0 ? `${minutes} min` : undefined;
 
   return (
-    <section className={hideHeader ? undefined : "mt-7"}>
-      {total ? (
-        <div className="mb-2.5 flex items-baseline justify-between">
-          <h2 className="font-serif text-[22px] italic leading-none text-text">
-            Ya puedes oír
-          </h2>
-          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-            {tracks.length} de {total}
-          </span>
-        </div>
-      ) : hideHeader ? null : (
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-          {tracks.length} canciones
-        </h2>
-      )}
-
-      <ol
-        className={
-          hideHeader || total
-            ? "divide-y divide-white/[0.06]"
-            : "mt-2 divide-y divide-white/[0.06]"
-        }
-      >
+    <section className="flex flex-col">
+      <SectionTitle aside={aside}>canciones</SectionTitle>
+      <div className="h-1.5" />
+      <ol>
         {tracks.map((t, i) => (
-          <li
-            key={`${t.n}-${i}`}
-            className="flex items-baseline gap-3 py-2.5 text-[14px] text-text"
-          >
-            <span className="w-5 shrink-0 font-mono text-[11px] tabular-nums text-text-3">
-              {t.n || i + 1}
+          <li key={`${t.n}-${i}`} className="flex min-h-12 items-center gap-3.5">
+            <span className="w-[22px] flex-none font-mono text-[12px] tabular-nums text-text-2">
+              {String(t.n || i + 1).padStart(2, "0")}
             </span>
-            <span className="min-w-0 flex-1 leading-snug">{t.name}</span>
-            {t.durationMs != null && (
-              <span className="shrink-0 font-mono text-[11px] tabular-nums text-text-3">
-                {fmt(t.durationMs)}
-              </span>
-            )}
+            <span className="min-w-0 flex-1 truncate text-[15px] text-text">{t.name}</span>
           </li>
         ))}
       </ol>
-
-      {/* A divider with a word in it, NOT a card: what's missing is an absence,
-          and an empty state would give it more furniture than it deserves. */}
       {pending > 0 && (
-        <div className="flex items-center gap-2.5 px-3 pb-0.5 pt-3.5">
-          <span className="h-px flex-1 bg-line" />
-          <span className="whitespace-nowrap text-[13px] text-text-3">
-            {pending === 1 ? "1 canción más" : `${pending} canciones más`}
-            {pendingLabel ? ` ${pendingLabel}` : ""}
-          </span>
-          <span className="h-px flex-1 bg-line" />
-        </div>
+        <p className="pt-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          {pending === 1 ? "1 canción más" : `${pending} canciones más`}
+          {pendingLabel ? ` ${pendingLabel}` : ""}
+        </p>
       )}
     </section>
   );

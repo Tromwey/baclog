@@ -42,7 +42,7 @@ export const ANNOUNCED_AT = new Date("2026-08-13T00:00:00.000Z");
 
 /** Fixed chrome for the Novedades sheet. */
 export const ANNOUNCEMENT_COPY = {
-  eyebrow: "Nuevo en Baclog",
+  eyebrow: "Nuevo en kura",
   title: "Reseñas",
   cta: "Escribir la primera",
   close: "Ahora no",

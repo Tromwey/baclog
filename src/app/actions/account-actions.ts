@@ -89,7 +89,7 @@ const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
 // (next.config.ts fallback rewrites) resolve baclog.app/{username}. Keep in
 // sync with the app's top-level routes.
 const RESERVED = new Set([
-  "admin", "api", "app", "baclog", "backlogs", "blocked", "descubrir", "item",
+  "admin", "api", "app", "baclog", "kura", "colecciones", "coleccion", "backlogs", "blocked", "descubrir", "item",
   "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
   "u", "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
   // F3.10 nav destination + /creditos (public credits page, was missing here).
@@ -125,6 +125,29 @@ export async function claimUsernameAction(
   }
   if (refresh) revalidatePath(`/u/${normalized}`, "layout");
   return { ok: true as const, username: normalized };
+}
+
+/**
+ * Kura O1b "elige tu usuario" — the live "libre / ocupado" beside the field.
+ * Read-only twin of claimUsernameAction: same normalization, same regex, same
+ * RESERVED set, no write. Answers for the caller's OWN current handle as
+ * "free" so re-typing it never reads as taken. Enumeration note: this tells a
+ * signed-in user whether a handle exists, which the public /{username} URL
+ * already reveals (a taken handle 200s or 404s), so it leaks nothing new.
+ */
+export async function checkUsernameAction(username: string) {
+  const user = await assertUser();
+  const normalized = username.trim().toLowerCase();
+  if (!USERNAME_RE.test(normalized) || RESERVED.has(normalized)) {
+    return { status: "invalid" as const };
+  }
+  if (user.username === normalized) return { status: "free" as const };
+  const [owner] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, normalized))
+    .limit(1);
+  return { status: owner ? ("taken" as const) : ("free" as const) };
 }
 
 export async function setPublicAction(isPublic: boolean) {

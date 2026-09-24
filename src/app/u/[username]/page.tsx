@@ -15,6 +15,7 @@ import { ProfileReviews } from "@/components/reviews/profile-reviews";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
 import { ShareChip } from "@/app/u/share-chip";
+import { BackButton } from "@/components/ui";
 import {
   BrandLockup,
   CollectionCard,
@@ -126,17 +127,11 @@ export default async function PublicProfilePage({
         style={{ background: tintSurfaceVertical(palette) }}
       >
         <div className="flex items-center justify-between">
-          <BrandLockup />
-          {viewer ? (
-            <Link
-              href="/backlogs"
-              className="inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
-            >
-              Mis colecciones
-            </Link>
-          ) : (
-            <EnterPill />
-          )}
+          {/* A signed-in viewer came from inside the app (a feed card, a row
+              of people): Volver takes them back. Anonymous: the brand and
+              the way in (33a). */}
+          {viewer ? <BackButton className="h-11! w-11!" /> : <BrandLockup />}
+          {!viewer && <EnterPill />}
         </div>
 
         <Seal name={profile.displayName || profile.username} hexes={palette} src={profile.avatarUrl} size={128} />

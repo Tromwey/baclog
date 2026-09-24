@@ -1,263 +1,219 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
-  claimUsernameAction,
   deleteAccountAction,
   setNotifyReleasesAction,
-  setPreferredServiceAction,
   setPublicAction,
-  updateDisplayNameAction,
 } from "@/app/actions/account-actions";
-import { AvatarPicker } from "./avatar-picker";
+import { Sheet, SheetClose } from "@/components/ui/sheet";
+import { FIELD, GLASS_BUTTON, SOLID_BUTTON } from "@/components/kura/components";
 
-const SERVICES = [
-  { id: "spotify", label: "Spotify" },
-  { id: "apple_music", label: "Apple Music" },
-  { id: "youtube_music", label: "YouTube Music" },
-  { id: "tidal", label: "TIDAL" },
-] as const;
+/**
+ * The live controls of Ajustes (Kura 30a / C3). The page itself is a server
+ * component; only what writes lives here. Each switch applies AT ONCE (no
+ * Guardar) and says so by moving — a failure snaps it back and says what
+ * happened under the row.
+ */
 
-type ServiceId = (typeof SERVICES)[number]["id"];
-
-export function SettingsForm({
-  initialName,
-  initialAvatarUrl,
-  avatarHexes,
-  initialService,
-  email,
-  initialUsername,
-  initialIsPublic,
-  initialNotifyReleases,
+/**
+ * The Kura switch (30a): 51×31; on = `--text` track with a `--bg` knob, off =
+ * glass track with a `--text` knob. The knob slides with the system spring.
+ */
+export function KuraSwitch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
 }: {
-  initialName: string;
-  /** F3.11 — current photo URL, null for the orb. */
-  initialAvatarUrl: string | null;
-  /** The viewer's ADN pair the picker's orb falls back to. */
-  avatarHexes: [string, string];
-  initialService: ServiceId | null;
-  email: string;
-  initialUsername: string | null;
-  initialIsPublic: boolean;
-  initialNotifyReleases: boolean;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
 }) {
-  const [name, setName] = useState(initialName);
-  const [service, setService] = useState<ServiceId | null>(initialService);
-  const [saved, setSaved] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [username, setUsername] = useState(initialUsername ?? "");
-  const [claimed, setClaimed] = useState<string | null>(initialUsername);
-  const [isPublic, setIsPublic] = useState(initialIsPublic);
-  const [notifyReleases, setNotifyReleases] = useState(initialNotifyReleases);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 disabled:opacity-50 ${
+        checked ? "bg-text" : "bg-white/[0.16]"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`absolute top-[2px] h-[27px] w-[27px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,.35)] transition-[left,background-color] duration-[260ms] [transition-timing-function:cubic-bezier(.2,.9,.3,1.25)] ${
+          checked ? "left-[22px] bg-bg" : "left-[2px] bg-text"
+        }`}
+      />
+    </button>
+  );
+}
 
-  async function claim(e: React.FormEvent) {
-    e.preventDefault();
+/** A 52 row with a title, an optional note, and the switch at the right. */
+function SwitchRow({
+  title,
+  note,
+  checked,
+  onChange,
+  error,
+}: {
+  title: string;
+  note?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  error: string | null;
+}) {
+  return (
+    <div className="flex min-h-[52px] items-center gap-3 py-2 pl-4 pr-3.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <span className="text-[16px] text-text">{title}</span>
+        {(error ?? note) && (
+          <span role={error ? "status" : undefined} className="text-[13px] leading-[1.4] text-text-2">
+            {error ?? note}
+          </span>
+        )}
+      </div>
+      <KuraSwitch checked={checked} onChange={onChange} label={title} />
+    </div>
+  );
+}
+
+/** Optimistic boolean setting: flips now, reverts with a sentence on failure. */
+function useSetting(initial: boolean, save: (v: boolean) => Promise<unknown>) {
+  const [value, setValue] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  async function set(next: boolean) {
+    setValue(next);
+    setError(null);
+    try {
+      await save(next);
+    } catch {
+      setValue(!next);
+      setError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
+    }
+  }
+  return [value, set, error] as const;
+}
+
+/**
+ * Perfil privado — the product's one privacy switch (`users.isPublic`,
+ * inverted). "Privado" is immediate: the public page 404s like one that never
+ * existed and your activity leaves your people's feeds (setPublicAction busts
+ * the public tree). The mock's "Apruebas a quien te sigue" (follow requests)
+ * doesn't exist in the product, so the note says what private really does.
+ */
+export function PrivacySwitch({ initialIsPublic }: { initialIsPublic: boolean }) {
+  const [isPublic, setIsPublic, error] = useSetting(initialIsPublic, setPublicAction);
+  return (
+    <SwitchRow
+      title="Perfil privado"
+      note={
+        isPublic
+          ? "Tu página es pública y tu gente ve lo que guardas y completas."
+          : "Tu página no existe para nadie y tu actividad no sale en el feed de tu gente."
+      }
+      checked={!isPublic}
+      onChange={(priv) => setIsPublic(!priv)}
+      error={error}
+    />
+  );
+}
+
+/** F3.8 — the release email's opt-out (album pre-orders only, today). */
+export function ReleasesSwitch({ initial }: { initial: boolean }) {
+  const [on, setOn, error] = useSetting(initial, setNotifyReleasesAction);
+  return (
+    <SwitchRow
+      title="Estrenos de álbumes que esperas"
+      note="Un correo el día que sale un álbum en preventa que guardaste."
+      checked={on}
+      onChange={setOn}
+      error={error}
+    />
+  );
+}
+
+/**
+ * C3 Borrar cuenta — the one irreversible action of the account, and so the
+ * one that is confirmed: a sheet that says what goes, asks you to type your
+ * @ (or your email while you have no @), and the SOLID "Borrar cuenta".
+ * No red anywhere (§color: lo destructivo se entiende por el título y la
+ * confirmación).
+ */
+export function DeleteAccount({ confirmWord }: { confirmWord: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex min-h-11 items-center text-[15px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
+      >
+        Borrar cuenta
+      </button>
+      {open && <DeleteSheet confirmWord={confirmWord} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function DeleteSheet({ confirmWord, onClose }: { confirmWord: string; onClose: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const matches = typed.trim().replace(/^@/, "").toLowerCase() === confirmWord.toLowerCase();
+
+  async function confirm() {
+    if (!matches) return;
     setBusy(true);
-    setUsernameError(null);
-    const res = await claimUsernameAction(username);
-    setBusy(false);
-    const claimedName = "username" in res ? res.username : null;
-    if (claimedName) {
-      setClaimed(claimedName);
-      setIsPublic(true);
-    } else {
-      setUsernameError(
-        res.error === "taken" ? "Ese username ya existe." : "Username inválido (3-30: a-z, 0-9, _ .)",
-      );
+    setError(null);
+    try {
+      // Redirects to /login on success; returning here means it didn't.
+      await deleteAccountAction();
+    } catch (err) {
+      // A redirect surfaces as a thrown NEXT_REDIRECT — that's success.
+      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
+      setBusy(false);
+      setError("No se pudo borrar tu cuenta. Revisa tu conexión y vuelve a intentar.");
     }
   }
 
-  async function saveName(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    await updateDisplayNameAction(name);
-    setBusy(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
-  async function pickService(id: ServiceId) {
-    setService(id);
-    await setPreferredServiceAction(id);
-  }
-
   return (
-    <div className="mt-6 space-y-8">
-      <section>
-        <h2 className="text-sm font-semibold text-text-2">Cuenta</h2>
-        <p className="mt-1 text-sm text-text-3">{email}</p>
-        <AvatarPicker initialUrl={initialAvatarUrl} hexes={avatarHexes} />
-        <form onSubmit={saveName} className="mt-3 flex gap-2">
+    <Sheet onClose={onClose} label="Borrar cuenta">
+      <div className="flex flex-col gap-1.5">
+        <h2 className="font-brand text-[26px] leading-[1.1] text-text">¿borrar tu cuenta?</h2>
+        <p className="mb-3 mt-1 text-[15px] leading-[1.5] text-text-2">
+          Se borran tus colecciones, reseñas y seguidores. No se puede deshacer.
+        </p>
+        <label className="flex flex-col gap-1.5">
+          <span className="px-1 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+            escribe {confirmWord}
+          </span>
           <input
-            value={name}
-            maxLength={50}
-            onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-xl bg-surface-2 px-4 py-2.5 outline-none transition-colors focus:bg-surface-3"
-            aria-label="Nombre visible"
-          />
-          <button
-            type="submit"
-            disabled={busy || !name.trim()}
-            className="rounded-xl bg-accent px-4 font-medium text-bg bl-press active:bg-accent-press disabled:opacity-40"
-          >
-            {saved ? "✓" : "Guardar"}
-          </button>
-        </form>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-text-2">
-          Tu app de música
-        </h2>
-        <div className="mt-3 space-y-2">
-          {SERVICES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => pickService(s.id)}
-              className={`w-full rounded-xl px-4 py-3 text-left transition-colors ${
-                service === s.id
-                  ? "bg-accent-soft font-semibold text-accent"
-                  : "bg-surface-2 hover:bg-surface-3 active:bg-white/[0.12]"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-text-2">Avisos</h2>
-        <label className="mt-3 flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 transition-colors active:bg-white/[0.12]">
-          <span className="text-sm">Avísame el día que sale un álbum</span>
-          <input
-            type="checkbox"
-            checked={notifyReleases}
-            onChange={async (e) => {
-              const next = e.target.checked;
-              setNotifyReleases(next);
-              await setNotifyReleasesAction(next);
-            }}
-            className="h-5 w-5 accent-accent"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label={`Escribe ${confirmWord} para confirmar`}
+            className={FIELD}
           />
         </label>
-        <p className="mt-2 text-xs text-text-3">
-          Un correo, una sola vez, cuando un álbum en preventa que guardaste
-          por fin existe. Apágalo y el álbum se queda en tu backlog igual.
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold text-text-2">
-          Página pública
-        </h2>
-        {claimed ? (
-          <div className="mt-3 space-y-3">
-            <p className="text-sm">
-              <span className="text-text-2">Tu página: </span>
-              <a
-                href={`/u/${claimed}`}
-                className="font-mono underline transition-opacity active:opacity-60"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                baclog.app/{claimed}
-              </a>
-            </p>
-            <label className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 transition-colors active:bg-white/[0.12]">
-              <span className="text-sm">Perfil visible públicamente</span>
-              <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={async (e) => {
-                  const next = e.target.checked;
-                  setIsPublic(next);
-                  await setPublicAction(next);
-                }}
-                className="h-5 w-5 accent-accent"
-              />
-            </label>
-            <p className="text-xs text-text-3">
-              Privado por default: solo lo que actives aquí se puede ver.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={claim} className="mt-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-text-3">baclog.app/</span>
-              <input
-                value={username}
-                maxLength={30}
-                onChange={(e) =>
-                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ""))
-                }
-                placeholder="tunombre"
-                className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3 py-2.5 font-mono outline-none transition-colors focus:bg-surface-3"
-                aria-label="Username"
-              />
-              <button
-                type="submit"
-                disabled={busy || username.length < 3}
-                className="rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
-              >
-                Reclamar
-              </button>
-            </div>
-            {usernameError && (
-              <p className="text-xs text-red-400">{usernameError}</p>
-            )}
-            <p className="text-xs text-text-3">
-              Opt-in explícito: sin username, nada tuyo es público.
-            </p>
-          </form>
+        {error && (
+          <p role="status" className="px-1 pt-1 text-[13px] leading-[1.4] text-text-2">
+            {error}
+          </p>
         )}
-      </section>
-
-      <section className="border-t border-line pt-6">
-        <h2 className="text-sm font-semibold text-text-2">Legal</h2>
-        <Link href="/creditos" className="mt-3 inline-block text-sm underline transition-opacity active:opacity-60">
-          Créditos
-        </Link>
-      </section>
-
-      <section className="border-t border-line pt-6">
-        <h2 className="text-sm font-semibold text-red-400">Zona peligrosa</h2>
-        {confirmingDelete ? (
-          <div className="mt-3 space-y-2 rounded-xl bg-red-950/60 p-4">
-            <p className="text-sm text-text">
-              Esto borra tu cuenta y todos tus backlogs. No hay vuelta atrás.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  setBusy(true);
-                  await deleteAccountAction();
-                }}
-                disabled={busy}
-                className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white bl-press disabled:opacity-40"
-              >
-                {busy ? "Borrando…" : "Borrar todo"}
-              </button>
-              <button
-                onClick={() => setConfirmingDelete(false)}
-                className="rounded-xl bg-surface-2 px-4 py-2 bl-press hover:bg-surface-3"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            className="mt-3 text-sm text-red-400 underline transition-opacity active:opacity-60"
-          >
-            Borrar mi cuenta
+        <div className="mt-2.5 flex flex-col gap-2">
+          <button type="button" onClick={confirm} disabled={!matches || busy} className={`${SOLID_BUTTON} w-full`}>
+            {busy ? "Borrando…" : "Borrar cuenta"}
           </button>
-        )}
-      </section>
-    </div>
+          <SheetClose className={`${GLASS_BUTTON} h-[52px] w-full text-[16px]`}>Cancelar</SheetClose>
+        </div>
+      </div>
+    </Sheet>
   );
 }

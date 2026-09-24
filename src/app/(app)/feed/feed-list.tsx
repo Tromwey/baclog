@@ -3,10 +3,13 @@
 import { Fragment, useState, useTransition } from "react";
 import { loadMoreFeedAction } from "@/app/actions/social-actions";
 import type { FeedCard, FeedSuggestion } from "@/modules/social/types";
-import { FeedCardView, HDR_PX, SuggestCard, cardTailHex, hexesOfCard } from "./feed-card";
+import { FeedCardView, SuggestCard, cardTailHex, hexesOfCard } from "./feed-card";
+import { HDR_PX } from "./feed-geometry";
+import { GLASS_BUTTON } from "@/components/kura/components";
 
 /**
- * F3.10 — the populated feed as a STACK (Feed v8 Stack, 2026-09-21).
+ * F3.10 — the populated feed as a STACK (Feed v8 Stack, 2026-09-21; Feed
+ * v10 · Kura details 2026-09-24 — see feed-card.tsx).
  *
  * This owns the scroll container, and that is not incidental: the cards pin
  * with `position: sticky` under the header, so the header has to live in the
@@ -103,7 +106,7 @@ export function FeedList({
               type="button"
               onClick={loadMore}
               disabled={loading}
-              className="rounded-full px-6 py-3.5 text-[16px] font-semibold text-text-2 transition-opacity active:opacity-60 disabled:opacity-60"
+              className={`${GLASS_BUTTON} disabled:opacity-60`}
             >
               {loading
                 ? "Cargando…"

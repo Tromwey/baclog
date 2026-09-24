@@ -5,99 +5,40 @@ import { plural } from "@/lib/plural";
 import type { SuggestedProfile } from "@/modules/social/types";
 
 /**
- * F3.10 — the two suggestion shapes of the feed's empty states (design 1b/1c).
- * Server components; only the FollowButton inside is client. Both meta lines
- * stay gender-neutral on purpose ("actividad hoy", never "activa/activo" — we
- * don't know anyone's gender and won't guess it from a name).
+ * F3.10 — a person offered by the feed's empty states and by Tu gente
+ * (/feed/gente), in Kura's people row (E1 / 32b): seal 44, @handle 16/500,
+ * one mono line of context, and the glass "Seguir" at the right. Server
+ * component; only the FollowButton inside is client.
+ *
+ * The mono line stays gender-neutral on purpose ("actividad hoy", never
+ * "activa/activo" — we don't know anyone's gender and won't guess it). The
+ * mock's "le obsesiona {título}" / "4 obsesiones en común" would need a
+ * per-suggestion read the product doesn't make; it says what it knows.
  */
-
-/** Rich card (1b): identity row + a strip of their recent covers. */
-export function SuggestionCard({ s }: { s: SuggestedProfile }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-[18px] bg-surface-1 p-3.5 transition-colors has-[a:active]:bg-surface-3">
-      <div className="flex items-center gap-[11px]">
-        <Link
-          href={`/u/${s.username}`}
-          className="flex min-w-0 flex-1 items-center gap-[11px]"
-        >
-          <AdnAvatar hexes={s.avatarHexes} src={s.avatarUrl} className="h-[38px] w-[38px]" />
-          <span className="min-w-0">
-            <span className="block truncate text-[13.5px] font-semibold text-text">
-              @{s.username}
-            </span>
-            <span className="mt-0.5 block truncate font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-              {richMeta(s)}
-            </span>
-          </span>
-        </Link>
-        <FollowButton username={s.username} initialFollowing={false} />
-      </div>
-      {s.covers.length > 0 && (
-        // ONE band height, native WIDTHS (founder call 2026-08-28): a mixed
-        // strip of 54×81 posters and 54×54 albums stair-stepped; equal height
-        // with the width carrying the aspect (poster 36px = exact 2:3, album
-        // 54px) reads as one shelf — and never cross-crops a cover, the same
-        // fixed-row criterion the backlog rows follow.
-        <div className="flex items-end gap-1.5">
-          {s.covers.map((c, i) => (
-            // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
-            <img
-              key={i}
-              src={c.posterUrl}
-              alt=""
-              className={`h-[54px] flex-none rounded-lg object-cover ${
-                c.mediaType === "album" ? "w-[54px]" : "w-9"
-              }`}
-            />
-          ))}
-          {s.moreCount > 0 && (
-            <span className="pb-0.5 font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-              +{s.moreCount}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Compact row (1c): for "gente que sí está activa". */
 export function SuggestionRow({ s }: { s: SuggestedProfile }) {
   return (
-    <div className="flex items-center gap-[11px] rounded-[14px] bg-surface-1 py-[11px] pl-3.5 pr-3 transition-colors has-[a:active]:bg-surface-3">
-      <Link
-        href={`/u/${s.username}`}
-        className="flex min-w-0 flex-1 items-center gap-[11px]"
-      >
-        <AdnAvatar hexes={s.avatarHexes} src={s.avatarUrl} className="h-[34px] w-[34px]" />
-        <span className="min-w-0">
-          <span className="block truncate text-[13.5px] font-semibold text-text">
-            @{s.username}
-          </span>
-          <span className="mt-0.5 block truncate font-mono text-[8.5px] uppercase tracking-[0.1em] text-text-3">
-            {compactMeta(s)}
+    <div className="flex min-h-[72px] items-center gap-3.5 rounded-[var(--r-surface)] transition-colors has-[a:active]:bg-white/[0.06]">
+      <Link href={`/u/${s.username}`} className="flex min-w-0 flex-1 items-center gap-3.5">
+        <AdnAvatar hexes={s.avatarHexes} name={s.name || s.username} src={s.avatarUrl} className="h-11 w-11" />
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="truncate text-[16px] font-medium text-text">@{s.username}</span>
+          <span className="truncate font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+            {suggestionMeta(s)}
           </span>
         </span>
       </Link>
-      <FollowButton username={s.username} initialFollowing={false} size="sm" />
+      <FollowButton username={s.username} initialFollowing={false} variant="row" />
     </div>
   );
 }
 
-function richMeta(s: SuggestedProfile): string {
+function suggestionMeta(s: SuggestedProfile): string {
   const parts = [
-    s.isFounder ? "Fundador" : null,
-    `${s.backlogCount} ${plural(s.backlogCount, "backlog", "backlogs")}`,
-    `${s.followerCount} ${plural(s.followerCount, "seguidor", "seguidores")}`,
-  ];
-  return parts.filter(Boolean).join(" · ");
-}
-
-function compactMeta(s: SuggestedProfile): string {
-  const parts = [
-    s.isFounder ? "Fundador" : null,
-    `${s.backlogCount} ${plural(s.backlogCount, "backlog", "backlogs")}`,
-    s.lastActive ? `actividad ${s.lastActive}` : null,
+    s.isFounder ? "fundador" : null,
+    `${s.backlogCount} ${plural(s.backlogCount, "colección", "colecciones")}`,
+    s.lastActive
+      ? `actividad ${s.lastActive}`
+      : `${s.followerCount} ${plural(s.followerCount, "seguidor", "seguidores")}`,
   ];
   return parts.filter(Boolean).join(" · ");
 }

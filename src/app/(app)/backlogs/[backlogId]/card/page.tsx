@@ -40,7 +40,7 @@ export default async function CardPage({
       backlog={cardBacklog}
       style="receipt"
       eyebrow={cardBacklog.name}
-      subtitle="tu backlog, como recibo"
+      subtitle="tu colección, como recibo"
       publicUrl={
         accountPublic && backlog.isPublic
           ? `https://baclog.app/${user.username}/${backlog.id}`
@@ -48,7 +48,7 @@ export default async function CardPage({
       }
       noLinkNote={
         accountPublic && !backlog.isPublic
-          ? "Este backlog es privado — la tarjeta viaja sin link. Cámbialo en Perfil · Editar."
+          ? "Esta colección es privada: la tarjeta viaja sin link. Cámbialo en Opciones · Privacidad."
           : undefined
       }
     />

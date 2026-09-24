@@ -1,118 +1,190 @@
 import Link from "next/link";
-import { ChevronRight, LogOut } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getUserPalette } from "@/modules/backlog/queries";
-import { legibleAdnPair } from "@/modules/reviews/format";
+import { getObsessions } from "@/modules/backlog/profile-stats";
 import { signOutAction } from "@/app/actions/account-actions";
 import { BackButton } from "@/components/ui";
+import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { InstallAppRow } from "@/app/(app)/perfil/install-app-row";
-import { SettingsForm } from "./settings-form";
+import { profileHexes } from "@/app/(app)/perfil/profile-hexes";
+import { DeleteAccount, PrivacySwitch, ReleasesSwitch } from "./settings-form";
+import { SERVICE_LABEL } from "./services";
 
 /**
- * F3.10 (design 2b) — what moved behind /perfil's ajustes chip: install,
- * the whole edit form (name, service, @handle y visibilidad, avisos), the
- * admin-only Torre de control entry and sign out. /perfil itself is the
- * public-profile-shaped screen now.
+ * 30a Ajustes (Kura, flujo 11) — behind /perfil's gear. Volver 44, "ajustes"
+ * in Newsreader 36, then `--s1` groups (radius 18) of 52 rows under a mono
+ * section label: you (seal, name, @, "Editar perfil ›", correo) · privacidad
+ * · apps · notificaciones · (founder only) torre de control; and at the foot
+ * Cerrar sesión, Borrar cuenta and the version line.
+ *
+ * Only what the product has (§ "lo que el mock pide y el producto no tiene se
+ * omite"): no "Quién ve lo que te obsesiona", no "País para dónde ver", no
+ * "Nuevos seguidores" / "Tu recap está listo" notices, no follow approval.
  */
 export default async function SettingsPage() {
   const user = await requireUser();
-  // F3.11 — the orb the photo picker falls back to (same pair the viewer's
-  // own review card uses).
-  const avatarHexes = legibleAdnPair(await getUserPalette(user.id, 2));
+  const [palette, obsessions] = await Promise.all([
+    getUserPalette(user.id),
+    getObsessions(user.id, 12),
+  ]);
+  const hexes = profileHexes(obsessions, palette);
+
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-[22px] pb-dock-clearance pt-[calc(24px+env(safe-area-inset-top))] text-text">
-      <BackButton href="/perfil" />
-
-      <header className="pb-2 pt-[18px]">
-        <h1 className="font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em]">
-          Ajustes
-        </h1>
-      </header>
-
-      {/* Self-hides when already installed (client component). */}
-      <div className="mt-3 overflow-hidden rounded-[22px] bl-glass">
-        <InstallAppRow />
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
+      <div className="px-6 pt-[calc(16px+env(safe-area-inset-top))]">
+        <BackButton href="/perfil" className="h-11! w-11!" />
       </div>
 
-      <SettingsForm
-        initialName={user.name ?? ""}
-        initialAvatarUrl={user.image}
-        avatarHexes={avatarHexes}
-        initialService={user.preferredService}
-        email={user.email}
-        initialUsername={user.username}
-        initialIsPublic={user.isPublic}
-        initialNotifyReleases={user.notifyReleases}
-      />
+      <div className="flex flex-col gap-7 px-4 pt-4">
+        <h1 className="mx-2 font-brand text-[36px] leading-[1.02] text-text">ajustes</h1>
 
-      {/* Torre de control — admin-only (nav-reachability del portal /admin) */}
-      {user.isAdmin && (
-        <>
-          <div className="mb-[13px] mt-[26px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-            Solo founder
+        <Group>
+          <div className="flex min-h-[76px] items-center gap-3.5 pl-4 pr-3.5">
+            <ProfileAvatar src={user.image} hexes={hexes} name={user.name || user.username || "·"} size={52} />
+            <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <span className="truncate text-[17px] font-semibold text-text">{user.name || "Sin nombre"}</span>
+              {user.username && (
+                <span className="truncate font-mono text-[12px] text-text-2">@{user.username}</span>
+              )}
+            </div>
+            <Link
+              href="/settings/perfil"
+              className="flex min-h-11 flex-none items-center gap-1.5 text-[15px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
+            >
+              Editar perfil
+              <Chevron />
+            </Link>
           </div>
-          <Link
-            href="/admin"
-            className="relative flex items-center gap-[13px] overflow-hidden rounded-[22px] bl-glass px-[15px] py-[14px] bl-press-lg hover:bg-white/[0.045]"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-bg">
-              <ControlTowerGlyph />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-sans text-[15px] font-semibold text-text">
-                Torre de control
-              </span>
-              <span className="mt-[3px] block font-mono text-[9.5px] uppercase tracking-[0.06em] text-text-3">
-                Solo tú lo ves · founder
-              </span>
-            </span>
-            <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-accent" />
-            <ChevronRight size={18} className="shrink-0 text-text-3" />
-          </Link>
-        </>
-      )}
+          <Divider />
+          <Row title="Correo" value={user.email} />
+        </Group>
 
-      {/* Cerrar sesión */}
-      <form action={signOutAction} className="mt-[14px] overflow-hidden rounded-[22px] bl-glass">
-        <button
-          type="submit"
-          className="relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-[rgba(232,132,108,0.06)] active:bg-[rgba(232,132,108,0.12)]"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[rgba(232,132,108,0.14)] text-[#E8846C]">
-            <LogOut size={17} strokeWidth={1.8} />
-          </span>
-          <span className="flex-1 font-sans text-[14.5px] font-semibold text-[#E8846C]">
-            Cerrar sesión
-          </span>
-        </button>
-      </form>
+        <Section label="privacidad">
+          <Group>
+            {user.username ? (
+              <>
+                <PrivacySwitch initialIsPublic={user.isPublic} />
+                <Divider />
+                <Row
+                  title="Tu página"
+                  value={`baclog.app/${user.username}`}
+                  href={user.isPublic ? `/u/${user.username}` : undefined}
+                />
+              </>
+            ) : (
+              <Row
+                title="Elige tu @usuario"
+                note="Sin @usuario, nada tuyo es público."
+                href="/settings/perfil"
+              />
+            )}
+          </Group>
+        </Section>
+
+        <Section label="apps">
+          <Group>
+            <Row
+              title="Abrir música en"
+              value={user.preferredService ? SERVICE_LABEL[user.preferredService] : "Elegir"}
+              href="/settings/musica"
+            />
+            {/* Self-hides (with its hairline) when already installed. */}
+            <InstallAppRow dividerTop />
+          </Group>
+        </Section>
+
+        <Section label="notificaciones">
+          <Group>
+            <ReleasesSwitch initial={user.notifyReleases} />
+          </Group>
+        </Section>
+
+        {/* Torre de control — admin-only (nav-reachability of /admin). */}
+        {user.isAdmin && (
+          <Section label="solo founder">
+            <Group>
+              <Row title="Torre de control" note="Solo tú la ves." href="/admin" />
+            </Group>
+          </Section>
+        )}
+
+        <div className="flex flex-col items-center gap-1 pt-1">
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex min-h-11 items-center text-[16px] font-medium text-text transition-opacity active:opacity-60"
+            >
+              Cerrar sesión
+            </button>
+          </form>
+          <DeleteAccount confirmWord={user.username ?? user.email} />
+          <Link
+            href="/creditos"
+            className="flex min-h-11 items-center text-[15px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
+          >
+            Créditos
+          </Link>
+          <span className="mt-2 font-mono text-[11px] tracking-[0.08em] text-text-3">蔵 kura</span>
+        </div>
+      </div>
     </main>
   );
 }
 
-/** Radar/tower glyph from the Torre de Control design (bespoke, not lucide). */
-function ControlTowerGlyph() {
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 16a8 8 0 0 1 16 0"
-        stroke="var(--accent)"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 16 16.6 10.8"
-        stroke="var(--accent)"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <circle cx="12" cy="16" r="1.7" fill="var(--accent)" />
-      <path
-        d="M7.2 14.2h.01M12 12.6h.01M16.8 14.2h.01"
-        stroke="var(--text-3)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+    <section className="flex flex-col gap-2">
+      <h2 className="px-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{label}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Group({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col overflow-hidden rounded-[var(--r-surface)] bg-surface-1">{children}</div>;
+}
+
+function Divider() {
+  return <span aria-hidden className="ml-4 h-px bg-white/[0.06]" />;
+}
+
+function Chevron() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="flex-none text-text-2" aria-hidden>
+      <path d={CHEVRON_RIGHT_PATH} />
     </svg>
+  );
+}
+
+/** A 52 row: title, optional note, optional value, chevron when it leads somewhere. */
+function Row({
+  title,
+  note,
+  value,
+  href,
+}: {
+  title: string;
+  note?: string;
+  value?: string;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <span className="text-[16px] text-text">{title}</span>
+        {note && <span className="text-[13px] leading-[1.4] text-text-2">{note}</span>}
+      </span>
+      {value && <span className="min-w-0 max-w-[55%] truncate text-[15px] text-text-2">{value}</span>}
+      {href && <Chevron />}
+    </>
+  );
+  const cls = "flex min-h-[52px] items-center gap-3 py-2 pl-4 pr-3.5";
+  return href ? (
+    <Link href={href} className={`${cls} transition-colors active:bg-white/[0.06]`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
   );
 }

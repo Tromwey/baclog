@@ -37,7 +37,7 @@
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
-- **La marca es Kura (2026-09-24).** El producto se renombró de Baclog a Kura ("la bodega donde guardas lo que más vale"). El rebrand se aplicó a la marca global (título, manifest, íconos) y a las superficies web **públicas**; la app firmada web sigue con el Revamp UI/lima hasta que el founder decida, y la experiencia de app se construye nativa en `ios/`. El repo, el proyecto de Vercel, el dominio `baclog.app` y la base siguen con el nombre viejo: renombrarlos es una decisión de infra aparte.
+- **La marca es Kura (2026-09-24).** El producto se renombró de Baclog a Kura ("la bodega donde guardas lo que más vale"). El rebrand se aplicó primero a la marca global y a las superficies públicas y, la misma tarde (decisión del founder), a **toda la app web firmada** (ver `state/frontend.md` § Estado Kura); la experiencia nativa se construye en `ios/`. El repo, el proyecto de Vercel, el dominio `baclog.app` y la base siguen con el nombre viejo: renombrarlos es una decisión de infra aparte.
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->

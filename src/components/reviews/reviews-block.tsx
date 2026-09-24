@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Sheet } from "@/components/ui";
 import {
   deleteReviewAction,
   saveReviewAction,
 } from "@/app/actions/review-actions";
 import { useItemReaction } from "@/app/(app)/item/[catalogItemId]/reaction-state";
+import { KuraSheet } from "@/app/(app)/item/[catalogItemId]/kura-sheet";
 import {
   type ItemReviewContext,
   type ReviewMark,
@@ -17,20 +17,21 @@ import { ReviewFeed } from "./review-feed";
 import { ReviewSheet } from "./review-sheet";
 
 /**
- * F3.9 — the review block on the item detail, redrawn for the Revamp UI
- * (2026-09-03): a mono header "Reseñas · 38" with "Ver todas" on the right,
- * then glass cards. The viewer's own card is pinned first as "Tú".
+ * F3.9 — "reseñas" on the ficha (Kura 24a, 2026-09-24): the section title in
+ * Newsreader 24 with the count — or "Ver las N" while more pages exist — in
+ * mono at the right, then `--s1` cards. The viewer's own card is pinned first
+ * as "Tú".
  *
- * The LOCK is read from the live reaction context, not from the server props:
- * tapping "Me gustó" 200px above has to open this block in the same frame,
- * without a round-trip. The server re-checks the same rule in saveReviewAction —
- * this is the courtesy, that's the rule.
+ * The LOCK is read from the live reaction context, not from the server props
+ * (the server re-checks the same rule in saveReviewAction — this is the
+ * courtesy, that's the rule). Writing happens in the Completar sheet: the
+ * unlocked-empty field opens it, and so does Reseñar in the header. EDITING
+ * an existing review (the card's ⋯, or Reseñar when you already wrote one)
+ * opens the edit sheet, because saving in Completar also marks the status.
+ * Which review sheet is open lives on the provider so Reseñar can open it.
  *
- * WRITING happens in the Completar sheet (08): the unlocked-empty field opens
- * it, and so does "Completo" on the reaction row. EDITING an existing review
- * (from the card's ⋯) stays in the bottom ReviewSheet, because Publicar in 08
- * also marks the title complete, and editing a review must not change status.
- * The own review lives on the provider so both surfaces see the same one.
+ * The whole section hides when there's nothing to read and nothing you can
+ * write yet (24d draws no reseñas block on a title nobody reviewed).
  */
 export function ReviewsBlock({
   catalogItemId,
@@ -39,6 +40,7 @@ export function ReviewsBlock({
   viewerIsPublic,
   viewerHexes,
   viewerAvatarUrl,
+  viewerName,
   context,
 }: {
   catalogItemId: string;
@@ -56,6 +58,8 @@ export function ReviewsBlock({
   viewerHexes: [string, string];
   /** F3.11 — the viewer's own photo, over the orb when they have one. */
   viewerAvatarUrl: string | null;
+  /** The viewer's handle (or name) — their seal's initials on their own card. */
+  viewerName?: string;
   context: ItemReviewContext;
 }) {
   const {
@@ -63,14 +67,13 @@ export function ReviewsBlock({
     obsessed,
     ownReview: own,
     setOwnReview: setOwn,
-    ensureInLibrary,
     openComplete,
+    reviewSheet: sheet,
+    setReviewSheet: setSheet,
   } = useItemReaction();
-  const [sheet, setSheet] = useState<"edit" | "menu" | null>(null);
   const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
-  const [, startOpen] = useTransition();
 
   const unlocked = obsessed || verdict !== null;
   const mark: ReviewMark = obsessed
@@ -89,9 +92,7 @@ export function ReviewsBlock({
 
   function write() {
     setError(null);
-    startOpen(async () => {
-      if (await ensureInLibrary()) openComplete();
-    });
+    openComplete();
   }
 
   function save(body: string, hasSpoiler: boolean) {
@@ -103,8 +104,8 @@ export function ReviewsBlock({
           res.error === "link"
             ? "Los enlaces no van en una reseña. Quítalo y vuelve a intentarlo."
             : res.error === "locked"
-              ? "Reacciona primero: me gustó, no me gustó u obsesión."
-              : "No se pudo publicar. Tu texto sigue aquí — inténtalo otra vez.",
+              ? "Para publicar tu reseña, elige Me gusta o Me obsesiona al completar."
+              : "No se pudo guardar. Tu texto sigue aquí: inténtalo otra vez.",
         );
         return;
       }
@@ -134,52 +135,37 @@ export function ReviewsBlock({
         setSheet(null);
         setArmed(false);
       } catch {
-        setError("No se pudo eliminar.");
+        setError("No se pudo borrar tu reseña. Inténtalo otra vez.");
       }
     });
   }
 
   const pinned = (
     <>
-      {/* 1 · bloqueado — no field, no button: the one thing to do is already
-          on screen, on the reaction row. */}
-      {!unlocked && !own && (
-        <div className="rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5">
-          <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
-            Tu reseña
-          </div>
-          <p className="mt-1.5 text-[15px] leading-[1.5] text-pretty text-text-2">
-            Se abre cuando reacciones.
-          </p>
-        </div>
-      )}
-
-      {/* 2 · desbloqueado y vacío — looks like a field, opens Completar. */}
+      {/* desbloqueado y vacío — looks like a field, opens Completar. Locked
+          (no reaction yet) draws nothing: Reseñar and Completar are right
+          there in the header. */}
       {unlocked && !own && (
         <button
           type="button"
           onClick={write}
-          className="flex w-full items-center justify-between gap-3 rounded-[18px] bg-[var(--glass-bg)] px-4 py-[15px] text-left transition-colors active:bg-white/[0.12]"
+          className="flex min-h-[52px] w-full items-center rounded-[var(--r-surface)] bg-white/[0.06] px-4 text-left transition-colors active:bg-white/[0.1]"
         >
-          <span className="text-[15px] text-text-3">
-            {total === 0 ? "Escribe la primera…" : "Escribe tu reseña…"}
+          <span className="text-[15px] text-text-2">
+            {total === 0 ? "Escribe la primera reseña" : "Escribe tu reseña"}
           </span>
         </button>
       )}
 
-      {/* 3/4/5 · con reseña propia — pinned above the feed, never repeated
-          inside it. */}
+      {/* con reseña propia — pinned above the feed, never repeated inside it. */}
       {own &&
         (own.hidden ? (
-          <div className="rounded-[18px] bg-[var(--glass-bg)] px-4 pb-4 pt-[15px] opacity-[0.72]">
-            <div className="mb-[11px] flex items-center gap-2">
-              <span aria-hidden className="h-[7px] w-[7px] flex-none rounded-full bg-bad" />
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
-                Oculta por moderación
-              </span>
-            </div>
-            <p className="text-[15px] leading-[1.5] text-pretty text-text-2">{own.body}</p>
-            <p className="mt-[10px] text-xs leading-[1.45] text-text-3">
+          <div className="flex flex-col gap-3 rounded-[var(--r-surface)] bg-surface-1 p-[18px]">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+              Oculta por moderación
+            </span>
+            <p className="text-[15px] leading-[1.55] text-pretty text-text-2">{own.body}</p>
+            <p className="text-[13px] leading-[1.45] text-text-2">
               Ya no aparece en el feed, y editarla no la vuelve a publicar.{" "}
               <button
                 type="button"
@@ -187,7 +173,7 @@ export function ReviewsBlock({
                   setError(null);
                   setSheet("edit");
                 }}
-                className="text-accent transition-opacity active:opacity-60"
+                className="font-semibold text-text transition-opacity active:opacity-60"
               >
                 Editarla
               </button>
@@ -201,8 +187,8 @@ export function ReviewsBlock({
             mark={mark}
             when={own.when}
             author={{
-              username: "",
-              initial: "T",
+              username: viewerName ?? "",
+              initial: (viewerName ?? "T").charAt(0).toUpperCase(),
               avatarHexes: viewerHexes,
               avatarUrl: viewerAvatarUrl,
             }}
@@ -215,25 +201,25 @@ export function ReviewsBlock({
             }}
           >
             {!viewerIsPublic && (
-              <p className="text-xs leading-[1.45] text-text-3">
+              <p className="text-[13px] leading-[1.45] text-text-2">
                 Solo tú la ves.{" "}
-                <Link href="/settings" className="text-accent transition-opacity active:opacity-60">
-                  Hazte público en Ajustes
+                <Link href="/settings" className="font-semibold text-text transition-opacity active:opacity-60">
+                  Haz público tu perfil en Ajustes
                 </Link>{" "}
-                y entra a la conversación.
+                para entrar a la conversación.
               </p>
             )}
           </ReviewCard>
         ))}
 
-      {error && !sheet && (
-        <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-hot">{error}</p>
-      )}
+      {error && !sheet && <p className="text-[14px] leading-[1.4] text-text-2">{error}</p>}
     </>
   );
 
+  if (total === 0 && !own && !unlocked && context.reviews.length === 0) return null;
+
   return (
-    <div className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3">
       <ReviewFeed
         catalogItemId={catalogItemId}
         initialReviews={context.reviews}
@@ -241,29 +227,29 @@ export function ReviewsBlock({
         canReport
         allowSpoiler={allowSpoiler}
         renderHeader={({ hasMore, loading, loadMore }) => (
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-              {total > 0 ? `Reseñas · ${total}` : "Reseñas"}
-            </span>
-            {hasMore && (
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="font-brand text-[24px] leading-[1.1] text-text">reseñas</h2>
+            {hasMore ? (
               <button
                 type="button"
                 onClick={loadMore}
                 disabled={loading}
-                className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-opacity active:opacity-60 disabled:opacity-50"
+                className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
               >
-                {loading ? "Cargando…" : "Ver todas"}
+                {loading ? "Cargando…" : `Ver las ${total}`}
               </button>
-            )}
+            ) : total > 0 ? (
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{total}</span>
+            ) : null}
           </div>
         )}
         pinned={pinned}
         emptyNote={
-          <p className="text-[14px] leading-[1.5] text-text-3">
-            {own
-              ? "Nadie más ha escrito todavía. Cuando lo hagan, aparecen aquí."
-              : "Nadie ha escrito todavía. Aquí empieza la conversación."}
-          </p>
+          own ? (
+            <p className="text-[14px] leading-[1.5] text-text-2">
+              Nadie más ha escrito todavía. Cuando lo hagan, aparecen aquí.
+            </p>
+          ) : null
         }
       />
 
@@ -281,34 +267,30 @@ export function ReviewsBlock({
       )}
 
       {sheet === "menu" && (
-        <Sheet onClose={() => setSheet(null)} label="Opciones de tu reseña">
-          <div className="font-display text-[18px] font-bold tracking-[-0.01em] text-text">
-            Tu reseña
-          </div>
-          <div className="mt-[14px] flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                setSheet("edit");
-              }}
-              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
-            >
-              Editar
-            </button>
-            {/* Two-tap confirm — a dialog to delete 280 characters would be
-                out of scale. */}
-            <button
-              type="button"
-              onClick={remove}
-              disabled={saving}
-              className="w-full rounded-[14px] bg-surface-2 px-4 py-[14px] text-left text-[14.5px] text-hot transition-colors hover:bg-surface-3 active:bg-white/[0.12]"
-            >
-              {armed ? "Toca de nuevo para eliminar" : "Eliminar"}
-            </button>
-          </div>
-        </Sheet>
+        <KuraSheet onClose={() => setSheet(null)} label="Opciones de tu reseña" className="px-5">
+          <h2 className="pb-2 pt-1 font-brand text-[22px] leading-[1.1] text-text">tu reseña</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setSheet("edit");
+            }}
+            className="flex min-h-[52px] w-full items-center text-left text-[16px] font-medium text-text transition-opacity active:opacity-60"
+          >
+            Editar
+          </button>
+          {/* Two-tap confirm — a dialog to delete 280 characters would be out
+              of scale. No red: the words say what happens. */}
+          <button
+            type="button"
+            onClick={remove}
+            disabled={saving}
+            className="flex min-h-[52px] w-full items-center text-left text-[16px] font-medium text-text transition-opacity active:opacity-60 disabled:opacity-40"
+          >
+            {armed ? "Toca de nuevo para borrarla" : "Borrar reseña"}
+          </button>
+        </KuraSheet>
       )}
-    </div>
+    </section>
   );
 }

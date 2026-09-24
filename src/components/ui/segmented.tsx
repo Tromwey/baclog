@@ -2,15 +2,16 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * The segmented pill (Revamp UI, 2026-09-03): a track of `rgba(255,255,255,.07)`
- * holding equal-width segments in mono-meta uppercase; the active segment is a
- * lighter fill (`.08`) and full text, the rest text-3. Borderless — the mock's
+ * The segmented pill. KURA (flujos-v2 02 filter, 2026-09-24): a `--glass-bg`
+ * track holding equal-width segments in Red Hat Mono 11 uppercase +.1em; the
+ * active segment is a `.1` white fill and `--text`, the rest `--text-2`.
+ * Borderless — the mock's
  * `--pill-line` is transparent in its default (borderless) state, and §7 bans
  * the hairline anyway.
  *
  * Two densities, both verbatim from the mock:
- *  - `tabs`    p 5 · gap 4 · py 9  · 10.5px — filters (Todos · Cine · Series…)
- *  - `actions` p 6 · gap 6 · py 11 · 10.5px with a state glyph — the reaction
+ *  - `tabs`    p 5 · gap 4 · py 10 · 11px — filters (Todos · Cine · Series…)
+ *  - `actions` p 6 · gap 6 · py 11 · 11px with a state glyph — the reaction
  *              row on an item (Me gustó · Obsesión · Completo)
  *
  * A segment is a Link when it has `href`, else a button; the control has no
@@ -67,7 +68,7 @@ export function Segmented({
   const seg =
     variant === "actions"
       ? "flex items-center justify-center gap-1.5 py-[11px]"
-      : "py-[9px] text-center";
+      : "py-2.5 text-center";
   const width = scrollable ? "flex-none px-4" : "flex-1 min-w-0";
   const multi = values !== undefined;
   const sliding = !multi && !scrollable;
@@ -77,14 +78,14 @@ export function Segmented({
     <div
       role={onSelect && !multi ? "tablist" : undefined}
       aria-label={ariaLabel}
-      className={`relative flex rounded-full bg-white/[0.07] ${track} ${
+      className={`relative flex rounded-full bg-[var(--glass-bg)] ${track} ${
         scrollable ? "bl-scroll overflow-x-auto" : ""
       } ${className}`}
     >
       {activeIndex >= 0 && (
         <span
           aria-hidden
-          className="pointer-events-none absolute rounded-full bg-white/[0.08] transition-transform duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
+          className="pointer-events-none absolute rounded-full bg-white/[0.1] transition-transform duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
           style={{
             top: pad,
             bottom: pad,
@@ -96,8 +97,8 @@ export function Segmented({
       )}
       {segments.map((s) => {
         const active = multi ? values.includes(s.key) : s.key === value;
-        const cls = `${seg} ${width} relative whitespace-nowrap rounded-full font-mono text-[10.5px] uppercase tracking-[0.1em] transition-colors duration-[var(--dur-fast)] active:bg-white/[0.12] ${
-          active ? `${sliding ? "" : "bg-white/[0.08] "}text-text` : "text-text-3"
+        const cls = `${seg} ${width} relative whitespace-nowrap rounded-full font-mono text-[11px] uppercase tracking-[0.1em] transition-colors duration-[var(--dur-fast)] active:bg-white/[0.12] ${
+          active ? `${sliding ? "" : "bg-white/[0.1] "}text-text` : "text-text-2"
         } ${s.className ?? ""}`;
         const body = (
           <>

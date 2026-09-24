@@ -39,6 +39,8 @@
      las tres excepciones deliberadas al modelo de ownership) están en AGENTS.md. -->
 
 ## Decisiones tomadas (y por qué)
+
+- **Lecturas cross-user nuevas con Kura (2026-09-24)** — misma postura que F3.10 (gate `publicAuthor` DENTRO de la query + lista blanca): `src/modules/social/people.ts` (onboarding "tu gente": perfiles públicos que obsesionan los mismos títulos que elegiste; devuelve handle, nombre, foto y el título compartido; completa con `getFollowSuggestions`). Además `modules/backlog/public.ts` expone dos agregados/catálogo más del perfil público: `followingCount` (conteo sobre `user_follow`, nunca la lista) y `obsessions` (títulos con `user_item.obsessed`, campos de catálogo). Lecturas PROPIAS nuevas (no cross-user): `(app)/descubrir/library-index.ts`, `(app)/item/[catalogItemId]/collections-index.ts`, las dos queries del loader en `backlogs/backlog-zoom-view.tsx`, `recap/recap-data.ts` — todas filtran por el usuario de sesión. `checkUsernameAction` (solo lectura) responde si un handle existe: no revela nada nuevo (la URL pública ya lo hace).
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
 
 ## En progreso

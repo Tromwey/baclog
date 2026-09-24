@@ -4,7 +4,7 @@ import type { MediaType } from "@/modules/cards/types";
 import { ItemStatus } from "./item-status";
 
 /**
- * Read-only backlog/lens row (HANDOFF §2): mono index · signal glyph · obra
+ * Read-only lens row (HANDOFF §2; Kura type sizes 2026-09-24): mono index · signal glyph · obra
  * title · media tag · chevron. Rows never edit inline — the gesture model is
  * tap-en-el-cuerpo = reproducir (deep-link via /api/links/resolve) and
  * chevron › = abrir el detalle/ticket. The two targets are SIBLINGS in a flex
@@ -13,7 +13,7 @@ import { ItemStatus } from "./item-status";
 
 /** Media tag copy (Spanish, rendered uppercase by the mono-meta style). */
 const MEDIA_LABEL: Record<MediaType, string> = {
-  film: "Film",
+  film: "Cine",
   series: "Serie",
   album: "Álbum",
 };
@@ -57,10 +57,10 @@ export function ItemRowReadonly({
           sourceCrossMediaRecId={sourceCrossMediaRecId}
         />
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="truncate font-serif text-xl italic text-text">
+          <span className="truncate font-brand text-[19px] italic text-text">
             {title}
           </span>
-          <span className="flex-none font-mono text-[8px] uppercase tracking-[0.1em] text-text-3">
+          <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">
             {MEDIA_LABEL[mediaType]}
           </span>
         </span>

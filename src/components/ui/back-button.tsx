@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BACK_PATH } from "@/components/glyph-paths";
+import { CHIP_44 } from "@/components/kura/components";
 import { StrokeIcon } from "./stroke-icon";
 
-import { glassChipClass } from "./glass";
-
-const CHIP = glassChipClass;
+// Kura (§componentes, 2026-09-24): Volver is the 44 glass chip with the
+// 18 / 2.2 chevron everywhere. The 38 recipe (glass.ts) stays for other chips.
+const CHIP = CHIP_44;
 
 /**
  * Circular glass back control — the app's ONE back affordance.
@@ -29,7 +30,7 @@ export function BackButton({
   className?: string;
 }) {
   const router = useRouter();
-  const icon = <StrokeIcon d={BACK_PATH} size={16} strokeWidth={2.4} />;
+  const icon = <StrokeIcon d={BACK_PATH} size={18} strokeWidth={2.2} />;
   if (href) {
     return (
       <Link href={href} aria-label="Volver" className={`${CHIP} ${className}`}>

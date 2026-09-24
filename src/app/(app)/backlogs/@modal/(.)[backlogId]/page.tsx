@@ -3,7 +3,7 @@ import { NotFoundError, UnauthorizedError } from "@/authz";
 import { BacklogZoomView, loadBacklogZoom } from "../../backlog-zoom-view";
 
 /**
- * The backlog detail as an intercepted overlay — a soft nav from /backlogs
+ * The collection (Kura · flujos-v2 03) as an intercepted overlay — a soft nav from /backlogs
  * lands here (URL becomes /backlogs/[id], shareable) while the list stays
  * mounted underneath. Same loader as the full-page twin. The fixed shell +
  * bl-zoom-in bloom live in this segment's layout.tsx so they play ONCE and
@@ -30,12 +30,6 @@ export default async function InterceptedBacklogZoom({
   }
 
   return (
-    <BacklogZoomView
-      backlog={data.backlog}
-      items={data.items}
-      coach={data.coach}
-      now={data.now}
-      zoom
-    />
+    <BacklogZoomView data={data} zoom />
   );
 }

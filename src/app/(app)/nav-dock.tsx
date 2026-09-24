@@ -6,7 +6,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -14,10 +13,9 @@ import {
 import { setNavDirection } from "./nav-direction";
 
 /**
- * The floating nav dock (M3.5 redesign, mock #p1) — three destinations in a
- * content-hugging glass pill: Backlogs · Discover · Perfil. Active = dark
- * inner pill + lima glyph (HANDOFF §7). It hides two different ways, on
- * purpose:
+ * The floating nav dock — four destinations in a content-hugging pill:
+ * Colecciones · Descubrir · Feed · Perfil (Kura, 2026-09-24). It hides two
+ * different ways, on purpose:
  *  - hard route boundaries (detail/full-bleed/export/admin) → `return null`,
  *    since the whole screen already unmounts on navigation.
  *  - ephemeral same-screen UI (a search input focused / an overlay open) →
@@ -66,19 +64,37 @@ export function useHideNavDock(active: boolean) {
   }, [active, api]);
 }
 
+/**
+ * The four tabs of the Kura dock (sistema de diseño §dock, flujos-v2 · NAV):
+ * Colecciones · Descubrir · Feed · Perfil. Glyphs verbatim from the frames'
+ * `NAV` paths (filled, 21 px). Routes keep their product names (/backlogs).
+ */
 const DESTINATIONS: {
   href: string;
   label: string;
-  Icon: () => ReactNode;
+  d: string;
   /** Extra prefixes that light this tab up — screens REACHED FROM it that
    *  aren't under its path (founder call: /settings lives behind Perfil's
    *  ajustes chip, so Perfil keeps the pill there). */
   also?: string[];
 }[] = [
-  { href: "/backlogs", label: "Backlogs", Icon: EstantesIcon },
-  { href: "/descubrir", label: "Discover", Icon: DiscoverIcon },
-  { href: "/feed", label: "Feed", Icon: FeedIcon },
-  { href: "/perfil", label: "Perfil", Icon: PerfilIcon, also: ["/settings"] },
+  {
+    href: "/backlogs",
+    label: "Colecciones",
+    d: "M5.7 4h12.6A1.7 1.7 0 0120 5.7v3.2a1.7 1.7 0 01-1.7 1.7H5.7A1.7 1.7 0 014 8.9V5.7A1.7 1.7 0 015.7 4zm0 9.4h12.6a1.7 1.7 0 011.7 1.7v3.2a1.7 1.7 0 01-1.7 1.7H5.7A1.7 1.7 0 014 18.3v-3.2a1.7 1.7 0 011.7-1.7z",
+  },
+  { href: "/descubrir", label: "Descubrir", d: "M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2z" },
+  {
+    href: "/feed",
+    label: "Feed",
+    d: "M8 7.8a4.2 4.2 0 110 8.4 4.2 4.2 0 010-8.4zm8 -.2h2.4a1.6 1.6 0 010 3.2H16a1.6 1.6 0 010-3.2zm0 5.6h.6a1.6 1.6 0 010 3.2H16a1.6 1.6 0 010-3.2z",
+  },
+  {
+    href: "/perfil",
+    label: "Perfil",
+    d: "M12 4.7a3.8 3.8 0 110 7.6 3.8 3.8 0 010-7.6zM5 20.5a7 7 0 0114 0z",
+    also: ["/settings"],
+  },
 ];
 
 function destinationIndex(pathname: string): number {
@@ -89,29 +105,24 @@ function destinationIndex(pathname: string): number {
   );
 }
 
-export function NavDock() {
+/**
+ * The Kura dock: `rgba(20,20,26,.5)` + blur 26 (saturate 1.7), the dark
+ * float shadow, 34 above the bottom edge (`--dock-offset`). Active tab = a
+ * `.1` white fill + `--text`; the rest `--text-3`. No accent in the dock —
+ * miel is spent once per screen, by the screen.
+ *
+ * Motion (§movimiento): a tab change is 0 ms. The fill does not slide; it
+ * answers the TAP (optimistic `pending`), not the navigation, so the dock
+ * never reads as dead while the destination renders.
+ *
+ * `feedDot` — "punto en Feed con notificaciones nuevas". The product has no
+ * notification signal yet, so the layout passes nothing and there's no dot;
+ * the slot is here for when there is.
+ */
+export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
   const pathname = usePathname();
-  // The dock is always present now (fixed z-10). The backlog zoom overlay is
-  // z-50 but trapped inside the content wrapper's z-10 stacking context, so
-  // the dock (a later sibling) keeps painting above it — that's the intended
-  // framing (mock #p2 shows the dock over the zoom). The context-hidden fade
-  // stays as an opt-in for any future ephemeral case.
   const hidden = useContext(HiddenCtx);
 
-  // The active pill is a SINGLE measured indicator that slides between
-  // destinations on navigation (founder ask, 2026-08-28) instead of each Link
-  // painting its own bg — a one-shot transition, which §7 allows (pulses are
-  // what's banned). Measured (offsetLeft/offsetWidth) because the pill is
-  // content-hugging: labels differ in width, so fractions won't do.
-  const listRef = useRef<HTMLDivElement>(null);
-  const [pill, setPill] = useState<{ x: number; w: number } | null>(null);
-  // The tap answers NOW: the pill and the lima glyph move on the press, not
-  // when the destination's server render lands (that wait read as a dead
-  // dock). `pending` is only believed while we're still on the route it was
-  // tapped from — once the pathname changes, the URL is the truth again, so
-  // a navigation that ends somewhere else (a redirect) self-corrects. Dropped
-  // during render (not in an effect) so coming BACK to that route later
-  // can't resurrect a stale tap.
   const [pending, setPending] = useState<{ from: string; index: number } | null>(
     null,
   );
@@ -120,33 +131,8 @@ export function NavDock() {
   const activeIndex =
     pending && pending.from === pathname ? pending.index : routeIndex;
 
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const measure = () => {
-      // Routes outside the four destinations (/settings, /recap…) keep the
-      // dock but have no active tab: the indicator fades away instead of
-      // parking on a wrong one.
-      if (activeIndex < 0) {
-        setPill(null);
-        return;
-      }
-      const el = list.querySelectorAll("a")[activeIndex] as
-        | HTMLElement
-        | undefined;
-      if (el) setPill({ x: el.offsetLeft, w: el.offsetWidth });
-    };
-    // First run happens pre-paint (useLayoutEffect), so the mount shows the
-    // pill already in place — only NAVIGATIONS animate. Re-measure on resize:
-    // the per-item padding steps at the 390px breakpoint.
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [activeIndex]);
-
-  // Hard route boundary (see the doc comment above): the Torre de Control
-  // (/admin) is a whole different screen, so the dock returns null — no
-  // post-hydration fade, no flash on a hard load.
+  // Hard route boundary: the Torre de Control (/admin) is a whole different
+  // screen, so the dock returns null — no post-hydration fade.
   if (pathname.startsWith("/admin")) return null;
 
   return (
@@ -154,27 +140,14 @@ export function NavDock() {
       aria-label="Navegación principal"
       className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] z-10 flex justify-center"
     >
-      {/* Content-hugging pill (mock #p1): no border, no grain, no fixed width.
-          Active destination = dark inner pill + lima glyph (HANDOFF §7 — never
-          a lima background). */}
       <div
-        ref={listRef}
-        className={`relative flex gap-1.5 rounded-full bg-white/[0.07] p-1.5 backdrop-blur-[22px] backdrop-saturate-[1.6] transition-[opacity,transform] duration-300 ease-out ${
+        className={`flex gap-1.5 rounded-full bg-[rgba(20,20,26,.5)] p-1.5 shadow-float backdrop-blur-[26px] backdrop-saturate-[1.7] transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"
             : "pointer-events-auto translate-y-0 opacity-100"
         }`}
       >
-        {/* The sliding active pill. Absolutely positioned under the Links
-            (they're `relative`, so they paint above it). */}
-        {pill && (
-          <span
-            aria-hidden
-            className="absolute bottom-1.5 left-0 top-1.5 rounded-full bg-white/[0.08] transition-[transform,width] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none"
-            style={{ transform: `translateX(${pill.x}px)`, width: pill.w }}
-          />
-        )}
-        {DESTINATIONS.map(({ href, label, Icon }, i) => {
+        {DESTINATIONS.map(({ href, label, d }, i) => {
           const active = i === activeIndex;
           return (
             <Link
@@ -182,78 +155,31 @@ export function NavDock() {
               href={href}
               aria-current={active ? "page" : undefined}
               onClick={(e) => {
-                // Carousel direction: which way the destinations are ordered.
-                const from = routeIndex;
-                setNavDirection(from >= 0 && from !== i ? Math.sign(i - from) : 0);
-                // Modified clicks open elsewhere — this tab isn't going anywhere.
+                // A tab change enters in 0 ms (page-slide.tsx).
+                setNavDirection(routeIndex !== i ? 1 : 0);
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 setPending({ from: pathname, index: i });
               }}
-              // 22px, not the 3-destination 28px: the fourth destination has
-              // to fit a 390px viewport with the pill still content-hugging
-              // (F3.10 design 1j — 349px wide, was 317). Below 390 (iPhone
-              // SE1, page zoom) even 22px overflows a centered fixed pill, so
-              // narrow viewports drop to 14px instead of clipping the ends.
+              // 22 px sides at ≥390 (the frame); 14 below so four tabs still
+              // fit a 360 viewport without clipping the ends.
               className={`bl-press-sm relative flex flex-col items-center gap-[3px] rounded-full px-3.5 py-2.5 min-[390px]:px-[22px] ${
-                active ? "text-accent" : "text-text-3"
+                active ? "bg-white/[0.1] text-text" : "text-text-3"
               }`}
             >
-              <Icon />
-              {/* Hanken, sentence-case — UPPERCASE is reserved to mono-meta
-                  (sistema-diseno §3), so nav labels don't shout. */}
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d={d} />
+              </svg>
               <span className="font-sans text-[10px] font-medium">{label}</span>
+              {href === "/feed" && feedDot && (
+                <span
+                  aria-label="Novedades en tu feed"
+                  className="absolute right-[18px] top-2 h-1.5 w-1.5 rounded-full bg-text"
+                />
+              )}
             </Link>
           );
         })}
       </div>
     </nav>
-  );
-}
-
-/* Bespoke FILLED glyphs (verbatim from mock #p1's dock markup) — deliberately
-   not the app's stroke-based lucide set; the dock is its own treatment. Active
-   state is pill + color only, so there's no stroke weight to animate. */
-
-function EstantesIcon() {
-  return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <rect x="4" y="4" width="16" height="6.6" rx="1.7" />
-      <rect x="4" y="13.4" width="16" height="6.6" rx="1.7" />
-    </svg>
-  );
-}
-
-function DiscoverIcon() {
-  return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2z" />
-    </svg>
-  );
-}
-
-/**
- * F3.10 — disco ADN + dos barras: una persona y su actividad.
- *
- * Geometry from `Revamp UI.dc.html` (`ICON.feed`): the bars start at x=16, so
- * they clear the disc by 3.8u. The older Feed v3 frame draws the same icon
- * with the bars starting at 14.4 — the two mocks disagree, and the Revamp doc
- * wins because it is the one that redraws the dock on screens 02/04/09.
- */
-function FeedIcon() {
-  return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="8" cy="12" r="4.2" />
-      <rect x="16" y="7.6" width="4" height="3.2" rx="1.6" />
-      <rect x="16" y="13.2" width="2.2" height="3.2" rx="1.6" />
-    </svg>
-  );
-}
-
-function PerfilIcon() {
-  return (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="12" cy="8.5" r="3.8" />
-      <path d="M5 20.5a7 7 0 0114 0z" />
-    </svg>
   );
 }

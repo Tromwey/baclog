@@ -1,17 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { glassChipClass } from "@/components/ui/glass";
-import { StrokeIcon } from "@/components/ui/stroke-icon";
+import { CHIP_44 } from "@/components/kura/components";
 import { BACK_PATH } from "@/components/glyph-paths";
 
 /**
- * The hero's back chip (Revamp UI 06) — the shared 38px glass chip recipe with
- * the mock's ‹ glyph (16px, stroke 2.4), i.e. exactly what BackButton draws.
- * It is its own component for one reason: router.back() like BackButton, but
- * the item detail HIDES the dock, so a deep-linked visit with no in-app
- * history would leave the chip doing nothing with no other way out — it falls
- * back to /backlogs instead.
+ * Volver (§componentes · navegación): 44 px glass at 64/24, the ‹ at 18 with
+ * stroke 2.2 — the Kura BackChip's look. A button, not the primitive's Link,
+ * for one reason: router.back() returns to wherever the ficha was opened from,
+ * and the ficha HIDES the dock, so a deep-linked visit with no in-app history
+ * falls back to /backlogs instead of doing nothing.
  */
 export function BackChip() {
   const router = useRouter();
@@ -23,9 +21,11 @@ export function BackChip() {
         else router.push("/backlogs");
       }}
       aria-label="Volver"
-      className={glassChipClass}
+      className={CHIP_44}
     >
-      <StrokeIcon d={BACK_PATH} size={16} strokeWidth={2.4} />
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d={BACK_PATH} />
+      </svg>
     </button>
   );
 }

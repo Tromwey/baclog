@@ -65,31 +65,30 @@ export function SheetClose({
 
 /**
  * The app's one sheet. Every modal surface goes through here so they can't
- * drift apart again — before this, the same idea existed in four slightly
- * different sets of numbers (radius 28 vs 22, two scrims, two glass alphas).
+ * drift apart again.
  *
  * ALWAYS portaled to <body>: the (app) content wrapper is a stacking context,
  * so a `fixed` sheet rendered inside it gets trapped UNDER the floating dock
  * (AGENTS.md). Portaling is the fix; never lower the dock's z-index.
  *
+ * KURA (sistema de diseño §hoja + flujos-v2, 2026-09-24): the sheet is a flat
+ * `--s2` surface floating 8 px inside the screen edges, radius 36, the dark
+ * `--sh-float` depth shadow, a 36×5 grabber — and behind it a real scrim
+ * (`rgba(5,5,6,.62)`, the frames' value). No glass, no grain, no border.
+ * "Nunca dos hojas a la vez": callers swap a sheet's CONTENT (a sub-step)
+ * instead of opening a second one on top.
+ *
  * Three variants:
  * - `bottom` (default) — routine sheets: pick something, name something.
- *   Floating clear of the screen edges, thumb-reachable.
  * - `center` — the rare celebration: centered, so it reads as an event.
  * - `cover` — centered, with NO padding: for a sheet whose first child is
  *   full-bleed artwork (F3.8 Novedades). The child owns its own insets.
  *
- * SURFACE (founder call 2026-08-28): bottom and center wear the DOCK's glass
- * (bl-dock-glass + --shadow-glass) so every floating control in the app is
- * the same material. The scrim behind is a LIGHT dim only — no backdrop-blur
- * and no heavy darkening (founder correction, same day): the glass IS the
- * modal, and it only reads as glass when live content stays visible behind it
- * for the panel's own blur to transluce — exactly how the dock earns its look
- * over the auras. `cover` stays opaque: artwork needs a solid backing to read
- * against, and the grain overlay is skipped there for the same reason.
+ * `pad` (bottom only): `form` = the frames' 10/20/26 (title + field + solid
+ * action), `menu` = 10/12/26 (rows that carry their own 10 px inset).
  *
- * Borderless and glow-free by construction (HANDOFF §7): the only depth is a
- * dark neutral shadow (exempt).
+ * Borderless and glow-free by construction: the only depth is a dark neutral
+ * shadow (exempt).
  *
  * MOTION (`useSheetMotion`): a spring entrance and the same path back out —
  * `onClose` fires AFTER the exit, so callers keep their `{open && <Sheet/>}`
@@ -102,6 +101,7 @@ export function SheetClose({
 export function Sheet(props: {
   onClose: () => void;
   variant?: "bottom" | "center" | "cover";
+  pad?: "form" | "menu";
   /** Accessible name for the dialog. */
   label: string;
   children: ReactNode;
@@ -116,11 +116,13 @@ export function Sheet(props: {
 function SheetBody({
   onClose,
   variant = "bottom",
+  pad: padKind = "form",
   label,
   children,
 }: {
   onClose: () => void;
   variant?: "bottom" | "center" | "cover";
+  pad?: "form" | "menu";
   /** Accessible name for the dialog. */
   label: string;
   children: ReactNode;
@@ -152,21 +154,25 @@ function SheetBody({
   const scrollerRef = useRef<HTMLDivElement>(null);
   useScrollerTouchAction(scrollerRef);
 
-  const pad = bottom ? "p-[22px]" : cover ? "" : "p-6";
+  const pad = bottom
+    ? padKind === "menu"
+      ? "px-3 pb-[calc(26px+env(safe-area-inset-bottom))]"
+      : "px-5 pb-[calc(26px+env(safe-area-inset-bottom))]"
+    : cover
+      ? ""
+      : "p-6";
 
   return createPortal(
     <div
       onClick={dismiss}
       className={`fixed inset-0 z-50 flex justify-center ${
-        bottom
-          ? "items-end p-5 pb-[calc(20px+env(safe-area-inset-bottom))]"
-          : "items-center p-6"
+        bottom ? "items-end p-2" : "items-center p-6"
       }`}
       style={
         keyboardInset > 0
           ? {
               paddingBottom: bottom
-                ? `calc(${keyboardInset}px + 20px + env(safe-area-inset-bottom))`
+                ? `calc(${keyboardInset}px + 8px)`
                 : `calc(${keyboardInset}px + 24px)`,
             }
           : undefined
@@ -177,7 +183,7 @@ function SheetBody({
       <div
         ref={scrimRef}
         aria-hidden
-        className="absolute inset-0 bg-[rgba(4,4,6,0.32)]"
+        className="absolute inset-0 bg-[rgba(5,5,6,0.62)]"
       />
       <div
         ref={panelRef}
@@ -186,22 +192,22 @@ function SheetBody({
         aria-label={label}
         onClick={(e) => e.stopPropagation()}
         {...panelHandlers}
-        className={`relative flex max-h-full w-full max-w-md touch-none flex-col overflow-hidden rounded-[22px] will-change-transform ${
+        className={`relative flex max-h-full w-full max-w-md touch-none flex-col overflow-hidden will-change-transform ${
           cover
-            ? "bg-surface-1 shadow-[var(--shadow-card)]"
-            : "bl-dock-glass shadow-[var(--shadow-glass)]"
+            ? "rounded-[var(--r-screen)] bg-surface-1 shadow-float"
+            : "rounded-[36px] bg-surface-2 shadow-float"
         }`}
       >
-        {!cover && <div aria-hidden className="bl-grain" />}
         {bottom && (
-          // The grabber: the promise that this sheet follows the finger. It
-          // sits in the panel's own top padding, so no layout moves for it.
+          // The grabber (36×5, the frames' `rgba(255,255,255,.18)`): the
+          // promise that this sheet follows the finger. In flow, 10 px from
+          // the top, so the content starts where the frames start it.
           <div
             data-sheet-handle
             aria-hidden
-            className="absolute inset-x-0 top-0 z-10 flex h-[22px] justify-center pt-[9px]"
+            className="flex flex-none justify-center pb-2.5 pt-2.5"
           >
-            <span className="h-1 w-[38px] rounded-full bg-white/20" />
+            <span className="h-[5px] w-9 rounded-full bg-white/[0.18]" />
           </div>
         )}
         <div

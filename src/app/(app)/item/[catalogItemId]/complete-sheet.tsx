@@ -1,143 +1,153 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
-import { createPortal } from "react-dom";
+import {
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
+import {
+  clearVerdictAction,
+  setObsessedAction,
+  setStatusAction,
+} from "@/app/actions/backlog-item-actions";
 import { completeItemAction, type CompleteReaction } from "@/app/actions/complete-actions";
-import { CoverTile, coverAspect } from "@/components/cover-tile";
-import { PaletteGlow } from "@/components/ui/palette-glow";
-import { Segmented } from "@/components/ui/segmented";
-import { StateGlyph } from "@/components/ui/state-glyph";
-import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
-import { useSheetMotion } from "@/hooks/use-sheet-motion";
-import type { MediaType } from "@/modules/catalog/types";
+import { SOLID_BUTTON } from "@/components/kura/components";
+import { BG, mixHex } from "@/components/kura/tint";
+import { CHECK_FILL_PATH, FLAME_PATH, LIKE_PATH } from "@/components/glyph-paths";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
-import { DONE_VERB, KIND_LABEL, todayShort } from "./labels";
+import { KuraSheet, useKuraSheetDismiss } from "./kura-sheet";
+import { TriangleGlyph } from "./toast";
 import { useItemReaction, type ItemVerdictValue } from "./reaction-state";
 
 /**
- * 08 · Completar (Revamp UI, 2026-09-03) — marking a title complete, saying
- * what you thought, and (optionally) the review, in ONE full-screen overlay
- * instead of a bottom sheet: it's the one moment the app asks for a
- * paragraph, so it gets the whole screen and the title's own light behind it.
+ * 26a · Completar (Kura, flujos-v2 `RX` / `mkS('sa','fill')`) — a floating
+ * sheet whose whole question is ONE slider with three magnetic stops:
  *
- * Portaled to <body> (the (app) wrapper traps fixed surfaces under the dock —
- * AGENTS.md) and hydration-guarded like Sheet. Escape closes; the keyboard
- * inset pads the column so the field and the ticket row stay reachable.
+ *   Completo → Me gusta → Me obsesiona
  *
- * One server call on Publicar (completeItemAction): status → reaction →
- * review. The three reaction choices are the mock's — "No me gustó" lives
- * ONLY here, never on the page's row. A review needs a reaction (the F3.9
- * unlock rule, re-checked by the action): with text and no choice, the sheet
- * says so inline and keeps Publicar off instead of letting the server refuse.
+ * The track fills up to the thumb in the stop's own colour (mixed 55% toward
+ * --bg); the 56 px thumb carries the glyph, in the state hue; the label above
+ * it grows a little at the obsession. Drag anywhere on the track (1:1, pointer
+ * captured), release snaps to the nearest stop; the dots are tap targets; ←/→
+ * move one stop. A tick of haptics on each new stop where the device has it.
  *
- * 280, not the mock's 600: REVIEW_MAX_LENGTH is the column and the action's
- * limit — flagged for the founder rather than silently widened here.
+ * Then the optional review (280, the column's real limit), the spoiler switch
+ * (films/series only) and the solid Guardar. "Quitar completado" when the
+ * title is already complete.
+ *
+ * WRITES — `completeItemAction` stays the one call for status + reaction +
+ * review (every rule it composes still applies). Stop → reaction:
+ *   Me obsesiona → "obsessed" (sets the flag, leaves the verdict)
+ *   Me gusta     → "liked"    (verdict liked, clears the flag)
+ *   Completo     → null       (status only) and THEN, if the title was liked
+ *                  or obsessed, those are cleared: moving the slider down to
+ *                  Completo means "just completed".
+ * Kura has no "no me gustó": a legacy dislike stays on the row untouched (it
+ * reads as Completo here, and it keeps the review unlocked, F3.9).
+ *
+ * The review needs a reaction (F3.9, re-checked by saveReviewAction): with
+ * text on the plain Completo stop the sheet says so and keeps Guardar off
+ * rather than letting the server refuse.
+ *
+ * On an unsaved title, Guardar first asks "guardar en" (pick mode) — this
+ * sheet stays mounted and hidden meanwhile (one sheet at a time).
  */
 
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
+type Stop = 0 | 1 | 2;
+
+const STOPS: { id: "completed" | "liked" | "obsessed"; label: string; d: string; color: string; hex: string }[] = [
+  { id: "completed", label: "Completo", d: CHECK_FILL_PATH, color: "var(--st-completed)", hex: "#a0cba0" },
+  { id: "liked", label: "Me gusta", d: LIKE_PATH, color: "var(--st-liked)", hex: "#9cbae1" },
+  { id: "obsessed", label: "Me obsesiona", d: FLAME_PATH, color: "var(--st-obsessed)", hex: "#ec8e76" },
+];
+
+/** Mounted from the page; renders the sheet while the provider says it's open. */
+export function CompleteSheetHost({ allowSpoiler }: { allowSpoiler: boolean }) {
+  const { completeOpen, closeComplete, saveSheet } = useItemReaction();
+  if (!completeOpen) return null;
+  return (
+    <KuraSheet onClose={closeComplete} label="Completar" hidden={saveSheet === "pick"} className="px-3">
+      <CompleteBody allowSpoiler={allowSpoiler} />
+    </KuraSheet>
   );
 }
 
-export interface CompleteItem {
-  id: string;
-  title: string;
-  year: number | null;
-  mediaType: MediaType;
-  posterUrl: string | null;
-  paletteHex: string[] | null;
-}
-
-/** Mounted from the page; renders the sheet while the provider says it's open. */
-export function CompleteSheetHost({
-  item,
-  allowSpoiler,
-}: {
-  item: CompleteItem;
-  allowSpoiler: boolean;
-}) {
-  const { completeOpen } = useItemReaction();
-  if (!completeOpen) return null;
-  return <CompleteSheet item={item} allowSpoiler={allowSpoiler} />;
-}
-
-function CompleteSheet({
-  item,
-  allowSpoiler,
-}: {
-  item: CompleteItem;
-  allowSpoiler: boolean;
-}) {
+function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
   const router = useRouter();
-  const hydrated = useHydrated();
-  const keyboardInset = useKeyboardInset();
+  const dismiss = useKuraSheetDismiss();
   const {
     catalogItemId,
     verdict,
     obsessed,
+    completed,
     ownReview,
     setOwnReview,
     settleFromComplete,
     ensureInLibrary,
-    closeComplete,
+    showToast,
   } = useItemReaction();
 
-  // Pre-select from the current state (obsessed › verdict) and pre-fill the
-  // existing review, so re-opening on a completed title is an edit.
-  const [reaction, setReaction] = useState<CompleteReaction>(
-    obsessed ? "obsessed" : verdict,
-  );
+  const [value, setValue] = useState<number>(obsessed ? 2 : verdict === "liked" ? 1 : 0);
+  const [dragging, setDragging] = useState(false);
+  const stop = Math.round(value) as Stop;
+  const lastStop = useRef<Stop>(stop);
+  const trackRef = useRef<HTMLDivElement>(null);
+
   const [body, setBody] = useState(ownReview?.body ?? "");
-  const [hasSpoiler, setHasSpoiler] = useState(
-    allowSpoiler && (ownReview?.hasSpoiler ?? false),
-  );
-  const [shareTicket, setShareTicket] = useState(true);
+  const [hasSpoiler, setHasSpoiler] = useState(allowSpoiler && (ownReview?.hasSpoiler ?? false));
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
-  // A full-screen surface, so no drag — but it still rises in and leaves the
-  // way it came (Cancelar / Escape). Publicar closes at once: the page under
-  // it is about to change anyway.
-  const { panelRef, dismiss } = useSheetMotion({
-    onClose: closeComplete,
-    enterOffset: 24,
-    enterScale: 1,
-    draggable: false,
-    enabled: hydrated,
-  });
+  function set(v: number) {
+    const s = Math.round(v) as Stop;
+    if (s !== lastStop.current) {
+      lastStop.current = s;
+      try {
+        navigator.vibrate?.(s === 2 ? 18 : 8);
+      } catch {
+        // no haptics here
+      }
+    }
+    setValue(v);
+  }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
-    };
-    window.addEventListener("keydown", onKey);
-    // The page behind must not scroll under a full-screen surface.
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [dismiss]);
+  function at(e: PointerEvent<HTMLDivElement>): number {
+    const el = trackRef.current;
+    if (!el) return value;
+    const r = el.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - r.left - 32) / (r.width - 64))) * 2;
+  }
 
+  function onKey(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+      e.preventDefault();
+      set(Math.min(2, stop + 1));
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+      e.preventDefault();
+      set(Math.max(0, stop - 1));
+    }
+  }
+
+  const X = STOPS[stop];
   const over = body.length > REVIEW_MAX_LENGTH;
   const hasText = body.trim().length > 0;
-  const needsReaction = hasText && reaction === null;
-  const canPublish = !saving && !over && !needsReaction;
+  // After saving, the review is unlocked iff there's a reaction left: the
+  // slider's, or a legacy dislike the plain Completo stop leaves in place.
+  const needsReaction = hasText && stop === 0 && verdict !== "disliked";
+  const canSave = !saving && !over && !needsReaction;
 
-  function publish() {
-    if (!canPublish) return;
+  function save() {
+    if (!canSave) return;
     setError(null);
     startSaving(async () => {
-      const inLibrary = await ensureInLibrary();
-      if (!inLibrary) {
-        setError("Elige un backlog para guardar el título.");
+      if (!(await ensureInLibrary())) {
+        setError("Elige una colección para guardarla.");
         return;
       }
+      const reaction: CompleteReaction = stop === 2 ? "obsessed" : stop === 1 ? "liked" : null;
       const res = await completeItemAction({
         catalogItemId,
         reaction,
@@ -149,19 +159,30 @@ function CompleteSheet({
           res.error === "link"
             ? "Los enlaces no van en una reseña. Quítalo y vuelve a intentarlo."
             : res.error === "locked"
-              ? "Elige qué te pareció para publicar la reseña."
-              : "No se pudo publicar. Tu texto sigue aquí — inténtalo otra vez.",
+              ? "Para publicar tu reseña, elige Me gusta o Me obsesiona."
+              : "No se pudo guardar. Tu texto sigue aquí: inténtalo otra vez.",
         );
         return;
       }
 
-      // Mirror the one write locally (the provider is NOT remounted on
-      // refresh — see reaction-state.tsx).
-      const nextVerdict: ItemVerdictValue =
-        reaction === "obsessed" || reaction === null ? verdict : reaction;
-      const nextObsessed =
-        reaction === "obsessed" ? true : reaction === null ? obsessed : false;
-      settleFromComplete({ verdict: nextVerdict, obsessed: nextObsessed });
+      let nextVerdict: ItemVerdictValue = verdict;
+      let nextObsessed = obsessed;
+      if (stop === 2) nextObsessed = true;
+      else if (stop === 1) {
+        nextVerdict = "liked";
+        nextObsessed = false;
+      } else {
+        // Down to plain Completo: drop what the slider no longer says.
+        if (obsessed) {
+          await setObsessedAction(catalogItemId, false).catch(() => null);
+          nextObsessed = false;
+        }
+        if (verdict === "liked") {
+          await clearVerdictAction(catalogItemId).catch(() => null);
+          nextVerdict = null;
+        }
+      }
+      settleFromComplete({ verdict: nextVerdict, obsessed: nextObsessed, completed: true });
       if (hasText) {
         setOwnReview({
           id: ownReview?.id ?? "own",
@@ -173,197 +194,197 @@ function CompleteSheet({
           hidden: ownReview?.hidden ?? false,
         });
       }
-      closeComplete();
+      dismiss();
       router.refresh();
-      if (shareTicket) router.push(`/item/${item.id}/card`);
     });
   }
 
-  if (!hydrated) return null;
+  function uncomplete() {
+    setError(null);
+    startSaving(async () => {
+      const res = await setStatusAction(catalogItemId, "on_my_radar").catch(() => null);
+      if (!res || "error" in res) {
+        setError("No se pudo quitar el completado. Inténtalo otra vez.");
+        return;
+      }
+      settleFromComplete({ verdict, obsessed, completed: false });
+      dismiss();
+      showToast("Quitaste el completado.", {
+        label: "Deshacer",
+        run: () => {
+          void setStatusAction(catalogItemId, "completed").then((r) => {
+            if (!("error" in r)) settleFromComplete({ verdict, obsessed, completed: true });
+          });
+        },
+      });
+    });
+  }
 
-  const kind = KIND_LABEL[item.mediaType];
-  const meta = [kind, item.year, `${DONE_VERB[item.mediaType]} el ${todayShort()}`]
-    .filter(Boolean)
-    .join(" · ");
-  const palette = item.paletteHex ?? [];
-  const bar1 = palette[0] ?? "var(--surface-3)";
-  const bar2 = palette[1] ?? palette[0] ?? "var(--surface-2)";
+  // 26a geometry: the thumb's left edge travels 4 → (100% − 60px); the fill
+  // ends 64 px past the start so it always wraps the thumb.
+  const frac = value / 2;
+  const edge = `calc((100% - 64px) * ${frac} + 64px)`;
+  const ease = dragging ? "" : " 320ms cubic-bezier(.2,.9,.3,1.25)";
 
-  return createPortal(
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Completar"
-      className="fixed inset-0 z-50 overflow-hidden bg-bg text-text"
-    >
-      <PaletteGlow hexes={palette} opacity={0.45} blur={90} className="-inset-[60px]" />
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5 px-2.5 pb-4 pt-1">
+        <h2 className="font-brand text-[22px] leading-[1.1] text-text">Listo. ¿Cómo te dejó?</h2>
+      </div>
 
-      <div
-        className="bl-scroll relative flex h-full flex-col gap-[18px] overflow-y-auto overscroll-contain px-5 pb-[30px] pt-[calc(12px+env(safe-area-inset-top))]"
-        style={
-          keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 16}px` } : undefined
-        }
-      >
-        <header className="flex flex-none items-center justify-between">
-          <button
-            type="button"
-            onClick={dismiss}
-            className="py-1 text-[14px] text-text-2 transition-opacity active:opacity-60"
+      <div className="flex flex-col items-center gap-3 px-1 pb-1 pt-1.5">
+        <div className="flex h-11 items-center">
+          <span
+            aria-hidden
+            className="font-brand text-[28px] leading-none text-text transition-transform duration-[280ms] ease-[cubic-bezier(.2,.9,.3,1.4)] motion-reduce:transition-none"
+            style={{ transform: stop === 2 ? "scale(1.06)" : "scale(1)" }}
           >
-            Cancelar
-          </button>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
-            Completar
+            {X.label}
           </span>
-          <button
-            type="button"
-            onClick={publish}
-            disabled={!canPublish}
-            className="py-1 text-[14px] font-semibold text-accent transition-opacity active:opacity-60 disabled:opacity-40"
-          >
-            {saving ? "Publicando…" : "Publicar"}
-          </button>
-        </header>
-
-        <div className="flex flex-none items-center gap-3.5">
-          <CoverTile
-            posterUrl={item.posterUrl}
-            paletteHex={item.paletteHex}
-            alt=""
-            className={`w-16 ${coverAspect(item.mediaType)}`}
-          />
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="font-serif text-[30px] italic leading-[1.02] text-pretty">
-              {item.title}
-            </span>
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
-              {meta}
-            </span>
-          </div>
         </div>
 
-        <div className="flex flex-none flex-col gap-2.5">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-            ¿Qué te pareció?
-          </span>
-          <Segmented
-            variant="actions"
-            ariaLabel="¿Qué te pareció?"
-            value={reaction}
-            onSelect={(key) =>
-              setReaction((prev) =>
-                prev === key ? null : (key as Exclude<CompleteReaction, null>),
-              )
+        <div
+          ref={trackRef}
+          role="slider"
+          tabIndex={0}
+          aria-label="Cómo te dejó"
+          aria-valuemin={0}
+          aria-valuemax={2}
+          aria-valuenow={stop}
+          aria-valuetext={X.label}
+          onKeyDown={onKey}
+          onPointerDown={(e) => {
+            // The slider owns this drag, not the sheet's drag-to-dismiss.
+            e.stopPropagation();
+            try {
+              e.currentTarget.setPointerCapture(e.pointerId);
+            } catch {
+              // pointer already gone
             }
-            segments={[
-              {
-                key: "disliked",
-                label: "No me gustó",
-                icon: <StateGlyph kind="disliked" size={11} />,
-              },
-              { key: "liked", label: "Me gustó", icon: <StateGlyph kind="liked" size={11} /> },
-              {
-                key: "obsessed",
-                label: "Obsesión",
-                icon: <StateGlyph kind="obsessed" size={10} />,
-              },
-            ]}
-          />
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-            Reseña · opcional
-          </span>
-          <div className="flex min-h-[120px] flex-1 rounded-[18px] bg-[var(--glass-bg)] p-4">
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="¿Qué se te quedó?"
-              aria-label="Tu reseña"
-              className="h-full w-full resize-none bg-transparent text-[16px] leading-[1.5] text-pretty text-text caret-accent outline-none placeholder:text-text-3"
-            />
-          </div>
-          <div className="flex items-center justify-between px-1">
-            {allowSpoiler ? (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={hasSpoiler}
-                onClick={() => setHasSpoiler((v) => !v)}
-                className="flex items-center gap-2.5 transition-opacity active:opacity-60"
-              >
-                <Toggle on={hasSpoiler} />
-                <span className="text-[13px] text-text-2">Contiene spoiler</span>
-              </button>
-            ) : (
-              <span />
-            )}
-            <span
-              className={`font-mono text-[10.5px] uppercase tracking-[0.1em] ${
-                over ? "text-hot" : "text-text-3"
-              }`}
-            >
-              {body.length} / {REVIEW_MAX_LENGTH}
-            </span>
-          </div>
-          {needsReaction && !error && (
-            <p className="px-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2">
-              Elige qué te pareció para publicar la reseña
-            </p>
-          )}
-          {error && (
-            <p className="px-1 font-mono text-[10.5px] uppercase tracking-[0.1em] text-hot">
-              {error}
-            </p>
-          )}
-        </div>
-
-        <button
-          type="button"
-          role="switch"
-          aria-checked={shareTicket}
-          onClick={() => setShareTicket((v) => !v)}
-          className="bl-press-lg flex flex-none items-center gap-3 rounded-[18px] bg-surface-1 px-3.5 py-3 text-left"
+            setDragging(true);
+            set(at(e));
+          }}
+          onPointerMove={(e) => {
+            if (dragging) set(at(e));
+          }}
+          onPointerUp={() => {
+            setDragging(false);
+            setValue((v) => Math.round(v));
+          }}
+          onPointerCancel={() => {
+            setDragging(false);
+            setValue((v) => Math.round(v));
+          }}
+          className="relative h-16 cursor-pointer select-none self-stretch rounded-full bg-white/[0.07] outline-none touch-none focus-visible:bg-white/[0.1]"
         >
           <span
             aria-hidden
-            className="flex h-14 w-11 flex-none flex-col justify-between rounded-[6px] bg-bg p-[5px]"
+            className="pointer-events-none absolute inset-0 rounded-full motion-reduce:transition-none!"
+            style={{
+              background: mixHex(X.hex, BG, 0.55),
+              clipPath: `inset(0 calc(100% - ${edge}) 0 0 round 999px)`,
+              transition: `background 200ms${ease ? `, clip-path${ease}` : ""}`,
+            }}
+          />
+          {STOPS.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              tabIndex={-1}
+              aria-label={s.label}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => set(i)}
+              className="absolute top-1/2 -ml-[22px] -mt-[22px] flex h-11 w-11 items-center justify-center"
+              style={{ left: `calc((100% - 64px) * ${i / 2} + 32px)` }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden style={{ fill: i <= value + 0.02 ? "var(--text)" : "rgba(255,255,255,.3)", transition: "fill 200ms" }}>
+                <path d={s.d} />
+              </svg>
+            </button>
+          ))}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1 flex h-14 w-14 items-center justify-center rounded-full shadow-[0_6px_16px_rgba(0,0,0,0.5)] motion-reduce:transition-none!"
+            style={{
+              left: `calc((100% - 64px) * ${frac} + 4px)`,
+              background: X.color,
+              transform: stop === 2 ? "scale(1.12)" : "scale(1)",
+              transition: `${ease ? `left${ease}, ` : ""}background 200ms, transform 260ms cubic-bezier(.2,.9,.3,1.4)`,
+            }}
           >
-            <span className="font-mono text-[6px] tracking-[0.08em] text-text-3">TICKET</span>
-            <span className="flex h-1">
-              <span className="flex-1" style={{ background: bar1 }} />
-              <span className="flex-1" style={{ background: bar2 }} />
-            </span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill={BG}>
+              <path d={X.d} />
+            </svg>
           </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-            <span className="text-[13.5px] font-semibold text-text">
-              Compartir ticket al publicar
-            </span>
-            <span className="text-[12px] text-text-3">Se genera con tu paleta</span>
-          </span>
-          <Toggle on={shareTicket} />
-        </button>
+        </div>
       </div>
-    </div>,
-    document.body,
+
+      <div className="relative mx-1 mt-3.5">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Escribe tu reseña (opcional)"
+          aria-label="Tu reseña"
+          rows={3}
+          className="block min-h-24 w-full resize-none rounded-[var(--r-surface)] bg-white/[0.06] px-4 py-3.5 text-[15px] leading-[1.5] text-pretty text-text caret-text outline-none transition-colors placeholder:text-text-2 focus:bg-white/[0.09]"
+        />
+        {(hasText || over) && (
+          <span className={`pointer-events-none absolute bottom-2.5 right-3.5 font-mono text-[11px] ${over ? "text-text" : "text-text-3"}`}>
+            {body.length} / {REVIEW_MAX_LENGTH}
+          </span>
+        )}
+      </div>
+
+      {allowSpoiler && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={hasSpoiler}
+          onClick={() => setHasSpoiler((v) => !v)}
+          className="mx-1 mt-1.5 flex min-h-[52px] items-center gap-3.5 px-1 text-left"
+        >
+          <span className="flex-1 text-[16px] font-medium text-text">Contiene spoilers</span>
+          <Switch on={hasSpoiler} />
+        </button>
+      )}
+
+      {(needsReaction || over || error) && (
+        <p role="status" className="mx-1 flex items-start gap-2 px-1 pt-1 text-[14px] leading-[1.4] text-text-2">
+          {error && <TriangleGlyph />}
+          {error ??
+            (over
+              ? `Tu reseña pasa de ${REVIEW_MAX_LENGTH} caracteres. Recórtala para guardarla.`
+              : "Para publicar tu reseña, elige Me gusta o Me obsesiona.")}
+        </p>
+      )}
+
+      <button type="button" onClick={save} disabled={!canSave} className={`${SOLID_BUTTON} mx-1 mt-3.5`}>
+        {saving ? "Guardando…" : "Guardar"}
+      </button>
+
+      {completed && (
+        <button
+          type="button"
+          onClick={uncomplete}
+          disabled={saving}
+          className="mt-1 flex min-h-11 items-center self-center px-3 text-[15px] font-medium text-text-2 transition-opacity active:opacity-60 disabled:opacity-40"
+        >
+          Quitar completado
+        </button>
+      )}
+    </div>
   );
 }
 
-/** The mock's 36×22 switch: surface-2 track + text-3 knob off, accent + bg knob on. */
-function Toggle({ on }: { on: boolean }) {
+/** The 51×31 switch of the system: `--text` track when on, the knob in --bg. */
+function Switch({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
-      className={`relative block h-[22px] w-9 flex-none rounded-full transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] ${
-        on ? "bg-accent" : "bg-surface-2"
-      }`}
+      className={`relative block h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 ${on ? "bg-text" : "bg-white/[0.16]"}`}
     >
       <span
-        className={`absolute top-[2px] rounded-full transition-[left,width,height] duration-[var(--dur-base)] ease-[var(--ease-out)] ${
-          on ? "left-4 h-[18px] w-[18px] bg-bg" : "left-[2px] h-4 w-4 bg-text-3"
-        }`}
+        className={`absolute top-[2px] h-[27px] w-[27px] rounded-full transition-[left,background-color] duration-200 ${on ? "left-[22px] bg-bg" : "left-[2px] bg-text"}`}
       />
     </span>
   );

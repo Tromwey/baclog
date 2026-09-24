@@ -10,16 +10,15 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { PaletteGlow, Segmented, StrokeIcon, type Segment } from "@/components/ui";
-import { CoverTile, coverAspect } from "@/components/cover-tile";
-import { BADGE_CHECK_PATH, PLUS_PATH } from "@/components/glyph-paths";
 import {
   addItemAction,
   removeMembershipAction,
 } from "@/app/actions/backlog-item-actions";
 import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { extractPalette } from "@/modules/cards/palette";
-import type { CatalogSearchResult, SearchTab } from "@/modules/catalog/types";
+import type { CatalogSearchResult } from "@/modules/catalog/types";
+import { GLASS_BUTTON } from "@/components/kura/components";
+import { CHEVRON_DOWN_PATH } from "@/components/glyph-paths";
 import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
@@ -28,22 +27,26 @@ import {
 } from "@/hooks/use-sheet-motion";
 import { useHideNavDock } from "@/app/(app)/nav-dock";
 import type { SearchBacklog } from "./descubrir-screen";
-import { workMeta } from "./discover-home";
+import type { LibraryIndex } from "./library";
+import {
+  CheckStroke,
+  CloseGlyph,
+  Highlight,
+  KindPills,
+  PlusGlyph,
+  RowCover,
+  SKELETON_PULSE,
+  SearchGlyph,
+  TriangleGlyph,
+  workMeta,
+  type KindTab,
+} from "./kura-bits";
 import {
   FirstItemSheet,
   type FirstItemCelebration,
 } from "./first-item-sheet";
 
-type Target = { id: string; name: string; paletteHex: string[] };
-
-const TABS: { key: SearchTab; label: string }[] = [
-  { key: "all", label: "Todo" },
-  { key: "film", label: "Cine" },
-  { key: "series", label: "Series" },
-  { key: "album", label: "Música" },
-];
-
-const NEW_KEY = "__new";
+type Target = { id: string; name: string };
 
 /** False on the server, true in the browser — the createPortal guard. */
 function useHydrated(): boolean {
@@ -54,17 +57,31 @@ function useHydrated(): boolean {
   );
 }
 
+const keyOf = (backlogId: string, catalogItemId: string) =>
+  `${backlogId}:${catalogItemId}`;
+
 /**
- * Buscar / agregar título (Revamp UI, 2026-09-03 — mock 07): a full-height
- * sheet over Discover. Behind it the page keeps rendering under the TARGET
- * backlog's glow and a scrim; the sheet is glass (rgba(18,18,24,.7) + blur 30
- * saturate 1.5), top-anchored at 96px, with the search field, the kind tabs,
- * the results and — pinned at the bottom — "Agregar a", the backlog picker.
+ * Agregar títulos a una colección (Kura · flujos-v2 27a/27b). A tall `--s1`
+ * sheet 54 from the top, radius 36: "AGREGAR A" + the collection's name in
+ * Newsreader 28 and a glass "Listo · N"; the 48 glass field; the format pills
+ * (Todo · Cine · Series · Música, the selected one solid); rows 72 with the
+ * cover (40×60 poster / 44×44 disc), the italic title with the typed text
+ * bold, the mono meta and a round + that turns into a solid ✓. Every add says
+ * "Agregado a {colección} · Deshacer" at the foot for 5 s.
  *
- * Portaled to <body> (AGENTS.md: the app shell's content wrapper is a stacking
- * context that would trap a fixed sheet under the dock) and the dock hides
- * while it's open. Adds go to a VISIBLE, changeable target backlog, and the ＋
- * toggles: tap ✓ to remove — a mis-add is undone without leaving.
+ * CONTRACT (kept for other areas — the collection's "Agregar títulos" lands
+ * here via `/descubrir?buscar=1&to={id}`): same props as before; `library`
+ * and `onMembershipChange` are optional extras Descubrir passes so titles
+ * already in the collection start checked and its own index stays true.
+ *
+ * The target is visible and changeable (tap the name) — adds are never a
+ * mystery — and ✓ toggles back: a mis-add is undone without leaving. Portaled
+ * to <body> (AGENTS.md: the content wrapper traps a fixed sheet under the
+ * dock) and the dock hides while it's open. The first title of an account gets
+ * the closing moment AFTER this sheet leaves — never two sheets at a time.
+ *
+ * "Para esta colección · por lo que ya tiene" (27a's suggestions) has no
+ * source in the product yet: the idle sheet says what to type instead.
  */
 export function SearchSheet({
   inputRef,
@@ -72,36 +89,54 @@ export function SearchSheet({
   backlogs,
   pinnedBacklogId,
   libraryEmpty,
+  library,
+  onMembershipChange,
   onClose,
 }: {
   /** Owned by the parent so the tap handler can focus it inside the gesture. */
   inputRef: RefObject<HTMLInputElement | null>;
-  /** From ?q= — a search restored after closing an item (re-runs on mount). */
+  /** A search restored after closing an item (re-runs on mount). */
   initialQuery: string;
   backlogs: SearchBacklog[];
   /**
-   * From ?to= — the backlog the user came FROM, pre-selected as the add target.
+   * The collection the user came FROM, pre-selected as the add target.
    * Resolved against `backlogs` (the owner's own server-loaded list), so a
-   * foreign or stale id simply doesn't match and falls back to the first:
-   * no extra query, no enumeration oracle, assertOwnsBacklog still the choke
+   * foreign or stale id simply doesn't match and falls back to the first: no
+   * extra query, no enumeration oracle, assertOwnsBacklog still the choke
    * point on the add itself.
    */
   pinnedBacklogId: string | null;
   /** The account has no titles yet — a successful add here is the first ever. */
   libraryEmpty: boolean;
+  /** Optional: the caller's memberships, so what's already in starts as ✓. */
+  library?: LibraryIndex;
+  /** Optional: told about every membership this sheet creates (id) or drops (null). */
+  onMembershipChange?: (
+    catalogItemId: string,
+    backlogId: string,
+    backlogItemId: string | null,
+  ) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const hydrated = useHydrated();
   const keyboardInset = useKeyboardInset();
   useHideNavDock(true);
-  // The app-wide sheet motion: rises in, leaves the way it came, and the
-  // handle is a real one — drag the sheet down (or flick it) to dismiss.
-  // A short 56px rise rather than from under the edge: the field is focused
-  // inside the opening tap, and iOS pans the page to chase an input that is
-  // still off-screen. `onClose` fires after the exit has played.
+
+  // Set when the first title of the account lands; the sheet's own exit then
+  // hands over to the celebration instead of closing outright.
+  const [celebration, setCelebration] = useState<FirstItemCelebration | null>(null);
+  const [celebrating, setCelebrating] = useState(false);
+  const celebrationRef = useRef<FirstItemCelebration | null>(null);
+
+  // The app-wide sheet motion: rises in, leaves the way it came, drags down to
+  // dismiss. A short 56px rise: the field is focused inside the opening tap,
+  // and iOS pans the page to chase an input that is still off-screen.
   const { panelRef, scrimRef, dismiss, panelHandlers } = useSheetMotion({
-    onClose,
+    onClose: () => {
+      if (celebrationRef.current) setCelebrating(true);
+      else onClose();
+    },
     enterOffset: 56,
     enterScale: 1,
     enabled: hydrated,
@@ -110,60 +145,49 @@ export function SearchSheet({
   useScrollerTouchAction(resultsRef, hydrated);
 
   const [query, setQuery] = useState(initialQuery);
-  const [tab, setTab] = useState<SearchTab>("all");
+  const [tab, setTab] = useState<KindTab>("all");
   const [results, setResults] = useState<CatalogSearchResult[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
     initialQuery.trim().length >= 2 ? "loading" : "idle",
   );
-  // catalogItemId -> the created backlogItem row id, so tapping ✓ can remove it.
-  const [added, setAdded] = useState<Record<string, string>>({});
-  // catalogItemIds with an add/remove in flight. A Set (not one shared flag) so
-  // each row owns its pending state — adding item A never touches B's button.
+  const [attempt, setAttempt] = useState(0);
+  // `${backlogId}:${catalogItemId}` → the membership id this session created
+  // (string) or removed (null). Absent = whatever `library` says.
+  const [overrides, setOverrides] = useState<Record<string, string | null>>({});
+  const [addsThisVisit, setAddsThisVisit] = useState(0);
+  // Rows with an add/remove in flight — per row, so adding A never touches B.
   const [pending, setPending] = useState<Set<string>>(() => new Set());
-  // Session target backlog — shown + changeable so adds aren't a mystery.
   const [options, setOptions] = useState<SearchBacklog[]>(backlogs);
   const [target, setTarget] = useState<Target | null>(() => {
     const pinned =
       (pinnedBacklogId && backlogs.find((b) => b.id === pinnedBacklogId)) ||
       backlogs[0];
-    return pinned
-      ? { id: pinned.id, name: pinned.name, paletteHex: pinned.paletteHex }
-      : null;
+    return pinned ? { id: pinned.id, name: pinned.name } : null;
   });
-  // catalogItemId whose add just failed — the row says so instead of quietly
-  // snapping back to ＋, which read as "nothing happened".
-  const [failed, setFailed] = useState<string | null>(null);
-  const [celebration, setCelebration] = useState<FirstItemCelebration | null>(
-    null,
-  );
-  const [newOpen, setNewOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(backlogs.length === 0);
+  const [newOpen, setNewOpen] = useState(backlogs.length === 0);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ id: number; catalogItemId: string; backlogId: string; name: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Once per mount, even if the user undoes the add and re-adds — the sheet is
-  // a first-time moment, not a per-add confirmation.
-  const celebrated = useRef(false);
   const fieldRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const newInputRef = useRef<HTMLInputElement>(null);
 
-  // Fallback for a mount that didn't come from the search-field tap (the
-  // handler focuses inside the gesture, the only path iOS opens a keyboard
-  // for) — e.g. a ?buscar=1 arrival. Skipped on a restored search: you came
-  // back to READ those results, and a keyboard would cover them.
+  // Fallback for a mount that didn't come from a tap (a ?buscar=1 arrival).
+  // Skipped on a restored search: you came back to READ those results.
   useEffect(() => {
-    if (initialQuery) return;
+    if (initialQuery || newOpen) return;
     const input = inputRef.current;
     if (input && document.activeElement !== input) input.focus();
-    // Only ever on mount — a later re-render must not re-grab focus.
+    // Only ever on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // iOS scrolls the document to clear the keyboard on its own and (in a
-  // standalone PWA) never scrolls back — keep the field row on screen.
+  // iOS scrolls the document to clear the keyboard and (standalone PWA) never
+  // scrolls back — keep the field row on screen.
   useKeyboardScrollGuard(inputRef, fieldRef);
 
-  // Escape closes, matching every other dismissible surface in the app.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") dismiss();
@@ -172,18 +196,15 @@ export function SearchSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [dismiss]);
 
-  // The picker scrolls; make sure the active backlog is in view once the
-  // portal exists (on a ?buscar=1 arrival the first render is the SSR null).
-  useEffect(() => {
-    if (!hydrated) return;
-    pickerRef.current
-      ?.querySelector<HTMLElement>('[aria-selected="true"]')
-      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  }, [hydrated]);
-
   useEffect(() => {
     if (newOpen) newInputRef.current?.focus();
   }, [newOpen]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast((x) => (x?.id === toast.id ? null : x)), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     const q = query.trim();
@@ -208,25 +229,30 @@ export function SearchSheet({
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [query, tab]);
+  }, [query, tab, attempt]);
 
-  // Stamp the live query onto THIS history entry before pushing the item, so
-  // the item's ✕ (router.back) returns to these same results. Native
-  // replaceState is the supported way to sync the URL without a re-render
-  // (Next: "Native History API"); router.replace would re-run the page.
+  /** The membership of `catalogItemId` in the current target, if any. */
+  const membershipIn = (catalogItemId: string): string | null => {
+    if (!target) return null;
+    const k = keyOf(target.id, catalogItemId);
+    if (k in overrides) return overrides[k];
+    return (
+      library?.byTitle[catalogItemId]?.find((m) => m.backlogId === target.id)
+        ?.backlogItemId ?? null
+    );
+  };
+
+  // On Descubrir, stamp the live query on THIS history entry before pushing
+  // the item, so the item's back lands on the same results. Anywhere else the
+  // URL belongs to the host page and is left alone.
   const openItem = (catalogItemId: string) => {
     const q = query.trim();
-    if (q) {
-      window.history.replaceState(
-        null,
-        "",
-        `/descubrir?q=${encodeURIComponent(q)}`,
-      );
+    if (q.length >= 2 && window.location.pathname === "/descubrir") {
+      window.history.replaceState(null, "", `/descubrir?q=${encodeURIComponent(q)}`);
     }
     router.push(`/item/${catalogItemId}`);
   };
 
-  // Flip a single row's pending flag, leaving every other row untouched.
   const setRowPending = (id: string, on: boolean) =>
     setPending((p) => {
       const next = new Set(p);
@@ -235,72 +261,88 @@ export function SearchSheet({
       return next;
     });
 
-  // Tap ＋ to add to the target backlog; tap ✓ to remove it again (undo).
+  const record = (backlogId: string, catalogItemId: string, id: string | null) => {
+    setOverrides((o) => ({ ...o, [keyOf(backlogId, catalogItemId)]: id }));
+    onMembershipChange?.(catalogItemId, backlogId, id);
+  };
+
+  // Tap + to add to the target; tap ✓ to take it out again.
   const toggle = async (r: CatalogSearchResult) => {
     const id = r.catalogItemId;
-    if (pending.has(id)) return; // ignore repeat taps on THIS row while in flight
-    const existingItemId = added[id];
-    if (!existingItemId && !target) {
-      // No target yet (the user has no backlogs) → create one first.
+    if (pending.has(id)) return;
+    if (!target) {
+      setPickerOpen(true);
       setNewOpen(true);
       return;
     }
+    const t = target;
+    const existing = membershipIn(id);
     setRowPending(id, true);
-    setFailed((f) => (f === id ? null : f)); // a retry clears its own error
+    setFailed((f) => (f === id ? null : f));
     try {
-      if (existingItemId) {
-        await removeMembershipAction(existingItemId);
-        setAdded((a) => {
-          const next: Record<string, string> = {};
-          for (const [k, v] of Object.entries(a)) {
-            if (k !== id) next[k] = v;
-          }
-          return next;
-        });
-      } else if (target) {
-        // Palette is cover-derived + cached on catalog_item; only extract when
-        // this title has none yet (the result carries the cached one).
+      if (existing) {
+        await removeMembershipAction(existing);
+        record(t.id, id, null);
+        setAddsThisVisit((n) => Math.max(0, n - 1));
+        setToast((x) => (x?.catalogItemId === id ? null : x));
+      } else {
+        // Palette is cover-derived + cached on catalog_item: extract only when
+        // this title has none yet.
         const needsPalette = !r.paletteHex || r.paletteHex.length === 0;
         const paletteHex =
           needsPalette && r.posterUrl ? await extractPalette(r.posterUrl) : [];
         const res = await addItemAction({
-          backlogId: target.id,
+          backlogId: t.id,
           catalogItemId: id,
           paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
         });
-        const itemId = "id" in res ? res.id : null;
-        if (itemId) {
-          setAdded((a) => ({ ...a, [id]: itemId }));
-          // First title of the account (the library was empty when this sheet
-          // mounted) → the closing sheet, once. A duplicate returns the
-          // existing membership id, so re-adding can't re-trigger it: `added`
-          // already holds every id this session put in.
-          if (libraryEmpty && !celebrated.current) {
-            celebrated.current = true;
-            setCelebration({
-              title: r.title,
-              mediaType: r.mediaType,
-              year: r.year,
-              posterUrl: r.posterUrl,
-              paletteHex:
-                paletteHex.length > 0 ? paletteHex : (r.paletteHex ?? []),
-              backlogId: target.id,
-              backlogName: target.name,
-            });
-          }
-        } else {
+        const newId = "id" in res ? res.id : undefined;
+        if (!newId) {
           setFailed(id);
+          return;
+        }
+        record(t.id, id, newId);
+        setAddsThisVisit((n) => n + 1);
+        setToast({ id: Date.now(), catalogItemId: id, backlogId: t.id, name: t.name });
+        if (libraryEmpty && !celebrationRef.current && !celebration) {
+          const c: FirstItemCelebration = {
+            title: r.title,
+            mediaType: r.mediaType,
+            year: r.year,
+            posterUrl: r.posterUrl,
+            paletteHex: paletteHex.length > 0 ? paletteHex : (r.paletteHex ?? []),
+            backlogId: t.id,
+            backlogName: t.name,
+          };
+          celebrationRef.current = c;
+          setCelebration(c);
         }
       }
     } catch {
-      // Add/remove failed: don't fake success. The row falls back to its prior
-      // state (idle ＋ if it wasn't added), and clearing pending re-enables the
-      // tap — a failed add is retryable, never stuck mid-state. Removals stay
-      // silent (the row simply keeps its ✓); only a failed ADD gets the line,
-      // because that's the one the user was told would be saved.
-      if (!existingItemId) setFailed(id);
+      // Don't fake success: the row keeps its prior state and stays tappable.
+      // Only a failed ADD says so — that's the one the user was told would save.
+      if (!existing) setFailed(id);
     } finally {
       setRowPending(id, false);
+    }
+  };
+
+  const undoToast = async () => {
+    if (!toast) return;
+    const { catalogItemId, backlogId } = toast;
+    setToast(null);
+    const k = keyOf(backlogId, catalogItemId);
+    const id = overrides[k];
+    if (!id) return;
+    setRowPending(catalogItemId, true);
+    try {
+      await removeMembershipAction(id);
+      record(backlogId, catalogItemId, null);
+      setAddsThisVisit((n) => Math.max(0, n - 1));
+    } catch {
+      // Left as it is; the ✓ still toggles it out.
+    } finally {
+      setRowPending(catalogItemId, false);
     }
   };
 
@@ -313,57 +355,39 @@ export function SearchSheet({
       const res = await createBacklogAction({ name });
       const id = "id" in res ? res.id : null;
       if (id) {
-        // A new backlog has no palette yet — the lima-only ADN fallback the
-        // shelf list uses, so the glow never goes dark.
-        const fresh: SearchBacklog = { id, name, itemCount: 0, paletteHex: ["#D8FF3E"] };
+        // A new collection has no cover yet, so no colour (§color: "sin
+        // portada no hay color").
+        const fresh: SearchBacklog = { id, name, itemCount: 0, paletteHex: [] };
         setOptions((o) => [fresh, ...o]);
-        setTarget({ id, name, paletteHex: fresh.paletteHex });
+        setTarget({ id, name });
         setNewName("");
         setNewOpen(false);
+        setPickerOpen(false);
+        inputRef.current?.focus();
       }
     } catch {
-      // swallow
+      // The field stays filled; "Crear" can be tapped again.
     } finally {
       setCreating(false);
     }
   };
 
-  const pick = (key: string) => {
-    if (key === NEW_KEY) {
-      setNewOpen((o) => !o);
-      return;
-    }
-    const b = options.find((o) => o.id === key);
-    if (b) {
-      setTarget({ id: b.id, name: b.name, paletteHex: b.paletteHex });
-      setNewOpen(false);
-    }
-  };
-
-  const segments: Segment[] = [
-    ...options.map((b) => ({ key: b.id, label: b.name })),
-    { key: NEW_KEY, label: "+ Nuevo" },
-  ];
-
   if (!hydrated) return null;
+
+  if (celebrating && celebration) {
+    return <FirstItemSheet item={celebration} onDismiss={onClose} />;
+  }
+
+  const q = query.trim();
 
   return createPortal(
     <div className="fixed inset-0 z-50">
-      {/* The target backlog's light and a scrim — the page keeps rendering
-          behind. One layer, so both fade together as the sheet is dragged away. */}
       <div ref={scrimRef} className="absolute inset-0">
-        <PaletteGlow
-          hexes={target?.paletteHex ?? []}
-          angle={110}
-          opacity={0.25}
-          blur={90}
-          className="inset-0"
-        />
         <button
           type="button"
           aria-label="Cerrar"
           onClick={dismiss}
-          className="absolute inset-0 bg-black/50"
+          className="absolute inset-0 bg-[rgba(5,5,6,0.62)]"
         />
       </div>
 
@@ -371,127 +395,251 @@ export function SearchSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Buscar y agregar título"
+        aria-label={target ? `Agregar a ${target.name}` : "Agregar títulos"}
         {...panelHandlers}
-        className="absolute inset-x-0 bottom-0 top-24 mx-auto flex max-w-md touch-none flex-col gap-[18px] rounded-t-[32px] bg-[rgba(18,18,24,.7)] px-5 pt-3 shadow-[var(--shadow-glass)] backdrop-blur-[30px] backdrop-saturate-[1.5] will-change-transform"
-        style={
-          keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined
-        }
+        className="absolute inset-x-0 bottom-0 top-[calc(54px+env(safe-area-inset-top))] mx-auto flex max-w-md touch-none flex-col overflow-hidden rounded-t-[36px] bg-surface-1 will-change-transform"
+        style={keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined}
       >
-        {/* The handle: a real tap target around the 38×4 bar — and a real
-            handle: it drags the sheet (a tap still closes). */}
         <button
           type="button"
           data-sheet-handle
           onClick={dismiss}
           aria-label="Cerrar"
-          className="-my-2 flex h-6 items-center self-center px-4"
+          className="flex h-[19px] flex-none items-end justify-center self-center px-4"
         >
-          <span className="h-1 w-[38px] rounded-full bg-white/20" />
+          <span className="h-[5px] w-9 rounded-full bg-white/[0.18]" />
         </button>
 
-        <div
-          ref={fieldRef}
-          className="flex items-center gap-2.5 rounded-full bg-white/[0.07] px-4 py-3"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            aria-hidden
-            className="flex-none text-text-2"
+        <div className="flex flex-none items-center justify-between gap-3 px-5 pb-3.5 pt-2">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            aria-expanded={pickerOpen}
+            className="flex min-w-0 flex-col gap-0.5 text-left"
           >
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="M20 20l-4-4" />
-          </svg>
-          <input
-            type="search"
-            ref={inputRef}
-            value={query}
-            onChange={(e) => {
-              const v = e.target.value;
-              setQuery(v);
-              if (v.trim().length < 2) {
-                setResults([]);
-                setState("idle");
-              } else {
-                setState("loading");
-              }
-            }}
-            placeholder="Películas, series, álbumes…"
-            aria-label="Búsqueda universal"
-            enterKeyHint="search"
-            // 16px (the mock says 15) on purpose: iOS Safari auto-zooms the
-            // page when a focused input is <16px, and this one is focused the
-            // moment it mounts. Keep it ≥16px.
-            className="min-w-0 flex-1 bg-transparent text-[16px] caret-accent outline-none placeholder:text-text-3"
-          />
-          <span className="ml-auto max-w-[38%] flex-none truncate font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
-            → {target?.name ?? "elige un backlog"}
-          </span>
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+              Agregar a
+            </span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-display text-[28px] leading-[1.05] text-text">
+                {target?.name ?? "elige una colección"}
+              </span>
+              <svg
+                width={16}
+                height={16}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+                className={`flex-none text-text-2 transition-transform ${pickerOpen ? "rotate-180" : ""}`}
+              >
+                <path d={CHEVRON_DOWN_PATH} />
+              </svg>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="min-h-11 flex-none rounded-full bg-[var(--glass-bg)] px-[18px] text-[16px] font-semibold text-text bl-press hover:bg-white/[0.12]"
+          >
+            {addsThisVisit > 0 ? `Listo · ${addsThisVisit}` : "Listo"}
+          </button>
         </div>
 
-        <Segmented
-          segments={TABS}
+        {pickerOpen && (
+          <div className="flex flex-none flex-col gap-2.5 pb-3.5">
+            <div role="listbox" aria-label="Colección destino" className="bl-scroll flex gap-2 overflow-x-auto px-5">
+              {options.map((b) => {
+                const on = b.id === target?.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    role="option"
+                    aria-selected={on}
+                    onClick={() => {
+                      setTarget({ id: b.id, name: b.name });
+                      setPickerOpen(false);
+                      setNewOpen(false);
+                    }}
+                    className={`min-h-9 flex-none rounded-full px-3.5 text-[15px] font-medium transition-colors ${
+                      on ? "bg-text text-bg" : "bg-white/[0.08] text-text hover:bg-white/[0.12]"
+                    }`}
+                  >
+                    {b.name}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setNewOpen((o) => !o)}
+                className="flex min-h-9 flex-none items-center gap-1.5 rounded-full bg-white/[0.08] pl-2.5 pr-3.5 text-[15px] font-medium text-text hover:bg-white/[0.12]"
+              >
+                <PlusGlyph size={16} />
+                Nueva colección
+              </button>
+            </div>
+            {newOpen && (
+              <form onSubmit={createAndSelect} className="bl-rise-soft flex gap-2 px-5">
+                <input
+                  ref={newInputRef}
+                  value={newName}
+                  maxLength={60}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder={options.length === 0 ? "Tu primera colección" : "Nombre de la colección"}
+                  aria-label="Nombre de la colección"
+                  className="h-12 min-w-0 flex-1 rounded-[16px] bg-[var(--glass-bg)] px-4 text-[16px] text-text caret-accent outline-none transition-colors placeholder:text-text-3 focus:bg-white/[0.11]"
+                />
+                <button
+                  type="submit"
+                  disabled={creating || !newName.trim()}
+                  className="h-12 flex-none rounded-full bg-text px-5 text-[16px] font-semibold text-bg bl-press disabled:opacity-40"
+                >
+                  Crear
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        <div ref={fieldRef} className="flex-none px-5">
+          <label className="flex h-12 items-center gap-2.5 rounded-full bg-white/[0.08] px-4 text-text-2">
+            <SearchGlyph />
+            <input
+              type="search"
+              ref={inputRef}
+              value={query}
+              onChange={(e) => {
+                const v = e.target.value;
+                setQuery(v);
+                if (v.trim().length < 2) {
+                  setResults([]);
+                  setState("idle");
+                } else {
+                  setState("loading");
+                }
+              }}
+              placeholder="Buscar títulos"
+              aria-label="Buscar títulos"
+              enterKeyHint="search"
+              autoComplete="off"
+              // 16px on purpose: iOS Safari zooms into a focused input below 16.
+              className="min-w-0 flex-1 bg-transparent text-[16px] text-text caret-accent outline-none placeholder:text-text-2 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setResults([]);
+                  setState("idle");
+                  inputRef.current?.focus();
+                }}
+                aria-label="Borrar búsqueda"
+                className="-mr-2 flex h-11 w-9 flex-none items-center justify-center"
+              >
+                <CloseGlyph />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <KindPills
           value={tab}
-          onSelect={(k) => setTab(k as SearchTab)}
-          ariaLabel="Tipo"
+          onSelect={(k) => {
+            setTab(k);
+            if (query.trim().length >= 2) setState("loading");
+          }}
+          tone="solid"
+          className="flex-none px-5 pb-1.5 pt-3.5"
         />
 
         <div
           ref={resultsRef}
-          className="bl-scroll -mx-5 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-5"
+          className="bl-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(96px+env(safe-area-inset-bottom))] pt-1.5"
         >
-          {state === "loading" &&
-            Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex animate-pulse items-center gap-3.5">
-                <span className="h-16 w-12 flex-none rounded-[9px] bg-white/[0.06]" />
-                <span className="flex min-w-0 flex-1 flex-col gap-2">
-                  <span className="h-4 w-3/5 rounded-full bg-white/[0.06]" />
-                  <span className="h-2.5 w-2/5 rounded-full bg-white/[0.05]" />
-                </span>
-                <span className="h-[34px] w-[34px] flex-none rounded-full bg-white/[0.06]" />
-              </div>
-            ))}
+          {state === "idle" && (
+            <p className="px-5 pt-4 text-[15px] leading-[1.5] text-text-2">
+              Escribe el nombre de una película, una serie o un álbum.
+            </p>
+          )}
+
+          {state === "loading" && (
+            <div aria-busy="true" aria-label="Buscando" className={SKELETON_PULSE}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex min-h-[72px] items-center gap-3.5 px-5">
+                  <span className="flex h-[60px] w-11 flex-none items-center justify-center">
+                    <span className="block h-[60px] w-10 rounded-[var(--r-cover-s)] bg-surface-2" />
+                  </span>
+                  <span className="flex flex-1 flex-col gap-2.5">
+                    <span className="block h-4 w-[70%] rounded-[6px] bg-surface-2" />
+                    <span className="block h-2.5 w-[45%] rounded-[5px] bg-surface-2" />
+                  </span>
+                  <span className="block h-11 w-11 flex-none rounded-full bg-surface-2" />
+                </div>
+              ))}
+            </div>
+          )}
+
           {state === "error" && (
-            <p className="py-8 text-center text-sm text-hot">
-              Algo falló buscando. Intenta de nuevo.
-            </p>
+            <div className="flex flex-col items-start gap-3 px-5 pt-6">
+              <span className="text-text-2">
+                <TriangleGlyph />
+              </span>
+              <p className="text-[15px] leading-[1.5] text-text-2">
+                No pudimos buscar. Revisa tu conexión y vuelve a intentarlo.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setState("loading");
+                  setAttempt((n) => n + 1);
+                }}
+                className={GLASS_BUTTON}
+              >
+                Reintentar
+              </button>
+            </div>
           )}
+
           {state === "done" && results.length === 0 && (
-            <p className="py-8 text-center text-sm text-text-3">
-              Nada por aquí. Prueba otro nombre.
-            </p>
+            <div className="flex flex-col gap-2 px-5 pt-6">
+              <p className="font-display text-[26px] leading-[1.1] text-text text-balance break-words">
+                nada con “{q}”.
+              </p>
+              <p className="text-[15px] leading-[1.5] text-text-2">
+                Revisa cómo se escribe, o prueba con otro nombre.
+              </p>
+            </div>
           )}
-          {state !== "loading" &&
+
+          {state === "done" &&
             results.map((r) => {
-              const isAdded = !!added[r.catalogItemId];
+              const inTarget = membershipIn(r.catalogItemId) !== null;
               const busy = pending.has(r.catalogItemId);
               return (
-                <div key={r.catalogItemId} className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-3.5">
+                <div key={r.catalogItemId} className="flex flex-col">
+                  <div className="flex min-h-[72px] items-center gap-3.5 px-5">
                     <button
                       type="button"
                       onClick={() => openItem(r.catalogItemId)}
                       className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-opacity active:opacity-70"
                     >
-                      <CoverTile
+                      <RowCover
                         posterUrl={r.posterUrl}
                         paletteHex={r.paletteHex}
-                        radius="rounded-[9px]"
-                        shadow="shadow-[0_12px_26px_-10px_rgba(0,0,0,.7)]"
-                        className={`w-12 ${coverAspect(r.mediaType)}`}
+                        mediaType={r.mediaType}
+                        size="add"
                       />
-                      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                        <span className="truncate font-serif text-[19px] italic leading-[1.1]">
-                          {r.title}
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="truncate font-serif text-[18px] italic leading-[1.15] text-text">
+                          <Highlight text={r.title} query={q} />
                         </span>
-                        <span className="truncate font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-                          {searchMeta(r)}
+                        <span className="truncate font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+                          {workMeta(r)}
                         </span>
                       </span>
                     </button>
@@ -499,31 +647,28 @@ export function SearchSheet({
                       type="button"
                       onClick={() => toggle(r)}
                       disabled={busy}
+                      aria-pressed={inTarget}
                       aria-label={
-                        isAdded ? `Quitar ${r.title}` : `Agregar ${r.title}`
+                        inTarget
+                          ? `Quitar ${r.title} de ${target?.name ?? "la colección"}`
+                          : `Agregar ${r.title} a ${target?.name ?? "una colección"}`
                       }
-                      aria-pressed={isAdded}
-                      className={`bl-press-sm flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full disabled:opacity-60 ${
-                        isAdded
-                          ? "bg-accent text-bg"
-                          : "bg-[var(--glass-bg)] text-text hover:bg-white/[0.12]"
+                      className={`flex h-11 w-11 flex-none items-center justify-center rounded-full transition-[background-color,color,transform] duration-200 disabled:opacity-60 ${
+                        inTarget
+                          ? "scale-[1.04] bg-text text-bg"
+                          : "bg-white/[0.1] text-text hover:bg-white/[0.14]"
                       }`}
                     >
-                      <StrokeIcon
-                        d={isAdded ? BADGE_CHECK_PATH : PLUS_PATH}
-                        size={14}
-                        strokeWidth={2.6}
-                      />
+                      {inTarget ? <CheckStroke /> : <PlusGlyph />}
                     </button>
                   </div>
-                  {/* A failed add used to revert in silence, which reads as
-                      "nothing happened" — say it didn't save, and that ＋ retries. */}
                   {failed === r.catalogItemId && (
                     <p
                       role="status"
-                      className="pl-[62px] font-mono text-[10px] uppercase tracking-[0.12em] text-hot"
+                      className="-mt-2 flex items-center gap-1.5 pb-2 pl-[78px] font-mono text-[11px] uppercase tracking-[0.08em] text-text-2"
                     >
-                      No se guardó · toca ＋ para reintentar
+                      <TriangleGlyph size={13} />
+                      No se guardó · toca + para reintentar
                     </p>
                   )}
                 </div>
@@ -531,57 +676,26 @@ export function SearchSheet({
             })}
         </div>
 
-        <div className="mt-auto flex flex-col gap-2.5 pb-[calc(16px+max(14px,env(safe-area-inset-bottom)))]">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-            Agregar a
-          </span>
-          <div ref={pickerRef}>
-            <Segmented
-              segments={segments}
-              value={target?.id ?? null}
-              onSelect={pick}
-              scrollable
-              ariaLabel="Backlog destino"
-            />
+        {toast && (
+          <div
+            role="status"
+            className="bl-rise-soft absolute inset-x-4 bottom-[calc(30px+env(safe-area-inset-bottom))] flex min-h-[52px] items-center gap-3 rounded-full bg-surface-2 pl-[18px] pr-2 shadow-float"
+            style={keyboardInset > 0 ? { bottom: keyboardInset + 16 } : undefined}
+          >
+            <span className="min-w-0 flex-1 truncate text-[15px] text-text">
+              Agregado a {toast.name}
+            </span>
+            <button
+              type="button"
+              onClick={undoToast}
+              className="min-h-11 flex-none px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-text"
+            >
+              Deshacer
+            </button>
           </div>
-          {newOpen && (
-            <form onSubmit={createAndSelect} className="bl-rise-soft flex gap-2">
-              <input
-                ref={newInputRef}
-                value={newName}
-                maxLength={60}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder={
-                  options.length === 0 ? "Tu primer backlog…" : "Nuevo backlog…"
-                }
-                aria-label="Nombre del backlog"
-                className="min-w-0 flex-1 rounded-full bg-white/[0.07] px-4 py-3 text-[16px] caret-accent outline-none transition-colors placeholder:text-text-3 focus:bg-white/[0.1]"
-              />
-              <button
-                type="submit"
-                disabled={creating || !newName.trim()}
-                className="bl-press flex-none rounded-full bg-accent px-4 font-mono text-[10.5px] uppercase tracking-[0.1em] text-bg active:bg-accent-press disabled:opacity-40"
-              >
-                Crear
-              </button>
-            </form>
-          )}
-        </div>
+        )}
       </div>
-
-      {celebration && (
-        <FirstItemSheet
-          item={celebration}
-          onDismiss={() => setCelebration(null)}
-        />
-      )}
     </div>,
     document.body,
   );
-}
-
-/** "Cine · 2023 · Wim Wenders" / "Álbum · Charli xcx" — the mock's search meta. */
-function searchMeta(r: CatalogSearchResult): string {
-  if (r.mediaType === "album") return workMeta(r);
-  return [workMeta(r), r.byline].filter(Boolean).join(" · ");
 }

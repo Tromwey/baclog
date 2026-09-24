@@ -8,7 +8,8 @@ import {
   drawCard,
 } from "@/modules/cards/render";
 import type { CardBacklog, CardStyle } from "@/modules/cards/types";
-import { Button, MonoMeta } from "@/components/ui";
+import { MonoMeta } from "@/components/ui";
+import { SOLID_BUTTON } from "@/components/kura/components";
 
 /**
  * F3.5.7 — the contextual card exporter. Each share context renders exactly ONE
@@ -81,7 +82,7 @@ export function CardExporter({
     }).catch(() => {});
     canvas.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], `baclog-${style}.png`, {
+      const file = new File([blob], `kura-${style}.png`, {
         type: "image/png",
       });
       try {
@@ -137,13 +138,16 @@ export function CardExporter({
         )}
       </div>
 
-      <Button
+      {/* Kura: the action that closes the flow is SOLID (text on bg), never
+          honey — miel is reserved for Seguir. */}
+      <button
+        type="button"
         onClick={share}
         disabled={!fontsReady}
-        className="mt-4 w-full max-w-[340px] shrink-0"
+        className={`${SOLID_BUTTON} mt-4 w-full max-w-[340px] shrink-0`}
       >
         Compartir tarjeta
-      </Button>
+      </button>
       {!publicUrl && (
         <p className="mt-2 max-w-[340px] shrink-0 text-center text-xs text-text-3">
           {noLinkNote}

@@ -1,32 +1,20 @@
-import Link from "next/link";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { assertOwnsBacklog } from "@/authz";
+import { db } from "@/db";
+import { backlogItems, catalogItems } from "@/db/schema";
 import { ThemeColorSync } from "@/components/theme-color-sync";
-import { UpcomingShelf, type UpcomingItem } from "@/components/upcoming-shelf";
+import { tintEnds } from "@/components/kura/tint";
 import { visibilityOf } from "@/modules/backlog/visibility";
-import { SHARE_PATH } from "@/components/glyph-paths";
-import {
-  CoachNote,
-  PaletteGlow,
-  StateGlyph,
-  StrokeIcon,
-  glassChipClass,
-  mixHexes,
-} from "@/components/ui";
-import { plural } from "@/lib/plural";
-import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
-import { getBacklogItems } from "@/modules/backlog/queries";
-import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
+import { getRenderInstant } from "@/modules/catalog/release";
+import { getBacklogItems, getBacklogNames } from "@/modules/backlog/queries";
 import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
+import type { MediaType } from "@/modules/catalog/types";
 import { HideDock } from "./hide-dock";
-import { ZoomBackButton } from "./zoom-back-button";
-import { BacklogGrid, type GridItem } from "./[backlogId]/backlog-grid";
 import {
-  BacklogVisibilityProvider,
-  DeleteBacklogRow,
-  EditBacklogTrigger,
-  VisibilityPill,
-  VisibilityRow,
-} from "./[backlogId]/backlog-sheets";
+  CollectionScreen,
+  type CollectionItem,
+  type OtherCollection,
+} from "./[backlogId]/collection-screen";
 
 /**
  * Shared data loader for the two detail twins ([backlogId]/page.tsx and the
@@ -35,181 +23,144 @@ import {
  * model is unchanged; the items are just already in flight when it does.
  * Throws assertOwnsBacklog's NotFoundError/UnauthorizedError — each twin maps
  * them to its own recovery (404 vs. redirect back to the list).
+ *
+ * Kura adds two owner-only reads for "Mover a" (O4a): the user's other
+ * collections with their newest cover, and which collections each title here
+ * already lives in (so a move never duplicates and its undo never removes a
+ * membership that existed before). Both are scoped by the session user id
+ * derived from the assert above — never by anything the client sent.
  */
 export async function loadBacklogZoom(backlogId: string) {
   const itemsP = getBacklogItems(backlogId);
   itemsP.catch(() => {}); // no unhandled rejection if the assert throws first
   const { user, backlog } = await assertOwnsBacklog(backlogId);
   const items = await itemsP;
-  // First-run moment 2 (first-run.ts): library-wide counts. Fetched AFTER the
-  // assert (it's a read for the owner only) but before render, so the note
-  // never flashes in.
-  const counts = await getFirstRunCounts(user.id);
+  const catalogIds = items.map((it) => it.catalogItemId);
+
+  const [counts, now, names, thumbs, memberRows] = await Promise.all([
+    getFirstRunCounts(user.id),
+    getRenderInstant(),
+    getBacklogNames(user.id),
+    db
+      .selectDistinctOn([backlogItems.backlogId], {
+        backlogId: backlogItems.backlogId,
+        posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
+        mediaType: catalogItems.mediaType,
+      })
+      .from(backlogItems)
+      .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+      .where(eq(backlogItems.userId, user.id))
+      .orderBy(backlogItems.backlogId, desc(backlogItems.addedAt)),
+    catalogIds.length
+      ? db
+          .select({
+            backlogId: backlogItems.backlogId,
+            catalogItemId: backlogItems.catalogItemId,
+          })
+          .from(backlogItems)
+          .where(
+            and(
+              eq(backlogItems.userId, user.id),
+              inArray(backlogItems.catalogItemId, catalogIds),
+            ),
+          )
+      : Promise.resolve([] as { backlogId: string; catalogItemId: string }[]),
+  ]);
+
+  const thumbOf = new Map(thumbs.map((t) => [t.backlogId, t]));
+  const others: OtherCollection[] = names
+    .filter((n) => n.id !== backlog.id)
+    .map((n) => {
+      const t = thumbOf.get(n.id);
+      return {
+        id: n.id,
+        name: n.name,
+        posterUrl: t?.posterUrl ?? null,
+        paletteHex: t?.paletteHex ?? null,
+        mediaType: (t?.mediaType ?? "film") as MediaType,
+      };
+    });
+
+  const memberships: Record<string, string[]> = {};
+  for (const r of memberRows) {
+    (memberships[r.catalogItemId] ??= []).push(r.backlogId);
+  }
+
   return {
     backlog,
     items,
     coach: firstRunCoach(counts).grid,
-    // F3.8 — read the clock HERE (the loader is async; the view below is not)
-    // so the strip and every wait pill share one instant.
-    now: await getRenderInstant(),
+    now,
+    others,
+    memberships,
+    viewer: { username: user.username, profilePublic: user.isPublic },
   };
 }
 
+export type BacklogZoomData = Awaited<ReturnType<typeof loadBacklogZoom>>;
+
 /**
- * Backlog detail (Revamp UI screen 03, 2026-09-03): a page-wide palette glow
- * hanging off the top, the header row (back · visibility pill · share), the
- * title block (mono count, serif 54 name, vibe + "editar"), this backlog's
- * "No puede esperar", the tabbed cover grid, and the settings rows. No dock —
- * the floating "Agregar título" takes its place (HideDock + BacklogGrid).
+ * Colección (flujos-v2 03, 2026-09-24): the tinted header (Volver · Opciones
+ * at 64/24, the chosen cover at 240 centered, the name in Newsreader 24, the
+ * format pills that filter), then the body grouped by format or as a shelf
+ * (the frames' `adapt()` rule), or as a list. Every action lives in Opciones.
+ * No dock (HideDock). Server-safe wrapper; the screen itself is client.
  *
- * Server-safe; shared by the real /backlogs/[id] page (plain, template.tsx
- * animates it) and the intercepted overlay (`zoom` adds the bl-zoom-content
- * stagger; the overlay route owns bl-zoom-in on its fixed shell).
+ * Shared by the real /backlogs/[id] page and the intercepted overlay (`zoom`
+ * adds the bl-zoom-content stagger; the overlay route owns bl-zoom-in on its
+ * fixed shell).
  */
 export function BacklogZoomView({
-  backlog,
-  items,
-  coach,
-  now,
+  data,
   zoom = false,
 }: {
-  backlog: {
-    id: string;
-    name: string;
-    vibe: string | null;
-    isPublic: boolean;
-    showOnProfile: boolean;
-  };
-  items: BacklogItemWithCatalog[];
-  /** First-run moment 2: nothing completed yet → explain the glyphs. */
-  coach: boolean;
-  /** The render instant from loadBacklogZoom — every wait on this screen is
-   *  measured from it. */
-  now: number;
+  data: BacklogZoomData;
   zoom?: boolean;
 }) {
-  const hasItems = items.length > 0;
-  const content = zoom ? "bl-zoom-content" : "";
-  const glow = mixHexes(items.map((it) => it.paletteHex ?? []));
+  const { backlog, items, now } = data;
 
-  const upcoming: UpcomingItem[] = items
-    .filter((it) => isUpcoming(it.releaseDate, now))
-    .sort((a, b) => a.releaseDate!.getTime() - b.releaseDate!.getTime())
-    .map((it) => ({
-      catalogItemId: it.catalogItemId,
-      title: it.title,
-      mediaType: it.mediaType,
-      posterUrl: it.posterUrl,
-      paletteHex: it.paletteHex,
-      releaseDate: it.releaseDate!.toISOString(),
-    }));
-
-  const gridItems: GridItem[] = items.map((it) => ({
+  const list: CollectionItem[] = items.map((it) => ({
     backlogItemId: it.id,
     catalogItemId: it.catalogItemId,
     title: it.title,
+    byline: it.byline,
     mediaType: it.mediaType,
     year: it.year,
     posterUrl: it.posterUrl,
-    paletteHex: it.paletteHex,
+    paletteHex: it.paletteHex ?? null,
     status: it.status,
     verdict: it.verdict,
     obsessed: it.obsessed,
     releaseDate: it.releaseDate ? it.releaseDate.toISOString() : null,
+    addedAt: it.addedAt.toISOString(),
   }));
 
-  // The glyph legend only makes sense next to covers that can carry glyphs.
-  const showGlyphCoach = coach && hasItems;
+  const lead = list.find((it) => it.paletteHex?.length)?.paletteHex ?? [];
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-[160px] text-text">
-      {/* In-browser Safari tints the status-bar band from theme-color — sync
-          it to the glow's dominant hue so the hero doesn't cut off in black. */}
-      <ThemeColorSync color={glow[0]} />
+    <>
+      {/* In-browser Safari tints the status-bar band from theme-color — the
+          top of the tinted header, so the header doesn't cut off in black. */}
+      <ThemeColorSync color={lead.length ? tintEnds(lead)[0] : undefined} exact />
       <HideDock />
-
-      {/* Page-wide light (mock: inset -60px -40px auto, 420px, blur 80, .5). */}
-      <PaletteGlow
-        hexes={glow}
-        angle={110}
-        opacity={0.5}
-        blur={80}
-        className={`-inset-x-10 -top-[60px] h-[420px] ${zoom ? "bl-zoom-aura" : ""}`}
+      <CollectionScreen
+        mode="owned"
+        backlog={{
+          id: backlog.id,
+          name: backlog.name,
+          vibe: backlog.vibe,
+          visibility: visibilityOf(backlog),
+        }}
+        items={list}
+        now={now}
+        others={data.others}
+        memberships={data.memberships}
+        username={data.viewer.username}
+        profilePublic={data.viewer.profilePublic}
+        coach={data.coach}
+        zoom={zoom}
       />
-
-      <BacklogVisibilityProvider backlogId={backlog.id} initial={visibilityOf(backlog)}>
-        <header
-          className={`relative flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))] ${content}`}
-        >
-          <ZoomBackButton />
-          <div className="flex items-center gap-2">
-            <VisibilityPill />
-            {hasItems && (
-              <Link
-                href={`/backlogs/${backlog.id}/card`}
-                aria-label="Compartir"
-                className={glassChipClass}
-              >
-                <StrokeIcon d={SHARE_PATH} size={16} strokeWidth={2.2} />
-              </Link>
-            )}
-          </div>
-        </header>
-
-        <div className={`relative flex flex-col gap-2 px-6 pt-[26px] ${content}`}>
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
-            Backlog · {items.length} {plural(items.length, "título", "títulos")}
-          </span>
-          <h1 className="font-serif text-[54px] font-normal italic leading-[0.95] tracking-[-0.01em]">
-            {backlog.name}
-          </h1>
-          <p className="mt-0.5 text-[15px] leading-[1.45] text-text-2 [text-wrap:pretty]">
-            {backlog.vibe && <>{backlog.vibe} </>}
-            <EditBacklogTrigger
-              backlogId={backlog.id}
-              name={backlog.name}
-              vibe={backlog.vibe}
-            />
-          </p>
-        </div>
-
-        <div className={`relative pt-[26px] ${content}`}>
-          {/* F3.8 — what hasn't come out yet, nearest first. The grid below
-              repeats the wait as the cover's pill (mock), not as a row. */}
-          <UpcomingShelf items={upcoming} initialNow={now} inset="px-6" />
-        </div>
-
-        <BacklogGrid
-          backlogId={backlog.id}
-          items={gridItems}
-          now={now}
-          className={`relative ${content}`}
-        />
-
-        {/* First-run moment 2 (first-run.ts): what the glyphs on the covers
-            mean, said once, until the first completion. */}
-        {showGlyphCoach && (
-          <CoachNote className="mx-6 mt-[26px]">
-            <span className="flex flex-wrap gap-x-3.5 gap-y-1">
-              <span className="inline-flex items-center gap-1.5">
-                <StateGlyph kind="obsessed" size={10} /> te obsesiona
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <StateGlyph kind="liked" size={11} /> te gustó
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <StateGlyph kind="done" size={11} /> completo
-              </span>
-            </span>
-            Abre una portada para marcarla · «Agregar título» abajo suma más.
-          </CoachNote>
-        )}
-
-        <div className={`relative flex flex-col gap-2 px-5 pt-[34px] ${content}`}>
-          <VisibilityRow />
-          <DeleteBacklogRow backlogId={backlog.id} />
-        </div>
-      </BacklogVisibilityProvider>
-    </div>
+    </>
   );
 }

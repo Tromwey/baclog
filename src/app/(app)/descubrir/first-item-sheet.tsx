@@ -1,32 +1,34 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MEDIA_TYPE_LABEL, type MediaType } from "@/modules/catalog/types";
+import type { MediaType } from "@/modules/catalog/types";
 import { Sheet, SheetClose } from "@/components/ui";
+import { Cover, GLASS_BUTTON, SOLID_BUTTON } from "@/components/kura/components";
+import { tintCard } from "@/components/kura/tint";
+import { KIND_SHORT } from "./kura-bits";
 
 export interface FirstItemCelebration {
   title: string;
   mediaType: MediaType;
   year: number | null;
   posterUrl: string | null;
-  /** Cover-derived hexes — the aura this title is about to hand the backlog. */
+  /** Cover-derived hexes — the colour this title is about to give the collection. */
   paletteHex: string[];
   backlogId: string;
   backlogName: string;
 }
 
 /**
- * The closing moment of step 2 — shown ONCE in the life of an account, when the
- * first title lands.
+ * The first title of an account — shown ONCE, right after it lands (and after
+ * the sheet that saved it has left: never two sheets at a time).
  *
- * It exists because the empty backlog promises "su color llenará el aura del
- * backlog" and, until now, nothing ever collected on that: the user got a ✓ in
- * a results list and no one walked them to the aura. So this sheet shows the
- * palette that was just extracted from the cover — the aura about to ignite —
- * and offers the two honest exits: go look at it, or keep adding.
+ * The empty collection promises that its covers will colour it (§color: "la
+ * portada es la única fuente de color"); this is where that promise is kept
+ * in view: the collection's own surface, tinted by the cover that just
+ * arrived, with the cover on it. Two honest exits: go see it (solid — the
+ * action that closes the moment), or keep saving.
  *
- * Only ever mounted after a SUCCESSFUL add. A failed add gets the retry line on
- * its own row instead; we don't celebrate what wasn't saved.
+ * Only ever mounted after a SUCCESSFUL save; a failed one says so on its row.
  */
 export function FirstItemSheet({
   item,
@@ -36,93 +38,59 @@ export function FirstItemSheet({
   onDismiss: () => void;
 }) {
   const router = useRouter();
-  const meta = [MEDIA_TYPE_LABEL[item.mediaType], item.year]
-    .filter(Boolean)
-    .join(" · ");
-  // Albums are square; everything else is a poster (same rule as the item page).
-  const coverSize =
-    item.mediaType === "album" ? "h-[74px] w-[74px]" : "h-[90px] w-[66px]";
+  const meta = [KIND_SHORT[item.mediaType], item.year].filter(Boolean).join(" · ");
 
   return (
-    // `center` (glass, centered) against the routine sheets' opaque bottom —
-    // that contrast IS the signal: this is the one celebration in the flow.
-    <Sheet
-      onClose={onDismiss}
-      variant="center"
-      label="Tu primer título guardado"
-    >
-      <div>
-        <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="h-1.5 w-1.5 flex-none rounded-full bg-hot"
-          />
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-2">
-            Primer título guardado
-          </span>
-        </div>
+    <Sheet onClose={onDismiss} variant="center" label="Tu primer título guardado">
+      <div className="flex flex-col">
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          Primer título guardado
+        </span>
 
-        <div className="mt-5 flex items-end gap-4">
-          {item.posterUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007: never proxy)
-            <img
-              src={item.posterUrl}
-              alt=""
-              className={`flex-none rounded-[10px] object-cover shadow-[var(--shadow-card)] ${coverSize}`}
-            />
-          ) : (
-            <div
-              className={`flex flex-none items-center justify-center rounded-[10px] bg-surface-2 text-2xl text-text-3 ${coverSize}`}
-            >
-              {item.mediaType === "album" ? "♫" : "▶"}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            {/* The extracted palette IS the payoff preview — no palette (a
-                  cover that wouldn't decode), no swatch row, and the sheet
-                  still reads. */}
-            {item.paletteHex.length > 0 && (
-              <>
-                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-text-3">
-                  Aura · paleta extraída
-                </p>
-                <div aria-hidden className="mt-2 flex gap-1">
-                  {item.paletteHex.slice(0, 4).map((hex) => (
-                    <span
-                      key={hex}
-                      className="h-[10px] flex-1 rounded-full"
-                      style={{ background: hex }}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+        <div
+          className="mt-4 flex items-end gap-4 rounded-[var(--r-surface)] p-4"
+          style={{ background: tintCard(item.paletteHex) }}
+        >
+          <Cover
+            posterUrl={item.posterUrl}
+            paletteHex={item.paletteHex}
+            mediaType={item.mediaType}
+            alt={item.title}
+            radius="rounded-[var(--r-cover-s)]"
+            style={{ height: 90 }}
+          />
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="truncate font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+              {item.backlogName}
+            </span>
+            <span className="line-clamp-2 font-serif text-[19px] italic leading-[1.1] text-text">
+              {item.title}
+            </span>
             {meta && (
-              <p className="mt-2.5 font-mono text-[9px] uppercase tracking-[0.12em] text-text-3">
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
                 {meta}
-              </p>
+              </span>
             )}
           </div>
         </div>
 
-        <p className="mt-[22px] font-serif text-[28px] italic leading-[1.1]">
-          Tu backlog ya tiene color.
+        <p className="mt-5 font-display text-[22px] leading-[1.15] text-text text-balance">
+          tu colección ya tiene color.
         </p>
-        <p className="mt-3 text-[15px] leading-[1.5] text-text-2">
-          {item.backlogName} tomó el color de {item.title}. Cada título que
-          agregues mueve el aura.
+        <p className="mt-2 text-[15px] leading-[1.5] text-text-2 text-pretty">
+          {item.backlogName} toma el color de {item.title}. Cada portada que
+          guardes lo va cambiando.
         </p>
 
         <div className="mt-6 flex flex-col gap-2.5">
           <button
+            type="button"
             onClick={() => router.push(`/backlogs/${item.backlogId}`)}
-            className="flex items-center justify-center rounded-full bg-accent px-5 py-4 text-base font-semibold text-bg bl-press active:bg-accent-press"
+            className={`${SOLID_BUTTON} w-full`}
           >
             <span className="truncate">Ver {item.backlogName}</span>
           </button>
-          <SheetClose className="flex items-center justify-center rounded-full bg-white/[0.06] px-5 py-3.5 text-[15px] font-medium text-text bl-press hover:bg-white/[0.12]">
-            Seguir agregando
-          </SheetClose>
+          <SheetClose className={`${GLASS_BUTTON} w-full`}>Seguir guardando</SheetClose>
         </div>
       </div>
     </Sheet>

@@ -6,20 +6,23 @@ import {
   getProfileCards,
   getReactionCounts,
 } from "@/modules/backlog/profile-stats";
+import { getShelvesForUser } from "@/modules/backlog/shelves";
 import { getFollowCounts } from "@/modules/social/queries";
 import { getRenderInstant } from "@/modules/catalog/release";
+import { getLatestRecapKey } from "../recap/recap-data";
 import { PerfilScreen } from "./perfil-screen";
 
 /**
- * Screen 09 (Revamp UI, 2026-09-03) — your profile: identity over your ADN
- * glow, the three reaction pills, followers/following, what you can't wait
- * for, your current obsessions and your cards. Every read is scoped to the
- * session user inside its query. All server component.
+ * 20c Perfil propio (Kura, flujo 09) — your profile: the header tinted by
+ * what obsesses you, the seal or photo, followers · following, the state
+ * pills, the recap chip; then "me obsesiona", what you can't wait for and
+ * "tus colecciones". Every read is scoped to the session user inside its
+ * query. All server component.
  */
 export default async function PerfilPage() {
   const user = await requireUser();
   const now = await getRenderInstant();
-  const [palette, counts, followCounts, upcoming, obsessions, cards] =
+  const [palette, counts, followCounts, upcoming, obsessions, cards, shelves, recapKey] =
     await Promise.all([
       getUserPalette(user.id),
       getReactionCounts(user.id),
@@ -27,6 +30,8 @@ export default async function PerfilPage() {
       getLibraryUpcoming(user.id, now),
       getObsessions(user.id),
       getProfileCards(user.id, now),
+      getShelvesForUser(user.id),
+      getLatestRecapKey(user.id),
     ]);
 
   return (
@@ -41,6 +46,8 @@ export default async function PerfilPage() {
       upcoming={upcoming}
       obsessions={obsessions}
       cards={cards}
+      shelves={shelves}
+      recapKey={recapKey}
       now={now}
     />
   );

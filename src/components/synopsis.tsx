@@ -17,8 +17,8 @@ import { useLayoutEffect, useRef, useState } from "react";
  * render is the clamped paragraph with no toggle, so nothing jumps on
  * hydration — the affordance just appears.
  *
- * Revamp UI (2026-09-03): the mock's paragraph — 15px/1.5, text-2,
- * text-pretty, left-aligned — is the default; the caller may override.
+ * Kura (24a): 15/1.55 in --text is what the ficha passes; the quieter
+ * text-2 paragraph stays the default for other callers.
  */
 export function Synopsis({
   text,
@@ -51,7 +51,7 @@ export function Synopsis({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="self-start font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
+          className="self-start font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
         >
           {expanded ? "Leer menos" : "Leer más"}
         </button>

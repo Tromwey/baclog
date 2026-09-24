@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { AdnAvatar } from "@/components/adn-avatar";
+import { sealHexesOf } from "@/components/adn-avatar";
+import { FollowButton } from "@/components/follow-button";
+import { Seal } from "@/components/kura/components";
+import { tintEnds } from "@/components/kura/tint";
 import {
   BOOKMARK_PATH,
   CHECK_FILL_PATH,
@@ -13,10 +16,11 @@ import {
   REVIEW_PATH,
   USERS_PATH,
 } from "@/components/glyph-paths";
-import { mixToward, rgba, type RGB } from "@/lib/color";
+import { rgba } from "@/lib/color";
 import { dominantHexes } from "@/modules/backlog/palette";
 import type { MediaType } from "@/modules/catalog/types";
 import type { FeedBurst, FeedCard, FeedEvent, FeedSuggestion } from "@/modules/social/types";
+import { EXT_BOTTOM, STICKY_TOP } from "./feed-geometry";
 
 /**
  * Feed v8 Stack (design "Feed v8 Stack", 2026-09-21) — the feed stops being a
@@ -46,18 +50,16 @@ import type { FeedBurst, FeedCard, FeedEvent, FeedSuggestion } from "@/modules/s
  *    tweak and ships OFF. The card reads flatter but cleaner, and with the
  *    120px overlap the shadow alone carries the separation.
  *
- * Founder calls, 2026-09-21: the "Seguir" pill KEEPS the mock's lime glow (an
- * explicit exception to AGENTS.md §7); the v8 greys and Space Mono apply to
- * the feed only (`.feed-v8` in globals.css); film covers stay 3:4 like the
- * rest of the product instead of the mock's 2:3.
+ * Feed v10 · Kura (2026-09-24) changes only details on top of the v8 stack:
+ * the author chip carries the SEAL (28) instead of the ADN orb, covers are
+ * 2:3 (Kura's DS rules — the founder adopted it with Kura; the old 3:4
+ * exception is gone), every pill is mono with its glyph in the state colour
+ * (coral obsesiona · pizarra gusta · salvia completo · lavanda espera), the
+ * suggestion's "Seguir" is honey WITHOUT the lima glow (that exception died
+ * with the Revamp), and the feed's greys are the root's (no `.feed-v8`
+ * override). The tint is `tintEnds` from `kura/tint.ts` — the same 45 % the
+ * v8 mock drew, now shared with every tinted surface of the app.
  */
-
-/** Sticky header height in the mock — what every card pins under. */
-export const HDR_PX = 63;
-/** How far a card's body runs past its own height (the mock's EXTB). */
-export const EXT_BOTTOM = 120;
-
-export const STICKY_TOP = `calc(${HDR_PX}px + env(safe-area-inset-top))`;
 
 type Tier = { h: number; cap: number; textMax: number };
 /** [fixed height, ceiling as a fraction of the screen, max height of the text block] */
@@ -67,19 +69,9 @@ const TIER: Record<"L" | "M" | "S", Tier> = {
   S: { h: 370, cap: 0.44, textMax: 105 },
 };
 
-/** The mock's `tint` slider at its default 45% → `k = 1 - .45 * .78`. */
-const TINT_K = 1 - (45 / 100) * 0.78;
-const TOP_TARGET: RGB = { r: 0x10, g: 0x10, b: 0x13 };
-const BOT_TARGET: RGB = { r: 0x0c, g: 0x0c, b: 0x10 };
-
-/** The mock's `ends()`: the palette pair dragged toward black, top and bottom. */
+/** The palette pair dragged toward black (`tintEnds`); never lit by nothing. */
 function cardEnds(hexes: readonly string[]): [string, string] {
-  const a = hexes[0] ?? "#6C6B76";
-  const b = hexes[1] ?? a;
-  return [
-    mixToward(a, TOP_TARGET, TINT_K),
-    mixToward(b, BOT_TARGET, Math.min(1, TINT_K + 0.08)),
-  ];
+  return tintEnds(hexes.length > 0 ? hexes : ["#6C6B76"]);
 }
 
 export function cardBackground(hexes: readonly string[]): string {
@@ -92,15 +84,12 @@ export function cardTailHex(hexes: readonly string[]): string {
   return cardEnds(hexes)[1];
 }
 
-/**
- * Founder call 2026-09-21: the mock fixes film at 2:3, but every other cover
- * in the product is 3:4 and the feed is not worth splitting that in two.
- */
-const aspectOf = (m: MediaType) => (m === "album" ? "1 / 1" : "3 / 4");
+/** Kura's forms: disco 1:1, póster 2:3. */
+const aspectOf = (m: MediaType) => (m === "album" ? "1 / 1" : "2 / 3");
 
-/** A card is never lit by nothing: the cover's hexes, else the author's ADN. */
+/** The cover's hexes, else the author's ADN (minus the lima fallback pair). */
 const cardHexes = (e: FeedEvent): readonly string[] =>
-  e.paletteHex.length > 0 ? e.paletteHex : e.author.avatarHexes;
+  e.paletteHex.length > 0 ? e.paletteHex : sealHexesOf(e.author.avatarHexes);
 
 /** Where a cover has no art: the palette as a printed gradient. */
 function posterFill(hexes: readonly string[]): string | undefined {
@@ -113,15 +102,16 @@ function posterFill(hexes: readonly string[]): string | undefined {
 
 type Pill = { label: string; d: string; color: string; flip?: boolean };
 
+/** One glyph, one meaning; the colour is the state's (§glifos). */
 const P = {
-  flame: (label: string): Pill => ({ label, d: FLAME_PATH, color: "var(--hot)" }),
-  up: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--radar)" }),
-  down: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--text-3)", flip: true }),
-  check: (label: string): Pill => ({ label, d: CHECK_FILL_PATH, color: "var(--accent)" }),
-  bookmark: (label: string): Pill => ({ label, d: BOOKMARK_PATH, color: "var(--text-2)" }),
-  clock: (label: string): Pill => ({ label, d: CLOCK_PATH, color: "var(--radar)" }),
+  flame: (label: string): Pill => ({ label, d: FLAME_PATH, color: "var(--st-obsessed)" }),
+  up: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--st-liked)" }),
+  down: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--text-2)", flip: true }),
+  check: (label: string): Pill => ({ label, d: CHECK_FILL_PATH, color: "var(--st-completed)" }),
+  bookmark: (label: string): Pill => ({ label, d: BOOKMARK_PATH, color: "var(--text)" }),
+  clock: (label: string): Pill => ({ label, d: CLOCK_PATH, color: "var(--st-waiting)" }),
   review: (label: string): Pill => ({ label, d: REVIEW_PATH, color: "var(--text)" }),
-  users: (label: string): Pill => ({ label, d: USERS_PATH, color: "var(--text-2)" }),
+  users: (label: string): Pill => ({ label, d: USERS_PATH, color: "var(--text)" }),
 };
 
 const MARK_PILL = {
@@ -155,7 +145,7 @@ function PillRow({ pills }: { pills: Pill[] }) {
       {pills.map((p) => (
         <span
           key={p.label}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-3.5 py-2 font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text backdrop-blur-[20px] backdrop-saturate-[1.5]"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-3 py-[7px] font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text"
         >
           <svg
             width="13"
@@ -179,29 +169,22 @@ function PillRow({ pills }: { pills: Pill[] }) {
 
 function AuthorPill({
   username,
-  initial,
   avatarUrl,
   avatarHexes,
   trailing,
 }: {
   username: string;
-  initial?: string;
   avatarUrl: string | null;
-  avatarHexes: readonly [string, string];
+  avatarHexes: readonly string[];
   trailing: string;
 }) {
   return (
     <Link
       href={`/u/${username}`}
-      className="relative z-10 flex max-w-full flex-none items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] py-1 pl-1 pr-3 backdrop-blur-[20px] backdrop-saturate-[1.5] bl-press"
+      className="relative z-10 flex max-w-full flex-none items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] py-1 pl-1 pr-3 bl-press"
     >
-      <AdnAvatar
-        hexes={avatarHexes}
-        initial={initial}
-        src={avatarUrl}
-        className="h-[22px] w-[22px] font-mono text-[11px]"
-      />
-      <span className="truncate text-[13px] font-semibold text-text">@{username}</span>
+      <Seal name={username} hexes={sealHexesOf(avatarHexes)} src={avatarUrl} size={28} />
+      <span className="truncate text-[14px] font-semibold text-text">@{username}</span>
       <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
         {trailing}
       </span>
@@ -256,9 +239,9 @@ function TextBlock({ size, children }: { size: "L" | "M" | "S"; children: React.
 
 function Title({ title, tail }: { title: string; tail: string | null }) {
   return (
-    <span className="font-serif text-[26px] italic leading-[1.08] text-pretty text-text">
+    <span className="font-brand text-[26px] italic leading-[1.08] text-pretty text-text">
       {title}
-      {tail && <span className="text-text-3">{` · ${tail}`}</span>}
+      {tail && <span className="text-text-2">{` · ${tail}`}</span>}
     </span>
   );
 }
@@ -274,7 +257,7 @@ export function hexesOfCard(card: FeedCard): readonly string[] {
   const last = card.items[card.items.length - 1]?.paletteHex ?? [];
   if (first.length > 0) return [first[0], last[1] ?? last[0] ?? first[0]];
   const mixed = dominantHexes(card.items, 4);
-  return mixed.length > 0 ? mixed : card.author.avatarHexes;
+  return mixed.length > 0 ? mixed : sealHexesOf(card.author.avatarHexes);
 }
 
 // ---------- cards ----------
@@ -295,12 +278,12 @@ const BODY =
 
 function EventCard({ event }: { event: FeedEvent }) {
   const size = sizeOf(event);
-  const tail = event.mediaType === "album" ? event.byline : (event.year?.toString() ?? null);
+  // v10: "título · autor" — the byline (artist / director), else the year.
+  const tail = event.byline ?? event.year?.toString() ?? null;
   return (
     <StackCard hexes={cardHexes(event)} size={size}>
       <AuthorPill
         username={event.author.username}
-        initial={event.author.initial}
         avatarUrl={event.author.avatarUrl}
         avatarHexes={event.author.avatarHexes}
         trailing={event.when}
@@ -315,7 +298,7 @@ function EventCard({ event }: { event: FeedEvent }) {
           <span
             role="img"
             aria-label={event.title}
-            className="block h-full w-full rounded-2xl bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_26px_52px_-20px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
+            className="block h-full w-full rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
             style={{
               backgroundImage: event.posterUrl
                 ? `url(${event.posterUrl})`
@@ -367,14 +350,13 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
       ? [first[0], last[1] ?? last[0] ?? first[0]]
       : mixed.length > 0
         ? mixed
-        : author.avatarHexes;
+        : sealHexesOf(author.avatarHexes);
   // The widest cover decides how short the strip gets: a square album is 1.
-  const maxRatio = items.some((i) => i.mediaType === "album") ? 1 : 3 / 4;
+  const maxRatio = items.some((i) => i.mediaType === "album") ? 1 : 2 / 3;
   return (
     <StackCard hexes={hexes} size="M">
       <AuthorPill
         username={author.username}
-        initial={author.initial}
         avatarUrl={author.avatarUrl}
         avatarHexes={author.avatarHexes}
         trailing={burst.when}
@@ -395,7 +377,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
               <span
                 role="img"
                 aria-label={e.title}
-                className="block h-full w-full overflow-hidden rounded-[14px] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_18px_36px_-16px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
+                className="block h-full w-full overflow-hidden rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
                 style={{
                   backgroundImage: e.posterUrl ? `url(${e.posterUrl})` : posterFill(e.paletteHex),
                 }}
@@ -416,16 +398,14 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
  * the words, the middle one (the title the reason names) in front.
  */
 export function SuggestCard({ s }: { s: FeedSuggestion }) {
-  const [following, setFollowing] = useState(false);
   const mixed = dominantHexes(s.covers, 4);
-  const hexes = mixed.length > 0 ? mixed : s.avatarHexes;
+  const hexes = mixed.length > 0 ? mixed : sealHexesOf(s.avatarHexes);
   // The named title goes to the centre and to the front; the others flank it.
   const order = s.covers.length >= 3 ? [s.covers[1], s.covers[0], s.covers[2]] : s.covers;
   return (
     <StackCard hexes={hexes} size="L">
       <AuthorPill
         username={s.username}
-        initial={s.initial}
         avatarUrl={s.avatarUrl}
         avatarHexes={s.avatarHexes}
         trailing="Sugerencia"
@@ -436,7 +416,7 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
             key={c.posterUrl}
             role="img"
             aria-hidden
-            className="absolute left-1/2 top-1/2 h-[64%] rounded-[14px] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-[0_22px_44px_-18px_rgba(0,0,0,.88),inset_0_1px_0_rgba(255,255,255,.16)]"
+            className="absolute left-1/2 top-1/2 h-[64%] rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
             style={{
               aspectRatio: aspectOf(c.mediaType),
               zIndex: i === 1 ? 3 : 1,
@@ -450,43 +430,11 @@ export function SuggestCard({ s }: { s: FeedSuggestion }) {
         <PillRow pills={[P.users("Sugerencia")]} />
         <Title title={s.reason} tail={null} />
         {s.common && <span className="text-[14px] leading-[1.35] text-text-2">{s.common}</span>}
-        <FollowPill
-          username={s.username}
-          following={following}
-          onToggle={() => setFollowing((v) => !v)}
-        />
+        {/* The real follow (the v8 port had left a local-only toggle here
+            that never reached the server). Honey, no glow. */}
+        <FollowButton username={s.username} initialFollowing={false} className="mt-1 self-start" />
       </TextBlock>
     </StackCard>
   );
 }
 
-/**
- * Founder call 2026-09-21: this keeps the mock's lime glow — an explicit,
- * documented exception to AGENTS.md §7 ("no coloured glows"), and the only
- * place in the product that has one.
- */
-function FollowPill({
-  username,
-  following,
-  onToggle,
-}: {
-  username: string;
-  following: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={following ? `Dejar de seguir a @${username}` : `Seguir a @${username}`}
-      onClick={onToggle}
-      className="mt-1 self-start rounded-full px-6 py-3.5 text-[16px] font-semibold transition-colors duration-200 bl-press"
-      style={
-        following
-          ? { background: "transparent", color: "var(--text-2)" }
-          : { background: "var(--accent)", color: "#0B0B0D", boxShadow: "0 0 24px #D8FF3E1A" }
-      }
-    >
-      {following ? "Siguiendo" : "Seguir"}
-    </button>
-  );
-}

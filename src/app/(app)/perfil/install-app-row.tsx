@@ -1,11 +1,13 @@
 "use client";
 
-import { ChevronRight, Download, SquareArrowUp, X } from "lucide-react";
+import { SquareArrowUp, X } from "lucide-react";
+import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Sheet, useSheetDismiss } from "@/components/ui/sheet";
 
 /**
- * "Instalar app" row for /perfil — the accessible install entry point.
+ * "Instalar Kura" — a 52 row of Ajustes (Kura 30a, group "apps"), the
+ * accessible install entry point.
  * Platform-aware because PWA install differs wildly:
  *  - Android/desktop Chromium fires `beforeinstallprompt`; we stash it and a tap
  *    triggers the NATIVE one-tap install dialog.
@@ -35,7 +37,7 @@ const getInstalledSnapshot = () =>
   window.matchMedia("(display-mode: standalone)").matches ||
   (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-export function InstallAppRow({ divider }: { divider?: boolean }) {
+export function InstallAppRow({ dividerTop = false }: { dividerTop?: boolean }) {
   const installed = useSyncExternalStore(
     subscribeInstalled,
     getInstalledSnapshot,
@@ -70,20 +72,17 @@ export function InstallAppRow({ divider }: { divider?: boolean }) {
 
   return (
     <>
+      {/* The group's hairline lives here so it disappears with the row. */}
+      {dividerTop && <span aria-hidden className="ml-4 block h-px bg-white/[0.06]" />}
       <button
         type="button"
         onClick={onClick}
-        className={`relative flex w-full items-center gap-[13px] px-[15px] py-[14px] text-left transition-colors hover:bg-white/[0.045] active:bg-white/[0.06] ${
-          divider ? "border-b border-white/[0.07]" : ""
-        }`}
+        className="flex min-h-[52px] w-full items-center gap-3 pl-4 pr-3.5 text-left transition-colors active:bg-white/[0.06]"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.07] text-text">
-          <Download size={17} strokeWidth={1.8} />
-        </span>
-        <span className="flex-1 font-sans text-[14.5px] font-medium">
-          Instalar app
-        </span>
-        <ChevronRight size={18} className="text-text-3" />
+        <span className="flex-1 font-sans text-[16px] text-text">Instalar Kura</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-text-2" aria-hidden>
+          <path d={CHEVRON_RIGHT_PATH} />
+        </svg>
       </button>
       {sheet && (
         <InstructionSheet kind={sheet} onClose={() => setSheet(null)} />
@@ -104,7 +103,7 @@ function InstructionSheet({
       ? [
           <>
             Toca{" "}
-            <span className="inline-flex translate-y-[3px] items-center text-accent">
+            <span className="inline-flex translate-y-[3px] items-center text-text">
               <SquareArrowUp size={16} strokeWidth={2} />
             </span>{" "}
             <b className="font-semibold text-text">Compartir</b> en la barra de
@@ -114,7 +113,7 @@ function InstructionSheet({
             Elige <b className="font-semibold text-text">«Agregar a Inicio»</b>.
           </>,
           <>
-            Toca <b className="font-semibold text-text">Agregar</b> — Baclog vive
+            Toca <b className="font-semibold text-text">Agregar</b>: Kura vive
             en tu inicio, a pantalla completa.
           </>,
         ]
@@ -132,24 +131,23 @@ function InstructionSheet({
   // The app's one sheet (it had drifted into a hand-rolled twin): same glass,
   // same motion, same drag-to-dismiss as every other.
   return (
-    <Sheet onClose={onClose} label="Instalar Baclog">
+    <Sheet onClose={onClose} label="Instalar Kura">
       <div className="flex items-start justify-between">
-        <h2 className="font-display text-lg font-bold tracking-[-0.01em]">
-          Instalar Baclog
+        <h2 className="font-brand text-[22px] leading-[1.1] text-text">
+          instalar kura
         </h2>
         <CloseButton />
       </div>
-      <p className="mt-1 text-xs text-text-3">
-        Se agrega a tu pantalla de inicio como app — sin tiendas, sin
-        descargas.
+      <p className="mt-1.5 text-[13px] leading-[1.45] text-text-2">
+        Se agrega a tu pantalla de inicio como app, sin tiendas ni descargas.
       </p>
       <ol className="mt-4 space-y-3">
         {steps.map((s, i) => (
           <li key={i} className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent font-mono text-[11px] font-bold text-bg">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--glass-bg)] font-mono text-[12px] text-text">
               {i + 1}
             </span>
-            <span className="pt-0.5 text-sm leading-[1.5] text-text-2">
+            <span className="pt-0.5 text-[15px] leading-[1.5] text-text-2">
               {s}
             </span>
           </li>
@@ -167,7 +165,7 @@ function CloseButton() {
       type="button"
       onClick={() => dismiss?.()}
       aria-label="Cerrar"
-      className="bl-press-sm -mr-1.5 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-text-3 hover:text-text"
+      className="bl-press-sm -mr-2 -mt-2 flex h-11 w-11 items-center justify-center rounded-full text-text-2 hover:text-text"
     >
       <X size={18} strokeWidth={2} />
     </button>

@@ -2,15 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { createBacklogAction } from "@/app/actions/backlog-actions";
-import { Sheet } from "@/components/ui";
+import {
+  createBacklogAction,
+  setBacklogVisibilityAction,
+  type BacklogVisibility,
+} from "@/app/actions/backlog-actions";
+import { Sheet, useSheetDismiss } from "@/components/ui";
+import { FillIcon, KIcon, PEOPLE_FILL } from "@/components/kura/icons";
+import { SHEET_FIELD, SHEET_SOLID, SheetTitle } from "@/components/kura/sheet-parts";
+import { PrivacyChoices, VISIBILITY_LABEL } from "./collection-forms";
 
 /**
- * Any "create a backlog" entry point: renders the caller's button (the dashed
- * "+" chip on /backlogs, the lima CTA on the #p8 first-use screen)
- * and owns the create modal it opens. The modal is portaled to <body> so it
- * escapes the (app) content wrapper's stacking context and sits ABOVE the
- * dock (see AGENTS.md).
+ * Any "create a collection" entry point: renders the caller's button (the
+ * 44 "+" on Tus colecciones, the ghost slot and the glass CTA of 15a) and
+ * owns the O2a sheet it opens. The sheet is <Sheet>, portaled to <body>, so
+ * it sits ABOVE the dock (AGENTS.md).
  */
 export function NewBacklogTrigger({
   className,
@@ -33,64 +39,97 @@ export function NewBacklogTrigger({
       >
         {children}
       </button>
-      {open && <NewBacklogModal onClose={() => setOpen(false)} />}
+      {open && (
+        <Sheet onClose={() => setOpen(false)} label="Nueva colección">
+          <NewCollectionBody />
+        </Sheet>
+      )}
     </>
   );
 }
 
-/** The create-backlog sheet — shape and portaling live in <Sheet>. */
-function NewBacklogModal({ onClose }: { onClose: () => void }) {
+/**
+ * O2a: "nueva colección" + close, the name field, "Quién la ve" (swaps the
+ * sheet to the K1a choices — one sheet, two steps) and the solid "Crear".
+ * New collections are Pública by default (the product's default:
+ * is_public AND show_on_profile); anything else is applied right after the
+ * create. Lands on the new, empty collection (15d).
+ */
+function NewCollectionBody() {
   const router = useRouter();
+  const dismiss = useSheetDismiss();
   const [name, setName] = useState("");
-  const [vibe, setVibe] = useState("");
+  const [visibility, setVisibility] = useState<BacklogVisibility>("featured");
+  const [step, setStep] = useState<"form" | "privacy">("form");
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const res = await createBacklogAction({ name, vibe: vibe || undefined });
-    setBusy(false);
-    if ("id" in res) {
-      onClose();
+    setFailed(false);
+    try {
+      const res = await createBacklogAction({ name });
+      if (!("id" in res) || !res.id) throw new Error("invalid");
+      if (visibility !== "featured") {
+        await setBacklogVisibilityAction(res.id, visibility);
+      }
+      dismiss?.();
       router.push(`/backlogs/${res.id}`);
+    } catch {
+      setFailed(true);
+      setBusy(false);
     }
   }
 
+  if (step === "privacy") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <SheetTitle close={false}>quién la ve</SheetTitle>
+        <PrivacyChoices
+          value={visibility}
+          onSelect={(v) => {
+            setVisibility(v);
+            setStep("form");
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <Sheet onClose={onClose} label="Nuevo backlog">
-      <form onSubmit={create}>
-        <div className="space-y-3">
-          <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
-            Nuevo backlog
-          </h2>
-          <input
-            autoFocus
-            required
-            maxLength={60}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nombre (ej. Summer Era)"
-            // Surface fills, not black alphas: the sheet is opaque now, so
-            // translucent blacks that were tuned against glass would read as
-            // muddy. Selection/focus stays a fill change (never an outline).
-            className="w-full rounded-[var(--r-md)] bg-surface-3 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3"
-          />
-          <input
-            maxLength={80}
-            value={vibe}
-            onChange={(e) => setVibe(e.target.value)}
-            placeholder="Vibe (opcional)"
-            className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3.5 outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
-          />
-          <button
-            type="submit"
-            disabled={busy || !name.trim()}
-            className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
-          >
-            {busy ? "Creando…" : "Crear"}
-          </button>
-        </div>
-      </form>
-    </Sheet>
+    <form onSubmit={create} className="flex flex-col gap-1.5">
+      <SheetTitle>nueva colección</SheetTitle>
+      <div className="mt-1.5 flex flex-col gap-3.5">
+        <input
+          autoFocus
+          required
+          maxLength={60}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-label="Nombre de la colección"
+          placeholder="Ponle nombre"
+          className={SHEET_FIELD}
+        />
+        <button
+          type="button"
+          onClick={() => setStep("privacy")}
+          className="flex min-h-14 items-center gap-3 px-1 text-left transition-opacity active:opacity-60"
+        >
+          <FillIcon d={PEOPLE_FILL} size={18} className="text-text" />
+          <span className="flex-1 font-sans text-[16px] font-medium text-text">Quién la ve</span>
+          <span className="font-sans text-[15px] text-text-2">{VISIBILITY_LABEL[visibility]}</span>
+          <KIcon name="chevron" size={16} className="text-text-2" />
+        </button>
+        {failed && (
+          <p className="px-1 font-sans text-[13px] text-text-2">
+            No se pudo crear. Revisa tu conexión e inténtalo otra vez.
+          </p>
+        )}
+        <button type="submit" disabled={busy || !name.trim()} className={SHEET_SOLID}>
+          {busy ? "Creando…" : "Crear"}
+        </button>
+      </div>
+    </form>
   );
 }

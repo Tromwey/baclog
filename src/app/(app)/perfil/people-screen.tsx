@@ -1,15 +1,21 @@
 import Link from "next/link";
-import { UserPlus } from "lucide-react";
 import { requireUser } from "@/auth";
 import { getFollowCounts, getPeoplePage } from "@/modules/social/queries";
-import { BackButton, ScreenHeader, glassChipClass } from "@/components/ui";
+import { BackButton } from "@/components/ui";
+import { plural } from "@/lib/plural";
 import { PeopleList } from "./people-list";
 
 /**
- * F3.10 (design 1i) — the shared shell of /perfil/siguiendo and
- * /perfil/seguidores: back chip, Tu gente header, the segmented pair (two
- * links, not client tabs — each side is its own URL) and the list. Always the
- * session user's own lists; there is no public route to anyone else's.
+ * 20e Seguidores y siguiendo — the shared shell of /perfil/seguidores and
+ * /perfil/siguiendo: Volver and your @ in mono on the 64 row, the glass
+ * segmented pair (two links, not client tabs — each side is its own URL),
+ * then the 72 rows. Always the session user's own lists; there is no public
+ * route to anyone else's (F3.10: counts public, lists private).
+ *
+ * The mock's field filters the list in place; the product has no in-list
+ * search, so the field is the door to Tu gente (/feed/gente), which searches
+ * every public profile. The mock's "Que también sigues" / "N en común" need
+ * an overlap read the product doesn't make — the row says what it knows.
  */
 export async function PeopleScreen({
   mode,
@@ -23,51 +29,46 @@ export async function PeopleScreen({
   ]);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      {/* Revamp UI (2026-09-03): the back chip and the search chip on the
-          mock's header row, then the one screen title. */}
-      <div className="flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))]">
-        <BackButton href="/perfil" />
-        <Link
-          href="/feed/gente"
-          aria-label="Buscar gente"
-          className={glassChipClass}
-        >
-          <UserPlus size={18} />
-        </Link>
-      </div>
-      <ScreenHeader
-        title={mode === "following" ? "A quién sigues" : "Quién te sigue"}
-        className="pt-[18px]!"
-      />
-
-      <div className="px-5 pb-10">
-        <div className="flex gap-1.5 rounded-full bg-surface-2 p-[5px]">
-          <Tab href="/perfil/siguiendo" active={mode === "following"}>
-            Siguiendo {counts.following}
-          </Tab>
-          <Tab href="/perfil/seguidores" active={mode === "followers"}>
-            Seguidores {counts.followers}
-          </Tab>
+    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
+      <div className="flex flex-col gap-4 px-6 pt-[calc(16px+env(safe-area-inset-top))]">
+        <div className="flex items-center justify-between">
+          <BackButton href="/perfil" className="h-11! w-11!" />
+          {user.username && (
+            <span className="font-mono text-[12px] text-text-2">@{user.username}</span>
+          )}
         </div>
 
+        <nav aria-label="Tu gente" className="flex gap-1 rounded-full bg-[var(--glass-bg)] p-[5px]">
+          <Tab href="/perfil/seguidores" active={mode === "followers"}>
+            {counts.followers} {plural(counts.followers, "seguidor", "seguidores")}
+          </Tab>
+          <Tab href="/perfil/siguiendo" active={mode === "following"}>
+            {counts.following} siguiendo
+          </Tab>
+        </nav>
+
+        <Link
+          href="/feed/gente"
+          className="flex h-12 items-center gap-2.5 rounded-full bg-[var(--glass-bg)] px-4 text-[16px] text-text-2 bl-press hover:bg-white/[0.12]"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          Buscar gente
+        </Link>
+
         {page.people.length === 0 && page.privateCount === 0 ? (
-          <p className="mt-6 text-[14.5px] leading-[1.52] text-pretty text-text-2">
-            {mode === "following" ? (
-              <>
-                Todavía no sigues a nadie.{" "}
-                <Link
-                  href="/feed/gente"
-                  className="text-text underline-offset-2 transition-opacity hover:underline active:opacity-60"
-                >
-                  Busca a alguien
-                </Link>{" "}
-                por su @handle o nombre.
-              </>
-            ) : (
-              "Todavía nadie te sigue. Comparte tu perfil para que te encuentren."
-            )}
-          </p>
+          <div className="flex flex-col gap-2 pt-8">
+            <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">
+              {mode === "following" ? "todavía no sigues a nadie." : "todavía nadie te sigue."}
+            </p>
+            <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
+              {mode === "following"
+                ? "Busca a quien comparte tus obsesiones por su @usuario o nombre."
+                : "Comparte tu perfil para que tu gente te encuentre."}
+            </p>
+          </div>
         ) : (
           <PeopleList
             mode={mode}
@@ -94,8 +95,8 @@ function Tab({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`flex-1 rounded-full py-[9px] text-center font-mono text-[10px] uppercase tracking-[0.1em] transition-colors active:bg-white/[0.12] ${
-        active ? "bg-accent-soft text-accent" : "text-text-3 hover:text-text-2"
+      className={`flex-1 rounded-full py-[11px] text-center text-[14px] transition-colors active:bg-white/[0.12] ${
+        active ? "bg-white/10 font-semibold text-text" : "font-medium text-text-2 hover:text-text"
       }`}
     >
       {children}

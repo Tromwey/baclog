@@ -37,7 +37,7 @@ async function send(
 export function sendOtpEmail(email: string, code: string): Promise<void> {
   return send(
     email,
-    `${code} es tu código de Baclog`,
+    `${code} es tu código de kura`,
     `Tu código de acceso es ${code}. Expira en 10 minutos.`,
     "OTP",
   );
@@ -69,13 +69,13 @@ export function sendReleaseEmail(
   const artist = album.byline ? `, de ${album.byline}` : "";
   const waited =
     album.addedOn && album.waitedDays != null && album.waitedDays > 0
-      ? `Lo agregaste a tu backlog el ${album.addedOn}, cuando faltaban ${album.waitedDays} días. La espera terminó.\n\n`
+      ? `Lo guardaste en una colección el ${album.addedOn}, cuando faltaban ${album.waitedDays} días. La espera terminó.\n\n`
       : "";
   const body =
     `Hoy sale ${album.title}${artist}.\n\n` +
     waited +
     `Escúchalo: ${album.itemUrl}\n\n` +
-    `—\nTe avisamos porque está en tu backlog. Si no quieres estos avisos, ` +
+    `—\nTe avisamos porque está en tus colecciones. Si no quieres estos avisos, ` +
     `apágalos en https://baclog.app/settings`;
   return send(email, `${album.title} ya salió ✦`, body, "RELEASE");
 }

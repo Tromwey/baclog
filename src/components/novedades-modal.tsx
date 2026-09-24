@@ -83,14 +83,14 @@ export function NovedadesModal({
         {/* Where F3.8 put a clock, this puts the title itself: the cover IS the
             example, so it has to be readable as one. */}
         <div className="absolute inset-x-0 bottom-0 p-[18px]">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/70">
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-white/70">
             Ya reaccionaste
           </p>
           <p className="mt-1 font-serif text-[30px] italic leading-[1.02] text-text">
             {invitation.title}
           </p>
           {invitation.byline && (
-            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-white/60">
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-white/60">
               {invitation.byline}
             </p>
           )}
@@ -98,23 +98,24 @@ export function NovedadesModal({
       </div>
 
       <div className="p-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
           {ANNOUNCEMENT_COPY.eyebrow}
         </p>
-        <h2 className="mt-2 font-serif text-[34px] italic leading-[1.04] text-text">
+        <h2 className="mt-2 font-brand text-[32px] leading-[1.05] text-text [text-wrap:balance]">
           {ANNOUNCEMENT_COPY.title}
         </h2>
-        <p className="mt-2 text-[14.5px] leading-[1.5] text-text-2 [text-wrap:pretty]">
+        <p className="mt-2 font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
           {invitationCopy(invitation.count, invitation.title)}
         </p>
         <button
           type="button"
           onClick={write}
-          className="mt-[18px] w-full rounded-full bg-accent px-6 py-[15px] text-base font-semibold text-bg bl-press active:bg-accent-press"
+          // Kura: the action that closes the sheet is SOLID (text on bg).
+          className="mt-[18px] flex h-[52px] w-full items-center justify-center rounded-full bg-text px-6 font-sans text-[16px] font-semibold text-bg bl-press"
         >
           {ANNOUNCEMENT_COPY.cta}
         </button>
-        <SheetClose className="mt-2 w-full rounded-full px-6 py-3 text-[15px] font-semibold text-text-2 transition-[color,opacity] hover:text-text active:opacity-60">
+        <SheetClose className="mt-1 flex min-h-[52px] w-full items-center justify-center rounded-full px-6 font-sans text-[16px] font-medium text-text transition-opacity active:opacity-60">
           {ANNOUNCEMENT_COPY.close}
         </SheetClose>
       </div>

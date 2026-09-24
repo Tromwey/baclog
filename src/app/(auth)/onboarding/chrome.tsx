@@ -1,156 +1,158 @@
 import type { ReactNode } from "react";
-import { PaletteGlow } from "@/components/ui";
+import { SOLID_BUTTON } from "@/components/kura/components";
 
 /**
- * The chrome the three onboarding steps share (Revamp UI, 2026-09-03 — mock
- * "01 · Onboarding"): a palette glow hanging off the top, the mock's 500px
- * highlight-and-fade overlay, the copy block (mono eyebrow · display headline
- * · serif lede), and a footer with the pager dots and the CTA.
+ * Kura · the pieces the onboarding screens share (design/kura/flujos-v2
+ * .dc.html, flujo 01 — O1b "elige tu usuario", 32a "elige 3", 32b "tu
+ * gente", and the service step the mock doesn't draw, styled after 30b).
  *
- * Two layouts, full-height `main`, no dock, no AuthAuraBackdrop either way:
- *  - `flow` (steps 1 and 3): the footer sits in flow (`mt-auto`) rather than
- *    `absolute bottom-[30px]` so on a short phone — or with the keyboard up —
- *    the button never covers the fields; on the mock's viewport it lands in
- *    the same place.
- *  - `scroll` (step 2, the endless pool): the copy block and the grid scroll
- *    inside `main`, and the footer is PINNED over a fade to the background
- *    (the mock's `absolute bottom:30px`), so the covers run under it. The
- *    scroller pads its bottom (`SCROLL_FOOTER_PAD`) so the last row clears it.
+ * No glow, no aura: the only colour on these screens is a flat tint of a
+ * picked cover (`tint.ts`), and the chrome itself is glass or solid fills.
  */
-
-export type OnboardingStep = 1 | 2 | 3;
 
 /**
- * The fixed brand mix behind steps 1 and 3 (there's no content palette yet):
- * the three stops of ONBOARDING_AURA (aura-presets.ts).
+ * Two counters, as in the mock: the account ("2 de 2" on O1b — the email was
+ * 1) and the profile seeding that follows. The mock's seeding is "1 de 2 ·
+ * 2 de 2" (elige 3 · tu gente); the product keeps the service step the mock
+ * doesn't draw, so it counts three.
  */
-export const ONBOARDING_HEXES = ["#C7462F", "#3A5A9B", "#9B4DCA"] as const;
+export const SEED_STEPS = 3;
 
-/** What the scroller reserves under its content for the pinned footer
- *  (pager 6 + gap 12 + CTA 54 + gap 12 + ghost 36 + pb 30 + a breath). */
-const SCROLL_FOOTER_PAD = "pb-[calc(190px+env(safe-area-inset-bottom))]";
-
-export function OnboardingShell({
-  step,
-  glowHexes,
-  title,
-  lede,
-  layout = "flow",
-  children,
-  footer,
-}: {
-  step: OnboardingStep;
-  glowHexes: readonly string[];
-  title: string;
-  lede: string;
-  layout?: "flow" | "scroll";
-  children: ReactNode;
-  footer: ReactNode;
-}) {
-  const scroll = layout === "scroll";
-  const copy = (
-    <div className="relative flex flex-col gap-[18px] px-6 pt-[calc(20px+env(safe-area-inset-top))]">
-      <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
-        Paso {step} de 3
-      </span>
-      <h1 className="font-display text-[34px] font-extrabold leading-[0.98] tracking-[-0.02em] text-pretty">
-        {title}
-      </h1>
-      <p className="font-serif text-[20px] italic leading-[1.2] text-text-2">
-        {lede}
-      </p>
-    </div>
-  );
-
+/** The pinned bottom action, over a fade to the background (32a/32b). */
+export function PinnedFooter({ children }: { children: ReactNode }) {
   return (
-    <main
-      className={`relative isolate flex flex-col overflow-hidden bg-bg text-text ${
-        scroll ? "h-dvh" : "min-h-lvh"
-      }`}
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 px-5 pb-[calc(34px+env(safe-area-inset-bottom))] pt-[18px]"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(11,11,13,0), rgba(11,11,13,.92) 40%)",
+      }}
     >
-      <PaletteGlow
-        hexes={glowHexes.length > 0 ? glowHexes : ONBOARDING_HEXES}
-        angle={110}
-        opacity={0.65}
-        blur={90}
-        maskStop={72}
-        className="-inset-x-[60px] -top-[120px] h-[560px]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[700px]"
-        style={{
-          background:
-            "radial-gradient(120% 80% at 80% 0%, rgba(255,255,255,.12), transparent 60%), linear-gradient(rgba(11,11,13,0) 40%, var(--bg) 82%)",
-        }}
-      />
-
-      {scroll ? (
-        <div
-          className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] ${SCROLL_FOOTER_PAD}`}
-        >
-          {copy}
-          {children}
-        </div>
-      ) : (
-        <>
-          {copy}
-          {children}
-        </>
-      )}
-
-      <div
-        className={`flex flex-col gap-3 px-5 pb-[calc(30px+env(safe-area-inset-bottom))] ${
-          scroll ? "absolute inset-x-0 bottom-0 pt-14" : "relative mt-auto pt-6"
-        }`}
-        style={
-          scroll
-            ? { background: "linear-gradient(rgba(11,11,13,0), var(--bg) 45%)" }
-            : undefined
-        }
-      >
-        <Pager step={step} />
-        {footer}
+      <div className="pointer-events-auto mx-auto flex w-full max-w-md flex-col gap-2.5">
+        {children}
       </div>
-    </main>
-  );
-}
-
-/** The mock's three dots: 6px text-3, the current one an 18px accent bar. */
-export function Pager({ step }: { step: OnboardingStep }) {
-  return (
-    <div aria-hidden className="flex justify-center gap-1.5">
-      {([1, 2, 3] as const).map((n) => (
-        <span
-          key={n}
-          className={`h-1.5 rounded-full ${
-            n === step ? "w-[18px] bg-accent" : "w-1.5 bg-text-3"
-          }`}
-        />
-      ))}
     </div>
   );
 }
 
-/** The mock's ghost line under the CTA: 14px, text-2, no fill. */
-export function GhostButton({
+/**
+ * The flow's CTA: glass with the count left while it can't go on ("Elige 2
+ * más"), solid once it can ("Continuar"). The waiting state is a real
+ * `disabled` so a tap does nothing and assistive tech hears why.
+ */
+export function FlowCta({
+  ready,
+  busy = false,
   children,
-  ...rest
-}: React.ComponentPropsWithoutRef<"button">) {
+  onClick,
+  type = "button",
+  form,
+}: {
+  ready: boolean;
+  busy?: boolean;
+  children: ReactNode;
+  onClick?: () => void;
+  type?: "button" | "submit";
+  form?: string;
+}) {
   return (
     <button
-      type="button"
-      {...rest}
-      className="py-2 text-[14px] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-40"
+      type={type}
+      form={form}
+      onClick={onClick}
+      disabled={!ready || busy}
+      aria-busy={busy || undefined}
+      className={
+        ready
+          ? `${SOLID_BUTTON} w-full`
+          : "inline-flex h-[52px] w-full items-center justify-center rounded-full bg-[var(--glass-bg)] px-5 font-sans text-[16px] font-semibold text-text-2 transition-[background-color,color] duration-[220ms]"
+      }
     >
       {children}
     </button>
   );
 }
 
-/** The mock's CTA: full-width accent pill, 17px vertical padding, 16/600. */
-export const CTA_CLASS = "w-full py-[17px] text-[16px]";
+/** "Algo falló": the triangle + what happened and what to do. Never red. */
+export function FailLine({
+  children,
+  align = "center",
+  className = "",
+}: {
+  children: ReactNode;
+  align?: "center" | "start";
+  className?: string;
+}) {
+  return (
+    <p
+      role="alert"
+      className={`flex items-center gap-2 text-[13px] leading-[1.5] text-text ${
+        align === "center" ? "justify-center text-center" : "justify-start text-left"
+      } ${className}`}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="flex-none text-text-2"
+        aria-hidden
+      >
+        <path d={WARN_PATH} />
+      </svg>
+      <span>{children}</span>
+    </p>
+  );
+}
 
-/** The mock's text field: flat surface fill, focus = a lighter fill. */
-export const INPUT_CLASS =
-  "w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3";
+/** The mock's step mark: Red Hat Mono 11, uppercase, +8 %, text-2. */
+export function StepMark({ n, of }: { n: number; of: number }) {
+  return (
+    <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+      {n} de {of}
+    </span>
+  );
+}
+
+/** Lupa of the mock's search field (32a). */
+export const SEARCH_PATH = "M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4";
+/** Clear the search. */
+export const CLEAR_PATH = "M6 6l12 12M18 6L6 18";
+/** The error triangle (§patrones · error). */
+const WARN_PATH = "M12 4l9 16H3zM12 10v4M12 17.5v.01";
+/** 30b's check on the chosen service. */
+export const RADIO_CHECK_PATH = "M5 12.5l4.5 4.5L19 7.5";
+
+/** The 18 px stroked icon every glass control here uses. */
+export function Stroke({
+  d,
+  size = 18,
+  width = 2.2,
+  className = "",
+}: {
+  d: string;
+  size?: number;
+  width?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={width}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`flex-none ${className}`}
+      aria-hidden
+    >
+      <path d={d} />
+    </svg>
+  );
+}

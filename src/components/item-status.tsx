@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { STATUS_LABEL } from "@/modules/backlog/status";
-import { FLAME_PATH, GLYPH_VIEWBOX, SPARKLE_PATH } from "./glyph-paths";
+import { FLAME_PATH, GLYPH_VIEWBOX, LIKE_PATH, SPARKLE_PATH } from "./glyph-paths";
 
 /**
  * ItemStatus — THE single source for how a title's status × reaction ×
@@ -22,11 +22,14 @@ import { FLAME_PATH, GLYPH_VIEWBOX, SPARKLE_PATH } from "./glyph-paths";
  * one place instead of at every call site.
  */
 
-/* Glyph palette (verbatim from item-signal-glyph — the mock's exact hues). */
-const HOT = "#FF2D55"; // llama (me obsesiona)
-const EMBER = "#FFE3B0"; // destello ember sobre la llama (obsesión + IA)
+/* Glyph palette — Kura (2026-09-24): one colour, one function. Coral for the
+   obsession, pizarra for me gusta; the IA sparkle stays neutral (it is
+   provenance, not a state). */
+const HOT = "var(--st-obsessed)"; // llama (me obsesiona)
+const EMBER = "#F4F3EE"; // destello sobre la llama (obsesión + IA)
 const WHITE = "#F4F3EE"; // destello blanco (me gusta + IA)
-const GRAY = "#6C6B76"; // punto / destello gris
+const GRAY = "#8F8E9B"; // destello gris (IA sin veredicto)
+const LIKED = "var(--st-liked)"; // pulgar (me gusta)
 
 /** Optical-mass compensation for the 4-point star — 16px glyph → 18px star,
  *  exactly the slot width (HANDOFF §3's intent without overflowing the cell). */
@@ -134,15 +137,17 @@ export function ItemStatus({
       </span>
     );
   } else if (verdict === "liked" && !fromAI) {
+    // Kura: states are glyphs, never dots — the thumb, in pizarra.
     glyph = (
-      <span
-        className="rounded-full"
-        style={{
-          width: Math.round(size * 0.69),
-          height: Math.round(size * 0.69),
-          background: GRAY,
-        }}
-      />
+      <svg
+        width={Math.round(size * 0.85)}
+        height={Math.round(size * 0.85)}
+        viewBox={GLYPH_VIEWBOX}
+        fill={LIKED}
+        aria-hidden
+      >
+        <path d={LIKE_PATH} />
+      </svg>
     );
   } else if (fromAI) {
     // liked + AI → white sparkle · no verdict (or disliked) + AI → gray sparkle

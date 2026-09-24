@@ -8,12 +8,11 @@ import { useItemReaction } from "./reaction-state";
  * First-run moment 3 (first-run.ts), on the surface where the reaction
  * actually happens. Two moments, never both:
  *
- * 1. BEFORE reacting — what the row does: "Me gustó" and "Obsesión" feed
- *    Discover, "Completo" opens the Completar sheet (where the review and
- *    "no me gustó" live).
- * 2. AFTER reacting — the confirmation. Whether Discover learned anything
- *    depends on WHICH reaction, so this is also where a completion with
- *    "no me gustó" gets told the truth without being scolded for it.
+ * 1. BEFORE reacting — what the row does: Completar opens the slider, and its
+ *    two upper stops (Me gusta, Me obsesiona) feed Descubrir.
+ * 2. AFTER reacting — the confirmation. Whether Descubrir learned anything
+ *    depends on WHICH stop, so a plain "Completo" gets told the truth without
+ *    being scolded for it.
  *
  * "Just reacted" is derived by comparing live context state against the
  * values captured on mount — a session fact, not a persisted one.
@@ -44,12 +43,12 @@ export function ReactionCoach({ pending }: { pending: boolean }) {
   if (!changed) {
     return (
       <CoachNote className="-mt-1.5">
-        Me gustó y Obsesión encienden Descubrir · Completo abre tu reseña.
+        Completar abre la hoja · Me gusta y Me obsesiona alimentan Descubrir.
       </CoachNote>
     );
   }
 
-  // Only obsession and "me gustó" seed the engine (LOVED_FILTER).
+  // Only obsession and "me gusta" seed the engine (LOVED_FILTER).
   const unlocked = obsessed || verdict === "liked";
   return (
     <CoachNote label={unlocked ? "Listo" : "Anotado"} className="-mt-1.5">

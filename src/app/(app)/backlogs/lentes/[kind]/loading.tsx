@@ -1,16 +1,16 @@
 /**
  * Lens skeleton — the lens page's silhouette (‹ back · icon+title hero · a few
  * rows) shown while getLensItems streams in. Mirrors the real page's paddings
- * so the swap doesn't jump; transparent bg keeps the app-wide aura visible.
+ * so the swap doesn't jump.
  * One shared pulse (opacity only) — no spinners (item loading.tsx idiom).
  */
 export default function Loading() {
   return (
     <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance">
-      <div className="animate-pulse">
+      <div className="animate-[pulse_1.6s_ease-in-out_infinite]">
         {/* top bar silhouette: ‹ back chip */}
-        <div className="flex items-center justify-between px-4 pt-[calc(24px+env(safe-area-inset-top))]">
-          <div className="h-[38px] w-[38px] rounded-full bg-surface-1" />
+        <div className="flex items-center justify-between px-6 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
+          <div className="h-11 w-11 rounded-full bg-surface-1" />
         </div>
 
         {/* hero: icon + title, then the meta line */}

@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/auth";
-import {
-  CoachNote,
-  ScreenHeader,
-  StrokeIcon,
-  glassChipClass,
-} from "@/components/ui";
+import { CoachNote, ScreenHeader } from "@/components/ui";
+import { CHIP_44 } from "@/components/kura/components";
+import { KIcon } from "@/components/kura/icons";
 import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { getShelvesForUser } from "@/modules/backlog/shelves";
 import { getLibraryUpcoming } from "@/modules/backlog/library";
@@ -13,16 +10,16 @@ import { getRenderInstant } from "@/modules/catalog/release";
 import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
-import { PLUS_PATH, SPARKLE_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
 import { NewBacklogTrigger } from "./new-backlog-button";
-import { BacklogShelves } from "./backlog-shelves";
+import { CollectionCards } from "./collection-cards";
 
 /**
- * /backlogs (Revamp UI screen 02, 2026-09-03): "Backlogs" header with the "+"
- * chip, the kind filter (Todos · Cine · Series · Música), the library-wide
- * "No puede esperar" strip and then every backlog as a strip of covers over
- * its palette glow. The lens entry (flame + dropdown) is gone from here — the
- * mock has none; /backlogs/lentes/* keeps working by URL.
+ * /backlogs = Tus colecciones (Kura · flujos-v2 02, 2026-09-24). The route
+ * keeps its product name; everything the user reads says "colección".
+ *
+ * Header "tus colecciones" + the 44 glass "+" (O2a Nueva colección), the
+ * format filter, the automatic "no puedo esperar" card and every collection
+ * as a spine card (collection-cards.tsx). Zero collections = 15a.
  */
 export default async function BacklogsPage() {
   const user = await requireUser();
@@ -31,17 +28,12 @@ export default async function BacklogsPage() {
     getRenderInstant(),
   ]);
 
-  if (shelves.length === 0) return <FirstUse name={user.name} />;
+  if (shelves.length === 0) return <NoCollections />;
 
   // Novedades (modules/announcements.ts + components/novedades-modal). Gated
-  // FIRST so the extra read only happens for an account that can actually see
-  // it. Deliberately not on the first-use screen above: someone who hasn't made
-  // a backlog yet is already being guided somewhere, and an announcement on top
-  // of onboarding is two voices talking at once.
+  // FIRST so the extra read only happens for an account that can see it.
   // F3.9: the sheet needs a title this reader already reacted to and hasn't
-  // written about. No such title = no sheet, and the announcement stays unspent
-  // (see getReviewInvitation) — it will find them the day they react to
-  // something.
+  // written about; no such title = no sheet (the announcement stays unspent).
   const announce = shouldAnnounce(user);
   const [invitation, upcoming, counts] = await Promise.all([
     announce ? getReviewInvitation(user.id) : Promise.resolve(null),
@@ -53,28 +45,37 @@ export default async function BacklogsPage() {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <ScreenHeader
-        title="Backlogs"
+        title="tus colecciones"
         action={
-          <NewBacklogTrigger ariaLabel="Nuevo backlog" className={glassChipClass}>
-            <StrokeIcon d={PLUS_PATH} size={16} strokeWidth={2.4} />
+          <NewBacklogTrigger ariaLabel="Nueva colección" className={CHIP_44}>
+            <KIcon name="plus" size={18} />
           </NewBacklogTrigger>
         }
       />
 
       {invitation && <NovedadesModal invitation={invitation} />}
 
-      <BacklogShelves shelves={shelves} upcoming={upcoming} now={now} />
+      <CollectionCards
+        shelves={shelves}
+        upcoming={upcoming}
+        now={now}
+        username={user.username}
+        profilePublic={user.isPublic}
+      />
 
       {/* First-run moment 1 (first-run.ts): the library is still the
           onboarding picks. Says what those picks already did and where the
           next title comes from. Lifts itself on the first add or judgement. */}
       {coach.shelves && (
         <CoachNote className="mx-5 mt-[30px]">
-          Empezaste con lo que te obsesiona — eso ya enciende{" "}
-          <Link href="/descubrir" className="text-text-2 underline underline-offset-2 transition-opacity active:opacity-60">
+          Empezaste con lo que te obsesiona: eso ya afina{" "}
+          <Link
+            href="/descubrir"
+            className="text-text-2 underline underline-offset-2 transition-opacity active:opacity-60"
+          >
             Descubrir
           </Link>
-          . Con el + de arriba agregas lo que quieres ver, oír o terminar.
+          . Ahí encuentras lo siguiente y lo guardas en una colección.
         </CoachNote>
       )}
     </main>
@@ -82,55 +83,57 @@ export default async function BacklogsPage() {
 }
 
 /**
- * No-backlogs screen (mock #p8, HANDOFF §8): no header actions, a muted fixed-
- * color aura (there's no content ADN to drive one yet — AuraField would fall
- * back to lima, which is exactly what the mock avoids here), one lima CTA
- * into the create modal and one dark CTA into Discover. Kept because the
- * Revamp UI mock defers empty states.
- *
- * Since onboarding v2 (2026-09-03) a NEW account never lands here — "elige
- * tres" creates the first backlog — so this is the recovery screen for
- * someone who deleted every backlog, not first use. The v1 step meter and
- * the row-model coach marks ("toca una fila", "el chevron") described an
- * interface that no longer exists and were removed with it.
+ * 15a Sin colecciones: the ghost card "tu primera" (its first slot is the
+ * way in), the phrase in Newsreader 34 with its full stop, one line of body
+ * and the glass "Nueva colección". Since onboarding v2 a new account never
+ * lands here (elige tres creates the first collection) — it's the screen for
+ * someone who deleted every collection.
  */
-function FirstUse({ name }: { name: string | null }) {
+function NoCollections() {
   return (
-    <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
-      <div className="relative px-5 pt-[calc(44px+env(safe-area-inset-top))]">
-        {name && (
-          <p className="bl-rise min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
-            Hola, {name}.
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col pb-dock-clearance text-text">
+      <ScreenHeader
+        title="tus colecciones"
+        action={
+          <NewBacklogTrigger ariaLabel="Nueva colección" className={CHIP_44}>
+            <KIcon name="plus" size={18} />
+          </NewBacklogTrigger>
+        }
+      />
+      <div className="flex flex-1 flex-col justify-center gap-6 px-7 pb-10">
+        <div className="-mx-4 flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1">
+          <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
+            <span
+              className="whitespace-nowrap font-mono text-[13px] tracking-[0.14em] text-text-3"
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+            >
+              tu primera
+            </span>
+          </span>
+          <div className="flex flex-1 items-end gap-2.5 overflow-hidden px-3.5 py-5">
+            <NewBacklogTrigger
+              ariaLabel="Nueva colección"
+              className="flex h-[150px] w-[100px] flex-none items-center justify-center rounded-[var(--r-cover-l)] bg-[var(--glass-bg)] text-text bl-press"
+            >
+              <KIcon name="plus" size={18} />
+            </NewBacklogTrigger>
+            <span className="h-[150px] w-[100px] flex-none rounded-[var(--r-cover-l)] bg-surface-2" />
+            <span className="h-[150px] w-[100px] flex-none rounded-[var(--r-cover-l)] bg-surface-2 opacity-50" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <h2 className="font-brand text-[34px] font-normal leading-[1.05] [text-wrap:balance]">
+            aquí va lo que más vale.
+          </h2>
+          <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
+            Empieza por lo que no puedes dejar de recomendar. Una colección puede
+            mezclar cine, series y música.
           </p>
-        )}
-        <h1 className="mt-4 font-display text-[36px] font-extrabold leading-none tracking-[-0.025em]">
-          Empieza tu backlog.
-        </h1>
-        <p className="mt-3.5 max-w-[26ch] font-serif text-[20px] italic leading-[1.25] text-text-2">
-          Guarda lo que ves, escuchas y no puedes soltar — en un solo lugar.
-        </p>
-      </div>
-
-      <div className="relative flex flex-col gap-2.5 px-5 pt-8">
-        <NewBacklogTrigger className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-[15px] text-[15px] font-semibold text-bg bl-press active:bg-accent-press">
-          <StrokeIcon d={PLUS_PATH} size={18} strokeWidth={2} />
-          Crear tu primer backlog
+        </div>
+        <NewBacklogTrigger className="flex h-11 items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] pl-3 pr-4 font-sans text-[15px] font-semibold text-text bl-press">
+          <KIcon name="plus" size={18} />
+          Nueva colección
         </NewBacklogTrigger>
-        <Link
-          href="/descubrir"
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-surface-2 py-3.5 text-[15px] font-semibold text-text bl-press"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox={GLYPH_VIEWBOX}
-            fill="currentColor"
-            aria-hidden
-          >
-            <path d={SPARKLE_PATH} />
-          </svg>
-          Explorar Discover
-        </Link>
       </div>
     </main>
   );

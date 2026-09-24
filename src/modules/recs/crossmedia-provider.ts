@@ -316,7 +316,7 @@ const LLM_MODEL = "claude-opus-4-8";
  * title can at worst fail to ground (no reco) — it can never inject a fake
  * addable item.
  */
-const SYSTEM_PROMPT = `Eres el motor de recomendaciones cross-media de Baclog. Dado un ítem que un usuario amó (película, serie o álbum), recomiendas UN ítem de OTRO medio (si el seed es cine/serie → recomienda un ÁLBUM; si es álbum → recomienda una PELÍCULA o SERIE) conectados por un vínculo cultural/creativo REAL y verificable (un artista que scoreó la película, una banda que inspiró al guionista, un director que citó el álbum, etc.).
+const SYSTEM_PROMPT = `Eres el motor de recomendaciones cross-media de Kura. Dado un ítem que un usuario amó (película, serie o álbum), recomiendas UN ítem de OTRO medio (si el seed es cine/serie → recomienda un ÁLBUM; si es álbum → recomienda una PELÍCULA o SERIE) conectados por un vínculo cultural/creativo REAL y verificable (un artista que scoreó la película, una banda que inspiró al guionista, un director que citó el álbum, etc.).
 
 Reglas:
 - Dirección: SOLO cine/series ↔ álbum. Nunca libros ni videojuegos.
@@ -346,7 +346,7 @@ Formato de salida (JSON):
  * (link graph): the model must not re-litigate the link, propose another
  * title, or invent facts — its whole job is voice.
  */
-const NARRATE_SYSTEM_PROMPT = `Eres el motor de narrativa cross-media de Baclog. Te doy un vínculo YA CONFIRMADO entre un ítem que un usuario amó (<seed>) y una recomendación real de otro medio (<target>), más el hecho concreto que los conecta (<link>). Tu único trabajo es escribir la narrativa de la card — el vínculo ya es real y ya fue verificado contra el catálogo.
+const NARRATE_SYSTEM_PROMPT = `Eres el motor de narrativa cross-media de Kura. Te doy un vínculo YA CONFIRMADO entre un ítem que un usuario amó (<seed>) y una recomendación real de otro medio (<target>), más el hecho concreto que los conecta (<link>). Tu único trabajo es escribir la narrativa de la card — el vínculo ya es real y ya fue verificado contra el catálogo.
 
 Reglas:
 - NO cuestiones el vínculo, NO propongas otro título, NO afirmes hechos que no estén en <link>.

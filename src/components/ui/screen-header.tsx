@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 
 /**
- * The one clean header for the authenticated shell (M3.5 nav redesign): a
- * Bricolage title in sentence case with an optional trailing action. The
+ * The one clean header for the authenticated shell. KURA (2026-09-24): the
+ * screen title is Newsreader 400 · 36, lowercase ("tus colecciones" — the
+ * caller writes it lowercase), no negative tracking; it sits 64 from the top
+ * edge like the frames (or 20 under the iOS safe area when that is taller —
+ * an installed PWA). The
  * `Baclog · {section}` eyebrow it used to carry was removed on the founder's
  * call (2026-08-28): inside the app the brand is redundant and the section
  * repeats the title — it only cost vertical space. (The immersive Descubrir
@@ -34,8 +37,8 @@ export function ScreenHeader({
     <header
       className={`${
         glass
-          ? "sticky top-0 z-[5] isolate px-5 pb-4 pt-[calc(22px+env(safe-area-inset-top))]"
-          : "px-5 pb-[18px] pt-[calc(20px+env(safe-area-inset-top))]"
+          ? "sticky top-0 z-[5] isolate px-5 pb-4 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]"
+          : "px-5 pb-[18px] pt-[max(64px,calc(20px+env(safe-area-inset-top)))]"
       } ${className}`}
     >
       {glass && (
@@ -54,7 +57,7 @@ export function ScreenHeader({
         />
       )}
       <div className={`flex justify-between gap-3.5 ${glass ? "items-start" : "items-end"}`}>
-        <h1 className="min-w-0 truncate font-display text-3xl font-extrabold leading-[1.02] tracking-[-0.02em] text-text">
+        <h1 className="min-w-0 truncate font-brand text-[36px] font-normal leading-[1.02] text-text">
           {title}
         </h1>
         {action && <div className="shrink-0">{action}</div>}
