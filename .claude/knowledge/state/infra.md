@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: YYYY-MM-DD
+> Actualizado: 2026-09-24 (API v1 · fase 0)
 
 ## Qué cubre este dominio
 <!-- Build, deploy, entornos, variables de entorno y dependencias.
@@ -15,7 +15,7 @@
 
 | Ruta | Qué hay |
 |---|---|
-| `package.json` | Scripts: `dev`, `build`, `start`, `lint`, `beta`, `ship`, `eval:recos`. Gestor: **pnpm** |
+| `package.json` | Scripts: `dev`, `build`, `start`, `lint`, `beta`, `ship`, `eval:recos`. Gestor: **pnpm**. Dependencia directa nueva (2026-09-24): **`jose` ^6.2.12** (JWT HS256 de la API v1, `src/authz/api.ts`; antes solo llegaba como transitiva de next-auth — pnpm dedupe una sola copia) |
 | `pnpm-workspace.yaml` · `pnpm-lock.yaml` | Workspace y lockfile de pnpm |
 | `next.config.ts` | `experimental.staleTimes` y los `rewrites` de fallback que sirven `/{username}` |
 | `vercel.json` · `.vercel/` | Config y vínculo del proyecto en Vercel |
@@ -43,6 +43,9 @@
   -p 3010` ahí (con los symlinks `.env.local` y `node_modules`) y se abre la URL en el navegador.
 
 ## Decisiones tomadas (y por qué)
+
+- **API v1 para iOS vive en el mismo deploy (`src/app/api/v1/**`, 2026-09-24)** — aditiva: no toca la web, así que desplegarla no rompe nada; el smoke (`scripts/api-smoke.ts`, ver `guardrails.md`) corre contra un `next dev` local antes de `pnpm ship`. Los handlers son Node runtime (usan `node:async_hooks`), nunca edge.
+
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
 
 ## En progreso

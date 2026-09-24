@@ -483,3 +483,13 @@ export async function getProfileReviews(
     when: relativeWhen(row.createdAt, now),
   }));
 }
+
+/** How many reviews THIS account has written (own profile stats; hidden ones
+ *  count — they're still the author's). Scoped by userId inside the query. */
+export async function countOwnReviews(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(itemReviews)
+    .where(eq(itemReviews.userId, userId));
+  return row?.n ?? 0;
+}

@@ -2,7 +2,7 @@ import { requireUser } from "@/auth";
 import { getUserPalette } from "@/modules/backlog/queries";
 import { getObsessions } from "@/modules/backlog/profile-stats";
 import { tintSurfaceVertical } from "@/components/kura/tint";
-import { profileHexes } from "@/app/(app)/perfil/profile-hexes";
+import { profileHexes } from "@/modules/backlog/profile-hexes";
 import { EditProfile } from "./edit-profile";
 
 /**

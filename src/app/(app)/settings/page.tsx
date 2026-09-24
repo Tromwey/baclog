@@ -7,7 +7,7 @@ import { BackButton } from "@/components/ui";
 import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { InstallAppRow } from "@/app/(app)/perfil/install-app-row";
-import { profileHexes } from "@/app/(app)/perfil/profile-hexes";
+import { profileHexes } from "@/modules/backlog/profile-hexes";
 import { DeleteAccount, PrivacySwitch, ReleasesSwitch } from "./settings-form";
 import { SERVICE_LABEL } from "./services";
 
