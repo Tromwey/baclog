@@ -120,6 +120,8 @@ struct WatchOption: Hashable, Identifiable {
     let short: String
     let name: String
     let kind: String
+    /// Theatrical row ("En cines"): its label is computed from the release date.
+    var isCinema: Bool { short == "cine" }
 }
 
 struct TitleCounts: Hashable {
@@ -151,6 +153,10 @@ struct Title: Identifiable, Hashable {
     var counts: TitleCounts? = nil
     var watch: [WatchOption] = []
     var musicLink: String? = nil
+    /// Line under "dónde ver" (e.g. "Todavía no está en streaming en México.").
+    var watchNote: String? = nil
+    /// E4 · not available here: where it is instead.
+    var watchElsewhere: String? = nil
 
     var lowerCreator: String { creator.lowercased() }
 }
@@ -165,6 +171,70 @@ struct Person: Identifiable, Hashable {
     /// Featured obsession tones [oscuro, claro]. Empty → no obsession yet.
     var hexes: [String]
     var featuredTitleID: String? = nil
+    var isPrivate = false
+    var followers = 0
+    var followingCount = 0
+    var stats = PersonStats()
+    /// Titles they're obsessed with (profile strip).
+    var obsessions: [String] = []
+    /// Titles in common with you.
+    var common: [String] = []
+    var collections: [PersonCollection] = []
+    /// Discovery line ("le obsesiona El viaje de Chihiro").
+    var why: String? = nil
+}
+
+struct PersonStats: Hashable {
+    var obsessed = 0
+    var completed = 0
+    var liked = 0
+    var reviews = 0
+}
+
+struct PersonCollection: Hashable, Identifiable {
+    var id: String { name }
+    let name: String
+    let titleIDs: [String]
+    var privacy: Privacy = .publicAccess
+}
+
+/// What someone you follow did with a title ("gente que sigues").
+struct PeopleMark: Hashable {
+    let personID: String
+    /// nil → waiting ("No puede esperar").
+    let mark: Mark?
+    var suffix: String? = nil
+}
+
+/// A creator (director, artist) — O7 ficha de persona.
+struct Creator: Hashable, Identifiable {
+    var id: String { name }
+    let name: String
+    let role: String
+    let works: Int
+    var initials: String {
+        String(name.split(separator: " ").prefix(2).compactMap(\.first)).lowercased()
+    }
+}
+
+// MARK: - Notifications (31a)
+
+enum NotificationKind: Hashable {
+    case followRequest(personID: String)
+    case release(titleID: String, text: String)
+    case newFollower(personID: String)
+    case recap(text: String)
+    case followers(ids: [String], more: Int)
+}
+
+enum RequestState: Hashable { case pending, approved, rejected }
+
+struct KNotification: Identifiable, Hashable {
+    let id: String
+    let kind: NotificationKind
+    let age: String
+    var unread: Bool
+    var thisWeek: Bool
 }
 
 // MARK: - Reviews
@@ -310,6 +380,19 @@ enum Route: Hashable {
     case reorder(String)
     case changeCover(String)
     case automatic
+    case person(String)
+    case followers(String, showFollowing: Bool)
+    case creator(String)
+    case notifications
+    case recap
+    case recapHistory
+    case recapShare
+    case settings
+    case settingsPrivacy
+    case musicApp
+    case editProfile
+    /// K1d / K1e — how your profile looks to someone who doesn't follow you.
+    case profileAsStranger
 }
 
 enum OnboardingStep: Hashable {

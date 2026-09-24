@@ -90,6 +90,92 @@ enum DebugLaunch {
             main(.discover)
         case "profile":
             main(.profile)
+        // Flujo 06 · obra (full file)
+        case "nostate":
+            main(.collections, [.title("garza")])
+        case "slider":
+            main(.collections, [.title("chihiro")], sheet: .complete(titleID: "chihiro", focusReview: false))
+        case "today":
+            store.now = MockData.date(2026, 10, 16, 10)
+            main(.collections, [.title("ycse")])
+        case "unavailable":
+            main(.collections, [.title("pearl")])
+        case "announced":
+            main(.collections, [.title("showgirl")])
+        case "aviso":
+            store.phase = .main
+            store.debugOverlay = .releaseNotification
+        // Flujo 07 · descubrir
+        case "recents":
+            main(.discover)
+            store.debugDiscoverQuery = ("", false)
+        case "typing":
+            main(.discover)
+            store.debugDiscoverQuery = ("mi", false)
+        case "results":
+            main(.discover)
+            store.debugDiscoverQuery = ("miyazaki", true)
+        case "saveto":
+            main(.discover, sheet: .saveTo("mononoke"))
+            store.debugDiscoverQuery = ("miyazaki", true)
+        case "noresults":
+            main(.discover)
+            store.debugDiscoverQuery = ("mononokee", true)
+        case "creator":
+            main(.discover, [.creator("Hayao Miyazaki")])
+        // Flujo 08 · gente
+        case "feedempty":
+            main(.feed)
+            store.debugEmptyFollowing = true
+        case "notifications":
+            main(.feed, [.notifications])
+        case "notificationsempty":
+            main(.feed, [.notifications])
+            store.notifications = []
+        case "person":
+            main(.feed, [.person("luciarrr")])
+        case "personoptions":
+            main(.feed, [.person("luciarrr")], sheet: .personOptions("luciarrr"))
+        case "unfollow":
+            main(.feed, [.person("luciarrr")])
+            store.pendingAction = { [weak store] in store?.followFromProfile("luciarrr") }
+        case "followers":
+            main(.feed, [.person("luciarrr"), .followers("luciarrr", showFollowing: false)])
+        case "private":
+            main(.feed, [.person("tomasv")])
+        case "requested":
+            main(.feed, [.person("tomasv")])
+            store.requested = ["tomasv"]
+        case "stranger":
+            main(.profile, [.settings, .settingsPrivacy, .profileAsStranger])
+        case "strangerprivate":
+            store.profilePrivate = true
+            main(.profile, [.settings, .settingsPrivacy, .profileAsStranger])
+        // Flujo 09 · tu perfil
+        case "editprofile":
+            main(.profile, [.editProfile])
+        case "profileempty":
+            store.emptyLibrary = true
+            main(.profile)
+        // Flujo 10 · recap
+        case "recap":
+            main(.profile, [.recap])
+        case "recapcard":
+            main(.profile, [.recap, .recapShare])
+        case "recaphistory":
+            main(.profile, [.recap, .recapHistory])
+        case "recapempty":
+            store.debugEmptyRecap = true
+            main(.profile, [.recap])
+        // Flujo 11 · ajustes
+        case "settings":
+            main(.profile, [.settings])
+        case "privacy":
+            main(.profile, [.settings, .settingsPrivacy])
+        case "musicapp":
+            main(.profile, [.settings, .musicApp])
+        case "deleteaccount":
+            main(.profile, [.settings], sheet: .deleteAccount)
         default:
             break
         }

@@ -63,7 +63,8 @@ struct CollectionDetailView: View {
     private func bodyContent(_ c: KCollection, titles: [Title], formats: [MediaFormat]) -> some View {
         if c.layout == .list {
             TitleList(titles: titles, collectionID: c.id)
-        } else if formats.count > 1 {
+        } else if formats.count >= 2 && formats.allSatisfy({ f in titles.filter { $0.format == f }.count >= 3 }) {
+            // adapt(): group only when every format shown has ≥ 3 titles.
             GroupedShelves(titles: titles, formats: formats, collectionID: c.id)
         } else {
             ShelfGrid(titles: titles, collectionID: c.id)

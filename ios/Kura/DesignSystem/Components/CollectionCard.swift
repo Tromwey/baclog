@@ -32,6 +32,7 @@ struct CollectionCard: View {
     let marks: [String: Mark]
     let palette: [String]?
     var coverHeight: CGFloat
+    var spineSize: CGFloat = 13
     var waitingLabel: (Title) -> String? = { _ in nil }
     var onTap: () -> Void = {}
     var onTitleTap: ((Title) -> Void)? = nil
@@ -45,7 +46,7 @@ struct CollectionCard: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     SpineLabel(text: collection.name, height: cardHeight,
-                               color: titles.isEmpty ? KColor.text3 : KColor.text)
+                               color: titles.isEmpty ? KColor.text3 : KColor.text, size: spineSize)
                     HStack(alignment: .bottom, spacing: 10) {
                         if titles.isEmpty {
                             ForEach(0..<3, id: \.self) { i in

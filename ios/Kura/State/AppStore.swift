@@ -10,6 +10,8 @@ enum AppPhase: Hashable {
 
 enum SheetStyle { case compact, tall }
 
+enum DebugOverlay { case releaseNotification }
+
 /// Every bottom sheet in the app. They are drawn by `SheetHost` (not the system
 /// `.sheet`) so they match the frames: inset 8, radius 36, s2, scrim .62.
 enum SheetRoute: Identifiable, Hashable {
@@ -26,8 +28,9 @@ enum SheetRoute: Identifiable, Hashable {
     case complete(titleID: String, focusReview: Bool)
     case saveTo(String)
     case titleMore(String)
+    case personOptions(String)
+    case deleteAccount
     case addTitles(String)
-    case settings
 
     var id: String { String(describing: self) }
 
@@ -59,7 +62,7 @@ enum LoadState { case loading, loaded }
 final class AppStore {
     // MARK: Dependencies
     @ObservationIgnored let api: KuraAPI
-    let now: Date
+    var now: Date
 
     // MARK: Phase / navigation
     var phase: AppPhase = .splash
@@ -83,6 +86,41 @@ final class AppStore {
     var revealedSpoilers: Set<String> = []
     /// Last collection used in "guardar en" — preselected next time.
     var lastUsedCollectionID: String?
+
+    // Social / settings
+    var requested: Set<String> = []
+    var muted: Set<String> = []
+    var notifications: [KNotification] = MockData.notifications
+    var requestStates: [String: RequestState] = [:]
+    var recentSearches: [String] = MockData.recentSearches
+    var musicApp = "Apple Music"
+    var profilePrivate = false
+    var showCommon = true
+    var notifyFollowers = true
+    var notifyReleases = true
+    var notifyRecap = true
+    var defaultPrivacy: Privacy = .followers
+    /// "Avísame cuando llegue" (E4) — titles you asked to be told about.
+    var alerts: Set<String> = []
+    /// Discover's search mode hides the dock (the keyboard owns the bottom).
+    var dockHidden = false
+    var recentlyViewed: [String] = ["chihiro", "ma", "severance", "mala", "pearl"]
+    @ObservationIgnored var debugEmptyRecap = false
+    @ObservationIgnored var debugEmptyFollowing = false
+    var debugOverlay: DebugOverlay?
+    @ObservationIgnored var debugDiscoverQuery: (text: String, submit: Bool)?
+
+    func noteSearch(_ q: String) {
+        recentSearches.removeAll { $0.caseInsensitiveCompare(q) == .orderedSame }
+        recentSearches.insert(q, at: 0)
+        if recentSearches.count > 6 { recentSearches.removeLast() }
+    }
+
+    func noteViewed(_ id: String) {
+        recentlyViewed.removeAll { $0 == id }
+        recentlyViewed.insert(id, at: 0)
+        if recentlyViewed.count > 8 { recentlyViewed.removeLast() }
+    }
 
     /// Onboarding picks (the three obsessions).
     var onboardingPicks: [String] = []
@@ -492,6 +530,9 @@ final class AppStore {
         for id in ids.subtracting(before) { update(id) { $0.titleIDs.append(titleID); $0.addedAt[titleID] = Date() } }
         for id in before.subtracting(ids) { update(id) { $0.titleIDs.removeAll { $0 == titleID } } }
         if let first = ids.subtracting(before).first { lastUsedCollectionID = first }
+        if before.isEmpty && !ids.isEmpty, notifyReleases, let t = titles[titleID], isUnreleased(t) {
+            ReleaseNotifier.schedule(t)
+        }
         gcUserState(titleID)
         let text: String
         if ids.isEmpty {
@@ -566,11 +607,79 @@ final class AppStore {
     }
 
     /// Followed people who did something with this title.
-    func followedMarks(for titleID: String) -> [(Person, Mark)] {
-        (MockData.peopleMarks[titleID] ?? []).compactMap { pair in
-            guard following.contains(pair.0), let p = people[pair.0] else { return nil }
-            return (p, pair.1)
+    func followedMarks(for titleID: String) -> [(Person, PeopleMark)] {
+        (MockData.peopleMarks[titleID] ?? []).compactMap { pm in
+            guard following.contains(pm.personID), let p = people[pm.personID] else { return nil }
+            return (p, pm)
         }
+    }
+
+    /// Follow from a profile: public → follow; private → request (Solicitado).
+    /// Tapping Siguiendo unfollows at once with Deshacer (no confirmation).
+    func followFromProfile(_ id: String) {
+        guard let p = people[id] else { return }
+        if following.contains(id) {
+            following.remove(id)
+            sync { try await $0.setFollowing(personID: id, following: false) }
+            undoToast("Dejaste de seguir a @\(p.handle)") { [weak self] in
+                self?.following.insert(id)
+                self?.sync { try await $0.setFollowing(personID: id, following: true) }
+            }
+        } else if p.isPrivate {
+            if requested.contains(id) { requested.remove(id) } else { requested.insert(id) }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } else {
+            toggleFollow(id)
+        }
+    }
+
+    func toggleMute(_ id: String) {
+        guard let p = people[id] else { return }
+        let now = !muted.contains(id)
+        if now { muted.insert(id) } else { muted.remove(id) }
+        undoToast(now ? "@\(p.handle) ya no sale en tu feed" : "@\(p.handle) vuelve a tu feed") { [weak self] in
+            if now { self?.muted.remove(id) } else { self?.muted.insert(id) }
+        }
+    }
+
+    func creator(_ name: String) -> Creator {
+        if let c = MockData.creators[name] { return c }
+        let n = catalogOrder.compactMap { titles[$0] }.filter { $0.creator == name }.count
+        let isMusic = catalogOrder.compactMap { titles[$0] }.contains { $0.creator == name && $0.format == .album }
+        return Creator(name: name, role: isMusic ? "artista" : "director", works: max(n, 1))
+    }
+
+    /// Visible feed: nobody you muted.
+    var visibleFeed: [FeedEvent] { feed.filter { !muted.contains($0.authorID) } }
+
+    func setRequest(_ notificationID: String, _ state: RequestState) {
+        requestStates[notificationID] = state
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func markNotificationsRead() {
+        for i in notifications.indices { notifications[i].unread = false }
+    }
+
+    var hasUnread: Bool { notifications.contains(where: \.unread) }
+
+    func toggleAlert(_ titleID: String) {
+        if alerts.contains(titleID) { alerts.remove(titleID) } else {
+            alerts.insert(titleID)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    /// C3 · the second irreversible action (typing your @ confirms it).
+    func deleteAccount() {
+        collections = []
+        userTitles = [:]
+        reviews.removeAll { $0.authorID == me.id }
+        following = []
+        onboardingPicks = []
+        onboardingStep = .welcome
+        signOut()
+        showToast(ToastModel(text: "Tu cuenta se borró.", kind: .info))
     }
 
     // MARK: Counters (profile ribbon)
@@ -589,6 +698,7 @@ final class AppStore {
         guard !didBootstrap else { return }
         didBootstrap = true
         await bootstrap(emptyLibrary: emptyLibrary, keepLoading: keepLoading)
+        if debugEmptyFollowing { following = [] }
         if let id = pendingListCollection, let i = collections.firstIndex(where: { $0.id == id }) {
             collections[i].layout = .list
         }
@@ -606,6 +716,7 @@ final class AppStore {
 
     func signOut() {
         sheet = nil
+        onboardingStep = .welcome
         paths = [:]
         tab = .collections
         withAnimation(KMotion.short) { phase = .onboarding }

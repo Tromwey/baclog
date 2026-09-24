@@ -22,7 +22,12 @@ struct RootView: View {
             }
 
             SheetHost()
-            ToastHost(dockVisible: store.phase == .main && store.path(store.tab).isEmpty)
+            ToastHost(dockVisible: store.phase == .main && store.path(store.tab).isEmpty && !(store.dockHidden && store.tab == .discover))
+            #if DEBUG
+            if store.debugOverlay == .releaseNotification {
+                ReleaseNotificationPreview()
+            }
+            #endif
         }
         .animation(.easeInOut(duration: 0.2), value: store.phase)
     }
@@ -41,9 +46,9 @@ struct MainTabs: View {
                     .allowsHitTesting(store.tab == tab)
                     .accessibilityHidden(store.tab != tab)
             }
-            if store.path(store.tab).isEmpty {
+            if store.path(store.tab).isEmpty && !(store.dockHidden && store.tab == .discover) {
                 Dock()
-                    .padding(.bottom, 0)
+                    .ignoresSafeArea(.keyboard)
                     .transition(.opacity)
             }
         }
@@ -90,6 +95,18 @@ struct RouteView: View {
             case .reorder(let id): ReorderView(collectionID: id)
             case .changeCover(let id): ChangeCoverView(collectionID: id)
             case .automatic: WaitingCollectionView()
+            case .person(let id): PersonProfileView(personID: id)
+            case .followers(let id, let f): FollowersView(personID: id, showFollowing: f)
+            case .creator(let name): CreatorView(name: name)
+            case .notifications: NotificationsView()
+            case .recap: RecapView()
+            case .recapHistory: RecapHistoryView()
+            case .recapShare: RecapShareView()
+            case .settings: SettingsView()
+            case .settingsPrivacy: PrivacySettingsView()
+            case .musicApp: MusicAppView()
+            case .editProfile: EditProfileView()
+            case .profileAsStranger: ProfileAsStrangerView()
             }
         }
         .background(KColor.bg.ignoresSafeArea())
@@ -115,8 +132,9 @@ struct SheetContent: View {
         case .complete(let t, let focus): CompleteSheet(titleID: t, focusReview: focus)
         case .saveTo(let t): SaveToSheet(titleID: t)
         case .titleMore(let t): TitleMoreSheet(titleID: t)
+        case .personOptions(let p): PersonOptionsSheet(personID: p)
+        case .deleteAccount: DeleteAccountSheet()
         case .addTitles(let c): AddTitlesSheet(collectionID: c)
-        case .settings: SettingsSheet()
         }
     }
 }

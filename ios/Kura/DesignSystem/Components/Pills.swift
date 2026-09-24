@@ -85,6 +85,7 @@ struct SectionTitle: View {
 struct MonoSegmented<T: Hashable>: View {
     let options: [(T, String)]
     @Binding var selection: T
+    var height: CGFloat = 36
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, opt in
@@ -99,7 +100,7 @@ struct MonoSegmented<T: Hashable>: View {
                         .textCase(.uppercase)
                         .foregroundStyle(on ? KColor.text : KColor.text2)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .frame(height: height)
                         .background(on ? KColor.dockActive : Color.clear, in: Capsule())
                         .contentShape(Capsule())
                 }

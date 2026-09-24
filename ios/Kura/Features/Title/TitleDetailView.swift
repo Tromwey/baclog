@@ -27,6 +27,7 @@ struct TitleDetailView: View {
                     }
                 }
             }
+            .onAppear { store.noteViewed(t.id) }
         } else {
             GoneView()
         }
@@ -42,6 +43,7 @@ private struct TitleHeader: View {
     var body: some View {
         let t = title
         let unreleased = store.isUnreleased(t)
+        let today = store.releaseLabel(t) == "hoy"
         let mark = store.mark(t.id)
         let saved = store.collectionsContaining(t.id).count
 
@@ -49,14 +51,28 @@ private struct TitleHeader: View {
             CoverView(title: t,
                       width: t.format == .album ? 240 : 200,
                       height: t.format == .album ? 240 : 300)
+                .overlay(alignment: .topLeading) {
+                    if today {
+                        HStack(spacing: 6) {
+                            GlyphView(glyph: .clock, size: 13, color: KColor.bg)
+                            Text("hoy").font(.kura.mono(11, medium: true)).tracking(1.1).textCase(.uppercase)
+                        }
+                        .foregroundStyle(KColor.bg)
+                        .padding(.leading, 9).padding(.trailing, 11)
+                        .frame(height: 28)
+                        .background(KColor.waiting, in: Capsule())
+                        .padding(10)
+                        .accessibilityLabel("Sale hoy")
+                    }
+                }
             Text(t.name)
                 .font(.kura.workTitle)
                 .foregroundStyle(KColor.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, 10)
                 .accessibilityAddTraits(.isHeader)
-            Text(t.lowerCreator).font(.kura.ui(15)).foregroundStyle(KColor.text2)
-            Text(metaLine(t)).monoLabel()
+            Text(t.lowerCreator).font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
+            Text(metaLine(t, unreleased: unreleased)).monoLabel()
 
             if let c = t.counts {
                 CountRibbon(items: ribbon(c))
@@ -65,61 +81,11 @@ private struct TitleHeader: View {
             }
 
             HStack(spacing: 8) {
-                if unreleased {
-                    // The clock is an indicator, never a button.
-                    HStack(spacing: 8) {
-                        GlyphView(glyph: .clock, size: 16)
-                        Text(store.releaseSentence(t)?.capitalizedFirst ?? "Sin fecha")
-                            .font(.kura.ui(15, .semibold))
-                            .foregroundStyle(KColor.text)
-                    }
-                    .padding(.leading, 14).padding(.trailing, 16)
-                    .frame(height: 44)
-                    .background(KColor.glassBg, in: Capsule())
-                    .accessibilityElement(children: .combine)
-                } else {
-                    Button {
-                        store.present(.complete(titleID: t.id, focusReview: false))
-                    } label: {
-                        HStack(spacing: 8) {
-                            if let mark { GlyphView(glyph: mark.glyph, size: 16).transition(.scale.combined(with: .opacity)) }
-                            Text(mark?.myLabel ?? "Completar")
-                                .font(.kura.ui(15, .semibold))
-                                .lineLimit(1)
-                                .fixedSize()
-                                .contentTransition(.interpolate)
-                        }
-                        .foregroundStyle(KColor.text)
-                        .padding(.leading, mark == nil ? 16 : 14).padding(.trailing, 16)
-                        .frame(height: 44)
-                        .background(KColor.glassBg, in: Capsule())
-                        .contentShape(Capsule())
-                    }
-                    .kPress()
-                    .animation(KMotion.spring, value: mark)
-                    .accessibilityLabel(mark.map { "Tu reacción: \($0.myLabel). Cambiar" } ?? "Completar")
+                if !(unreleased && t.format == .album) {
+                    completeButton(t, mark: mark, solid: today)
                 }
-
-                Button {
-                    store.present(.saveTo(t.id))
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: saved > 0 ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(saved == 0 ? "Guardar" : (saved == 1 ? "En 1 colección" : "En \(saved) colecciones"))
-                            .font(.kura.ui(15, .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                    .foregroundStyle(KColor.text)
-                    .padding(.leading, 14).padding(.trailing, 16)
-                    .frame(height: 44)
-                    .background(KColor.glassBg, in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .kPress()
-
-                if !unreleased && t.format != .series {
+                saveButton(t, saved: saved)
+                if !unreleased && !today && t.format != .series {
                     IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, label: "Reseñar") {
                         store.present(.complete(titleID: t.id, focusReview: true))
                     }
@@ -128,7 +94,9 @@ private struct TitleHeader: View {
             .padding(.top, 8)
             .padding(.horizontal, -10)
 
-            if t.upcomingSeason != nil, let label = store.releaseLabel(t, withSeason: true) {
+            if unreleased, let sentence = store.releaseSentence(t) {
+                Text(sentence.capitalizedFirst).monoLabel().padding(.top, 2)
+            } else if t.upcomingSeason != nil, let label = store.releaseLabel(t, withSeason: true) {
                 Text(label).monoLabel().padding(.top, 2)
             }
         }
@@ -139,7 +107,54 @@ private struct TitleHeader: View {
         .background(Tint.header(t.palette))
     }
 
-    private func metaLine(_ t: Title) -> String {
+    private func completeButton(_ t: Title, mark: Mark?, solid: Bool) -> some View {
+        Button {
+            store.present(.complete(titleID: t.id, focusReview: false))
+        } label: {
+            HStack(spacing: 8) {
+                if let mark { GlyphView(glyph: mark.glyph, size: 16).transition(.scale.combined(with: .opacity)) }
+                Text(mark?.myLabel ?? "Completar")
+                    .font(.kura.ui(15, .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .contentTransition(.interpolate)
+            }
+            .foregroundStyle(solid && mark == nil ? KColor.bg : KColor.text)
+            .padding(.leading, mark == nil ? (solid ? 18 : 16) : 14).padding(.trailing, solid ? 18 : 16)
+            .frame(height: 44)
+            .background(solid && mark == nil ? KColor.text : KColor.glassBg, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .kPress()
+        .animation(KMotion.spring, value: mark)
+        .accessibilityLabel(mark.map { "Tu reacción: \($0.myLabel). Cambiar" } ?? "Completar")
+    }
+
+    private func saveButton(_ t: Title, saved: Int) -> some View {
+        Button {
+            store.present(.saveTo(t.id))
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: saved > 0 ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(saved == 0 ? "Guardar" : (saved == 1 ? "En 1 colección" : "En \(saved) colecciones"))
+                    .font(.kura.ui(15, .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(KColor.text)
+            .padding(.leading, 14).padding(.trailing, 16)
+            .frame(height: 44)
+            .background(KColor.glassBg, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .kPress()
+    }
+
+    private func metaLine(_ t: Title, unreleased: Bool) -> String {
+        if t.format == .album && unreleased {
+            return [t.year.map(String.init), "álbum", t.trackCount.map { "\($0) tracks" }].compactMap { $0 }.joined(separator: " · ")
+        }
         var parts: [String] = []
         if let y = t.year { parts.append(String(y)) }
         if let d = t.detail { parts.append(d) }
@@ -149,7 +164,9 @@ private struct TitleHeader: View {
 
     private func ribbon(_ c: TitleCounts) -> [(Glyph, String)] {
         var items: [(Glyph, String)] = []
-        if c.obsessed != "—" { items += [(.flame, c.obsessed), (.thumb, c.liked), (.check, c.completed)] }
+        if c.obsessed != "—" { items.append((.flame, c.obsessed)) }
+        if c.liked != "—" { items.append((.thumb, c.liked)) }
+        if c.completed != "—" { items.append((.check, c.completed)) }
         if let w = c.waiting { items.append((.clock, w)) }
         items.append((.bookmark, c.saved))
         return items
@@ -158,7 +175,7 @@ private struct TitleHeader: View {
     private func ribbonA11y(_ c: TitleCounts) -> String {
         var s: [String] = []
         if c.obsessed != "—" { s += ["\(c.obsessed) obsesionados", "\(c.liked) les gusta", "\(c.completed) completos"] }
-        if let w = c.waiting { s.append("\(w) lo esperaron") }
+        if let w = c.waiting { s.append("\(w) esperando") }
         s.append("\(c.saved) guardados")
         return s.joined(separator: ", ")
     }
@@ -177,6 +194,7 @@ private struct TitleSections: View {
                 AlbumSections(title: t)
             } else {
                 if !t.watch.isEmpty { whereToWatch(t) }
+                else if t.watchElsewhere != nil { notAvailable(t) }
                 if t.format == .series { SeriesSections(title: t) }
             }
             if let s = t.synopsis {
@@ -191,26 +209,77 @@ private struct TitleSections: View {
     }
 
     private func whereToWatch(_ t: Title) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let unreleased = store.isUnreleased(t)
+        let label = store.releaseLabel(t)
+        return VStack(alignment: .leading, spacing: 4) {
             SectionTitle(text: "dónde ver", trailing: "México")
             ForEach(t.watch) { w in
                 Link(destination: providerURL(w.name)) {
                     HStack(spacing: 14) {
-                        Text(w.short)
-                            .font(.kura.mono(12, medium: true))
-                            .foregroundStyle(KColor.text)
-                            .frame(width: 40, height: 40)
-                            .background(KColor.s2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        Group {
+                            if w.isCinema {
+                                Image(systemName: "ticket").font(.system(size: 16))
+                            } else {
+                                Text(w.short).font(.kura.mono(12, medium: true))
+                            }
+                        }
+                        .foregroundStyle(KColor.text)
+                        .frame(width: 40, height: 40)
+                        .background(KColor.s2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         Text(w.name).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
                         Spacer()
-                        Text(w.kind).monoLabel()
-                        Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
+                        if w.isCinema {
+                            let when = label == "hoy" ? "desde hoy" : (unreleased ? (label ?? "") : cinemaSince(t))
+                            Text(when).monoLabel(11, color: label == "hoy" ? KColor.waiting : KColor.text2)
+                        } else {
+                            Text(w.kind).monoLabel()
+                        }
+                        if label != "hoy" || !w.isCinema {
+                            Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
+                        }
                     }
                     .frame(minHeight: 56)
                     .contentShape(Rectangle())
                 }
                 .accessibilityLabel("\(w.name), \(w.kind)")
             }
+            if unreleased, let sentence = store.releaseLabel(t) {
+                Text("Te avisamos el \(sentence) y cuando llegue a streaming.")
+                    .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+            } else if let note = t.watchNote, label != "hoy" {
+                Text(note).font(.kura.ui(13)).foregroundStyle(KColor.text2)
+            }
+        }
+    }
+
+    private func cinemaSince(_ t: Title) -> String {
+        guard case .day(let d)? = t.release else { return "" }
+        let c = MockData.calendar.dateComponents([.day, .month], from: d)
+        let months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+        return "desde \(c.day ?? 1) \(months[(c.month ?? 1) - 1])"
+    }
+
+    /// E4 · no disponible aquí.
+    private func notAvailable(_ t: Title) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(text: "dónde ver", trailing: "México")
+            Text("No está en streaming en México.").font(.kura.ui(16)).foregroundStyle(KColor.text)
+            if let e = t.watchElsewhere {
+                Text(e).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+            }
+            let on = store.alerts.contains(t.id)
+            Button { store.toggleAlert(t.id) } label: {
+                HStack(spacing: 8) {
+                    GlyphView(glyph: on ? .check : .clock, size: 16, color: on ? KColor.text : KColor.waiting)
+                    Text(on ? "Te avisamos cuando llegue" : "Avísame cuando llegue").font(.kura.ui(15, .semibold))
+                }
+                .foregroundStyle(KColor.text)
+                .padding(.leading, 14).padding(.trailing, 18)
+                .frame(height: 44)
+                .background(on ? KColor.glassBg : KColor.waiting.opacity(0.18), in: Capsule())
+            }
+            .kPress()
+            .animation(KMotion.short, value: on)
         }
     }
 
@@ -230,17 +299,22 @@ private struct TitleSections: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(text: "gente que sigues")
                 VStack(spacing: 0) {
-                    ForEach(people, id: \.0.id) { p, m in
-                        HStack(spacing: 12) {
-                            Seal(person: p, size: 36)
-                            Text("@\(p.handle)").font(.kura.ui(15, .medium)).foregroundStyle(KColor.text)
-                            Spacer()
-                            HStack(spacing: 7) {
-                                GlyphView(glyph: m.glyph, size: 14)
-                                Text(m.theirLabel).monoLabel(11, tracking: 0.06)
+                    ForEach(people, id: \.0.id) { p, pm in
+                        Button { store.push(.person(p.id)) } label: {
+                            HStack(spacing: 12) {
+                                Seal(person: p, size: 36)
+                                Text("@\(p.handle)").font(.kura.ui(15, .medium)).foregroundStyle(KColor.text)
+                                Spacer()
+                                HStack(spacing: 7) {
+                                    GlyphView(glyph: pm.mark?.glyph ?? .clock, size: 14)
+                                    Text((pm.mark?.theirLabel ?? "No puede esperar") + (pm.suffix.map { " · \($0)" } ?? ""))
+                                        .monoLabel(11, tracking: 0.06)
+                                }
                             }
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
                         }
-                        .frame(minHeight: 52)
+                        .buttonStyle(.plain)
                         .accessibilityElement(children: .combine)
                     }
                 }
@@ -287,7 +361,10 @@ private struct TitleSections: View {
         let others = store.catalogOrder.compactMap { store.title($0) }.filter { $0.creator == t.creator && $0.id != t.id }
         if !others.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                SectionTitle(text: "también de \(t.lowerCreator)")
+                Button { store.push(.creator(t.creator)) } label: {
+                    SectionTitle(text: "también de \(t.lowerCreator)")
+                }
+                .buttonStyle(.plain)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .bottom, spacing: 12) {
                         ForEach(others) { o in
@@ -512,7 +589,7 @@ private struct SeriesSections: View {
     }
 }
 
-// MARK: - 24c Álbum
+// MARK: - 24c Álbum · 37c Álbum anunciado
 
 private struct AlbumSections: View {
     @Environment(AppStore.self) private var store
@@ -522,45 +599,62 @@ private struct AlbumSections: View {
         let t = title
         let unreleased = store.isUnreleased(t)
         VStack(alignment: .leading, spacing: 30) {
-            Link(destination: appleMusicURL(t)) {
-                HStack(spacing: 8) {
-                    Text("Abrir en \(t.musicLink ?? "Apple Music")").font(.kura.ui(16, .semibold))
-                    Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
+            if unreleased {
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionTitle(text: "dónde escuchar")
+                    Link(destination: musicURL(t)) {
+                        HStack(spacing: 14) {
+                            Image(systemName: "music.note").font(.system(size: 16))
+                                .foregroundStyle(KColor.text)
+                                .frame(width: 40, height: 40)
+                                .background(KColor.s2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            Text("Abrir en \(store.musicApp)").font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
+                            Spacer()
+                            Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
+                        }
+                        .frame(minHeight: 56)
+                    }
+                    let newCount = t.tracks.filter(\.isNew).count
+                    Text("Abre el álbum completo. Los \(newCount) tracks nuevos llegan en \(store.releaseLabel(t) ?? "").")
+                        .font(.kura.ui(13)).foregroundStyle(KColor.text2)
                 }
-                .foregroundStyle(KColor.text)
-                .padding(.leading, 20).padding(.trailing, 18)
-                .frame(height: 48)
-                .background(KColor.glassBg, in: Capsule())
+            } else {
+                Link(destination: musicURL(t)) {
+                    HStack(spacing: 8) {
+                        Text("Abrir en \(store.musicApp)").font(.kura.ui(16, .semibold))
+                        Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(KColor.text)
+                    .padding(.leading, 20).padding(.trailing, 18)
+                    .frame(height: 48)
+                    .background(KColor.glassBg, in: Capsule())
+                }
             }
 
             if !t.tracks.isEmpty {
+                let shown = unreleased ? t.tracks.filter(\.available) : t.tracks
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("canciones").font(.kura.news(24)).foregroundStyle(KColor.text)
+                        Text(unreleased ? "tracks" : "canciones").font(.kura.news(24)).foregroundStyle(KColor.text)
                         Spacer()
                         if unreleased {
-                            let avail = t.tracks.filter(\.available).count
-                            Text("\(avail) de \(t.trackCount ?? t.tracks.count) disponibles").monoLabel()
+                            Text("\(shown.count) de \(t.trackCount ?? t.tracks.count) disponibles").monoLabel()
                         }
                     }
-                    .padding(.bottom, 6)
-                    ForEach(t.tracks) { tr in
+                    .padding(.bottom, unreleased ? 4 : 6)
+                    ForEach(shown) { tr in
                         HStack(spacing: 14) {
-                            Text(String(format: "%02d", tr.number)).font(.kura.mono(12)).foregroundStyle(KColor.text2).frame(width: 22, alignment: .leading)
-                            Text(tr.name).font(.kura.ui(15)).foregroundStyle(tr.available ? KColor.text : KColor.text2).lineLimit(1)
+                            Text(unreleased ? "\(tr.number)" : String(format: "%02d", tr.number))
+                                .monoLabel(unreleased ? 11 : 12)
+                                .frame(width: 22, alignment: .leading)
+                            Text(tr.name).font(.kura.ui(unreleased ? 16 : 15)).foregroundStyle(KColor.text).lineLimit(1)
                             Spacer()
-                            if tr.isNew {
-                                HStack(spacing: 5) {
-                                    GlyphView(glyph: .clock, size: 12)
-                                    Text("nueva").monoLabel(10)
-                                }
-                            }
                         }
                         .frame(minHeight: 48)
                         .accessibilityElement(children: .combine)
                     }
                     if let total = t.trackCount, total > t.tracks.count {
-                        Text("Ver las \(total) en \(t.musicLink ?? "Apple Music")")
+                        Text("Ver las \(total) en \(store.musicApp)")
                             .font(.kura.ui(14, .semibold))
                             .foregroundStyle(KColor.text2)
                             .padding(.top, 6)
@@ -569,16 +663,21 @@ private struct AlbumSections: View {
             } else if let total = t.trackCount {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("canciones").font(.kura.news(24)).foregroundStyle(KColor.text)
-                    Text("\(total) canciones · la lista completa está en \(t.musicLink ?? "Apple Music").")
+                    Text("\(total) canciones · la lista completa está en \(store.musicApp).")
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                 }
             }
         }
     }
 
-    private func appleMusicURL(_ t: Title) -> URL {
+    private func musicURL(_ t: Title) -> URL {
         let q = "\(t.name) \(t.creator)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return URL(string: "https://music.apple.com/mx/search?term=\(q)")!
+        switch store.musicApp {
+        case "Spotify": return URL(string: "https://open.spotify.com/search/\(q)")!
+        case "YouTube Music": return URL(string: "https://music.youtube.com/search?q=\(q)")!
+        case "Tidal": return URL(string: "https://listen.tidal.com/search?q=\(q)")!
+        default: return URL(string: "https://music.apple.com/mx/search?term=\(q)")!
+        }
     }
 }
 

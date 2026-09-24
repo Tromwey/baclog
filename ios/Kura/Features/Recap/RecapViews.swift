@@ -1,0 +1,313 @@
+import SwiftUI
+
+/// Mock recap data (agosto 2026). The real one comes from the API.
+enum RecapData {
+    static let month = "agosto"
+    static let year = 2026
+    static let topTitleID = "ma"
+    static let stats: [(String, String, Glyph)] = [("14", "Completos", .check), ("6", "Obsesiones", .flame),
+                                                   ("3", "Reseñas", .review), ("9", "Guardados", .bookmark)]
+    static let more = ["chihiro", "mala", "pearl", "eduardo"]
+    static let fan = ["chihiro", "ma", "mala"]
+    static let history: [(String, String)] = [("agosto", "ma"), ("julio", "chihiro"), ("junio", "pearl"), ("mayo", "mala")]
+}
+
+// MARK: - 08 Recap · 09 Recap vacío
+
+struct RecapView: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        if store.debugEmptyRecap {
+            EmptyRecapView()
+        } else if let top = store.title(RecapData.topTitleID) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack {
+                        BackChip()
+                        Spacer()
+                        Text("Recap · \(RecapData.month) \(String(RecapData.year))").monoLabel(11, tracking: 0.1)
+                        Spacer()
+                        Color.clear.frame(width: 44, height: 44)
+                    }
+                    Text(RecapData.month).font(.kura.newsItalic(52)).foregroundStyle(KColor.text)
+                        .accessibilityAddTraits(.isHeader)
+                    HStack(alignment: .bottom, spacing: 16) {
+                        Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170) }
+                            .buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Lo más tuyo").monoLabel(11, tracking: 0.1)
+                            Text(top.name).font(.kura.newsItalic(26)).foregroundStyle(KColor.text)
+                            Text(top.lowerCreator).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                        }
+                    }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 18) {
+                        ForEach(RecapData.stats, id: \.1) { v, l, g in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(v).font(.kura.mono(34)).foregroundStyle(KColor.text)
+                                HStack(spacing: 7) {
+                                    GlyphView(glyph: g, size: 13, color: g == .bookmark ? KColor.text2 : nil)
+                                    Text(l).monoLabel()
+                                }
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("También en tu mes").monoLabel(11, tracking: 0.1)
+                        HStack(alignment: .bottom, spacing: 10) {
+                            ForEach(RecapData.more.compactMap { store.title($0) }) { t in
+                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS) }
+                                    .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        GlassButton(title: "Compartir tarjeta", height: 46) { store.push(.recapShare) }
+                        Button("Meses anteriores") { store.push(.recapHistory) }
+                            .font(.kura.ui(15, .semibold))
+                            .foregroundStyle(KColor.text2)
+                            .padding(.horizontal, 16)
+                            .frame(height: 46)
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(.top, KSize.chromeTop)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 48)
+            }
+            .background(Tint.card(top.palette).ignoresSafeArea())
+            .ignoresSafeArea(.container, edges: .top)
+        }
+    }
+}
+
+struct EmptyRecapView: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack {
+                BackChip()
+                Spacer()
+                Text("Recap · septiembre 2026").monoLabel(11, tracking: 0.1, color: KColor.text3)
+                Spacer()
+                Color.clear.frame(width: 44, height: 44)
+            }
+            Spacer()
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s2).frame(width: 84, height: 126)
+                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126)
+                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126).opacity(0.5)
+                }
+                Text("tu recap de septiembre todavía se está escribiendo.")
+                    .font(.kura.newsItalic(44)).foregroundStyle(KColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("El recap llega el 1 de octubre con lo que completes, califiques o reseñes este mes.")
+                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Faltan \(daysLeft) días").font(.kura.mono(12)).foregroundStyle(KColor.text2)
+            }
+            Spacer()
+            GlassButton(title: "Ir a tus colecciones", height: 46) { store.pop(); store.select(.collections) }
+        }
+        .padding(.top, KSize.chromeTop)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 48)
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var daysLeft: Int {
+        let end = MockData.date(2026, 10, 1)
+        return max(0, MockData.calendar.dateComponents([.day], from: MockData.calendar.startOfDay(for: store.now), to: end).day ?? 0) + 1
+    }
+}
+
+// MARK: - O8 Meses anteriores
+
+struct RecapHistoryView: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack { BackChip(); Spacer() }
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 14)
+                Text("recap · agosto 2026").monoLabel().padding(.horizontal, 20)
+                Text("agosto").font(.kura.news(40)).foregroundStyle(KColor.text).padding(.horizontal, 20).padding(.top, 6)
+                HStack(spacing: 10) {
+                    tile("14", "completos")
+                    tile("6", "obsesiones")
+                    tile("31 h", "de cine")
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                Text("meses anteriores").font(.kura.section).foregroundStyle(KColor.text)
+                    .padding(.horizontal, 20).padding(.top, 40).padding(.bottom, 12)
+                HStack(spacing: 0) {
+                    SpineLabel(text: "tus recaps", height: 228)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(RecapData.history, id: \.0) { month, tid in
+                                if let t = store.title(tid) {
+                                    Button { store.push(.recap) } label: {
+                                        VStack {
+                                            Text("KURA").font(.kura.mono(10)).tracking(1).foregroundStyle(KColor.text2)
+                                            Spacer()
+                                            CoverImage(url: t.coverURL, palette: t.palette)
+                                                .frame(width: 64, height: 64)
+                                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                            Spacer()
+                                            Text(month).font(.kura.news(18)).foregroundStyle(KColor.text)
+                                        }
+                                        .padding(.vertical, 14).padding(.horizontal, 10)
+                                        .frame(width: 108, height: 192)
+                                        .background(recapGradient(t.palette), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        .kShadow(.cover)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Recap de \(month)")
+                                }
+                            }
+                        }
+                        .padding(.vertical, 18)
+                        .padding(.horizontal, 16)
+                    }
+                }
+                .background(KColor.s1)
+                .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
+                .padding(.horizontal, 12)
+            }
+            .padding(.top, KSize.chromeTop)
+            .padding(.bottom, 60)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private func tile(_ v: String, _ l: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(v).font(.kura.news(28)).foregroundStyle(KColor.text)
+            Text(l).monoLabel()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+    }
+}
+
+func recapGradient(_ palette: [String]) -> LinearGradient {
+    let (top, bottom) = Tint.ends(palette)
+    return LinearGradient(stops: [.init(color: top.color, location: 0), .init(color: bottom.color, location: 0.7),
+                                  .init(color: KColor.bg, location: 1)], startPoint: .top, endPoint: .bottom)
+}
+
+// MARK: - Tarjeta recap · C2 firmada
+
+struct RecapShareView: View {
+    @Environment(AppStore.self) private var store
+    @State private var signed = false
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            VStack(spacing: 22) {
+                Group {
+                    if signed { SignedRecapCard() } else { RecapCard() }
+                }
+                .transition(.opacity)
+                .animation(KMotion.tint, value: signed)
+                HStack(spacing: 14) {
+                    Text("Firmar con tu @").font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
+                    Spacer()
+                    KuraSwitch(label: "Firmar con tu @", isOn: $signed)
+                }
+                .padding(.horizontal, 28)
+                ShareLink(item: URL(string: "https://kura.app/@\(store.me.handle)/recap/2026-08")!,
+                          message: Text("mi recap de agosto en kura")) {
+                    Text("Compartir").font(.kura.ui(16, .semibold)).foregroundStyle(KColor.bg)
+                        .frame(maxWidth: .infinity).frame(height: 52)
+                        .background(KColor.text, in: Capsule())
+                }
+                .padding(.horizontal, 24)
+            }
+            .padding(.top, 118)
+            TopChrome { EmptyView() }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+/// 360×640 exportable card (scaled to fit).
+struct RecapCard: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        let top = store.title(RecapData.topTitleID)
+        HStack(spacing: 0) {
+            SpineLabel(text: "KURA · recap 08.2026", height: 540)
+            VStack(alignment: .leading, spacing: 18) {
+                Text(RecapData.month).font(.kura.newsItalic(50)).foregroundStyle(KColor.text)
+                GeometryReader { geo in
+                    let h = geo.size.height * 0.7
+                    ZStack {
+                        ForEach(Array(RecapData.fan.compactMap { store.title($0) }.enumerated()), id: \.element.id) { i, t in
+                            CoverView(title: t, height: h)
+                                .rotationEffect(.degrees(Double(i - 1) * 8))
+                                .offset(x: CGFloat(i - 1) * 54 * 0.85)
+                                .zIndex(i == 1 ? 3 : 1)
+                        }
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                }
+                HStack(alignment: .top) {
+                    ForEach(RecapData.stats.prefix(3), id: \.1) { v, l, g in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(v).font(.kura.mono(26)).foregroundStyle(KColor.text)
+                            HStack(spacing: 5) {
+                                GlyphView(glyph: g, size: 11)
+                                Text(l).font(.kura.mono(10)).tracking(0.4).textCase(.uppercase).foregroundStyle(KColor.text2)
+                                    .lineLimit(1).minimumScaleFactor(0.7)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                Text("@\(store.me.handle)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
+            }
+            .padding(.top, 32).padding(.horizontal, 22).padding(.bottom, 28)
+        }
+        .frame(width: 306, height: 540)
+        .background(Tint.card(top?.palette ?? []))
+        .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// C2 · tarjeta firmada.
+struct SignedRecapCard: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        let top = store.title(RecapData.topTitleID)
+        VStack(alignment: .leading) {
+            Text("KURA · recap 08.2026").font(.kura.mono(11)).tracking(1.5).foregroundStyle(KColor.text2)
+            Spacer()
+            if let top { CoverView(title: top, width: 180, height: 180).frame(maxWidth: .infinity) }
+            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("recap de agosto").font(.kura.news(34)).foregroundStyle(KColor.text)
+                Text("14 completos · 6 obsesiones").monoLabel()
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Rectangle().fill(KColor.text.opacity(0.18)).frame(height: 1).padding(.bottom, 14)
+                Text("recap de").monoLabel(10, tracking: 0.1)
+                Text("@\(store.me.handle)").font(.kura.newsItalic(26)).foregroundStyle(KColor.text)
+                Text("kura.app/@\(store.me.handle)").font(.kura.mono(11)).foregroundStyle(KColor.text2)
+            }
+            .padding(.top, 14)
+        }
+        .padding(26)
+        .frame(width: 300, height: 533)
+        .background(recapGradient(top?.palette ?? []), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}

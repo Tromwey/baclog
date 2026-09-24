@@ -5,7 +5,6 @@ import SwiftUI
 /// so the next card's edge always shows), snap per card.
 struct FeedView: View {
     @Environment(AppStore.self) private var store
-    @State private var bellDot = true
     @State private var position: String?
 
     /// How far a card's body runs past its own height, so the card rising from
@@ -13,10 +12,18 @@ struct FeedView: View {
     private let ext: CGFloat = 120
 
     var body: some View {
+        if store.following.isEmpty {
+            FeedEmptyView()
+        } else {
+            stack
+        }
+    }
+
+    private var stack: some View {
         VStack(spacing: 0) {
             header
             GeometryReader { geo in
-                let events = store.feed
+                let events = store.visibleFeed
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         ForEach(Array(events.enumerated()), id: \.element.id) { i, e in
@@ -61,14 +68,10 @@ struct FeedView: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             ZStack(alignment: .topTrailing) {
-                IconChip44(systemName: "bell", iconSize: 17, weight: .medium, label: bellDot ? "Avisos, hay nuevos" : "Avisos") {
-                    bellDot = false
-                    if let t = store.waitingTitles.first(where: { store.isUnreleased($0) }),
-                       let s = store.releaseSentence(t) {
-                        store.showToast(ToastModel(text: "\(t.name) \(s).", kind: .info))
-                    }
+                IconChip44(systemName: "bell", iconSize: 17, weight: .medium, label: store.hasUnread ? "Notificaciones, hay nuevas" : "Notificaciones") {
+                    store.push(.notifications)
                 }
-                if bellDot {
+                if store.hasUnread {
                     Circle().fill(KColor.text).frame(width: 8, height: 8)
                         .offset(x: -9, y: 9)
                         .allowsHitTesting(false)
@@ -119,7 +122,12 @@ private struct FeedCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let author { AuthorChip(person: author, age: ageLabel(event.ageHours)) }
+            if let author {
+                Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
+                    AuthorChip(person: author, age: ageLabel(event.ageHours))
+                }
+                .buttonStyle(.plain)
+            }
             art
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             textBlock

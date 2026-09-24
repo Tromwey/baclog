@@ -24,28 +24,95 @@ enum MockData {
     // MARK: People
 
     static let me = Person(handle: "mariel.ok", name: "mariel ortega", initials: "mo",
-                           hexes: ["#c53e42", "#794244"], featuredTitleID: "chihiro")
+                           hexes: ["#c53e42", "#794244"], featuredTitleID: "chihiro",
+                           followers: 204, followingCount: 187)
 
     static let people: [Person] = [
         me,
-        Person(handle: "tono_v", name: "toño v", initials: "tv", hexes: ["#b57a56", "#685746"], featuredTitleID: "mindofmine"),
-        Person(handle: "luciarrr", name: "lucía r", initials: "lr", hexes: ["#b4562f", "#9b5832"], featuredTitleID: "mala"),
-        Person(handle: "danpix", name: "dan pix", initials: "dp", hexes: ["#c33d3b", "#ae4c69"], featuredTitleID: "chihiro"),
-        Person(handle: "nico.ve", name: "nico ve", initials: "nv", hexes: ["#5ca6cb", "#33566e"], featuredTitleID: "chihiro")
+        Person(handle: "tono_v", name: "toño vega", initials: "tv", hexes: ["#b57a56", "#685746"], featuredTitleID: "mindofmine",
+               followers: 88, followingCount: 120, stats: PersonStats(obsessed: 7, completed: 51, liked: 22, reviews: 3),
+               obsessions: ["mindofmine", "eduardo", "nube"], common: ["mindofmine", "eduardo", "ma"],
+               collections: [PersonCollection(name: "música 2026", titleIDs: ["eduardo", "mindofmine", "nube"])],
+               why: "le obsesiona Mind of Mine"),
+        Person(handle: "luciarrr", name: "lucía rivas", initials: "lr", hexes: ["#b4562f", "#9b5832"], featuredTitleID: "mala",
+               followers: 318, followingCount: 142, stats: PersonStats(obsessed: 12, completed: 64, liked: 40, reviews: 9),
+               obsessions: ["mala", "chihiro", "ma", "pearl", "severance"],
+               common: ["ma", "chihiro", "eduardo", "pearl", "mindofmine"],
+               collections: [
+                PersonCollection(name: "música 2026", titleIDs: ["mala", "ma", "eduardo", "mindofmine"]),
+                PersonCollection(name: "ghibli completo", titleIDs: ["chihiro", "mononoke", "totoro", "garza"]),
+                PersonCollection(name: "para correr", titleIDs: ["nube", "ma", "mindofmine"], privacy: .followers)
+               ],
+               why: "le obsesiona Mala"),
+        Person(handle: "danpix", name: "dan pix", initials: "dp", hexes: ["#c33d3b", "#ae4c69"], featuredTitleID: "chihiro",
+               followers: 512, followingCount: 201, stats: PersonStats(obsessed: 18, completed: 140, liked: 61, reviews: 22),
+               obsessions: ["chihiro", "ma", "odyssey"], common: ["chihiro", "odyssey", "pearl"],
+               collections: [PersonCollection(name: "estrenos", titleIDs: ["odyssey", "doomsday", "ycse"])],
+               why: "le obsesiona El viaje de Chihiro"),
+        Person(handle: "nico.ve", name: "nico velasco", initials: "nv", hexes: ["#5ca6cb", "#33566e"], featuredTitleID: "chihiro",
+               followers: 144, followingCount: 98, stats: PersonStats(obsessed: 9, completed: 77, liked: 30, reviews: 4),
+               obsessions: ["chihiro", "severance", "pearl"], common: ["chihiro", "pearl"],
+               collections: [PersonCollection(name: "series", titleIDs: ["severance"])],
+               why: "le obsesiona El viaje de Chihiro"),
+        Person(handle: "mili.v", name: "mili vargas", initials: "mv", hexes: [],
+               followers: 61, followingCount: 70, obsessions: ["ma"], common: ["ma", "pearl"],
+               why: "le obsesiona Ma"),
+        Person(handle: "ghibli.club", name: "ghibli club", initials: "gc", hexes: [],
+               followers: 2400, followingCount: 12, obsessions: ["chihiro", "totoro", "mononoke"], common: ["chihiro", "totoro", "mononoke", "garza"],
+               collections: [PersonCollection(name: "ghibli completo", titleIDs: ["chihiro", "mononoke", "totoro", "garza"])],
+               why: "4 obsesiones en común"),
+        Person(handle: "tomasv", name: "tomás vidal", initials: "tv", hexes: [], isPrivate: true,
+               followers: 96, followingCount: 110),
+        Person(handle: "anaso", name: "ana sofía", initials: "as", hexes: [], common: ["pearl", "ma"]),
+        Person(handle: "rafam", name: "rafa m.", initials: "rm", hexes: [])
     ]
 
     /// Who mariel already follows (nico.ve is the feed's suggestion).
-    static let following: Set<String> = ["tono_v", "luciarrr", "danpix"]
+    static let following: Set<String> = ["tono_v", "luciarrr", "danpix", "mili.v"]
+
+    /// Who follows a given profile (20e) — for the mock, lucía's.
+    static let followersOf: [String: [String]] = [
+        "luciarrr": ["danpix", "nico.ve", "mili.v", "ghibli.club", "anaso", "rafam"],
+        "mariel.ok": ["danpix", "luciarrr", "mili.v", "nico.ve", "anaso"]
+    ]
+    static let followingOf: [String: [String]] = [
+        "luciarrr": ["danpix", "tono_v", "ghibli.club", "mariel.ok"],
+        "mariel.ok": ["tono_v", "luciarrr", "danpix", "mili.v"]
+    ]
 
     /// What people you follow did with a title (ficha · "gente que sigues").
-    static let peopleMarks: [String: [(String, Mark)]] = [
-        "chihiro": [("danpix", .obsessed), ("luciarrr", .liked), ("nico.ve", .obsessed)],
-        "severance": [("nico.ve", .obsessed), ("danpix", .completed)],
-        "mindofmine": [("tono_v", .obsessed)],
-        "ma": [("luciarrr", .completed), ("danpix", .obsessed)],
-        "mala": [("luciarrr", .obsessed)],
-        "pearl": [("danpix", .liked)],
-        "eduardo": [("tono_v", .liked)]
+    static let peopleMarks: [String: [PeopleMark]] = [
+        "chihiro": [PeopleMark(personID: "danpix", mark: .obsessed), PeopleMark(personID: "luciarrr", mark: .liked), PeopleMark(personID: "nico.ve", mark: .liked)],
+        "severance": [PeopleMark(personID: "nico.ve", mark: .obsessed), PeopleMark(personID: "danpix", mark: .completed)],
+        "mindofmine": [PeopleMark(personID: "tono_v", mark: .obsessed)],
+        "ma": [PeopleMark(personID: "luciarrr", mark: .completed), PeopleMark(personID: "danpix", mark: .obsessed)],
+        "mala": [PeopleMark(personID: "luciarrr", mark: .obsessed)],
+        "pearl": [PeopleMark(personID: "danpix", mark: .liked)],
+        "eduardo": [PeopleMark(personID: "tono_v", mark: .liked)],
+        "odyssey": [PeopleMark(personID: "danpix", mark: .obsessed)],
+        "garza": [PeopleMark(personID: "danpix", mark: .obsessed)],
+        "ycse": [PeopleMark(personID: "danpix", mark: .obsessed, suffix: "Telluride"), PeopleMark(personID: "mili.v", mark: nil)]
+    ]
+
+    /// Creators with more work than the catalog shows (O7).
+    static let creators: [String: Creator] = [
+        "Hayao Miyazaki": Creator(name: "Hayao Miyazaki", role: "director", works: 12),
+        "Devendra Banhart": Creator(name: "Devendra Banhart", role: "artista", works: 11),
+        "Ed Maverick": Creator(name: "Ed Maverick", role: "artista", works: 5)
+    ]
+    /// Extra works by a creator that aren't in the catalog (row only, no ficha).
+    static let otherWorks: [String: [(String, String)]] = [
+        "Hayao Miyazaki": [("El castillo ambulante", "Cine · 2004"), ("Ponyo", "Cine · 2008"), ("Kiki: entregas a domicilio", "Cine · 1989")]
+    ]
+
+    static let recentSearches = ["miyazaki", "severance", "devendra", "@luciarrr"]
+
+    static let notifications: [KNotification] = [
+        KNotification(id: "n1", kind: .followRequest(personID: "tomasv"), age: "hace 12 min", unread: true, thisWeek: false),
+        KNotification(id: "n2", kind: .release(titleID: "odyssey", text: "llegó a streaming. Sigue en no puedo esperar hasta que la completes."), age: "hace 2 h", unread: true, thisWeek: false),
+        KNotification(id: "n3", kind: .newFollower(personID: "nico.ve"), age: "hace 5 h", unread: false, thisWeek: false),
+        KNotification(id: "n4", kind: .recap(text: "está listo: 14 completos y 6 obsesiones."), age: "lun", unread: false, thisWeek: true),
+        KNotification(id: "n5", kind: .followers(ids: ["mili.v", "danpix"], more: 3), age: "dom", unread: false, thisWeek: true)
     ]
 
     // MARK: Titles
@@ -65,13 +132,14 @@ enum MockData {
               palette: ["#5ca6cb", "#33566e"], coverURL: tmdb("mKPGRRyXIwN8JOLhAbWnxV1gNrS.jpg"),
               synopsis: "Odiseo vuelve a casa después de la guerra de Troya. El viaje dura diez años y le cuesta a casi toda su tripulación.",
               release: .day(date(2026, 7, 15)),
-              counts: TitleCounts(obsessed: "3,1 k", liked: "7,8 k", completed: "11,2 k", waiting: "41,6 k", saved: "52,0 k"),
-              watch: [WatchOption(short: "cine", name: "En cines", kind: "Cartelera")]),
+              counts: TitleCounts(obsessed: "5,4 k", liked: "11,2 k", completed: "16,9 k", waiting: "2,3 k", saved: "19,5 k"),
+              watch: [WatchOption(short: "cine", name: "En cines", kind: "")],
+              watchNote: "Todavía no está en streaming en México."),
         Title(id: "pearl", name: "Pearl", format: .film, year: 2022, creator: "Ti West", detail: "102 min",
               palette: ["#c45a4a", "#785d53"], coverURL: tmdb("orYlKu8i5NRdbdhSXWg1cbRn3eB.jpg"),
               synopsis: "1918. Pearl vive en una granja aislada con sus padres y sueña con ser estrella. La espera se le vuelve peligrosa.",
-              counts: TitleCounts(obsessed: "2,2 k", liked: "6,4 k", completed: "9,9 k", saved: "4,1 k"),
-              watch: [WatchOption(short: "max", name: "Max", kind: "Incluido")]),
+              counts: TitleCounts(obsessed: "3,1 k", liked: "7,4 k", completed: "12,2 k", saved: "8,8 k"),
+              watchElsewhere: "Está en Max en Estados Unidos."),
         Title(id: "spiderman3", name: "Spider-Man 3", format: .film, year: 2007, creator: "Sam Raimi", detail: "139 min",
               palette: ["#74524d", "#3b3235"], coverURL: tmdb("etRvHz9ElAP0TMwltAZV1ufyfnW.jpg"),
               synopsis: "Peter Parker por fin tiene la vida en orden, hasta que un traje negro empieza a cambiarlo.",
@@ -106,10 +174,12 @@ enum MockData {
               palette: ["#6a4a8a", "#2a2238"], coverURL: tmdb("7WU8xhLhiCYuRB2VcBnUMvo6kST.jpg"),
               release: .day(date(2026, 12, 18)),
               counts: TitleCounts(obsessed: "—", liked: "—", completed: "—", waiting: "88,4 k", saved: "91,2 k")),
-        Title(id: "ycse", name: "You Can See Everything", format: .film, year: 2026, creator: "A24",
-              palette: ["#8a8a7a", "#3a3a34"], coverURL: tmdb("qhFWz1BsEMg5rcs6TAstmGQggMT.jpg"),
+        Title(id: "ycse", name: "You Can See Everything", format: .film, year: 2026, creator: "Nathan Fielder · Lance Oppenheim",
+              palette: ["#6d6660", "#35312e"], coverURL: tmdb("qhFWz1BsEMg5rcs6TAstmGQggMT.jpg"),
+              synopsis: "Un documental de A24 sobre lo que la gente ve cuando nadie más está mirando.",
               release: .day(date(2026, 10, 16)),
-              counts: TitleCounts(obsessed: "—", liked: "—", completed: "—", waiting: "4,7 k", saved: "5,9 k")),
+              counts: TitleCounts(obsessed: "214", liked: "486", completed: "1,2 k", waiting: "9,8 k", saved: "12,1 k"),
+              watch: [WatchOption(short: "cine", name: "En cines", kind: "")]),
         Title(id: "mindofmine", name: "Mind of Mine", format: .album, year: 2016, creator: "ZAYN", detail: "18 canciones",
               palette: ["#b57a56", "#685746"], coverURL: apple("Music125/v4/8b/73/a1/8b73a1fe-27eb-ef0d-535b-950b29769f9d/886445750782.jpg"),
               tracks: ["MIND OF MINE (Intro)", "PILLOWTALK", "iT's YoU", "BeFoUr", "sHe", "dRuNk", "INTERMISSION: fLoWer", "rEaR vIeW", "wRoNg", "fOoL fOr YoU", "BoRdErSz", "tRuTh", "lUcOzAdE", "TiO", "BLUE", "BRIGHT", "LIKE I WOULD", "SHE DON'T LOVE ME"]
@@ -147,7 +217,7 @@ enum MockData {
                     + (["Patient Zero", "Cleveland!", "Pink Clouding", "Babylon"]
                         .enumerated().map { Track(number: $0.offset + 13, name: $0.element, isNew: true, available: false) }),
               trackCount: 16,
-              counts: TitleCounts(obsessed: "—", liked: "—", completed: "—", waiting: "212 k", saved: "240 k"),
+              counts: TitleCounts(obsessed: "—", liked: "—", completed: "—", waiting: "41,2 k", saved: "56,7 k"),
               musicLink: "Apple Music")
     ]
 

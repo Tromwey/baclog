@@ -19,13 +19,17 @@ xcrun simctl launch booted io.communeo.kura
 
 `xcrun simctl launch booted io.communeo.kura -kuraScreen <nombre>`
 
-| grupo | nombres |
+| flujo | nombres |
 |---|---|
-| primera vez | `splash` · `onboarding` · `signup` · `username` · `pick` · `people` · `login` |
-| tus colecciones | `collections` · `loading` · `empty` · `offline` · `newcollection` |
-| colección | `collection` (agrupada) · `shelf` (cuadrícula) · `list` · `auto` · `emptycollection` · `more` · `actions` · `add` · `toast` |
-| obra | `title` · `series` · `album` · `waiting` · `complete` |
-| otros tabs | `feed` · `feedreview` · `feedsuggest` · `discover` · `profile` |
+| 01 primera vez | `splash` · `onboarding` · `signup` · `username` · `pick` · `people` · `login` |
+| 02 tus colecciones | `collections` · `loading` · `empty` · `offline` · `newcollection` |
+| 03–05 colección | `collection` · `shelf` · `list` · `auto` · `emptycollection` · `more` · `actions` · `add` · `toast` |
+| 06 obra | `title` · `series` · `album` · `waiting` (37a) · `nostate` (24d) · `slider` / `complete` (26a) · `today` (C4) · `unavailable` (E4) · `announced` (37c) · `aviso` (31c) |
+| 07 descubrir | `discover` (19a) · `recents` (19d) · `typing` (19e) · `results` (19f) · `saveto` (19h) · `noresults` (19g) · `creator` (O7) |
+| 08 gente | `feed` · `feedreview` · `feedsuggest` · `feedempty` (E1) · `notifications` (31a) · `notificationsempty` (31b) · `person` (20a) · `personoptions` (O10a) · `unfollow` (O10b) · `followers` (20e) · `private` (20d) · `requested` (35d) · `stranger` (K1d) · `strangerprivate` (K1e) |
+| 09 tu perfil | `profile` (20c) · `editprofile` (20f) · `profileempty` (E2) |
+| 10 recap | `recap` (08) · `recapcard` (tarjeta / C2) · `recaphistory` (O8) · `recapempty` (09) |
+| 11 ajustes | `settings` (30a) · `privacy` (K1c) · `musicapp` (30b) · `deleteaccount` (C3) |
 
 Al arrancar en DEBUG se verifica que las 9 fuentes estén registradas (`[Kura] fonts OK: 9 faces registered`); si falta alguna se imprimen `UIFont.familyNames`.
 
@@ -48,7 +52,9 @@ ios/
     Mock/MockData.swift       todo el mock del brief (hoy = jue 24 sep 2026, 10:00 CDMX)
     Services/KuraAPI.swift    protocolo KuraAPI + MockAPI
     State/AppStore.swift      @Observable: navegación, hojas, avisos, colecciones, reacciones, seguidos, undo
-    Features/                 Onboarding · Collections · CollectionDetail · Title · Feed · Discover · Profile · Add
+    Features/                 Onboarding · Collections · CollectionDetail · Title · Feed (+ notificaciones) ·
+                              Discover (+ búsqueda) · People (perfil ajeno, seguidores, creador) · Profile ·
+                              Recap · Settings · Add
     Resources/                fuentes TTF, Assets.xcassets (AppIcon 1024 + LaunchBackground)
 ```
 
@@ -59,6 +65,9 @@ ios/
 - **No puedo esperar es derivada**: títulos anunciados que guardaste y no has completado. Orden: lo que ya salió → lo más próximo → "sin fecha". Etiquetas: `14 h`, `3 d`, `16 oct`, `oct 2026`, `2027`, `sin fecha`, `hoy`, `ya salió`. Antes del estreno la ficha muestra el reloj (indicador, no botón) y no hay Completar; "La vi en preestreno" en Opciones abre la hoja.
 - **Hojas propias** (`SheetHost`), no `.sheet` del sistema, para calzar con los frames: inset 8, radio 36, s2, velo `rgba(5,5,6,.62)`, asa 36×5, 280 ms; se cierran arrastrando o tocando fuera. "Agregar" es la hoja alta (s1, a 54 del borde).
 - **Navegación**: un `NavigationStack` por tab (cambio de tab instantáneo), chrome propio (Volver/Opciones a 64/24) y swipe-back conservado. En iOS 18+ la portada crece a la ficha/colección con la transición zoom (`matchedTransitionSource`); en iOS 17 es el push normal. En el onboarding las 3 portadas elegidas viajan de 32a a 32b con `matchedGeometryEffect`.
+- **Completar** es el slider de tres paradas de 26a (Completo → Me gusta → Me obsesiona): relleno en el tono de la parada, imán con spring y háptica (ligera; media en Me obsesiona).
+- **Colección**: se agrupa por formato solo si hay ≥ 2 formatos y cada uno tiene ≥ 3 títulos (`adapt()` del script de Flujos v2); si no, repisa.
+- **Aviso de estreno (31c)**: al guardar un título anunciado se programa una notificación local el día del estreno (`Services/ReleaseNotifier.swift`); `-kuraScreen aviso` solo pinta una vista previa de la pantalla bloqueada.
 - **Feed** = pila: cada card se fija bajo el header (`visualEffect`) y la siguiente la tapa; alturas L/M/S topadas a la pantalla; snap por card (`scrollTargetBehavior(.viewAligned)`).
 
 ## Dónde enchufar la API real
@@ -72,8 +81,8 @@ ios/
 
 - Auth real (Apple / Google / link por correo): hoy los botones solo avanzan el flujo.
 - Búsqueda contra el catálogo real (hoy filtra el mock) y "dónde ver" real (hoy abre la web del proveedor).
-- Perfil ajeno, notificaciones (la campana solo muestra un aviso), recap de agosto, Editar perfil, borrar cuenta.
-- Compartir → "Historia" hoy comparte el link; falta generar la tarjeta exportable.
+- Fotos de perfil (hoy todo es sello), bloquear/reportar (hoy un aviso), push real (hoy notificación local).
+- Recap: datos fijos de agosto; la tarjeta se comparte como link, falta exportarla como imagen. Compartir → "Historia" igual.
 - Modo ordenar usa el `List` del sistema para arrastrar (asa y levantado nativos, no los del frame).
 - Tipografía fija (`fixedSize`) para calzar con los frames; falta decidir la escala con Dynamic Type.
 - Persistencia local / sincronización real del modo sin conexión (hoy "Simular sin conexión" en Ajustes solo muestra la franja).
