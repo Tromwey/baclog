@@ -15,7 +15,8 @@ import { SERVICE_LABEL } from "./services";
  * 30a Ajustes (Kura, flujo 11) — behind /perfil's gear. Volver 44, "ajustes"
  * in Newsreader 36, then `--s1` groups (radius 18) of 52 rows under a mono
  * section label: you (seal, name, @, "Editar perfil ›", correo) · privacidad
- * · apps · notificaciones · (founder only) torre de control; and at the foot
+ * (switch, tu página, aviso de privacidad → /privacidad) · apps ·
+ * notificaciones · (founder only) torre de control; and at the foot
  * Cerrar sesión, Borrar cuenta and the version line.
  *
  * Only what the product has (§ "lo que el mock pide y el producto no tiene se
@@ -79,6 +80,8 @@ export default async function SettingsPage() {
                 href="/settings/perfil"
               />
             )}
+            <Divider />
+            <Row title="Aviso de privacidad" href="/privacidad" />
           </Group>
         </Section>
 

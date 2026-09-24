@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { Wordmark } from "@/components/kura/components";
 import { WaitlistForm } from "./waitlist-form";
@@ -30,6 +31,19 @@ export default function WaitlistPage() {
           <WaitlistForm />
         </Suspense>
       </div>
+
+      {/* Same footer as /login: the notice must be within reach BEFORE the
+          email is collected (LFPDPPP tacit consent), and this form collects one. */}
+      <p className="mt-auto pt-10 text-center text-[13px] leading-[1.5] text-text-2 text-pretty">
+        Cómo cuidamos tus datos:{" "}
+        <Link
+          href="/privacidad"
+          className="text-text underline decoration-text-3 underline-offset-[3px] transition-opacity active:opacity-60"
+        >
+          aviso de privacidad
+        </Link>
+        .
+      </p>
     </main>
   );
 }

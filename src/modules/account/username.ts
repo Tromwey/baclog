@@ -1,7 +1,7 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { analyticsEvents, users } from "@/db/schema";
 
 /**
  * F2.17 username claim — shared by `claimUsernameAction` /
@@ -22,6 +22,8 @@ export const RESERVED = new Set([
   "u", "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
   // F3.10 nav destination + /creditos (public credits page, was missing here).
   "feed", "creditos",
+  // Public aviso de privacidad (App Store privacy-policy URL).
+  "privacidad",
 ]);
 
 /** Trim, lowercase, and drop a leading `@` — the ONE normalization every
@@ -87,6 +89,27 @@ export type ClaimUsernameResult =
  * `updateProfile({ isPublic })`). "Taken" is the unique index on
  * `users.username` saying so: the check-then-write race is settled by the
  * database, never by a prior SELECT.
+ *
+ * Fase 4b — a rename carries `analytics_event.target_username` forward
+ * (old → new) in the SAME `db.batch` (Neon HTTP batch = one transaction,
+ * mirrors `deleteAccount`'s scrub), so a handle released by a rename and
+ * claimed later doesn't inherit the previous owner's visits, and the owner's
+ * own history (Torre de Control) follows them. Two statements, and the ORDER
+ * is the point:
+ *   1. `update analytics_event … where lower(target_username) = (select
+ *      lower(username) from "user" where id = $1 FOR UPDATE)` — the OLD
+ *      handle is read INSIDE the transaction, under a row lock on the user.
+ *      It has to run first: once (2) runs, the old value is gone from the
+ *      row. The lock serialises two concurrent renames of the same account:
+ *      the second waits, then re-reads the handle the first one committed
+ *      (READ COMMITTED re-fetches a locked row), so A→B then B→C moves the
+ *      events A→B→C instead of stranding them under B (the race the old
+ *      read-before-the-batch version had).
+ *   2. `update "user" set username = <new>` — if it loses the race for the
+ *      handle (`unique_violation`, 23505) the whole transaction rolls back
+ *      and (1) never lands: no separate guard needed.
+ * No handle yet (`username` null) → `= (null)` is false, (1) touches nothing.
+ * Re-claiming the same handle → (1) skips rows already under it.
  */
 export async function claimUsername(
   userId: string,
@@ -94,11 +117,25 @@ export async function claimUsername(
 ): Promise<ClaimUsernameResult> {
   const normalized = validUsernameOrNull(raw);
   if (!normalized) return { ok: false, error: "invalid" };
+
+  // `users.username` is only ever stored lowercase (this same normalization,
+  // on the way in), but `lower()` keeps the comparison honest the same way
+  // `deleteAccount`'s scrub does.
+  const previousLocked = sql`(select lower(${users.username}) from ${users} where ${users.id} = ${userId} for update)`;
+
   try {
-    await db
-      .update(users)
-      .set({ username: normalized, isPublic: true })
-      .where(eq(users.id, userId));
+    await db.batch([
+      db
+        .update(analyticsEvents)
+        .set({ targetUsername: normalized })
+        .where(
+          sql`lower(${analyticsEvents.targetUsername}) = ${previousLocked} and lower(${analyticsEvents.targetUsername}) <> ${normalized}`,
+        ),
+      db
+        .update(users)
+        .set({ username: normalized, isPublic: true })
+        .where(eq(users.id, userId)),
+    ]);
   } catch (err) {
     if (isUniqueViolation(err)) return { ok: false, error: "taken" };
     throw err;
