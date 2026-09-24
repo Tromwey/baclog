@@ -67,8 +67,8 @@ explain_failure() {
     hints+=("El Team ID '$KURA_TEAM_ID' no existe o la cuenta no pertenece a él: revísalo en developer.apple.com › Account › Membership details.")
   grep -qi "requires a development team" "$log" 2>/dev/null &&
     hints+=("Falta el team: DEVELOPMENT_TEAM no llegó al build (¿KURA_TEAM_ID vacío?).")
-  grep -qi "No profiles for 'io.communeo.kura'\|bundle identifier.*not available\|Failed Registering Bundle Identifier\|cannot be registered to your development team" "$log" 2>/dev/null &&
-    hints+=("No hay App ID/perfil para io.communeo.kura en ese team: créalo en developer.apple.com › Identifiers (Bundle ID explícito, sin capacidades) y vuelve a correr (el script ya pasa -allowProvisioningUpdates).")
+  grep -qi "No profiles for 'com.tromwey.kura'\|bundle identifier.*not available\|Failed Registering Bundle Identifier\|cannot be registered to your development team" "$log" 2>/dev/null &&
+    hints+=("No hay App ID/perfil para com.tromwey.kura en ese team: créalo en developer.apple.com › Identifiers (Bundle ID explícito, sin capacidades) y vuelve a correr (el script ya pasa -allowProvisioningUpdates).")
   grep -qi "has no devices\|no devices from which to generate" "$log" 2>/dev/null &&
     hints+=("El team no tiene ningún iPhone registrado y la firma automática lo necesita para el perfil de desarrollo del archive: conecta tu iPhone y ábrelo una vez en Xcode (o regístralo en developer.apple.com › Devices).")
   grep -qi "No signing certificate\|No certificate for team\|doesn't include signing certificate\|no valid signing identit" "$log" 2>/dev/null &&
@@ -78,7 +78,7 @@ explain_failure() {
   grep -qi "Authentication failed\|Invalid authentication\|NOT_AUTHORIZED\|401" "$log" 2>/dev/null && [[ -n "${KURA_ASC_KEY_ID:-}" ]] &&
     hints+=("La llave de App Store Connect API fue rechazada: revisa KURA_ASC_KEY_ID / KURA_ASC_ISSUER_ID / KURA_ASC_KEY_PATH y que la llave tenga rol App Manager o Admin.")
   grep -qi "No suitable application records were found\|Cannot determine the Apple ID from Bundle ID" "$log" 2>/dev/null &&
-    hints+=("App Store Connect no tiene una app con el Bundle ID io.communeo.kura: créala en App Store Connect › Apps › + antes de subir.")
+    hints+=("App Store Connect no tiene una app con el Bundle ID com.tromwey.kura: créala en App Store Connect › Apps › + antes de subir.")
   grep -qi "bundle version must be higher\|The bundle version.*has already been used\|Redundant Binary Upload" "$log" 2>/dev/null &&
     hints+=("Ese número de build ya se subió: haz commit (sube git rev-list --count) o exporta KURA_BUILD_NUMBER mayor.")
   [[ ${#hints[@]} -eq 0 ]] && hints+=("Causa no reconocida; mira las líneas de error de abajo y el log completo.")

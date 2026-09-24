@@ -577,7 +577,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.communeo.kura;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tromwey.kura;
 				PRODUCT_NAME = Kura;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = NO;
@@ -660,7 +660,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.communeo.kura;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tromwey.kura;
 				PRODUCT_NAME = Kura;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = NO;

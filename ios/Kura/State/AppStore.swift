@@ -294,7 +294,7 @@ final class AppStore {
             let ok = path.status == .satisfied
             Task { @MainActor in self?.connectivityChanged(ok) }
         }
-        monitor.start(queue: DispatchQueue(label: "io.communeo.kura.path"))
+        monitor.start(queue: DispatchQueue(label: "com.tromwey.kura.path"))
         pathMonitor = monitor
     }
 

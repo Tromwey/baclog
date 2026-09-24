@@ -52,7 +52,7 @@ Descubrir y Perfil: no hay frame; construir según el DS (Descubrir = campo de b
 
 ## Arquitectura
 
-- `ios/project.yml` (xcodegen) → `ios/Kura.xcodeproj`, target `Kura`, bundle `io.communeo.kura`, iOS 17.0, SwiftUI, portrait only, `UIAppFonts` con los 9 TTF, `UIUserInterfaceStyle = Dark`, icono desde `ios/Kura/Resources/AppIcon-1024.png` (asset catalog con un solo 1024 universal).
+- `ios/project.yml` (xcodegen) → `ios/Kura.xcodeproj`, target `Kura`, bundle `com.tromwey.kura`, iOS 17.0, SwiftUI, portrait only, `UIAppFonts` con los 9 TTF, `UIUserInterfaceStyle = Dark`, icono desde `ios/Kura/Resources/AppIcon-1024.png` (asset catalog con un solo 1024 universal).
 - `Kura/App` (KuraApp, RootRouter con estado `onboarded`), `Kura/DesignSystem` (Tokens, Typography con `Font.kura.*`, Components: `GlassButton`, `SolidButton`, `HoneyButton`, `IconChip44`, `StatusPill`, `CountRibbon`, `Cover` (AsyncImage + fallback de paleta + glifo de esquina + pill de espera), `CollectionCard` (lomo vertical + portadas), `TintedSurface`, `SectionTitle`, `KuraSheet` (presentationDetents + fondo s1/s2, asa 36×5), `Toast`, `Dock`, `Skeleton`, `Seal`), `Kura/Models`, `Kura/Mock/MockData.swift`, `Kura/Services/KuraAPI.swift` (protocol + `MockAPI`; nada de red real salvo imágenes), `Kura/Features/{Onboarding,Collections,CollectionDetail,Title,Feed,Discover,Profile,Add}`.
 - Estado en un `@Observable AppStore` (colecciones, títulos, reacciones, seguidos, toasts) para que Deshacer funcione de verdad.
 - Sin dependencias externas. Sin bordes en botones/cards/campos, sin glows, sin pulsos.

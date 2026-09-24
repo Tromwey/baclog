@@ -5,7 +5,7 @@ import os
 /// Contract drift and server failures, in every configuration (TestFlight included):
 /// method, path, HTTP status and the server's `X-Request-Id` — never a body, never a token.
 enum KuraLog {
-    static let api = Logger(subsystem: "io.communeo.kura", category: "api")
+    static let api = Logger(subsystem: "com.tromwey.kura", category: "api")
 }
 
 /// Redirects never carry the bearer to another origin (scheme + host + port). `URLSession`
@@ -77,7 +77,7 @@ struct Endpoint {
 
 extension Notification.Name {
     /// Posted (on the main queue) when any call answers 401: the token is already gone.
-    static let kuraSessionExpired = Notification.Name("io.communeo.kura.sessionExpired")
+    static let kuraSessionExpired = Notification.Name("com.tromwey.kura.sessionExpired")
 }
 
 // MARK: - Client

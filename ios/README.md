@@ -12,7 +12,7 @@ cd ios
 xcodebuild -project Kura.xcodeproj -scheme Kura \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug build
 xcrun simctl install booted <DerivedData>/Build/Products/Debug-iphonesimulator/Kura.app
-xcrun simctl launch booted io.communeo.kura
+xcrun simctl launch booted com.tromwey.kura
 ```
 
 `Kura.xcodeproj` se regenera desde `project.yml`: no lo edites a mano. Para probar en el simulador una build que conserve la sesión entre lanzamientos, firma ad-hoc (`CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`): con `CODE_SIGNING_ALLOWED=NO` el Keychain no persiste y cada relanzamiento cae en la bienvenida. Si agregas un archivo, vuelve a correr `xcodegen generate`.
@@ -22,14 +22,14 @@ xcrun simctl launch booted io.communeo.kura
 - **Base URL** = `KuraAPIBase` en `Info.plist`, armada desde `KURA_API_SCHEME` + `KURA_API_HOST` por configuración en `project.yml` (partida en dos para que `//` nunca entre a un build setting):
   - **Debug** → `http://localhost:3010/api/v1`. El simulador llega al Mac por `localhost`; levanta la web con `pnpm dev --port 3010` (o cambia `KURA_API_HOST` en `project.yml` y regenera). Debug usa `Kura/Info-Debug.plist` (gemelo de `Info.plist` + `NSAppTransportSecurity › NSAllowsLocalNetworking`): si cambias `info.properties` en `project.yml`, replica el cambio ahí.
   - **Release** → `https://baclog.app/api/v1`, sin ATS local.
-- **Sesión**: `POST auth/otp/request` → `POST auth/otp/verify` → JWT en el **Keychain** (`Services/Keychain.swift`, service `io.communeo.kura`, account `bearer`; nunca `UserDefaults`). `Services/Session.swift` lee `exp` del payload (sin verificar firma) y la app llama `POST auth/refresh` al abrir si faltan < 7 días. Un **401 en cualquier llamada** borra el token, manda `.kuraSessionExpired` y el store vuelve a la entrada.
+- **Sesión**: `POST auth/otp/request` → `POST auth/otp/verify` → JWT en el **Keychain** (`Services/Keychain.swift`, service `com.tromwey.kura`, account `bearer`; nunca `UserDefaults`). `Services/Session.swift` lee `exp` del payload (sin verificar firma) y la app llama `POST auth/refresh` al abrir si faltan < 7 días. Un **401 en cualquier llamada** borra el token, manda `.kuraSessionExpired` y el store vuelve a la entrada.
 - **Cliente** (`Services/LiveAPI.swift`): `APIClient` (URLSession, bearer, `KuraJSON.decoder` que acepta ISO 8601 con y sin fracción, mapeo `error.code`/`reason` → `KuraAPIError`) + `LiveAPI: KuraAPI` endpoint por endpoint. Reintento con backoff (0.5 / 1 / 2 s) **solo en GET**; las escrituras no reintentan: el toast "Reintentar" es el reintento.
 - **Carga por recurso**: al arrancar `GET /me` + `/collections` + `/me/titles` + `/me/following`, luego `GET /titles?ids=` para lo que falte; ficha, colección, feed, descubrir, persona, listas y recap cargan al entrar (`store.load*`). Lo `unsupported` (fijar, orden manual, portada elegida, orden/vista, episodios) vive en `Services/LocalPrefs.swift` (UserDefaults, apagado en mock).
 - **Mock**: `-kuraScreen <nombre>` o `-kuraMock` (DEBUG) arrancan con `MockAPI` sin servidor; `KuraRuntime.usesMock` lo expone a los modelos (p. ej. `Privacy.options`).
 
 ### Abrir directo en una pantalla (DEBUG)
 
-`xcrun simctl launch booted io.communeo.kura -kuraScreen <nombre>`
+`xcrun simctl launch booted com.tromwey.kura -kuraScreen <nombre>`
 
 | flujo | nombres |
 |---|---|
@@ -49,7 +49,7 @@ Al arrancar en DEBUG se verifica que las 9 fuentes estén registradas (`[Kura] f
 
 ```
 ios/
-  project.yml                 xcodegen (bundle io.communeo.kura, iOS 17, portrait, UIAppFonts, Dark)
+  project.yml                 xcodegen (bundle com.tromwey.kura, iOS 17, portrait, UIAppFonts, Dark)
   Config/                     Kura.xcconfig (base del target: DEVELOPMENT_TEAM = $(KURA_TEAM_ID)),
                               Team.xcconfig.example (copia → Team.xcconfig, gitignoreado)
   ExportOptions.plist         plantilla de export app-store-connect (el script pone el teamID)
@@ -123,8 +123,8 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 1. **Apple Developer Program activo** (developer.apple.com › Account; la renovación es anual).
 2. **Aceptar los acuerdos pendientes**: el banner de developer.apple.com y App Store Connect › Business. El de Paid Apps no hace falta porque la app es gratis.
 3. **Anotar el Team ID**: developer.apple.com › Account › Membership details.
-4. **Registrar el Bundle ID** en developer.apple.com › Certificates, IDs & Profiles › Identifiers › + › App IDs › App: Bundle ID **explícito** `io.communeo.kura`, descripción "Kura", **sin capacidades** (no marques Sign in with Apple, Push ni nada más).
-5. **Crear la app** en App Store Connect › Apps › + › New App: plataforma iOS, nombre "Kura" (si ya está tomado, "Kura: …"), idioma principal **Spanish (Mexico)**, Bundle ID `io.communeo.kura`, SKU p. ej. `kura-ios`, acceso completo. Categoría principal: Entertainment (secundaria: Lifestyle o Music).
+4. **Registrar el Bundle ID** en developer.apple.com › Certificates, IDs & Profiles › Identifiers › + › App IDs › App: Bundle ID **explícito** `com.tromwey.kura`, descripción "Kura", **sin capacidades** (no marques Sign in with Apple, Push ni nada más).
+5. **Crear la app** en App Store Connect › Apps › + › New App: plataforma iOS, nombre "Kura" (si ya está tomado, "Kura: …"), idioma principal **Spanish (Mexico)**, Bundle ID `com.tromwey.kura`, SKU p. ej. `kura-ios`, acceso completo. Categoría principal: Entertainment (secundaria: Lifestyle o Music).
 6. **Tu Apple ID en Xcode** (Xcode › Settings › Accounts › +) y, en Manage Certificates, crea **Apple Distribution**. Si el team no tiene ningún iPhone registrado, conecta el tuyo y ábrelo una vez en Xcode: la firma automática necesita un dispositivo para el perfil de desarrollo del archive.
 7. **Generar el build**: `export KURA_TEAM_ID=…` y `ios/scripts/archive.sh`.
 8. **Subir el `.ipa`**, con una de estas tres:

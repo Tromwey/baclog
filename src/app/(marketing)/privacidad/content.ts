@@ -17,7 +17,7 @@
 export const PRIVACY_EFFECTIVE_DATE = "24 de septiembre de 2026";
 
 export const CONTACT_EMAIL = "[CORREO DE CONTACTO]";
-const RESPONSIBLE = "[RAZÓN SOCIAL]";
+const RESPONSIBLE = "Tromwey";
 const ADDRESS = "[DOMICILIO]";
 
 /** True while any founder placeholder is still unfilled: `page.tsx` answers

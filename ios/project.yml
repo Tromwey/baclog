@@ -1,6 +1,6 @@
 name: Kura
 options:
-  bundleIdPrefix: io.communeo
+  bundleIdPrefix: com.tromwey
   # The app is Spanish-only: CFBundleDevelopmentRegion = es-MX so system UI (share sheet,
   # text-field menus, alerts) matches the copy and App Store Connect lists Spanish.
   developmentLanguage: es-MX
@@ -62,7 +62,7 @@ targets:
           - RedHatMono-Medium.ttf
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.communeo.kura
+        PRODUCT_BUNDLE_IDENTIFIER: com.tromwey.kura
         PRODUCT_NAME: Kura
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"

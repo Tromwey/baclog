@@ -26,7 +26,7 @@ struct LocalPrefs {
     }
 
     let enabled: Bool
-    private let key = "io.communeo.kura.local"
+    private let key = "com.tromwey.kura.local"
     private let defaults: UserDefaults
 
     init(enabled: Bool, defaults: UserDefaults = .standard) {

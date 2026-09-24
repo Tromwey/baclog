@@ -2,13 +2,13 @@ import Foundation
 import Security
 
 /// Thin wrapper over the Security framework for one generic-password item.
-/// The bearer token lives here (service `io.communeo.kura`, account `bearer`)
+/// The bearer token lives here (service `com.tromwey.kura`, account `bearer`)
 /// and never in `UserDefaults`.
 struct Keychain: Sendable {
     let service: String
     let account: String
 
-    static let bearer = Keychain(service: "io.communeo.kura", account: "bearer")
+    static let bearer = Keychain(service: "com.tromwey.kura", account: "bearer")
 
     private var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
