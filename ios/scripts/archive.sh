@@ -156,6 +156,7 @@ printf '%s\n' "$IDENTITIES" | grep -E '^[[:space:]]*[0-9]+\)' | sed 's/^[[:space
 if ! printf '%s\n' "$IDENTITIES" | grep -qE '"(Apple|iPhone) Distribution'; then
   if [[ "${KURA_CLOUD_SIGNING:-0}" == "1" || ${#AUTH_ARGS[@]} -gt 0 ]]; then
     warn "no hay certificado 'Apple Distribution' local; el export usará la firma de distribución en la nube."
+    warn "OJO: con un nombre de team con acentos o Ñ, la firma en la nube escribe un requisito de firma que el certificado no cumple y App Store Connect rechaza el .ipa (learnings/2026-09-24-firma-en-la-nube-ñ). Crea el Apple Distribution local en Xcode."
   else
     fail "No hay certificado 'Apple Distribution' en el llavero (solo de desarrollo)." \
       "El .ipa para TestFlight se firma con Apple Distribution. Opciones:" \
@@ -255,6 +256,29 @@ else
   [[ -n "$IPA" && -s "$IPA" ]] || fail "El export terminó pero no hay ningún .ipa en $EXPORT_PATH." \
     "Contenido: $(ls -1 "$EXPORT_PATH" 2>/dev/null | tr '\n' ' ')" \
     "Revisa ios/ExportOptions.plist (destination debe ser export) y el log: $EXPORT_LOG"
+
+  # Guardrail: el .ipa tiene que cumplir su propio requisito de firma (designated requirement).
+  # Con la firma en la nube y un nombre de team con Ñ/acentos, Xcode escribe el nombre descompuesto
+  # (N + tilde) en el requisito y el certificado lo trae compuesto: la firma es "válida" pero no se
+  # cumple a sí misma, y App Store Connect responde "Invalid Signature. Code failed to satisfy
+  # specified code requirement(s)". Se detecta aquí, antes de subir nada.
+  step "Verificando la firma del .ipa"
+  IPA_CHECK="$(mktemp -d)"
+  if ! unzip -q "$IPA" -d "$IPA_CHECK" 2>/dev/null; then
+    fail "No pude descomprimir el .ipa para verificar la firma: $IPA"
+  fi
+  IPA_APP="$(find "$IPA_CHECK/Payload" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
+  [[ -n "$IPA_APP" ]] || fail "El .ipa no trae Payload/*.app: $IPA"
+  SIGN_CHECK="$(codesign --verify --deep --strict -vv "$IPA_APP" 2>&1 || true)"
+  rm -rf "$IPA_CHECK"
+  if ! grep -q "satisfies its Designated Requirement" <<<"$SIGN_CHECK"; then
+    fail "El .ipa NO cumple su requisito de firma: App Store Connect lo va a rechazar ('Invalid Signature')." \
+      "codesign dice:" "  $(tr '\n' ' ' <<<"$SIGN_CHECK")" "" \
+      "Causa conocida: firma en la nube (KURA_CLOUD_SIGNING=1 o llave ASC) con un nombre de team con Ñ/acentos." \
+      "Arreglo: Xcode › Settings › Apple Accounts › (el team) › Manage Certificates… › + › Apple Distribution," \
+      "y vuelve a correr sin KURA_CLOUD_SIGNING (firma local). Ver learnings/2026-09-24-firma-en-la-nube-ñ."
+  fi
+  printf '    firma OK (cumple su designated requirement)\n'
 fi
 
 printf '\n%sListo.%s\n' "$green" "$reset"
