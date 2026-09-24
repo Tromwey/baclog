@@ -1,5 +1,5 @@
 {
-  "id": "fab3218a-b78e-4bfb-8144-5ddfbf8fe6d6",
+  "id": "fc69d949-4e40-4c52-bab1-a8a10ca2fd2a",
   "prevId": "c2f5ceb9-7423-4405-8f3c-7d522030adb4",
   "version": "7",
   "dialect": "postgresql",
@@ -2532,6 +2532,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "notify_recap": {
+          "name": "notify_recap",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         }
       },
       "indexes": {

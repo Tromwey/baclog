@@ -52,7 +52,7 @@ export type UserRow = NonNullable<Awaited<ReturnType<typeof loadUserById>>>;
  * TODO(migración 0027): after `drizzle-kit migrate`, uncomment
  * `tokenVersion` in src/db/schema.ts and flip this to `true`.
  */
-export const TOKEN_VERSION_LIVE = false;
+export const TOKEN_VERSION_LIVE = true;
 
 /** Raw on purpose: it compiles whether or not `schema.ts` declares the
  *  column yet (see TOKEN_VERSION_LIVE). */
