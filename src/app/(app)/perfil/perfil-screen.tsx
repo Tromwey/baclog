@@ -20,7 +20,7 @@ import type {
 import type { Shelf } from "@/modules/backlog/shelves";
 import { plural } from "@/lib/plural";
 import { ShareChip } from "@/app/u/share-chip";
-import { monthName } from "../recap/recap-data";
+import { monthName } from "@/modules/backlog/recap-format";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
 
 /** The lima of the Revamp's ADN fallback is not a Kura colour. */

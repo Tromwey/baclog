@@ -2,7 +2,7 @@ import { requireUser } from "@/auth";
 import { buildLatestRecap, buildMonthlyRecap } from "@/modules/backlog/recap";
 import { CardExporter } from "@/components/card-exporter";
 import { BackButton } from "@/components/ui";
-import { monthName, monthYear } from "../recap-data";
+import { monthName, monthYear } from "@/modules/backlog/recap-format";
 
 /**
  * 66 Tarjeta recap / 67 C2 Tarjeta firmada — the Kura frame around the

@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
 import type { SeriesFactsPatch } from "./series-status";
@@ -92,4 +92,36 @@ export async function cacheSeriesFacts(
     // A cache write must never take the page down with it.
     console.error("[catalog] series facts cache failed:", err);
   }
+}
+
+/**
+ * API v1 `GET /titles?ids=` — the cached rows for a set of ids, in ONE query.
+ * Unknown ids are simply absent (the caller decides whether that matters);
+ * an empty list never hits the DB. Order is not guaranteed — callers that
+ * care re-sort by the ids they asked for. Shared catalog facts only: no user
+ * data lives on `catalog_item`, so no ownership check applies.
+ */
+export async function getCatalogItems(ids: string[]): Promise<CatalogItemRow[]> {
+  if (ids.length === 0) return [];
+  return db.select().from(catalogItems).where(inArray(catalogItems.id, ids));
+}
+
+/**
+ * API v1 membership `PUT` / onboarding picks — the "not cached yet" branch:
+ * a search hit the app kept as `externalRef {source, externalId}` (the unique
+ * `(source, external_id)` pair every provider upsert keys on). Null when the
+ * provider row never reached the catalog; the caller answers 404 and asks
+ * for a fresh search — this module never calls a provider. Shared catalog
+ * facts only, no ownership check.
+ */
+export async function findCatalogItemByRef(
+  source: "tmdb" | "itunes",
+  externalId: string,
+): Promise<CatalogItemRow | null> {
+  const [row] = await db
+    .select()
+    .from(catalogItems)
+    .where(and(eq(catalogItems.source, source), eq(catalogItems.externalId, externalId)))
+    .limit(1);
+  return row ?? null;
 }

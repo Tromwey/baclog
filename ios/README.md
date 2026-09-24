@@ -1,8 +1,8 @@
 # Kura · iOS
 
-> **Backend real:** la especificación de la API y el plan por fases para conectarla están en [`API.md`](API.md). Hoy la app corre con `MockAPI`.
+> **Backend real:** la especificación de la API está en [`API.md`](API.md) y el contrato de wire en `src/app/api/v1/_lib/schemas.ts`. La app habla con `/api/v1` por `LiveAPI` (por defecto) y conserva `MockAPI` para capturas y demo — ver [Backend real](#backend-real).
 
-App nativa (SwiftUI, iOS 17+, sin dependencias) que implementa el sistema de diseño **Kura** y los **Flujos v2** con datos mock. Fuentes de verdad: `BRIEF.md`, `design/kura/sistema-de-diseno.dc.html`, `design/kura/flujos-v2.dc.html`.
+App nativa (SwiftUI, iOS 17+, sin dependencias) que implementa el sistema de diseño **Kura** y los **Flujos v2**. Fuentes de verdad: `BRIEF.md`, `design/kura/sistema-de-diseno.dc.html`, `design/kura/flujos-v2.dc.html`.
 
 ## Generar y correr
 
@@ -16,6 +16,16 @@ xcrun simctl launch booted io.communeo.kura
 ```
 
 `Kura.xcodeproj` se regenera desde `project.yml`: no lo edites a mano. Si agregas un archivo, vuelve a correr `xcodegen generate`.
+
+## Backend real
+
+- **Base URL** = `KuraAPIBase` en `Info.plist`, armada desde `KURA_API_SCHEME` + `KURA_API_HOST` por configuración en `project.yml` (partida en dos para que `//` nunca entre a un build setting):
+  - **Debug** → `http://localhost:3010/api/v1`. El simulador llega al Mac por `localhost`; levanta la web con `pnpm dev --port 3010` (o cambia `KURA_API_HOST` en `project.yml` y regenera). Debug usa `Kura/Info-Debug.plist` (gemelo de `Info.plist` + `NSAppTransportSecurity › NSAllowsLocalNetworking`): si cambias `info.properties` en `project.yml`, replica el cambio ahí.
+  - **Release** → `https://baclog.app/api/v1`, sin ATS local.
+- **Sesión**: `POST auth/otp/request` → `POST auth/otp/verify` → JWT en el **Keychain** (`Services/Keychain.swift`, service `io.communeo.kura`, account `bearer`; nunca `UserDefaults`). `Services/Session.swift` lee `exp` del payload (sin verificar firma) y la app llama `POST auth/refresh` al abrir si faltan < 7 días. Un **401 en cualquier llamada** borra el token, manda `.kuraSessionExpired` y el store vuelve a la entrada.
+- **Cliente** (`Services/LiveAPI.swift`): `APIClient` (URLSession, bearer, `KuraJSON.decoder` que acepta ISO 8601 con y sin fracción, mapeo `error.code`/`reason` → `KuraAPIError`) + `LiveAPI: KuraAPI` endpoint por endpoint. Reintento con backoff (0.5 / 1 / 2 s) **solo en GET**; las escrituras no reintentan: el toast "Reintentar" es el reintento.
+- **Carga por recurso**: al arrancar `GET /me` + `/collections` + `/me/titles` + `/me/following`, luego `GET /titles?ids=` para lo que falte; ficha, colección, feed, descubrir, persona, listas y recap cargan al entrar (`store.load*`). Lo `unsupported` (fijar, orden manual, portada elegida, orden/vista, episodios) vive en `Services/LocalPrefs.swift` (UserDefaults, apagado en mock).
+- **Mock**: `-kuraScreen <nombre>` o `-kuraMock` (DEBUG) arrancan con `MockAPI` sin servidor; `KuraRuntime.usesMock` lo expone a los modelos (p. ej. `Privacy.options`).
 
 ### Abrir directo en una pantalla (DEBUG)
 
@@ -52,8 +62,10 @@ ios/
                               ZoomTransition (portada compartida)
     Models/                   Title, KCollection, Mark, Release, Person, Review, FeedEvent, rutas
     Mock/MockData.swift       todo el mock del brief (hoy = jue 24 sep 2026, 10:00 CDMX)
-    Services/KuraAPI.swift    protocolo KuraAPI + MockAPI
-    State/AppStore.swift      @Observable: navegación, hojas, avisos, colecciones, reacciones, seguidos, undo
+    Services/                 KuraAPI (protocolo + MockAPI), LiveAPI (APIClient + endpoints), Keychain, Session (JWT exp),
+                              LocalPrefs (lo unsupported, en el dispositivo), ReleaseNotifier
+    State/AppStore.swift      @Observable: sesión, hidratación por recurso, navegación, hojas, avisos, colecciones,
+                              membresías (Deshacer diferido 5 s), reacciones, seguidos
     Features/                 Onboarding · Collections · CollectionDetail · Title · Feed (+ notificaciones) ·
                               Discover (+ búsqueda) · People (perfil ajeno, seguidores, creador) · Profile ·
                               Recap · Settings · Add
@@ -74,15 +86,15 @@ ios/
 
 ## Dónde enchufar la API real
 
-1. Escribe `struct LiveAPI: KuraAPI` en `Services/` (URLSession contra el backend de Next.js). El protocolo ya separa lecturas (`catalog`, `collections`, `userTitles`, `feed`, `search`…) de escrituras (`createCollection`, `updateCollection`, `setMark`, `saveReview`, `setFollowing`…).
-2. En `KuraApp.init` cambia `AppStore(api: MockAPI())` por `AppStore(api: LiveAPI(...))`.
+1. `Services/LiveAPI.swift` ya es la implementación real de `KuraAPI`; `KuraApp.init` elige `LiveAPI` salvo `-kuraScreen`/`-kuraMock`.
+2. Un endpoint nuevo = un método en el protocolo `KuraAPI` + su versión en `LiveAPI` (ruta) y `MockAPI` (dato de `MockData`) + un `load*`/`sync` en `AppStore`.
 3. La autorización se queda en el servidor (como en la web): la app nunca manda un `userId`; las escrituras van por título (`catalogItemId`) o por colección.
 4. `MockData` se queda para previews y para `-kuraScreen`.
 
 ## Pendiente
 
-- Auth real (Apple / Google / link por correo): hoy los botones solo avanzan el flujo.
-- Búsqueda contra el catálogo real (hoy filtra el mock) y "dónde ver" real (hoy abre la web del proveedor).
+- Apple / Google (API.md §2.2, fase 4): hoy solo correo → código; esos botones avisan.
+- Recorrido real contra `pnpm dev` (fase 3 del plan) todavía no ejercitado de punta a punta.
 - Fotos de perfil (hoy todo es sello), bloquear/reportar (hoy un aviso), push real (hoy notificación local).
 - Recap: datos fijos de agosto; la tarjeta se comparte como link, falta exportarla como imagen. Compartir → "Historia" igual.
 - Modo ordenar usa el `List` del sistema para arrastrar (asa y levantado nativos, no los del frame).

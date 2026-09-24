@@ -50,7 +50,7 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(me.name).font(.kura.profile).foregroundStyle(KColor.text).accessibilityAddTraits(.isHeader)
                             Text("@\(me.handle)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
-                            FollowCounts(followers: me.followers, following: store.following.count,
+                            FollowCounts(followers: me.followers, following: max(me.followingCount, store.following.count),
                                          onFollowers: { store.push(.followers(me.id, showFollowing: false)) },
                                          onFollowing: { store.push(.followers(me.id, showFollowing: true)) })
                         }
@@ -58,11 +58,11 @@ struct ProfileView: View {
                             RibbonPill(glyph: .flame, value: store.count(of: .obsessed))
                             RibbonPill(glyph: .check, value: store.count(of: .completed) + store.count(of: .liked) + store.count(of: .obsessed))
                             RibbonPill(glyph: .thumb, value: store.count(of: .liked))
-                            RibbonPill(glyph: .review, value: store.reviews.filter { $0.authorID == me.id }.count)
+                            RibbonPill(glyph: .review, value: store.reviewCount)
                         }
                         Button { store.push(.recap) } label: {
                             HStack(spacing: 8) {
-                                Text("recap de agosto").font(.kura.news(17))
+                                Text(store.recapButtonLabel).font(.kura.news(17))
                                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
                             }
                             .foregroundStyle(KColor.text)
@@ -339,17 +339,7 @@ struct EditProfileView: View {
     }
 
     private func save() {
-        let h = handle.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
-        var me = Person(handle: h.isEmpty ? store.me.handle : h, name: name.lowercased(), initials: initials(name),
-                        hexes: featured.flatMap { store.title($0)?.palette } ?? store.me.hexes,
-                        featuredTitleID: featured)
-        me.followers = store.me.followers
-        me.followingCount = store.me.followingCount
-        store.me = me
-        store.people[me.id] = me
-        store.profilePrivate = isPrivate
-        store.showCommon = showCommon
+        store.saveProfile(name: name, handle: handle, featured: featured, isPrivate: isPrivate, showCommon: showCommon)
         store.pop()
-        store.showToast(ToastModel(text: "Perfil actualizado", kind: .info))
     }
 }

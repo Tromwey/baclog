@@ -6,22 +6,51 @@ import { searchAlbums } from "./itunes";
 import { videoCatalog } from "./tmdb";
 import type { CatalogSearchResult, ExternalItem, SearchTab } from "./types";
 
+export interface DetailedSearch {
+  results: CatalogSearchResult[];
+  /** The providers that were asked and threw (a failing upstream is logged,
+   *  never rethrown — one dead provider must not blank the other's hits). */
+  failed: SearchTab[];
+}
+
 /**
  * F2.5 unified search: TMDB + iTunes fired in parallel, results upserted
  * into catalog_items in ONE round trip (search doubles as cache warmer),
  * merged into the normalized client shape.
+ *
+ * The detailed form ALSO says which providers failed, so a caller that has
+ * to tell "no results" from "the catalog is down" (the mobile API's 503,
+ * ios/API.md §4) can: every asked provider failed AND nothing came back ⇒
+ * unavailable. `unifiedSearch` is the same call minus that report — the web
+ * keeps its `[]`-on-failure posture.
  */
+export async function unifiedSearchDetailed(
+  query: string,
+  tab: SearchTab,
+): Promise<DetailedSearch> {
+  const tasks: { tab: SearchTab; run: Promise<ExternalItem[] | null> }[] = [];
+  if (tab === "film" || tab === "all")
+    tasks.push({ tab: "film", run: safe(videoCatalog.search(query, "film")) });
+  if (tab === "series" || tab === "all")
+    tasks.push({ tab: "series", run: safe(videoCatalog.search(query, "series")) });
+  if (tab === "album" || tab === "all")
+    tasks.push({ tab: "album", run: safe(searchAlbums(query)) });
+
+  const settled = await Promise.all(tasks.map((t) => t.run));
+  const failed: SearchTab[] = [];
+  const external: ExternalItem[] = [];
+  settled.forEach((items, i) => {
+    if (items === null) failed.push(tasks[i].tab);
+    else external.push(...items);
+  });
+  return { results: await cacheExternalItems(external), failed };
+}
+
 export async function unifiedSearch(
   query: string,
   tab: SearchTab,
 ): Promise<CatalogSearchResult[]> {
-  const tasks: Promise<ExternalItem[]>[] = [];
-  if (tab === "film" || tab === "all") tasks.push(safe(videoCatalog.search(query, "film")));
-  if (tab === "series" || tab === "all") tasks.push(safe(videoCatalog.search(query, "series")));
-  if (tab === "album" || tab === "all") tasks.push(safe(searchAlbums(query)));
-
-  const external = (await Promise.all(tasks)).flat();
-  return cacheExternalItems(external);
+  return (await unifiedSearchDetailed(query, tab)).results;
 }
 
 /**
@@ -94,6 +123,7 @@ export async function cacheExternalItems(
     .map((r) => ({
       catalogItemId: r.id,
       source: r.source as "tmdb" | "itunes",
+      externalId: r.externalId,
       mediaType: r.mediaType,
       title: r.title,
       byline: r.byline,
@@ -103,12 +133,14 @@ export async function cacheExternalItems(
     }));
 }
 
-/** One upstream failing must not blank the whole search. */
-async function safe<T>(p: Promise<T[]>): Promise<T[]> {
+/** One upstream failing must not blank the whole search — but the failure is
+ *  still REPORTED (null, distinct from an honest empty `[]`) so the mobile API
+ *  can answer 503 when every provider is down instead of a silent no-results. */
+async function safe<T>(p: Promise<T[]>): Promise<T[] | null> {
   try {
     return await p;
   } catch (err) {
     console.error("[catalog] upstream search failed:", err);
-    return [];
+    return null;
   }
 }

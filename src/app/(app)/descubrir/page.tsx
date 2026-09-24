@@ -5,12 +5,11 @@ import { getLibraryUpcoming } from "@/modules/backlog/library";
 import {
   getLatestDoubleFeature,
   getObsessionRails,
-  type ObsessionRail,
 } from "@/modules/recs/discover-rails";
+import { recCards } from "@/modules/recs/discover-cards";
 import { getTrendingAmongFollowed } from "@/modules/social/trending";
 import { getRenderInstant } from "@/modules/catalog/release";
 import { DescubrirScreen, type SearchBacklog } from "./descubrir-screen";
-import type { RecCard } from "./discover-home";
 import { getLibraryIndex } from "./library-index";
 
 /**
@@ -62,24 +61,4 @@ export default async function DescubrirPage() {
       doubleFeature={doubleFeature}
     />
   );
-}
-
-/**
- * Rails → cards, interleaved (every rail's best first, then every rail's
- * second…) so the first cards speak for different obsessions. A title two
- * obsessions both point to shows once, under the first.
- */
-function recCards(rails: ObsessionRail[]): RecCard[] {
-  const out: RecCard[] = [];
-  const seen = new Set<string>();
-  const depth = Math.max(0, ...rails.map((r) => r.items.length));
-  for (let i = 0; i < depth; i++) {
-    for (const rail of rails) {
-      const work = rail.items[i];
-      if (!work || seen.has(work.catalogItemId)) continue;
-      seen.add(work.catalogItemId);
-      out.push({ work, because: rail.seed.title });
-    }
-  }
-  return out;
 }

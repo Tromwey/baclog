@@ -38,6 +38,10 @@ export interface FeedReview {
   mark: ReviewMark;
   /** Pre-formatted on the server ("hace 2 d") — see queries.ts. */
   when: string;
+  /** Raw instants for consumers that format on their own clock (the mobile
+   *  API serializes these; the web renders `when`). */
+  createdAt: Date;
+  updatedAt: Date;
   author: ReviewAuthor;
 }
 
@@ -52,6 +56,11 @@ export interface OwnReview {
   hasSpoiler: boolean;
   mark: ReviewMark;
   when: string;
+  /** Raw instants (the mobile API serializes them). Optional ONLY because the
+   *  web builds this shape optimistically on the client after a save, where
+   *  it has no server clock; the server reads always set both. */
+  createdAt?: Date;
+  updatedAt?: Date;
   /** Hidden by moderation: out of the feed, still visible to its author. */
   hidden: boolean;
 }

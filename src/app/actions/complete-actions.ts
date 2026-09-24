@@ -1,13 +1,11 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertOwnsBacklog } from "@/authz";
-import { db } from "@/db";
-import { backlogItems } from "@/db/schema";
+import { removeTitleFromBacklog } from "@/modules/backlog/membership";
 import {
   addItemAction,
-  removeMembershipAction,
   setObsessedAction,
   setStatusAction,
   setVerdictAction,
@@ -83,9 +81,9 @@ export async function completeItemAction(input: {
 
 /**
  * The "En N backlogs" sheet: put the title in a backlog, or take it out of
- * one. Adding is `addItemAction` verbatim; removing resolves the caller's own
- * membership row for that backlog and hands it to `removeMembershipAction`,
- * which GC's the per-title state (and the review) when it was the last one.
+ * one. Adding is `addItemAction` verbatim; removing hands the caller's own
+ * (backlog, title) pair to `removeTitleFromBacklog`, which GC's the per-title
+ * state (and the review) when it was the last membership. Idempotent.
  */
 export async function setMembershipAction(input: {
   backlogId: string;
@@ -112,18 +110,8 @@ export async function setMembershipAction(input: {
     return "id" in res ? { ok: true as const } : res;
   }
 
-  const { user } = await assertOwnsBacklog(backlogId);
-  const [membership] = await db
-    .select({ id: backlogItems.id })
-    .from(backlogItems)
-    .where(
-      and(
-        eq(backlogItems.backlogId, backlogId),
-        eq(backlogItems.userId, user.id),
-        eq(backlogItems.catalogItemId, catalogItemId),
-      ),
-    )
-    .limit(1);
-  if (!membership) return { ok: true as const };
-  return removeMembershipAction(membership.id);
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  await removeTitleFromBacklog(user.id, backlog.id, catalogItemId);
+  revalidatePath("/backlogs", "layout");
+  return { ok: true as const };
 }

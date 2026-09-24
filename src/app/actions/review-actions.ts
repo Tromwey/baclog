@@ -6,11 +6,10 @@ import { z } from "zod";
 import { getCurrentUser } from "@/auth";
 import { assertOwnsUserItem, assertUser } from "@/authz";
 import { db } from "@/db";
-import { catalogItems, itemReviews, reports } from "@/db/schema";
+import { itemReviews, reports } from "@/db/schema";
 import { getReviewFeedPage } from "@/modules/reviews/queries";
-import { supportsSpoiler } from "@/modules/reviews/format";
+import { deleteOwnReview, saveReview } from "@/modules/reviews/write";
 import {
-  REVIEW_MAX_LENGTH,
   REVIEW_MORE_SIZE,
   REVIEW_REPORT_REASONS,
   type ReviewFeedPage,
@@ -24,44 +23,16 @@ import {
  * file — review-moderation-actions.ts).
  */
 
-/**
- * Links are rejected outright. A 280-character box next to a title people
- * search for is a spam magnet, and the only thing that makes it worth spamming
- * is the ability to leave a URL. Rejecting them removes the payoff instead of
- * relying on a moderator to notice.
- */
-const LINK_PATTERNS = [
-  /https?:\/\//i,
-  /\bwww\./i,
-  /\b[a-z0-9-]{2,}\.(com|net|org|io|co|app|me|ly|gg|tv|xyz|link|shop|info|biz)\b/i,
-];
-
-const bodySchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(REVIEW_MAX_LENGTH)
-  .refine((v) => !LINK_PATTERNS.some((re) => re.test(v)), {
-    message: "link",
-  });
-
 export type SaveReviewResult =
   | { ok: true }
   | { error: "invalid" | "link" | "locked" | "failed" };
 
 /**
- * Publish or edit the caller's review of a title.
- *
- * Two gates, both server-side (the UI's lock is a courtesy, not the rule):
- * `assertOwnsUserItem` proves the title is in their library, and the reaction
- * check enforces the product rule that writing is UNLOCKED by reacting — a
- * verdict or an obsession, either one.
- *
- * Editing does NOT touch `hiddenAt` (founder decision, 2026-09-02): a review
- * moderation hid stays hidden however many times its author rewrites it — the
- * only way back into the feed is Restaurar in the Torre. Anything else turns
- * every edit into a free re-publish that skips the queue. The author-facing
- * note (reviews-block.tsx) says exactly that, so the copy and the rule agree.
+ * Publish or edit the caller's review of a title. The rules (react first,
+ * no links, ≤280, albums never carry a spoiler flag, editing does NOT clear
+ * `hiddenAt`) live in `modules/reviews/write.ts` — the same code the API's
+ * `PUT /me/titles/{id}/review` runs. This wrapper only proves ownership
+ * (`assertOwnsUserItem`: the title is in their library) and revalidates.
  */
 export async function saveReviewAction(input: {
   catalogItemId: string;
@@ -70,55 +41,20 @@ export async function saveReviewAction(input: {
 }): Promise<SaveReviewResult> {
   const { user, item } = await assertOwnsUserItem(input.catalogItemId);
 
-  // The unlock rule (F3.9): react first — me gusta, no me gusta o me obsesiona.
-  if (!item.obsessed && item.verdict === null) return { error: "locked" };
-
-  const body = bodySchema.safeParse(input.body);
-  if (!body.success) {
-    return {
-      error: body.error.issues.some((i) => i.message === "link")
-        ? "link"
-        : "invalid",
-    };
-  }
-  const parsedSpoiler = z.boolean().safeParse(input.hasSpoiler);
-  if (!parsedSpoiler.success) return { error: "invalid" };
-
-  // Albums have nothing to spoil, so the flag can't be set on one — the sheet
-  // hides the switch, and this drops the value whatever the caller sent. Also
-  // normalizes on the way through: editing an album review clears a flag that
-  // should never have been settable.
-  const [catalog] = await db
-    .select({ mediaType: catalogItems.mediaType })
-    .from(catalogItems)
-    .where(eq(catalogItems.id, input.catalogItemId))
-    .limit(1);
-  const hasSpoiler =
-    catalog && supportsSpoiler(catalog.mediaType) ? parsedSpoiler.data : false;
-
-  const now = new Date();
+  let result: Awaited<ReturnType<typeof saveReview>>;
   try {
-    await db
-      .insert(itemReviews)
-      .values({
-        userId: user.id,
-        catalogItemId: input.catalogItemId,
-        body: body.data,
-        hasSpoiler,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [itemReviews.userId, itemReviews.catalogItemId],
-        set: {
-          body: body.data,
-          hasSpoiler,
-          updatedAt: now,
-        },
-      });
+    result = await saveReview(user.id, item.catalogItemId, {
+      body: input.body,
+      hasSpoiler: input.hasSpoiler,
+    });
   } catch (err) {
     console.error("[F3.9] save review failed:", err);
     return { error: "failed" };
+  }
+  if ("error" in result) {
+    // `not_found` can't happen after assertOwnsUserItem (same row, same
+    // request) — if the row vanished in between, surface it as a failure.
+    return { error: result.error === "not_found" ? "failed" : result.error };
   }
 
   revalidatePath(`/item/${input.catalogItemId}`);
@@ -127,15 +63,8 @@ export async function saveReviewAction(input: {
 
 /** Delete the caller's own review. The ⋯ menu two-tap-confirms before this. */
 export async function deleteReviewAction(catalogItemId: string) {
-  const { user } = await assertOwnsUserItem(catalogItemId);
-  await db
-    .delete(itemReviews)
-    .where(
-      and(
-        eq(itemReviews.userId, user.id),
-        eq(itemReviews.catalogItemId, catalogItemId),
-      ),
-    );
+  const { user, item } = await assertOwnsUserItem(catalogItemId);
+  await deleteOwnReview(user.id, item.catalogItemId);
   revalidatePath(`/item/${catalogItemId}`);
   return { ok: true as const };
 }

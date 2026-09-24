@@ -64,6 +64,9 @@ export async function getPublicProfile(username: string) {
       ? await db
           .select({
             backlogId: backlogItems.backlogId,
+            // API v1 (`GET /people/{handle}`): the escaparate's full order of
+            // title ids per collection, `addedAt desc`. Same gated rows.
+            catalogItemId: catalogItems.id,
             posterUrl: catalogItems.posterUrl,
             paletteHex: catalogItems.paletteHex,
             // Kura (2026-09-24): the card draws each cover at its native
@@ -93,7 +96,17 @@ export async function getPublicProfile(username: string) {
     string,
     { posterUrl: string | null; paletteHex: string[] | null; mediaType: MediaType }[]
   >();
+  // API v1: every title id per collection (rows are already `addedAt desc`),
+  // and the newest one with a cover — the wire's derived `coverTitleId`.
+  const titleIds = new Map<string, string[]>();
+  const coverTitle = new Map<string, string>();
   for (const c of coverRows) {
+    const ids = titleIds.get(c.backlogId) ?? [];
+    ids.push(c.catalogItemId);
+    titleIds.set(c.backlogId, ids);
+    if (c.posterUrl && !coverTitle.has(c.backlogId)) {
+      coverTitle.set(c.backlogId, c.catalogItemId);
+    }
     if (c.posterUrl) {
       const list = covers.get(c.backlogId) ?? [];
       if (list.length < 4) {
@@ -181,6 +194,8 @@ export async function getPublicProfile(username: string) {
       ...l,
       coverUrls: covers.get(l.id) ?? [],
       covers: fans.get(l.id) ?? [],
+      titleIds: titleIds.get(l.id) ?? [],
+      coverTitleId: coverTitle.get(l.id) ?? null,
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
     })),
     upcoming: upcoming.map((u) => ({
@@ -226,6 +241,12 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       // Creation year for the hero meta ("{N} ítems · {año}"). Public-safe: the
       // backlog itself is already public; a year is not user-identifying.
       createdAt: backlogs.createdAt,
+      // API v1 (`GET /people/{handle}/collections/{id}`): the wire Collection
+      // folds the two visibility axes and carries `updatedAt`. The row is
+      // already gated `isPublic = true` below, so `showOnProfile` only says
+      // "link" vs "profile" — never reveals a private shelf.
+      showOnProfile: backlogs.showOnProfile,
+      updatedAt: backlogs.updatedAt,
       ownerName: users.name,
       ownerUsername: users.username,
     })
@@ -247,6 +268,10 @@ export async function getPublicBacklog(username: string, backlogId: string) {
   const items = await db
     .select({
       id: backlogItems.id,
+      // API v1: when the title entered THIS collection (membership, not
+      // user_item.addedAt — the first-save instant stays private). Public
+      // already: the feed's "agregó" event is keyed on this same instant.
+      addedAt: backlogItems.addedAt,
       status: userItems.status,
       // F3.7 — two independent axes with different public rules (handoff §1):
       // `obsessed` IS the public real-time "obsessing over" signal, so it always

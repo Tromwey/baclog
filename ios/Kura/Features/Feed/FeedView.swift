@@ -12,11 +12,38 @@ struct FeedView: View {
     private let ext: CGFloat = 120
 
     var body: some View {
-        if store.following.isEmpty {
-            FeedEmptyView()
-        } else {
-            stack
+        Group {
+            if store.following.isEmpty && store.me.followingCount == 0 {
+                FeedEmptyView()
+            } else if !store.feedLoaded && store.visibleFeed.isEmpty {
+                loading
+            } else {
+                stack
+            }
         }
+        .task { await store.loadFeed() }
+    }
+
+    /// The stack's shape while `GET /feed` runs.
+    private var loading: some View {
+        VStack(spacing: 0) {
+            header
+            VStack(alignment: .leading, spacing: 14) {
+                Skeleton(radius: 999).frame(width: 150, height: 28)
+                Skeleton().frame(maxWidth: .infinity).frame(height: 260)
+                Skeleton(radius: 6).frame(width: 220, height: 26)
+                Skeleton(radius: 5).frame(width: 140, height: 12)
+                Spacer()
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity)
+            .background(KColor.s1)
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous))
+        }
+        .background(KColor.bg.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando tu feed")
     }
 
     private var stack: some View {
@@ -41,6 +68,7 @@ struct FeedView: View {
                                     return content.offset(y: y < 0 ? -y : 0)
                                 }
                                 .zIndex(Double(i))
+                                .onAppear { if i >= events.count - 2 { Task { await store.loadMoreFeed() } } }
                         }
                         // The stack's light continues past the last card.
                         Tint.ends(palette(events.last)).1.color

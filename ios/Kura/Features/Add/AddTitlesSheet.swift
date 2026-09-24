@@ -59,7 +59,20 @@ struct AddTitlesSheet: View {
                             ForEach(suggestions(c)) { t in row(t, c) }
                         } else {
                             let res = results
-                            if res.isEmpty {
+                            if store.searchLoading && res.isEmpty {
+                                ForEach(0..<5, id: \.self) { _ in
+                                    HStack(spacing: 14) {
+                                        Skeleton(radius: KRadius.coverS).frame(width: 40, height: 60)
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Skeleton(radius: 6).frame(width: 180, height: 16)
+                                            Skeleton(radius: 5).frame(width: 120, height: 10)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .frame(minHeight: 72)
+                                }
+                            } else if res.isEmpty {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("no encontramos «\(query)».").font(.kura.news(22)).foregroundStyle(KColor.text)
                                     Text("Revisa cómo se escribe o busca por autor.").font(.kura.ui(14)).foregroundStyle(KColor.text2)
@@ -75,6 +88,14 @@ struct AddTitlesSheet: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
+            .task(id: "\(query)|\(format?.rawValue ?? "")") {
+                let q = query.trimmingCharacters(in: .whitespaces)
+                guard !q.isEmpty else { store.clearSearch(); return }
+                try? await Task.sleep(for: .milliseconds(KuraRuntime.usesMock ? 0 : 350))
+                guard !Task.isCancelled else { return }
+                await store.runSearch(q, kind: format)
+            }
+            .onDisappear { store.clearSearch() }
         }
     }
 
@@ -94,11 +115,9 @@ struct AddTitlesSheet: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
+    /// `GET /search` results (the store keeps the last answer); filtered by the chip.
     private var results: [Title] {
-        let q = fold(query.trimmingCharacters(in: .whitespaces))
-        return store.catalogOrder.compactMap { store.title($0) }
-            .filter { format == nil || $0.format == format }
-            .filter { fold($0.name).contains(q) || fold($0.creator).contains(q) }
+        store.searchResults.map { store.title($0.id) ?? $0.title }.filter { format == nil || $0.format == format }
     }
 
     /// Same creators / formats as what the collection already has, not yet in it.

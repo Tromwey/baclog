@@ -54,6 +54,9 @@ export interface ExternalItem {
 export interface CatalogSearchResult {
   catalogItemId: string;
   source: "tmdb" | "itunes";
+  /** Provider id (TMDB numeric id / iTunes collectionId) — with `source` it is
+   *  the `externalRef` the mobile API hands back (ios/API.md §3). */
+  externalId: string;
   mediaType: MediaType;
   title: string;
   byline: string | null;

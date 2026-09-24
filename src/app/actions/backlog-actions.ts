@@ -2,14 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { assertOwnsBacklog, assertUser } from "@/authz";
-import { db } from "@/db";
-import { backlogs } from "@/db/schema";
+import {
+  backlogNameSchema,
+  backlogVibeSchema,
+  createBacklog,
+  deleteBacklog,
+  updateBacklog,
+} from "@/modules/backlog/collections";
+import type { BacklogVisibility } from "@/modules/backlog/visibility";
 
-const nameSchema = z.string().trim().min(1).max(60);
-const vibeSchema = z.string().trim().max(80).optional();
+/**
+ * Web wrappers over `modules/backlog/collections.ts` (the one write path the
+ * API v1 handlers share): assert* → module → revalidate/redirect. Same public
+ * signatures and return shapes as before the extraction.
+ */
+
+export type { BacklogVisibility };
+
+const nameSchema = backlogNameSchema;
+const vibeSchema = backlogVibeSchema.optional();
 
 export async function createBacklogAction(input: {
   name: string;
@@ -20,10 +33,10 @@ export async function createBacklogAction(input: {
   const vibe = vibeSchema.safeParse(input.vibe);
   if (!name.success || !vibe.success) return { error: "invalid" as const };
 
-  const [created] = await db
-    .insert(backlogs)
-    .values({ userId: user.id, name: name.data, vibe: vibe.data || null })
-    .returning({ id: backlogs.id });
+  const created = await createBacklog(user.id, {
+    name: name.data,
+    vibe: vibe.data || null,
+  });
   revalidatePath("/backlogs");
   return { id: created.id };
 }
@@ -38,37 +51,25 @@ export async function renameBacklogAction(
   name: string,
   vibe?: string,
 ) {
-  const { backlog } = await assertOwnsBacklog(backlogId);
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
   const parsed = nameSchema.safeParse(name);
   const parsedVibe = vibeSchema.safeParse(vibe);
   if (!parsed.success || !parsedVibe.success) return { error: "invalid" as const };
-  await db
-    .update(backlogs)
-    .set({
-      name: parsed.data,
-      ...(parsedVibe.data !== undefined ? { vibe: parsedVibe.data || null } : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(backlogs.id, backlog.id));
+  await updateBacklog(user.id, backlog.id, {
+    name: parsed.data,
+    ...(parsedVibe.data !== undefined ? { vibe: parsedVibe.data } : {}),
+  });
   revalidatePath(`/backlogs/${backlog.id}`);
   revalidatePath("/backlogs");
   return { ok: true as const };
 }
 
-/** The three states of F3.10.1, and how they land on the two boolean axes. */
-const VISIBILITY = {
-  private: { isPublic: false, showOnProfile: false },
-  public: { isPublic: true, showOnProfile: false },
-  featured: { isPublic: true, showOnProfile: true },
-} as const;
-
-export type BacklogVisibility = keyof typeof VISIBILITY;
-
 /**
  * F3.10.1 — Privado / Público / En tu perfil, set from the profile's edit
  * sheet. One action for the whole triad so the two columns can never be
- * written inconsistently (featured always implies public). Revalidates the
- * public tree too: making a backlog private must 404 its /u URL immediately.
+ * written inconsistently (featured always implies public — the pair lives in
+ * `VISIBILITY`, modules/backlog/visibility.ts). Revalidates the public tree
+ * too: making a backlog private must 404 its /u URL immediately.
  */
 export async function setBacklogVisibilityAction(
   backlogId: string,
@@ -78,10 +79,7 @@ export async function setBacklogVisibilityAction(
   const parsed = z.enum(["private", "public", "featured"]).safeParse(visibility);
   if (!parsed.success) return { error: "invalid" as const };
 
-  await db
-    .update(backlogs)
-    .set({ ...VISIBILITY[parsed.data], updatedAt: new Date() })
-    .where(eq(backlogs.id, backlog.id));
+  await updateBacklog(user.id, backlog.id, { visibility: parsed.data });
 
   revalidatePath("/perfil");
   revalidatePath("/feed");
@@ -92,8 +90,8 @@ export async function setBacklogVisibilityAction(
 }
 
 export async function deleteBacklogAction(backlogId: string) {
-  const { backlog } = await assertOwnsBacklog(backlogId);
-  await db.delete(backlogs).where(eq(backlogs.id, backlog.id));
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  await deleteBacklog(user.id, backlog.id);
   revalidatePath("/backlogs");
   redirect("/backlogs");
 }

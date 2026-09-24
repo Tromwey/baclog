@@ -13,7 +13,8 @@ struct SplashView: View {
         .task {
             guard !store.holdSplash else { return }
             try? await Task.sleep(for: .milliseconds(1100))
-            store.phase = .onboarding
+            // A stored token skips the entrance (refreshing it when it's about to expire).
+            await store.finishSplash()
         }
     }
 }
@@ -33,7 +34,9 @@ struct OnboardingFlow: View {
             case .username: UsernameView().transition(.opacity)
             case .pick: PickThreeView(ns: ns).transition(.opacity)
             case .people: YourPeopleView(ns: ns).transition(.opacity)
-            case .login: LoginView().transition(.opacity)
+            case .login, .email: LoginView().transition(.opacity)
+            case .code: CodeView().transition(.opacity)
+            case .underage: UnderageView().transition(.opacity)
             }
         }
         .animation(KMotion.spring, value: store.onboardingStep)
@@ -62,6 +65,20 @@ private struct OnboardingChrome: View {
     }
 }
 
+/// Inline error under a field, in the Kura voice.
+private struct InlineError: View {
+    let text: String?
+    var body: some View {
+        if let text {
+            Text(text)
+                .font(.kura.ui(13))
+                .foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
+        }
+    }
+}
+
 // MARK: - 13 Onboarding (bienvenida)
 
 struct WelcomeView: View {
@@ -70,7 +87,7 @@ struct WelcomeView: View {
     private var fan: [(Title, Double, CGFloat, Double)] {
         // (title, rotation, x offset as fraction of fan height, z)
         [("chihiro", -9.0, -0.62, 0.0), ("odyssey", 9.0, 0.62, 1.0), ("ma", 0.0, 0.0, 2.0)]
-            .compactMap { id, rot, dx, z in store.title(id).map { ($0, rot, dx, z) } }
+            .compactMap { id, rot, dx, z in store.decor(id).map { ($0, rot, dx, z) } }
     }
 
     var body: some View {
@@ -132,7 +149,7 @@ struct SignUpView: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 14) {
-                    if let t = store.title("chihiro") {
+                    if let t = store.decor("chihiro") {
                         CoverView(title: t, width: 44, height: 66, radius: KRadius.coverS)
                     }
                     (Text("Para guardar ").font(.kura.ui(14)).foregroundColor(KColor.text2)
@@ -152,9 +169,10 @@ struct SignUpView: View {
 
             VStack(spacing: 10) {
                 Spacer()
-                AuthButton(kind: .apple) { store.onboardingStep = .username }
-                AuthButton(kind: .google) { store.onboardingStep = .username }
-                AuthButton(kind: .email) { store.onboardingStep = .username }
+                // Apple / Google arrive in a later phase (API.md §2.2); today only the code by email.
+                AuthButton(kind: .apple) { store.showToast(ToastModel(text: "Apple llega después. Por ahora, con correo.", kind: .info)) }
+                AuthButton(kind: .google) { store.showToast(ToastModel(text: "Google llega después. Por ahora, con correo.", kind: .info)) }
+                AuthButton(kind: .email) { store.onboardingStep = .login }
                 Button {
                     store.onboardingStep = .login
                 } label: {
@@ -207,69 +225,98 @@ struct AuthButton: View {
 
 struct UsernameView: View {
     @Environment(AppStore.self) private var store
-    @State private var handle = "mariel.ok"
-    @State private var name = "mariel ortega"
+    @State private var handle = KuraRuntime.usesMock ? "mariel.ok" : ""
+    @State private var name = KuraRuntime.usesMock ? "mariel ortega" : ""
+    @State private var year = KuraRuntime.usesMock ? "1998" : ""
+    @State private var status: UsernameStatus?
+    @State private var seeded = false
 
     private var clean: String {
         handle.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
     }
-    private var available: Bool {
-        clean.count >= 3 && !["danpix", "luciarrr", "tono_v", "nico.ve", "kura", "feed"].contains(clean)
+    private var birthYear: Int? {
+        guard let y = Int(year.filter(\.isNumber)), y >= 1900, y <= 2100 else { return nil }
+        return y
+    }
+    private var needsYear: Bool { !(store.account?.onboarded ?? false) }
+    private var canSubmit: Bool {
+        clean.count >= 3 && status == .free && !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && (!needsYear || birthYear != nil) && !store.authBusy
     }
 
     var body: some View {
         ZStack(alignment: .top) {
-            OnboardingChrome(step: "2 de 2") { store.onboardingStep = .signup }
-
-            VStack(alignment: .leading, spacing: 14) {
-                Text("elige tu usuario.")
-                    .font(.kura.news(40))
-                    .foregroundStyle(KColor.text)
-                    .accessibilityAddTraits(.isHeader)
-                Text("Es tu link: kura.app/@\(clean.isEmpty ? "usuario" : clean)")
-                    .font(.kura.ui(14))
-                    .foregroundStyle(KColor.text2)
-                VStack(spacing: 10) {
-                    GlassField(placeholder: "@usuario", text: Binding(
-                        get: { "@" + handle },
-                        set: { handle = String($0.drop(while: { $0 == "@" })) }
-                    ), trailing: AnyView(availability))
-                    GlassField(placeholder: "tu nombre", text: $name)
-                }
-                .padding(.top, 14)
-                Text("Tu nombre se puede cambiar después en Editar perfil.")
-                    .font(.kura.ui(13))
-                    .foregroundStyle(KColor.text2)
+            // Volver on O1b = logout (API.md §5): the token was already issued.
+            OnboardingChrome(step: "2 de 2") {
+                if store.account == nil { store.onboardingStep = .signup } else { store.signOut() }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 170)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("elige tu usuario.")
+                        .font(.kura.news(40))
+                        .foregroundStyle(KColor.text)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Es tu link: kura.app/@\(clean.isEmpty ? "usuario" : clean)")
+                        .font(.kura.ui(14))
+                        .foregroundStyle(KColor.text2)
+                    VStack(spacing: 10) {
+                        GlassField(placeholder: "@usuario", text: Binding(
+                            get: { "@" + handle },
+                            set: { handle = String($0.drop(while: { $0 == "@" })) }
+                        ), trailing: AnyView(availability))
+                        GlassField(placeholder: "tu nombre", text: $name)
+                        if needsYear {
+                            GlassField(placeholder: "año de nacimiento", text: $year)
+                                .keyboardType(.numberPad)
+                        }
+                    }
+                    .padding(.top, 14)
+                    Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. El año solo confirma que tienes 13 o más; no se guarda."
+                                   : "Tu nombre se puede cambiar después en Editar perfil.")
+                        .font(.kura.ui(13))
+                        .foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    InlineError(text: store.authError)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 170)
+                .padding(.bottom, 120)
+            }
+            .scrollDismissesKeyboard(.interactively)
 
             VStack {
                 Spacer()
-                SolidButton(title: "Crear cuenta", enabled: available) {
-                    store.me = Person(handle: clean, name: name.lowercased(), initials: initials(name),
-                                      hexes: store.me.hexes, featuredTitleID: store.me.featuredTitleID)
-                    store.onboardingStep = .pick
+                SolidButton(title: store.authBusy ? "Un momento…" : "Crear cuenta", enabled: canSubmit) {
+                    Task { await store.submitUsername(handle: clean, name: name, birthYear: birthYear) }
                 }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 10)
         }
         .ignoresSafeArea(.container, edges: .top)
-    }
-
-    private func initials(_ s: String) -> String {
-        let parts = s.split(separator: " ")
-        let chars = parts.prefix(2).compactMap(\.first)
-        return chars.isEmpty ? "k" : String(chars).lowercased()
+        .onAppear {
+            guard !seeded else { return }
+            seeded = true
+            if let h = store.account?.handle, !h.isEmpty { handle = h }
+            if let n = store.account?.name, !n.isEmpty { name = n }
+        }
+        .task(id: clean) {
+            status = nil
+            guard clean.count >= 3 else { return }
+            try? await Task.sleep(for: .milliseconds(KuraRuntime.usesMock ? 0 : 350))
+            guard !Task.isCancelled else { return }
+            let s = await store.checkUsername(clean)
+            if !Task.isCancelled { status = s ?? .free }
+        }
     }
 
     @ViewBuilder private var availability: some View {
-        if clean.count >= 3 {
+        if clean.count >= 3, let status {
             HStack(spacing: 6) {
-                if available { GlyphView(glyph: .check, size: 13) }
-                Text(available ? "libre" : "ocupado")
-                    .monoLabel(11, color: available ? KColor.completed : KColor.text2)
+                if status == .free { GlyphView(glyph: .check, size: 13) }
+                Text(status == .free ? "libre" : (status == .taken ? "ocupado" : "no vale"))
+                    .monoLabel(11, color: status == .free ? KColor.completed : KColor.text2)
             }
         }
     }
@@ -283,12 +330,9 @@ struct PickThreeView: View {
     @State private var query = ""
 
     private var grid: [Title] {
-        let all = MockData.onboardingGrid.compactMap { store.title($0) }
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return all }
-        return store.catalogOrder.compactMap { store.title($0) }.filter {
-            $0.name.lowercased().contains(q) || $0.creator.lowercased().contains(q)
-        }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return store.onboardingGrid }
+        return store.searchResults.map(\.title)
     }
 
     private var picks: [String] { store.onboardingPicks }
@@ -303,9 +347,11 @@ struct PickThreeView: View {
                     HStack {
                         StepLabel(text: "1 de 2")
                         Spacer()
-                        Button("Volver") { store.onboardingStep = .username }
-                            .font(.kura.ui(14, .semibold))
-                            .foregroundStyle(KColor.text2)
+                        Button("Volver") {
+                            if store.account?.onboarded == true { store.finishOnboarding() } else { store.onboardingStep = .username }
+                        }
+                        .font(.kura.ui(14, .semibold))
+                        .foregroundStyle(KColor.text2)
                     }
                     Text("elige 3 que te obsesionan.")
                         .font(.kura.news(32))
@@ -316,20 +362,38 @@ struct PickThreeView: View {
                         .lineSpacing(4)
                         .foregroundStyle(KColor.text2)
                     SearchPill(placeholder: "Buscar películas, series o música", text: $query)
-                    masonry.padding(.top, 4)
+                    if grid.isEmpty {
+                        if store.searchLoading || (query.isEmpty && store.onboardingGrid.isEmpty) {
+                            pickSkeleton.padding(.top, 4)
+                        } else if !query.isEmpty {
+                            Text("nada con “\(query)”.").font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 12)
+                        }
+                    } else {
+                        masonry.padding(.top, 4)
+                    }
+                    InlineError(text: store.authError)
                 }
                 .padding(.top, 72)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 150)
             }
+            .scrollDismissesKeyboard(.interactively)
 
             BottomCTA {
-                SolidButton(title: ctaTitle, enabled: picks.count == 3) {
-                    store.onboardingStep = .people
+                SolidButton(title: store.authBusy ? "Un momento…" : ctaTitle, enabled: picks.count == 3 && !store.authBusy) {
+                    Task { await store.submitPicks() }
                 }
             }
         }
         .ignoresSafeArea(.container, edges: .top)
+        .task { await store.loadOnboardingGrid() }
+        .task(id: query) {
+            let q = query.trimmingCharacters(in: .whitespaces)
+            guard !q.isEmpty else { store.clearSearch(); return }
+            try? await Task.sleep(for: .milliseconds(KuraRuntime.usesMock ? 0 : 350))
+            guard !Task.isCancelled else { return }
+            await store.runSearch(q)
+        }
     }
 
     private var ctaTitle: String {
@@ -346,6 +410,21 @@ struct PickThreeView: View {
         return Group {
             if palettes.isEmpty { KColor.bg } else { Tint.header3(palettes) }
         }
+    }
+
+    private var pickSkeleton: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(0..<3, id: \.self) { col in
+                VStack(spacing: 12) {
+                    ForEach(0..<3, id: \.self) { row in
+                        Skeleton(radius: KRadius.coverS).aspectRatio((col + row) % 3 == 1 ? 1 : 2.0 / 3.0, contentMode: .fit)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando")
     }
 
     private var masonry: some View {
@@ -456,8 +535,14 @@ struct YourPeopleView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     hero
                     VStack(spacing: 0) {
-                        ForEach(MockData.onboardingPeople, id: \.0) { id, why in
-                            if let p = store.person(id) { personRow(p, why: why) }
+                        if store.onboardingPeople.isEmpty {
+                            Text("Todavía no hay gente con tus obsesiones. Tu feed se llena cuando la encuentres en Descubrir.")
+                                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.vertical, 24)
+                        }
+                        ForEach(store.onboardingPeople) { p in
+                            personRow(store.person(p.id) ?? p, why: p.why ?? "")
                         }
                     }
                     .padding(.horizontal, 20)
@@ -473,6 +558,7 @@ struct YourPeopleView: View {
                 }
             }
         }
+        .task { await store.loadOnboardingPeople() }
     }
 
     private var hero: some View {
@@ -513,9 +599,11 @@ struct YourPeopleView: View {
             Seal(person: p, size: 44)
             VStack(alignment: .leading, spacing: 4) {
                 Text("@\(p.handle)").font(.kura.ui(16, .semibold)).foregroundStyle(KColor.text)
-                HStack(spacing: 6) {
-                    GlyphView(glyph: .flame, size: 12)
-                    Text(why).font(.kura.ui(13)).foregroundStyle(KColor.text2).lineLimit(1)
+                if !why.isEmpty {
+                    HStack(spacing: 6) {
+                        GlyphView(glyph: .flame, size: 12)
+                        Text(why).font(.kura.ui(13)).foregroundStyle(KColor.text2).lineLimit(1)
+                    }
                 }
             }
             Spacer(minLength: 8)
@@ -525,11 +613,12 @@ struct YourPeopleView: View {
     }
 }
 
-// MARK: - O1c Entrar
+// MARK: - O1c Entrar (correo)
 
 struct LoginView: View {
     @Environment(AppStore.self) private var store
-    @State private var email = "mariel@correo.com"
+    @State private var email = KuraRuntime.usesMock ? "mariel@correo.com" : ""
+    @FocusState private var focused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -542,22 +631,21 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 20)
                     .accessibilityAddTraits(.isHeader)
-                AuthButton(kind: .apple) { store.finishOnboarding() }
-                AuthButton(kind: .google) { store.finishOnboarding() }
+                AuthButton(kind: .apple) { store.showToast(ToastModel(text: "Apple llega después. Por ahora, con correo.", kind: .info)) }
+                AuthButton(kind: .google) { store.showToast(ToastModel(text: "Google llega después. Por ahora, con correo.", kind: .info)) }
                 Text("o con correo")
                     .monoLabel(11, color: KColor.text3)
                     .padding(.top, 14)
                     .padding(.bottom, 2)
-                GlassField(placeholder: "tu correo", text: $email)
+                GlassField(placeholder: "tu correo", text: $email, focus: $focused)
                     .keyboardType(.emailAddress)
-                GlassButton(title: "Enviarme un link", height: 52, fontSize: 16, fullWidth: true) {
-                    store.showToast(ToastModel(text: "Te mandamos un link a \(email).", kind: .info))
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(1400))
-                        store.finishOnboarding()
-                    }
-                }
-                Text("Sin contraseña: te mandamos un link para entrar.")
+                    .textContentType(.emailAddress)
+                    .submitLabel(.send)
+                    .onSubmit(send)
+                GlassButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", height: 52, fontSize: 16, fullWidth: true, action: send)
+                    .disabled(store.authBusy)
+                InlineError(text: store.authError)
+                Text("Sin contraseña: te mandamos un código de seis dígitos.")
                     .font(.kura.ui(13))
                     .foregroundStyle(KColor.text2)
                     .multilineTextAlignment(.center)
@@ -566,5 +654,104 @@ struct LoginView: View {
             .padding(.top, 170)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .onAppear { if !store.authEmail.isEmpty { email = store.authEmail } }
+    }
+
+    private func send() {
+        guard !store.authBusy else { return }
+        focused = false
+        Task {
+            if await store.requestCode(email: email) {
+                store.onboardingStep = .code
+            }
+        }
+    }
+}
+
+// MARK: - O1c · el código
+
+struct CodeView: View {
+    @Environment(AppStore.self) private var store
+    @State private var code = ""
+    @FocusState private var focused: Bool
+
+    private var digits: String { String(code.filter(\.isNumber).prefix(6)) }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = .login }
+
+            VStack(spacing: 12) {
+                Text("tu código.")
+                    .font(.kura.news(40))
+                    .foregroundStyle(KColor.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                (Text("Lo mandamos a ").foregroundColor(KColor.text2)
+                 + Text(store.authEmail).foregroundColor(KColor.text))
+                    .font(.kura.ui(15))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 20)
+                GlassField(placeholder: "seis dígitos", text: $code, focus: $focused)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .onChange(of: code) { _, new in
+                        let d = String(new.filter(\.isNumber).prefix(6))
+                        if d != new { code = d }
+                        if d.count == 6 { verify() }
+                    }
+                SolidButton(title: store.authBusy ? "Entrando…" : "Entrar", enabled: digits.count == 6 && !store.authBusy, action: verify)
+                InlineError(text: store.authError)
+                Button {
+                    Task { _ = await store.requestCode(email: store.authEmail); code = "" }
+                } label: {
+                    Text("Mandar otro código")
+                        .font(.kura.ui(15, .medium))
+                        .foregroundStyle(KColor.text2)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(store.authBusy)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 170)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .onAppear { focused = true }
+    }
+
+    private func verify() {
+        guard digits.count == 6, !store.authBusy else { return }
+        focused = false
+        Task { _ = await store.verifyCode(digits) }
+    }
+}
+
+// MARK: - 13 años
+
+struct UnderageView: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Spacer()
+            Text("kura es para mayores de 13.")
+                .font(.kura.news(36))
+                .foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text("No podemos abrirte una cuenta todavía. Guarda el link y vuelve cuando cumplas 13.")
+                .font(.kura.ui(15))
+                .lineSpacing(4)
+                .foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            GlassButton(title: "Entendido", height: 52, fontSize: 16, fullWidth: true) {
+                store.signOut()
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 48)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

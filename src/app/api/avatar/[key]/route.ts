@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/auth";
+import { readApiUser } from "@/authz/api";
 import { getAvatarByKey } from "@/modules/avatar/queries";
 import { AVATAR_KEY_RE } from "@/modules/avatar/shared";
 
@@ -10,6 +11,11 @@ import { AVATAR_KEY_RE } from "@/modules/avatar/shared";
  * photo is served to that user only — a bad key, a private owner and a
  * stranger all get the same empty 404, so the route is no oracle for anything.
  *
+ * The viewer is resolved from EITHER credential: the mobile bearer first
+ * (`readApiUser` — the Kura iOS app loads its own photo with
+ * `Authorization: Bearer`, it has no cookie), then the Auth.js cookie. Same
+ * gate, same 404, whichever one identifies the owner.
+ *
  * Cache-Control is `private`: browsers may keep the bytes for a year (the key
  * rotates on every change, so the URL is truly immutable), but the CDN must
  * NOT — an edge cache would keep serving a photo after its owner went
@@ -18,7 +24,7 @@ import { AVATAR_KEY_RE } from "@/modules/avatar/shared";
  * scale; revisit with a key rotation on privacy flips if it ever isn't.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ key: string }> },
 ) {
   const { key } = await params;
@@ -27,7 +33,7 @@ export async function GET(
   const row = await getAvatarByKey(key);
   if (!row) return notFound();
   if (!row.isPublic) {
-    const viewer = await getCurrentUser();
+    const viewer = (await readApiUser(request)) ?? (await getCurrentUser());
     if (viewer?.id !== row.userId) return notFound();
   }
 

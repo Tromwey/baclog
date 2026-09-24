@@ -269,6 +269,7 @@ struct NewCollectionSheet: View {
     var movingFrom: String? = nil
     @State private var name = ""
     @State private var privacy: Privacy = .followers
+    @State private var privacySeeded = false
     @State private var choosingPrivacy = false
     @FocusState private var focused: Bool
 
@@ -281,7 +282,7 @@ struct NewCollectionSheet: View {
                     .onSubmit(create)
                 if choosingPrivacy {
                     VStack(spacing: 0) {
-                        ForEach(Privacy.allCases) { p in
+                        ForEach(Privacy.options) { p in
                             PrivacyOptionRow(privacy: p, selected: p == privacy) {
                                 privacy = p
                                 withAnimation(KMotion.short) { choosingPrivacy = false }
@@ -312,7 +313,10 @@ struct NewCollectionSheet: View {
             .padding(.top, 6)
         }
         .padding(.horizontal, 20)
-        .onAppear { focused = true }
+        .onAppear {
+            focused = true
+            if !privacySeeded { privacySeeded = true; privacy = store.defaultPrivacy }
+        }
     }
 
     private func create() {

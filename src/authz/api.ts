@@ -237,6 +237,21 @@ export async function requireApiUser(request: Request): Promise<CurrentUser> {
   return user;
 }
 
+/**
+ * Soft twin of `requireApiUser` for routes OUTSIDE v1 that serve both the web
+ * (cookie) and the app (bearer) — today only `/api/avatar/[key]`. Returns the
+ * bearer user or null (no header, bad token, unknown/blocked user): the
+ * caller falls back to `getCurrentUser()` for the cookie. No rate limit and
+ * no `apiContext` — it identifies, it does not wrap.
+ */
+export async function readApiUser(request: Request): Promise<CurrentUser | null> {
+  const token = bearerOf(request);
+  if (!token) return null;
+  const claims = await verifyMobileToken(token);
+  if (!claims) return null;
+  return loadUserById(claims.sub);
+}
+
 // ---------- rate limit ----------
 
 /**

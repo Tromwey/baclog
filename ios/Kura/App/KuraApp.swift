@@ -10,7 +10,21 @@ struct KuraApp: App {
         // give the shared cache room: returning to a screen should not refetch.
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         FontCheck.run()
-        let store = AppStore(api: MockAPI())
+        // `LiveAPI` by default; `MockAPI` for the `-kuraScreen` captures and `-kuraMock` (DEBUG).
+        let mock = DebugLaunch.wantsMock
+        KuraRuntime.usesMock = mock
+        let api: KuraAPI
+        if mock {
+            api = MockAPI()
+        } else {
+            let client = APIClient()
+            var origin = URLComponents(url: client.base, resolvingAgainstBaseURL: false)
+            origin?.path = ""
+            origin?.query = nil
+            KuraRuntime.apiOrigin = origin?.url
+            api = LiveAPI(client: client)
+        }
+        let store = AppStore(api: api, now: mock ? MockData.now : Date())
         DebugLaunch.configure(store)
         _store = State(initialValue: store)
     }

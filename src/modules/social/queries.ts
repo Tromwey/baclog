@@ -472,6 +472,10 @@ async function fetchFeedChunk(
         r.kind === "added" && isUpcoming(r.releaseDate, now)
           ? waitingLabel(r.releaseDate!, now)
           : null,
+      releaseDate:
+        r.kind === "added" && isUpcoming(r.releaseDate, now)
+          ? r.releaseDate!.toISOString()
+          : null,
       backlogId: r.backlogId,
       backlogName: r.backlogName,
       // The verdict travels only on Completó/Reseñó; the obsession EVENT
@@ -773,6 +777,7 @@ export async function getFeedSuggestion(
         .where(and(eq(backlogs.userId, cid), eq(backlogs.isPublic, true))),
       db
         .select({
+          catalogItemId: catalogItems.id,
           posterUrl: catalogItems.posterUrl,
           mediaType: catalogItems.mediaType,
           paletteHex: catalogItems.paletteHex,
@@ -816,6 +821,7 @@ export async function getFeedSuggestion(
     covers: coverRows
       .filter((c): c is typeof c & { posterUrl: string } => Boolean(c.posterUrl))
       .map((c) => ({
+        catalogItemId: c.catalogItemId,
         posterUrl: c.posterUrl,
         mediaType: c.mediaType,
         paletteHex: c.paletteHex ?? [],
@@ -1105,6 +1111,27 @@ export async function getPeoplePage(
         ? encodeCursor(last.at, last.followId)
         : null,
   };
+}
+
+// ---------- API v1: one page of EVENTS (the app groups its own bursts) ----------
+
+/**
+ * `GET /api/v1/feed` — one keyset chunk of raw events (FEED_EVENT_CHUNK) for
+ * the bearer viewer, without the card grouping: the contract ships EVENTS and
+ * the iOS list folds bursts with the same rule as feed-list.tsx. Same
+ * follow-graph resolution, same four gated branches and the same
+ * `encodeCursor` format as getFeedCards, so a cursor from either paginates
+ * the same stream. No followed ids → empty page, null cursor (the app owns
+ * that empty state, like the web).
+ */
+export async function getFeedEventsPage(
+  viewerId: string,
+  opts: { cursor?: string | null; now?: number } = {},
+): Promise<{ events: FeedEvent[]; nextCursor: string | null }> {
+  const now = opts.now ?? Date.now();
+  const ids = await getFollowedIds(viewerId);
+  if (ids.length === 0) return { events: [], nextCursor: null };
+  return fetchFeedChunk(ids, opts.cursor ?? null, now, new Map());
 }
 
 // ---------- feed v2: cards (bursts + singles), paged by CARDS ----------

@@ -7,7 +7,19 @@ struct TitleDetailView: View {
     let titleID: String
 
     var body: some View {
-        if let t = store.title(titleID) {
+        Group {
+            if let t = store.title(titleID) {
+                detail(t)
+            } else if store.missingTitles.contains(titleID) {
+                GoneView(title: "este título ya no está.", note: "Se quitó del catálogo o dejó de estar disponible.")
+            } else {
+                LoadingScreen()
+            }
+        }
+        .task(id: titleID) { await store.loadTitle(titleID) }
+    }
+
+    private func detail(_ t: Title) -> some View {
             ZStack(alignment: .top) {
                 KColor.bg.ignoresSafeArea()
                 ScrollView(showsIndicators: false) {
@@ -28,9 +40,6 @@ struct TitleDetailView: View {
                 }
             }
             .onAppear { store.noteViewed(t.id) }
-        } else {
-            GoneView()
-        }
     }
 }
 
@@ -168,7 +177,7 @@ private struct TitleHeader: View {
         if c.liked != "—" { items.append((.thumb, c.liked)) }
         if c.completed != "—" { items.append((.check, c.completed)) }
         if let w = c.waiting { items.append((.clock, w)) }
-        items.append((.bookmark, c.saved))
+        if c.saved != "—" { items.append((.bookmark, c.saved)) }
         return items
     }
 
@@ -176,7 +185,7 @@ private struct TitleHeader: View {
         var s: [String] = []
         if c.obsessed != "—" { s += ["\(c.obsessed) obsesionados", "\(c.liked) les gusta", "\(c.completed) completos"] }
         if let w = c.waiting { s.append("\(w) esperando") }
-        s.append("\(c.saved) guardados")
+        if c.saved != "—" { s.append("\(c.saved) guardados") }
         return s.joined(separator: ", ")
     }
 }
@@ -214,7 +223,7 @@ private struct TitleSections: View {
         return VStack(alignment: .leading, spacing: 4) {
             SectionTitle(text: "dónde ver", trailing: "México")
             ForEach(t.watch) { w in
-                Link(destination: providerURL(w.name)) {
+                Link(destination: w.url ?? providerURL(w.name)) {
                     HStack(spacing: 14) {
                         Group {
                             if w.isCinema {
@@ -254,7 +263,7 @@ private struct TitleSections: View {
 
     private func cinemaSince(_ t: Title) -> String {
         guard case .day(let d)? = t.release else { return "" }
-        let c = MockData.calendar.dateComponents([.day, .month], from: d)
+        let c = store.cal.dateComponents([.day, .month], from: d)
         let months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
         return "desde \(c.day ?? 1) \(months[(c.month ?? 1) - 1])"
     }
@@ -671,6 +680,8 @@ private struct AlbumSections: View {
     }
 
     private func musicURL(_ t: Title) -> URL {
+        // The API resolves the preferred service's link (`watch[].url`); otherwise search it.
+        if let u = t.watch.first?.url { return u }
         let q = "\(t.name) \(t.creator)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         switch store.musicApp {
         case "Spotify": return URL(string: "https://open.spotify.com/search/\(q)")!

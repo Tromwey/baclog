@@ -9,7 +9,7 @@ import {
 import { getShelvesForUser } from "@/modules/backlog/shelves";
 import { getFollowCounts } from "@/modules/social/queries";
 import { getRenderInstant } from "@/modules/catalog/release";
-import { getLatestRecapKey } from "../recap/recap-data";
+import { getLatestRecapKey } from "@/modules/backlog/recap";
 import { PerfilScreen } from "./perfil-screen";
 
 /**

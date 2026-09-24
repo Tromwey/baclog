@@ -20,6 +20,7 @@ targets:
         excludes:
           - "Resources/AppIcon-1024.png"
           - "Info.plist"
+          - "Info-Debug.plist"
     info:
       path: Kura/Info.plist
       properties:
@@ -33,6 +34,9 @@ targets:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
+        # KURA_API_BASE, split in scheme/host so `//` never lands in a build setting.
+        # Debug: http://localhost:3010/api/v1 · Release: https://baclog.app/api/v1 (see configs below).
+        KuraAPIBase: $(KURA_API_SCHEME)://$(KURA_API_HOST)/api/v1
         UIAppFonts:
           - Newsreader-Regular.ttf
           - Newsreader-Medium.ttf
@@ -52,6 +56,15 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_PREVIEWS: YES
         CODE_SIGN_STYLE: Automatic
+      configs:
+        Debug:
+          KURA_API_SCHEME: http
+          KURA_API_HOST: "localhost:3010"
+          # Debug-only plist: same keys + NSAllowsLocalNetworking for the dev server on the Mac.
+          INFOPLIST_FILE: Kura/Info-Debug.plist
+        Release:
+          KURA_API_SCHEME: https
+          KURA_API_HOST: baclog.app
 schemes:
   Kura:
     build:

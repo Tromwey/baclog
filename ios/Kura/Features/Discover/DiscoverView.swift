@@ -22,13 +22,14 @@ struct DiscoverView: View {
             }
         }
         .onChange(of: searching) { _, s in store.dockHidden = s }
+        .task { await store.loadDiscover() }
         .onAppear {
             if let q = store.debugDiscoverQuery {
                 store.debugDiscoverQuery = nil
                 searching = true
                 store.dockHidden = true
                 query = q.text
-                if q.submit { submitted = q.text } else { focused = true }
+                if q.submit { submit(q.text) } else { focused = true }
             }
         }
     }
@@ -40,8 +41,10 @@ struct DiscoverView: View {
             query = ""
             submitted = nil
         }
+        store.clearSearch()
     }
 
+    /// E5 · `GET /search` + `GET /people/search`; the skeleton shows while it runs.
     private func submit(_ q: String) {
         let t = q.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return }
@@ -51,8 +54,8 @@ struct DiscoverView: View {
         loading = true
         submitted = t
         Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            loading = false
+            await store.runSearch(t)
+            if submitted == t { loading = false }
         }
     }
 
@@ -105,15 +108,18 @@ struct DiscoverView: View {
 
     private func inTab(_ t: Title) -> Bool { tab == nil || t.format == tab }
 
+    /// The subtitle under a recommendation: the creator, or the series length.
+    private func recSubtitle(_ t: Title) -> String {
+        if t.format == .series, let d = t.detail { return d }
+        return t.lowerCreator
+    }
+
     // "recomendado para ti" — a tinted card with the reason.
     @ViewBuilder private var recommended: some View {
-        let recs: [(String, String, String)] = [
-            ("ma", "Porque te obsesiona Mala", "devendra banhart"),
-            ("pearl", "Porque guardaste Spider-Man 3", "ti west"),
-            ("severance", "Porque guardaste The Odyssey", "2 temporadas"),
-            ("mononoke", "Porque te obsesiona El viaje de Chihiro", "hayao miyazaki")
-        ]
-        if let r = recs.first(where: { store.title($0.0).map(inTab) ?? false }), let t = store.title(r.0) {
+        let recs = store.discover?.recommended ?? []
+        if store.discover == nil && store.discoverLoading {
+            DiscoverSkeleton()
+        } else if let r = recs.first(where: { inTab($0.title) }), let t = store.title(r.title.id) ?? Optional(r.title) {
             VStack(alignment: .leading, spacing: 14) {
                 SectionTitle(text: "recomendado para ti").padding(.horizontal, 20)
                 HStack(alignment: .bottom, spacing: 16) {
@@ -122,9 +128,9 @@ struct DiscoverView: View {
                     }
                     .buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(r.1).monoLabel(10).lineSpacing(3)
+                        Text(r.reason).monoLabel(10).lineSpacing(3)
                         Text(t.name).font(.kura.newsItalic(24)).foregroundStyle(KColor.text)
-                        Text(r.2).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                        Text(recSubtitle(t)).font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         GlassButton(title: store.isSaved(t.id) ? "Guardado" : "Guardar",
                                     systemImage: store.isSaved(t.id) ? "checkmark" : "plus") {
                             store.present(.saveTo(t.id))
@@ -142,10 +148,10 @@ struct DiscoverView: View {
     }
 
     // "tendencias · esta semana" — ranked rows.
-    private var trends: some View {
-        let ids = ["odyssey", "severance", "pearl", "chihiro", "mindofmine", "spiderman3", "ma", "mala", "eduardo"]
-        let list = ids.compactMap { store.title($0) }.filter(inTab).prefix(5)
-        return VStack(alignment: .leading, spacing: 14) {
+    @ViewBuilder private var trends: some View {
+        let list = (store.discover?.trending ?? []).map { store.title($0.title.id) ?? $0.title }.filter(inTab).prefix(5)
+        if !list.isEmpty {
+        VStack(alignment: .leading, spacing: 14) {
             SectionTitle(text: "tendencias", trailing: "esta semana").padding(.horizontal, 20)
             VStack(spacing: 0) {
                 ForEach(Array(list.enumerated()), id: \.element.id) { i, t in
@@ -167,14 +173,27 @@ struct DiscoverView: View {
                 }
             }
         }
+        }
+    }
+
+    /// "En cines" · "14 h" · "T3 · sin fecha" · "2025" — what the rail says under a title.
+    private func upcomingLabel(_ t: Title, releaseDate: Date?) -> String {
+        if t.release != nil, store.isUnreleased(t) || t.upcomingSeason != nil {
+            return store.releaseLabel(t, withSeason: true) ?? ""
+        }
+        if let d = releaseDate, d > store.now { return store.label(for: .day(KuraJSON.dayAtNoon(d))) }
+        if t.watch.contains(where: \.isCinema) { return "En cines" }
+        return t.year.map(String.init) ?? ""
     }
 
     // "nuevos y próximos lanzamientos"
-    private var upcoming: some View {
-        let items: [(String, String)] = [("odyssey", "En cines"), ("showgirl", "14 h"), ("ycse", "16 oct"),
-                                         ("doomsday", "18 dic"), ("severance", "T3 · sin fecha"), ("nube", "2025")]
-        let list = items.compactMap { id, when in store.title(id).map { ($0, when) } }.filter { inTab($0.0) }
-        return VStack(alignment: .leading, spacing: 14) {
+    @ViewBuilder private var upcoming: some View {
+        let list = (store.discover?.upcoming ?? []).map { u -> (Title, String) in
+            let t = store.title(u.title.id) ?? u.title
+            return (t, upcomingLabel(t, releaseDate: u.releaseDate))
+        }.filter { inTab($0.0) }
+        if !list.isEmpty {
+        VStack(alignment: .leading, spacing: 14) {
             SectionTitle(text: "nuevos y próximos lanzamientos").padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .bottom, spacing: 12) {
@@ -195,6 +214,7 @@ struct DiscoverView: View {
                 .padding(.bottom, 12)
             }
             .scrollClipDisabled()
+        }
         }
     }
 
@@ -444,10 +464,21 @@ private struct SearchMode: View {
 
     @ViewBuilder private var results: some View {
         let q = submitted ?? query
-        let titles = SearchIndex.titles(q, store)
+        let titles = store.searchResults.map { store.title($0.id) ?? $0.title }
         let creators = SearchIndex.creators(q, store)
-        let users = SearchIndex.users(q, store)
-        if titles.isEmpty && creators.isEmpty && users.isEmpty {
+        let users = store.searchPeople
+        if let e = store.searchError, e == .unavailable || e == .offline {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(e == .offline ? "sin conexión." : "el catálogo no responde.").font(.kura.news(32)).foregroundStyle(KColor.text)
+                Text(e == .offline ? "Revisa tu red y vuelve a buscar." : "Inténtalo de nuevo en un momento.")
+                    .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { submit(q) }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.top, 120)
+        } else if titles.isEmpty && creators.isEmpty && users.isEmpty {
             NoResults(query: q) { fix in
                 query = fix
                 submit(fix)
@@ -536,6 +567,29 @@ private struct SearchMode: View {
     }
 
     private func fold(_ s: String) -> String { s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
+}
+
+/// 19a while `GET /discover` runs: the shape of the recommendation card.
+private struct DiscoverSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Skeleton(radius: 6).frame(width: 180, height: 22).padding(.horizontal, 20)
+            HStack(alignment: .bottom, spacing: 16) {
+                Skeleton().frame(width: 88, height: 132)
+                VStack(alignment: .leading, spacing: 10) {
+                    Skeleton(radius: 5).frame(width: 140, height: 10)
+                    Skeleton(radius: 6).frame(width: 170, height: 22)
+                    Skeleton(radius: 5).frame(width: 110, height: 12)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
+            .padding(.horizontal, 12)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando")
+    }
 }
 
 /// E5 · Buscando — skeletons with the shape of the results.
@@ -640,7 +694,8 @@ struct InitialsSeal: View {
     }
 }
 
-/// Mock search over the catalog, creators and people.
+/// Local index over what the app already knows (typing suggestions, creators,
+/// the "did you mean" correction). The real search is `store.runSearch`.
 enum SearchIndex {
     static func fold(_ s: String) -> String { s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
 

@@ -35,7 +35,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(SheetRowStyle())
                         ListDivider()
-                        SettingsRow(title: "Correo") { RowValue(text: "mariel@correo.com") }
+                        SettingsRow(title: "Correo") { RowValue(text: store.account?.email ?? (KuraRuntime.usesMock ? "mariel@correo.com" : "")) }
                     }
 
                     section("privacidad") {
@@ -121,7 +121,7 @@ struct PrivacySettingsView: View {
                     KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
                 }
                 Button {
-                    let all = Privacy.allCases
+                    let all = Privacy.options
                     let i = all.firstIndex(of: store.defaultPrivacy) ?? 0
                     store.defaultPrivacy = all[(i + 1) % all.count]
                     UISelectionFeedbackGenerator().selectionChanged()
@@ -167,7 +167,7 @@ struct PrivacySettingsView: View {
 
 struct MusicAppView: View {
     @Environment(AppStore.self) private var store
-    private let apps = ["Apple Music", "Spotify", "YouTube Music", "Tidal"]
+    private let apps = AppStore.services.map(\.name)
 
     var body: some View {
         ZStack(alignment: .top) {

@@ -8,6 +8,16 @@ import Foundation
 /// list · auto · more · actions · add · title · series · album · waiting ·
 /// complete · feed · discover · profile
 enum DebugLaunch {
+    /// `-kuraScreen <name>` or `-kuraMock` → the app runs on `MockAPI` (DEBUG only).
+    static var wantsMock: Bool {
+        #if DEBUG
+        let d = UserDefaults.standard
+        return d.string(forKey: "kuraScreen") != nil || d.bool(forKey: "kuraMock")
+        #else
+        return false
+        #endif
+    }
+
     @MainActor
     static func configure(_ store: AppStore) {
         #if DEBUG

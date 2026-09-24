@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { BackButton } from "@/components/ui";
 import { tintSurfaceVertical } from "@/components/kura/tint";
-import { getRecapMonths, monthName, monthYear } from "../recap-data";
+import { getRecapMonths } from "@/modules/backlog/recap";
+import { monthName, monthYear } from "@/modules/backlog/recap-format";
 
 /**
  * O8 Meses anteriores (Kura, flujo 10 — a branch of Recap): the newest

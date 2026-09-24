@@ -183,6 +183,7 @@ export async function getReviewFeedPage(
       body: itemReviews.body,
       hasSpoiler: itemReviews.hasSpoiler,
       createdAt: itemReviews.createdAt,
+      updatedAt: itemReviews.updatedAt,
       username: users.username,
       image: users.image,
       obsessed: userItems.obsessed,
@@ -232,6 +233,8 @@ export async function getReviewFeedPage(
       hasSpoiler: row.hasSpoiler,
       mark: markOf(row),
       when: relativeWhen(row.createdAt, now),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
       author: {
         username,
         initial: initialOf(username),
@@ -281,6 +284,7 @@ export async function getItemReviewContext(
         body: itemReviews.body,
         hasSpoiler: itemReviews.hasSpoiler,
         hiddenAt: itemReviews.hiddenAt,
+        createdAt: itemReviews.createdAt,
         updatedAt: itemReviews.updatedAt,
         obsessed: userItems.obsessed,
         verdict: userItems.verdict,
@@ -314,6 +318,8 @@ export async function getItemReviewContext(
     mark: markOf(row),
     // The own card shows when it was last SAVED — editing is re-publishing.
     when: relativeWhen(row.updatedAt, now),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     hidden: row.hiddenAt !== null,
   };
   return { ...page, own, total };
@@ -336,6 +342,7 @@ export async function getPublicOwnerReview(
       body: itemReviews.body,
       hasSpoiler: itemReviews.hasSpoiler,
       createdAt: itemReviews.createdAt,
+      updatedAt: itemReviews.updatedAt,
       username: users.username,
       image: users.image,
       obsessed: userItems.obsessed,
@@ -368,6 +375,8 @@ export async function getPublicOwnerReview(
     hasSpoiler: row.hasSpoiler,
     mark: markOf(row),
     when: relativeWhen(row.createdAt, now),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     author: {
       username: name,
       initial: initialOf(name),

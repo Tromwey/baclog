@@ -145,3 +145,74 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
 
   return rows.map((r) => shelves.get(r.id)!);
 }
+
+/**
+ * API v1 `GET /collections` — every backlog of the user with ALL of its
+ * memberships (no cover cap: the app hydrates `titleIds` itself and needs
+ * the full order + `addedAt` map), in the same two round trips as
+ * `getShelvesForUser`. Own-user only: the caller passes the bearer user's id.
+ * Only membership facts and the shared cover URL travel — no per-title state
+ * (that is `GET /collections/{id}` / `GET /me/titles`).
+ */
+export interface CollectionMembership {
+  catalogItemId: string;
+  /** `backlog_item.addedAt` — when it entered THIS collection. */
+  addedAt: Date;
+  posterUrl: string | null;
+}
+
+export interface CollectionWithMemberships {
+  id: string;
+  name: string;
+  vibe: string | null;
+  isPublic: boolean;
+  showOnProfile: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  /** Newest first. */
+  memberships: CollectionMembership[];
+}
+
+export async function getCollectionsWithMemberships(
+  userId: string,
+): Promise<CollectionWithMemberships[]> {
+  const rows = await db
+    .select({
+      id: backlogs.id,
+      name: backlogs.name,
+      vibe: backlogs.vibe,
+      isPublic: backlogs.isPublic,
+      showOnProfile: backlogs.showOnProfile,
+      createdAt: backlogs.createdAt,
+      updatedAt: backlogs.updatedAt,
+    })
+    .from(backlogs)
+    .where(eq(backlogs.userId, userId))
+    .orderBy(desc(backlogs.createdAt));
+
+  if (rows.length === 0) return [];
+
+  const memberships = await db
+    .select({
+      backlogId: backlogItems.backlogId,
+      catalogItemId: backlogItems.catalogItemId,
+      addedAt: backlogItems.addedAt,
+      posterUrl: catalogItems.posterUrl,
+    })
+    .from(backlogItems)
+    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .where(eq(backlogItems.userId, userId))
+    .orderBy(desc(backlogItems.addedAt));
+
+  const byBacklog = new Map<string, CollectionWithMemberships>(
+    rows.map((r) => [r.id, { ...r, memberships: [] }]),
+  );
+  for (const m of memberships) {
+    byBacklog.get(m.backlogId)?.memberships.push({
+      catalogItemId: m.catalogItemId,
+      addedAt: m.addedAt,
+      posterUrl: m.posterUrl,
+    });
+  }
+  return rows.map((r) => byBacklog.get(r.id)!);
+}

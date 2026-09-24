@@ -7,11 +7,17 @@ struct PersonProfileView: View {
     let personID: String
 
     var body: some View {
-        if let p = store.person(personID) {
-            content(p)
-        } else {
-            GoneView()
+        Group {
+            if let p = store.person(personID) {
+                content(p)
+            } else if store.missingPeople.contains(personID) {
+                // Private and nonexistent are the same 404 (API.md §3): never say which.
+                GoneView(title: "@\(personID) no está disponible.", note: "El perfil es privado o ya no existe.")
+            } else {
+                LoadingScreen(square: true)
+            }
         }
+        .task(id: personID) { await store.loadPerson(personID) }
     }
 
     private func palette(_ p: Person) -> [String]? {
@@ -328,11 +334,13 @@ struct FollowersView: View {
 
     var body: some View {
         let p = store.person(personID)
-        let followersCount = (p?.followers ?? 0)
-        let followingCount = (p?.followingCount ?? 0)
-        let ids = (showFollowing ? MockData.followingOf[personID] : MockData.followersOf[personID]) ?? []
+        let isMe = personID == store.me.id
+        let followersCount = isMe ? max(p?.followers ?? 0, 0) : (p?.followers ?? 0)
+        let followingCount = isMe ? max(p?.followingCount ?? 0, store.following.count) : (p?.followingCount ?? 0)
+        let key = AppStore.peopleListKey(of: personID, following: showFollowing)
+        let loaded = store.peopleLists[key]
         let q = SearchIndex.fold(query)
-        let list = ids.compactMap { store.person($0) }.filter { $0.id != store.me.id }
+        let list = (loaded ?? []).map { store.person($0.id) ?? $0 }.filter { $0.id != store.me.id }
             .filter { q.isEmpty || SearchIndex.fold($0.handle).contains(q) || SearchIndex.fold($0.name).contains(q) }
         let mutual = list.filter { store.isFollowing($0.id) }
         let rest = list.filter { !store.isFollowing($0.id) }
@@ -352,6 +360,25 @@ struct FollowersView: View {
                 .background(KColor.glassBg, in: Capsule())
                 SearchPill(placeholder: "Buscar", text: $query)
                 VStack(alignment: .leading, spacing: 0) {
+                    if loaded == nil {
+                        ForEach(0..<4, id: \.self) { _ in
+                            HStack(spacing: 14) {
+                                Skeleton(radius: 999).frame(width: 48, height: 48)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Skeleton(radius: 6).frame(width: 140, height: 14)
+                                    Skeleton(radius: 5).frame(width: 90, height: 10)
+                                }
+                                Spacer()
+                            }
+                            .frame(minHeight: 68)
+                        }
+                    } else if list.isEmpty && !isMe {
+                        // Only the owner sees their lists (§4); the counts are public.
+                        Text("Solo @\(p?.handle ?? personID) ve su lista.").font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                    } else if list.isEmpty {
+                        Text(showFollowing ? "Todavía no sigues a nadie." : "Todavía nadie te sigue.")
+                            .font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                    }
                     if !mutual.isEmpty {
                         Text("Que también sigues").monoLabel(11, tracking: 0.1, color: KColor.text3).padding(.top, 8).padding(.bottom, 4)
                         ForEach(mutual) { row($0) }
@@ -367,6 +394,7 @@ struct FollowersView: View {
             .padding(.bottom, 150)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .task(id: key) { await store.loadPeopleList(of: personID, following: showFollowing) }
     }
 
     private func tab(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -478,7 +506,7 @@ struct CreatorView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { store.push(.title(t.id)) }
                             }
-                            if filter == nil || filter == .film {
+                            if filter == nil || filter == .film, KuraRuntime.usesMock {
                                 ForEach(MockData.otherWorks[name] ?? [], id: \.0) { w in
                                     HStack(spacing: 14) {
                                         RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous).fill(KColor.s2).frame(width: 44, height: 66)

@@ -65,6 +65,10 @@ export interface FeedEvent {
   /** "faltan 12 días" when the title is still unreleased — flips the card to
    *  its "No puede esperar" flavor. Null once it's out. */
   waiting: string | null;
+  /** API v1: the same instant `waiting` was formatted from, ISO — set ONLY
+   *  while `waiting` is (an `added` event whose title is still unreleased),
+   *  so the app can count down with its own clock. Null otherwise. */
+  releaseDate: string | null;
   /** The destination backlog — `added` events only. The id is what bursts
    *  key on (names aren't unique per user); it is also the public URL segment
    *  (/u/{username}/{backlogId}) — the query already gates on isPublic. */
@@ -135,8 +139,14 @@ export interface FeedSuggestion {
    *  "Tiene 4 backlogs" — the strongest signal available, in that order. */
   reason: string;
   /** Up to 3 recent covers for the fan, native aspect, with their palettes
-   *  (the card glows from these; the ADN pair is the fallback). */
-  covers: { posterUrl: string; mediaType: MediaType; paletteHex: string[] }[];
+   *  (the card glows from these; the ADN pair is the fallback). API v1 ships
+   *  the ids so the app can hydrate the titles. */
+  covers: {
+    catalogItemId: string;
+    posterUrl: string;
+    mediaType: MediaType;
+    paletteHex: string[];
+  }[];
 }
 
 /** A public profile offered in the feed's empty states. NOT `FollowSuggestion`:

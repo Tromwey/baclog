@@ -7,6 +7,7 @@ import {
   backlogs,
   catalogItems,
   crossMediaRecs,
+  itemReviews,
   userItems,
 } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
@@ -297,29 +298,66 @@ export async function getLovedSeeds(
   return seeds;
 }
 
+/** The shared field list of a backlog's item rows: membership id + per-title
+ *  state (user_item) + the shared catalog facts. One constant so the two
+ *  readers below can't drift, and so `getBacklogItems`' inferred type — which
+ *  recap.ts and the card page build BY HAND (`BacklogItemWithCatalog`) — stays
+ *  exactly this shape when a reader needs an extra column. */
+const backlogItemColumns = {
+  id: backlogItems.id,
+  status: userItems.status,
+  verdict: userItems.verdict,
+  obsessed: userItems.obsessed,
+  sourceCrossMediaRecId: userItems.sourceCrossMediaRecId,
+  paletteHex: catalogItems.paletteHex,
+  addedAt: backlogItems.addedAt,
+  statusChangedAt: userItems.statusChangedAt,
+  catalogItemId: catalogItems.id,
+  title: catalogItems.title,
+  byline: catalogItems.byline,
+  year: catalogItems.year,
+  // F3.8 — what turns a row into a countdown and feeds the shelf above it.
+  releaseDate: catalogItems.releaseDate,
+  genre: catalogItems.genre,
+  mediaType: catalogItems.mediaType,
+  posterUrl: catalogItems.posterUrl,
+} as const;
+
 /** Caller must have verified ownership (assertOwnsBacklog) first. `id` is the
  *  membership (backlog_item) id — the per-backlog remove acts on it; state comes
  *  from user_item, palette from the shared catalog_item. */
 export async function getBacklogItems(backlogId: string) {
   return db
+    .select(backlogItemColumns)
+    .from(backlogItems)
+    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
+    .where(eq(backlogItems.backlogId, backlogId))
+    .orderBy(desc(backlogItems.addedAt));
+}
+
+/**
+ * API v1 `GET /collections/{id}` — `getBacklogItems` plus what `TitleState`
+ * needs: `userItemAddedAt` (`user_item.addedAt`, the FIRST membership — a
+ * title filed twice reports one `savedAt`) and the owner's own `reviewId`
+ * (one review per user+title; `hidden_at` is NOT filtered because this is an
+ * own-user read and the author keeps seeing their text). Caller must have
+ * verified ownership (assertOwnsBacklog) first. A separate reader on purpose:
+ * adding columns to `getBacklogItems` would change the type its by-hand
+ * builders (recap.ts, card page) construct.
+ */
+export async function getBacklogItemsWithState(backlogId: string) {
+  return db
     .select({
-      id: backlogItems.id,
-      status: userItems.status,
-      verdict: userItems.verdict,
-      obsessed: userItems.obsessed,
-      sourceCrossMediaRecId: userItems.sourceCrossMediaRecId,
-      paletteHex: catalogItems.paletteHex,
-      addedAt: backlogItems.addedAt,
-      statusChangedAt: userItems.statusChangedAt,
-      catalogItemId: catalogItems.id,
-      title: catalogItems.title,
-      byline: catalogItems.byline,
-      year: catalogItems.year,
-      // F3.8 — what turns a row into a countdown and feeds the shelf above it.
-      releaseDate: catalogItems.releaseDate,
-      genre: catalogItems.genre,
-      mediaType: catalogItems.mediaType,
-      posterUrl: catalogItems.posterUrl,
+      ...backlogItemColumns,
+      userItemAddedAt: userItems.addedAt,
+      reviewId: itemReviews.id,
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
@@ -328,6 +366,13 @@ export async function getBacklogItems(backlogId: string) {
       and(
         eq(userItems.userId, backlogItems.userId),
         eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
+    .leftJoin(
+      itemReviews,
+      and(
+        eq(itemReviews.userId, backlogItems.userId),
+        eq(itemReviews.catalogItemId, backlogItems.catalogItemId),
       ),
     )
     .where(eq(backlogItems.backlogId, backlogId))

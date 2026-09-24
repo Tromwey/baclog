@@ -1,15 +1,18 @@
 import SwiftUI
 
-/// Mock recap data (agosto 2026). The real one comes from the API.
-enum RecapData {
-    static let month = "agosto"
-    static let year = 2026
-    static let topTitleID = "ma"
-    static let stats: [(String, String, Glyph)] = [("14", "Completos", .check), ("6", "Obsesiones", .flame),
-                                                   ("3", "Reseñas", .review), ("9", "Guardados", .bookmark)]
-    static let more = ["chihiro", "mala", "pearl", "eduardo"]
-    static let fan = ["chihiro", "ma", "mala"]
-    static let history: [(String, String)] = [("agosto", "ma"), ("julio", "chihiro"), ("junio", "pearl"), ("mayo", "mala")]
+/// The four stat tiles of a recap, in frame order.
+extension RecapPayload {
+    var tiles: [(String, String, Glyph)] {
+        [(String(stats.completed), "Completos", .check), (String(stats.obsessed), "Obsesiones", .flame),
+         (String(stats.reviews), "Reseñas", .review), (String(stats.saved), "Guardados", .bookmark)]
+    }
+    /// The three covers fanned on the card: the top one in the middle.
+    var fan: [Title] {
+        let others = also.filter { $0.id != top?.id }
+        var list = Array(others.prefix(2))
+        if let top { list.insert(top, at: min(1, list.count)) }
+        return list
+    }
 }
 
 // MARK: - 08 Recap · 09 Recap vacío
@@ -18,19 +21,31 @@ struct RecapView: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
-        if store.debugEmptyRecap {
-            EmptyRecapView()
-        } else if let top = store.title(RecapData.topTitleID) {
+        Group {
+            if store.debugEmptyRecap {
+                EmptyRecapView()
+            } else if let r = store.currentRecap, let top = r.top {
+                content(r, top: top)
+            } else if store.recapMonths != nil && !store.recapLoading {
+                EmptyRecapView()
+            } else {
+                LoadingScreen(square: true)
+            }
+        }
+        .task { await store.loadRecap() }
+    }
+
+    private func content(_ r: RecapPayload, top: Title) -> some View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack {
                         BackChip()
                         Spacer()
-                        Text("Recap · \(RecapData.month) \(String(RecapData.year))").monoLabel(11, tracking: 0.1)
+                        Text("Recap · \(r.month) \(String(r.year))").monoLabel(11, tracking: 0.1)
                         Spacer()
                         Color.clear.frame(width: 44, height: 44)
                     }
-                    Text(RecapData.month).font(.kura.newsItalic(52)).foregroundStyle(KColor.text)
+                    Text(r.month).font(.kura.newsItalic(52)).foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
                     HStack(alignment: .bottom, spacing: 16) {
                         Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170) }
@@ -42,7 +57,7 @@ struct RecapView: View {
                         }
                     }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 18) {
-                        ForEach(RecapData.stats, id: \.1) { v, l, g in
+                        ForEach(r.tiles, id: \.1) { v, l, g in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(v).font(.kura.mono(34)).foregroundStyle(KColor.text)
                                 HStack(spacing: 7) {
@@ -57,7 +72,7 @@ struct RecapView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("También en tu mes").monoLabel(11, tracking: 0.1)
                         HStack(alignment: .bottom, spacing: 10) {
-                            ForEach(RecapData.more.compactMap { store.title($0) }) { t in
+                            ForEach(r.also) { t in
                                 Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS) }
                                     .buttonStyle(.plain)
                             }
@@ -79,7 +94,6 @@ struct RecapView: View {
             }
             .background(Tint.card(top.palette).ignoresSafeArea())
             .ignoresSafeArea(.container, edges: .top)
-        }
     }
 }
 
@@ -119,8 +133,12 @@ struct EmptyRecapView: View {
     }
 
     private var daysLeft: Int {
-        let end = MockData.date(2026, 10, 1)
-        return max(0, MockData.calendar.dateComponents([.day], from: MockData.calendar.startOfDay(for: store.now), to: end).day ?? 0) + 1
+        let cal = store.cal
+        var comps = cal.dateComponents([.year, .month], from: store.now)
+        comps.month = (comps.month ?? 1) + 1
+        comps.day = 1
+        let end = cal.date(from: comps) ?? store.now
+        return max(0, cal.dateComponents([.day], from: cal.startOfDay(for: store.now), to: end).day ?? 0) + 1
     }
 }
 
@@ -129,17 +147,19 @@ struct EmptyRecapView: View {
 struct RecapHistoryView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
+        let current = store.currentRecap
+        let months = store.recapMonths ?? []
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack { BackChip(); Spacer() }
                     .padding(.horizontal, 4)
                     .padding(.bottom, 14)
-                Text("recap · agosto 2026").monoLabel().padding(.horizontal, 20)
-                Text("agosto").font(.kura.news(40)).foregroundStyle(KColor.text).padding(.horizontal, 20).padding(.top, 6)
+                Text("recap · \(current?.month ?? "") \(current.map { String($0.year) } ?? "")").monoLabel().padding(.horizontal, 20)
+                Text(current?.month ?? "recap").font(.kura.news(40)).foregroundStyle(KColor.text).padding(.horizontal, 20).padding(.top, 6)
                 HStack(spacing: 10) {
-                    tile("14", "completos")
-                    tile("6", "obsesiones")
-                    tile("31 h", "de cine")
+                    tile(String(current?.stats.completed ?? 0), "completos")
+                    tile(String(current?.stats.obsessed ?? 0), "obsesiones")
+                    if let h = current?.stats.hours { tile("\(h) h", "de cine") } else { tile(String(current?.stats.reviews ?? 0), "reseñas") }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -149,9 +169,10 @@ struct RecapHistoryView: View {
                     SpineLabel(text: "tus recaps", height: 228)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
-                            ForEach(RecapData.history, id: \.0) { month, tid in
-                                if let t = store.title(tid) {
-                                    Button { store.push(.recap) } label: {
+                            ForEach(months) { m in
+                                let month = m.label.split(separator: " ").first.map(String.init) ?? m.era
+                                if let t = store.recaps[m.era]?.top {
+                                    Button { store.pop() } label: {
                                         VStack {
                                             Text("KURA").font(.kura.mono(10)).tracking(1).foregroundStyle(KColor.text2)
                                             Spacer()
@@ -168,6 +189,9 @@ struct RecapHistoryView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Recap de \(month)")
+                                } else {
+                                    Skeleton(radius: 14).frame(width: 108, height: 192)
+                                        .task { await store.loadRecap(era: m.era) }
                                 }
                             }
                         }
@@ -183,6 +207,7 @@ struct RecapHistoryView: View {
             .padding(.bottom, 60)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .task { await store.loadRecap() }
     }
 
     private func tile(_ v: String, _ l: String) -> some View {
@@ -223,8 +248,8 @@ struct RecapShareView: View {
                     KuraSwitch(label: "Firmar con tu @", isOn: $signed)
                 }
                 .padding(.horizontal, 28)
-                ShareLink(item: URL(string: "https://kura.app/@\(store.me.handle)/recap/2026-08")!,
-                          message: Text("mi recap de agosto en kura")) {
+                ShareLink(item: URL(string: "https://kura.app/@\(store.me.handle)/recap/\(store.currentRecap?.era ?? "")")!,
+                          message: Text("mi recap de \(store.currentRecap?.month ?? "") en kura")) {
                     Text("Compartir").font(.kura.ui(16, .semibold)).foregroundStyle(KColor.bg)
                         .frame(maxWidth: .infinity).frame(height: 52)
                         .background(KColor.text, in: Capsule())
@@ -242,15 +267,16 @@ struct RecapShareView: View {
 struct RecapCard: View {
     @Environment(AppStore.self) private var store
     var body: some View {
-        let top = store.title(RecapData.topTitleID)
+        let r = store.currentRecap
+        let top = r?.top
         HStack(spacing: 0) {
-            SpineLabel(text: "KURA · recap 08.2026", height: 540)
+            SpineLabel(text: "KURA · recap \(r.map { String(format: "%02d.%d", ($0.era.split(separator: "-").last.flatMap { Int($0) } ?? 0), $0.year) } ?? "")", height: 540)
             VStack(alignment: .leading, spacing: 18) {
-                Text(RecapData.month).font(.kura.newsItalic(50)).foregroundStyle(KColor.text)
+                Text(r?.month ?? "").font(.kura.newsItalic(50)).foregroundStyle(KColor.text)
                 GeometryReader { geo in
                     let h = geo.size.height * 0.7
                     ZStack {
-                        ForEach(Array(RecapData.fan.compactMap { store.title($0) }.enumerated()), id: \.element.id) { i, t in
+                        ForEach(Array((r?.fan ?? []).enumerated()), id: \.element.id) { i, t in
                             CoverView(title: t, height: h)
                                 .rotationEffect(.degrees(Double(i - 1) * 8))
                                 .offset(x: CGFloat(i - 1) * 54 * 0.85)
@@ -260,7 +286,7 @@ struct RecapCard: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                 }
                 HStack(alignment: .top) {
-                    ForEach(RecapData.stats.prefix(3), id: \.1) { v, l, g in
+                    ForEach((r?.tiles ?? []).prefix(3), id: \.1) { v, l, g in
                         VStack(alignment: .leading, spacing: 5) {
                             Text(v).font(.kura.mono(26)).foregroundStyle(KColor.text)
                             HStack(spacing: 5) {
@@ -287,15 +313,17 @@ struct RecapCard: View {
 struct SignedRecapCard: View {
     @Environment(AppStore.self) private var store
     var body: some View {
-        let top = store.title(RecapData.topTitleID)
+        let r = store.currentRecap
+        let top = r?.top
         VStack(alignment: .leading) {
-            Text("KURA · recap 08.2026").font(.kura.mono(11)).tracking(1.5).foregroundStyle(KColor.text2)
+            Text("KURA · recap \(r.map { String(format: "%02d.%d", ($0.era.split(separator: "-").last.flatMap { Int($0) } ?? 0), $0.year) } ?? "")")
+                .font(.kura.mono(11)).tracking(1.5).foregroundStyle(KColor.text2)
             Spacer()
             if let top { CoverView(title: top, width: 180, height: 180).frame(maxWidth: .infinity) }
             Spacer()
             VStack(alignment: .leading, spacing: 6) {
-                Text("recap de agosto").font(.kura.news(34)).foregroundStyle(KColor.text)
-                Text("14 completos · 6 obsesiones").monoLabel()
+                Text("recap de \(r?.month ?? "")").font(.kura.news(34)).foregroundStyle(KColor.text)
+                Text("\(r?.stats.completed ?? 0) completos · \(r?.stats.obsessed ?? 0) obsesiones").monoLabel()
             }
             VStack(alignment: .leading, spacing: 5) {
                 Rectangle().fill(KColor.text.opacity(0.18)).frame(height: 1).padding(.bottom, 14)

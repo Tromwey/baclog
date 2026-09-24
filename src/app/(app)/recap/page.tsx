@@ -5,7 +5,8 @@ import { BackButton } from "@/components/ui";
 import { BOOKMARK_PATH, CHECK_FILL_PATH, FLAME_PATH, REVIEW_PATH } from "@/components/glyph-paths";
 import { Cover, GLASS_BUTTON } from "@/components/kura/components";
 import { tintCard } from "@/components/kura/tint";
-import { getRecapMonths, monthName, monthYear, type RecapMonth } from "./recap-data";
+import { getRecapMonths, type RecapMonth } from "@/modules/backlog/recap";
+import { alsoInMonth, monthName, monthYear } from "@/modules/backlog/recap-format";
 
 /**
  * 65 Recap (Kura, flujo 10) — the month on a surface tinted by "lo más
@@ -37,7 +38,7 @@ export default async function RecapPage({
   if (!month) return <EmptyRecap now={now} />;
 
   const top = month.top;
-  const more = month.titles.filter((t) => t.catalogItemId !== top?.catalogItemId).slice(0, 12);
+  const more = alsoInMonth(month);
   const surface = top && top.paletteHex.length > 0 ? tintCard(top.paletteHex) : "var(--bg)";
 
   return (

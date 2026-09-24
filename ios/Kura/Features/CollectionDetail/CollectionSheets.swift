@@ -185,7 +185,7 @@ struct PrivacySheet: View {
         if let c = store.collection(collectionID) {
             VStack(alignment: .leading, spacing: 6) {
                 SheetHeader(title: "quién ve \(c.name)")
-                ForEach(Privacy.allCases) { p in
+                ForEach(Privacy.options) { p in
                     PrivacyOptionRow(privacy: p, selected: c.privacy == p) {
                         store.setPrivacy(c.id, p)
                         store.dismissSheet()

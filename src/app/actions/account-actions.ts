@@ -2,28 +2,29 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
-import { z } from "zod";
 import { signOut } from "@/auth";
 import { assertUser } from "@/authz";
-import { db } from "@/db";
-import { users, type preferredServiceEnum } from "@/db/schema";
-
-const MIN_AGE = 13;
-
-const onboardingSchema = z.object({
-  name: z.string().trim().min(1).max(50),
-  birthYear: z
-    .number()
-    .int()
-    .min(1900)
-    .max(new Date().getFullYear()),
-});
+import { deleteAccount } from "@/modules/account/delete";
+import { completeOnboarding, onboardingSchema } from "@/modules/account/onboarding";
+import {
+  displayNameSchema,
+  preferredServiceSchema,
+  updateProfile,
+  type PreferredService,
+} from "@/modules/account/profile";
+import { checkUsername, claimUsername } from "@/modules/account/username";
 
 /**
- * F2.1 step 3 + F2.2 minor gate. Under-13: mark blocked and bail — the
- * isMinor flag makes getCurrentUser() return null everywhere (effective
- * sign-out) and prevents re-onboarding with a different year.
+ * Account actions — thin wrappers: `assertUser()` → `src/modules/account/*`
+ * → revalidate/redirect. The logic lives in the modules so the API v1
+ * handlers (`/api/v1/me/**`) share it byte for byte; nothing here may grow a
+ * rule the modules don't have.
+ */
+
+/**
+ * F2.1 step 3 + F2.2 minor gate. Under-13: the module marks the account
+ * blocked (getCurrentUser() returns null everywhere from now on) and we
+ * bail to /blocked.
  */
 export async function completeOnboardingAction(input: {
   name: string;
@@ -33,36 +34,16 @@ export async function completeOnboardingAction(input: {
   const parsed = onboardingSchema.safeParse(input);
   if (!parsed.success) return { error: "invalid" as const };
 
-  const age = new Date().getFullYear() - parsed.data.birthYear;
-  if (age < MIN_AGE) {
-    await db
-      .update(users)
-      .set({ isMinor: true, birthYear: parsed.data.birthYear })
-      .where(eq(users.id, user.id));
-    redirect("/blocked");
-  }
-
-  await db
-    .update(users)
-    .set({
-      name: parsed.data.name,
-      birthYear: parsed.data.birthYear,
-      isMinor: false,
-    })
-    .where(eq(users.id, user.id));
+  const result = await completeOnboarding(user.id, parsed.data);
+  if (!result.ok) redirect("/blocked");
   return { ok: true as const };
 }
 
-type PreferredService = (typeof preferredServiceEnum.enumValues)[number];
-
 export async function setPreferredServiceAction(service: PreferredService) {
   const user = await assertUser();
-  const valid = ["spotify", "apple_music", "youtube_music", "tidal"] as const;
-  if (!valid.includes(service)) return { error: "invalid" as const };
-  await db
-    .update(users)
-    .set({ preferredService: service })
-    .where(eq(users.id, user.id));
+  const parsed = preferredServiceSchema.safeParse(service);
+  if (!parsed.success) return { error: "invalid" as const };
+  await updateProfile(user.id, { preferredService: parsed.data });
   return { ok: true as const };
 }
 
@@ -75,26 +56,11 @@ export async function setPreferredServiceAction(service: PreferredService) {
 
 export async function updateDisplayNameAction(name: string) {
   const user = await assertUser();
-  const parsed = z.string().trim().min(1).max(50).safeParse(name);
+  const parsed = displayNameSchema.safeParse(name);
   if (!parsed.success) return { error: "invalid" as const };
-  await db
-    .update(users)
-    .set({ name: parsed.data })
-    .where(eq(users.id, user.id));
+  await updateProfile(user.id, { name: parsed.data });
   return { ok: true as const };
 }
-
-const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
-// Handles that would shadow a real top-level route once clean public URLs
-// (next.config.ts fallback rewrites) resolve baclog.app/{username}. Keep in
-// sync with the app's top-level routes.
-const RESERVED = new Set([
-  "admin", "api", "app", "baclog", "kura", "colecciones", "coleccion", "backlogs", "blocked", "descubrir", "item",
-  "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
-  "u", "verify", "www", "waitlist", "recap", "analytics", "cron", "marketing",
-  // F3.10 nav destination + /creditos (public credits page, was missing here).
-  "feed", "creditos",
-]);
 
 /**
  * F2.17 — claiming implies opting in to a public page (toggleable).
@@ -110,52 +76,25 @@ export async function claimUsernameAction(
   { refresh = true }: { refresh?: boolean } = {},
 ) {
   const user = await assertUser();
-  const normalized = username.trim().toLowerCase();
-  if (!USERNAME_RE.test(normalized) || RESERVED.has(normalized)) {
-    return { error: "invalid" as const };
-  }
-  try {
-    await db
-      .update(users)
-      .set({ username: normalized, isPublic: true })
-      .where(eq(users.id, user.id));
-  } catch {
-    // unique index violation — someone owns it
-    return { error: "taken" as const };
-  }
-  if (refresh) revalidatePath(`/u/${normalized}`, "layout");
-  return { ok: true as const, username: normalized };
+  const result = await claimUsername(user.id, username);
+  if (!result.ok) return { error: result.error };
+  if (refresh) revalidatePath(`/u/${result.username}`, "layout");
+  return { ok: true as const, username: result.username };
 }
 
 /**
  * Kura O1b "elige tu usuario" — the live "libre / ocupado" beside the field.
- * Read-only twin of claimUsernameAction: same normalization, same regex, same
- * RESERVED set, no write. Answers for the caller's OWN current handle as
- * "free" so re-typing it never reads as taken. Enumeration note: this tells a
- * signed-in user whether a handle exists, which the public /{username} URL
- * already reveals (a taken handle 200s or 404s), so it leaks nothing new.
+ * Read-only twin of claimUsernameAction (see modules/account/username.ts).
  */
 export async function checkUsernameAction(username: string) {
   const user = await assertUser();
-  const normalized = username.trim().toLowerCase();
-  if (!USERNAME_RE.test(normalized) || RESERVED.has(normalized)) {
-    return { status: "invalid" as const };
-  }
-  if (user.username === normalized) return { status: "free" as const };
-  const [owner] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.username, normalized))
-    .limit(1);
-  return { status: owner ? ("taken" as const) : ("free" as const) };
+  const status = await checkUsername(user.id, user.username, username);
+  return { status };
 }
 
 export async function setPublicAction(isPublic: boolean) {
   const user = await assertUser();
-  await db
-    .update(users)
-    .set({ isPublic: Boolean(isPublic) })
-    .where(eq(users.id, user.id));
+  await updateProfile(user.id, { isPublic: Boolean(isPublic) });
   // Privacy must be immediate — bust the ISR cache for the public tree
   if (user.username) revalidatePath(`/u/${user.username}`, "layout");
   return { ok: true as const };
@@ -167,21 +106,18 @@ export async function setPublicAction(isPublic: boolean) {
  */
 export async function setNotifyReleasesAction(notifyReleases: boolean) {
   const user = await assertUser();
-  await db
-    .update(users)
-    .set({ notifyReleases: Boolean(notifyReleases) })
-    .where(eq(users.id, user.id));
+  await updateProfile(user.id, { notifyReleases: Boolean(notifyReleases) });
   return { ok: true as const };
 }
 
 /**
- * F2.4 — deletes the user row; every user-owned table cascades (backlogs,
- * items, sessions, reports-against). catalog_items/media_links are shared
- * cache, not user data. No "why are you leaving" email — just gone.
+ * F2.4 — deletes the account (modules/account/delete.ts: the row + every
+ * cascade). Two-step: clear the JWT cookie, then redirect (signOut's own
+ * redirect isn't trusted).
  */
 export async function deleteAccountAction() {
   const user = await assertUser();
-  await db.delete(users).where(eq(users.id, user.id));
+  await deleteAccount(user.id);
   await signOut({ redirect: false });
   redirect("/login");
 }

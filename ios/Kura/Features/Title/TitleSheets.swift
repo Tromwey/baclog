@@ -132,8 +132,9 @@ struct CompleteSheet: View {
     private func save(_ t: Title) {
         let choice = ReactionSlider.stops[stop].mark
         let wasSaved = store.isSaved(t.id)
+        // "La vi en preestreno": the server needs `preview: true` before the release (409 not_released otherwise).
         withAnimation(KMotion.spring) {
-            store.setMark(t.id, choice, haptic: false)
+            store.setMark(t.id, choice, haptic: false, preview: store.isUnreleased(t))
         }
         store.publishReview(titleID: t.id, text: text, spoiler: spoiler)
         store.dismissSheet()

@@ -8,11 +8,14 @@ struct CollectionDetailView: View {
     @State private var filter: MediaFormat? = nil
 
     var body: some View {
-        if let c = store.collection(collectionID) {
-            content(c)
-        } else {
-            GoneView()
+        Group {
+            if let c = store.collection(collectionID) {
+                content(c)
+            } else {
+                GoneView()
+            }
         }
+        .task(id: collectionID) { await store.loadCollection(collectionID) }
     }
 
     private func content(_ c: KCollection) -> some View {
@@ -330,23 +333,6 @@ struct EmptyCollectionHeader: View {
             .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-struct GoneView: View {
-    var body: some View {
-        ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 10) {
-                Text("esta colección ya no existe.").font(.kura.news(28)).foregroundStyle(KColor.text)
-                Text("Se borró o dejó de estar disponible.").font(.kura.ui(15)).foregroundStyle(KColor.text2)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 140)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            TopChrome { EmptyView() }
-        }
-        .ignoresSafeArea(.container, edges: .top)
     }
 }
 
