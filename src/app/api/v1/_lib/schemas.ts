@@ -415,12 +415,12 @@ export const DeviceSchema = z.object({
 export type Device = z.infer<typeof DeviceSchema>;
 
 export const OtpRequestBodySchema = z.object({
-  email: z.string().trim().email().max(254),
+  email: z.string().trim().email("Escribe un correo válido.").max(254, "Ese correo es demasiado largo."),
 });
 export type OtpRequestBody = z.infer<typeof OtpRequestBodySchema>;
 
 export const OtpVerifyBodySchema = z.object({
-  email: z.string().trim().email().max(254),
+  email: z.string().trim().email("Escribe un correo válido.").max(254, "Ese correo es demasiado largo."),
   code: z.string().trim().regex(/^\d{6}$/, "Seis dígitos"),
   device: DeviceSchema,
 });
