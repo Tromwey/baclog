@@ -4,8 +4,6 @@ import { getUserCatalogEntry } from "@/modules/backlog/queries";
 import { getTitleStats } from "@/modules/backlog/title-stats";
 import { getCatalogItem, type CatalogItemRow } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
-import type { AlbumTrack } from "@/modules/catalog/itunes";
-import type { SeriesStatus } from "@/modules/catalog/series-status";
 import { getItemReviewContext } from "@/modules/reviews/queries";
 import {
   getTitleActivityAmongFollowed,
@@ -13,15 +11,21 @@ import {
 } from "@/modules/social/title-activity";
 import { json, parseId } from "../../_lib/http";
 import {
-  isoDate,
   type PublicMark,
   type Review,
   type Title,
   type TitleState,
-  type Track,
   type WatchOption,
 } from "../../_lib/schemas";
-import { releaseOf, toTitleState, toTitleSummary } from "../../_lib/wire";
+import {
+  releaseOf,
+  titleDetailOf,
+  toOwnReview,
+  toPublicReview,
+  toTitleState,
+  toTitleSummary,
+  toTracks,
+} from "../../_lib/wire";
 
 /**
  * GET /api/v1/titles/{id} (§4 Títulos) — the ficha: the FULL `Title` (detail
@@ -51,46 +55,6 @@ const ACTIVITY_MARK: Record<ActivityState, PublicMark> = {
   done: "completed",
   liked: "liked",
 };
-
-/** "125 min" · "2 temporadas" · "18 canciones" — null when we have no data. */
-function detailOf(
-  item: CatalogItemRow,
-  media: { trackCount: number; seriesStatus: SeriesStatus | null },
-): string | null {
-  switch (item.mediaType) {
-    case "film": {
-      // The stored TMDB search payload carries no runtime; a details payload
-      // would. Read it if it's there, never invent it.
-      const raw = item.raw as { runtime?: unknown } | null;
-      const runtime = typeof raw?.runtime === "number" ? raw.runtime : 0;
-      return runtime > 0 ? `${Math.round(runtime)} min` : null;
-    }
-    case "series": {
-      const seasons = media.seriesStatus?.seasons ?? 0;
-      if (seasons <= 0) return null;
-      return seasons === 1 ? "1 temporada" : `${seasons} temporadas`;
-    }
-    case "album": {
-      const n = media.trackCount;
-      if (n <= 0) return null;
-      return n === 1 ? "1 canción" : `${n} canciones`;
-    }
-  }
-}
-
-/** iTunes tracks → wire. Placeholders ("Track 4") never reach here (itunes.ts
- *  drops them), so every listed track is playable: `available` is true. */
-function tracksOf(tracks: AlbumTrack[]): Track[] {
-  return tracks.map((t, i) => ({
-    number: t.n > 0 ? t.n : i + 1,
-    name: t.name,
-    available: true,
-    durationMs:
-      typeof t.durationMs === "number" && Number.isInteger(t.durationMs) && t.durationMs >= 0
-        ? t.durationMs
-        : null,
-  }));
-}
 
 /**
  * ONE link-out, unresolved: `/api/links/resolve` answers a 302 without a
@@ -140,9 +104,14 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
     ...toTitleSummary(item),
     genre: item.genre,
     synopsis: media.synopsis,
-    detail: detailOf(item, media),
+    detail: titleDetailOf({
+      mediaType: item.mediaType,
+      runtimeMinutes: media.runtimeMinutes,
+      seasons: media.seriesStatus?.seasons ?? null,
+      trackCount: media.trackCount,
+    }),
     release: releaseOf(media.releaseDate ?? item.releaseDate, item.year),
-    tracks: item.mediaType === "album" ? tracksOf(media.tracks) : [],
+    tracks: item.mediaType === "album" ? toTracks(media.tracks) : [],
     trackCount: item.mediaType === "album" ? media.trackCount : null,
     seriesStatus: media.seriesStatus,
     counts: stats,
@@ -167,33 +136,13 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
   }));
 
   // Own review first (its author always sees it, hidden or not), then the
-  // public page. `hidden` rides only on the own card.
+  // public page — which never repeats it (`getOthersReviewsPage` excludes the
+  // caller on every page, including `GET /titles/{id}/reviews`). `hidden`
+  // rides only on the own card; `authorHandle` is null, never "", without a
+  // handle (`_lib/wire/review.ts`).
   const items: Review[] = [];
-  if (own) {
-    items.push({
-      id: own.id,
-      authorHandle: user.username,
-      titleId: item.id,
-      body: own.body,
-      hasSpoiler: own.hasSpoiler,
-      mark: own.mark,
-      createdAt: isoDate(own.createdAt),
-      updatedAt: isoDate(own.updatedAt),
-      hidden: own.hidden,
-    });
-  }
-  for (const r of reviewCtx.reviews) {
-    items.push({
-      id: r.id,
-      authorHandle: r.author.username,
-      titleId: item.id,
-      body: r.body,
-      hasSpoiler: r.hasSpoiler,
-      mark: r.mark,
-      createdAt: isoDate(r.createdAt),
-      updatedAt: isoDate(r.updatedAt),
-    });
-  }
+  if (own) items.push(toOwnReview(own, item.id, user.username));
+  for (const r of reviewCtx.reviews) items.push(toPublicReview(r, item.id));
 
   return json({
     title,

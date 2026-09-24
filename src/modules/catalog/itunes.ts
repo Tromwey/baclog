@@ -193,6 +193,11 @@ export interface AlbumTrack {
   n: number;
   name: string;
   durationMs: number | null;
+  /** iTunes' `isStreamable` — false for a REAL, named track the store lists
+   *  but won't play yet (a partial pre-order's non-single). Defaults to true
+   *  when iTunes omits the flag. The web tracklist ignores it (it already
+   *  lists only named tracks); the mobile API ships it as `Track.available`. */
+  available: boolean;
 }
 
 /**
@@ -309,14 +314,27 @@ export async function getAlbumDetail(
       )
       // "Track 4" never reaches the screen (design 1f): a muted placeholder row
       // says nothing the "N canciones más" divider doesn't say better. The
-      // partial tracklist splits on trackCount, so streamability matters only
-      // here, as half of that test.
+      // partial tracklist splits on trackCount. Streamability is half of that
+      // test, and it also rides on every surviving track as `available` (a
+      // named track that isn't playable yet stays listed — the API tells the
+      // app so; the web renders it like any other row).
+      // ONE semantic for a missing `isStreamable`, on purpose asymmetric:
+      //  - `available` reads it as PLAYABLE (`!== false`): iTunes omits the
+      //    flag on plenty of released catalog, and "pronto" on a playable song
+      //    is the worse lie;
+      //  - the placeholder test needs positive proof (`=== true`) to KEEP a
+      //    "Track N" row: only a pre-order placeholder is named like that, so
+      //    without the flag it is dropped. A real song literally called
+      //    "Track 5" on a released album comes with `isStreamable: true` and
+      //    survives (with `available: true`).
+      // So a surviving track is never "placeholder AND unavailable".
       .filter((t) => !isPlaceholderTrack(t.trackName as string, t.isStreamable === true))
       .map((t) => ({
         n: t.trackNumber ?? 0,
         name: t.trackName as string,
         durationMs:
           typeof t.trackTimeMillis === "number" ? t.trackTimeMillis : null,
+        available: t.isStreamable !== false,
       }));
 
     return {

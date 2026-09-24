@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Worktrees of parallel sessions live inside the repo (`.claude/worktrees/*`)
+    // and carry their own `.next/` output; lint the main tree only.
+    ".claude/worktrees/**",
   ]),
 ]);
 

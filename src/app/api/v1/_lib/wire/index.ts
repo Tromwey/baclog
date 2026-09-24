@@ -9,3 +9,4 @@ export * from "./title";
 export * from "./state";
 export * from "./collection";
 export * from "./person";
+export * from "./review";

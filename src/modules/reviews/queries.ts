@@ -8,8 +8,10 @@ import {
   users,
 } from "@/db/schema";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
+import { decodeCursor, encodeCursor } from "./cursor";
 import { FALLBACK_ADN, isLegibleBehindText, relativeWhen } from "./format";
 import {
+  REVIEW_MORE_SIZE,
   REVIEW_PAGE_SIZE,
   type FeedReview,
   type ItemReviewContext,
@@ -127,26 +129,9 @@ export async function avatarHexesFor(
   return out;
 }
 
-/** `${iso}|${id}` keyset cursor codec — shared with the social module, so the
- *  two feeds can never disagree on the format. BOTH halves live here: every
- *  producer goes through encodeCursor, so a format change can't leave a stale
- *  hand-built encoder behind (decodeCursor answers null to one, and a null
- *  cursor silently re-serves page 1 forever). */
-export function encodeCursor(at: Date | string, id: string): string {
-  return `${typeof at === "string" ? at : at.toISOString()}|${id}`;
-}
-
-export function decodeCursor(
-  cursor: string | null,
-): { at: Date; id: string } | null {
-  if (!cursor) return null;
-  const sep = cursor.lastIndexOf("|");
-  if (sep < 1) return null;
-  const at = new Date(cursor.slice(0, sep));
-  const id = cursor.slice(sep + 1);
-  if (!id || Number.isNaN(at.getTime())) return null;
-  return { at, id };
-}
+// The keyset cursor codec lives in the pure `cursor.ts` (check-wire asserts
+// it without a DB); re-exported so every caller keeps importing it from here.
+export { decodeCursor, encodeCursor };
 
 /**
  * One page of a title's public reviews, newest first.
@@ -254,6 +239,33 @@ export async function getReviewFeedPage(
   };
 }
 
+/**
+ * The OTHER people's reviews of a title as the signed-in viewer pages them —
+ * the one rule the ficha (web and `GET /api/v1/titles/{id}`) and
+ * `GET /api/v1/titles/{id}/reviews` share:
+ *  - the viewer's own review is excluded from EVERY page (it is pinned above
+ *    the list by `getItemReviewContext`, hidden or not, public or not — so it
+ *    can never appear twice, whatever page the client is on);
+ *  - no cursor = the first page at `REVIEW_PAGE_SIZE` (exactly what the ficha
+ *    embeds); a cursor = a following page at `REVIEW_MORE_SIZE` (the web's
+ *    "ver más" size). Keyset, so mixing sizes is safe.
+ * Public gate (`publicAuthor` + `hidden_at IS NULL`) inside the query, as for
+ * every read in this file. The caller validates the cursor (`decodeCursor`).
+ */
+export async function getOthersReviewsPage(
+  viewerId: string,
+  catalogItemId: string,
+  cursor: string | null = null,
+  now = Date.now(),
+): Promise<ReviewFeedPage> {
+  return getReviewFeedPage(catalogItemId, {
+    excludeUserId: viewerId,
+    cursor,
+    limit: cursor ? REVIEW_MORE_SIZE : REVIEW_PAGE_SIZE,
+    now,
+  });
+}
+
 /** How many public, non-hidden reviews this title has — the header count. */
 export async function countPublicReviews(
   catalogItemId: string,
@@ -304,7 +316,7 @@ export async function getItemReviewContext(
         ),
       )
       .limit(1),
-    getReviewFeedPage(catalogItemId, { excludeUserId: userId, now }),
+    getOthersReviewsPage(userId, catalogItemId, null, now),
     countPublicReviews(catalogItemId),
   ]);
 

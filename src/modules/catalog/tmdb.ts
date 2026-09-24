@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { releaseDateOf, runtimeMinutesOf, type FilmFacts } from "./film-facts";
 import type { SeriesFacts } from "./series-status";
 import { TMDB_FIXTURES } from "./tmdb.fixtures";
 import type { ExternalItem, VideoCatalog } from "./types";
@@ -207,6 +208,48 @@ export async function getSeriesFacts(tmdbId: string): Promise<SeriesFacts | null
     };
   } catch (err) {
     console.error(`[catalog] TMDB /tv/${tmdbId} failed:`, err);
+    return null;
+  }
+}
+
+/**
+ * Film facts (API v1 `Title.detail`, web meta line 24a "2001 · 125 min"):
+ * `runtime` and `release_date` from `GET /movie/{id}`. The `/search/movie` hit
+ * in `catalog_item.raw` has no runtime; like `getSeriesFacts`, the caller
+ * (`getFilmRuntime` in display-media.ts) persists these back onto the row
+ * with a marker, so this runs ONCE per title (see film-facts.ts). Returns ONLY
+ * those two fields — nothing else from the details payload leaks into `raw`.
+ *
+ * Two kinds of "no answer", on purpose:
+ *  - 404 = TMDB no longer has this film (deleted/merged). That is an ANSWER:
+ *    `{ runtime: null, release_date: null }`, so the caller writes the marker
+ *    and the 30-day re-check applies. Returning null here made every view of
+ *    the ficha (public anonymous one included) call TMDB and log, forever.
+ *  - no key, 401/429/5xx, network or parse error = TRANSIENT: null, nothing
+ *    is written and the next view retries. Logged at warn — the detail line
+ *    just omits the runtime, the page is fine.
+ */
+export async function getFilmFacts(tmdbId: string): Promise<FilmFacts | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const url = new URL(`https://api.themoviedb.org/3/movie/${tmdbId}`);
+  url.searchParams.set("language", "es-MX");
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
+  try {
+    // Short fetch cache: the DB row is the real cache; this only dedupes a
+    // burst of views between the fetch and the persisted write.
+    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
+    if (res.status === 404) return { runtime: null, release_date: null };
+    if (!res.ok) {
+      console.warn(`[catalog] TMDB /movie/${tmdbId} failed: ${res.status} (transitorio, se reintenta)`);
+      return null;
+    }
+    const d = (await res.json()) as { runtime?: unknown; release_date?: unknown };
+    return {
+      runtime: runtimeMinutesOf(d.runtime),
+      release_date: releaseDateOf(d.release_date),
+    };
+  } catch (err) {
+    console.warn(`[catalog] TMDB /movie/${tmdbId} failed (transitorio, se reintenta):`, err);
     return null;
   }
 }

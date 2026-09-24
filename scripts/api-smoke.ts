@@ -31,7 +31,8 @@
  * run that silently exercised less than it claims can't read as green.
  */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { resolve as resolvePath, sep as pathSep } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { config as loadEnv } from "dotenv";
@@ -151,6 +152,19 @@ function expectError(res: Res, status: number, code: string) {
   const parsed = ErrorBodySchema.parse(res.body);
   assert.equal(parsed.error.code, code);
   return parsed.error;
+}
+
+/**
+ * "The same error" = same status, same code AND the same RAW JSON body, key
+ * for key. Compare `res.body`, never what `expectError` returns: that went
+ * through zod, which DROPS unknown keys — a 404 that leaked an extra field
+ * in only one branch would compare equal. Nothing per-request lives in the
+ * body (`X-Request-Id` is a header), so byte-equal bodies are the contract.
+ */
+function expectSameError(a: Res, b: Res, status: number, code: string, message: string) {
+  expectError(a, status, code);
+  expectError(b, status, code);
+  assert.deepEqual(a.body, b.body, message);
 }
 
 function expectOk<S extends z.ZodTypeAny>(res: Res, status: number, schema: S): z.infer<S> {
@@ -327,9 +341,13 @@ const auth: Case[] = [
       const [h, p, s] = ctx.token.split(".");
       const flipped = s[0] === "A" ? "B" : "A";
       const tampered = `${h}.${p}.${flipped}${s.slice(1)}`;
-      const a = expectError(await call("GET", "/me", { token: tampered }), 401, "unauthorized");
-      const b = expectError(await call("GET", "/me"), 401, "unauthorized");
-      assert.deepEqual(a, b, "un 401 nunca dice qué falló");
+      expectSameError(
+        await call("GET", "/me", { token: tampered }),
+        await call("GET", "/me"),
+        401,
+        "unauthorized",
+        "un 401 nunca dice qué falló",
+      );
       expectError(await call("GET", "/me", { token: "garbage" }), 401, "unauthorized");
       // Malformed scheme
       const res = await fetch(`${opts.base}/me`, { headers: { Authorization: `Basic ${ctx.token}` } });
@@ -468,6 +486,65 @@ const DiscoverResponseSchema = z.object({
   upcoming: z.array(z.object({ title: TitleSchema, releaseDate: IsoDateSchema })),
 });
 const l2 = { titleIds: [] as string[] };
+
+/** Read-only SQL for cases that need to FIND data (a pre-order album, the
+ *  most-reviewed title) or check a cache marker. Null without DATABASE_URL
+ *  (the case then skips). Never used to write in `reads`. */
+async function smokeSql<T>(query: string, params: unknown[] = []): Promise<T[] | null> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(url);
+  return (await sql.query(query, params)) as unknown as T[];
+}
+
+/** Plausible values for each dynamic segment of the v1 tree. A segment not
+ *  listed here fails the sweep on purpose: whoever adds `[newSeg]` decides
+ *  what a harmless value for it is. */
+const SWEEP_SEGMENTS: Record<string, string> = {
+  "[id]": "00000000-0000-4000-8000-000000000000",
+  "[titleId]": "00000000-0000-4000-8000-000000000000",
+  "[handle]": "eric",
+  "[key]": "x",
+  "[era]": "2026-08",
+};
+/** The only v1 routes that are public by design (`withPublicApi`). */
+const SWEEP_PUBLIC = /^\/auth\/otp\//;
+
+/**
+ * Every (verb, path) of `src/app/api/v1/**\/route.ts` except `auth/otp/*`,
+ * read from the TREE — a hand-written list is exactly the one that forgets
+ * the route nobody wrapped in `withApi`. Runs from the repo root (like the
+ * `.env.local` load above). A route.ts that exports no verb the regex can
+ * see fails too (the parser would otherwise skip it silently).
+ */
+async function v1ProtectedRoutes(): Promise<[string, string][]> {
+  const root = resolvePath("src/app/api/v1");
+  const files = (await readdir(root, { recursive: true }))
+    .filter((f) => f === "route.ts" || f.endsWith(`${pathSep}route.ts`))
+    .sort();
+  assert.ok(files.length > 0, `no hay route.ts bajo ${root} — corre el smoke desde la raíz del repo`);
+  const out: [string, string][] = [];
+  for (const file of files) {
+    const dir = file.slice(0, -"route.ts".length).split(pathSep).filter(Boolean);
+    const path = `/${dir
+      .map((seg) => {
+        if (!seg.startsWith("[")) return seg;
+        const value = SWEEP_SEGMENTS[seg];
+        assert.ok(value, `segmento dinámico sin valor de barrido: ${seg} (${file}) — agrégalo a SWEEP_SEGMENTS`);
+        return value;
+      })
+      .join("/")}`;
+    if (SWEEP_PUBLIC.test(`${path}/`)) continue;
+    const src = await readFile(resolvePath(root, file), "utf8");
+    const verbs = [
+      ...src.matchAll(/export\s+(?:const|(?:async\s+)?function)\s+(GET|POST|PUT|PATCH|DELETE)\b/g),
+    ].map((m) => m[1]);
+    assert.ok(verbs.length > 0, `${file} no exporta ningún verbo reconocible`);
+    for (const verb of verbs) out.push([verb, path]);
+  }
+  return out;
+}
 
 const reads: Case[] = [
   {
@@ -609,13 +686,13 @@ const reads: Case[] = [
     name: "GET /collections/{id} ajeno o inexistente → 404 not_found idéntico",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
-      const a = expectError(
+      expectSameError(
         await call("GET", "/collections/00000000-0000-0000-0000-000000000000", { token: ctx.token }),
+        await call("GET", "/collections/nope", { token: ctx.token }),
         404,
         "not_found",
+        "un 404 nunca dice si existe",
       );
-      const b = expectError(await call("GET", "/collections/nope", { token: ctx.token }), 404, "not_found");
-      assert.deepEqual(a, b, "un 404 nunca dice si existe");
     },
   },
   {
@@ -727,7 +804,11 @@ const reads: Case[] = [
         d.reviews.items.forEach((r, i) => {
           assert.equal(r.titleId, id);
           if (i > 0) assert.ok(!("hidden" in r), "solo la reseña propia lleva hidden");
+          assert.notEqual(r.authorHandle, "", "authorHandle nunca es \"\" (null = sin handle)");
+          const pinnedOwn = i === 0 && d.state?.reviewId === r.id;
+          if (!pinnedOwn) assert.ok(r.authorHandle, "una reseña pública siempre tiene handle");
         });
+        for (const t of d.title.tracks ?? []) assert.equal(typeof t.available, "boolean", "Track.available booleano");
         if (d.state?.reviewId) {
           assert.equal(d.reviews.items[0]?.id, d.state.reviewId, "la reseña propia va primero");
           assert.ok("hidden" in d.reviews.items[0], "la reseña propia lleva hidden");
@@ -742,13 +823,215 @@ const reads: Case[] = [
     name: "GET /titles/{id} malformado o inexistente → 404 not_found (mismo cuerpo)",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
-      const a = expectError(await call("GET", "/titles/not-a-uuid", { token: ctx.token }), 404, "not_found");
-      const b = expectError(
+      expectSameError(
+        await call("GET", "/titles/not-a-uuid", { token: ctx.token }),
         await call("GET", "/titles/00000000-0000-4000-8000-000000000000", { token: ctx.token }),
         404,
         "not_found",
+        "malformado e inexistente son el mismo 404",
       );
-      assert.deepEqual(a, b, "malformado e inexistente son el mismo 404");
+    },
+  },
+  // L5 (fase 4a) — Title.detail de película, Track.available, reseñas paginadas.
+  {
+    name: "GET /titles/{id} de película → detail \"N min\" (runtime de TMDB, persistido en raw una sola vez)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const search = await call("GET", "/search?q=dune&kind=film", { token: ctx.token });
+      const { items } = expectOk(search, 200, z.object({ items: z.array(SearchResultSchema) }));
+      const film = items.find((h) => h.id && h.externalRef?.source === "tmdb");
+      assert.ok(film?.id, "\"dune\" como película tiene que dar un título de TMDB");
+      const first = expectOk(await call("GET", `/titles/${film.id}`, { token: ctx.token }), 200, TitleDetailResponseSchema);
+      assert.equal(first.title.format, "film");
+      assert.match(first.title.detail ?? "", /^\d+ min$/, `detail de película: ${first.title.detail}`);
+      // Second view reads it off `raw` (same answer, no second TMDB call needed).
+      const again = expectOk(await call("GET", `/titles/${film.id}`, { token: ctx.token }), 200, TitleDetailResponseSchema);
+      assert.equal(again.title.detail, first.title.detail);
+      const rows = await smokeSql<{ at: string | null; runtime: string | null }>(
+        `select raw->>'_film_facts_at' as at, raw->>'runtime' as runtime from catalog_item where id = $1`,
+        [film.id],
+      );
+      if (!rows) skip("sin DATABASE_URL para verificar el marcador en raw");
+      assert.ok(rows[0]?.at, "raw lleva _film_facts_at tras la primera vista");
+      assert.equal(`${rows[0].runtime} min`, first.title.detail, "detail = raw.runtime");
+    },
+  },
+  {
+    name: "GET /titles/{id} de álbum en preventa → Track.available = isStreamable de iTunes",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const rows = await smokeSql<{ id: string; external_id: string }>(
+        `select id, external_id from catalog_item where media_type = 'album' and source = 'itunes' and release_date > now() order by release_date limit 5`,
+      );
+      if (!rows) skip("sin DATABASE_URL para buscar un álbum en preventa");
+      if (rows.length === 0) skip("no hay ningún álbum en preventa en el catálogo");
+      let checked = 0;
+      let unavailable = 0;
+      const undecided: string[] = [];
+      for (const row of rows) {
+        // Ground truth FIRST, straight from iTunes (named track → isStreamable).
+        // Only when iTunes itself has nothing can the case not decide.
+        let results: { wrapperType?: string; trackName?: string; isStreamable?: boolean }[];
+        try {
+          const lookup = await fetch(`https://itunes.apple.com/lookup?id=${row.external_id}&entity=song&limit=300`);
+          if (!lookup.ok) {
+            undecided.push(`${row.external_id}: iTunes ${lookup.status}`);
+            continue;
+          }
+          results = ((await lookup.json()) as { results?: typeof results }).results ?? [];
+        } catch (err) {
+          undecided.push(`${row.external_id}: iTunes no respondió (${err instanceof Error ? err.message : err})`);
+          continue;
+        }
+        const streamable = new Map(
+          results
+            .filter((r) => r.wrapperType === "track" && r.trackName)
+            .map((r) => [r.trackName as string, r.isStreamable !== false]),
+        );
+        if (streamable.size === 0) {
+          undecided.push(`${row.external_id}: iTunes sin pistas nombradas`);
+          continue;
+        }
+        // iTunes HAS named tracks: from here on, 503 or [] from the API is a bug.
+        const res = await call("GET", `/titles/${row.id}`, { token: ctx.token });
+        assert.notEqual(res.status, 503, `${row.id}: iTunes tiene ${streamable.size} pistas nombradas y la API respondió 503`);
+        const d = expectOk(res, 200, TitleDetailResponseSchema);
+        const tracks = d.title.tracks ?? [];
+        assert.ok(tracks.length > 0, `${row.id}: iTunes tiene ${streamable.size} pistas nombradas y la API dio tracks: []`);
+        let compared = 0;
+        for (const t of tracks) {
+          assert.ok(!/^track \d+$/i.test(t.name) || t.available, `placeholder "${t.name}" nunca viaja`);
+          if (streamable.has(t.name)) {
+            assert.equal(t.available, streamable.get(t.name), `${t.name}: available = isStreamable`);
+            compared++;
+          }
+          if (!t.available) unavailable++;
+        }
+        assert.ok(compared > 0, `${row.id}: ninguna pista de la API coincide por nombre con iTunes (nada verificado)`);
+        assert.ok((d.title.trackCount ?? 0) >= tracks.length, "trackCount ≥ pistas listadas");
+        checked++;
+      }
+      if (checked === 0) skip(`ningún álbum en preventa verificable — ${undecided.join("; ")}`);
+      if (unavailable === 0) console.log("   (ningún álbum en preventa trae hoy una pista nombrada no disponible: solo forma)");
+    },
+  },
+  {
+    name: "GET /titles/{id}/reviews → página 1 = la de GET /titles/{id} sin la propia; página 2 sin repetidos",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me, "hace falta un token");
+      const Page = paginated(ReviewSchema);
+      // A title whose ficha shows at least one review by SOMEONE ELSE — on a
+      // title with none, every equality below holds trivially ([] == []).
+      // Candidates: the most-reviewed titles (DB), then the caller's library
+      // via the API; the first whose ficha has others' reviews wins.
+      const top = await smokeSql<{ id: string }>(
+        `select r.catalog_item_id as id from item_review r join "user" u on u.id = r.user_id
+          where u.is_public and u.username is not null and r.hidden_at is null and r.user_id <> $1
+          group by 1 order by count(*) desc limit 5`,
+        [ctx.me.id],
+      );
+      const lib = expectOk(
+        await call("GET", "/me/titles", { token: ctx.token }),
+        200,
+        z.object({ items: z.array(z.object({ titleId: z.string() })) }),
+      );
+      const candidates = [...new Set([...(top ?? []).map((r) => r.id), ...lib.items.map((i) => i.titleId)])].slice(0, 25);
+      let id: string | null = null;
+      let ficha: z.infer<typeof TitleDetailResponseSchema> | null = null;
+      for (const candidate of candidates) {
+        const d = expectOk(await call("GET", `/titles/${candidate}`, { token: ctx.token }), 200, TitleDetailResponseSchema);
+        if (d.reviews.items.some((r) => r.id !== d.state?.reviewId)) {
+          id = candidate;
+          ficha = d;
+          break;
+        }
+      }
+      if (!id || !ficha) {
+        skip(
+          `ningún título con reseñas ajenas entre ${candidates.length} candidatos${top ? "" : " (sin DATABASE_URL: solo la biblioteca)"} — nada que paginar`,
+        );
+      }
+      const res = await call("GET", `/titles/${id}/reviews`, { token: ctx.token });
+      const page = expectOk(res, 200, Page);
+      assertNoPeopleLeak(res.body);
+      const ownReviewId = ficha.state?.reviewId;
+      const fichaPublic = ficha.reviews.items.filter((r) => r.id !== ownReviewId);
+      assert.deepEqual(page.items, fichaPublic, "sin cursor = la primera página de la ficha, sin la reseña propia");
+      assert.equal(page.nextCursor, ficha.reviews.nextCursor, "mismo nextCursor que la ficha");
+      for (const r of page.items) {
+        assert.equal(r.titleId, id);
+        assert.ok(r.authorHandle, "reseña pública: handle presente, nunca \"\"");
+        assert.notEqual(r.authorHandle, ctx.me.handle, "la reseña propia nunca se repite en la lista");
+        assert.ok(!("hidden" in r), "una reseña pública no lleva hidden");
+      }
+      for (let i = 1; i < page.items.length; i++) {
+        assert.ok(page.items[i - 1].createdAt >= page.items[i].createdAt, "createdAt desc");
+      }
+      const empty = expectOk(await call("GET", `/titles/${id}/reviews?cursor=`, { token: ctx.token }), 200, Page);
+      assert.deepEqual(empty, page, "cursor vacío = página 1");
+      if (page.nextCursor) {
+        const p2 = expectOk(
+          await call("GET", `/titles/${id}/reviews?cursor=${encodeURIComponent(page.nextCursor)}`, { token: ctx.token }),
+          200,
+          Page,
+        );
+        const seen = new Set(page.items.map((r) => r.id));
+        for (const r of p2.items) assert.ok(!seen.has(r.id), "página 2 sin repetidos");
+      } else {
+        // No real second page in this DB: a well-formed cursor past the end is
+        // an empty last page (2000 = the lowest year `decodeCursor` accepts).
+        const past = encodeURIComponent(`2000-01-01T00:00:00.000Z|00000000-0000-0000-0000-000000000000`);
+        const tail = expectOk(await call("GET", `/titles/${id}/reviews?cursor=${past}`, { token: ctx.token }), 200, Page);
+        assert.deepEqual(tail, { items: [], nextCursor: null }, "cursor más allá del final = página vacía");
+      }
+    },
+  },
+  {
+    name: "GET /titles/{id}/reviews: cursor corrupto (incl. \"1|x\", año 0000, id no-UUID) → 400 fields.cursor; 404 idéntico; 401",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      // Any real title: these answers don't depend on it having reviews.
+      const id = l2.titleIds[0];
+      assert.ok(id, "necesita ids de /search");
+      // Corrupt cursors — including the two that used to reach Postgres and
+      // 500 ("1|x" parses as a Date; year 0000 has no ISO Postgres accepts)
+      // and a well-formed instant whose id isn't an `item_review.id` (UUID).
+      for (const bad of ["garbage", "1|x", "0000-01-01T00:00:00.000Z|x", "2026-01-01T00:00:00.000Z|x"]) {
+        const junk = expectError(
+          await call("GET", `/titles/${id}/reviews?cursor=${encodeURIComponent(bad)}`, { token: ctx.token }),
+          400,
+          "invalid",
+        );
+        assert.ok(junk.fields && "cursor" in junk.fields, `${bad}: fields.cursor presente`);
+      }
+      // …while a cursor `encodeCursor` could have emitted (UUID id, year ≥ 2000) is a real page.
+      const valid = encodeURIComponent(`2000-01-01T00:00:00.000Z|00000000-0000-0000-0000-000000000000`);
+      expectOk(await call("GET", `/titles/${id}/reviews?cursor=${valid}`, { token: ctx.token }), 200, paginated(ReviewSchema));
+      expectSameError(
+        await call("GET", "/titles/not-a-uuid/reviews", { token: ctx.token }),
+        await call("GET", "/titles/00000000-0000-4000-8000-000000000000/reviews", { token: ctx.token }),
+        404,
+        "not_found",
+        "malformado e inexistente son el mismo 404",
+      );
+      expectError(await call("GET", `/titles/${id}/reviews`), 401, "unauthorized");
+    },
+  },
+  {
+    name: "sin bearer → el MISMO 401 en TODAS las rutas v1 (barrido generado del árbol; ninguna escribe)",
+    run: async () => {
+      const routes = await v1ProtectedRoutes();
+      // Sanity on the walker itself: 44 protected verbs today. Far fewer means
+      // the tree scan broke, and a sweep over nothing would pass.
+      assert.ok(routes.length >= 40, `el barrido encontró solo ${routes.length} rutas: ¿cambió el árbol o el parser?`);
+      const reference = await call("GET", "/me");
+      expectError(reference, 401, "unauthorized");
+      for (const [method, path] of routes) {
+        const res = await call(method, path, method === "GET" || method === "DELETE" ? {} : { body: {} });
+        // Anything but this exact 401 = a handler that isn't behind `withApi`.
+        expectSameError(res, reference, 401, "unauthorized", `${method} ${path}: mismo 401 (¿falta withApi?)`);
+      }
+      if (opts.verbose) console.log(`   (${routes.length} rutas barridas)`);
     },
   },
   {
@@ -815,12 +1098,10 @@ const reads: Case[] = [
       assert.ok(ctx.token, "hace falta un token");
       const missing = await call("GET", "/people/zz_nadie_por_aqui_404", { token: ctx.token });
       const invalid = await call("GET", "/people/AB", { token: ctx.token });
-      const a = expectError(missing, 404, "not_found");
-      const b = expectError(invalid, 404, "not_found");
-      assert.deepEqual(a, b, "un 404 nunca dice si el handle era inválido, privado o inexistente");
+      expectSameError(missing, invalid, 404, "not_found", "un 404 nunca dice si el handle era inválido, privado o inexistente");
       // A collection under a nonexistent owner is the same 404 too.
       const coll = await call("GET", "/people/zz_nadie_por_aqui_404/collections/nope", { token: ctx.token });
-      assert.deepEqual(expectError(coll, 404, "not_found"), a);
+      expectSameError(coll, missing, 404, "not_found", "colección bajo un dueño inexistente: el mismo 404");
     },
   },
   {
@@ -861,13 +1142,13 @@ const reads: Case[] = [
       const priv = smoke.collections.find((c) => c.visibility === "private");
       if (!priv) skip("la cuenta no tiene ninguna colección privada");
       const res = await call("GET", `/people/${ctx.me.handle}/collections/${priv.id}`, { token: ctx.token });
-      const a = expectError(res, 404, "not_found");
-      const b = expectError(
+      expectSameError(
+        res,
         await call("GET", `/people/${ctx.me.handle}/collections/00000000-0000-0000-0000-000000000000`, { token: ctx.token }),
         404,
         "not_found",
+        "privada e inexistente son el mismo 404, incluso para su dueño",
       );
-      assert.deepEqual(a, b, "privada e inexistente son el mismo 404, incluso para su dueño");
       // The owner still sees it through the private route.
       expectOk(await call("GET", `/collections/${priv.id}`, { token: ctx.token }), 200, z.object({ collection: CollectionSchema }));
     },
@@ -1017,8 +1298,17 @@ const reads: Case[] = [
         const last = page.items.at(-1)!;
         for (const e of p2.items) assert.ok(e.at <= last.at, "página 2 es más vieja");
       }
-      const junk = expectError(await call("GET", "/feed?cursor=garbage", { token: ctx.token }), 400, "invalid");
-      assert.ok(junk.fields && "cursor" in junk.fields, "cursor inválido = 400 con fields.cursor");
+      for (const bad of ["garbage", "1|x", "0000-01-01T00:00:00.000Z|x"]) {
+        const junk = expectError(await call("GET", `/feed?cursor=${encodeURIComponent(bad)}`, { token: ctx.token }), 400, "invalid");
+        assert.ok(junk.fields && "cursor" in junk.fields, `${bad}: cursor inválido = 400 con fields.cursor`);
+      }
+      // The feed's id half is opaque (composite `kind:rowId`): a valid instant
+      // with any id is a real (here: past-the-end-ish) page, never a 400/500.
+      expectOk(
+        await call("GET", `/feed?cursor=${encodeURIComponent("2000-01-01T00:00:00.000Z|x")}`, { token: ctx.token }),
+        200,
+        paginated(FeedEventSchema),
+      );
     },
   },
   {
@@ -1067,17 +1357,29 @@ const e2: {
   collection: string;
 } = { picks: [], plain: "", spare: null, obsesiones: "", collection: "" };
 
-/** `call` on the QA token; ONE retry after a 429 (E1+E2+E3 together brush
- *  the 60 writes/min ceiling — the limiter is per instance, not the case). */
-async function e2call(method: string, path: string, init: { body?: unknown } = {}): Promise<Res> {
-  const res = await call(method, path, { token: ctx.token, ...init });
-  if (res.status !== 429) return res;
-  const err = ErrorBodySchema.parse(res.body).error;
-  const wait = Math.min(60, err.retryAfterSeconds ?? 5);
-  console.log(`   (429 en ${method} ${path} — espero ${wait}s)`);
-  await new Promise((r) => setTimeout(r, wait * 1000));
-  return call(method, path, { token: ctx.token, ...init });
+/**
+ * `call` on the QA token, retried after a 429 until the window lets it
+ * through (bounded: ≤ 6 retries, ≤ 90 s total). The whole `writes` section
+ * runs on ONE QA account inside a couple of minutes and E1+R0+E2+E3 together
+ * exceed the 60 writes/min ceiling. ONE retry is not enough: the limiter is a
+ * sliding window, `Retry-After` is when the OLDEST write expires — one slot —
+ * so a case that bursts several writes hits the ceiling again right after
+ * (learning 2026-09-24-smoke-writes-compartido-rebasa-rate-limit-por-usuario).
+ */
+async function qaCall(method: string, path: string, init: { body?: unknown } = {}): Promise<Res> {
+  const deadline = Date.now() + 90_000;
+  let res = await call(method, path, { token: ctx.token, ...init });
+  for (let attempt = 0; res.status === 429 && attempt < 6 && Date.now() < deadline; attempt++) {
+    const err = ErrorBodySchema.parse(res.body).error;
+    // At least 2 s: a 1 s Retry-After frees a single slot and the next burst re-trips it.
+    const wait = Math.min(60, Math.max(2, err.retryAfterSeconds ?? 5));
+    console.log(`   (429 en ${method} ${path} — espero ${wait}s)`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await call(method, path, { token: ctx.token, ...init });
+  }
+  return res;
 }
+const e2call = qaCall;
 
 async function e2Search(q: string) {
   const res = await e2call("GET", `/search?q=${encodeURIComponent(q)}`);
@@ -1113,17 +1415,8 @@ async function e2Library() {
 // E3 — helpers for the review cases (state they hand to each other).
 const e3: { review: z.infer<typeof ReviewSchema> | null } = { review: null };
 
-/** `call` with the bearer, retried ONCE after a 429: the whole `writes`
- *  section runs on one QA account inside one minute and E1+E2 already spend
- *  most of the 60 writes/min budget before these cases start. */
-async function e3call(method: string, path: string, init: { body?: unknown } = {}): Promise<Res> {
-  const res = await call(method, path, { token: ctx.token, ...init });
-  if (res.status !== 429) return res;
-  const wait = Math.min(60, ErrorBodySchema.parse(res.body).error.retryAfterSeconds ?? 5);
-  console.log(`   (429 en ${method} ${path} — espero ${wait}s)`);
-  await new Promise((r) => setTimeout(r, wait * 1000));
-  return call(method, path, { token: ctx.token, ...init });
-}
+/** Same bounded 429 retry as `e2call` (they share one QA account's budget). */
+const e3call = qaCall;
 
 /** `--token` mode skips the login, so `ctx.me` is empty: read it once. */
 async function e3Me(): Promise<Me> {
@@ -1313,6 +1606,86 @@ const writes: Case[] = [
       assert.equal(await status(""), "invalid", "vacío no es 400, es invalid");
     },
   },
+  // R0 (fase 4a) — BEFORE the handle is claimed (next case): the own review of
+  // an account without a handle carries `authorHandle: null`, never "", both
+  // in the PUT and pinned in GET /titles/{id}. Leaves NOTHING behind: E2's
+  // picks must still find an account with no collection (so they create
+  // "Obsesiones") and an empty library.
+  {
+    name: "R0 reseña sin handle → authorHandle null en PUT /me/titles/{id}/review y en GET /titles/{id}",
+    run: async () => {
+      const me = expectOk(await e3call("GET", "/me"), 200, MeSchema);
+      assert.equal(me.handle, null, "este caso corre antes de reclamar el handle");
+      const hits = await e2Search("dune");
+      const film = hits.find((h) => h.format === "film") ?? hits[0];
+      assert.ok(film?.id, "\"dune\" tiene que dar un título con id");
+      const titleId = film.id;
+
+      const coll = expectOk(
+        await e3call("POST", "/collections", { body: { name: "Smoke R0", visibility: "private" } }),
+        200,
+        CollectionSchema,
+      );
+      let caseError: unknown = null;
+      try {
+        expectOk(
+          await e3call("PUT", `/collections/${coll.id}/titles/${titleId}`),
+          200,
+          z.object({ title: TitleSchema, state: TitleStateSchema }),
+        );
+        const marked = expectOk(
+          await e3call("PUT", `/me/titles/${titleId}/mark`, { body: { mark: "liked" } }),
+          200,
+          TitleStateSchema,
+        );
+        assert.equal(marked.mark, "liked");
+
+        const put = await e3call("PUT", `/me/titles/${titleId}/review`, {
+          body: { body: "Reseña sin handle, smoke R0.", hasSpoiler: false },
+        });
+        const review = expectOk(put, 200, ReviewSchema);
+        assert.strictEqual(review.authorHandle, null, "PUT: sin handle → authorHandle null, nunca \"\"");
+        assert.ok(put.text.includes('"authorHandle":null'), "null literal en el JSON");
+
+        const d = expectOk(await e3call("GET", `/titles/${titleId}`), 200, TitleDetailResponseSchema);
+        assert.equal(d.state?.reviewId, review.id);
+        const pinned = d.reviews.items[0];
+        assert.equal(pinned?.id, review.id, "la reseña propia va primero");
+        assert.strictEqual(pinned.authorHandle, null, "GET /titles/{id}: authorHandle null, nunca \"\"");
+        assert.equal(pinned.hidden, false);
+
+        // The paged list never repeats the own review (pinned above it).
+        const rest = expectOk(await e3call("GET", `/titles/${titleId}/reviews`), 200, paginated(ReviewSchema));
+        assert.ok(!rest.items.some((r) => r.id === review.id), "GET /titles/{id}/reviews excluye la propia");
+      } catch (err) {
+        caseError = err;
+      }
+      // Cleanup ALWAYS runs both DELETEs (DELETE /me/titles drops membership
+      // + user_item + review; then the collection) and asserts only AFTER
+      // both ran — an assert between them would leave the collection behind.
+      // A 404 is "nothing to clean" only when the case failed before creating
+      // it; on a passing case both must be 204.
+      const cleanupFailures: string[] = [];
+      for (const path of [`/me/titles/${titleId}`, `/collections/${coll.id}`]) {
+        try {
+          const r = await e3call("DELETE", path);
+          if (r.status !== 204 && !(caseError && r.status === 404)) cleanupFailures.push(`DELETE ${path} → ${r.status}: ${r.text}`);
+        } catch (err) {
+          cleanupFailures.push(`DELETE ${path} → ${err instanceof Error ? err.message : err}`);
+        }
+      }
+      if (caseError) {
+        // The case's own failure is the headline; a cleanup failure rides on it, never replaces it.
+        if (cleanupFailures.length > 0 && caseError instanceof Error) {
+          caseError.message += `\n   + además falló la limpieza de R0: ${cleanupFailures.join(" · ")}`;
+        }
+        throw caseError;
+      }
+      assert.equal(cleanupFailures.length, 0, `limpieza de R0: ${cleanupFailures.join(" · ")}`);
+      assert.deepEqual(await e2Collections(), [], "R0 no deja colecciones (E2 crea \"Obsesiones\")");
+      assert.equal((await e2Library()).size, 0, "R0 no deja títulos en la biblioteca");
+    },
+  },
   {
     name: "E1 PUT /me/username → Me con handle e isPublic=true (F2.17)",
     run: async () => {
@@ -1452,11 +1825,11 @@ const writes: Case[] = [
       const after = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
       assert.equal(after, before + 1);
       // Own handle, nonexistent and (indistinguishably) private → the same 404.
-      const self = expectError(await call("PUT", `/me/following/${ctx.me.handle}`, { token: ctx.token }), 404, "not_found");
-      const nobody = expectError(await call("PUT", "/me/following/nadieexiste12345", { token: ctx.token }), 404, "not_found");
-      assert.deepEqual(self, nobody, "propio e inexistente son el mismo 404");
-      const malformed = expectError(await call("PUT", "/me/following/ab", { token: ctx.token }), 404, "not_found");
-      assert.deepEqual(malformed, nobody, "malformado es el mismo 404 (sin oráculo de forma)");
+      const self = await call("PUT", `/me/following/${ctx.me.handle}`, { token: ctx.token });
+      const nobody = await call("PUT", "/me/following/nadieexiste12345", { token: ctx.token });
+      expectSameError(self, nobody, 404, "not_found", "propio e inexistente son el mismo 404");
+      const malformed = await call("PUT", "/me/following/ab", { token: ctx.token });
+      expectSameError(malformed, nobody, 404, "not_found", "malformado es el mismo 404 (sin oráculo de forma)");
       // `@eric` and `ERIC` normalize to the same handle: still one row.
       assert.equal((await call("PUT", "/me/following/%40ERIC", { token: ctx.token })).status, 204);
       // The follow shows up in the own list.
@@ -1675,6 +2048,7 @@ const writes: Case[] = [
         "not_found",
       );
       expectError(await e2call("PUT", `/me/titles/${e2.plain}/episodes/s1e1`, { body: {} }), 501, "unsupported");
+      expectError(await e2call("DELETE", `/me/titles/${e2.plain}/episodes/s1e1`), 501, "unsupported");
     },
   },
   {
@@ -1925,6 +2299,20 @@ async function main() {
         }
         console.error(`   FAIL ${c.name}`);
         console.error(err instanceof Error ? err.message : err);
+        // A FAIL in `writes` aborts before `e1DeleteMe` — the QA account would
+        // stay alive in the DB (= prod). Best-effort cleanup, then exit 1.
+        if (section === "writes" && c !== e1DeleteMe && ctx.token) {
+          try {
+            await e1DeleteMe.run();
+            console.error("   (limpieza: cuenta QA borrada con E1 DELETE /me)");
+          } catch (cleanupErr) {
+            console.error(
+              `   (limpieza FALLÓ — borra a mano: select email from "user" where email like 'qa-api-%') ${
+                cleanupErr instanceof Error ? cleanupErr.message : cleanupErr
+              }`,
+            );
+          }
+        }
         process.exit(1);
       }
     }

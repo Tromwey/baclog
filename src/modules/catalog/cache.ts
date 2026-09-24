@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import type { FilmFactsWrite } from "./film-facts";
 import type { SeriesFactsPatch } from "./series-status";
 
 /** ADR-007: re-fetch horizon ≤3 months (TMDB caps caching at 6). */
@@ -80,6 +81,31 @@ export async function cacheSeriesFacts(
   catalogItemId: string,
   patch: SeriesFactsPatch,
 ): Promise<void> {
+  await mergeIntoRaw(catalogItemId, patch, "series facts");
+}
+
+/**
+ * Film facts (API v1 `Title.detail`, film-facts.ts) — the same `raw || patch`
+ * merge as `cacheSeriesFacts`, with `runtime`, `release_date` and the
+ * `_film_facts_at` marker (build it with `filmFactsWrite`: a null fact is
+ * omitted, so it never erases a stored one). `release_date` stays INSIDE
+ * `raw`: the column is video-null on purpose until the founder decides
+ * (ios/API.md §7 q8).
+ */
+export async function cacheFilmFacts(
+  catalogItemId: string,
+  patch: FilmFactsWrite,
+): Promise<void> {
+  await mergeIntoRaw(catalogItemId, patch, "film facts");
+}
+
+/** jsonb `raw || patch` — existing keys survive unless the patch names them.
+ *  Never throws: a cache write must never take the page down with it. */
+async function mergeIntoRaw(
+  catalogItemId: string,
+  patch: object,
+  what: string,
+): Promise<void> {
   try {
     await db
       .update(catalogItems)
@@ -89,8 +115,7 @@ export async function cacheSeriesFacts(
       })
       .where(eq(catalogItems.id, catalogItemId));
   } catch (err) {
-    // A cache write must never take the page down with it.
-    console.error("[catalog] series facts cache failed:", err);
+    console.error(`[catalog] ${what} cache failed:`, err);
   }
 }
 

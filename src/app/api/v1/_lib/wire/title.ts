@@ -1,4 +1,5 @@
-import { isoDate, type Release, type Title } from "../schemas";
+import { runtimeLabel } from "@/modules/catalog/film-facts";
+import { isoDate, type Release, type Title, type Track } from "../schemas";
 
 /**
  * `Title` SUMMARY (§3) from the shared `catalog_item` facts every list query
@@ -60,4 +61,51 @@ export function releaseOf(
     return { kind: "year", date: isoDate(new Date(Date.UTC(year, 0, 1))) };
   }
   return null;
+}
+
+/**
+ * `Title.detail` — "125 min" · "2 temporadas" · "18 canciones", null when we
+ * have no data (never invented). Film runtime comes from `getFilmRuntime`
+ * (TMDB `/movie/{id}`, persisted in `raw`), seasons from the series facts,
+ * songs from the album's full count.
+ */
+export function titleDetailOf(facts: {
+  mediaType: "film" | "series" | "album";
+  runtimeMinutes: number | null;
+  seasons: number | null;
+  trackCount: number;
+}): string | null {
+  switch (facts.mediaType) {
+    case "film":
+      return runtimeLabel(facts.runtimeMinutes);
+    case "series": {
+      const seasons = facts.seasons ?? 0;
+      if (seasons <= 0) return null;
+      return seasons === 1 ? "1 temporada" : `${seasons} temporadas`;
+    }
+    case "album": {
+      const n = facts.trackCount;
+      if (n <= 0) return null;
+      return n === 1 ? "1 canción" : `${n} canciones`;
+    }
+  }
+}
+
+/**
+ * iTunes tracks → wire. Placeholders ("Track 4") never reach here (itunes.ts
+ * drops them); `available` is iTunes' `isStreamable` (false = a named track of
+ * a partial pre-order that isn't playable yet; true when iTunes omits it).
+ */
+export function toTracks(
+  tracks: { n: number; name: string; durationMs: number | null; available: boolean }[],
+): Track[] {
+  return tracks.map((t, i) => ({
+    number: t.n > 0 ? t.n : i + 1,
+    name: t.name,
+    available: t.available,
+    durationMs:
+      typeof t.durationMs === "number" && Number.isInteger(t.durationMs) && t.durationMs >= 0
+        ? t.durationMs
+        : null,
+  }));
 }

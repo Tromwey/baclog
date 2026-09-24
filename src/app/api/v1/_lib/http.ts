@@ -80,26 +80,34 @@ export function readQuery<S extends z.ZodTypeAny>(
   return schema.parse(params);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * `?cursor=` for the keyset lists (feed, following, followers). Absent or
- * empty → page 1. Present but not decodable → 400 `invalid` with
- * `fields.cursor`: a cursor the app didn't get from us is a client bug, and
- * silently re-serving page 1 would hide it as an endless first page. None of
- * the modules behind these lists take a page size (the chunk is theirs), so
- * there is no `limit` here on purpose.
+ * `?cursor=` for the keyset lists (feed, following, followers, a title's
+ * reviews). Absent or empty → page 1. Present but not decodable → 400
+ * `invalid` with `fields.cursor`: a cursor the app didn't get from us is a
+ * client bug, and silently re-serving page 1 would hide it as an endless
+ * first page. `decodeCursor` checks the instant half (exactly what
+ * `encodeCursor` emits, year ≥ 2000); `uuidId` also requires the id half to
+ * be a UUID, for lists whose cursor id is a plain row id (`item_review.id`).
+ * The feed's ids are composite (`reviewed:<uuid>`), so it can't use it. None
+ * of the modules behind these lists take a page size (the chunk is theirs),
+ * so there is no `limit` here on purpose.
  */
-export function readCursor(request: Request): string | null {
+export function readCursor(
+  request: Request,
+  opts: { uuidId?: boolean } = {},
+): string | null {
   const raw = new URL(request.url).searchParams.get("cursor");
   if (!raw) return null;
-  if (decodeCursor(raw) === null) {
+  const decoded = decodeCursor(raw);
+  if (decoded === null || (opts.uuidId && !UUID_RE.test(decoded.id))) {
     throw new ApiError("invalid", "El cursor de paginación no es válido. Vuelve a cargar la lista desde el principio.", {
       fields: { cursor: "Cursor no válido" },
     });
   }
   return raw;
 }
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The id if it is UUID-shaped, else null — for lookups that fall back to
  *  something else (the membership PUT's `externalRef`). */

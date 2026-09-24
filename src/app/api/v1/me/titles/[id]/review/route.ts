@@ -5,7 +5,7 @@ import { publicMarkOf } from "@/modules/backlog/mark";
 import { deleteOwnReview, getOwnReview, saveReview } from "@/modules/reviews/write";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 import { json, noContent, parseId, readJson } from "../../../../_lib/http";
-import { isoDate, type Review } from "../../../../_lib/schemas";
+import { toOwnReview } from "../../../../_lib/wire";
 
 /**
  * PUT    /api/v1/me/titles/{id}/review  { body, hasSpoiler } → Review
@@ -16,8 +16,8 @@ import { isoDate, type Review } from "../../../../_lib/schemas";
  * web action runs): react first (409 `reaction_required`), no links (400),
  * ≤280 (400), albums never carry a spoiler, editing keeps `hiddenAt`.
  *
- * `authorHandle` is `users.username` as is — null while the caller has no
- * handle — never an id (nothing on the wire carries a user id). `mark` is
+ * `authorHandle` is `users.username` as is — null (never "") while the
+ * caller has no handle, via `toOwnReview` — never an id (nothing on the wire carries a user id). `mark` is
  * the caller's reaction at write time (`publicMarkOf`, so a `disliked`
  * review says so).
  */
@@ -53,17 +53,19 @@ export const PUT = withApi<{ id: string }>(async (request, { user, params }) => 
   const own = await getOwnReview(user.id, item.catalogItemId);
   if (!own) throw new ApiError("internal"); // just upserted — a read-after-write miss is a bug
 
-  const review: Review = {
-    id: own.id,
-    authorHandle: user.username,
-    titleId: item.catalogItemId,
-    body: own.body,
-    hasSpoiler: own.hasSpoiler,
-    mark: publicMarkOf(item),
-    createdAt: isoDate(own.createdAt),
-    updatedAt: isoDate(own.updatedAt),
-    hidden: own.hiddenAt !== null,
-  };
+  const review = toOwnReview(
+    {
+      id: own.id,
+      body: own.body,
+      hasSpoiler: own.hasSpoiler,
+      mark: publicMarkOf(item),
+      createdAt: own.createdAt,
+      updatedAt: own.updatedAt,
+      hidden: own.hiddenAt !== null,
+    },
+    item.catalogItemId,
+    user.username,
+  );
   return json(review);
 });
 

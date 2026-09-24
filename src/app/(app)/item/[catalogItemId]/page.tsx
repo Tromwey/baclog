@@ -100,7 +100,7 @@ export default async function ItemPage({
   // provider and cached, shared with the public ficha. For an album this also
   // refreshes catalog_item.release_date (F3.8): read the release off the
   // returned value, not the row loaded before it.
-  const [{ tracks, trackCount, synopsis, releaseDate, seriesStatus }, friends] =
+  const [{ tracks, trackCount, synopsis, releaseDate, seriesStatus, runtimeMinutes }, friends] =
     await Promise.all([
       getItemDisplayMedia(item),
       getTitleActivityAmongFollowed(user.id, item.id, {
@@ -144,9 +144,11 @@ export default async function ItemPage({
   const songs = trackCount || tracks.length;
 
   // The mono data line (24a "2001 · 125 min", 24b "2022 · 2 temporadas", 24c
-  // "2024 · 12 canciones"): only what the catalog stores — no runtime.
+  // "2024 · 12 canciones"): only what the catalog stores (film runtime lives
+  // in `raw`, filled once by getFilmRuntime).
   const meta = [
     item.year,
+    runtimeMinutes ? `${runtimeMinutes} min` : null,
     seriesStatus ? `${seriesStatus.seasons} ${plural(seriesStatus.seasons, "temporada", "temporadas")}` : null,
     isAlbum && songs > 0 ? `${songs} ${plural(songs, "canción", "canciones")}` : null,
   ]

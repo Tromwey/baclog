@@ -9,19 +9,36 @@ import assert from "node:assert/strict";
 import { kuraMarkOf, publicMarkOf } from "../src/modules/backlog/mark";
 import { profileTint } from "../src/modules/backlog/profile-hexes";
 import {
+  FILM_FACTS_AT_KEY,
+  FILM_FACTS_RETRY_MS,
+  filmFactsNeedFetch,
+  filmFactsWrite,
+  readFilmFacts,
+  releaseDateOf,
+  runtimeMinutesOf,
+} from "../src/modules/catalog/film-facts";
+import { decodeCursor, encodeCursor } from "../src/modules/reviews/cursor";
+import {
   CollectionSchema,
   PersonSchema,
   ReleaseSchema,
+  ReviewSchema,
   TitleSchema,
   TitleStateSchema,
+  TrackSchema,
 } from "../src/app/api/v1/_lib/schemas";
 import {
+  handleOrNull,
   releaseOf,
+  titleDetailOf,
   toCollection,
   toCollectionDetail,
+  toOwnReview,
   toPersonLite,
+  toPublicReview,
   toTitleState,
   toTitleSummary,
+  toTracks,
   wireVisibilityOf,
 } from "../src/app/api/v1/_lib/wire";
 
@@ -265,6 +282,122 @@ check("toPersonLite cumple PersonSchema (defaults en cero, name null → '')", (
     toPersonLite({ username: "ana", name: "Ana", avatarUrl: null, avatarHexes: [], isPrivate: true }),
   );
   assert.equal(priv.isPrivate, true);
+});
+
+check("Review.authorHandle: null (nunca \"\") sin handle; propia con hidden, pública sin él", () => {
+  assert.equal(handleOrNull(""), null);
+  assert.equal(handleOrNull(null), null);
+  assert.equal(handleOrNull(undefined), null);
+  assert.equal(handleOrNull("ana"), "ana");
+  const facts = { id: "r1", body: "Hermosa.", hasSpoiler: false, mark: "liked" as const, createdAt: T0, updatedAt: T1 };
+  const own = ReviewSchema.parse(toOwnReview({ ...facts, hidden: true }, "t1", null));
+  assert.equal(own.authorHandle, null, "cuenta sin handle → null");
+  assert.equal(own.hidden, true);
+  assert.equal(own.createdAt, "2026-09-24T15:00:00Z", "sin fracción");
+  // queries.ts pads a missing username to "" for the web initial: never on the wire.
+  assert.equal(ReviewSchema.parse(toOwnReview({ ...facts, hidden: false }, "t1", "")).authorHandle, null);
+  const pub = ReviewSchema.parse(toPublicReview({ ...facts, author: { username: "ana" } }, "t1"));
+  assert.equal(pub.authorHandle, "ana");
+  assert.ok(!("hidden" in pub), "una reseña ajena nunca lleva hidden");
+  assert.equal(toPublicReview({ ...facts, author: { username: "" } }, "t1").authorHandle, null);
+});
+
+check("toTracks: available = isStreamable (default true), número 1-based, durationMs saneado", () => {
+  const tracks = toTracks([
+    { n: 1, name: "Single", durationMs: 201000, available: true },
+    { n: 0, name: "Pre-order", durationMs: 180000.5, available: false },
+    { n: 9, name: "Otra", durationMs: null, available: true },
+  ]);
+  for (const t of tracks) TrackSchema.parse(t);
+  assert.deepEqual(tracks.map((t) => t.available), [true, false, true]);
+  assert.equal(tracks[1].number, 2, "n=0 cae a la posición");
+  assert.equal(tracks[1].durationMs, null, "no entero → null");
+});
+
+check("titleDetailOf: \"125 min\" · \"1 temporada\" · \"18 canciones\"; null sin dato", () => {
+  const d = (mediaType: "film" | "series" | "album", runtimeMinutes: number | null, seasons: number | null, trackCount: number) =>
+    titleDetailOf({ mediaType, runtimeMinutes, seasons, trackCount });
+  assert.equal(d("film", 125, null, 0), "125 min");
+  assert.equal(d("film", null, null, 0), null);
+  assert.equal(d("film", 0, null, 0), null);
+  assert.equal(d("series", null, 1, 0), "1 temporada");
+  assert.equal(d("series", null, 3, 0), "3 temporadas");
+  assert.equal(d("series", null, 0, 0), null);
+  assert.equal(d("album", null, null, 1), "1 canción");
+  assert.equal(d("album", null, null, 18), "18 canciones");
+  assert.equal(d("album", null, null, 0), null);
+  assert.equal(d("film", 125, 2, 18), "125 min", "cada formato mira solo su dato");
+});
+
+check("film-facts: runtime saneado; sin marcador = sin enriquecer; runtime conocido nunca se re-consulta", () => {
+  assert.equal(runtimeMinutesOf(125), 125);
+  assert.equal(runtimeMinutesOf(0), null, "TMDB manda 0 cuando no sabe");
+  assert.equal(runtimeMinutesOf("125"), null);
+  assert.equal(runtimeMinutesOf(Number.NaN), null);
+  // A /search/movie hit: release_date but no marker → not enriched.
+  assert.equal(readFilmFacts({ id: 1, release_date: "2021-09-15" }), null);
+  assert.equal(filmFactsNeedFetch(null), true);
+  const now = Date.parse("2026-09-24T00:00:00Z");
+  const known = readFilmFacts({ runtime: 155, release_date: "2021-09-15", [FILM_FACTS_AT_KEY]: "2020-01-01T00:00:00Z" });
+  assert.ok(known);
+  assert.equal(known.runtime, 155);
+  assert.equal(filmFactsNeedFetch(known, now), false, "un runtime conocido es final, por viejo que sea");
+  const unknownFresh = readFilmFacts({ runtime: 0, [FILM_FACTS_AT_KEY]: new Date(now - 1000).toISOString() });
+  assert.equal(filmFactsNeedFetch(unknownFresh, now), false, "sin runtime, recién consultado: no re-consulta");
+  const unknownOld = readFilmFacts({ runtime: null, [FILM_FACTS_AT_KEY]: new Date(now - FILM_FACTS_RETRY_MS - 1).toISOString() });
+  assert.equal(filmFactsNeedFetch(unknownOld, now), true, "sin runtime tras 30 días: re-consulta");
+  assert.equal(readFilmFacts({ runtime: 100, [FILM_FACTS_AT_KEY]: "no-es-fecha" }), null);
+});
+
+check("film-facts: release_date solo YYYY-MM-DD; el patch OMITE los hechos nulos (nunca borra raw)", () => {
+  assert.equal(releaseDateOf("2021-09-15"), "2021-09-15");
+  assert.equal(releaseDateOf(""), null, "TMDB manda \"\" cuando no sabe");
+  assert.equal(releaseDateOf("2021-09-15T00:00:00Z"), null);
+  assert.equal(releaseDateOf("pronto"), null);
+  assert.equal(releaseDateOf(20210915), null);
+  const at = "2026-09-24T00:00:00.000Z";
+  assert.deepEqual(filmFactsWrite({ runtime: 155, release_date: "2021-09-15" }, at), {
+    runtime: 155,
+    release_date: "2021-09-15",
+    [FILM_FACTS_AT_KEY]: at,
+  });
+  // A TMDB 404 (film gone): only the marker — the search hit's release_date survives the `raw || patch`.
+  const gone = filmFactsWrite({ runtime: null, release_date: null }, at);
+  assert.deepEqual(gone, { [FILM_FACTS_AT_KEY]: at });
+  const merged = { release_date: "2021-09-15", ...gone };
+  assert.equal(merged.release_date, "2021-09-15");
+  const facts = readFilmFacts(merged);
+  assert.ok(facts);
+  assert.equal(facts.runtime, null);
+  assert.equal(filmFactsNeedFetch(facts, Date.parse(at) + 1000), false, "404 escribe marcador: no re-consulta en cada vista");
+});
+
+check("cursor keyset: round trip; instante = lo que emite encodeCursor, año ≥ 2000; id opaco", () => {
+  const c = encodeCursor(T0, "reviewed:8b1f0c9e-0000-4000-8000-000000000000");
+  const d = decodeCursor(c);
+  assert.ok(d);
+  assert.equal(d.at.toISOString(), T0.toISOString());
+  assert.equal(d.id, "reviewed:8b1f0c9e-0000-4000-8000-000000000000", "id compuesto del feed intacto");
+  assert.ok(decodeCursor(encodeCursor(T0.toISOString(), "x")), "instante como string");
+  assert.ok(decodeCursor("2026-09-24T15:00:00Z|x"), "sin milisegundos");
+  assert.equal(decodeCursor(null), null);
+  assert.equal(decodeCursor(""), null);
+  for (const bad of [
+    "1|x",
+    "2026|abc",
+    "garbage",
+    "|x",
+    "2026-09-24T15:00:00.000Z|",
+    "0000-01-01T00:00:00.000Z|x",
+    "-000001-01-01T00:00:00.000Z|x",
+    "1999-12-31T23:59:59.999Z|x",
+    "2026-02-30T00:00:00.000Z|x",
+    "2026-13-01T00:00:00.000Z|x",
+    "2026-09-24 15:00:00|x",
+    "2026-09-24T15:00:00.000+02:00|x",
+  ]) {
+    assert.equal(decodeCursor(bad), null, `rechaza ${JSON.stringify(bad)}`);
+  }
 });
 
 console.log(failures === 0 ? "\ncheck-wire ok" : `\n${failures} fallos`);
