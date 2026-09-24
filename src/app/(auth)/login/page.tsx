@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
-import { FIELD, SOLID_BUTTON, Wordmark } from "@/app/u/kura/components";
+import { FIELD, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
 
 /**
  * Kura · O1c "entrar." (design/kura/flujos-v2.dc.html, flujo 01 · rama "ya

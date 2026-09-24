@@ -32,8 +32,8 @@ import {
   Mono,
   SectionTitle,
   formatMil,
-} from "@/app/u/kura/components";
-import { releaseSentence, tintSurfaceVertical } from "@/app/u/kura/tint";
+} from "@/components/kura/components";
+import { releaseSentence, tintSurfaceVertical } from "@/components/kura/tint";
 import { PublicReviews } from "./public-reviews";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.

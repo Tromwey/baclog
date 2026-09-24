@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { MediaType } from "@/modules/catalog/types";
-import { Cover, type GlyphKind } from "@/app/u/kura/components";
+import { Cover, type GlyphKind } from "@/components/kura/components";
 
 /**
  * Kura · the body of a shared collection (flujos-v2 · 33b, same rules as the

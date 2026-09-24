@@ -4,7 +4,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
-import { FIELD, GLASS_BUTTON, SOLID_BUTTON, Wordmark } from "@/app/u/kura/components";
+import { FIELD, GLASS_BUTTON, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
 
 /**
  * Kura · the second half of "entrar." — the code the email carries. Same

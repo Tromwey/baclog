@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { joinWaitlistAction } from "@/app/actions/waitlist-actions";
-import { FIELD, SOLID_BUTTON } from "@/app/u/kura/components";
+import { FIELD, SOLID_BUTTON } from "@/components/kura/components";
 import { PositionCard } from "./position-card";
 
 type Joined = {

@@ -20,24 +20,26 @@
   --text-2: #b9b8c2; /* secondary (Revamp UI 2026-09-03: lifted from #a9a8b2) */
   --text-3: #8f8e9b; /* tertiary / metadata (Revamp UI 2026-09-03: lifted from #6c6b76) */
 
-  /* Firma (lima) */
-  --accent: #d8ff3e; /* CTA primario, activos, focus, marca */
-  --accent-press: #c2e82f; /* pressed */
-  --accent-soft: #d8ff3e1a; /* selección — fill suave, nunca glow */
+  /* Acento — Kura (2026-09-24): MIEL. "Un color, una función": Seguir y la
+     acción de acento de la pantalla, una vez por pantalla. Texto en --bg. */
+  --accent: #efce8d;
+  --accent-press: #e2b86e; /* pressed */
+  --accent-soft: rgba(239, 206, 141, 0.16); /* selección — fill suave, nunca glow */
 
-  /* Hot (rojo) — estado + celebración, uso escaso */
-  --hot: #ff2d55;
-  --hot-soft: #ff2d5522;
+  /* Me obsesiona — coral (Kura). El rojo salió del producto: "sin rojo, lo
+     destructivo se entiende por el título y la confirmación". */
+  --hot: #ec8e76;
+  --hot-soft: rgba(236, 142, 118, 0.16);
 
   /* Semáforo Torre de Control (/admin) — ok = accent, sin-señal = text-3.
      Apagados a propósito: nada neón salvo la lima (diseño Torre de Control). */
   --warn: #e8b23a;
   --bad: #c4494e;
 
-  /* Hues de estado (mayormente como puntos/tints) */
-  --radar: #7aa2ff; /* On my radar */
-  --obsessing: #ff2d55; /* Obsessing over */
-  --completed: #d8ff3e; /* Completed */
+  /* Matices de estado Kura — glifo + color, un significado cada uno */
+  --radar: #9cbae1; /* pizarra — me gusta / aviso */
+  --obsessing: #ec8e76; /* coral — me obsesiona */
+  --completed: #a0cba0; /* salvia — completo */
 
   /* Radios — redondeado, no burbuja */
   --r-sm: 8px;
@@ -83,7 +85,7 @@
      cover/screen radii + three shadows. The signed-in app keeps lima until
      it is rebuilt; the PUBLIC surfaces opt in via the `.kura` scope below.
      ------------------------------------------------------------------ */
-  --honey: #efce8d; /* miel — Seguir, once per screen; text in --bg */
+  --honey: #efce8d; /* miel — alias de --accent (Seguir, una vez por pantalla) */
   --honey-press: #e2b86e;
   --honey-soft: rgba(239, 206, 141, 0.16);
   --st-obsessed: #ec8e76; /* coral — me obsesiona */
@@ -109,19 +111,11 @@
   --dock-clearance: calc(130px + env(safe-area-inset-bottom, 0px));
 }
 
-/* Kura scope — the public surfaces (login, verify, waitlist, créditos and
-   every /u/* page) wear it on their root. It re-points the ACCENT tokens to
-   honey so the shared primitives they still render (Button, the follow pill,
-   the focus ring, ::selection) come out on-brand without a fork, while the
-   signed-in app — which never carries the class — keeps lima. Component
-   copy for these pages says "colección", never "backlog" (§voz). */
+/* `.kura` — the public surfaces wore this scope while the signed-in app was
+   still lima. Founder call 2026-09-24: THE WHOLE APP adopts Kura, so the
+   tokens above are the root and the class is an inert marker kept for the
+   pages that already carry it. Don't add overrides here. */
 .kura {
-  --accent: var(--honey);
-  --accent-press: var(--honey-press);
-  --accent-soft: var(--honey-soft);
-  --radar: var(--st-liked);
-  --hot: var(--st-obsessed);
-  --completed: var(--st-completed);
 }
 
 /* The wordmark (§marca · A): Newsreader italic 500, tracking −3.5%, always
@@ -231,8 +225,13 @@
      read too mechanical in-app). Space Mono is still loaded as a real
      document font for the exportable cards — the receipt/ticket ink — which
      reference it by family name (cards/render/fonts.ts, double-feature). */
-  --font-display: var(--font-bricolage), system-ui, sans-serif;
-  --font-serif: var(--font-instrument-serif), Georgia, serif;
+  /* Kura (2026-09-24): Newsreader is the one brand voice — `font-display`
+     (screen titles, sections, empty phrases, always lowercase, weight 400)
+     and `font-serif` (titles of works and the wordmark, italic) both resolve
+     to it; Bricolage and Instrument Serif left the product (they survive only
+     as document fonts for the exportable cards, see layout.tsx). */
+  --font-display: var(--font-newsreader), "Newsreader", Georgia, serif;
+  --font-serif: var(--font-newsreader), "Newsreader", Georgia, serif;
   --font-sans: var(--font-hanken), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-red-hat-mono), "Red Hat Mono", ui-monospace, monospace;
   /* Kura's brand voice (sistema-de-diseno §tipografía): Newsreader, roman for

@@ -1,28 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import {
-  Bricolage_Grotesque,
-  Hanken_Grotesk,
-  Instrument_Serif,
-  Newsreader,
-  Red_Hat_Mono,
-} from "next/font/google";
+import { Hanken_Grotesk, Newsreader, Red_Hat_Mono } from "next/font/google";
 import "./globals.css";
 
-/* Design system fonts (sistema-diseno §3). next/font self-hosts each family
-   and exposes a CSS variable that globals.css maps onto --font-* tokens. */
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-bricolage",
-  display: "swap",
-});
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-instrument-serif",
-  display: "swap",
-});
+/* Design system fonts (Kura, design/kura/sistema-de-diseno.dc.html §tipografía).
+   next/font self-hosts each family and exposes a CSS variable that globals.css
+   maps onto --font-* tokens. */
 const hanken = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -47,8 +29,8 @@ const redHatMono = Red_Hat_Mono({
  * Kura (rebrand 2026-09-24, design/kura/sistema-de-diseno.dc.html §marca +
  * §tipografía): Newsreader is the brand voice — screen titles, section
  * names and empty-state phrases in roman, titles of works and the "kura"
- * wordmark in italic 500. Exposed as `font-brand` (globals.css) and used on
- * the PUBLIC surfaces only for now; the signed-in app keeps its current type.
+ * wordmark in italic 500. Exposed as `font-brand`, `font-display` and
+ * `font-serif` (globals.css) — the one voice of the whole product.
  * Variable font: the optical-size axis travels with it so the 40px titles and
  * the 14px italics each get their cut.
  */
@@ -103,7 +85,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${redHatMono.variable} ${newsreader.variable}`}
+      className={`h-full antialiased ${hanken.variable} ${redHatMono.variable} ${newsreader.variable}`}
     >
       <head>
         {/* This Next build's `appleWebApp: { capable: true }` only emits the

@@ -8,7 +8,7 @@ import { CHECK_PATH, FLAME_PATH, LIKE_PATH } from "@/components/glyph-paths";
  *  - liked     → thumb up, radar (fill)
  *  - disliked  → the same thumb flipped, text-3 (fill) — only where the viewer
  *                is the author (a "no me gustó" is never surfaced publicly)
- *  - done      → check, accent (STROKE 3.4)
+ *  - done      → check, salvia `--completed` (STROKE 3.4)
  *
  * The same glyph appears on a cover's corner (13px), in a review's byline
  * (10–11px) and inside a segmented control (10–11px), so the size travels as a
@@ -41,7 +41,7 @@ export function StateGlyph({
         height={s}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--accent)"
+        stroke="var(--completed)"
         strokeWidth={3.4}
         strokeLinecap="round"
         strokeLinejoin="round"

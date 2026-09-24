@@ -1,4 +1,4 @@
-import { Wordmark } from "@/app/u/kura/components";
+import { Wordmark } from "@/components/kura/components";
 
 /** Kura · the age gate. A fact and a note, no wink (§voz · errores). */
 export default function BlockedPage() {

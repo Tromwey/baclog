@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GLASS_BUTTON, Wordmark } from "@/app/u/kura/components";
+import { GLASS_BUTTON, Wordmark } from "@/components/kura/components";
 
 /**
  * Kura · the web block (§patrones · privacidad, "Sin cuenta · web": a private

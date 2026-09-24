@@ -26,8 +26,8 @@ import {
   type GlyphKind,
   Seal,
   SectionTitle,
-} from "@/app/u/kura/components";
-import { tintSurfaceVertical } from "@/app/u/kura/tint";
+} from "@/components/kura/components";
+import { tintSurfaceVertical } from "@/components/kura/tint";
 import { ReportButton } from "./report-button";
 
 // Dynamic (not ISR) on purpose: F3.4 captures viewer geo/device server-side

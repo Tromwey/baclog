@@ -17,8 +17,8 @@ import {
   EnterPill,
   Seal,
   stateGlyph,
-} from "@/app/u/kura/components";
-import { releaseLabel, tintSurfaceVertical } from "@/app/u/kura/tint";
+} from "@/components/kura/components";
+import { releaseLabel, tintSurfaceVertical } from "@/components/kura/tint";
 import { CollectionBody, type ShelfItem } from "./collection-body";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.

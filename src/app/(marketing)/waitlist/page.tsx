@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Wordmark } from "@/app/u/kura/components";
+import { Wordmark } from "@/components/kura/components";
 import { WaitlistForm } from "./waitlist-form";
 
 export const metadata = {

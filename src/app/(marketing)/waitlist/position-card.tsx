@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { plural } from "@/lib/plural";
-import { SOLID_BUTTON } from "@/app/u/kura/components";
+import { SOLID_BUTTON } from "@/components/kura/components";
 
 /**
  * Kura · your place in line: a `--s1` group (radius 18) with the position as

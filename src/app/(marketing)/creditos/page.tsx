@@ -1,4 +1,4 @@
-import { Wordmark } from "@/app/u/kura/components";
+import { Wordmark } from "@/components/kura/components";
 
 export const metadata = {
   title: "créditos · kura",
