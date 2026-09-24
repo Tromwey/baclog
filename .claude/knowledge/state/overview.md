@@ -27,7 +27,9 @@
 | `src/db/`, `drizzle/` | Esquema Drizzle y migraciones SQL versionadas |
 | `src/lib/`, `src/hooks/` | Utilidades y hooks compartidos |
 | `scripts/` | Deploy beta, eval de recos, seed de curadores, generación de íconos |
-| `design/item-flow/` | HANDOFF de diseño (fuente de las reglas visuales) |
+| `design/item-flow/` | HANDOFF de diseño del Revamp (reglas visuales de la app firmada) |
+| `design/kura/` | **Sistema de diseño Kura + Flujos v2** (rebrand 2026-09-24): fuente de verdad de las superficies públicas y de la app iOS |
+| `ios/` | **App nativa iOS Kura** (SwiftUI + xcodegen). Ver `ios/README.md` y `ios/BRIEF.md` |
 | `~/Documents/Baclog` (fuera del repo) | Vault de Obsidian con el estado de producto — empezar por `estado-actual.md` |
 
 ## Convenciones vigentes
@@ -35,6 +37,7 @@
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
+- **La marca es Kura (2026-09-24).** El producto se renombró de Baclog a Kura ("la bodega donde guardas lo que más vale"). El rebrand se aplicó a la marca global (título, manifest, íconos) y a las superficies web **públicas**; la app firmada web sigue con el Revamp UI/lima hasta que el founder decida, y la experiencia de app se construye nativa en `ios/`. El repo, el proyecto de Vercel, el dominio `baclog.app` y la base siguen con el nombre viejo: renombrarlos es una decisión de infra aparte.
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->

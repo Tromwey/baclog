@@ -74,6 +74,31 @@
   --dur-base: 220ms;
   --dur-slow: 420ms;
 
+  /* ------------------------------------------------------------------
+     Kura (rebrand 2026-09-24) — design/kura/sistema-de-diseno.dc.html.
+     The neutrals, greys and radii of the Revamp already match the Kura
+     system 1:1 (bg, surface-1, surface-2, text, text-2, text-3, glass-bg), so the
+     tokens below are the ones Kura ADDS: honey as the single accent, the
+     four state hues ("un color, una función"), the pill over art, and the
+     cover/screen radii + three shadows. The signed-in app keeps lima until
+     it is rebuilt; the PUBLIC surfaces opt in via the `.kura` scope below.
+     ------------------------------------------------------------------ */
+  --honey: #efce8d; /* miel — Seguir, once per screen; text in --bg */
+  --honey-press: #e2b86e;
+  --honey-soft: rgba(239, 206, 141, 0.16);
+  --st-obsessed: #ec8e76; /* coral — me obsesiona */
+  --st-liked: #9cbae1; /* pizarra — me gusta */
+  --st-completed: #a0cba0; /* salvia — completo */
+  --st-waiting: #b9a6e8; /* lavanda — aviso de estreno: reloj y fecha */
+  --glass-art: rgba(11, 11, 13, 0.5); /* pill over a cover */
+  --r-cover-s: 8px; /* portada chica: filas, cuadrícula */
+  --r-cover-l: 14px; /* portada grande: cards, cabeceras */
+  --r-surface: 18px; /* grupos, paneles, filas agrupadas */
+  --r-screen: 26px; /* card de pantalla, hoja */
+  --sh-cover: 0 18px 36px -16px rgba(0, 0, 0, 0.88);
+  --sh-stack: 0 -8px 18px rgba(0, 0, 0, 0.42);
+  --sh-float: 0 14px 44px rgba(0, 0, 0, 0.55);
+
   /* Floating nav dock — bottom clearance for scrollable pages sitting under
      the dock (dock height + gap + iOS home indicator). The offsets below are
      the aesthetic float above the bottom edge; in a browser tab they also clear
@@ -82,6 +107,42 @@
   --dock-offset: 34px;
   --item-bar-offset: 28px;
   --dock-clearance: calc(130px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Kura scope — the public surfaces (login, verify, waitlist, créditos and
+   every /u/* page) wear it on their root. It re-points the ACCENT tokens to
+   honey so the shared primitives they still render (Button, the follow pill,
+   the focus ring, ::selection) come out on-brand without a fork, while the
+   signed-in app — which never carries the class — keeps lima. Component
+   copy for these pages says "colección", never "backlog" (§voz). */
+.kura {
+  --accent: var(--honey);
+  --accent-press: var(--honey-press);
+  --accent-soft: var(--honey-soft);
+  --radar: var(--st-liked);
+  --hot: var(--st-obsessed);
+  --completed: var(--st-completed);
+}
+
+/* The wordmark (§marca · A): Newsreader italic 500, tracking −3.5%, always
+   lowercase, in --text. Sized by the caller. */
+.kura-wordmark {
+  font-family: var(--font-brand);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 0.8;
+}
+
+/* The seal (§marca · sello): two lowercase initials in the wordmark's cut,
+   42% of the diameter, nudged for the italic overhang. */
+.kura-seal {
+  font-family: var(--font-brand);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  padding-right: 0.04em;
 }
 
 /* Installed PWA (Add-to-Home-Screen / standalone): there's no Safari bottom
@@ -142,6 +203,23 @@
   --color-obsessing: var(--obsessing);
   --color-completed: var(--completed);
 
+  /* Kura tokens → utilities (bg-honey, text-st-obsessed, rounded-screen…) */
+  --color-honey: var(--honey);
+  --color-honey-press: var(--honey-press);
+  --color-honey-soft: var(--honey-soft);
+  --color-st-obsessed: var(--st-obsessed);
+  --color-st-liked: var(--st-liked);
+  --color-st-completed: var(--st-completed);
+  --color-st-waiting: var(--st-waiting);
+  --color-glass-art: var(--glass-art);
+  --radius-cover-s: var(--r-cover-s);
+  --radius-cover-l: var(--r-cover-l);
+  --radius-surface: var(--r-surface);
+  --radius-screen: var(--r-screen);
+  --shadow-cover: var(--sh-cover);
+  --shadow-stack: var(--sh-stack);
+  --shadow-float: var(--sh-float);
+
   /* Radii */
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
@@ -157,6 +235,10 @@
   --font-serif: var(--font-instrument-serif), Georgia, serif;
   --font-sans: var(--font-hanken), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-red-hat-mono), "Red Hat Mono", ui-monospace, monospace;
+  /* Kura's brand voice (sistema-de-diseno §tipografía): Newsreader, roman for
+     screen titles / sections / empty phrases (always lowercase), italic for
+     titles of works and the wordmark. */
+  --font-brand: var(--font-newsreader), "Newsreader", Georgia, serif;
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

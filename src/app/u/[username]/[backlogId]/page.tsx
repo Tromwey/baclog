@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Music, Play } from "lucide-react";
 import { getPublicBacklog } from "@/modules/backlog/public";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
-import { CountdownMono } from "@/components/countdown";
+import type { MediaType } from "@/modules/catalog/types";
 import { captureView } from "@/modules/analytics/capture";
-import { parseHex } from "@/lib/color";
-import { BacklogHero } from "@/components/backlog-hero";
-import { ItemStatus } from "@/components/item-status";
-import { BackButton, MonoMeta } from "@/components/ui";
-import { FLAME_PATH, GLYPH_VIEWBOX } from "@/components/glyph-paths";
+import { plural } from "@/lib/plural";
+import { ShareChip } from "@/app/u/share-chip";
+import {
+  BackChip,
+  Cover,
+  CreditsLink,
+  Mono,
+  PublicCta,
+  stateGlyph,
+} from "@/app/u/kura/components";
+import { releaseLabel, tintSurface } from "@/app/u/kura/tint";
+import { CollectionBody, type ShelfItem } from "./collection-body";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -25,16 +30,27 @@ export async function generateMetadata({
   if (!data) return {};
   const firstPoster = data.items.find((i) => i.posterUrl)?.posterUrl;
   return {
-    title: `${data.backlogName} · ${data.ownerName} · Baclog`,
-    description: `${data.items.length} obsesiones de ${data.ownerName}.`,
+    title: `${data.backlogName} · ${data.ownerName} · kura`,
+    description: `${data.items.length} ${plural(data.items.length, "título", "títulos")} de ${data.ownerName}.`,
     openGraph: {
       title: data.backlogName,
-      description: `Un backlog de ${data.ownerName} en Baclog.`,
+      description: `Una colección de ${data.ownerName} en kura.`,
       ...(firstPoster ? { images: [firstPoster] } : {}),
     },
   };
 }
 
+/** The mock's kind label under a cover: "Cine · 2001". */
+const KIND: Record<MediaType, string> = { film: "Cine", series: "Serie", album: "Álbum" };
+
+/**
+ * Kura · 33b colección compartida (flujos-v2 · 03 "Colección" + 23a): the
+ * header tinted by the collection's covers, fused into the page; Volver (to
+ * the owner's profile) and Compartir at 64/24; the lead cover centred at 240
+ * high; the name in Newsreader 24; the owner and count in mono; then the
+ * format pills that filter, and the shelf. Anonymous visitors get the solid
+ * "Crear cuenta" over the fade.
+ */
 export default async function PublicBacklogPage({
   params,
 }: {
@@ -44,10 +60,7 @@ export default async function PublicBacklogPage({
   const data = await getPublicBacklog(username, backlogId);
   if (!data) notFound();
 
-  // One render instant for every countdown on the page (see countdown.tsx).
   const now = await getRenderInstant();
-  const upcomingOn = (i: { releaseDate: Date | null }) =>
-    isUpcoming(i.releaseDate, now);
 
   captureView({
     eventType: "public_backlog_view",
@@ -55,213 +68,80 @@ export default async function PublicBacklogPage({
     headers: await headers(),
   });
 
-  return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-hidden bg-bg text-text">
-      {/* Shared hero (B disciplinada) — the SAME component the in-app zoom view
-          renders, so the two backlog-detail twins can't drift. The public
-          top-bar control is the ‹ @username link back to the owner's profile. */}
-      <BacklogHero
-        name={data.backlogName}
-        vibe={data.vibe}
-        itemCount={data.items.length}
-        year={data.createdAt.getFullYear()}
-        controls={<BackButton href={`/u/${username}`} />}
-      />
+  const lead = data.items.find((i) => i.posterUrl) ?? data.items[0];
+  const count = data.items.length;
+  const items: ShelfItem[] = data.items.map((i) => {
+    const upcoming = isUpcoming(i.releaseDate, now);
+    return {
+      catalogItemId: i.catalogItemId,
+      title: i.title,
+      sub: [KIND[i.mediaType], upcoming ? null : i.year].filter(Boolean).join(" · "),
+      mediaType: i.mediaType,
+      posterUrl: i.posterUrl,
+      paletteHex: i.paletteHex ?? null,
+      glyph: stateGlyph({ obsessed: i.obsessed, status: i.status, verdict: i.verdict }),
+      wait: upcoming && i.releaseDate ? releaseLabel(i.releaseDate, now) : null,
+    };
+  });
 
-      <main className="relative px-5 pb-[150px] pt-[18px]">
-        {data.items.length > 0 ? (
-          <div className="space-y-2">
-            {data.items.map((item) => {
-              // Per-item palette wash (left): the cover's dominant hue bleeds
-              // from the left edge and fades to the card fill by ~60%. parseHex
-              // → rgba (same technique as the item page's coverShadow), fading to
-              // the SAME colour at alpha 0 (never `transparent`) so there's no
-              // dark fringe (aura-field rule). Card stays borderless (§7).
-              const wash = item.paletteHex?.[0]
-                ? parseHex(item.paletteHex[0])
-                : null;
-              const leftWash = wash
-                ? `linear-gradient(90deg, rgba(${wash.r},${wash.g},${wash.b},0.34) 0%, rgba(${wash.r},${wash.g},${wash.b},0) 60%)`
-                : null;
-              const isAlbum = item.mediaType === "album";
-              return (
-                <Link
-                  key={item.id}
-                  // ?from carries the origin backlog so the item page's back
-                  // returns HERE, not to the profile. Deep-linked/shared item
-                  // URLs omit it and fall back to the profile.
-                  href={`/u/${username}/item/${item.catalogItemId}?from=${backlogId}`}
-                  className="relative flex items-center gap-3 overflow-hidden rounded-[var(--r-md)] bg-surface-1 p-2.5 transition-colors hover:bg-surface-2 active:bg-surface-3"
-                >
-                  {leftWash && (
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0"
-                      style={{ background: leftWash }}
-                    />
-                  )}
-                  {/* Obsession (B disciplinada): a CONTAINED radial hot aura
-                      pooling AROUND the flame at the right edge — the glyph is
-                      the ember throwing the light (§7: the aura is the only light
-                      source). A glow, not a full bloom, so it never fights the
-                      hero aura. */}
-                  {item.obsessed && (
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0"
-                      style={{
-                        background:
-                          "radial-gradient(circle at 100% 50%, rgba(255,45,85,0.34) 0%, rgba(255,45,85,0) 60%)",
-                      }}
-                    />
-                  )}
-                  {/* Native-aspect thumbnail — album 1:1, film/series 2:3 (never
-                      cross-crop) — centred in a fixed 56px slot so every title's
-                      text starts at the same x; the side gap for a tall poster
-                      shows the wash, not black. */}
-                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
-                    {item.posterUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-                      <img
-                        src={item.posterUrl}
-                        alt=""
-                        loading="lazy"
-                        className={`rounded-[var(--r-sm)] object-cover ${isAlbum ? "h-14 w-14" : "h-14 w-[37px]"}`}
-                      />
-                    ) : (
-                      <div
-                        className={`flex items-center justify-center rounded-[var(--r-sm)] bg-surface-3 text-text-3 ${isAlbum ? "h-14 w-14" : "h-14 w-[37px]"}`}
-                      >
-                        {isAlbum ? <Music size={18} /> : <Play size={18} />}
-                      </div>
-                    )}
-                  </div>
-                  <div className="relative min-w-0 flex-1">
-                    <p className="truncate font-serif text-lg italic leading-tight text-text">
-                      {item.title}
-                    </p>
-                    <MonoMeta className="mt-0.5 block text-[10px] normal-case tracking-normal text-text-2">
-                      {[item.byline, upcomingOn(item) ? null : item.year]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      {upcomingOn(item) && (
-                        <>
-                          {item.byline ? " · " : ""}
-                          <CountdownMono
-                            releaseDate={item.releaseDate!.toISOString()}
-                            initialNow={now}
-                            className="text-[10px] tracking-normal text-text"
-                            liveClassName="text-[12px]"
-                          />
-                        </>
-                      )}
-                    </MonoMeta>
-                    <span className="mt-1.5 block">
-                      {/* Public caption — status dot + Spanish label + public
-                          reaction. hideProvenance: the ✦ provenance glyph NEVER
-                          appears publicly (the atom owns that rule). */}
-                      <ItemStatus
-                        mode="caption"
-                        status={item.status}
-                        // The public query types verdict as sql<string | null>
-                        // (gated to completed items); narrow to the atom's union.
-                        verdict={
-                          item.verdict as "disliked" | "liked" | null
-                        }
-                        obsessed={item.obsessed}
-                        sourceCrossMediaRecId={null}
-                        hideProvenance
-                      />
-                    </span>
-                  </div>
-                  {/* Obsession signal: a prominent flame at the source of its
-                      own right-edge hot wash. No caption word (flame + wash
-                      carry it, like "en el radar" the label is redundant);
-                      off-white so it reads on the red wash — with no hot caption
-                      word left to be inconsistent with. */}
-                  {item.obsessed && (
-                    // Comfortable trailing inset (~16px total with the card's
-                    // p-2.5) so the lone flame doesn't look glued to the edge —
-                    // still edge-anchored to its own right-edge glow, not pulled
-                    // to the vertical centre (that would detach it from the wash).
-                    <span aria-hidden className="relative flex-none pr-1.5">
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox={GLYPH_VIEWBOX}
-                        fill="#F4F3EE"
-                        aria-hidden
-                      >
-                        <path d={FLAME_PATH} />
-                      </svg>
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
+  return (
+    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[170px] text-text">
+      <header
+        className="relative flex flex-col items-center gap-3 px-6 pb-7 pt-[calc(124px+env(safe-area-inset-top))]"
+        style={{ background: tintSurface(data.palette) }}
+      >
+        <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
+          <BackChip href={`/u/${username}`} label={`Ver el perfil de ${data.ownerName ?? username}`} />
+          <ShareChip path={`/u/${username}/${backlogId}`} label={`Compartir ${data.backlogName}`} className="h-11! w-11!" />
+        </div>
+
+        {lead ? (
+          <Cover
+            posterUrl={lead.posterUrl}
+            paletteHex={lead.paletteHex}
+            mediaType={lead.mediaType}
+            alt={lead.title}
+            className="h-[240px]"
+            style={{ width: lead.mediaType === "album" ? 240 : 160 }}
+          />
         ) : (
-          // Estante en blanco, read-only twin of backlog-zoom-view's empty
-          // state (mock #p7): the viewer isn't the owner, so no "Agregar
-          // algo" CTA — the fixed login button below already invites them to
-          // start their own. Dashed tile is a deliberate §7 exception.
-          <div className="mt-10 flex flex-col items-center text-center">
-            <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[22px] border-[1.5px] border-dashed border-[#33333C]">
-              <svg
-                width="30"
-                height="30"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden
-              >
-                <path
-                  d="M12 5v14M5 12h14"
-                  stroke="#4A4A54"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
-            <p className="mt-[22px] font-serif text-[26px] italic leading-[1.2]">
-              Este backlog está vacío.
+          <span className="flex h-[240px] w-[160px] items-center justify-center rounded-[var(--r-cover-l)] bg-[var(--glass-bg)]">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </span>
+        )}
+        <h1 className="mt-2 text-center font-brand text-[24px] leading-[1.05] text-text text-balance [overflow-wrap:anywhere]">
+          {data.backlogName}
+        </h1>
+        <Mono upper={false}>
+          de @{username} · {count} {plural(count, "título", "títulos")}
+        </Mono>
+        {data.vibe && (
+          <p className="max-w-[30ch] text-center text-[15px] leading-[1.5] text-text-2 text-pretty">{data.vibe}</p>
+        )}
+      </header>
+
+      <main className="relative">
+        {count > 0 ? (
+          <CollectionBody items={items} username={username} backlogId={backlogId} />
+        ) : (
+          // The read-only twin of 15d (colección vacía): the visitor isn't
+          // the owner, so no "Agregar títulos" — the fixed CTA below invites
+          // them to start their own.
+          <div className="flex flex-col items-center gap-3 px-8 pt-8 text-center">
+            <p className="font-brand text-[32px] leading-[1.05] text-text text-balance">
+              colección nueva, repisa vacía.
             </p>
-            <p className="mt-3 max-w-[30ch] text-sm leading-[1.55] text-text-2">
+            <p className="max-w-[30ch] text-[15px] leading-[1.5] text-text-2">
               Todavía no hay títulos aquí.
             </p>
           </div>
         )}
-
-        {/* This list page has no per-item watch button to attribute JustWatch
-            next to — that note lives on each item's own page instead. General
-            TMDB/Apple Music attribution centralizes at /creditos (TMDB's own
-            FAQ allows this in an About/Credits section). */}
-        <footer className="mt-10 text-center">
-          <MonoMeta className="text-[10px] text-text-3">
-            <Link href="/creditos" className="underline transition-opacity active:opacity-60">
-              Créditos
-            </Link>
-          </MonoMeta>
-        </footer>
+        <CreditsLink className="pt-12" />
       </main>
 
-      {/* The conversion CTA over a fade — the public item page's recipe
-          (Revamp UI 06b): the one accent button, no lima glow (§7). */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[200px] w-full max-w-md"
-        style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
-      />
-      <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
-        <Link
-          href="/login"
-          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
-        >
-          Empieza tu backlog →
-        </Link>
-        <span className="text-center text-[12px] text-text-3">
-          Guarda, marca y comparte lo que te obsesiona
-        </span>
-      </div>
+      <PublicCta note="Guarda lo que más vale: películas, series y música, en colecciones." />
     </div>
   );
 }

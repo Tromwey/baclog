@@ -26,11 +26,15 @@ export function ProfileReviews({
   if (reviews.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-3 px-6 pt-[26px]">
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-          Lo que dice {displayName} · {reviews.length}
+    <section className="flex flex-col gap-3 px-6">
+      {/* Kura (2026-09-24): the section title in Newsreader 24, lowercase,
+          with the count in mono at the right — like every other section of
+          the public profile. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-brand text-[24px] leading-[1.1] text-text">
+          lo que dice {displayName.toLowerCase()}
         </h2>
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{reviews.length}</span>
       </div>
       {reviews.map((review) => (
         <div
@@ -40,19 +44,19 @@ export function ProfileReviews({
           <div className="flex items-center gap-2">
             <Link
               href={`/u/${username}/item/${review.catalogItemId}`}
-              className="min-w-0 truncate font-serif text-[19px] italic leading-[1.1] text-text transition-opacity active:opacity-60"
+              className="min-w-0 truncate font-brand text-[19px] italic leading-[1.1] text-text transition-opacity active:opacity-60"
             >
               {review.title}
             </Link>
             <span className="flex items-center">
               <MarkGlyph mark={review.mark} />
             </span>
-            <span className="ml-auto flex-none font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-3">
+            <span className="ml-auto flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
               {review.when}
             </span>
           </div>
           <SpoilerBody body={review.body} hasSpoiler={review.hasSpoiler} />
-          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
             {review.mediaTypeLabel}
           </span>
         </div>

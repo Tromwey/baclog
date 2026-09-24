@@ -9,6 +9,7 @@ import {
   userItems,
   users,
 } from "@/db/schema";
+import type { MediaType } from "@/modules/catalog/types";
 import { dominantHexes, groupDominantHexes } from "./palette";
 
 /**
@@ -65,6 +66,10 @@ export async function getPublicProfile(username: string) {
             backlogId: backlogItems.backlogId,
             posterUrl: catalogItems.posterUrl,
             paletteHex: catalogItems.paletteHex,
+            // Kura (2026-09-24): the card draws each cover at its native
+            // aspect (disco 1:1, póster 2:3), so the fan carries the kind.
+            // Catalog data, not user state — still inside the public list.
+            mediaType: catalogItems.mediaType,
           })
           .from(backlogItems)
           .innerJoin(
@@ -84,7 +89,10 @@ export async function getPublicProfile(username: string) {
   // Revamp UI (screen 10): the row's fan of up to three covers, newest first,
   // keeping a coverless title so the fan can paint its palette instead of
   // skipping a slot (posterUrl OR paletteHex — never both missing).
-  const fans = new Map<string, { posterUrl: string | null; paletteHex: string[] | null }[]>();
+  const fans = new Map<
+    string,
+    { posterUrl: string | null; paletteHex: string[] | null; mediaType: MediaType }[]
+  >();
   for (const c of coverRows) {
     if (c.posterUrl) {
       const list = covers.get(c.backlogId) ?? [];
@@ -96,7 +104,7 @@ export async function getPublicProfile(username: string) {
     if (c.posterUrl || c.paletteHex?.length) {
       const fan = fans.get(c.backlogId) ?? [];
       if (fan.length < 3) {
-        fan.push({ posterUrl: c.posterUrl, paletteHex: c.paletteHex ?? null });
+        fan.push({ posterUrl: c.posterUrl, paletteHex: c.paletteHex ?? null, mediaType: c.mediaType });
         fans.set(c.backlogId, fan);
       }
     }

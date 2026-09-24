@@ -7,8 +7,8 @@ import { markLabel } from "@/modules/reviews/format";
 import type { FeedReview } from "@/modules/reviews/types";
 
 /**
- * "Reseñas · N" on the anonymous item page (Revamp UI 06b/d/f, 2026-09-03):
- * the mono header with "Ver todas" at the right, then the mock's glass review
+ * "reseñas" on the anonymous item page (Kura 24a: the section title in
+ * Newsreader 24 with the count in mono at the right), then the review
  * cards. The profile owner's review — the reason this link was sent — is
  * simply the FIRST card (the old "Lo que dice X" block folded into the list);
  * every page loaded after excludes their handle so it never repeats.
@@ -55,19 +55,19 @@ export function PublicReviews({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-          Reseñas · {count}
-        </h2>
-        {cursor && (
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-brand text-[24px] leading-[1.1] text-text">reseñas</h2>
+        {cursor ? (
           <button
             type="button"
             onClick={loadAll}
             disabled={loading}
-            className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
+            className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
           >
-            {loading ? "Cargando…" : "Ver todas"}
+            {loading ? "Cargando…" : `Ver todas · ${count}`}
           </button>
+        ) : (
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{count}</span>
         )}
       </div>
       {all.map((review) => (

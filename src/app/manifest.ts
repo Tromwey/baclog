@@ -6,16 +6,17 @@ import type { MetadataRoute } from "next";
  * from this file convention; the iOS home-screen icon comes from the
  * apple-touch-icon (layout.tsx metadata), since Safari prefers it over these.
  *
- * The icons are PLACEHOLDERS (a lime spark on #0B0B0D) produced by
- * scripts/generate-icons.mjs — same file bleeds to the edges so it doubles as
- * the maskable icon. FOUNDER: drop a real logo into public/ (same filenames) or
- * re-run that script.
+ * The icons are the Kura mark (design/kura/sistema-de-diseno.dc.html §marca ·
+ * ícono: a cut of a collection — 1:1 and 2:3 covers in four offset columns,
+ * three filled in washi and one in honey), rasterized from
+ * public/kura-icon.svg. Full-bleed on the #232329→#0f0f12 background, so the
+ * same file serves as the maskable icon and iOS rounds it itself.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Baclog",
-    short_name: "Baclog",
-    description: "Tus obsesiones, en una tarjeta.",
+    name: "Kura",
+    short_name: "Kura",
+    description: "Guarda lo que más vale: películas, series y música, en colecciones.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait-primary",

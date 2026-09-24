@@ -24,6 +24,8 @@
 | `eslint.config.mjs` · `postcss.config.mjs` · `tsconfig.json` | Lint, PostCSS/Tailwind v4 y TypeScript |
 | `.claude/launch.json` | Config del dev server para el runner de preview (`pnpm dev`, puerto 3000, `autoPort`) |
 | `drizzle.config.ts` | Aplicación de migraciones (ver `data.md`) |
+| `ios/project.yml` | Proyecto Xcode de la app iOS Kura, generado con **xcodegen** (`/opt/homebrew/bin/xcodegen generate` desde `ios/`); build headless: `xcodebuild -project ios/Kura.xcodeproj -scheme Kura -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`. No participa del deploy de Vercel |
+| `public/kura-icon.svg` | Fuente del ícono de app (sistema Kura §marca · ícono); los PNG (`icon-192/512`, `apple-touch-icon`) se rasterizan con `qlmanage -t -s 1024` + `sips -z` — `scripts/generate-icons.mjs` quedó obsoleto (dibujaba el destello lima) |
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.

@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { plural } from "@/lib/plural";
+import { SOLID_BUTTON } from "@/app/u/kura/components";
 
+/**
+ * Kura · your place in line: a `--s1` group (radius 18) with the position as
+ * the one big datum in mono, then the solid share action. No confetti —
+ * the number is the celebration (§movimiento: "se anima lo que el usuario
+ * hace, nunca lo que cambia solo").
+ */
 export function PositionCard({
   position,
   referralCode,
@@ -18,13 +25,13 @@ export function PositionCard({
   const link =
     typeof window !== "undefined"
       ? `${window.location.origin}/waitlist?ref=${referralCode}`
-      : `https://baclog.app/waitlist?ref=${referralCode}`;
+      : `/waitlist?ref=${referralCode}`;
 
   async function share() {
-    const text = `Aparté mi lugar en Baclog. Entra con mi invitación 👉`;
+    const text = "Aparté mi lugar en kura. Entra con mi invitación:";
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Baclog", text, url: link });
+        await navigator.share({ title: "kura", text, url: link });
         return;
       }
     } catch (err) {
@@ -36,26 +43,22 @@ export function PositionCard({
   }
 
   return (
-    <div className="mt-8 space-y-4">
-      <div className="rounded-2xl bg-surface-1 p-6">
-        <p className="text-sm text-text-2">
-          {alreadyJoined ? "Ya estabas en la fila" : "¡Estás dentro!"}
-        </p>
-        <p className="mt-1 font-mono text-4xl font-bold">#{position}</p>
-        <p className="mt-1 text-xs text-text-3">
+    <div className="mt-5 flex flex-col gap-3">
+      <div className="flex flex-col gap-2 rounded-[var(--r-surface)] bg-surface-1 p-6">
+        <span className="font-brand text-[22px] leading-none text-text">
+          {alreadyJoined ? "ya estabas en la fila." : "estás dentro."}
+        </span>
+        <span className="font-mono text-[40px] leading-none text-text">#{position}</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
           {referralCount > 0
             ? `${referralCount} ${plural(referralCount, "invitado", "invitados")} · cada uno te sube 3 lugares`
-            : "Invita gente y sube 3 lugares por cada uno"}
-        </p>
+            : "cada invitado te sube 3 lugares"}
+        </span>
       </div>
-
-      <button
-        onClick={share}
-        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press"
-      >
-        {copied ? "Link copiado ✓" : "Invitar y subir en la fila"}
+      <button type="button" onClick={share} className={SOLID_BUTTON}>
+        {copied ? "Link copiado" : "Invitar y subir en la fila"}
       </button>
-      <p className="break-all text-xs text-text-3">{link}</p>
+      <p className="break-all text-center font-mono text-[11px] text-text-3">{link}</p>
     </div>
   );
 }

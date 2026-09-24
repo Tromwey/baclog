@@ -1,13 +1,20 @@
+import { Wordmark } from "@/app/u/kura/components";
+
+/** Kura · the age gate. A fact and a note, no wink (§voz · errores). */
 export default function BlockedPage() {
   return (
-    <main className="flex min-h-lvh flex-col items-center justify-center bg-bg px-6 text-center text-text">
-      <h1 className="font-mono text-2xl font-bold tracking-[0.35em]">BACLOG</h1>
-      <p className="mt-8 max-w-xs text-text-2">
-        Necesitas tener al menos 13 años para usar Baclog.
-      </p>
-      <p className="mt-2 max-w-xs text-sm text-text-3">
-        No guardamos nada más de ti.
-      </p>
+    <main className="kura relative mx-auto flex min-h-lvh w-full max-w-md flex-col bg-bg px-6 pb-11 text-text">
+      <header className="flex items-center pt-[calc(64px+env(safe-area-inset-top))]">
+        <Wordmark size={30} />
+      </header>
+      <div className="mt-[62px] flex flex-col gap-3">
+        <h1 className="font-brand text-[40px] leading-none text-text text-balance">
+          necesitas tener 13 años para usar kura.
+        </h1>
+        <p className="text-[15px] leading-[1.5] text-text-2">
+          No guardamos nada más de ti.
+        </p>
+      </div>
     </main>
   );
 }
