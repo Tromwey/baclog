@@ -22,15 +22,16 @@ import {
 } from "@/modules/reviews/queries";
 import { ShareChip } from "@/app/u/share-chip";
 import {
-  BackChip,
+  BrandLockup,
   CountRibbon,
   Cover,
   CreditsLink,
-  GLASS_BUTTON,
+  CtaCard,
+  EnterPill,
   Glyph,
   Mono,
-  PublicCta,
   SectionTitle,
+  formatMil,
 } from "@/app/u/kura/components";
 import { releaseSentence, tintSurfaceVertical } from "@/app/u/kura/tint";
 import { PublicReviews } from "./public-reviews";
@@ -78,14 +79,15 @@ const MUSIC_SERVICES = [
 ] as const;
 
 /**
- * Kura · 29a ficha pública (flujos-v2 · 24a/24b/24c): the header tinted by
- * the title's own palette (180°, fused into the page), Volver to the profile
- * that shared it and Compartir at 64/24, the cover centred (200×300 · album
+ * Kura · 29a ficha pública (design/kura/flujos-v2.dc.html, flujo 12): the
+ * header tinted by the title's own palette (180°, fused into the page), the
+ * brand lockup and the way in at 64/24, the cover centred (200×300 · album
  * 240×240), the title in Newsreader italic 30, the byline, the mono data
- * line, the ribbon of counts; then the sections in Newsreader 24: dónde ver
- * / escuchar en, the synopsis or the songs, reseñas. Guardar is the one
- * action, and for a visitor without an account it leads to the account flow
- * (O1a: "Para guardar X en una colección. crea tu cuenta.").
+ * line, the ribbon of counts, then the SOLID Guardar beside Compartir; below,
+ * the sections in Newsreader 24: dónde ver / escuchar en, the synopsis or the
+ * songs, "en kura" as glass pills, reseñas, and the CTA card. Guardar leads
+ * a visitor into the account flow (O1a: "Para guardar X en una colección.
+ * crea tu cuenta.").
  */
 export default async function PublicItemPage({
   params,
@@ -155,14 +157,14 @@ export default async function PublicItemPage({
     .join(" · ");
 
   return (
-    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[170px] text-text">
+    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-14 text-text">
       <header
-        className="relative flex flex-col items-center gap-3 px-6 pb-8 pt-[calc(124px+env(safe-area-inset-top))]"
+        className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]"
         style={{ background: tintSurfaceVertical(palette) }}
       >
         <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
-          <BackChip href={`/u/${username}`} label={`Ver el perfil de ${profile.displayName}`} />
-          <ShareChip path={`/u/${username}/item/${item.id}`} label={`Compartir ${item.title}`} className="h-11! w-11!" />
+          <BrandLockup />
+          <EnterPill />
         </div>
 
         <Cover
@@ -193,10 +195,16 @@ export default async function PublicItemPage({
           ]}
         />
         <div className="mt-2 flex items-center gap-2">
-          <Link href="/login" className={GLASS_BUTTON}>
-            <Glyph kind="saved" size={16} />
+          <Link
+            href="/login"
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-text pl-[18px] pr-[22px] font-sans text-[16px] font-semibold text-bg bl-press"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path d="M7 2.6h10a2.2 2.2 0 012.2 2.2v16.6L12 17.6l-7.2 3.8V4.8A2.2 2.2 0 017 2.6z" />
+            </svg>
             Guardar
           </Link>
+          <ShareChip path={`/u/${username}/item/${item.id}`} label={`Compartir ${item.title}`} className="h-12! w-12!" />
         </div>
       </header>
 
@@ -263,6 +271,28 @@ export default async function PublicItemPage({
           <Synopsis text={synopsis} className="text-[15px] leading-[1.55] text-pretty text-text" />
         )}
 
+        {/* "en kura" — how many people the title obsesses / completed, across
+            everyone (title-stats.ts: a count, never an identity). */}
+        {(stats.obsessed > 0 || stats.completed > 0) && (
+          <section className="flex flex-col gap-3">
+            <SectionTitle>en kura</SectionTitle>
+            <div className="flex flex-wrap gap-2">
+              {stats.obsessed > 0 && (
+                <span aria-label={`${stats.obsessed} les obsesiona`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
+                  <Glyph kind="obsessed" size={13} />
+                  {formatMil(stats.obsessed)}
+                </span>
+              )}
+              {stats.completed > 0 && (
+                <span aria-label={`${stats.completed} la completaron`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
+                  <Glyph kind="completed" size={13} />
+                  {formatMil(stats.completed)}
+                </span>
+              )}
+            </div>
+          </section>
+        )}
+
         <PublicReviews
           catalogItemId={item.id}
           count={reviewCount}
@@ -272,15 +302,12 @@ export default async function PublicItemPage({
           excludeUsername={username}
         />
 
+        <CtaCard />
+
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}
         <CreditsLink />
       </main>
-
-      <PublicCta
-        label="Guardar en una colección"
-        note={`Para guardar ${item.title} en una colección, crea tu cuenta.`}
-      />
     </div>
   );
 }

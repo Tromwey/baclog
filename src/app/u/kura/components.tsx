@@ -35,6 +35,34 @@ export function Wordmark({ size = 30, className = "" }: { size?: number; classNa
   );
 }
 
+/**
+ * The web header of every public page (flujos-v2 · 12 web): the kanji beside
+ * the wordmark at 22, left, and a glass "Abrir app" pill at the right. There
+ * is no store listing yet, so the pill leads into the account flow and says
+ * so honestly ("Entrar"); swap the label and href when the app ships.
+ */
+export function BrandLockup() {
+  return (
+    <Link href="/" aria-label="kura" className="flex h-11 items-center gap-1.5 text-text">
+      <span className="font-brand text-[22px] leading-none">蔵</span>
+      <span className="kura-wordmark" style={{ fontSize: 22, lineHeight: 1 }}>
+        kura
+      </span>
+    </Link>
+  );
+}
+
+export function EnterPill({ label = "Entrar", href = "/login" }: { label?: string; href?: string }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
+    >
+      {label}
+    </Link>
+  );
+}
+
 /* --------------------------------------------------------------- glifos */
 
 export type GlyphKind =
@@ -236,6 +264,13 @@ export function formatCount(n: number): string {
   return `${(k >= 10 ? Math.round(k) : Math.round(k * 10) / 10).toString().replace(".", ",")} k`;
 }
 
+/** The "en kura" pills' thousands: "1.2 mil", "21 mil", "318" (29a). */
+export function formatMil(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10} mil`;
+}
+
 /* --------------------------------------------------------------- portada */
 
 /** Native aspect per kind (§forma): disco 1:1, póster 2:3. */
@@ -325,7 +360,8 @@ export function CollectionCard({
   name: string;
   covers: CardCover[];
   paletteHex: readonly string[];
-  height?: 150 | 120;
+  /** 150 pinned · 120 compact · 104 on the web profile (33a). */
+  height?: 150 | 120 | 104;
   href?: string;
   /** "auto" on the automatic collection. */
   tag?: string;
@@ -341,13 +377,16 @@ export function CollectionCard({
     >
       <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
         <span
-          className="whitespace-nowrap font-mono text-[13px] tracking-[0.14em] text-text"
-          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: height + 20 }}
+          className="whitespace-nowrap font-mono tracking-[0.14em] text-text"
+          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", maxHeight: height + 26, fontSize: height >= 150 ? 13 : 11 }}
         >
           {name}
         </span>
       </span>
-      <span className="bl-scroll flex flex-1 items-end gap-2.5 overflow-x-auto py-[18px] pl-3.5 pr-3.5" style={{ paddingTop: tag ? 44 : 18 }}>
+      <span
+        className="bl-scroll flex flex-1 items-end gap-2.5 overflow-x-auto pl-3.5 pr-3.5"
+        style={{ paddingTop: tag ? 44 : height >= 150 ? 20 : 16, paddingBottom: height >= 150 ? 20 : 16 }}
+      >
         {covers.length === 0 && (
           <span className="flex items-center justify-center rounded-[var(--r-cover-l)] bg-[var(--glass-bg)] text-text-3" style={{ height, width: Math.round(height * 2 / 3) }}>
             <span className="font-mono text-[10px] uppercase tracking-[0.08em]">{emptyLabel ?? "vacía"}</span>
@@ -388,33 +427,30 @@ export function CollectionCard({
 /* --------------------------------------------------------- llamada web */
 
 /**
- * The anonymous visitor's way in (§patrones · links y cuenta): one SOLID
- * button over a fade — "crear cuenta" is literal in buttons (§voz). Miel is
- * reserved for Seguir, so this is never honey.
+ * The way in for someone without the app (flujos-v2 · 12 web): a `--s1`
+ * card at the end of the page — the system's opening line in Newsreader 26,
+ * one sentence, the solid "Crear cuenta" and the quiet "Ya tengo cuenta".
+ * Not fixed, not honey: miel stays reserved for Seguir.
  */
-export function PublicCta({
-  label = "Crear cuenta",
-  note,
-  href = "/login",
-}: {
-  label?: string;
-  note: string;
-  href?: string;
-}) {
+export function CtaCard({ className = "" }: { className?: string }) {
   return (
-    <>
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[190px] w-full max-w-md"
-        style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
-      />
-      <div className="pointer-events-none fixed inset-x-0 bottom-[34px] z-30 mx-auto flex w-full max-w-md flex-col items-stretch gap-2.5 px-6">
-        <Link href={href} className={`${SOLID_BUTTON} pointer-events-auto w-full`}>
-          {label}
-        </Link>
-        <span className="text-center text-[13px] leading-[1.5] text-text-2">{note}</span>
-      </div>
-    </>
+    <div
+      className={`flex flex-col items-center gap-3 rounded-[var(--r-screen)] bg-surface-1 px-5 py-7 text-center ${className}`}
+    >
+      <span className="font-brand text-[26px] leading-[1.1] text-text text-balance">guarda lo que más vale.</span>
+      <span className="text-[15px] leading-[1.5] text-text-2 text-pretty">
+        Tus películas, series y música en un solo lugar, y lo que obsesiona a tu gente.
+      </span>
+      <Link
+        href="/login"
+        className="mt-1.5 inline-flex h-12 items-center rounded-full bg-text px-6 font-sans text-[16px] font-semibold text-bg bl-press"
+      >
+        Crear cuenta
+      </Link>
+      <Link href="/login" className="flex min-h-11 items-center text-[15px] font-medium text-text-2 transition-colors hover:text-text">
+        Ya tengo cuenta
+      </Link>
+    </div>
   );
 }
 

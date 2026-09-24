@@ -14,22 +14,20 @@ import { FollowButton } from "@/components/follow-button";
 import { ProfileReviews } from "@/components/reviews/profile-reviews";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
-import { getRenderInstant } from "@/modules/catalog/release";
 import { ShareChip } from "@/app/u/share-chip";
 import {
-  BackChip,
+  BrandLockup,
   CollectionCard,
-  CountRibbon,
   Cover,
   CreditsLink,
-  HONEY_BUTTON,
-  Mono,
-  PublicCta,
+  CtaCard,
+  EnterPill,
+  Glyph,
+  type GlyphKind,
   Seal,
   SectionTitle,
-  Wordmark,
 } from "@/app/u/kura/components";
-import { releaseLabel, tintSurface } from "@/app/u/kura/tint";
+import { tintSurfaceVertical } from "@/app/u/kura/tint";
 import { ReportButton } from "./report-button";
 
 // Dynamic (not ISR) on purpose: F3.4 captures viewer geo/device server-side
@@ -60,14 +58,27 @@ export async function generateMetadata({
   };
 }
 
+/** A glass pill of the ribbon: glyph 12 + mono 12 count (33a). */
+function StatPill({ kind, n, label }: { kind: GlyphKind; n: number; label: string }) {
+  return (
+    <span
+      aria-label={`${n} ${label}`}
+      className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3 py-[7px] font-mono text-[12px] leading-none text-text"
+    >
+      <Glyph kind={kind} size={12} />
+      {n}
+    </span>
+  );
+}
+
 /**
- * Kura · 33a perfil público (design/kura/sistema-de-diseno.dc.html §marca ·
- * cabeceras · perfil): a surface tinted by the owner's dominant palette,
- * fused into the page; Volver and Compartir at 64/24; the seal (or photo) at
- * 128; the name in Newsreader 40; the ribbon of counts, one per state; and
- * Seguir in honey — the only accent on the screen. Below, the automatic
- * "no puedo esperar" card when there is something coming, then their
- * collections as cards with a spine, then what they wrote.
+ * Kura · 33a perfil público web (design/kura/flujos-v2.dc.html, flujo 12):
+ * the header tinted by the owner's palette (180°, fused into the page), the
+ * brand lockup and the way into the app at 64, the photo or seal at 128, the
+ * name in Newsreader 40, the handle, followers · following, the ribbon of
+ * glass pills (one count per state), and Seguir in honey beside Compartir.
+ * Then "le obsesiona" as a strip of covers, the collections as compact cards
+ * (spine + covers at 104), what they wrote, and the CTA card.
  */
 export default async function PublicProfilePage({
   params,
@@ -90,7 +101,6 @@ export default async function PublicProfilePage({
     headers: await headers(),
   });
 
-  const now = await getRenderInstant();
   const viewer = await getCurrentUser();
   // F3.10 — the follow control beside the name. The owner sees neither state.
   const isOwner = viewer?.username === profile.username;
@@ -103,123 +113,133 @@ export default async function PublicProfilePage({
 
   const affinityLine = affinityCopy(affinity);
   const itemHref = (id: string) => `/u/${profile.username}/item/${id}`;
-  // The tint comes from the covers of what they keep (public.ts already
-  // aggregates the dominant hexes); the lima fallback of the old aura is not
-  // a colour Kura has, so a paletteless profile is simply `--bg`.
+  // The tint comes from the covers of what they keep (public.ts aggregates
+  // the dominant hexes); the lima fallback of the old aura is not a Kura
+  // colour, so a paletteless profile is simply `--bg`.
   const palette = profile.palette.filter((h) => h.toLowerCase() !== "#d8ff3e");
   const collectionCount = profile.backlogs.length;
 
   return (
-    <div className={`kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg text-text ${viewer ? "pb-16" : "pb-[170px]"}`}>
-      {/* Cabecera de persona */}
+    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg text-text">
       <header
-        className="relative flex flex-col items-center gap-3 px-6 pb-8 pt-[calc(124px+env(safe-area-inset-top))]"
-        style={{ background: tintSurface(palette) }}
+        className="flex flex-col gap-[18px] px-6 pb-[34px] pt-[calc(64px+env(safe-area-inset-top))]"
+        style={{ background: tintSurfaceVertical(palette) }}
       >
-        <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
-          {viewer ? <BackChip href="/backlogs" /> : <Wordmark size={26} />}
-          <ShareChip
-            path={`/u/${profile.username}`}
-            label={`Compartir el perfil de ${profile.displayName}`}
-            className="h-11! w-11!"
-          />
+        <div className="flex items-center justify-between">
+          <BrandLockup />
+          {viewer ? (
+            <Link
+              href="/backlogs"
+              className="inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
+            >
+              Mis colecciones
+            </Link>
+          ) : (
+            <EnterPill />
+          )}
         </div>
 
-        <Seal name={profile.displayName || profile.username} hexes={palette} src={profile.avatarUrl} size={128} className="shadow-cover" />
-        {/* overflow-wrap: a 50-char display name (or one long token) must
-            wrap inside the column, not run off the screen. */}
-        <h1 className="mt-2 text-center font-brand text-[40px] leading-none text-text text-balance [overflow-wrap:anywhere]">
-          {profile.displayName}
-        </h1>
-        <Mono upper={false}>
-          @{profile.username}
-          {profile.isFounder && " · fundador"}
-        </Mono>
+        <Seal name={profile.displayName || profile.username} hexes={palette} src={profile.avatarUrl} size={128} />
 
-        <CountRibbon
-          className="mt-1"
-          counts={[
-            { kind: "obsessed", n: counts.obsessed, label: "le obsesionan" },
-            { kind: "liked", n: counts.liked, label: "le gustan" },
-            { kind: "completed", n: counts.completed, label: "completos" },
-            { kind: "users", n: profile.followerCount, label: plural(profile.followerCount, "seguidor", "seguidores") },
-          ]}
-        />
+        <div className="flex flex-col gap-1.5">
+          {/* overflow-wrap: a 50-char display name (or one long token) must
+              wrap inside the column, not run off the screen. */}
+          <h1 className="font-brand text-[40px] leading-none text-text [overflow-wrap:anywhere]">
+            {profile.displayName.toLowerCase()}
+          </h1>
+          <span className="font-mono text-[12px] text-text-2">
+            @{profile.username}
+            {profile.isFounder && <span className="uppercase tracking-[0.08em]"> · fundador</span>}
+          </span>
+          <div className="flex gap-4 text-[14px] text-text-2">
+            <span>
+              <b className="font-semibold text-text">{profile.followerCount}</b>{" "}
+              {plural(profile.followerCount, "seguidor", "seguidores")}
+            </span>
+            <span>
+              <b className="font-semibold text-text">{profile.followingCount}</b> siguiendo
+            </span>
+          </div>
+        </div>
 
-        {!isOwner && (
-          <div className="mt-2 flex flex-col items-center gap-2.5">
-            {viewer ? (
-              <FollowButton
-                username={profile.username}
-                initialFollowing={viewerFollows}
-                variant="kura"
-              />
+        <div className="flex flex-wrap gap-[7px]">
+          <StatPill kind="obsessed" n={counts.obsessed} label="le obsesionan" />
+          <StatPill kind="completed" n={counts.completed} label="completos" />
+          <StatPill kind="liked" n={counts.liked} label="le gustan" />
+          <StatPill kind="review" n={reviews.length} label={plural(reviews.length, "reseña", "reseñas")} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!isOwner &&
+            (viewer ? (
+              <FollowButton username={profile.username} initialFollowing={viewerFollows} variant="kura" />
             ) : (
               // Anonymous: the same honey pill leads into the account flow
-              // (§patrones · links y cuenta: the action completes itself once
-              // the registration ends — today it lands on /login).
-              <Link href="/login" className={HONEY_BUTTON}>
+              // (§patrones · links y cuenta — the action completes itself
+              // once the registration ends; today it lands on /login).
+              <Link
+                href="/login"
+                className="inline-flex h-12 items-center justify-center rounded-full bg-honey px-7 font-sans text-[16px] font-semibold text-bg bl-press active:bg-honey-press"
+              >
                 Seguir
               </Link>
-            )}
-            {affinityLine && (
-              <span className="text-center text-[13px] leading-[1.4] text-text-2">{affinityLine}</span>
-            )}
-          </div>
-        )}
+            ))}
+          <ShareChip path={`/u/${profile.username}`} label={`Compartir el perfil de ${profile.displayName}`} className="h-11! w-11!" />
+          {affinityLine && (
+            <span className="min-w-0 flex-1 text-[13px] leading-[1.4] text-text-2">{affinityLine}</span>
+          )}
+        </div>
       </header>
 
-      <main className="relative flex flex-col gap-8 px-3 pt-2">
-        {/* La automática — what they are waiting for, as Kura's own card.
-            Third person: the visitor reads someone else's anticipation. */}
-        {profile.upcoming.length > 0 && (
-          <CollectionCard
-            name="no puedo esperar"
-            tag="auto"
-            height={120}
-            paletteHex={profile.upcoming.find((u) => u.paletteHex?.length)?.paletteHex ?? []}
-            covers={profile.upcoming.map((u) => ({
-              posterUrl: u.posterUrl,
-              paletteHex: u.paletteHex,
-              mediaType: u.mediaType,
-              title: u.title,
-              wait: releaseLabel(u.releaseDate, now),
-            }))}
-          />
-        )}
-
-        {/* En común contigo — signed-in only, and only titles the owner keeps
-            on a public collection (affinity.ts). */}
-        {affinity && affinity.common.length > 0 && (
-          <section className="flex flex-col gap-3 px-3">
-            <SectionTitle aside={`${affinity.common.length}`}>en común contigo</SectionTitle>
-            <div className="bl-scroll -mx-3 flex items-end gap-3 overflow-x-auto px-3 pb-6">
-              {affinity.common.map((it) => (
-                <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex w-[100px] flex-none flex-col gap-[7px] bl-press-lg">
-                  <Cover posterUrl={it.posterUrl} paletteHex={it.paletteHex} mediaType={it.mediaType} alt={it.title} className="w-[100px]" />
-                  <span className="truncate font-brand text-[14px] italic leading-[1.15] text-text">{it.title}</span>
+      <main className="flex flex-col gap-[30px] pb-[150px] pt-2">
+        {/* le obsesiona — the strip of what they can't stop recommending. */}
+        {profile.obsessions.length > 0 && (
+          <section className="flex flex-col gap-3.5">
+            <div className="px-5">
+              <SectionTitle>le obsesiona</SectionTitle>
+            </div>
+            <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-6">
+              {profile.obsessions.map((o) => (
+                <Link key={o.catalogItemId} href={itemHref(o.catalogItemId)} className="flex-none bl-press-lg">
+                  <Cover posterUrl={o.posterUrl} paletteHex={o.paletteHex} mediaType={o.mediaType} alt={o.title} className="h-[150px]" />
                 </Link>
               ))}
             </div>
           </section>
         )}
 
-        {/* Sus colecciones — the escaparate (F3.10.1: public AND on the
-            profile), each the collection card: spine + covers at 120. */}
-        {collectionCount > 0 && (
-          <section className="flex flex-col gap-3">
-            <div className="px-3">
-              <SectionTitle aside={`${collectionCount} ${plural(collectionCount, "colección", "colecciones")}`}>
-                sus colecciones
-              </SectionTitle>
+        {/* En común contigo — signed-in only, and only titles the owner keeps
+            on a public collection (affinity.ts). */}
+        {affinity && affinity.common.length > 0 && (
+          <section className="flex flex-col gap-3.5">
+            <div className="px-5">
+              <SectionTitle aside={`${affinity.common.length}`}>en común contigo</SectionTitle>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-6">
+              {affinity.common.map((it) => (
+                <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex-none bl-press-lg">
+                  <Cover posterUrl={it.posterUrl} paletteHex={it.paletteHex} mediaType={it.mediaType} alt={it.title} className="h-[150px]" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* colecciones — the escaparate (F3.10.1: public AND on the profile),
+            each the compact collection card: spine + covers at 104. */}
+        {collectionCount > 0 && (
+          <section className="flex flex-col gap-3.5">
+            <div className="flex items-baseline justify-between gap-3 px-5">
+              <h2 className="font-brand text-[24px] leading-[1.1] text-text">colecciones</h2>
+              <span className="text-[14px] font-medium text-text-2">{collectionCount}</span>
+            </div>
+            <div className="flex flex-col gap-3 px-3">
               {profile.backlogs.map((b) => (
                 <CollectionCard
                   key={b.id}
                   name={b.name}
                   href={`/u/${profile.username}/${b.id}`}
-                  height={120}
+                  height={104}
                   paletteHex={b.paletteHex.filter((h) => h.toLowerCase() !== "#d8ff3e")}
                   emptyLabel={`${b.itemCount} ${plural(b.itemCount, "título", "títulos")}`}
                   covers={b.covers.map((c) => ({
@@ -233,24 +253,16 @@ export default async function PublicProfilePage({
           </section>
         )}
 
-        {/* F3.9 — "Lo que dice X". Renders nothing until they've written one. */}
-        <div className="-mx-3">
-          <ProfileReviews
-            username={profile.username}
-            displayName={profile.displayName}
-            reviews={reviews}
-          />
-        </div>
+        {/* F3.9 — "lo que dice X". Renders nothing until they've written one. */}
+        <ProfileReviews username={profile.username} displayName={profile.displayName} reviews={reviews} />
 
-        <div className="flex flex-col items-center gap-4 pt-2">
+        {!viewer && <CtaCard className="mx-5" />}
+
+        <div className="flex flex-col items-center gap-4">
           <ReportButton username={profile.username} />
           <CreditsLink />
         </div>
       </main>
-
-      {!viewer && (
-        <PublicCta note="Guarda lo que más vale y mira lo que obsesiona a tu gente." />
-      )}
     </div>
   );
 }

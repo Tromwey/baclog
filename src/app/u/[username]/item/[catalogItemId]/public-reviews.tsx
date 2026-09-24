@@ -64,7 +64,7 @@ export function PublicReviews({
             disabled={loading}
             className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
           >
-            {loading ? "Cargando…" : `Ver todas · ${count}`}
+            {loading ? "Cargando…" : `Ver las ${count} reseñas`}
           </button>
         ) : (
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{count}</span>

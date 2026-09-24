@@ -143,6 +143,29 @@ export async function getPublicProfile(username: string) {
     .select({ n: sql<number>`count(*)::int` })
     .from(userFollows)
     .where(eq(userFollows.followedUserId, user.id));
+  // Kura 33a prints "N seguidores · M siguiendo": the following count is the
+  // same kind of aggregate over follow edges — a number, never a list.
+  const [followingAgg] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(userFollows)
+    .where(eq(userFollows.followerUserId, user.id));
+
+  // Kura 33a "le obsesiona": the titles this person obsesses over, newest
+  // first. Obsession IS the public real-time signal (see getPublicBacklog and
+  // the feed): gated on the account being public, catalog fields only.
+  const obsessions = await db
+    .select({
+      catalogItemId: catalogItems.id,
+      title: catalogItems.title,
+      mediaType: catalogItems.mediaType,
+      posterUrl: catalogItems.posterUrl,
+      paletteHex: catalogItems.paletteHex,
+    })
+    .from(userItems)
+    .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
+    .where(and(eq(userItems.userId, user.id), eq(userItems.obsessed, true)))
+    .orderBy(desc(userItems.obsessedAt))
+    .limit(8);
 
   return {
     displayName: user.name ?? user.username ?? "",
@@ -150,6 +173,8 @@ export async function getPublicProfile(username: string) {
     isFounder: user.isFounder,
     avatarUrl: user.image,
     followerCount: followerAgg?.n ?? 0,
+    followingCount: followingAgg?.n ?? 0,
+    obsessions: obsessions.map((o) => ({ ...o, paletteHex: o.paletteHex ?? null })),
     // Lima fallback so an owner with no extracted palette still auras.
     palette: palette.length > 0 ? palette : ["#D8FF3E"],
     backlogs: lists.map((l) => ({
