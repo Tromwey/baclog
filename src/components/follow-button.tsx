@@ -45,7 +45,7 @@ export function FollowButton({
   username: string;
   initialFollowing: boolean;
   size?: keyof typeof SIZES;
-  variant?: "accent" | "glass" | "hero";
+  variant?: "accent" | "glass" | "hero" | "kura";
   className?: string;
 }) {
   const [following, setFollowing] = useState(initialFollowing);
@@ -69,6 +69,23 @@ export function FollowButton({
         setFollowing(!next);
       }
     });
+  }
+
+  if (variant === "kura") {
+    // Kura (public profile, 2026-09-24): Seguir is THE honey action of the
+    // screen; Siguiendo drops to glass (§componentes · botones · miel).
+    return (
+      <button
+        onClick={toggle}
+        className={`inline-flex h-11 items-center justify-center rounded-full px-5 font-sans text-[15px] font-semibold bl-press ${
+          following
+            ? "bg-[var(--glass-bg)] text-text hover:bg-white/[0.12]"
+            : "bg-honey text-bg active:bg-honey-press"
+        } ${className}`}
+      >
+        {following ? "Siguiendo" : "Seguir"}
+      </button>
+    );
   }
 
   if (variant === "hero") {

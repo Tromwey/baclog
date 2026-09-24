@@ -35,7 +35,7 @@ export function ReportButton({ username }: { username: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
+        className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-3 transition-[color,opacity] hover:text-text-2 active:opacity-60"
       >
         Reportar perfil
       </button>
@@ -47,8 +47,8 @@ export function ReportButton({ username }: { username: string }) {
             </p>
           ) : (
             <>
-              <div className="font-display text-[18px] font-bold tracking-[-0.01em] text-text">
-                ¿Qué pasa con este perfil?
+              <div className="font-brand text-[22px] text-text">
+                ¿qué pasa con este perfil?
               </div>
               <div className="mt-[14px] flex flex-col gap-2">
                 {REASONS.map((r) => (
@@ -57,7 +57,7 @@ export function ReportButton({ username }: { username: string }) {
                     type="button"
                     disabled={busy}
                     onClick={() => report(r.id)}
-                    className="w-full rounded-[14px] bg-surface-2 px-4 py-[13px] text-left text-sm text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12] disabled:opacity-40"
+                    className="min-h-[52px] w-full rounded-[14px] bg-surface-2 px-4 text-left text-[15px] font-medium text-text transition-colors hover:bg-surface-3 active:bg-white/[0.12] disabled:opacity-40"
                   >
                     {r.label}
                   </button>

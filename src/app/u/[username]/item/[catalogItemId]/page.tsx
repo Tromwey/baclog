@@ -7,35 +7,33 @@ import {
   getPublicCatalogItem,
   getPublicProfile,
 } from "@/modules/backlog/public";
-import {
-  getTitleStats,
-  titleStatsSentence,
-} from "@/modules/backlog/title-stats";
+import { getTitleStats } from "@/modules/backlog/title-stats";
 import { captureView } from "@/modules/analytics/capture";
-import { FillIcon, PaletteGlow, StrokeIcon } from "@/components/ui";
-import { EXTERNAL_PATH, PLAY_PATH } from "@/components/glyph-paths";
-import { coverAspect } from "@/components/cover-tile";
-import { SeriesStatusPill } from "@/components/series-status-pill";
 import { Synopsis } from "@/components/synopsis";
-import { Tracklist } from "@/components/tracklist";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
-import {
-  getRenderInstant,
-  isUpcoming,
-  restArrivesLabel,
-} from "@/modules/catalog/release";
-import { CountdownMono } from "@/components/countdown";
+import { getRenderInstant, isUpcoming, restArrivesLabel } from "@/modules/catalog/release";
+import { seriesStatusLabel } from "@/modules/catalog/series-status";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
 import type { MediaType } from "@/modules/catalog/types";
-import { joinMeta } from "@/lib/format";
 import {
   countPublicReviews,
   getPublicOwnerReview,
   getReviewFeedPage,
 } from "@/modules/reviews/queries";
 import { ShareChip } from "@/app/u/share-chip";
+import {
+  BackChip,
+  CountRibbon,
+  Cover,
+  CreditsLink,
+  GLASS_BUTTON,
+  Glyph,
+  Mono,
+  PublicCta,
+  SectionTitle,
+} from "@/app/u/kura/components";
+import { releaseSentence, tintSurfaceVertical } from "@/app/u/kura/tint";
 import { PublicReviews } from "./public-reviews";
-import { TracklistCard } from "./tracklist-card";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
 
@@ -54,8 +52,8 @@ export async function generateMetadata({
       ? await getSpanishOverview(item.externalId, item.mediaType)
       : null;
   return {
-    title: `${item.title} · Baclog`,
-    description: (esOverview ?? item.synopsis) ?? `${item.title} en Baclog`,
+    title: `${item.title} · kura`,
+    description: (esOverview ?? item.synopsis) ?? `${item.title} en kura`,
     openGraph: {
       title: item.title,
       description: [item.byline, item.year].filter(Boolean).join(" · "),
@@ -64,32 +62,30 @@ export async function generateMetadata({
   };
 }
 
-/** The mock's kind label in the meta line: "Cine · 2023 · Wim Wenders". */
+/** The mock's kind label in the meta line: "Cine · 2001 · 125 min". */
 const KIND: Record<MediaType, string> = {
   film: "Cine",
   series: "Serie",
   album: "Álbum",
 };
 
-/** The four "Dónde escuchar" rows, in the mock's order. */
+/** The "escuchar en" rows (24c: "Abrir en …"), in the mock's order. */
 const MUSIC_SERVICES = [
-  { id: "spotify", label: "Spotify" },
-  { id: "apple_music", label: "Apple Music" },
-  { id: "youtube_music", label: "YouTube Music" },
-  { id: "tidal", label: "TIDAL" },
+  { id: "apple_music", label: "Apple Music", mark: "am" },
+  { id: "spotify", label: "Spotify", mark: "sp" },
+  { id: "youtube_music", label: "YouTube Music", mark: "yt" },
+  { id: "tidal", label: "TIDAL", mark: "td" },
 ] as const;
 
-/** Surface tones that pad a short palette to the mock's five bands. */
-const BAND_PAD = ["#26262c", "#1c1c21", "#141417"];
-
-const GLASS_BUTTON =
-  "flex flex-1 items-center justify-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 py-[13px] font-sans text-[14px] font-semibold text-text bl-press hover:bg-white/[0.12]";
-
 /**
- * Screens 06b/06d/06f (Revamp UI, 2026-09-03) — the anonymous-viewer landing
- * for a shared title: wordmark + share, the cover beside the serif title over
- * the title's own glow, where to watch/listen, the synopsis, "En Baclog" and
- * the reviews, with the register CTA fixed over a fade at the bottom.
+ * Kura · 29a ficha pública (flujos-v2 · 24a/24b/24c): the header tinted by
+ * the title's own palette (180°, fused into the page), Volver to the profile
+ * that shared it and Compartir at 64/24, the cover centred (200×300 · album
+ * 240×240), the title in Newsreader italic 30, the byline, the mono data
+ * line, the ribbon of counts; then the sections in Newsreader 24: dónde ver
+ * / escuchar en, the synopsis or the songs, reseñas. Guardar is the one
+ * action, and for a visitor without an account it leads to the account flow
+ * (O1a: "Para guardar X en una colección. crea tu cuenta.").
  */
 export default async function PublicItemPage({
   params,
@@ -100,9 +96,8 @@ export default async function PublicItemPage({
 
   // Founder call (2026-08-28): a SIGNED-IN viewer opening a shared item link
   // gets their OWN item page — the app knows their preferred service, their
-  // backlogs and their reactions, so the generic every-service conversion
-  // splash is strictly worse for them. This page stays what F2.19 built it to
-  // be: the anonymous visitor's landing.
+  // collections and their reactions, so the generic conversion splash is
+  // strictly worse for them. This page stays the anonymous visitor's landing.
   //
   // The redirect runs BEFORE any owner lookup and unconditionally on session,
   // so it confirms nothing about the username (private, nonexistent and
@@ -135,7 +130,6 @@ export default async function PublicItemPage({
 
   const now = await getRenderInstant();
   const upcoming = isUpcoming(releaseDate, now);
-  const releaseIso = releaseDate ? releaseDate.toISOString() : null;
 
   captureView({
     eventType: "public_item_view",
@@ -148,183 +142,125 @@ export default async function PublicItemPage({
 
   const isAlbum = item.mediaType === "album";
   const palette = item.paletteHex ?? [];
-  // The mock's five palette bands for a title with no art: its hexes, then
-  // surface tones so the cover always reads as a full card.
-  const bands = [...palette, ...BAND_PAD].slice(0, 5);
   const minutes = Math.round(
     tracks.reduce((ms, t) => ms + (t.durationMs ?? 0), 0) / 60_000,
   );
-  const inBaclog = titleStatsSentence(stats, item.mediaType);
-
-  // Kind · year · byline. While an album is still coming, the countdown takes
-  // the YEAR's slot (F3.8) — the date is catalog data, identical for anyone.
-  const meta = joinMeta([
+  const meta = [
     KIND[item.mediaType],
-    upcoming && releaseIso ? (
-      <CountdownMono
-        key="countdown"
-        releaseDate={releaseIso}
-        initialNow={now}
-        className="text-[11px] tracking-[0.12em] text-text"
-        liveClassName="text-[13px] tracking-[0.02em]"
-      />
-    ) : (
-      item.year
-    ),
-    item.byline,
-  ]);
+    upcoming ? null : item.year,
+    isAlbum && trackCount ? `${trackCount} ${trackCount === 1 ? "canción" : "canciones"}` : null,
+    !isAlbum && seriesStatus ? seriesStatusLabel(seriesStatus) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[150px] text-text">
-      {/* Hero: the title's own two hexes as the page glow (the mock's
-          `glow()`: 120°, .6, blur 90, fading out at 72%) off the top edge. */}
-      <div className="relative flex flex-col gap-[22px] px-6 pt-[calc(12px+env(safe-area-inset-top))]">
-        <PaletteGlow
-          hexes={palette.slice(0, 2)}
-          angle={120}
-          opacity={0.6}
-          blur={90}
-          maskStop={72}
-          className="-inset-x-[60px] -top-[120px] h-[460px]"
+    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-[170px] text-text">
+      <header
+        className="relative flex flex-col items-center gap-3 px-6 pb-8 pt-[calc(124px+env(safe-area-inset-top))]"
+        style={{ background: tintSurfaceVertical(palette) }}
+      >
+        <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
+          <BackChip href={`/u/${username}`} label={`Ver el perfil de ${profile.displayName}`} />
+          <ShareChip path={`/u/${username}/item/${item.id}`} label={`Compartir ${item.title}`} className="h-11! w-11!" />
+        </div>
+
+        <Cover
+          posterUrl={item.posterUrl}
+          paletteHex={palette}
+          mediaType={item.mediaType}
+          alt={`Portada de ${item.title}`}
+          className={isAlbum ? "h-[240px] w-[240px]" : "h-[300px] w-[200px]"}
         />
-        <div className="relative flex items-center justify-between">
-          <Link
-            href="/"
-            className="font-display text-[18px] font-extrabold tracking-[-0.02em] text-text transition-opacity active:opacity-60"
-          >
-            baclog
+        <h1 className="mt-2 text-center font-brand text-[30px] italic leading-[1.05] text-text text-balance [overflow-wrap:anywhere]">
+          {item.title}
+        </h1>
+        {item.byline && <p className="text-center text-[15px] text-text-2">{item.byline}</p>}
+        {meta && <Mono>{meta}</Mono>}
+        {upcoming && releaseDate && (
+          <span className="inline-flex items-center gap-[7px] font-mono text-[11px] uppercase tracking-[0.08em] text-st-waiting">
+            <Glyph kind="waiting" size={13} />
+            {releaseSentence(releaseDate, now)}
+          </span>
+        )}
+        {/* "En kura": how many people the title obsesses / completed, across
+            everyone (title-stats.ts — a count, never an identity). */}
+        <CountRibbon
+          className="mt-0.5"
+          counts={[
+            { kind: "obsessed", n: stats.obsessed, label: "obsesionados" },
+            { kind: "completed", n: stats.completed, label: "completos" },
+          ]}
+        />
+        <div className="mt-2 flex items-center gap-2">
+          <Link href="/login" className={GLASS_BUTTON}>
+            <Glyph kind="saved" size={16} />
+            Guardar
           </Link>
-          <ShareChip
-            path={`/u/${username}/item/${item.id}`}
-            label={`Compartir ${item.title}`}
-          />
         </div>
+      </header>
 
-        <div className="relative flex items-end gap-4">
-          <span
-            className={`relative block w-[118px] flex-none overflow-hidden rounded-[14px] bg-surface-1 shadow-[0_20px_44px_-14px_rgba(0,0,0,.8)] ${coverAspect(item.mediaType)}`}
-          >
-            {item.posterUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-              <img
-                src={item.posterUrl}
-                alt={`Portada de ${item.title}`}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            ) : (
-              <span aria-hidden className="absolute inset-0 flex flex-col">
-                {bands.map((hex, i) => (
-                  <span key={i} className="flex-1" style={{ background: hex }} />
-                ))}
-              </span>
-            )}
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0 rounded-[14px] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]"
-            />
-          </span>
-          <span className="flex min-w-0 flex-col gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-text-2">
-              {meta}
-            </span>
-            <h1 className="font-serif text-[40px] italic leading-[0.95] tracking-[-0.01em] text-pretty text-text [overflow-wrap:anywhere]">
-              {item.title}
-            </h1>
-            {!item.posterUrl && (
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-                Paleta extraída · sin arte
-              </span>
-            )}
-          </span>
-        </div>
-      </div>
-
-      <main className="relative flex flex-col gap-[22px] px-5 pt-[22px]">
-        {/* 06d — the series status pill leads the body (same catalog fact as
-            the in-app page, same self-healing write). */}
-        <SeriesStatusPill status={seriesStatus} />
-
+      <main className="relative flex flex-col gap-[30px] px-6 pt-1">
         {isAlbum ? (
           <>
-            {/* "Dónde escuchar": four glass rows, one per service, each to
-                today's per-service resolve link. All four read "Abrir" — the
-                mock's dimmed "No disponible" needs a pre-resolution this page
-                doesn't do at render time. */}
-            <div className="flex flex-col gap-2">
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-                Dónde escuchar
-              </span>
+            <section className="flex flex-col gap-1">
+              <SectionTitle>escuchar en</SectionTitle>
               {MUSIC_SERVICES.map((s) => (
                 <a
                   key={s.id}
                   href={resolve(`&service=${s.id}`)}
-                  className="flex items-center gap-3 rounded-full bg-[var(--glass-bg)] px-4 py-3 transition-colors hover:bg-white/[0.12] active:bg-white/[0.14]"
+                  className="flex min-h-[56px] items-center gap-3.5 transition-opacity active:opacity-70"
                 >
-                  <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-white/10 text-text">
-                    <FillIcon d={PLAY_PATH} size={12} />
+                  <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-[10px] bg-surface-2 font-mono text-[12px] font-medium text-text">
+                    {s.mark}
                   </span>
-                  <span className="flex-1 text-[14px] font-semibold text-text">
-                    {s.label}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-                    Abrir
-                  </span>
+                  <span className="flex-1 text-[16px] font-medium text-text">{s.label}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">Abrir</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-2" aria-hidden>
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
                 </a>
               ))}
-            </div>
+            </section>
             {tracks.length > 0 && (
-              <TracklistCard
-                trackCount={upcoming ? trackCount : tracks.length}
-                minutes={minutes}
-              >
-                <Tracklist
-                  tracks={tracks}
-                  totalCount={upcoming ? trackCount : undefined}
-                  pendingLabel={
-                    upcoming && releaseDate
-                      ? restArrivesLabel(releaseDate, now)
-                      : undefined
-                  }
-                  hideHeader
-                />
-              </TracklistCard>
+              <section className="flex flex-col gap-1">
+                <SectionTitle aside={minutes > 0 ? `${minutes} min` : undefined}>canciones</SectionTitle>
+                {tracks.map((t) => (
+                  <div key={t.n} className="flex min-h-12 items-center gap-3.5">
+                    <span className="w-[22px] flex-none font-mono text-[12px] text-text-2">{String(t.n).padStart(2, "0")}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] text-text">{t.name}</span>
+                  </div>
+                ))}
+                {upcoming && releaseDate && trackCount > tracks.length && (
+                  <p className="pt-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+                    {tracks.length} de {trackCount} disponibles · el resto llega {restArrivesLabel(releaseDate, now)}
+                  </p>
+                )}
+              </section>
             )}
           </>
         ) : (
-          // TMDB's own guidance for watch/providers data is "a reference on
-          // each media item" — the button's label carries the JustWatch
-          // attribution instead of a separate note below it.
-          <div className="flex gap-2.5">
-            <a href={resolve("")} className={GLASS_BUTTON}>
-              Dónde ver · JustWatch
-              <StrokeIcon d={EXTERNAL_PATH} size={12} strokeWidth={2.4} />
+          <section className="flex flex-col gap-1">
+            <SectionTitle>dónde ver</SectionTitle>
+            {/* TMDB's guidance for watch/providers data is "a reference on
+                each media item": the row carries the JustWatch attribution. */}
+            <a href={resolve("")} className="flex min-h-[56px] items-center gap-3.5 transition-opacity active:opacity-70">
+              <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-[10px] bg-surface-2 font-mono text-[12px] font-medium text-text">
+                jw
+              </span>
+              <span className="flex-1 text-[16px] font-medium text-text">JustWatch</span>
+              <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">Ver dónde</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-2" aria-hidden>
+                <path d="M7 17L17 7M9 7h8v8" />
+              </svg>
             </a>
-          </div>
+          </section>
         )}
 
         {/* Films/series carry a TMDB synopsis; albums have none (iTunes has no
             album description). Identification use + attribution (ADR-008). */}
         {synopsis && (
-          <Synopsis
-            text={synopsis}
-            className="text-[15px] leading-[1.5] text-pretty text-text-2"
-          />
-        )}
-
-        {/* "En Baclog" — the title's counts across the whole app (see
-            title-stats.ts). Hidden until someone has reacted, and NOT on
-            albums: the mock draws this block on 06b (film) and 06d (series)
-            but drops it on 06f, whose screen already carries four service
-            rows plus the tracklist (founder call, 2026-09-21). */}
-        {inBaclog && !isAlbum && (
-          <div className="flex flex-col gap-2.5">
-            <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-              En Baclog
-            </span>
-            <p className="font-serif text-[22px] italic leading-[1.1] text-pretty text-text">
-              {inBaclog}
-            </p>
-          </div>
+          <Synopsis text={synopsis} className="text-[15px] leading-[1.55] text-pretty text-text" />
         )}
 
         <PublicReviews
@@ -338,31 +274,13 @@ export default async function PublicItemPage({
 
         {/* General TMDB/Apple Music attribution lives at /creditos (TMDB's
             FAQ allows centralizing it in an About/Credits section). */}
-        <p className="text-center font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-          <Link href="/creditos" className="transition-[color,opacity] hover:text-text-2 active:opacity-60">
-            Créditos
-          </Link>
-        </p>
+        <CreditsLink />
       </main>
 
-      {/* The fade the CTA floats on, then the CTA itself: the one accent
-          button on the page (no lima glow — §7) and its line. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[200px] w-full max-w-md"
-        style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
+      <PublicCta
+        label="Guardar en una colección"
+        note={`Para guardar ${item.title} en una colección, crea tu cuenta.`}
       />
-      <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
-        <Link
-          href="/login"
-          className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
-        >
-          Empieza tu backlog →
-        </Link>
-        <span className="text-center text-[12px] text-text-3">
-          Guarda, marca y comparte lo que te obsesiona
-        </span>
-      </div>
     </div>
   );
 }

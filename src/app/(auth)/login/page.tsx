@@ -2,9 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "@/components/ui";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
+import { FIELD, SOLID_BUTTON, Wordmark } from "@/app/u/kura/components";
 
+/**
+ * Kura · O1c "entrar." (design/kura/flujos-v2.dc.html, flujo 01 · rama "ya
+ * tengo cuenta"). The mock offers Apple, Google and a magic link; the product
+ * signs in with a one-time code by email (src/auth), so this is the "o con
+ * correo" branch of that screen, alone: title at 170 from the top, the glass
+ * field (radius 16, 52 tall), the solid action, and one plain note. No
+ * password, no red — errors are stated in words (§patrones · error).
+ *
+ * Public surface: wears the `.kura` scope (globals.css) so the shared
+ * primitives come out in honey/Newsreader without touching the signed-in app.
+ */
 export default function LoginPage() {
   const router = useRouter();
   const emailRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
@@ -29,28 +40,25 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-lvh flex-col items-center justify-center overflow-hidden bg-bg px-6 text-text">
-      <div className="relative flex w-full max-w-sm flex-col items-center">
-        <h1 className="font-mono text-xl font-bold uppercase tracking-[0.35em] text-accent">
-          Baclog
-        </h1>
-        <p className="mt-3 font-serif text-lg italic text-text-2">
-          Tus obsesiones, en una tarjeta.
-        </p>
-        <p className="mt-4 max-w-[34ch] text-center text-sm leading-relaxed text-text-2">
-          Guarda las películas, series y álbumes que amas. Baclog te devuelve
-          conexiones cross-media que sí pegan y tarjetas hechas para compartir.
+    <main className="kura relative mx-auto flex min-h-lvh w-full max-w-md flex-col bg-bg px-6 pb-11 text-text">
+      <header className="flex items-center pt-[calc(64px+env(safe-area-inset-top))]">
+        <Wordmark size={30} />
+      </header>
+
+      <div className="mt-[62px] flex flex-col gap-3">
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">entrar.</h1>
+        <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
+          Guarda películas, series y música en colecciones, y mira lo que
+          obsesiona a tu gente.
         </p>
 
-        <form onSubmit={requestCode} className="mt-8 w-full space-y-3">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent">
-              Entra o regístrate · un paso
-            </p>
-            <label className="mt-1.5 block text-sm text-text-2" htmlFor="email">
-              Tu email
-            </label>
-          </div>
+        <form onSubmit={requestCode} className="mt-5 flex flex-col gap-3">
+          <span className="text-center font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">
+            con correo
+          </span>
+          <label htmlFor="email" className="sr-only">
+            Tu correo
+          </label>
           <input
             id="email"
             ref={emailRef}
@@ -60,25 +68,25 @@ export default function LoginPage() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="tu@email.com"
-            className="w-full rounded-[var(--r-md)] bg-surface-2 px-4 py-3 text-base text-text outline-none transition-colors placeholder:text-text-3 focus:bg-surface-3"
+            placeholder="tu@correo.com"
+            className={FIELD}
           />
-          <Button type="submit" disabled={status === "sending"} className="w-full">
+          <button type="submit" disabled={status === "sending"} className={SOLID_BUTTON}>
             {status === "sending" ? "Enviando…" : "Enviarme un código"}
-          </Button>
+          </button>
           {status === "error" && (
-            <p className="text-sm text-hot">
-              No pudimos enviar el código. Intenta de nuevo.
+            <p className="text-center text-[13px] leading-[1.5] text-text">
+              No pudimos enviar el código. Revisa el correo e intenta de nuevo.
             </p>
           )}
           {status === "cooldown" && (
-            <p className="text-sm text-radar">
-              Ya te enviamos un código hace poco — espera un minuto.
+            <p className="text-center text-[13px] leading-[1.5] text-text">
+              Ya te enviamos un código hace poco. Espera un minuto.
             </p>
           )}
-          <p className="pt-2 text-xs leading-relaxed text-text-3">
-            No necesitas una cuenta previa: tu correo te registra o te deja
-            entrar. Sin contraseñas —solo un código de 6 dígitos.
+          <p className="text-center text-[13px] leading-[1.5] text-text-2 text-pretty">
+            Sin contraseña: te mandamos un código de 6 dígitos. Si es tu
+            primera vez, ese mismo correo crea tu cuenta.
           </p>
         </form>
       </div>

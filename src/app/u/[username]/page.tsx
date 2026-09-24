@@ -8,24 +8,28 @@ import {
   getPublicReactionCounts,
 } from "@/modules/backlog/public";
 import { getProfileReviews } from "@/modules/reviews/queries";
-import { initialOf } from "@/modules/reviews/queries";
 import { isFollowing } from "@/modules/social/queries";
 import { getAffinity } from "@/modules/social/affinity";
 import { FollowButton } from "@/components/follow-button";
-import { followPillClass } from "@/components/follow-pill";
 import { ProfileReviews } from "@/components/reviews/profile-reviews";
-import { ProfileAvatar } from "@/components/profile-avatar";
-import { posterFallbackStyle } from "@/components/cover-tile";
 import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
-import { UpcomingShelf } from "@/components/upcoming-shelf";
 import { getRenderInstant } from "@/modules/catalog/release";
-import { BackButton, StrokeIcon, glassPillClass } from "@/components/ui";
-import { CHEVRON_RIGHT_PATH, SPARKLE_PATH } from "@/components/glyph-paths";
 import { ShareChip } from "@/app/u/share-chip";
-import { ProfileBackdrop } from "@/app/u/profile-backdrop";
-import { ProfileStatPills } from "@/app/u/profile-stat-pills";
-import { CoverStrip } from "@/app/u/cover-strip";
+import {
+  BackChip,
+  CollectionCard,
+  CountRibbon,
+  Cover,
+  CreditsLink,
+  HONEY_BUTTON,
+  Mono,
+  PublicCta,
+  Seal,
+  SectionTitle,
+  Wordmark,
+} from "@/app/u/kura/components";
+import { releaseLabel, tintSurface } from "@/app/u/kura/tint";
 import { ReportButton } from "./report-button";
 
 // Dynamic (not ISR) on purpose: F3.4 captures viewer geo/device server-side
@@ -39,17 +43,17 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const profile = await getPublicProfile((await params).username);
   if (!profile) return {};
-  // OG image = the first backlog's first cover, so the primary share
-  // destination previews with an image (consistent with backlog/page.tsx).
+  // OG image = the first collection's first cover, so the primary share
+  // destination previews with an image (consistent with [backlogId]/page.tsx).
   const firstPoster = profile.backlogs
     .flatMap((b) => b.coverUrls)
     .find(Boolean);
   return {
-    title: `${profile.displayName} · Baclog`,
-    description: `Los backlogs de ${profile.displayName} — películas, series y música.`,
+    title: `${profile.displayName} · kura`,
+    description: `Las colecciones de ${profile.displayName}: películas, series y música.`,
     openGraph: {
-      title: `${profile.displayName} en Baclog`,
-      description: `${profile.backlogs.length} backlogs de obsesiones.`,
+      title: `${profile.displayName} en kura`,
+      description: `${profile.backlogs.length} ${plural(profile.backlogs.length, "colección", "colecciones")}.`,
       type: "profile",
       ...(firstPoster ? { images: [firstPoster] } : {}),
     },
@@ -57,10 +61,13 @@ export async function generateMetadata({
 }
 
 /**
- * Screen 10 (Revamp UI, 2026-09-03) — someone's public profile: their ADN
- * glow, the 72px orb, the Bricolage name, the three stat pills, the follow
- * button beside what you have in common, the "En común contigo" strip, then
- * their backlogs as rows with a fan of covers.
+ * Kura · 33a perfil público (design/kura/sistema-de-diseno.dc.html §marca ·
+ * cabeceras · perfil): a surface tinted by the owner's dominant palette,
+ * fused into the page; Volver and Compartir at 64/24; the seal (or photo) at
+ * 128; the name in Newsreader 40; the ribbon of counts, one per state; and
+ * Seguir in honey — the only accent on the screen. Below, the automatic
+ * "no puedo esperar" card when there is something coming, then their
+ * collections as cards with a spine, then what they wrote.
  */
 export default async function PublicProfilePage({
   params,
@@ -83,7 +90,6 @@ export default async function PublicProfilePage({
     headers: await headers(),
   });
 
-  // One server instant for every countdown on the page (see countdown.tsx).
   const now = await getRenderInstant();
   const viewer = await getCurrentUser();
   // F3.10 — the follow control beside the name. The owner sees neither state.
@@ -97,187 +103,153 @@ export default async function PublicProfilePage({
 
   const affinityLine = affinityCopy(affinity);
   const itemHref = (id: string) => `/u/${profile.username}/item/${id}`;
+  // The tint comes from the covers of what they keep (public.ts already
+  // aggregates the dominant hexes); the lima fallback of the old aura is not
+  // a colour Kura has, so a paletteless profile is simply `--bg`.
+  const palette = profile.palette.filter((h) => h.toLowerCase() !== "#d8ff3e");
+  const collectionCount = profile.backlogs.length;
 
   return (
-    <div
-      className={`relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg text-text ${
-        viewer ? "pb-[140px]" : "pb-[150px]"
-      }`}
-    >
-      <ProfileBackdrop palette={profile.palette} midStop={55} />
-
-      <div className="relative">
-        {/* Header — back (a signed-in viewer returns wherever they came from;
-            a cold deep-link lands at the root) and share. */}
-        <header className="flex items-center justify-between px-5 pt-[calc(12px+env(safe-area-inset-top))]">
-          {viewer ? <BackButton /> : <BackButton href="/" />}
+    <div className={`kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg text-text ${viewer ? "pb-16" : "pb-[170px]"}`}>
+      {/* Cabecera de persona */}
+      <header
+        className="relative flex flex-col items-center gap-3 px-6 pb-8 pt-[calc(124px+env(safe-area-inset-top))]"
+        style={{ background: tintSurface(palette) }}
+      >
+        <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
+          {viewer ? <BackChip href="/backlogs" /> : <Wordmark size={26} />}
           <ShareChip
             path={`/u/${profile.username}`}
             label={`Compartir el perfil de ${profile.displayName}`}
+            className="h-11! w-11!"
           />
-        </header>
-
-        {/* Identity */}
-        <div className="flex flex-col gap-1.5 px-6 pt-[18px]">
-          <ProfileAvatar
-            src={profile.avatarUrl}
-            palette={profile.palette}
-            initial={initialOf(profile.displayName || profile.username)}
-          />
-          {/* overflow-wrap: a 50-char display name (or one long token) must
-              wrap inside the column, not run off the screen. */}
-          <h1 className="mt-3 font-display text-[44px] font-extrabold leading-none tracking-[-0.02em] text-text [overflow-wrap:anywhere]">
-            {profile.displayName}
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-2">
-              baclog.app/{profile.username}
-            </span>
-            {profile.isFounder && (
-              <span className={`${glassPillClass} px-2.5 py-1 text-accent`}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d={SPARKLE_PATH} />
-                </svg>
-                Fundador
-              </span>
-            )}
-          </div>
-
-          <ProfileStatPills counts={counts} className="mt-3.5" />
-
-          {!isOwner && (
-            <div className="mt-[18px] flex items-center gap-3">
-              {viewer ? (
-                <FollowButton
-                  username={profile.username}
-                  initialFollowing={viewerFollows}
-                  variant="hero"
-                />
-              ) : (
-                // Same recipe as the real pill (followPillClass) so the
-                // logged-out conversion path can't drift from the button.
-                <Link href="/login" className={followPillClass}>
-                  Seguir
-                </Link>
-              )}
-              {affinityLine && (
-                <span className="flex-1 text-[12.5px] leading-[1.3] text-text-2">
-                  {affinityLine}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* En común contigo — signed-in only, and only titles the owner keeps
-            on a public backlog (affinity.ts). */}
-        {affinity && (
-          <CoverStrip
-            label="En común contigo"
-            items={affinity.common}
-            height="h-[150px]"
-            itemHref={itemHref}
-            className="pt-[30px]"
+        <Seal name={profile.displayName || profile.username} hexes={palette} src={profile.avatarUrl} size={128} className="shadow-cover" />
+        {/* overflow-wrap: a 50-char display name (or one long token) must
+            wrap inside the column, not run off the screen. */}
+        <h1 className="mt-2 text-center font-brand text-[40px] leading-none text-text text-balance [overflow-wrap:anywhere]">
+          {profile.displayName}
+        </h1>
+        <Mono upper={false}>
+          @{profile.username}
+          {profile.isFounder && " · fundador"}
+        </Mono>
+
+        <CountRibbon
+          className="mt-1"
+          counts={[
+            { kind: "obsessed", n: counts.obsessed, label: "le obsesionan" },
+            { kind: "liked", n: counts.liked, label: "le gustan" },
+            { kind: "completed", n: counts.completed, label: "completos" },
+            { kind: "users", n: profile.followerCount, label: plural(profile.followerCount, "seguidor", "seguidores") },
+          ]}
+        />
+
+        {!isOwner && (
+          <div className="mt-2 flex flex-col items-center gap-2.5">
+            {viewer ? (
+              <FollowButton
+                username={profile.username}
+                initialFollowing={viewerFollows}
+                variant="kura"
+              />
+            ) : (
+              // Anonymous: the same honey pill leads into the account flow
+              // (§patrones · links y cuenta: the action completes itself once
+              // the registration ends — today it lands on /login).
+              <Link href="/login" className={HONEY_BUTTON}>
+                Seguir
+              </Link>
+            )}
+            {affinityLine && (
+              <span className="text-center text-[13px] leading-[1.4] text-text-2">{affinityLine}</span>
+            )}
+          </div>
+        )}
+      </header>
+
+      <main className="relative flex flex-col gap-8 px-3 pt-2">
+        {/* La automática — what they are waiting for, as Kura's own card.
+            Third person: the visitor reads someone else's anticipation. */}
+        {profile.upcoming.length > 0 && (
+          <CollectionCard
+            name="no puedo esperar"
+            tag="auto"
+            height={120}
+            paletteHex={profile.upcoming.find((u) => u.paletteHex?.length)?.paletteHex ?? []}
+            covers={profile.upcoming.map((u) => ({
+              posterUrl: u.posterUrl,
+              paletteHex: u.paletteHex,
+              mediaType: u.mediaType,
+              title: u.title,
+              wait: releaseLabel(u.releaseDate, now),
+            }))}
           />
         )}
 
-        {/* F3.8 — what they're waiting for. Third person here ("No puede
-            esperar"): the visitor is reading someone else's anticipation.
-            Renders nothing when there's nothing coming. */}
-        <UpcomingShelf
-          items={profile.upcoming}
-          initialNow={now}
-          heading="No puede esperar"
-          itemHref={itemHref}
-          inset="px-6"
-          className="pt-[30px]"
-        />
+        {/* En común contigo — signed-in only, and only titles the owner keeps
+            on a public collection (affinity.ts). */}
+        {affinity && affinity.common.length > 0 && (
+          <section className="flex flex-col gap-3 px-3">
+            <SectionTitle aside={`${affinity.common.length}`}>en común contigo</SectionTitle>
+            <div className="bl-scroll -mx-3 flex items-end gap-3 overflow-x-auto px-3 pb-6">
+              {affinity.common.map((it) => (
+                <Link key={it.catalogItemId} href={itemHref(it.catalogItemId)} className="flex w-[100px] flex-none flex-col gap-[7px] bl-press-lg">
+                  <Cover posterUrl={it.posterUrl} paletteHex={it.paletteHex} mediaType={it.mediaType} alt={it.title} className="w-[100px]" />
+                  <span className="truncate font-brand text-[14px] italic leading-[1.15] text-text">{it.title}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* Sus backlogs — the escaparate (F3.10.1: public AND on the profile),
-            each a row with a fan of its three newest covers. */}
-        {profile.backlogs.length > 0 && (
-          <section className="flex flex-col gap-3.5 px-6 pt-[26px]">
-            <h2 className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-3">
-              Sus backlogs · {profile.backlogs.length}
-            </h2>
-            {profile.backlogs.map((b) => (
-              <Link
-                key={b.id}
-                href={`/u/${profile.username}/${b.id}`}
-                className="flex items-center gap-3.5 transition-opacity active:opacity-70"
-              >
-                <span className="flex pl-3" aria-hidden>
-                  {b.covers.map((c, i) => (
-                    <span
-                      key={i}
-                      className="-ml-3 h-[46px] w-[34px] flex-none overflow-hidden rounded-[6px] bg-surface-2 shadow-[0_8px_20px_-8px_rgba(0,0,0,.8)] ring-[1.5px] ring-bg"
-                      style={c.posterUrl ? undefined : posterFallbackStyle(c.paletteHex)}
-                    >
-                      {c.posterUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-                        <img
-                          src={c.posterUrl}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      )}
-                    </span>
-                  ))}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                  <span className="truncate font-serif text-[19px] italic leading-[1.1] text-text">
-                    {b.name}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-                    {b.itemCount} {plural(b.itemCount, "título", "títulos")}
-                  </span>
-                </span>
-                <StrokeIcon
-                  d={CHEVRON_RIGHT_PATH}
-                  size={14}
-                  strokeWidth={2.4}
-                  className="flex-none text-text-3"
+        {/* Sus colecciones — the escaparate (F3.10.1: public AND on the
+            profile), each the collection card: spine + covers at 120. */}
+        {collectionCount > 0 && (
+          <section className="flex flex-col gap-3">
+            <div className="px-3">
+              <SectionTitle aside={`${collectionCount} ${plural(collectionCount, "colección", "colecciones")}`}>
+                sus colecciones
+              </SectionTitle>
+            </div>
+            <div className="flex flex-col gap-3">
+              {profile.backlogs.map((b) => (
+                <CollectionCard
+                  key={b.id}
+                  name={b.name}
+                  href={`/u/${profile.username}/${b.id}`}
+                  height={120}
+                  paletteHex={b.paletteHex.filter((h) => h.toLowerCase() !== "#d8ff3e")}
+                  emptyLabel={`${b.itemCount} ${plural(b.itemCount, "título", "títulos")}`}
+                  covers={b.covers.map((c) => ({
+                    posterUrl: c.posterUrl,
+                    paletteHex: c.paletteHex,
+                    mediaType: c.mediaType,
+                  }))}
                 />
-              </Link>
-            ))}
+              ))}
+            </div>
           </section>
         )}
 
         {/* F3.9 — "Lo que dice X". Renders nothing until they've written one. */}
-        <ProfileReviews
-          username={profile.username}
-          displayName={profile.displayName}
-          reviews={reviews}
-        />
-
-        <div className="pt-8 text-center">
-          <ReportButton username={profile.username} />
-        </div>
-      </div>
-
-      {/* Anonymous visitors: the conversion CTA over a fade (06b's recipe).
-          F3.10 pitches the social loop ("seguirle": the neutral MX form). */}
-      {!viewer && (
-        <>
-          <div
-            aria-hidden
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto h-[200px] w-full max-w-md"
-            style={{ background: "linear-gradient(rgba(11,11,13,0), var(--bg) 55%)" }}
+        <div className="-mx-3">
+          <ProfileReviews
+            username={profile.username}
+            displayName={profile.displayName}
+            reviews={reviews}
           />
-          <div className="pointer-events-none fixed inset-x-0 bottom-[30px] z-30 mx-auto flex w-full max-w-md flex-col gap-2.5 px-5">
-            <Link
-              href="/login"
-              className="pointer-events-auto rounded-full bg-accent py-[17px] text-center font-sans text-[16px] font-semibold text-bg bl-press active:bg-accent-press"
-            >
-              Regístrate para seguirle →
-            </Link>
-            <span className="text-center text-[12px] text-text-3">
-              Guarda, marca y comparte lo que te obsesiona
-            </span>
-          </div>
-        </>
+        </div>
+
+        <div className="flex flex-col items-center gap-4 pt-2">
+          <ReportButton username={profile.username} />
+          <CreditsLink />
+        </div>
+      </main>
+
+      {!viewer && (
+        <PublicCta note="Guarda lo que más vale y mira lo que obsesiona a tu gente." />
       )}
     </div>
   );

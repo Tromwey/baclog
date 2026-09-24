@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { joinWaitlistAction } from "@/app/actions/waitlist-actions";
+import { FIELD, SOLID_BUTTON } from "@/app/u/kura/components";
 import { PositionCard } from "./position-card";
 
 type Joined = {
@@ -33,31 +34,35 @@ export function WaitlistForm() {
   if (joined) return <PositionCard {...joined} />;
 
   return (
-    <form onSubmit={submit} className="mt-8 space-y-3">
+    <form onSubmit={submit} className="mt-5 flex flex-col gap-3">
+      <label htmlFor="waitlist-email" className="sr-only">
+        Tu correo
+      </label>
       <input
+        id="waitlist-email"
         type="email"
         required
         autoFocus
         autoComplete="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="tu@email.com"
-        className="w-full rounded-xl bg-surface-2 px-4 py-3 text-center outline-none transition-colors focus:bg-surface-3"
+        placeholder="tu@correo.com"
+        className={FIELD}
       />
-      <button
-        type="submit"
-        disabled={status === "sending"}
-        className="w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
-      >
-        {status === "sending" ? "Apartando…" : "Apártame un lugar"}
+      <button type="submit" disabled={status === "sending"} className={SOLID_BUTTON}>
+        {status === "sending" ? "Apartando…" : "Apartarme un lugar"}
       </button>
       {status === "error" && (
-        <p className="text-sm text-red-400">Revisa tu email e intenta de nuevo.</p>
+        <p className="text-center text-[13px] leading-[1.5] text-text">
+          No pudimos apartarte el lugar. Revisa el correo e intenta de nuevo.
+        </p>
       )}
       {refCode && (
-        <p className="text-xs text-text-3">Entras con una invitación 🎟️</p>
+        <p className="text-center font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          entras con una invitación
+        </p>
       )}
-      <p className="pt-1 text-xs text-text-3">
+      <p className="text-center text-[13px] leading-[1.5] text-text-2">
         Solo te avisamos cuando tengas acceso. Nada más.
       </p>
     </form>

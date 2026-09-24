@@ -3,6 +3,7 @@ import {
   Bricolage_Grotesque,
   Hanken_Grotesk,
   Instrument_Serif,
+  Newsreader,
   Red_Hat_Mono,
 } from "next/font/google";
 import "./globals.css";
@@ -42,10 +43,27 @@ const redHatMono = Red_Hat_Mono({
   variable: "--font-red-hat-mono",
   display: "swap",
 });
+/**
+ * Kura (rebrand 2026-09-24, design/kura/sistema-de-diseno.dc.html §marca +
+ * §tipografía): Newsreader is the brand voice — screen titles, section
+ * names and empty-state phrases in roman, titles of works and the "kura"
+ * wordmark in italic 500. Exposed as `font-brand` (globals.css) and used on
+ * the PUBLIC surfaces only for now; the signed-in app keeps its current type.
+ * Variable font: the optical-size axis travels with it so the 40px titles and
+ * the 14px italics each get their cut.
+ */
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  weight: "variable",
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  variable: "--font-newsreader",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Baclog",
-  description: "Tus obsesiones, en una tarjeta.",
+  title: "Kura",
+  description: "Guarda lo que más vale: películas, series y música, en colecciones.",
   // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest
   // icons. Placeholder spark (scripts/generate-icons.mjs); the app/favicon.ico
   // convention stays auto-linked for browser tabs. The PWA install icons
@@ -59,7 +77,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Baclog",
+    title: "Kura",
   },
 };
 
@@ -85,7 +103,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${redHatMono.variable}`}
+      className={`h-full antialiased ${bricolage.variable} ${instrumentSerif.variable} ${hanken.variable} ${redHatMono.variable} ${newsreader.variable}`}
     >
       <head>
         {/* This Next build's `appleWebApp: { capable: true }` only emits the
@@ -135,11 +153,9 @@ export default function RootLayout({
               strokeLinecap="round"
             />
           </svg>
-          <p className="font-serif text-xl italic text-text">
-            Gira tu dispositivo
-          </p>
+          <p className="font-brand text-2xl text-text">gira tu teléfono.</p>
           <p className="max-w-[30ch] text-sm leading-[1.55] text-text-2">
-            Baclog está diseñado para uso vertical.
+            Kura está hecha para usarse en vertical.
           </p>
         </div>
       </body>
