@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * 15b Cargando (flujos-v2 02): the real header ("tus colecciones" + the 44
  * chip, so nothing jumps when the page lands) and four card silhouettes —
@@ -23,7 +25,7 @@ export default function Loading() {
       <div
         aria-busy="true"
         aria-label="Cargando colecciones"
-        className="flex animate-[pulse_1.6s_ease-in-out_infinite] flex-col gap-3 px-3"
+        className={`flex flex-col gap-3 px-3 ${SKELETON_PULSE}`}
       >
         {CARDS.map((c, i) => (
           <div key={i} className="flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1">

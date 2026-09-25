@@ -157,7 +157,7 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 
 ## Pendiente
 
-Cerrado en la fase 4a (2026-09-24): fotos de perfil (`DesignSystem/Components/Avatar.swift`, subida desde Editar perfil con recorte a 512 px y JPEG ≤ 400 KB), colección pública ajena (`Features/People/PublicCollectionView.swift`), "más reseñas" paginado (`GET /titles/{id}/reviews`), estados vacío/error/sin conexión en cada `load*` (`loadErrors`, `RetryStrip`, reintento al volver la red), Dynamic Type (escala con tope `xxxLarge`; mono, wordmark, sello y dock fijos a propósito), `PrivacyInfo.xcprivacy`, ventana pintada con `bg` desde el primer frame, y el recorrido real contra `next dev` de punta a punta (dos veces, cuenta QA borrada).
+Cerrado en la fase 4a (2026-09-24): fotos de perfil (`DesignSystem/Components/Avatar.swift`, subida desde Editar perfil con recorte a 512 px y JPEG ≤ 400 KB), colección pública ajena (`Features/People/PublicCollectionView.swift`), "más reseñas" paginado (`GET /titles/{id}/reviews`), estados vacío/error/sin conexión en cada `load*` (`loadErrors`, `RetryStrip`, reintento al volver la red), Dynamic Type (escala con tope `xxxLarge` — desde la auditoría Apple del 2026-09-24 el tope ya no es global: solo el cromo de geometría fija lo lleva vía `kFixedChrome()`; mono, wordmark, sello y dock fijos a propósito), `PrivacyInfo.xcprivacy`, ventana pintada con `bg` desde el primer frame, y el recorrido real contra `next dev` de punta a punta (dos veces, cuenta QA borrada).
 
 - Apple / Google (API.md §2.2, fase 4): hoy solo correo → código; esos botones avisan.
 - Bloquear/reportar (hoy un aviso), push real (hoy notificación local; `device_token` es fase 4b).

@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * Ficha skeleton (Kura §patrones · cargando: "Esqueleto con la forma real.
  * Pulso de opacidad de 1.6 s entre --s1 y --s2, sin shimmer ni spinner. La
@@ -10,7 +12,7 @@
 export default function Loading() {
   return (
     <main aria-busy="true" className="relative mx-auto min-h-dvh w-full max-w-md bg-bg pb-14">
-      <div className="animate-[pulse_1.6s_ease-in-out_infinite] motion-reduce:animate-none">
+      <div className={SKELETON_PULSE}>
         <div className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]">
           <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex justify-between">
             <div className="h-11 w-11 rounded-full bg-surface-1" />

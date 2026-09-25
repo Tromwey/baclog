@@ -23,6 +23,7 @@
 		49B22B39A89D1BF2A724ED08 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D2B8AE4C1260B7995DD02575 /* Assets.xcassets */; };
 		4DBC99A5F9787893025E837E /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = D0DCA4E6E3361EBF7FAB69D7 /* OFL.txt */; };
 		4F2EEACD6AA7AC1DE80FB770 /* TitleDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F513E900B3467EC9E49CDE82 /* TitleDetailView.swift */; };
+		57BD12DFA9058EF0C99C4D70 /* Press.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60746C9E7409F5B883F84830 /* Press.swift */; };
 		5CF711BA2E694C14BA52D064 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295CCB31CDF4DFC6597D3065 /* RootView.swift */; };
 		6435E69E1730EEEA2C289B22 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 239BA8C2661D10E88DB8AA9D /* Glass.swift */; };
 		65D8526902D6A6670328C876 /* KuraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB6EFAAB0741C435C162CA3 /* KuraApp.swift */; };
@@ -88,6 +89,7 @@
 		51F9E780278E4FF272759D21 /* DebugLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLaunch.swift; sourceTree = "<group>"; };
 		52009EBC11CDCDA41F528ADC /* HankenGrotesk-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "HankenGrotesk-Regular.ttf"; sourceTree = "<group>"; };
 		5AC81669DACE442BF0F68E23 /* KuraAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KuraAPI.swift; sourceTree = "<group>"; };
+		60746C9E7409F5B883F84830 /* Press.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Press.swift; sourceTree = "<group>"; };
 		7742337E5F84C340B1B8A3B0 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		77548D94658292AE0E375FF4 /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
 		7A1A1ED30047BCF97E1A15EB /* CollectionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionSheets.swift; sourceTree = "<group>"; };
@@ -293,6 +295,7 @@
 				239BA8C2661D10E88DB8AA9D /* Glass.swift */,
 				D98318B0CA1D0E576A8F3419 /* LoadingScreen.swift */,
 				A1AA9B8D2CC3B028EE69A485 /* Pills.swift */,
+				60746C9E7409F5B883F84830 /* Press.swift */,
 				7F4697357313399FE5AF1B88 /* ZoomTransition.swift */,
 			);
 			path = Components;
@@ -485,6 +488,7 @@
 				79C1D95382CD42043BDDF162 /* OnboardingViews.swift in Sources */,
 				07731AC6CABC1B53B4333729 /* PersonProfileView.swift in Sources */,
 				B4E0A3D82BF54686D9B215B2 /* Pills.swift in Sources */,
+				57BD12DFA9058EF0C99C4D70 /* Press.swift in Sources */,
 				063D7CE4C6BC833E0B45BE54 /* ProfileView.swift in Sources */,
 				A2B9C78681E9827D1570AAA5 /* PublicCollectionView.swift in Sources */,
 				675B2F19EECE813DCA167A47 /* RecapViews.swift in Sources */,

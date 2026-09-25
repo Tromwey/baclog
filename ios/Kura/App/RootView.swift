@@ -11,17 +11,21 @@ struct RootView: View {
             KColor.bg.ignoresSafeArea()
                 .background(WindowBackground())
 
-            switch store.phase {
-            case .splash:
-                SplashView()
-                    .transition(.opacity)
-            case .onboarding:
-                OnboardingFlow()
-                    .transition(.opacity)
-            case .main:
-                MainTabs()
-                    .transition(.opacity)
+            Group {
+                switch store.phase {
+                case .splash:
+                    SplashView()
+                        .transition(.opacity)
+                case .onboarding:
+                    OnboardingFlow()
+                        .transition(.opacity)
+                case .main:
+                    MainTabs()
+                        .transition(.opacity)
+                }
             }
+            // A sheet is modal: VoiceOver never wanders into what's behind it.
+            .accessibilityHidden(store.sheet != nil)
 
             SheetHost()
             ToastHost(dockVisible: store.phase == .main && store.path(store.tab).isEmpty && !(store.dockHidden && store.tab == .discover))
@@ -31,10 +35,10 @@ struct RootView: View {
             }
             #endif
         }
-        .animation(.easeInOut(duration: 0.2), value: store.phase)
-        // Dynamic Type scales the Kura faces (Typography.swift); past xxxLarge the
-        // fixed frames (covers, 44 chips, sheets) would break, so growth stops there.
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .animation(KMotion.fade, value: store.phase)
+        // Dynamic Type scales the Kura faces (Typography.swift) all the way into the
+        // accessibility sizes. Only fixed-geometry chrome caps itself at xxxLarge
+        // (`kFixedChrome()`: dock, top chips, covers, collection cards, feed cards).
     }
 }
 
@@ -76,7 +80,7 @@ struct MainTabs: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.18), value: store.path(store.tab).isEmpty)
+        .animation(KMotion.fade, value: store.path(store.tab).isEmpty)
         .task { await store.startIfNeeded() }
     }
 }

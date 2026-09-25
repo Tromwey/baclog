@@ -95,7 +95,7 @@ struct MonoSegmented<T: Hashable>: View {
                 let on = opt.0 == selection
                 Button {
                     selection = opt.0
-                    UISelectionFeedbackGenerator().selectionChanged()
+                    KHaptic.select()
                 } label: {
                     Text(opt.1)
                         .font(.kura.mono(11))
@@ -172,14 +172,17 @@ struct FlowLayout: Layout {
 }
 
 /// Skeleton block: opacity pulse between s1 and s2 over 1.6 s (allowed: loading).
+/// Reduce Motion: a still block at the midpoint, no loop.
 struct Skeleton: View {
     var radius: CGFloat = KRadius.coverL
     @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduce
     var body: some View {
         RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(KColor.s2)
-            .opacity(on ? 1 : 0.45)
+            .opacity(reduce ? 0.7 : (on ? 1 : 0.45))
             .onAppear {
+                guard !reduce else { return }
                 withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { on = true }
             }
             .accessibilityHidden(true)

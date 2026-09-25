@@ -18,6 +18,7 @@ import {
   setVerdictAction,
 } from "@/app/actions/backlog-item-actions";
 import { setMembershipAction } from "@/app/actions/complete-actions";
+import { useToast, type ToastHost } from "@/components/kura/toast";
 import { extractPalette } from "@/modules/cards/palette";
 import type { OwnReview } from "@/modules/reviews/types";
 import type { CollectionsIndex } from "./collections-index";
@@ -43,10 +44,13 @@ import type { CollectionsIndex } from "./collections-index";
  *    and Opciones are mutually exclusive, EXCEPT that Completar on a title that
  *    isn't saved yet asks "guardar en" (pick mode) and stays mounted, hidden,
  *    until the pick resolves.
- *  - The one toast ("Deshacer" / "Reintentar", 5 s, one at a time).
+ *  - The one toast ("Deshacer" / "Reintentar", one at a time) — the shared
+ *    `kura/toast` host, so its clock pauses like every other toast's.
  *  - "Quitar de tus colecciones" with a real Deshacer: the page goes dark at
- *    once, the write waits out the toast (5 s) and is flushed early by any
- *    other membership write, or on unmount.
+ *    once, the write waits out the TOAST (its `onExpire` commits — so a
+ *    paused toast never leaves a Deshacer on screen for a write that already
+ *    happened) and is flushed early by any other membership write, or on
+ *    unmount.
  *
  * Nothing here calls router.refresh() on add: the provider is keyed on the
  * entry id in page.tsx, and a refresh that swaps `none → id` would remount
@@ -113,11 +117,13 @@ const persistNothing = async (): Promise<ActionResult> => ({ ok: true });
 
 export type SaveSheetMode = "manage" | "pick" | null;
 
-export interface ToastState {
-  key: number;
-  text: string;
+export interface ToastAction {
   /** "Deshacer" for the reversible, "Reintentar" (with the triangle) for failures. */
-  action?: { label: string; run: () => void; failure?: boolean };
+  label: string;
+  run: () => void;
+  failure?: boolean;
+  /** Runs when the toast leaves WITHOUT `run` — the deferred commit. */
+  expire?: () => void;
 }
 
 interface ItemReactionState {
@@ -164,8 +170,8 @@ interface ItemReactionState {
   closeOptions: () => void;
   recoHidden: boolean;
   setRecoHidden: (hidden: boolean) => void;
-  toast: ToastState | null;
-  showToast: (text: string, action?: ToastState["action"]) => void;
+  toastHost: ToastHost;
+  showToast: (text: string, action?: ToastAction) => void;
   clearToast: () => void;
   /** "Quitar de tus colecciones" — optimistic, with a 5 s Deshacer. */
   removeFromLibrary: () => void;
@@ -239,15 +245,21 @@ export function ItemReactionProvider({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [saveSheet, setSaveSheet] = useState<SaveSheetMode>(null);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const toastKey = useRef(0);
+  const toastHost = useToast();
+  const { show: showHostToast, dismiss: clearToast } = toastHost;
   const pendingPick = useRef<((ok: boolean) => void) | null>(null);
 
-  const showToast = useCallback((text: string, action?: ToastState["action"]) => {
-    toastKey.current += 1;
-    setToast({ key: toastKey.current, text, action });
-  }, []);
-  const clearToast = useCallback(() => setToast(null), []);
+  const showToast = useCallback(
+    (text: string, action?: ToastAction) =>
+      showHostToast({
+        message: text,
+        kind: action?.failure ? "error" : action ? "undo" : undefined,
+        actionLabel: action?.label,
+        onAction: action?.run,
+        onExpire: action?.expire,
+      }),
+    [showHostToast],
+  );
 
   // Palette is cover-derived + cached on catalog_item; extract on-device only
   // when this title has none yet ([] on CORS failure). Once per visit.
@@ -266,10 +278,7 @@ export function ItemReactionProvider({
   // Latest `removeFromLibrary`, for the Reintentar and the uncheck-all path
   // (both run later, from closures made before the latest render).
   const removeFromLibraryRef = useRef<() => void>(() => {});
-  const pendingRemoval = useRef<{
-    timer: ReturnType<typeof setTimeout>;
-    commit: () => Promise<void>;
-  } | null>(null);
+  const pendingRemoval = useRef<{ commit: () => Promise<void> } | null>(null);
 
   const clearLocalState = useCallback(() => {
     setMemberIds([]);
@@ -282,7 +291,6 @@ export function ItemReactionProvider({
   const flushRemoval = useCallback(async () => {
     const pending = pendingRemoval.current;
     if (!pending) return;
-    clearTimeout(pending.timer);
     await pending.commit();
   }, []);
 
@@ -316,15 +324,18 @@ export function ItemReactionProvider({
       }
     };
     clearLocalState();
-    pendingRemoval.current = { timer: setTimeout(() => void commit(), 5000), commit };
+    const entry = { commit };
+    pendingRemoval.current = entry;
     showToast("Ya no está en tus colecciones.", {
       label: "Deshacer",
       run: () => {
-        const pending = pendingRemoval.current;
-        if (!pending) return;
-        clearTimeout(pending.timer);
+        // Already flushed by another membership write: nothing to take back.
+        if (pendingRemoval.current !== entry) return;
         pendingRemoval.current = null;
         restore();
+      },
+      expire: () => {
+        if (pendingRemoval.current === entry) void commit();
       },
     });
   }, [
@@ -350,7 +361,6 @@ export function ItemReactionProvider({
     () => () => {
       const pending = pendingRemoval.current;
       if (!pending) return;
-      clearTimeout(pending.timer);
       void pending.commit();
     },
     [],
@@ -504,7 +514,7 @@ export function ItemReactionProvider({
         closeOptions: () => setOptionsOpen(false),
         recoHidden,
         setRecoHidden,
-        toast,
+        toastHost,
         showToast,
         clearToast,
         removeFromLibrary,

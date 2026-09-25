@@ -141,7 +141,7 @@ struct DiscoverView: View {
                 SectionTitle(text: "recomendado para ti").padding(.horizontal, 20)
                 HStack(alignment: .bottom, spacing: 16) {
                     Button { store.push(.title(t.id)) } label: {
-                        CoverView(title: t, height: 132)
+                        CoverView(title: t, height: 132).zoomSource(ZoomID.title(t.id))
                     }
                     .buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 8) {
@@ -159,7 +159,9 @@ struct DiscoverView: View {
                 .padding(20)
                 .background(Tint.card(t.palette), in: RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
                 .padding(.horizontal, 12)
-                .animation(.easeInOut(duration: 0.3), value: t.id)
+                .animation(KMotion.tint, value: t.id)
+                // Cover + text + pill side by side in a card: past xxxLarge the pill truncates.
+                .kFixedChrome()
             }
         }
     }
@@ -174,7 +176,7 @@ struct DiscoverView: View {
                 ForEach(Array(list.enumerated()), id: \.element.id) { i, t in
                     HStack(spacing: 14) {
                         Text("\(i + 1)").font(.kura.mono(18)).foregroundStyle(KColor.text2).frame(width: 22, alignment: .leading)
-                        CoverView(title: t, height: t.format == .album ? 51 : 64, radius: KRadius.coverS)
+                        CoverView(title: t, height: t.format == .album ? 51 : 64, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                             .frame(width: 48)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(t.name).font(.kura.newsItalic(17)).foregroundStyle(KColor.text).lineLimit(1)
@@ -186,7 +188,7 @@ struct DiscoverView: View {
                     .padding(.horizontal, 20)
                     .frame(minHeight: 76)
                     .contentShape(Rectangle())
-                    .onTapGesture { store.push(.title(t.id)) }
+                    .kPressable(.row) { store.push(.title(t.id)) }
                 }
             }
         }
@@ -218,7 +220,7 @@ struct DiscoverView: View {
                         let w = t.format == .album ? 150.0 : 100.0
                         Button { store.push(.title(t.id)) } label: {
                             VStack(alignment: .leading, spacing: 7) {
-                                CoverView(title: t, width: w)
+                                CoverView(title: t, width: w).zoomSource(ZoomID.title(t.id))
                                 Text(t.name).font(.kura.newsItalic(14)).foregroundStyle(KColor.text)
                                     .lineLimit(1).frame(width: w, alignment: .leading)
                                 Text(when).monoLabel(10).lineLimit(1).frame(width: w, alignment: .leading)
@@ -358,7 +360,7 @@ private struct SearchMode: View {
                                 .padding(.leading, 20).padding(.trailing, 8)
                                 .frame(minHeight: 52)
                                 .contentShape(Rectangle())
-                                .onTapGesture { submit(q) }
+                                .kPressable(.row) { submit(q) }
                             }
                         }
                     }
@@ -371,7 +373,7 @@ private struct SearchMode: View {
                             HStack(alignment: .bottom, spacing: 12) {
                                 ForEach(viewed) { t in
                                     Button { store.push(.title(t.id)) } label: {
-                                        CoverView(title: t, height: 96, radius: KRadius.coverS)
+                                        CoverView(title: t, height: 96, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -401,7 +403,7 @@ private struct SearchMode: View {
             VStack(spacing: 0) {
                 ForEach(Array(titles.enumerated()), id: \.element.id) { i, t in
                     suggestionRow(onTap: { store.push(.title(t.id)) }) {
-                        CoverView(title: t, width: t.format == .album ? 44 : 40, height: t.format == .album ? 44 : 60, radius: KRadius.coverS)
+                        CoverView(title: t, width: t.format == .album ? 44 : 40, height: t.format == .album ? 44 : 60, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                             .frame(width: 44)
                     } text: {
                         Highlight(text: t.name, query: q, serif: true)
@@ -442,7 +444,7 @@ private struct SearchMode: View {
                     .padding(.horizontal, 20)
                     .frame(minHeight: 52)
                     .contentShape(Rectangle())
-                    .onTapGesture { submit(s) }
+                    .kPressable(.row) { submit(s) }
                 }
                 if titles.isEmpty && creators.isEmpty && users.isEmpty {
                     HStack(spacing: 14) {
@@ -453,7 +455,7 @@ private struct SearchMode: View {
                     .padding(.horizontal, 20)
                     .frame(minHeight: 52)
                     .contentShape(Rectangle())
-                    .onTapGesture { submit(q) }
+                    .kPressable(.row) { submit(q) }
                 }
             }
             .padding(.top, 14)
@@ -474,7 +476,7 @@ private struct SearchMode: View {
         .padding(.horizontal, 20)
         .frame(minHeight: 64)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .kPressable(.row, action: onTap)
     }
 
     // MARK: 19f / 19g
@@ -537,7 +539,7 @@ private struct SearchMode: View {
                                 VStack(spacing: 0) {
                                     ForEach(shown) { t in
                                         HStack(spacing: 14) {
-                                            CoverView(title: t, width: t.format == .album ? 48 : 44, height: t.format == .album ? 48 : 66, radius: KRadius.coverS)
+                                            CoverView(title: t, width: t.format == .album ? 48 : 44, height: t.format == .album ? 48 : 66, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                                                 .frame(width: 48)
                                             VStack(alignment: .leading, spacing: 5) {
                                                 Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
@@ -550,7 +552,7 @@ private struct SearchMode: View {
                                         .padding(.horizontal, 20)
                                         .frame(minHeight: 84)
                                         .contentShape(Rectangle())
-                                        .onTapGesture { store.push(.title(t.id)) }
+                                        .kPressable(.row) { store.push(.title(t.id)) }
                                     }
                                 }
                             }
@@ -571,7 +573,7 @@ private struct SearchMode: View {
                                     }
                                     .padding(.horizontal, 20)
                                     .contentShape(Rectangle())
-                                    .onTapGesture { store.push(.person(p.id)) }
+                                    .kPressable(.row) { store.push(.person(p.id)) }
                                 }
                             }
                         }

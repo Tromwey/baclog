@@ -46,8 +46,8 @@ export function KuraSwitch({
     >
       <span
         aria-hidden
-        className={`absolute top-[2px] h-[27px] w-[27px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,.35)] transition-[left,background-color] duration-[260ms] [transition-timing-function:cubic-bezier(.2,.9,.3,1.25)] ${
-          checked ? "left-[22px] bg-bg" : "left-[2px] bg-text"
+        className={`absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,.35)] transition-[translate,background-color] duration-[260ms] [transition-timing-function:cubic-bezier(.2,.9,.3,1.25)] motion-reduce:transition-none ${
+          checked ? "translate-x-5 bg-bg" : "translate-x-0 bg-text"
         }`}
       />
     </button>

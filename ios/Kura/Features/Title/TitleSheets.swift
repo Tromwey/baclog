@@ -52,8 +52,8 @@ struct CompleteSheet: View {
                     Text(s.label)
                         .font(.kura.news(28))
                         .foregroundStyle(KColor.text)
-                        .scaleEffect(stop == 2 ? 1.06 : 1)
-                        .animation(.spring(response: 0.28, dampingFraction: 0.55), value: stop)
+                        .kScale(stop == 2 ? 1.06 : 1)
+                        .kAnimation(KMotion.snappy, value: stop)
                         .contentTransition(.opacity)
                         .frame(height: 44)
                     ReactionSlider(value: $value)
@@ -177,7 +177,7 @@ struct CompleteSheet: View {
         let review = trimmedReview
         // Completo can't carry a new review (409 `reaction_required`): send nothing, the note says why.
         if reviewBlocked {
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            KHaptic.notify(.warning)
             return
         }
         let done = { store.dismissSheet() }
@@ -287,7 +287,7 @@ struct SaveToSheet: View {
                             let on = selected.contains(c.id)
                             Button {
                                 if on { selected.remove(c.id) } else { selected.insert(c.id) }
-                                UISelectionFeedbackGenerator().selectionChanged()
+                                KHaptic.select()
                             } label: {
                                 HStack(spacing: 14) {
                                     CollectionThumb(collection: c)
@@ -298,7 +298,7 @@ struct SaveToSheet: View {
                                         .foregroundStyle(on ? KColor.text : .clear)
                                         .frame(width: 26, height: 26)
                                         .background(on ? KColor.glassSelected : KColor.glassBg, in: Circle())
-                                        .animation(.easeInOut(duration: 0.18), value: on)
+                                        .animation(KMotion.fade, value: on)
                                 }
                                 .padding(.horizontal, 8)
                                 .frame(minHeight: 56)

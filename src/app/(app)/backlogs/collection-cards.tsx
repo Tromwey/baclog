@@ -313,7 +313,15 @@ function CollectionCard({
         {...handlers}
         // The detail opens from where it was tapped (zoom-origin.ts).
         onClick={(e) => setZoomOrigin(e.clientX, e.clientY)}
-        className="flex w-max min-w-full snap-start select-none overflow-hidden rounded-[var(--r-screen)] transition-transform duration-[180ms] [-webkit-touch-callout:none]"
+        // Press = bl-press-lg's 0.985 on the `scale` property, which composes
+        // with the hold-lift's inline `transform` — spelled out by hand
+        // because the lift also transitions `transform` (bl-press-lg would
+        // own `transition-property`). Once lifted, the press lets go.
+        className={`flex w-max min-w-full snap-start select-none overflow-hidden rounded-[var(--r-screen)] transition-[transform,scale,opacity] duration-[180ms] [-webkit-touch-callout:none] ${
+          lifted
+            ? ""
+            : "active:scale-[0.985] active:duration-[80ms] motion-reduce:active:scale-100 motion-reduce:active:opacity-80"
+        }`}
         style={{
           background: covers.length ? tintCard(lead) : "var(--surface-1)",
           transform: lifted ? "scale(1.03)" : undefined,

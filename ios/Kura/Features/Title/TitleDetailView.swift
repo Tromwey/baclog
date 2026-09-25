@@ -56,6 +56,7 @@ struct TitleDetailView: View {
 
 private struct TitleHeader: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduce
     let title: Title
 
     var body: some View {
@@ -113,6 +114,8 @@ private struct TitleHeader: View {
             }
             .padding(.top, 8)
             .padding(.horizontal, -10)
+            // A row of 44 pt pills: it holds up to xxxLarge, past that it would truncate.
+            .kFixedChrome()
 
             if unreleased, let sentence = store.releaseSentence(t) {
                 Text(sentence.capitalizedFirst).monoLabel().padding(.top, 2)
@@ -132,7 +135,7 @@ private struct TitleHeader: View {
             store.present(.complete(titleID: t.id, focusReview: false))
         } label: {
             HStack(spacing: 8) {
-                if let mark { GlyphView(glyph: mark.glyph, size: 16).transition(.scale.combined(with: .opacity)) }
+                if let mark { GlyphView(glyph: mark.glyph, size: 16).transition(reduce ? .opacity : .scale.combined(with: .opacity)) }
                 Text(mark?.myLabel ?? "Completar")
                     .font(.kura.ui(15, .semibold))
                     .lineLimit(1)
@@ -146,7 +149,7 @@ private struct TitleHeader: View {
             .contentShape(Capsule())
         }
         .kPress()
-        .animation(KMotion.spring, value: mark)
+        .kAnimation(KMotion.spring, value: mark)
         .accessibilityLabel(mark.map { "Tu reacción: \($0.myLabel). Cambiar" } ?? "Completar")
     }
 
@@ -411,7 +414,7 @@ private struct TitleSections: View {
                         ForEach(others) { o in
                             Button { store.push(.title(o.id)) } label: {
                                 VStack(alignment: .leading, spacing: 7) {
-                                    CoverView(title: o, width: o.format == .album ? 130 : 100)
+                                    CoverView(title: o, width: o.format == .album ? 130 : 100).zoomSource(ZoomID.title(o.id))
                                     Text(o.name).font(.kura.newsItalic(14)).foregroundStyle(KColor.text)
                                         .lineLimit(1)
                                         .frame(width: o.format == .album ? 130 : 100, alignment: .leading)
@@ -466,7 +469,7 @@ struct ReviewCard: View {
                     SpoilerPill { store.revealedSpoilers.insert(review.id) }
                 }
             }
-            .animation(.easeOut(duration: 0.24), value: revealed)
+            .animation(KMotion.fade, value: revealed)
         }
         .padding(18)
         .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
@@ -489,6 +492,7 @@ struct SpoilerPill: View {
             .frame(height: 36)
             .modifier(SpoilerSurface())
             .environment(\.colorScheme, .dark)
+            .kHitArea(vertical: 4)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Contiene spoiler. Mostrar")

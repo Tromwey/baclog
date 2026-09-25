@@ -20,11 +20,12 @@ const VARIANT: Record<ButtonVariant, string> = {
   ghost: "bg-transparent text-text-2 hover:text-text",
 };
 
+// `bl-press` owns the transition and the pointer-down 0.97 (a dim under
+// reduced motion) — never `transition-all` + `active:scale` by hand.
 const BASE =
   "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 " +
-  "font-sans font-semibold text-base leading-none transition-all " +
-  "duration-[var(--dur-fast)] ease-[var(--ease-out)] " +
-  "active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none " +
+  "font-sans font-semibold text-base leading-none bl-press " +
+  "disabled:opacity-40 disabled:pointer-events-none " +
   "focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2";
 
 type CommonProps = {

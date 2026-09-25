@@ -118,7 +118,7 @@ struct PersonProfileView: View {
                 .frame(height: 48)
                 .modifier(FollowSurface(honey: honey))
                 .contentShape(Capsule())
-                .animation(.easeInOut(duration: 0.2), value: label)
+                .animation(KMotion.fade, value: label)
         }
         .kPress()
         .accessibilityLabel(following ? "Dejar de seguir a @\(p.handle)" : label)
@@ -143,7 +143,7 @@ struct PersonProfileView: View {
                         HStack(alignment: .bottom, spacing: 12) {
                             ForEach(common) { t in
                                 Button { store.push(.title(t.id)) } label: {
-                                    CoverView(title: t, height: 72, radius: KRadius.coverS)
+                                    CoverView(title: t, height: 72, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -165,7 +165,7 @@ struct PersonProfileView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .bottom, spacing: 12) {
                             ForEach(obs) { t in
-                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150) }
+                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
                                     .buttonStyle(.plain)
                             }
                         }
@@ -223,7 +223,7 @@ struct PersonCollectionCard: View {
         } else {
             CollectionCard(collection: c, titles: titles, marks: [:], palette: cover?.palette,
                            coverHeight: coverHeight, spineSize: 11,
-                           onTap: {}, onTitleTap: { store.push(.title($0.id)) })
+                           onTap: {}, onTitleTap: { store.push(.title($0.id)) }, coversOpenTitles: true)
         }
     }
 }
@@ -470,7 +470,7 @@ struct FollowersView: View {
         .frame(minHeight: 68)
         .contentShape(Rectangle())
         .opacity(dimmed ? 0.5 : 1)
-        .onTapGesture { if !dimmed { store.push(.person(p.id)) } }
+        .kPressable(.row(inset: -10)) { if !dimmed { store.push(.person(p.id)) } }
     }
 }
 
@@ -512,7 +512,7 @@ struct CreatorView: View {
                                     HStack(alignment: .bottom, spacing: 12) {
                                         ForEach(saved) { t in
                                             Button { store.push(.title(t.id)) } label: {
-                                                CoverView(title: t, height: 150, badge: store.mark(t.id).map { .mark($0) } ?? .none)
+                                                CoverView(title: t, height: 150, badge: store.mark(t.id).map { .mark($0) } ?? .none).zoomSource(ZoomID.title(t.id))
                                             }
                                             .buttonStyle(.plain)
                                         }
@@ -531,7 +531,7 @@ struct CreatorView: View {
                             }
                             ForEach(shown) { t in
                                 HStack(spacing: 14) {
-                                    CoverView(title: t, width: t.format == .album ? 56 : 44, height: t.format == .album ? 56 : 66, radius: KRadius.coverS)
+                                    CoverView(title: t, width: t.format == .album ? 56 : 44, height: t.format == .album ? 56 : 66, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                                     VStack(alignment: .leading, spacing: 5) {
                                         Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
                                         Text([t.format.metaLabel, t.year.map(String.init)].compactMap { $0 }.joined(separator: " · ")).monoLabel()
@@ -542,7 +542,7 @@ struct CreatorView: View {
                                 .padding(.horizontal, 20)
                                 .frame(minHeight: 84)
                                 .contentShape(Rectangle())
-                                .onTapGesture { store.push(.title(t.id)) }
+                                .kPressable(.row) { store.push(.title(t.id)) }
                             }
                             if filter == nil || filter == .film, KuraRuntime.usesMock {
                                 ForEach(MockData.otherWorks[name] ?? [], id: \.0) { w in
@@ -574,7 +574,7 @@ struct CreatorView: View {
                                     }
                                     .frame(minHeight: 52)
                                     .contentShape(Rectangle())
-                                    .onTapGesture { store.push(.person(p.id)) }
+                                    .kPressable(.row(inset: -10)) { store.push(.person(p.id)) }
                                 }
                             }
                             .padding(.horizontal, 20)

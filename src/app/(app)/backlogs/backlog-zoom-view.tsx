@@ -108,7 +108,7 @@ export type BacklogZoomData = Awaited<ReturnType<typeof loadBacklogZoom>>;
  * No dock (HideDock). Server-safe wrapper; the screen itself is client.
  *
  * Shared by the real /backlogs/[id] page and the intercepted overlay (`zoom`
- * adds the bl-zoom-content stagger; the overlay route owns bl-zoom-in on its
+ * adds the bl-zoom-content stagger; the overlay route owns the spring bloom on its
  * fixed shell).
  */
 export function BacklogZoomView({

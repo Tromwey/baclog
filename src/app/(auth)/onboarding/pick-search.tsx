@@ -9,6 +9,7 @@ import {
   type CatalogSearchResult,
 } from "@/modules/catalog/types";
 import { FailLine, Stroke } from "./chrome";
+import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
  * The results of 32a's search field (the field itself lives in the step, so
@@ -72,8 +73,8 @@ export function PickSearch({
       <div aria-busy className="flex flex-col">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex min-h-[80px] items-center gap-3.5">
-            <span className="h-16 w-[43px] flex-none animate-pulse rounded-[var(--r-cover-s)] bg-surface-2 [animation-duration:1.6s]" />
-            <span className="h-4 w-2/3 animate-pulse rounded-full bg-surface-1 [animation-duration:1.6s]" />
+            <span className={`h-16 w-[43px] flex-none rounded-[var(--r-cover-s)] bg-surface-2 ${SKELETON_PULSE}`} />
+            <span className={`h-4 w-2/3 rounded-full bg-surface-1 ${SKELETON_PULSE}`} />
           </div>
         ))}
       </div>

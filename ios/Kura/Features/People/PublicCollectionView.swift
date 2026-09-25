@@ -44,7 +44,7 @@ struct PublicCollectionView: View {
                         palette: cover?.palette,
                         lead: {
                             if let cover {
-                                Button { store.push(.title(cover.id)) } label: { CoverView(title: cover, height: 240) }
+                                Button { store.push(.title(cover.id)) } label: { CoverView(title: cover, height: 240).zoomSource(ZoomID.title(cover.id)) }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Portada: \(cover.name)")
                             } else {

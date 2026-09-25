@@ -145,6 +145,24 @@ export function rubberband(
 }
 
 /**
+ * The inverse of `rubberband`: the raw travel that produced an on-screen,
+ * rubber-banded offset. A gesture that grabs something mid-bounce must start
+ * from THIS, not from the visible offset — feeding the visible value back
+ * through `rubberband` resists twice and the element jumps toward rest.
+ */
+export function unrubberband(
+  offset: number,
+  dimension: number,
+  constant = 0.55,
+): number {
+  if (offset === 0) return 0;
+  // offset = r·d·c / (d + c·|r|)  →  |r| = |offset|·d / (c·(d − |offset|))
+  const room = dimension - Math.abs(offset);
+  if (room <= 0) return offset; // at/over the asymptote: nothing to invert
+  return (offset * dimension) / (constant * room);
+}
+
+/**
  * Release velocity from the last ~100ms of pointer samples. The final
  * pointermove alone is noise (a finger decelerates as it lifts), and a sample
  * from a pause half a second ago says nothing about the throw.

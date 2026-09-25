@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * /feed skeleton — the v10 stack's own shape, so the first paint doesn't
  * reflow: the header ("tu feed" + the 44 bell) at HDR_PX, then one card of
@@ -8,7 +10,7 @@
 export default function Loading() {
   return (
     <main className="mx-auto h-dvh w-full max-w-[430px] overflow-hidden bg-bg">
-      <div className="animate-pulse">
+      <div className={SKELETON_PULSE}>
         <header className="flex h-[calc(76px+env(safe-area-inset-top))] items-end justify-between px-5 pb-[14px]">
           <div className="h-9 w-32 rounded-full bg-surface-1" />
           <div className="h-11 w-11 rounded-full bg-surface-1" />

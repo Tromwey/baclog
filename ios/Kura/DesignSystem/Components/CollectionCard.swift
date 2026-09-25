@@ -37,6 +37,8 @@ struct CollectionCard: View {
     var onTap: () -> Void = {}
     var onTitleTap: ((Title) -> Void)? = nil
     var onLongPress: () -> Void = {}
+    /// The covers push their own ficha (not the collection): they're zoom sources.
+    var coversOpenTitles = false
 
     private var vPad: CGFloat { coverHeight >= 150 ? 20 : 16 }
     private var cardHeight: CGFloat { coverHeight + vPad * 2 }
@@ -58,6 +60,7 @@ struct CollectionCard: View {
                         }
                         ForEach(titles) { t in
                             CoverView(title: t, height: coverHeight, badge: badge(for: t))
+                                .zoomSource(coversOpenTitles ? ZoomID.title(t.id) : nil)
                                 .onTapGesture { (onTitleTap ?? { _ in onTap() })(t) }
                         }
                         Color.clear.frame(width: 2, height: 1)
@@ -69,16 +72,13 @@ struct CollectionCard: View {
                 .background(surface)
                 .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
-                .onTapGesture(perform: onTap)
-                .onLongPressGesture(minimumDuration: 0.4) {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    onLongPress()
-                }
+                .kPressable(longPress: onLongPress, action: onTap)
                 .padding(.horizontal, 12)
             }
             .scrollClipDisabled()
         }
         .frame(height: cardHeight)
+        .kFixedChrome()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(collection.name), \(titles.count) títulos")
         .accessibilityAddTraits(.isButton)
@@ -115,6 +115,7 @@ struct WaitingCard: View {
                     HStack(alignment: .bottom, spacing: 10) {
                         ForEach(titles) { t in
                             CoverView(title: t, height: coverHeight, badge: .waiting(label(t)), badgeHeight: 24)
+                                .zoomSource(ZoomID.title(t.id))
                                 .onTapGesture { onTitleTap(t) }
                         }
                         Color.clear.frame(width: 2, height: 1)
@@ -136,12 +137,13 @@ struct WaitingCard: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
-                .onTapGesture(perform: onTap)
+                .kPressable(action: onTap)
                 .padding(.horizontal, 12)
             }
             .scrollClipDisabled()
         }
         .frame(height: cardHeight)
+        .kFixedChrome()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("no puedo esperar, automática, \(titles.count) títulos")
         .accessibilityAddTraits(.isButton)

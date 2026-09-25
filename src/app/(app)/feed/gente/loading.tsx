@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * /feed/gente skeleton — Volver, the title, the search field and a few 72
  * rows (seal 44, two lines, the follow pill). Needed because loading.tsx
@@ -6,7 +8,7 @@
 export default function Loading() {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance">
-      <div className="animate-pulse">
+      <div className={SKELETON_PULSE}>
         <div className="flex px-6 pt-[calc(16px+env(safe-area-inset-top))]">
           <div className="h-11 w-11 rounded-full bg-surface-1" />
         </div>

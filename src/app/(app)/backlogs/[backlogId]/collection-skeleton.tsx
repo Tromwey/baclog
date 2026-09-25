@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * The collection's silhouette (Kura · flujos-v2 03): Volver and Opciones at
  * 64/24, the 240 cover, the name, three format pills, then a shelf of 132
@@ -9,7 +11,7 @@ export function CollectionSkeleton() {
     <div
       aria-busy="true"
       aria-label="Cargando colección"
-      className="relative mx-auto min-h-dvh w-full max-w-md animate-[pulse_1.6s_ease-in-out_infinite] pb-14"
+      className={`relative mx-auto min-h-dvh w-full max-w-md pb-14 ${SKELETON_PULSE}`}
     >
       <div className="absolute inset-x-6 top-[max(64px,calc(20px+env(safe-area-inset-top)))] flex justify-between">
         <span className="h-11 w-11 rounded-full bg-surface-1" />

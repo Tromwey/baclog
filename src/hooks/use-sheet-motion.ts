@@ -14,6 +14,7 @@ import {
   project,
   rubberband,
   spring,
+  unrubberband,
   type SpringHandle,
 } from "@/lib/spring";
 
@@ -104,6 +105,9 @@ export function useSheetMotion({
       base: number;
       offset: number;
       active: boolean;
+      /** Pressed while the non-gesture exit was playing: the exit only
+       *  reverses if this turns into a real drag — a tap lets it finish. */
+      reopen: boolean;
     },
   }).current;
 
@@ -236,7 +240,9 @@ export function useSheetMotion({
 
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      s.suppressClick = false;
+      // Mid-exit (scrim/Escape/Cancel), a press never hits a button in the
+      // leaving panel — whether or not it goes on to re-grab the sheet.
+      s.suppressClick = s.closing && s.ySpring === null;
       if (!draggable || !e.isPrimary) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
       const panel = panelRef.current;
@@ -267,7 +273,10 @@ export function useSheetMotion({
       const midFlight = s.ySpring !== null;
       s.ySpring?.stop();
       s.ySpring = null;
-      if (s.closing) {
+      // A press during the scrim/Escape exit: the sheet keeps leaving (and
+      // its buttons stay dead) unless the press becomes an actual drag.
+      const reopen = s.closing && !midFlight;
+      if (!reopen && s.closing) {
         s.closing = false;
         animateP(1);
       }
@@ -276,9 +285,16 @@ export function useSheetMotion({
         id: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
-        base: s.dragY,
+        // `dragY` is what's ON SCREEN — rubber-banded when above rest. Grabbed
+        // mid-bounce, the base must be the raw travel behind it, or the next
+        // move rubber-bands an already-banded value and the panel jumps.
+        base:
+          s.dragY < 0 && panel
+            ? unrubberband(s.dragY, panel.offsetHeight)
+            : s.dragY,
         offset: 0,
         active: midFlight,
+        reopen,
       };
       if (midFlight) capture(panel, e.pointerId);
     },
@@ -299,6 +315,11 @@ export function useSheetMotion({
           return;
         }
         d.active = true;
+        if (d.reopen) {
+          d.reopen = false;
+          s.closing = false;
+          animateP(1);
+        }
         // Start tracking from HERE, so crossing the threshold isn't a jump.
         d.offset = Math.sign(dy) * HYSTERESIS;
         s.suppressClick = true;
@@ -310,7 +331,7 @@ export function useSheetMotion({
       s.tracker.add(s.dragY, e.timeStamp);
       apply();
     },
-    [s, apply],
+    [s, apply, animateP],
   );
 
   const endDrag = useCallback(

@@ -233,6 +233,7 @@ struct FeedView: View {
         .frame(height: hdr, alignment: .top)
         .frame(maxWidth: .infinity)
         .background(transparent ? Color.clear : KColor.bg)
+        .kFixedChrome()
     }
 
     /// Three fixed heights; the fraction only caps them so the next card always shows.
@@ -302,9 +303,11 @@ private struct FeedCard: View {
         .padding(.bottom, 22)
         .frame(height: height + topInset, alignment: .top)
         .contentShape(Rectangle())
-        .onTapGesture {
+        .kPressable(.row) {
             if let id = event.titleID { store.push(.title(id)) }
         }
+        // Tier heights are exact: the card's text stops growing at xxxLarge (it clips past its block).
+        .kFixedChrome()
         .accessibilityElement(children: .contain)
     }
 
@@ -322,7 +325,7 @@ private struct FeedCard: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
                         ForEach(ts) { t in
-                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: h) }
+                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: h).zoomSource(ZoomID.title(t.id)) }
                                 .buttonStyle(.plain)
                         }
                     }
@@ -357,7 +360,7 @@ private struct FeedCard: View {
             if let t = title {
                 GeometryReader { geo in
                     let w = min(geo.size.width, geo.size.height * t.format.aspect)
-                    CoverView(title: t, width: w, height: w / t.format.aspect)
+                    CoverView(title: t, width: w, height: w / t.format.aspect).zoomSource(ZoomID.title(t.id))
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
@@ -421,7 +424,7 @@ private struct FeedCard: View {
                         }
                     }
                     .padding(.top, 2)
-                    .animation(.easeOut(duration: 0.24), value: revealed)
+                    .animation(KMotion.fade, value: revealed)
                 }
             }
         }
@@ -517,7 +520,7 @@ private struct FollowButton: View {
                 .padding(.vertical, 14)
                 .background(following ? KColor.glassBg : KColor.accent, in: Capsule())
                 .contentShape(Capsule())
-                .animation(.easeInOut(duration: 0.2), value: following)
+                .animation(KMotion.fade, value: following)
         }
         .kPress()
         .accessibilityLabel(following ? "Dejar de seguir" : "Seguir")

@@ -113,7 +113,7 @@ struct ProfileView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(alignment: .bottom, spacing: 12) {
                                         ForEach(obsessions) { t in
-                                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150) }
+                                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
                                                 .buttonStyle(.plain)
                                         }
                                     }
@@ -302,7 +302,7 @@ struct EditProfileView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 30)
                 .background(palette.map { Tint.header($0) } ?? Tint.neutralHeader)
-                .animation(.easeInOut(duration: 0.3), value: featured)
+                .animation(KMotion.tint, value: featured)
 
                 VStack(alignment: .leading, spacing: 24) {
                     GroupedList {
@@ -322,7 +322,7 @@ struct EditProfileView: View {
                                     let on = t.id == featured
                                     Button {
                                         featured = t.id
-                                        UISelectionFeedbackGenerator().selectionChanged()
+                                        KHaptic.select()
                                     } label: {
                                         CoverView(title: t, height: 96, radius: KRadius.coverS)
                                             .overlay(alignment: .topLeading) {

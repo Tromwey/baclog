@@ -457,13 +457,14 @@
    The flame carries a static DARK legibility drop-shadow inline in
    obsession-gesture.tsx (depth, not irradiation). */
 
-/* Dock glass — the dock and shelf cards share this glass by design (founder
-   call: the shelf card's base IS the dock's surface, so the blurred backdrop
-   aura shows through both the same way). */
+/* Dock glass — the Kura dock's material (sistema de diseño §dock:
+   rgba(20,20,26,.5) + blur 26, saturate 1.7). A class, not inline utilities,
+   so the accessibility media queries below can reach it: reduced
+   transparency makes it solid, more contrast makes it near-solid. */
 .bl-dock-glass {
-  background: rgba(20, 20, 26, 0.55);
-  backdrop-filter: blur(22px) saturate(1.6);
-  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  background: rgba(20, 20, 26, 0.5);
+  backdrop-filter: blur(26px) saturate(1.7);
+  -webkit-backdrop-filter: blur(26px) saturate(1.7);
 }
 
 /* Glass surface (sistema-diseno §4) — accent only, over bg/aura, never full
@@ -485,19 +486,11 @@
 }
 
 /* Backlog shelf → detail "zoom" (M3.5): the card scales up into a full
-   overlay, the backlog's ADN aura blooms, and the content rises in. */
-@keyframes bl-zoom-in {
-  from {
-    opacity: 0;
-    transform: scale(0.86);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
+   overlay, the backlog's ADN aura blooms, and the content rises in. The
+   overlay's own scale + fade is a SPRING in `@modal/(.)[backlogId]/zoom-shell.tsx`
+   (it has to run backwards on Volver, from wherever it is) — not a keyframe. */
 
-/* Opacity-only: the shell's bl-zoom-in (segment layout) owns the ONE scale
+/* Opacity-only: the shell's spring (segment layout) owns the ONE scale
    bloom per open — a second scale here (post-skeleton, when real content
    streams in) read as the overlay "opening twice". The aura just lights up. */
 @keyframes bl-zoom-aura {
@@ -521,9 +514,6 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .bl-zoom-in {
-    animation: bl-zoom-in 0.5s cubic-bezier(0.55, 0, 0.2, 1) both;
-  }
   .bl-zoom-aura {
     animation: bl-zoom-aura 0.75s cubic-bezier(0.5, 0, 0.15, 1) both;
   }

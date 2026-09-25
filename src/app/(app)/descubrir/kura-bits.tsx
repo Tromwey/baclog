@@ -249,5 +249,6 @@ export function SavedCount({ n }: { n: number }) {
   );
 }
 
-/** The skeleton's pulse (§estados · cargando): opacity, 1.6 s, nothing else. */
-export const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none [animation-duration:1.6s]";
+/** The skeleton's pulse — shared from `kura/components` (re-exported for
+ *  Descubrir's existing imports). */
+export { SKELETON_PULSE } from "@/components/kura/components";

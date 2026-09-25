@@ -1062,12 +1062,24 @@ final class AppStore {
 
     // MARK: Toasts
 
+    /// How long a toast (and the Deshacer behind it) stays: 5 s, or 15 s with VoiceOver
+    /// running — reaching the button by swiping takes longer than a glance. `deferRemove`
+    /// waits exactly this long, so an undo that's still on screen can always be honored.
+    static var undoWindow: Duration {
+        UIAccessibility.isVoiceOverRunning ? .seconds(15) : .seconds(5)
+    }
+
     func showToast(_ t: ToastModel) {
         toastTask?.cancel()
         withAnimation(KMotion.short) { toast = t }
+        // VoiceOver doesn't see a view slide in: say it.
+        var said = AttributedString(t.action == nil ? t.text : "\(t.text). \(t.kind == .retry ? "Reintentar" : "Deshacer") disponible")
+        said.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(said).post()
         let id = t.id
+        let window = Self.undoWindow
         toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: window)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self, self.toast?.id == id else { return }
@@ -1129,16 +1141,17 @@ final class AppStore {
         withAnimation(KMotion.sheetIn) { sheet = route }
     }
 
-    func dismissSheet() {
-        withAnimation(KMotion.sheetOut) { sheet = nil }
+    func dismissSheet(animation: Animation = KMotion.sheetOut) {
+        withAnimation(animation) { sheet = nil }
     }
 
-    /// Scrim tap / grabber drag: ignored while the sheet is mid-write (`sheetLocked`).
+    /// Scrim tap / grabber drag / VoiceOver escape: ignored while the sheet is mid-write
+    /// (`sheetLocked`). `animation` lets a drag hand its velocity to the dismissal.
     /// Returns false when the sheet stays.
     @discardableResult
-    func dismissSheetInteractively() -> Bool {
+    func dismissSheetInteractively(animation: Animation = KMotion.sheetOut) -> Bool {
         guard !sheetLocked else { return false }
-        dismissSheet()
+        dismissSheet(animation: animation)
         return true
     }
 
@@ -1398,13 +1411,14 @@ final class AppStore {
         }
     }
 
-    /// Removals wait for the Deshacer window (5 s): undoing never round-trips,
+    /// Removals wait for the Deshacer window (`undoWindow`, 5 s / 15 s with VoiceOver): undoing never round-trips,
     /// and the server keeps the title's state until the window closes.
     private func deferRemove(_ titleID: String, from collectionID: String) {
         let key = "\(titleID)|\(collectionID)"
         deferredWrites[key]?.cancel()
+        let window = Self.undoWindow
         deferredWrites[key] = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: window)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self else { return }
@@ -1543,8 +1557,8 @@ final class AppStore {
         userTitles[titleID]?.mark = mark
         if haptic {
             switch mark {
-            case .obsessed: UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            case .liked: UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            case .obsessed: KHaptic.impact(.medium)
+            case .liked: KHaptic.impact(.light)
             default: break
             }
         }
@@ -1699,7 +1713,7 @@ final class AppStore {
         let watched = !set.contains(key)
         if watched { set.insert(key) } else { set.remove(key) }
         userTitles[titleID]?.watchedEpisodes = set
-        UISelectionFeedbackGenerator().selectionChanged()
+        KHaptic.select()
         saveLocal()
     }
 
@@ -1712,7 +1726,7 @@ final class AppStore {
         if now { following.insert(id) } else { following.remove(id) }
         if var p = people[id] { p.isFollowing = now; people[id] = p }
         me.followingCount = max(0, me.followingCount + (now ? 1 : -1))
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        KHaptic.impact(.light)
         sync { api in try await api.setFollowing(handle: id, following: now) }
     }
 
@@ -1739,7 +1753,7 @@ final class AppStore {
             }
         } else if p.isPrivate {
             if requested.contains(id) { requested.remove(id) } else { requested.insert(id) }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            KHaptic.impact(.light)
         } else {
             toggleFollow(id)
         }
@@ -1768,7 +1782,7 @@ final class AppStore {
 
     func setRequest(_ notificationID: String, _ state: RequestState) {
         requestStates[notificationID] = state
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        KHaptic.impact(.light)
     }
 
     func markNotificationsRead() {
@@ -1780,7 +1794,7 @@ final class AppStore {
     func toggleAlert(_ titleID: String) {
         if alerts.contains(titleID) { alerts.remove(titleID) } else {
             alerts.insert(titleID)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            KHaptic.impact(.light)
         }
         saveLocal()
     }
@@ -1922,25 +1936,35 @@ final class AppStore {
 
     /// After the splash: a stored token skips the entrance (refreshing it when
     /// it's about to expire); no token → entrance.
-    func finishSplash() async {
+    /// `minimumHold`: the splash's brand beat. It runs concurrently with the refresh
+    /// (never added on top of it); nothing leaves the splash before it's over.
+    func finishSplash(minimumHold: Duration = .zero) async {
         guard phase == .splash else { return }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: minimumHold)
+        func hold() async { try? await Task.sleep(until: deadline, clock: clock) }
         guard api.hasSession else {
+            await hold()
             onboardingStep = entryStep
-            withAnimation(.easeInOut(duration: 0.2)) { phase = .onboarding }
+            withAnimation(KMotion.fade) { phase = .onboarding }
             return
         }
         if api.needsRefresh {
-            do {
-                let m = try await api.refresh()
+            let result: Result<Me, Error>
+            do { result = .success(try await api.refresh()) } catch { result = .failure(error) }
+            await hold()
+            switch result {
+            case .success(let m):
                 applyMe(m)
                 if !route(after: m) { return }
-            } catch {
+            case .failure(let error):
                 let e = noteError(error)
                 if e == .unauthorized { return }
                 // Transport trouble: keep the token, try the library anyway.
             }
         }
-        withAnimation(.easeInOut(duration: 0.2)) { phase = .main }
+        await hold()
+        withAnimation(KMotion.fade) { phase = .main }
     }
 
     /// `POST auth/otp/request` — true when the code went out.

@@ -1,3 +1,5 @@
+import { SKELETON_PULSE } from "@/components/kura/components";
+
 /**
  * Lens skeleton — the lens page's silhouette (‹ back · icon+title hero · a few
  * rows) shown while getLensItems streams in. Mirrors the real page's paddings
@@ -7,7 +9,7 @@
 export default function Loading() {
   return (
     <main className="relative mx-auto min-h-dvh w-full max-w-md pb-dock-clearance">
-      <div className="animate-[pulse_1.6s_ease-in-out_infinite]">
+      <div className={SKELETON_PULSE}>
         {/* top bar silhouette: ‹ back chip */}
         <div className="flex items-center justify-between px-6 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
           <div className="h-11 w-11 rounded-full bg-surface-1" />

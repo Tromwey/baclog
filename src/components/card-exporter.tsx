@@ -10,6 +10,7 @@ import {
 import type { CardBacklog, CardStyle } from "@/modules/cards/types";
 import { MonoMeta } from "@/components/ui";
 import { SOLID_BUTTON } from "@/components/kura/components";
+import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
  * F3.5.7 — the contextual card exporter. Each share context renders exactly ONE
@@ -132,7 +133,7 @@ export function CardExporter({
         />
         {!fontsReady && (
           <div
-            className="absolute inset-0 m-auto max-h-full w-auto max-w-full animate-pulse rounded-[var(--r-lg)] bg-surface-2"
+            className={`absolute inset-0 m-auto max-h-full w-auto max-w-full rounded-[var(--r-lg)] bg-surface-2 ${SKELETON_PULSE}`}
             style={{ aspectRatio: "9 / 16" }}
           />
         )}

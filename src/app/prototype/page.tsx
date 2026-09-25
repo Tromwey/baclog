@@ -13,6 +13,7 @@ import {
   SAMPLE_DOUBLE_FEATURE,
 } from "@/modules/cards/double-feature";
 import { ALT_BACKLOG, DEMO_BACKLOG } from "./data";
+import { SKELETON_PULSE } from "@/components/kura/components";
 
 type LabStyle = CardStyle | "double-feature";
 
@@ -154,7 +155,7 @@ export default function PrototypePage() {
               className="aspect-[9/16] w-full rounded-xl shadow-2xl shadow-black/60"
             />
             {!fontsReady && (
-              <div className="absolute inset-0 animate-pulse rounded-xl bg-surface-2" />
+              <div className={`absolute inset-0 rounded-xl bg-surface-2 ${SKELETON_PULSE}`} />
             )}
           </>
         )}

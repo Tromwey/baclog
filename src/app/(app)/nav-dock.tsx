@@ -106,7 +106,9 @@ function destinationIndex(pathname: string): number {
 }
 
 /**
- * The Kura dock: `rgba(20,20,26,.5)` + blur 26 (saturate 1.7), the dark
+ * The Kura dock: `.bl-dock-glass` (`rgba(20,20,26,.5)` + blur 26, saturate
+ * 1.7 — a class so `prefers-contrast` / `prefers-reduced-transparency` can
+ * reach it), the dark
  * float shadow, 34 above the bottom edge (`--dock-offset`). Active tab = a
  * `.1` white fill + `--text`; the rest `--text-3`. No accent in the dock —
  * miel is spent once per screen, by the screen.
@@ -141,7 +143,7 @@ export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
       className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] z-10 flex justify-center"
     >
       <div
-        className={`flex gap-1.5 rounded-full bg-[rgba(20,20,26,.5)] p-1.5 shadow-float backdrop-blur-[26px] backdrop-saturate-[1.7] transition-[opacity,transform] duration-300 ease-out ${
+        className={`bl-dock-glass flex gap-1.5 rounded-full p-1.5 shadow-float transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"
             : "pointer-events-auto translate-y-0 opacity-100"
@@ -155,9 +157,18 @@ export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
               href={href}
               aria-current={active ? "page" : undefined}
               onClick={(e) => {
+                // A modified click opens a new tab: nothing navigates here, so
+                // nothing may be marked for this page's next template mount.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                // Re-tapping the tab you're on (at its root) = back to the top.
+                if (pathname === href) {
+                  e.preventDefault();
+                  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                  window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+                  return;
+                }
                 // A tab change enters in 0 ms (page-slide.tsx).
                 setNavDirection(routeIndex !== i ? 1 : 0);
-                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 setPending({ from: pathname, index: i });
               }}
               // 22 px sides at ≥390 (the frame); 14 below so four tabs still

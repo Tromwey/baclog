@@ -12,9 +12,9 @@ struct SplashView: View {
         }
         .task {
             guard !store.holdSplash else { return }
-            try? await Task.sleep(for: .milliseconds(1100))
             // A stored token skips the entrance (refreshing it when it's about to expire).
-            await store.finishSplash()
+            // The refresh runs right away; the wordmark only holds a short beat if it's faster.
+            await store.finishSplash(minimumHold: .milliseconds(400))
         }
     }
 }
@@ -347,7 +347,7 @@ struct PickThreeView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             background.ignoresSafeArea()
-                .animation(.easeInOut(duration: 0.4), value: picks)
+                .animation(KMotion.tint, value: picks)
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -475,9 +475,9 @@ struct PickThreeView: View {
         }
         .buttonStyle(.plain)
         .opacity(full && idx == nil ? 0.38 : 1)
-        .scaleEffect(idx != nil ? 0.95 : 1)
-        .animation(.spring(response: 0.26, dampingFraction: 0.6), value: idx)
-        .animation(.easeInOut(duration: 0.2), value: full)
+        .kScale(idx != nil ? 0.95 : 1)
+        .kAnimation(KMotion.snappy, value: idx)
+        .animation(KMotion.fade, value: full)
         .accessibilityLabel(t.name)
         .accessibilityAddTraits(idx != nil ? .isSelected : [])
     }
@@ -487,7 +487,7 @@ struct PickThreeView: View {
             store.onboardingPicks.remove(at: i)
         } else if store.onboardingPicks.count < 3 {
             store.onboardingPicks.append(id)
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            KHaptic.impact(.medium)
         }
     }
 }

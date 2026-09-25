@@ -203,7 +203,8 @@ export function CollectionScreen({
   const [visibility, setVisibility] = useState(backlog.visibility);
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   const [sheet, setSheet] = useState<SheetState | null>(null);
-  const { toast, show, act } = useToast();
+  const toastHost = useToast();
+  const { show } = toastHost;
   const content = zoom ? "bl-zoom-content" : "";
 
   const present = useMemo(
@@ -480,7 +481,7 @@ export function CollectionScreen({
         </Sheet>
       )}
 
-      <Toast toast={toast} onAction={act} />
+      <Toast host={toastHost} />
     </div>
   );
 }

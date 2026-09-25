@@ -6,7 +6,7 @@ import { BacklogZoomView, loadBacklogZoom } from "../../backlog-zoom-view";
  * The collection (Kura · flujos-v2 03) as an intercepted overlay — a soft nav from /backlogs
  * lands here (URL becomes /backlogs/[id], shareable) while the list stays
  * mounted underneath. Same loader as the full-page twin. The fixed shell +
- * bl-zoom-in bloom live in this segment's layout.tsx so they play ONCE and
+ * spring bloom (zoom-shell.tsx) live in this segment's layout.tsx so they play ONCE and
  * survive the loading→page swap; `zoom` here only adds the inner content
  * staggers. Dismiss = router.back() (the header's ZoomBackButton).
  */

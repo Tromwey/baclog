@@ -141,7 +141,7 @@ struct CollectionsView: View {
                         HStack(alignment: .bottom, spacing: 10) {
                             ForEach(ts) { t in
                                 Button { store.push(.title(t.id)) } label: {
-                                    CoverView(title: t, height: 150, badge: badge(t))
+                                    CoverView(title: t, height: 150, badge: badge(t)).zoomSource(ZoomID.title(t.id))
                                 }
                                 .buttonStyle(.plain)
                             }

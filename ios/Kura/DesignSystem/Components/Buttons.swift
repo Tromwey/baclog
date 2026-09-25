@@ -1,12 +1,21 @@
 import SwiftUI
 
-/// Press feedback without borders or glows: a slight dim + scale.
+/// Press feedback without borders or glows: a slight dim + scale. Press-in is instant
+/// (the finger is the animation); release springs back. Reduce Motion keeps only the dim.
 struct KPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.72 : 1)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        KPressBody(configuration: configuration)
+    }
+
+    private struct KPressBody: View {
+        let configuration: Configuration
+        @Environment(\.accessibilityReduceMotion) private var reduce
+        var body: some View {
+            configuration.label
+                .opacity(configuration.isPressed ? 0.72 : 1)
+                .scaleEffect(configuration.isPressed && !reduce ? 0.97 : 1)
+                .animation(configuration.isPressed ? nil : KMotion.release, value: configuration.isPressed)
+        }
     }
 }
 
@@ -25,17 +34,19 @@ struct GlassButton: View {
     var fill: Color = KColor.glassBg
     var trailingSystemImage: String? = nil
     let action: () -> Void
+    /// Icons grow with the label next to them (Dynamic Type).
+    @ScaledMetric(relativeTo: .subheadline) private var k: CGFloat = 1
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let glyph { GlyphView(glyph: glyph, size: 16) }
                 if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: 15, weight: .semibold))
+                    Image(systemName: systemImage).font(.system(size: 15 * k, weight: .semibold))
                 }
                 Text(title).font(.kura.ui(fontSize, .semibold)).lineLimit(1)
                 if let trailingSystemImage {
-                    Image(systemName: trailingSystemImage).font(.system(size: 13, weight: .semibold))
+                    Image(systemName: trailingSystemImage).font(.system(size: 13 * k, weight: .semibold))
                 }
             }
             .foregroundStyle(KColor.text)
@@ -57,11 +68,12 @@ struct SolidButton: View {
     var height: CGFloat = 52
     var enabled = true
     let action: () -> Void
+    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if let systemImage { Image(systemName: systemImage).font(.system(size: 17, weight: .semibold)) }
+                if let systemImage { Image(systemName: systemImage).font(.system(size: iconSize, weight: .semibold)) }
                 Text(title).font(.kura.ui(16, .semibold))
             }
             .foregroundStyle(enabled ? KColor.bg : KColor.text2)
@@ -69,7 +81,7 @@ struct SolidButton: View {
             .frame(height: height)
             .background(enabled ? KColor.text : KColor.s2, in: Capsule())
             .contentShape(Capsule())
-            .animation(.easeInOut(duration: 0.22), value: enabled)
+            .animation(KMotion.fade, value: enabled)
         }
         .kPress()
         .disabled(!enabled)
@@ -90,6 +102,8 @@ struct HoneyButton: View {
                 .padding(.horizontal, 14)
                 .frame(height: height)
                 .background(KColor.accent, in: Capsule())
+                // 44 pt to the finger, same pill to the eye.
+                .kHitArea(vertical: max(0, (44 - height) / 2))
         }
         .kPress()
     }
@@ -110,8 +124,8 @@ struct FollowToggle: View {
                 .padding(.horizontal, 14)
                 .frame(minHeight: 36)
                 .background(following ? Color.clear : (honey ? KColor.accent : KColor.glassBg), in: Capsule())
-                .contentShape(Capsule())
-                .animation(.easeInOut(duration: 0.2), value: following)
+                .kHitArea(vertical: 4)
+                .animation(KMotion.fade, value: following)
         }
         .kPress()
         .accessibilityLabel(following ? "Dejar de seguir" : "Seguir")
@@ -136,6 +150,8 @@ struct IconChip44: View {
                 .frame(width: size, height: size)
                 .modifier(ChromeFill(fill: fill, shape: Circle()))
                 .contentShape(Circle())
+                // Smaller chips (the 36 sheet close) still take a 44 pt touch.
+                .kHitArea(horizontal: max(0, (44 - size) / 2), vertical: max(0, (44 - size) / 2))
         }
         .modifier(ChromePress(glass: fill == KColor.glassBg))
         .accessibilityLabel(label)
@@ -185,7 +201,7 @@ struct RadioMark: View {
             }
         }
         .frame(width: 26, height: 26)
-        .animation(.easeInOut(duration: 0.18), value: on)
+        .animation(KMotion.fade, value: on)
         .accessibilityHidden(true)
     }
 }

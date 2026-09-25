@@ -107,7 +107,7 @@ struct AvatarPhoto: View {
             }
         }
         .frame(width: size, height: size)
-        .animation(.easeOut(duration: 0.18), value: img != nil)
+        .animation(KMotion.fade, value: img != nil)
         .task(id: url) {
             guard AvatarStore.shared.cached(url) == nil else { return }
             if let image = await AvatarStore.shared.image(for: url) { loaded = (url, image) }

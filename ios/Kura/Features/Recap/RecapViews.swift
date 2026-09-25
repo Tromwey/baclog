@@ -51,7 +51,7 @@ struct RecapView: View {
                     Text(r.month).font(.kura.newsItalic(52)).foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
                     HStack(alignment: .bottom, spacing: 16) {
-                        Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170) }
+                        Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170).zoomSource(ZoomID.title(top.id)) }
                             .buttonStyle(.plain)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Lo más tuyo").monoLabel(11, tracking: 0.1)
@@ -76,7 +76,7 @@ struct RecapView: View {
                         Text("También en tu mes").monoLabel(11, tracking: 0.1)
                         HStack(alignment: .bottom, spacing: 10) {
                             ForEach(r.also) { t in
-                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS) }
+                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id)) }
                                     .buttonStyle(.plain)
                             }
                         }

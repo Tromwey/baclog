@@ -167,7 +167,7 @@ function EditBody({
               className={`relative block h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 ${hasSpoiler ? "bg-text" : "bg-white/[0.16]"}`}
             >
               <span
-                className={`absolute top-[2px] h-[27px] w-[27px] rounded-full transition-[left,background-color] duration-200 ${hasSpoiler ? "left-[22px] bg-bg" : "left-[2px] bg-text"}`}
+                className={`absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full transition-[translate,background-color] duration-200 ${hasSpoiler ? "translate-x-5 bg-bg" : "translate-x-0 bg-text"}`}
               />
             </span>
           </button>

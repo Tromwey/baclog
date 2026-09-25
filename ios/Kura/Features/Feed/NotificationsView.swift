@@ -74,7 +74,7 @@ struct NotificationsView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { open(n) }
+        .kPressable(.row) { open(n) }
         .accessibilityElement(children: .combine)
     }
 
@@ -93,7 +93,7 @@ struct NotificationsView: View {
             if let p = store.person(id) { Seal(person: p, size: 44) }
         case .release(let tid, _):
             if let t = store.title(tid) {
-                CoverView(title: t, width: 44, height: 66, radius: KRadius.coverS)
+                CoverView(title: t, width: 44, height: 66, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
                     .overlay(alignment: .bottomTrailing) {
                         GlyphView(glyph: .clock, size: 14)
                             .frame(width: 24, height: 24)
@@ -210,7 +210,7 @@ struct FeedEmptyView: View {
                     }
                     .frame(minHeight: 64)
                     .contentShape(Rectangle())
-                    .onTapGesture { store.push(.person(p.id)) }
+                    .kPressable(.row(inset: -10)) { store.push(.person(p.id)) }
                 }
             }
             .padding(.horizontal, 20)

@@ -55,7 +55,8 @@ export function FollowButton({
 }) {
   const [following, setFollowing] = useState(initialFollowing);
   const [, startTransition] = useTransition();
-  const { toast, show, act, dismiss } = useToast();
+  const toastHost = useToast();
+  const { show, dismiss } = toastHost;
   const id = useId();
 
   useEffect(() => {
@@ -125,7 +126,7 @@ export function FollowButton({
       >
         {following ? "Siguiendo" : "Seguir"}
       </button>
-      <Toast toast={toast} onAction={act} bottom={toastBottom} />
+      <Toast host={toastHost} bottom={toastBottom} />
     </>
   );
 }

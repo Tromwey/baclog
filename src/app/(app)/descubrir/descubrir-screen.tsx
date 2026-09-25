@@ -5,10 +5,9 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   useTransition,
 } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { flushSync } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import {
   discoverNextRecoAction,
@@ -36,6 +35,7 @@ import {
   SOLID_BUTTON,
 } from "@/components/kura/components";
 import { BACK_PATH } from "@/components/glyph-paths";
+import { Toast, useToast } from "@/components/kura/toast";
 import { DiscoverHome, type RecCard } from "./discover-home";
 import { SearchView } from "./search-view";
 import { SearchSheet } from "./search-sheet";
@@ -51,12 +51,6 @@ type Mode = "home" | "search" | "loading" | "ai";
 export interface SearchBacklog extends DiscoveryBacklog {
   /** The collection's palette — what its thumbnail falls back to without a cover. */
   paletteHex: string[];
-}
-
-interface Toast {
-  id: number;
-  text: string;
-  undo?: () => Promise<void>;
 }
 
 /**
@@ -120,7 +114,8 @@ export function DescubrirScreen({
   const [library, setLibrary] = useState<LibraryIndex>(initialLibrary);
   const [collections, setCollections] = useState<SearchBacklog[]>(backlogs);
   const [saving, setSaving] = useState<SaveWork | null>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const toastHost = useToast();
+  const { show: showToast } = toastHost;
   const [celebration, setCelebration] = useState<FirstItemCelebration | null>(null);
   const queuedCelebration = useRef<FirstItemCelebration | null>(null);
   const libraryWasEmpty = useRef(totalTitles === 0);
@@ -144,16 +139,21 @@ export function DescubrirScreen({
 
   const seen = (w: SeenWork) => pushSeen(w);
 
-  const toastSeq = useRef(0);
-  const say = useCallback((text: string, undo?: () => Promise<void>) => {
-    toastSeq.current += 1;
-    setToast({ id: toastSeq.current, text, undo });
-  }, []);
-  // Only clears the pill it was called for: a "no se pudo deshacer" raised
-  // while an undo runs must survive that undo's own dismissal.
-  const dropToast = useCallback(
-    (id: number) => setToast((t) => (t && t.id === id ? null : t)),
-    [],
+  // §patrones · confirmar y deshacer, on the shared pill. The undo is a
+  // REVERSE write (the save already landed), so it runs as an async action:
+  // the pill waits for it, and a "no se pudo deshacer" it raises replaces it.
+  const say = useCallback(
+    (text: string, undo?: () => Promise<void>) =>
+      showToast(
+        undo
+          ? { message: text, kind: "undo", actionLabel: "Deshacer", onAction: undo }
+          : { message: text },
+      ),
+    [showToast],
+  );
+  const fail = useCallback(
+    (text: string) => showToast({ message: text, kind: "error" }),
+    [showToast],
   );
 
   const nameOf = (id: string) =>
@@ -242,7 +242,7 @@ export function DescubrirScreen({
           cur = cur.filter((x) => x.backlogItemId !== m.backlogItemId);
         }
       } catch {
-        say("No se pudo deshacer. Revisa tu conexión.");
+        fail("No se pudo deshacer. Revisa tu conexión.");
       }
       const final = cur;
       setLibrary((lib) => withMemberships(lib, id, final));
@@ -433,54 +433,9 @@ export function DescubrirScreen({
         <FirstItemSheet item={celebration} onDismiss={() => setCelebration(null)} />
       )}
 
-      {toast && <UndoToast key={toast.id} toast={toast} onDone={dropToast} />}
+      {/* Over the dock: the pill sits just above it. */}
+      <Toast host={toastHost} bottom="calc(var(--dock-clearance) - 22px)" />
     </main>
-  );
-}
-
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-}
-
-/**
- * §patrones · confirmar y deshacer: an `--s2` pill over the dock, 5 s, one at
- * a time (a new one replaces the old by key). Portaled: the content wrapper
- * would trap it under the dock.
- */
-function UndoToast({ toast, onDone }: { toast: Toast; onDone: (id: number) => void }) {
-  const hydrated = useHydrated();
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => onDone(toast.id), 5000);
-    return () => clearTimeout(t);
-  }, [onDone, toast.id]);
-  if (!hydrated) return null;
-  return createPortal(
-    <div
-      role="status"
-      className="bl-rise-soft fixed inset-x-4 bottom-[calc(var(--dock-clearance)-22px)] z-40 mx-auto flex min-h-[52px] max-w-[calc(28rem-32px)] items-center gap-3 rounded-full bg-surface-2 pl-[18px] pr-2 shadow-float"
-    >
-      <span className="min-w-0 flex-1 truncate text-[15px] text-text">{toast.text}</span>
-      {toast.undo && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            await toast.undo?.();
-            onDone(toast.id);
-          }}
-          className="min-h-11 flex-none px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-text disabled:opacity-50"
-        >
-          Deshacer
-        </button>
-      )}
-    </div>,
-    document.body,
   );
 }
 

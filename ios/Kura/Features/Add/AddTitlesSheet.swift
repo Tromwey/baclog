@@ -103,7 +103,7 @@ struct AddTitlesSheet: View {
         let on = format == f
         return Button {
             format = f
-            UISelectionFeedbackGenerator().selectionChanged()
+            KHaptic.select()
         } label: {
             Text(label)
                 .monoLabel(11, color: on ? KColor.text : KColor.text2)
@@ -157,7 +157,7 @@ struct AddTitlesSheet: View {
                     store.removeSilently(t.id, from: c.id)
                 } else {
                     store.add(t.id, to: c.id)
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    KHaptic.impact(.light)
                 }
             } label: {
                 Image(systemName: added ? "checkmark" : "plus")
@@ -165,8 +165,8 @@ struct AddTitlesSheet: View {
                     .foregroundStyle(added ? KColor.bg : KColor.text)
                     .frame(width: 44, height: 44)
                     .background(added ? KColor.text : KColor.glassBg, in: Circle())
-                    .scaleEffect(added ? 1 : 0.94)
-                    .animation(.spring(response: 0.26, dampingFraction: 0.55), value: added)
+                    .kScale(added ? 1 : 0.94)
+                    .kAnimation(KMotion.snappy, value: added)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(added ? "Quitar \(t.name)" : "Agregar \(t.name)")

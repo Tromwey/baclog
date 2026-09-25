@@ -24,8 +24,8 @@ enum UIWeight { case regular, medium, semibold }
 
 /// `Font.kura.*` — sizes are the DS values (specified in px at 390 pt wide) at
 /// the default text size, and they follow Dynamic Type: each size scales with
-/// the text style it sits closest to (`relativeTo:`). `RootView` caps the growth
-/// at `xxxLarge` so the fixed frames (covers, chips 44, sheets) keep holding.
+/// the text style it sits closest to (`relativeTo:`), into the accessibility sizes.
+/// Fixed-geometry chrome caps itself at `xxxLarge` with `kFixedChrome()`.
 ///
 /// What stays FIXED on purpose (`fixed: true` / `mono`):
 /// - Red Hat Mono is the data voice: uppercase labels on cover badges, the
@@ -92,6 +92,11 @@ extension Font {
 }
 
 extension View {
+    /// Fixed-geometry chrome (dock, top chips, covers, collection/feed cards, toast) stops
+    /// growing at xxxLarge: its frames are exact and it's secondary to the reading text,
+    /// which scales into the accessibility sizes. Never put this on a screen or a sheet.
+    func kFixedChrome() -> some View { dynamicTypeSize(...DynamicTypeSize.xxxLarge) }
+
     /// Red Hat Mono · UPPERCASE · tracking +8 % (dates, counts, labels).
     func monoLabel(_ size: CGFloat = 11, tracking: Double = 0.08, color: Color = KColor.text2, medium: Bool = false) -> some View {
         self.font(.kura.mono(size, medium: medium))

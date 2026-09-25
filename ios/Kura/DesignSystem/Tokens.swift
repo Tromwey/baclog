@@ -219,14 +219,68 @@ enum Tint {
 
 // MARK: - Motion
 
+/// Every curve in the app comes from here (DS "movimiento"). Rules:
+/// - Tap-driven state changes are critically damped springs (no bounce): `snappy`.
+/// - Bounce only after a drag that carries momentum: `momentum` (slider snap, sheet release).
+/// - Fades (tint, opacity, color) are eases: `tint`, `fade`.
+/// - Press: instant in, `release` out (KPressStyle, kPressable).
+/// - Reduce Motion: anything spatial (move, zoom, scale, bounce) becomes a fade —
+///   use `KMotion.slide(_:reduce:)`, `.kAnimation(_:value:)` and `.kScale(_:)`, which read it.
 enum KMotion {
-    /// Shared cover, reaction morph: 320 ms spring.
+    /// Shared cover, reaction morph: 320 ms spring, barely damped past critical.
     static let spring = Animation.spring(response: 0.32, dampingFraction: 0.86)
+    /// Tap-driven toggles/selections: quick, no overshoot.
+    static let snappy = Animation.spring(response: 0.28, dampingFraction: 0.92)
+    /// Settles a drag that had momentum (bounce allowed here only).
+    static let momentum = Animation.spring(response: 0.32, dampingFraction: 0.68)
+    /// Press release (press-in is instant).
+    static let release = Animation.spring(response: 0.3, dampingFraction: 0.9)
     /// Tint fade.
     static let tint = Animation.easeInOut(duration: 0.24)
-    /// Sheet up.
-    static let sheetIn = Animation.easeOut(duration: 0.28)
-    /// Sheet down.
-    static let sheetOut = Animation.easeIn(duration: 0.22)
-    static let short = Animation.easeInOut(duration: 0.2)
+    /// Opacity / color fades.
+    static let fade = Animation.easeInOut(duration: 0.2)
+    /// Sheet up / down: springs (retargetable mid-flight), not fixed eases.
+    static let sheetIn = Animation.smooth(duration: 0.34)
+    static let sheetOut = Animation.smooth(duration: 0.26)
+    /// Legacy name for `fade`.
+    static let short = fade
+
+    /// The system setting, for code outside a view (store, gestures).
+    static var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+
+    /// A spatial animation, or a fade when Reduce Motion is on.
+    static func spatial(_ a: Animation, reduce: Bool = reduceMotion) -> Animation { reduce ? fade : a }
+
+    /// Slide in from an edge; a plain fade with Reduce Motion.
+    static func slide(_ edge: Edge, reduce: Bool, fading: Bool = false) -> AnyTransition {
+        if reduce { return .opacity }
+        return fading ? .move(edge: edge).combined(with: .opacity) : .move(edge: edge)
+    }
+}
+
+extension View {
+    /// `.animation(_:value:)` that swaps a spatial curve for a fade under Reduce Motion.
+    func kAnimation<V: Equatable>(_ a: Animation, value: V) -> some View {
+        modifier(KReducedAnimation(animation: a, value: value))
+    }
+
+    /// Emphasis scale that Reduce Motion drops (stays at 1).
+    func kScale(_ s: CGFloat) -> some View { modifier(KReducedScale(scale: s)) }
+}
+
+private struct KReducedAnimation<V: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    let animation: Animation
+    let value: V
+    func body(content: Content) -> some View {
+        content.animation(reduce ? KMotion.fade : animation, value: value)
+    }
+}
+
+private struct KReducedScale: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    let scale: CGFloat
+    func body(content: Content) -> some View {
+        content.scaleEffect(reduce ? 1 : scale)
+    }
 }

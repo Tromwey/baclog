@@ -222,7 +222,7 @@ struct ChangeCoverView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 124)
                         .padding(.bottom, 28)
-                        .background(Tint.header(current?.palette ?? []).animation(.easeInOut(duration: 0.3), value: current?.id))
+                        .background(Tint.header(current?.palette ?? []).animation(KMotion.tint, value: current?.id))
 
                         VStack(alignment: .leading, spacing: 14) {
                             Text("Elige la portada. Su color tiñe la cabecera y la card en tus colecciones.")
@@ -234,7 +234,7 @@ struct ChangeCoverView: View {
                                     let on = t.id == current?.id
                                     Button {
                                         withAnimation(KMotion.tint) { chosen = t.id }
-                                        UISelectionFeedbackGenerator().selectionChanged()
+                                        KHaptic.select()
                                     } label: {
                                         CoverView(title: t, radius: KRadius.coverS, badge: on ? .chosen : .none, fluid: true)
                                             .opacity(on ? 1 : 0.55)
@@ -399,7 +399,6 @@ struct DeleteCollectionSheet: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
-            .accessibilityAddTraits(.isModal)
         }
     }
 }
@@ -502,7 +501,7 @@ struct MoveToSheet: View {
                             Button {
                                 guard !here else { return }
                                 target = c.id
-                                UISelectionFeedbackGenerator().selectionChanged()
+                                KHaptic.select()
                             } label: {
                                 HStack(spacing: 14) {
                                     CollectionThumb(collection: c)

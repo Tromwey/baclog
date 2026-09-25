@@ -7,7 +7,7 @@ struct KuraToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button {
             configuration.isOn.toggle()
-            UISelectionFeedbackGenerator().selectionChanged()
+            KHaptic.select()
         } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                 Capsule().fill(configuration.isOn ? KColor.text : Color.white.opacity(0.16))
@@ -18,7 +18,7 @@ struct KuraToggleStyle: ToggleStyle {
                     .padding(2)
             }
             .frame(width: 51, height: 31)
-            .animation(.spring(response: 0.26, dampingFraction: 0.78), value: configuration.isOn)
+            .animation(KMotion.snappy, value: configuration.isOn)
         }
         .buttonStyle(.plain)
         .accessibilityRepresentation { Toggle(isOn: configuration.$isOn) { configuration.label } }
@@ -85,10 +85,11 @@ struct SettingsRow<Trailing: View>: View {
 /// Value + chevron for a settings row.
 struct RowValue: View {
     let text: String
+    @ScaledMetric(relativeTo: .subheadline) private var chevron: CGFloat = 13
     var body: some View {
         HStack(spacing: 6) {
             Text(text).font(.kura.ui(15)).foregroundStyle(KColor.text2)
-            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
+            Image(systemName: "chevron.right").font(.system(size: chevron, weight: .semibold)).foregroundStyle(KColor.text2)
         }
     }
 }
@@ -121,7 +122,7 @@ struct ReactionSlider: View {
                 Capsule().fill(Color.white.opacity(0.07))
                 Capsule().fill(fill)
                     .frame(width: (w - 64) * value / 2 + 64)
-                    .animation(.easeInOut(duration: 0.2), value: stop)
+                    .animation(KMotion.fade, value: stop)
                 ForEach(0..<3, id: \.self) { i in
                     GlyphView(glyph: Self.stops[i].mark.glyph, size: 22,
                               color: CGFloat(i) <= value + 0.02 ? KColor.text : Color.white.opacity(0.3))
@@ -135,8 +136,8 @@ struct ReactionSlider: View {
                     .frame(width: 56, height: 56)
                     .overlay(GlyphView(glyph: s.mark.glyph, size: 24, color: KColor.bg))
                     .shadow(color: .black.opacity(0.5), radius: 8, y: 6)
-                    .scaleEffect(stop == 2 ? 1.12 : 1)
-                    .animation(.spring(response: 0.26, dampingFraction: 0.55), value: stop)
+                    .kScale(stop == 2 ? 1.12 : 1)
+                    .kAnimation(KMotion.snappy, value: stop)
                     .offset(x: (w - 64) * value / 2 + 4, y: 4)
                     .allowsHitTesting(false)
             }
@@ -168,8 +169,11 @@ struct ReactionSlider: View {
         }
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduce
+
+    /// The one bounce left in the app: the thumb settling after a drag with momentum.
     private func snap(to i: Int) {
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.68)) { value = CGFloat(i) }
+        withAnimation(KMotion.spatial(KMotion.momentum, reduce: reduce)) { value = CGFloat(i) }
         hapticIfStopChanged(force: i)
     }
 
@@ -177,7 +181,7 @@ struct ReactionSlider: View {
         let s = force ?? stop
         guard s != lastStop else { return }
         lastStop = s
-        UIImpactFeedbackGenerator(style: s == 2 ? .medium : .light).impactOccurred()
+        KHaptic.impact(s == 2 ? .medium : .light)
     }
 }
 
@@ -229,13 +233,16 @@ struct ChipRow<T: Hashable>: View {
                     let on = opt.0 == selection
                     Button {
                         selection = opt.0
-                        UISelectionFeedbackGenerator().selectionChanged()
+                        KHaptic.select()
                     } label: {
                         Text(opt.1)
                             .monoLabel(11, tracking: 0.1, color: on ? KColor.text : KColor.text2)
                             .padding(.horizontal, 16)
                             .frame(height: 40)
                             .background(on ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+                            // 44 pt touch; the extra 2+2 lives inside the scroll view so it's hit-testable.
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(on ? .isSelected : [])
@@ -243,5 +250,6 @@ struct ChipRow<T: Hashable>: View {
             }
             .padding(.horizontal, 20)
         }
+        .padding(.vertical, -2)
     }
 }

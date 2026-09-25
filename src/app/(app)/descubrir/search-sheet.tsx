@@ -18,6 +18,7 @@ import { createBacklogAction } from "@/app/actions/backlog-actions";
 import { extractPalette } from "@/modules/cards/palette";
 import type { CatalogSearchResult } from "@/modules/catalog/types";
 import { GLASS_BUTTON } from "@/components/kura/components";
+import { Toast, useToast } from "@/components/kura/toast";
 import { CHEVRON_DOWN_PATH } from "@/components/glyph-paths";
 import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
@@ -169,7 +170,10 @@ export function SearchSheet({
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ id: number; catalogItemId: string; backlogId: string; name: string } | null>(null);
+  const toastHost = useToast();
+  const { show: showToast, dismiss: dismissToast } = toastHost;
+  /** The title the live "Agregado a…" pill is about. */
+  const toastItem = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const newInputRef = useRef<HTMLInputElement>(null);
@@ -199,12 +203,6 @@ export function SearchSheet({
   useEffect(() => {
     if (newOpen) newInputRef.current?.focus();
   }, [newOpen]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast((x) => (x?.id === toast.id ? null : x)), 5000);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   useEffect(() => {
     const q = query.trim();
@@ -284,7 +282,8 @@ export function SearchSheet({
         await removeMembershipAction(existing);
         record(t.id, id, null);
         setAddsThisVisit((n) => Math.max(0, n - 1));
-        setToast((x) => (x?.catalogItemId === id ? null : x));
+        // Taken out by hand: its "Agregado a…" says nothing true anymore.
+        if (toastItem.current === id) dismissToast();
       } else {
         // Palette is cover-derived + cached on catalog_item: extract only when
         // this title has none yet.
@@ -303,7 +302,13 @@ export function SearchSheet({
         }
         record(t.id, id, newId);
         setAddsThisVisit((n) => n + 1);
-        setToast({ id: Date.now(), catalogItemId: id, backlogId: t.id, name: t.name });
+        toastItem.current = id;
+        showToast({
+          message: `Agregado a ${t.name}`,
+          kind: "undo",
+          actionLabel: "Deshacer",
+          onAction: () => void undoAdd(t.id, id, newId),
+        });
         if (libraryEmpty && !celebrationRef.current && !celebration) {
           const c: FirstItemCelebration = {
             title: r.title,
@@ -327,13 +332,7 @@ export function SearchSheet({
     }
   };
 
-  const undoToast = async () => {
-    if (!toast) return;
-    const { catalogItemId, backlogId } = toast;
-    setToast(null);
-    const k = keyOf(backlogId, catalogItemId);
-    const id = overrides[k];
-    if (!id) return;
+  const undoAdd = async (backlogId: string, catalogItemId: string, id: string) => {
     setRowPending(catalogItemId, true);
     try {
       await removeMembershipAction(id);
@@ -676,24 +675,15 @@ export function SearchSheet({
             })}
         </div>
 
-        {toast && (
-          <div
-            role="status"
-            className="bl-rise-soft absolute inset-x-4 bottom-[calc(30px+env(safe-area-inset-bottom))] flex min-h-[52px] items-center gap-3 rounded-full bg-surface-2 pl-[18px] pr-2 shadow-float"
-            style={keyboardInset > 0 ? { bottom: keyboardInset + 16 } : undefined}
-          >
-            <span className="min-w-0 flex-1 truncate text-[15px] text-text">
-              Agregado a {toast.name}
-            </span>
-            <button
-              type="button"
-              onClick={undoToast}
-              className="min-h-11 flex-none px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-text"
-            >
-              Deshacer
-            </button>
-          </div>
-        )}
+        <Toast
+          host={toastHost}
+          contained
+          bottom={
+            keyboardInset > 0
+              ? `${keyboardInset + 16}px`
+              : "calc(30px + env(safe-area-inset-bottom))"
+          }
+        />
       </div>
     </div>,
     document.body,

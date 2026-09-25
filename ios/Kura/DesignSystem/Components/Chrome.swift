@@ -33,6 +33,7 @@ struct Dock: View {
         .padding(6)
         .modifier(DockSurface())
         .environment(\.colorScheme, .dark)
+        .kFixedChrome()
     }
 }
 
@@ -86,12 +87,14 @@ struct ToastView: View {
         .frame(minHeight: 52)
         .kGlass(Capsule(), fill: KColor.s2, tint: KColor.s2.opacity(0.7))
         .modifier(PreGlassShadow())
+        .kFixedChrome()
         .accessibilityElement(children: .contain)
     }
 }
 
 struct ToastHost: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduce
     var dockVisible: Bool
 
     var body: some View {
@@ -101,11 +104,11 @@ struct ToastHost: View {
                 ToastView(toast: t) { t.action?() }
                     .padding(.horizontal, 16)
                     .padding(.bottom, dockVisible && store.sheet == nil ? 78 : 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(KMotion.slide(.bottom, reduce: reduce, fading: true))
                     .id(t.id)
             }
         }
-        .animation(KMotion.short, value: store.toast?.id)
+        .animation(KMotion.spatial(KMotion.snappy, reduce: reduce), value: store.toast?.id)
     }
 }
 
@@ -113,9 +116,21 @@ struct ToastHost: View {
 
 /// Compact sheet: inset 8, radius 36, s2, grabber 36×5, float shadow.
 /// Tall sheet (Agregar): 54 from the top, s1, radius 36 on top.
+///
+/// Modal for VoiceOver (`isModal` + the escape "Z" gesture closes it like the scrim);
+/// `RootView` hides everything behind it from accessibility while it's up.
+/// The grabber drag follows the finger down, rubber-bands up, and hands its velocity
+/// to the settle (or to the dismissal). Only the grabber drags: the sheets hold
+/// ScrollViews/lists, and on iOS 17 there's no scroll-offset signal to know when a body
+/// drag should move the sheet instead of the list.
 struct SheetHost: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduce
     @State private var drag: CGFloat = 0
+    @State private var sheetHeight: CGFloat = 400
+    /// True while a grabber drag is live; resets on end AND on cancel (a system gesture or
+    /// an interruption never calls `onEnded`, which would leave the sheet hanging mid-drag).
+    @GestureState private var dragging = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -124,26 +139,61 @@ struct SheetHost: View {
                     .ignoresSafeArea()
                     .onTapGesture { store.dismissSheetInteractively() }
                     .transition(.opacity)
-                    .accessibilityLabel("Cerrar")
-                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHidden(true)
 
                 container(for: route)
-                    .offset(y: max(0, drag))
-                    .transition(.move(edge: .bottom))
+                    .background {
+                        GeometryReader { g in
+                            Color.clear
+                                .onAppear { sheetHeight = g.size.height }
+                                .onChange(of: g.size.height) { _, h in sheetHeight = h }
+                        }
+                    }
+                    .offset(y: rubberBand(drag))
+                    .accessibilityElement(children: .contain)
+                    .accessibilityAddTraits(.isModal)
+                    .accessibilityAction(.escape) { store.dismissSheetInteractively() }
+                    .accessibilityAction(named: "Cerrar") { store.dismissSheetInteractively() }
+                    .transition(KMotion.slide(.bottom, reduce: reduce))
                     .id(route.id)
             }
         }
-        .animation(store.sheet == nil ? KMotion.sheetOut : KMotion.sheetIn, value: store.sheet?.id)
+        // No `.animation` here: `present`/`dismissSheet` bring their own (and a drag hands
+        // its velocity to the dismissal), and an id remap (local → server) swaps in place.
+        // A new sheet (or none) always starts at rest; the leaving one keeps its offset
+        // while its removal transition plays.
+        .onChange(of: store.sheet?.id) { drag = 0 }
+        .onChange(of: dragging) { _, live in
+            guard !live, drag != 0, store.sheet != nil else { return }
+            withAnimation(KMotion.snappy) { drag = 0 }
+        }
+    }
+
+    /// Down follows the finger 1:1; up resists (a sheet has nowhere to go up).
+    private func rubberBand(_ d: CGFloat) -> CGFloat {
+        d >= 0 ? d : -pow(-d, 0.7)
     }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 8)
+            .updating($dragging) { _, live, _ in live = true }
             .onChanged { v in drag = v.translation.height }
             .onEnded { v in
-                if (v.translation.height > 110 || v.predictedEndTranslation.height > 260), store.dismissSheetInteractively() {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { drag = 0 }
+                let vy = v.velocity.height
+                let shouldDismiss = v.translation.height > 110 || v.predictedEndTranslation.height > 260
+                if shouldDismiss, !store.sheetLocked {
+                    // The removal continues at the finger's speed: velocity in "progress per
+                    // second" over the transition's travel (the move adds the sheet's full
+                    // height on top of the current drag offset).
+                    let anim: Animation = reduce ? KMotion.sheetOut
+                        : .interpolatingSpring(duration: 0.3, bounce: 0, initialVelocity: max(vy, 0) / max(sheetHeight, 1))
+                    store.dismissSheetInteractively(animation: anim)
                 } else {
-                    withAnimation(KMotion.spring) { drag = 0 }
+                    let from = rubberBand(drag)
+                    let v0 = abs(from) > 1 ? -vy / from : 0
+                    withAnimation(reduce ? KMotion.fade : .interpolatingSpring(duration: 0.36, bounce: 0.12, initialVelocity: v0)) {
+                        drag = 0
+                    }
                 }
             }
     }
@@ -182,6 +232,8 @@ struct SheetHost: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .background(KColor.s1, in: UnevenRoundedRectangle(topLeadingRadius: KRadius.sheet, topTrailingRadius: KRadius.sheet, style: .continuous))
+            // Below the screen edge: what a rubber-banded upward pull reveals.
+            .background(alignment: .bottom) { KColor.s1.frame(height: 90).offset(y: 90) }
             .padding(.top, 54)
             .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
@@ -244,13 +296,14 @@ struct SheetRow<Trailing: View>: View {
     var glyph: Glyph? = nil
     let action: () -> Void
     @ViewBuilder var trailing: Trailing
+    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Group {
                     if let glyph { GlyphView(glyph: glyph, size: 16) }
-                    else { Image(systemName: systemImage).font(.system(size: 17, weight: .regular)).foregroundStyle(iconColor) }
+                    else { Image(systemName: systemImage).font(.system(size: iconSize, weight: .regular)).foregroundStyle(iconColor) }
                 }
                 .frame(width: 24)
                 Text(label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
@@ -301,6 +354,7 @@ struct GlassField: View {
                 Button { text = "" } label: {
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(KColor.text2)
                         .frame(width: 28, height: 28)
+                        .kHitArea(horizontal: 8, vertical: 8)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Borrar texto")
@@ -326,9 +380,10 @@ struct GlassField: View {
 // MARK: - Offline strip
 
 struct OfflineStrip: View {
+    @ScaledMetric(relativeTo: .footnote) private var iconSize: CGFloat = 15
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "wifi.slash").font(.system(size: 15, weight: .medium))
+            Image(systemName: "wifi.slash").font(.system(size: iconSize, weight: .medium))
             Text("Sin conexión. Ves lo guardado en tu teléfono.")
                 .font(.kura.ui(14))
                 .foregroundStyle(KColor.text2)
@@ -355,6 +410,7 @@ struct TopChrome<Right: View>: View {
         }
         .padding(.horizontal, KSize.chromeSide)
         .padding(.top, KSize.chromeTop)
+        .kFixedChrome()
         // chromeTop is measured from the screen's edge, never from the safe area: otherwise
         // a screen whose container respects the safe area drops its chips ~60 pt lower.
         .ignoresSafeArea(.container, edges: .top)

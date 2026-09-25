@@ -20,6 +20,7 @@ import {
   Stroke,
 } from "./chrome";
 import { PickSearch } from "./pick-search";
+import { SKELETON_PULSE } from "@/components/kura/components";
 
 const MAX_PICKS = 3;
 /** Skeleton tiles per column while the next page loads. */
@@ -326,7 +327,7 @@ export function PicksStep({
                         <span
                           key={`skeleton-${i}`}
                           aria-hidden
-                          className="block aspect-[2/3] w-full animate-pulse rounded-[var(--r-cover-s)] bg-surface-1 [animation-duration:1.6s]"
+                          className={`block aspect-[2/3] w-full rounded-[var(--r-cover-s)] bg-surface-1 ${SKELETON_PULSE}`}
                         />
                       ))}
                   </div>

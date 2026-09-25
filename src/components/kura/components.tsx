@@ -123,6 +123,10 @@ export function stateGlyph(item: {
 /* ------------------------------------------------------------- botones */
 
 /** Volver / Opciones: 44 px, glass, no border (§componentes · icono y texto). */
+/** The skeleton's pulse (§estados · cargando): opacity, 1.6 s, nothing else —
+ *  the one loop the system allows, and it stops under reduced motion. */
+export const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none [animation-duration:1.6s]";
+
 export const CHIP_44 =
   "flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]";
 

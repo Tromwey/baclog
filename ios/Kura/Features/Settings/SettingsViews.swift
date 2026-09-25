@@ -157,7 +157,7 @@ struct PrivacySettingsView: View {
                     let all = Privacy.options
                     let i = all.firstIndex(of: store.defaultPrivacy) ?? 0
                     store.defaultPrivacy = all[(i + 1) % all.count]
-                    UISelectionFeedbackGenerator().selectionChanged()
+                    KHaptic.select()
                 } label: {
                     row("Colecciones nuevas", note: "Cada colección se puede cambiar en sus opciones.") {
                         RowValue(text: store.defaultPrivacy.label)
@@ -213,7 +213,7 @@ struct MusicAppView: View {
                         if i > 0 { ListDivider() }
                         Button {
                             store.musicApp = app
-                            UISelectionFeedbackGenerator().selectionChanged()
+                            KHaptic.select()
                         } label: {
                             HStack {
                                 Text(app).font(.kura.ui(16)).foregroundStyle(KColor.text)

@@ -4,7 +4,7 @@ import { ZoomShell } from "./zoom-shell";
 /**
  * The zoom overlay's animated shell. It lives in the LAYOUT (not page/loading)
  * so the card→overlay bloom plays exactly ONCE per open: layouts persist
- * across the Suspense swap from loading.tsx to page.tsx — putting bl-zoom-in
+ * across the Suspense swap from loading.tsx to page.tsx — putting the bloom
  * on each of those instead made the overlay visibly "open twice" (skeleton
  * bloomed, then the real content bloomed again).
  *

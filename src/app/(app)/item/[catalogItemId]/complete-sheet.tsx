@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import {
+  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useTransition,
@@ -18,6 +20,7 @@ import { SOLID_BUTTON } from "@/components/kura/components";
 import { BG, mixHex } from "@/components/kura/tint";
 import { CHECK_FILL_PATH, FLAME_PATH, LIKE_PATH } from "@/components/glyph-paths";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
+import { VelocityTracker, project, spring, type SpringHandle } from "@/lib/spring";
 import { KuraSheet, useKuraSheetDismiss } from "./kura-sheet";
 import { TriangleGlyph } from "./toast";
 import { useItemReaction, type ItemVerdictValue } from "./reaction-state";
@@ -31,8 +34,12 @@ import { useItemReaction, type ItemVerdictValue } from "./reaction-state";
  * The track fills up to the thumb in the stop's own colour (mixed 55% toward
  * --bg); the 56 px thumb carries the glyph, in the state hue; the label above
  * it grows a little at the obsession. Drag anywhere on the track (1:1, pointer
- * captured), release snaps to the nearest stop; the dots are tap targets; ←/→
- * move one stop. A tick of haptics on each new stop where the device has it.
+ * captured); the release PROJECTS the throw (VelocityTracker + `project`) and
+ * a spring carries the thumb to the nearest stop to that landing — with a
+ * little bounce only when the release was actually thrown, none after a slow
+ * drag. The dots are tap targets; ←/→ move one stop. A tick of haptics on
+ * each new stop where the device has it. The thumb and fill move by
+ * `transform` (compositor-only), never `left` / `clip-path`.
  *
  * Then the optional review (280, the column's real limit), the spoiler switch
  * (films/series only) and the solid Guardar. "Quitar completado" when the
@@ -92,9 +99,28 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
 
   const [value, setValue] = useState<number>(obsessed ? 2 : verdict === "liked" ? 1 : 0);
   const [dragging, setDragging] = useState(false);
-  const stop = Math.round(value) as Stop;
+  const stop = Math.min(2, Math.max(0, Math.round(value))) as Stop;
   const lastStop = useRef<Stop>(stop);
+  // The live value for handlers (a spring or a release may run before React
+  // re-renders with the last `set`).
+  const valueRef = useRef(value);
   const trackRef = useRef<HTMLDivElement>(null);
+  // Track width in px: the thumb and fill translate by it (a % in translate
+  // is the element's own size, not the track's).
+  const [trackW, setTrackW] = useState(0);
+  const settleRef = useRef<SpringHandle | null>(null);
+  const tracker = useRef(new VelocityTracker()).current;
+
+  useLayoutEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const sync = () => setTrackW(el.clientWidth);
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => () => settleRef.current?.stop(), []);
 
   const [body, setBody] = useState(ownReview?.body ?? "");
   const [hasSpoiler, setHasSpoiler] = useState(allowSpoiler && (ownReview?.hasSpoiler ?? false));
@@ -111,7 +137,36 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
         // no haptics here
       }
     }
+    valueRef.current = v;
     setValue(v);
+  }
+
+  /** Spring the thumb to `target` (a stop), carrying `velocity` (stops/s).
+   *  Bounce (damping .8) is earned by a throw; a slow release lands dead. */
+  function settleTo(target: Stop, velocity = 0) {
+    settleRef.current?.stop();
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const thrown = Math.abs(velocity) > 0.8;
+    settleRef.current = spring({
+      from: valueRef.current,
+      to: target,
+      velocity,
+      damping: thrown && !reduce ? 0.8 : 1,
+      response: 0.32,
+      precision: 0.002,
+      onUpdate: set,
+      onRest: () => {
+        settleRef.current = null;
+      },
+    });
+  }
+
+  function release(e: PointerEvent<HTMLDivElement>, cancelled: boolean) {
+    if (!dragging) return;
+    setDragging(false);
+    const velocity = cancelled ? 0 : tracker.get(e.timeStamp);
+    const landing = valueRef.current + project(velocity);
+    settleTo(Math.min(2, Math.max(0, Math.round(landing))) as Stop, velocity);
   }
 
   function at(e: PointerEvent<HTMLDivElement>): number {
@@ -124,10 +179,10 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "ArrowRight" || e.key === "ArrowUp") {
       e.preventDefault();
-      set(Math.min(2, stop + 1));
+      settleTo(Math.min(2, stop + 1) as Stop);
     } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
       e.preventDefault();
-      set(Math.max(0, stop - 1));
+      settleTo(Math.max(0, stop - 1) as Stop);
     }
   }
 
@@ -224,11 +279,12 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
     });
   }
 
-  // 26a geometry: the thumb's left edge travels 4 → (100% − 60px); the fill
-  // ends 64 px past the start so it always wraps the thumb.
-  const frac = value / 2;
-  const edge = `calc((100% - 64px) * ${frac} + 64px)`;
-  const ease = dragging ? "" : " 320ms cubic-bezier(.2,.9,.3,1.25)";
+  // 26a geometry: the thumb's left edge travels 4 → (width − 60px); the fill
+  // ends 64 px past the start so it always wraps the thumb. The fill is a
+  // full-width pill slid left inside a clipping, rounded track — the same
+  // shape the old `clip-path: inset(… round 999px)` cut, on the compositor.
+  const travel = Math.max(0, trackW - 64) * (value / 2);
+  const fillShift = travel + 64 - trackW;
 
   return (
     <div className="flex flex-col gap-1">
@@ -260,36 +316,41 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           onPointerDown={(e) => {
             // The slider owns this drag, not the sheet's drag-to-dismiss.
             e.stopPropagation();
+            if (!e.isPrimary) return;
             try {
               e.currentTarget.setPointerCapture(e.pointerId);
             } catch {
               // pointer already gone
             }
+            // Grabbed mid-settle: the finger takes over from here.
+            settleRef.current?.stop();
+            settleRef.current = null;
             setDragging(true);
-            set(at(e));
+            tracker.reset();
+            const v = at(e);
+            tracker.add(v, e.timeStamp);
+            set(v);
           }}
           onPointerMove={(e) => {
-            if (dragging) set(at(e));
+            if (!dragging) return;
+            const v = at(e);
+            tracker.add(v, e.timeStamp);
+            set(v);
           }}
-          onPointerUp={() => {
-            setDragging(false);
-            setValue((v) => Math.round(v));
-          }}
-          onPointerCancel={() => {
-            setDragging(false);
-            setValue((v) => Math.round(v));
-          }}
+          onPointerUp={(e) => release(e, false)}
+          onPointerCancel={(e) => release(e, true)}
           className="relative h-16 cursor-pointer select-none self-stretch rounded-full bg-white/[0.07] outline-none touch-none focus-visible:bg-white/[0.1]"
         >
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full motion-reduce:transition-none!"
-            style={{
-              background: mixHex(X.hex, BG, 0.55),
-              clipPath: `inset(0 calc(100% - ${edge}) 0 0 round 999px)`,
-              transition: `background 200ms${ease ? `, clip-path${ease}` : ""}`,
-            }}
-          />
+          <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+            <span
+              className="absolute inset-0 rounded-full motion-reduce:transition-none!"
+              style={{
+                background: mixHex(X.hex, BG, 0.55),
+                transform: `translate3d(${fillShift.toFixed(2)}px, 0, 0)`,
+                transition: "background 200ms",
+              }}
+            />
+          </span>
           {STOPS.map((s, i) => (
             <button
               key={s.id}
@@ -297,7 +358,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
               tabIndex={-1}
               aria-label={s.label}
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => set(i)}
+              onClick={() => settleTo(i as Stop)}
               className="absolute top-1/2 -ml-[22px] -mt-[22px] flex h-11 w-11 items-center justify-center"
               style={{ left: `calc((100% - 64px) * ${i / 2} + 32px)` }}
             >
@@ -308,17 +369,21 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           ))}
           <span
             aria-hidden
-            className="pointer-events-none absolute top-1 flex h-14 w-14 items-center justify-center rounded-full shadow-[0_6px_16px_rgba(0,0,0,0.5)] motion-reduce:transition-none!"
-            style={{
-              left: `calc((100% - 64px) * ${frac} + 4px)`,
-              background: X.color,
-              transform: stop === 2 ? "scale(1.12)" : "scale(1)",
-              transition: `${ease ? `left${ease}, ` : ""}background 200ms, transform 260ms cubic-bezier(.2,.9,.3,1.4)`,
-            }}
+            className="pointer-events-none absolute left-1 top-1 h-14 w-14"
+            style={{ transform: `translate3d(${travel.toFixed(2)}px, 0, 0)` }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill={BG}>
-              <path d={X.d} />
-            </svg>
+            <span
+              className="flex h-14 w-14 items-center justify-center rounded-full shadow-[0_6px_16px_rgba(0,0,0,0.5)] motion-reduce:transition-none!"
+              style={{
+                background: X.color,
+                transform: stop === 2 ? "scale(1.12)" : "scale(1)",
+                transition: "background 200ms, transform 260ms cubic-bezier(.2,.9,.3,1.4)",
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill={BG}>
+                <path d={X.d} />
+              </svg>
+            </span>
           </span>
         </div>
       </div>
@@ -388,7 +453,7 @@ function Switch({ on }: { on: boolean }) {
       className={`relative block h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 ${on ? "bg-text" : "bg-white/[0.16]"}`}
     >
       <span
-        className={`absolute top-[2px] h-[27px] w-[27px] rounded-full transition-[left,background-color] duration-200 ${on ? "left-[22px] bg-bg" : "left-[2px] bg-text"}`}
+        className={`absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full transition-[translate,background-color] duration-200 ${on ? "translate-x-5 bg-bg" : "translate-x-0 bg-text"}`}
       />
     </span>
   );

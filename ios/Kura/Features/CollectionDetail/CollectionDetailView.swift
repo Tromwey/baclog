@@ -213,17 +213,7 @@ struct ShelfItem: View {
         }
         .frame(width: width)
         .contentShape(Rectangle())
-        .onTapGesture { store.push(.title(title.id)) }
-        .onLongPressGesture(minimumDuration: 0.4) {
-            if let longPress {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                longPress()
-                return
-            }
-            guard !collectionID.isEmpty else { return }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            store.present(.titleActions(titleID: title.id, collectionID: collectionID))
-        }
+        .kPressable(longPress: longPressAction) { store.push(.title(title.id)) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: longPress == nil ? "Opciones" : "Guardar en…") {
@@ -231,6 +221,13 @@ struct ShelfItem: View {
                 store.present(.titleActions(titleID: title.id, collectionID: collectionID))
             }
         }
+    }
+
+    /// Someone else's collection → its own action; yours → 18c; none without a collection.
+    private var longPressAction: (() -> Void)? {
+        if let longPress { return longPress }
+        guard !collectionID.isEmpty else { return nil }
+        return { store.present(.titleActions(titleID: title.id, collectionID: collectionID)) }
     }
 
     private var sub: String {
@@ -324,11 +321,9 @@ struct TitleList: View {
                 }
                 .frame(minHeight: 80)
                 .contentShape(Rectangle())
-                .onTapGesture { store.push(.title(t.id)) }
-                .onLongPressGesture(minimumDuration: 0.4) {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                .kPressable(.row(inset: -10), longPress: {
                     store.present(.titleActions(titleID: t.id, collectionID: collectionID))
-                }
+                }) { store.push(.title(t.id)) }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
             }

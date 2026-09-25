@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useDialogFocus } from "@/hooks/use-dialog-focus";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -97,6 +98,9 @@ export function SheetClose({
  * upward, thrown by a flick (projected landing), interruptible mid-flight.
  * The grabber says so. A button INSIDE the sheet that closes it should call
  * `useSheetDismiss()` rather than the caller's setter, or it skips the exit.
+ *
+ * FOCUS (`useDialogFocus`): focus moves into the panel on open, Tab cycles
+ * inside it, and it returns to the opener after the exit.
  */
 export function Sheet(props: {
   onClose: () => void;
@@ -141,6 +145,8 @@ function SheetBody({
     onClose,
     draggable: bottom,
   });
+
+  useDialogFocus(panelRef);
 
   // Escape closes, matching every other dismissible surface in the app.
   useEffect(() => {
@@ -190,9 +196,10 @@ function SheetBody({
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         {...panelHandlers}
-        className={`relative flex max-h-full w-full max-w-md touch-none flex-col overflow-hidden will-change-transform ${
+        className={`relative flex max-h-full w-full max-w-md touch-none flex-col overflow-hidden outline-none will-change-transform ${
           cover
             ? "rounded-[var(--r-screen)] bg-surface-1 shadow-float"
             : "rounded-[36px] bg-surface-2 shadow-float"
