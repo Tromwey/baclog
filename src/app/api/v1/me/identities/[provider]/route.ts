@@ -72,7 +72,7 @@ async function answer(userId: string, outcome: LinkOutcome): Promise<Response> {
  * POST /api/v1/me/identities/{apple|google} (phase 4g) — connect a provider
  * to the SIGNED-IN account (the bearer's; never a body field).
  *   apple  { identityToken, rawNonce, authorizationCode? }
- *   google { idToken }
+ *   google { idToken, nonce? }
  * Verified exactly like the sign-in (`social-tokens.ts`); a rejected token
  * (any cause) is ONE 422 `invalid` + reason `invalid_proof` — never 401,
  * which the app reads as "session dead". Then (`linkIdentity`):
@@ -106,7 +106,7 @@ export const POST = withApi<Params>(async (request, { user, params }) => {
   const clientId = googleIosClientId();
   if (!clientId) throw new ApiError("unavailable", GOOGLE_UNAVAILABLE);
   const body = await readJson(request, GoogleLinkBodySchema);
-  const identity = await verifyGoogleIdToken(body.idToken, clientId);
+  const identity = await verifyGoogleIdToken(body.idToken, clientId, body.nonce);
   if (!identity) throw invalidProof(GOOGLE_PROOF_MESSAGE);
   return answer(user.id, await linkIdentity(user.id, "google", identity));
 });

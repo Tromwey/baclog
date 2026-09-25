@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
 import { KURA_BUNDLE_ID } from "./apple-key";
 
@@ -86,16 +86,34 @@ export async function verifyAppleIdentityToken(
   }
 }
 
+/** Constant-time string equality: both sides hashed first, so neither the
+ *  length nor the first differing byte leaks through timing. */
+function sameSecret(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a, "utf8").digest();
+  const hb = createHash("sha256").update(b, "utf8").digest();
+  return timingSafeEqual(ha, hb);
+}
+
 /**
  * Google ID token (iOS client): RS256 against Google's JWKS, `iss` ∈
  * {https://accounts.google.com, accounts.google.com}, `aud` = the iOS
  * OAuth client id, `exp`/`sub` required, and `email_verified` MUST be true
  * with an email present (a Google identity is only linked or created
  * through a verified address).
+ *
+ * `nonce`: the value the app passed to Google Sign-In for THIS sign-in
+ * (GIDSignIn puts it in the token verbatim, no hashing). When given, the
+ * token's `nonce` claim must equal it (constant-time) — the replay guard,
+ * as with Apple; a mismatch or a token without the claim is the same null.
+ * When absent the token is accepted without it.
+ * TODO(nonce): make `nonce` required (here and in the zod bodies) once every
+ * iOS build in TestFlight/App Store sends it — until then old builds would
+ * be locked out of Google sign-in.
  */
 export async function verifyGoogleIdToken(
   idToken: string,
   clientId: string,
+  nonce: string | undefined,
   keys: JWTVerifyGetKey = googleKeySet(),
 ): Promise<VerifiedIdentity | null> {
   try {
@@ -107,6 +125,9 @@ export async function verifyGoogleIdToken(
       clockTolerance: 30,
     });
     if (typeof payload.sub !== "string" || !payload.sub) return null;
+    if (nonce !== undefined) {
+      if (typeof payload.nonce !== "string" || !sameSecret(payload.nonce, nonce)) return null;
+    }
     const email = emailOf(payload);
     if (!email || !truthyClaim(payload.email_verified)) return null;
     return { sub: payload.sub, email, emailVerified: true };
