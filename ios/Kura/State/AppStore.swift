@@ -232,6 +232,15 @@ final class SessionData {
         mutating func titlesChanged() { waiting = nil; titlesIn = [:] }
     }
 
+    /// A `sync` key with its collection id made current (`collectionAliases`): once `adopt` moved a
+    /// chain to the server id, the enqueue, the cleanup and a Reintentar captured with the local id
+    /// all have to find it there (`m|título|colección`, `c|colección`; other keys pass through).
+    func canonicalWriteKey(_ key: String) -> String {
+        guard let bar = key.lastIndex(of: "|") else { return key }
+        guard let serverID = collectionAliases[String(key[key.index(after: bar)...])] else { return key }
+        return String(key[..<bar]) + "|" + serverID
+    }
+
     /// Cancels every write and timer of this session (it's being replaced).
     func cancelAll() {
         for (_, t) in deferredWrites { t.cancel() }
@@ -1007,6 +1016,7 @@ final class AppStore {
                       _ op: @escaping @Sendable (KuraAPI) async throws -> Void) {
         let api = self.api
         let session = s
+        let key = key.map(session.canonicalWriteKey)
         if let titleID { session.inflight[titleID, default: 0] += 1 }
         let previous = key.flatMap { session.writeChains[$0]?.task }
         let token = UUID()
@@ -1020,7 +1030,11 @@ final class AppStore {
             }
             defer {
                 if let titleID { session.inflight[titleID, default: 1] -= 1 }
-                if let key, session.writeChains[key]?.token == token { session.writeChains[key] = nil }
+                // Re-canonicalized: an `adopt` while this ran moved the chain to the server id.
+                if let key {
+                    let now = session.canonicalWriteKey(key)
+                    if session.writeChains[now]?.token == token { session.writeChains[now] = nil }
+                }
             }
             guard let self, self.s === session else { return }
             guard let failure else { self.online(); return }
