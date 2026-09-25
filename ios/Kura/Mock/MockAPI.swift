@@ -161,7 +161,7 @@ struct MockAPI: KuraAPI {
         return c
     }
     func deleteCollection(id: String) async throws { try await write() }
-    func createTitleMembership(collectionID: String, ref: TitleRef) async throws -> MembershipResult {
+    func createTitleMembership(collectionID: String, ref: TitleRef, paletteHex: [String]?) async throws -> MembershipResult {
         try await write()
         guard case .id(let tid) = ref, let t = MockData.titles.first(where: { $0.id == tid }) else { throw KuraAPIError.notFound }
         return MembershipResult(title: t, state: MockData.userTitles[tid] ?? UserTitleState(savedAt: Date()))
@@ -177,6 +177,11 @@ struct MockAPI: KuraAPI {
     }
     func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage { ReviewPage(items: []) }
     func titles(ids: [String]) async throws -> [Title] { MockData.titles.filter { ids.contains($0.id) } }
+    func fillPalette(titleID: String, hexes: [String]) async throws -> Title {
+        guard var t = MockData.titles.first(where: { $0.id == titleID }) else { throw KuraAPIError.notFound }
+        if t.palette.isEmpty { t.palette = hexes }
+        return t
+    }
     func myTitles() async throws -> [String: UserTitleState] { MockData.userTitles }
     func setMark(titleID: String, mark: Mark?, preview: Bool) async throws -> UserTitleState {
         try await write()

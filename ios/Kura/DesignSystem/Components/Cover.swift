@@ -27,6 +27,8 @@ struct CoverView: View {
     var badgeHeight: CGFloat = 26
     /// Fill the proposed width at the format's aspect (grids).
     var fluid = false
+    /// Optional: previews and the welcome art draw covers outside the app's environment.
+    @Environment(AppStore.self) private var store: AppStore?
 
     private var size: CGSize {
         let a = title.format.aspect
@@ -39,6 +41,15 @@ struct CoverView: View {
     }
 
     var body: some View {
+        cover
+            // The first draw of a title with no palette extracts its cover on the device
+            // (`AppStore+Palette`): the tints stop falling back to gray, for everyone.
+            .task(id: title.id) {
+                if title.palette.isEmpty { store?.fillPaletteIfNeeded(title) }
+            }
+    }
+
+    @ViewBuilder private var cover: some View {
         if fluid {
             Color.clear
                 .aspectRatio(title.format.aspect, contentMode: .fit)

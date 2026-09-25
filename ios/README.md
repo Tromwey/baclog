@@ -94,14 +94,14 @@ ios/
                               RetryPolicy con jitter, APIClient + endpoints, GET en vuelo unidos), Keychain (+ InstallMarker:
                               borra el bearer de una instalación borrada), Session (JWT exp), LocalPrefs (lo unsupported,
                               en el dispositivo), ReleaseNotifier, Push (APNs + app delegate), SocialSignIn (nonce de
-                              Apple, Google OAuth PKCE con nonce)
+                              Apple, Google OAuth PKCE con nonce), CoverPalette (paleta de portada en el dispositivo)
     Kura.entitlements         Release: Sign in with Apple + aps-environment production
     Kura-Debug.entitlements   Debug: Sign in with Apple + aps-environment development
     State/                    AppStore.swift = SessionData (estado por cuenta) + propiedades guardadas + núcleo
                               (registro, errores, lookups, avisos, `sync` por clave, hojas, ciclo de sesión). Extensiones
                               por dominio: +Loading (bootstrap y lecturas por recurso) · +Social (seguir, gente, feed) ·
                               +Library (colecciones, membresías, Deshacer diferido 5 s) · +Reactions (marcas, reseñas,
-                              episodios) · +Releases (no puedo esperar) · +Safety (reportar/bloquear) · +Profile ·
+                              episodios) · +Releases (no puedo esperar) · +Safety (reportar/bloquear) · +Profile · +Palette ·
                               +Auth (splash, código, Apple/Google) · +AccountLink (push, identidades, fusión, sesiones) ·
                               +Onboarding · +LocalPrefs. Una propiedad guardada nueva va en AppStore.swift (una extensión
                               no puede tenerlas) o, si es por cuenta, en SessionData.
@@ -119,6 +119,7 @@ ios/
 - **Hojas propias** (`SheetHost`), no `.sheet` del sistema, para calzar con los frames: inset 8, radio 36, s2, velo `rgba(5,5,6,.62)`, asa 36×5, 280 ms; se cierran arrastrando o tocando fuera. "Agregar" es la hoja alta (s1, a 54 del borde).
 - **Navegación**: un `NavigationStack` por tab (cambio de tab instantáneo), chrome propio (Volver/Opciones a 64/24) y swipe-back conservado. En iOS 18+ la portada crece a la ficha/colección con la transición zoom (`matchedTransitionSource`); en iOS 17 es el push normal. En el onboarding las 3 portadas elegidas viajan de 32a a 32b con `matchedGeometryEffect`.
 - **Completar** es el slider de tres paradas de 26a (Completo → Me gusta → Me obsesiona): relleno en el tono de la parada, imán con spring y háptica (ligera; media en Me obsesiona).
+- **Paleta de portada** (`Services/CoverPalette.swift` + `State/AppStore+Palette.swift`): si un título dibujado en un `CoverView` llega con `palette: []`, la app extrae su portada en el dispositivo (mismo algoritmo que `extractPalette` de la web), usa los hex en el acto y los manda con `PUT titles/{id}/palette` (el servidor solo escribe si sigue vacía y responde la que ganó). Un resultado `ext:` los manda en el `PUT` de membresía al guardarlo. Sin esto, `Tint.card`/`Tint.header` caen al gris `#6c6b76`.
 - **Colección**: se agrupa por formato solo si hay ≥ 2 formatos y cada uno tiene ≥ 3 títulos (`adapt()` del script de Flujos v2); si no, repisa.
 - **Aviso de estreno (31c)**: al guardar un título anunciado se programa una notificación local el día del estreno (`Services/ReleaseNotifier.swift`); `-kuraScreen aviso` solo pinta una vista previa de la pantalla bloqueada.
 - **Feed** = pila: cada card se fija bajo el header (`visualEffect`) y la siguiente la tapa; alturas L/M/S topadas a la pantalla; snap por card (`scrollTargetBehavior(.viewAligned)`).

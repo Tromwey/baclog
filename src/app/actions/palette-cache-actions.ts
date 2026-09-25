@@ -1,10 +1,8 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
 import { getCurrentUser } from "@/auth";
-import { db } from "@/db";
-import { catalogItems } from "@/db/schema";
 import { paletteHexSchema } from "@/modules/backlog/palette";
+import { fillCatalogPalette } from "@/modules/catalog/cache";
 
 /**
  * F2.15 follow-up — self-healing palette cache. When a signed-in user's
@@ -36,15 +34,7 @@ export async function cacheItemPaletteAction(
   const parsed = paletteHexSchema.safeParse(paletteHex);
   if (!parsed.success || parsed.data.length === 0) return { skipped: true };
 
-  await db
-    .update(catalogItems)
-    .set({ paletteHex: parsed.data })
-    .where(
-      and(
-        eq(catalogItems.id, catalogItemId),
-        isNull(catalogItems.paletteHex),
-      ),
-    );
+  await fillCatalogPalette(catalogItemId, parsed.data);
 
   return { ok: true };
 }

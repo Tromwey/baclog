@@ -90,7 +90,10 @@ protocol KuraAPI: Sendable {
     func createCollection(name: String, privacy: Privacy) async throws -> KCollection
     func updateCollection(id: String, name: String?, privacy: Privacy?) async throws -> KCollection
     func deleteCollection(id: String) async throws
-    func createTitleMembership(collectionID: String, ref: TitleRef) async throws -> MembershipResult
+    /// `paletteHex`: a palette extracted on this device that the server hasn't confirmed (the
+    /// server writes it only while `catalog_item.paletteHex` is still empty). For an `ext:` search
+    /// result it's the only channel: it has no catalog id to `fillPalette` before it's saved.
+    func createTitleMembership(collectionID: String, ref: TitleRef, paletteHex: [String]?) async throws -> MembershipResult
     func removeTitleMembership(collectionID: String, titleID: String) async throws
 
     // MARK: Titles and your state (keyed on the title, identical across collections)
@@ -99,6 +102,11 @@ protocol KuraAPI: Sendable {
     /// same `paginated(ReviewSchema)` as the ficha's first page).
     func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage
     func titles(ids: [String]) async throws -> [Title]
+    /// `PUT /titles/{id}/palette { paletteHex }` → the title re-read: fills the shared cover palette
+    /// of a title the app SHOWS with `palette: []` (extracted on-device, `CoverPalette`). Written
+    /// only while the server's is still empty (first-writer-wins), so the answer carries the
+    /// palette that won.
+    func fillPalette(titleID: String, hexes: [String]) async throws -> Title
     func myTitles() async throws -> [String: UserTitleState]
     /// `PUT /me/titles/{id}/mark`. On a catalog title you haven't saved it CREATES your state
     /// (200: the title enters `GET /me/titles` in no collection); `mark: nil` on an unsaved title

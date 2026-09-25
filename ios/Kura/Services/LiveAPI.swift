@@ -797,7 +797,8 @@ struct LiveAPI: KuraAPI {
     }
     private struct NewCollection: Encodable { let name: String; let visibility: String }
     private struct CollectionPatch: Encodable { let name: String?; let visibility: String? }
-    private struct MembershipBody: Encodable { let externalRef: ExternalRef }
+    private struct MembershipBody: Encodable { let externalRef: ExternalRef?; let paletteHex: [String]? }
+    private struct PaletteBody: Encodable { let paletteHex: [String] }
 
     func collections() async throws -> [KCollection] {
         let r: Items<KCollection> = try await client.decode(.get("collections"))
@@ -820,14 +821,17 @@ struct LiveAPI: KuraAPI {
         try await client.send(.delete("collections/\(id)"))
     }
 
-    func createTitleMembership(collectionID: String, ref: TitleRef) async throws -> MembershipResult {
+    func createTitleMembership(collectionID: String, ref: TitleRef, paletteHex: [String]?) async throws -> MembershipResult {
+        let palette = paletteHex.flatMap { $0.isEmpty ? nil : $0 }
         switch ref {
         case .id(let id):
-            return try await client.decode(.put("collections/\(collectionID)/titles/\(id)"))
+            guard let palette else { return try await client.decode(.put("collections/\(collectionID)/titles/\(id)")) }
+            return try await client.decode(try .put("collections/\(collectionID)/titles/\(id)",
+                                                    MembershipBody(externalRef: nil, paletteHex: palette)))
         case .external(let source, let externalId):
             // Uncached catalog item: the path carries the externalId and the body the ref;
             // the backend resolves `(source, externalId)` and caches it (§4 `{ externalRef? }`).
-            let body = MembershipBody(externalRef: ExternalRef(source: source, externalId: externalId))
+            let body = MembershipBody(externalRef: ExternalRef(source: source, externalId: externalId), paletteHex: palette)
             return try await client.decode(try .put("collections/\(collectionID)/titles/\(externalId)", body))
         }
     }
@@ -860,6 +864,10 @@ struct LiveAPI: KuraAPI {
     /// reviews, never the caller's own — that one is pinned in `GET /titles/{id}`).
     func moreReviews(titleID: String, cursor: String) async throws -> ReviewPage {
         try await client.decode(.get("titles/\(titleID)/reviews", [URLQueryItem(name: "cursor", value: cursor)]))
+    }
+
+    func fillPalette(titleID: String, hexes: [String]) async throws -> Title {
+        try await client.decode(try .put("titles/\(titleID)/palette", PaletteBody(paletteHex: hexes)))
     }
 
     /// `GET /titles?ids=` in chunks of 50, at most 4 in flight at once. The result is the

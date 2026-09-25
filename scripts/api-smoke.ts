@@ -3141,6 +3141,29 @@ const e1DeleteMe: Case = {
     },
   };
 
+// Palette fill (2026-09-25). Never fills a NULL row here: the smoke runs against
+// the shared DB and a fake palette would stick for every viewer (first-writer-
+// wins). It checks the guards and the no-clobber rule on a title that HAS one.
+writes.push({
+  name: "PUT /titles/{id}/palette → Title; nunca pisa una paleta existente; 400 vacío/hex malo; 404 id",
+  run: async () => {
+    assert.ok(ctx.token, "hace falta un token");
+    const hits = await e2Search("Dune");
+    const withPalette = hits.find((h) => h.palette.length > 0);
+    assert.ok(withPalette?.id, "la búsqueda trae algún título con paleta");
+    const id = withPalette.id;
+    const put = (body: unknown, target = id) => qaCall("PUT", `/titles/${target}/palette`, { body });
+    const kept = expectOk(await put({ paletteHex: ["#010203"] }), 200, TitleSchema);
+    assert.deepEqual(kept.palette, withPalette.palette, "la paleta existente gana (first-writer-wins)");
+    const empty = expectError(await put({ paletteHex: [] }), 400, "invalid");
+    assert.ok(empty.fields && "paletteHex" in empty.fields, "fields.paletteHex en vacío");
+    expectError(await put({ paletteHex: ["red"] }), 400, "invalid");
+    expectError(await put({ paletteHex: Array(7).fill("#010203") }), 400, "invalid");
+    expectError(await put({ paletteHex: ["#010203"] }, "not-a-uuid"), 404, "not_found");
+    expectError(await put({ paletteHex: ["#010203"] }, "00000000-0000-4000-8000-000000000000"), 404, "not_found");
+  },
+});
+
 writes.push(e1DeleteMe);
 
 const sections: Record<string, Case[]> = { auth, reads, writes };
