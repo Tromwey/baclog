@@ -2,34 +2,17 @@ import SwiftUI
 
 // MARK: - Switch (30a)
 
-/// The DS switch: 51×31. On = text track + bg knob; off = rgba(255,255,255,.16) + text knob.
-struct KuraToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-            KHaptic.select()
-        } label: {
-            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule().fill(configuration.isOn ? KColor.text : Color.white.opacity(0.16))
-                Circle()
-                    .fill(configuration.isOn ? KColor.bg : KColor.text)
-                    .frame(width: 27, height: 27)
-                    .shadow(color: .black.opacity(0.35), radius: 3, y: 2)
-                    .padding(2)
-            }
-            .frame(width: 51, height: 31)
-            .animation(KMotion.snappy, value: configuration.isOn)
-        }
-        .buttonStyle(.plain)
-        .accessibilityRepresentation { Toggle(isOn: configuration.$isOn) { configuration.label } }
-    }
-}
-
+/// The system switch (on iOS 26 its knob turns into the Liquid Glass lens while it's
+/// pressed/dragged — the OS material, like the dock). On = salvia, Kura's "hecho" green:
+/// honey is once per screen and a settings list has several switches; the DS's white track
+/// would swallow the system's white knob.
 struct KuraSwitch: View {
     let label: String
     @Binding var isOn: Bool
     var body: some View {
-        Toggle(label, isOn: $isOn).toggleStyle(KuraToggleStyle()).labelsHidden()
+        Toggle(label, isOn: $isOn)
+            .labelsHidden()
+            .tint(KColor.completed)
     }
 }
 
