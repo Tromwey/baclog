@@ -134,15 +134,18 @@ struct DiscoverView: View {
         } else if let r = recs.first(where: { inTab($0.title) }), let t = store.title(r.title.id) ?? Optional(r.title) {
             VStack(alignment: .leading, spacing: 14) {
                 SectionTitle(text: "recomendado para ti").padding(.horizontal, 20)
-                HStack(alignment: .bottom, spacing: 16) {
+                // Centered, and the name capped at 2 lines: a long album name ("… (Original Motion
+                // Picture Soundtrack)") ran to 4 lines and left the cover stranded at the bottom.
+                HStack(alignment: .center, spacing: 16) {
                     Button { store.push(.title(t.id)) } label: {
                         CoverView(title: t, height: 132).zoomSource(ZoomID.title(t.id))
                     }
                     .buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(r.reason).monoLabel(10).lineSpacing(3)
+                        Text(r.reason).monoLabel(10).lineSpacing(3).lineLimit(2)
                         Text(t.name).font(.kura.newsItalic(24)).foregroundStyle(KColor.text)
-                        Text(recSubtitle(t)).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                            .lineLimit(2).minimumScaleFactor(0.85)
+                        Text(recSubtitle(t)).font(.kura.ui(14)).foregroundStyle(KColor.text2).lineLimit(1)
                         GlassButton(title: store.isSaved(t.id) ? "Guardado" : "Guardar",
                                     systemImage: store.isSaved(t.id) ? "checkmark" : "plus") {
                             store.present(.saveTo(t.id))
