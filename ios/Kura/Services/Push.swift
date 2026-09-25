@@ -27,15 +27,24 @@ enum PushRegistration {
     static func markRegistered() { UserDefaults.standard.set(true, forKey: registeredKey) }
     static func markUnregistered() { UserDefaults.standard.set(false, forKey: registeredKey) }
 
-    /// APNs gateway the token belongs to: Debug builds get sandbox tokens (`aps-environment =
-    /// development`), Release (TestFlight, App Store) production ones.
-    static var environment: String {
-        #if DEBUG
-        return "sandbox"
-        #else
-        return "production"
-        #endif
-    }
+    /// APNs gateway the token belongs to, read from how THIS binary was signed — not from
+    /// Debug/Release: a Release build installed by cable is signed for development and gets
+    /// SANDBOX tokens (sending those to production APNs is a BadDeviceToken, and the server prunes
+    /// the token). A development/ad-hoc install carries `embedded.mobileprovision` with its
+    /// `aps-environment`; TestFlight and App Store builds carry none and are production.
+    static let environment: String = {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              // The profile is a CMS envelope around a plain XML plist: find the plist and parse it.
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(
+                  from: data[start.lowerBound..<end.upperBound], format: nil) as? [String: Any],
+              let entitlements = plist["Entitlements"] as? [String: Any],
+              let aps = entitlements["aps-environment"] as? String
+        else { return "production" }
+        return aps == "development" ? "sandbox" : "production"
+    }()
 
     static func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
 }
