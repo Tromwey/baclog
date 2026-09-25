@@ -53,7 +53,7 @@ import {
   type PeoplePage,
   type PersonRow,
 } from "./types";
-import { closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
+import { BURST_GAP, closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
 import { notBlockedWith } from "./block-gate";
 
 /**
@@ -165,6 +165,33 @@ function olderThan(
   if (!after) return undefined;
   const at = atParam(after.at);
   return sql`(date_trunc('milliseconds', ${atCol}) < ${at} or (date_trunc('milliseconds', ${atCol}) = ${at} and ${idExpr} < ${after.id}))`;
+}
+
+/**
+ * One sitting, one card per title (founder, 2026-09-25): saving a title and
+ * reacting to it "al momento" made two feed events for the same thing. When
+ * the same person touches the same title within SAME_MOMENT (a burst's gap:
+ * one sitting), only the MOST relevant event survives —
+ *
+ *   reviewed > obsessed > completed (incl. its verdict: like / no me gustó) > added
+ *
+ * Each branch drops its row with a NOT EXISTS on a more relevant sibling, in
+ * SQL, so it's stateless: a page boundary between the two events can't let
+ * the loser through (the keyset never has to remember what it showed). The
+ * survivor loses nothing: a review card carries the mark and the obsession,
+ * an obsession outranks its completion, and a reaction implies the save.
+ * Siblings are read with the SAME public-state rules their own branch uses
+ * (hidden reviews don't count; obsession/completion are the current state).
+ */
+const SAME_MOMENT_SECONDS = BURST_GAP / 1000;
+
+function sameMoment(a: AnyColumn | SQL, b: AnyColumn | SQL) {
+  return sql`abs(extract(epoch from (${a} - ${b}))) <= ${SAME_MOMENT_SECONDS}`;
+}
+
+/** No visible review of this title by this person in the same sitting. */
+function noReviewNear(userCol: AnyColumn, catalogCol: AnyColumn, atCol: AnyColumn) {
+  return sql`not exists (select 1 from ${itemReviews} where ${itemReviews.userId} = ${userCol} and ${itemReviews.catalogItemId} = ${catalogCol} and ${itemReviews.hiddenAt} is null and ${sameMoment(itemReviews.createdAt, atCol)})`;
 }
 
 interface RawEvent {
@@ -280,6 +307,9 @@ async function fetchFeedChunk(
             sql`'added:' || ${backlogItems.id}`,
             after,
           ),
+          // A save is the least relevant event: any reaction in the sitting wins.
+          sql`not exists (select 1 from ${userItems} where ${userItems.userId} = ${backlogItems.userId} and ${userItems.catalogItemId} = ${backlogItems.catalogItemId} and ((${userItems.status} = 'completed' and ${sameMoment(userItems.statusChangedAt, backlogItems.addedAt)}) or (${userItems.obsessed} and ${sameMoment(userItems.obsessedAt, backlogItems.addedAt)})))`,
+          noReviewNear(backlogItems.userId, backlogItems.catalogItemId, backlogItems.addedAt),
         ),
       )
       .orderBy(desc(backlogItems.addedAt), desc(backlogItems.id))
@@ -323,6 +353,9 @@ async function fetchFeedChunk(
             sql`'completed:' || ${userItems.id}`,
             after,
           ),
+          // Outranked by an obsession or a review in the same sitting.
+          sql`not coalesce(${userItems.obsessed} and ${sameMoment(userItems.obsessedAt, userItems.statusChangedAt)}, false)`,
+          noReviewNear(userItems.userId, userItems.catalogItemId, userItems.statusChangedAt),
         ),
       )
       .orderBy(desc(userItems.statusChangedAt), desc(userItems.id))
@@ -365,6 +398,8 @@ async function fetchFeedChunk(
             sql`'obsessed:' || ${userItems.id}`,
             after,
           ),
+          // Outranked only by a review in the same sitting.
+          noReviewNear(userItems.userId, userItems.catalogItemId, userItems.obsessedAt),
         ),
       )
       .orderBy(desc(userItems.obsessedAt), desc(userItems.id))
