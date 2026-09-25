@@ -5,6 +5,7 @@ import UIKit
 /// are hosted here, above everything (including the dock).
 struct RootView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -36,6 +37,10 @@ struct RootView: View {
             #endif
         }
         .animation(KMotion.fade, value: store.phase)
+        // Coming back from the iPhone's Ajustes (where a "no" to notifications is undone).
+        .onChange(of: scenePhase) { _, p in
+            if p == .active, store.phase == .main { Task { await store.refreshNotificationStatus() } }
+        }
         // Dynamic Type scales the Kura faces (Typography.swift) all the way into the
         // accessibility sizes. Only fixed-geometry chrome caps itself at xxxLarge
         // (`kFixedChrome()`: dock, top chips, covers, collection cards, feed cards).
@@ -173,6 +178,7 @@ struct SheetContent: View {
         case .addTitles(let c): AddTitlesSheet(collectionID: c)
         case .revokeSession(let s): RevokeSessionSheet(session: s)
         case .unlinkIdentity(let p): UnlinkIdentitySheet(provider: p)
+        case .notificationsAsk: NotificationsAskSheet()
         }
     }
 }

@@ -40,10 +40,37 @@ enum PushRegistration {
     static func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
 }
 
-/// Notification permission, shared by the local release notices and remote push. Kura never asks
-/// on a cold open: only when you save something that hasn't come out (`ReleaseNotifier`) or turn
-/// a notification switch back on in Ajustes.
+/// Notification permission, shared by the local release notices and remote push. Kura never fires
+/// the system prompt on a cold open: first its own "¿te avisamos?" sheet (once, after the tabs come
+/// up), then iOS's only if you say yes. Also when you save something that hasn't come out
+/// (`ReleaseNotifier`), turn a switch back on, or tap "Activar avisos" in Ajustes.
 enum NotificationPermission {
+    /// What iOS says about alerts for Kura, as Ajustes shows it.
+    enum Status: Equatable { case undetermined, allowed, denied }
+
+    static func status() async -> Status {
+        let s = await UNUserNotificationCenter.current().notificationSettings()
+        switch s.authorizationStatus {
+        case .notDetermined: return .undetermined
+        case .authorized, .provisional, .ephemeral: return .allowed
+        default: return .denied
+        }
+    }
+
+    /// The iPhone's Ajustes page for Kura's notifications (a denial can only be undone there).
+    @MainActor
+    static func openSystemSettings() {
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    /// Kura's own "¿te avisamos?" was already shown on this install (once, never nagging).
+    static var didOfferPrompt: Bool {
+        get { UserDefaults.standard.bool(forKey: "kuraNotifOffered") }
+        set { UserDefaults.standard.set(newValue, forKey: "kuraNotifOffered") }
+    }
+
     /// True when alerts may be shown (authorized, provisional or ephemeral).
     static func isAllowed() async -> Bool {
         let s = await UNUserNotificationCenter.current().notificationSettings()

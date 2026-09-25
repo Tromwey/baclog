@@ -79,6 +79,29 @@ struct SettingsView: View {
                     }
 
                     section("notificaciones") {
+                        // iOS has the last word on push: say so when it's "not yet" or "no".
+                        switch store.notificationStatus {
+                        case .undetermined:
+                            SettingsRow(title: "Activar avisos", note: "Kura todavía no tiene permiso para avisarte.",
+                                        action: { Task { await store.enableNotifications() } }) {
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(KColor.text2)
+                                    .accessibilityHidden(true)
+                            }
+                            ListDivider()
+                        case .denied:
+                            SettingsRow(title: "Avisos apagados en el iPhone",
+                                        note: "Los seguidores y estrenos no te llegan. Actívalos en Ajustes del iPhone.",
+                                        action: { NotificationPermission.openSystemSettings() }) {
+                                Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(KColor.text2)
+                                    .accessibilityHidden(true)
+                            }
+                            .accessibilityHint("Abre los ajustes del iPhone")
+                            ListDivider()
+                        case .allowed:
+                            EmptyView()
+                        }
                         // Server-owned (`PATCH /me { notifyFollowers }`): the server sends the push.
                         SettingsRow(title: "Nuevos seguidores", note: "Cuando alguien empieza a seguirte.") {
                             KuraSwitch(label: "Nuevos seguidores", isOn: $store.notifyFollowers)
@@ -149,6 +172,7 @@ struct SettingsView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .task { await store.loadIdentities() }
+        .task { await store.refreshNotificationStatus() }
         .fullScreenCover(isPresented: $showPrivacyNotice) {
             SafariView(url: Self.privacyNoticeURL).ignoresSafeArea()
         }

@@ -227,6 +227,14 @@ enum DebugLaunch {
         // Flujo 11 · ajustes
         case "settings":
             main(.profile, [.settings])
+        case "notifask":
+            main(sheet: .notificationsAsk)
+        case "notifoff":
+            store.debugNotificationStatus = .denied
+            main(.profile, [.settings])
+        case "notifnotyet":
+            store.debugNotificationStatus = .undetermined
+            main(.profile, [.settings])
         case "privacy":
             main(.profile, [.settings, .settingsPrivacy])
         case "musicapp":

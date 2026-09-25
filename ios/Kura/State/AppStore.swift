@@ -41,6 +41,8 @@ enum SheetRoute: Identifiable, Hashable {
     case revokeSession(DeviceSession)
     /// Ajustes › Inicio de sesión › Apple/Google conectada › "¿desconectar…?" (`DELETE /me/identities/{p}`).
     case unlinkIdentity(IdentityProvider)
+    /// "¿te avisamos?" — Kura's own ask before iOS's permission prompt (once per install).
+    case notificationsAsk
 
     var id: String { String(describing: self) }
 
@@ -2319,6 +2321,39 @@ final class AppStore {
 
     // MARK: Push
 
+    /// iOS's answer about alerts, for Ajustes (re-read when the app comes back to the foreground:
+    /// the only way out of `denied` is the iPhone's own Ajustes).
+    var notificationStatus: NotificationPermission.Status = .allowed
+    /// DEBUG: `-kuraNotif undetermined|denied` fakes the answer in the mock.
+    @ObservationIgnored var debugNotificationStatus: NotificationPermission.Status?
+
+    func refreshNotificationStatus() async {
+        if let s = debugNotificationStatus { notificationStatus = s; return }
+        guard !KuraRuntime.usesMock else { return }
+        notificationStatus = await NotificationPermission.status()
+    }
+
+    /// Once per install, after the tabs are up: if iOS hasn't been asked yet, Kura's own sheet says
+    /// what the notices are before the system prompt. Never over another sheet or a tapped push.
+    func offerNotificationsIfNeeded() async {
+        await refreshNotificationStatus()
+        guard notificationStatus == .undetermined, !NotificationPermission.didOfferPrompt,
+              sheet == nil, pendingSheet == nil else { return }
+        try? await Task.sleep(for: .milliseconds(900))
+        guard sheet == nil, phase == .main else { return }
+        NotificationPermission.didOfferPrompt = true
+        present(.notificationsAsk)
+    }
+
+    /// "Activar avisos" (the sheet or Ajustes): iOS's prompt, then the APNs token if allowed.
+    func enableNotifications() async {
+        if debugNotificationStatus != nil { debugNotificationStatus = .allowed }
+        if !KuraRuntime.usesMock, await NotificationPermission.requestIfUndetermined() {
+            NotificationPermission.registerForRemote()
+        }
+        await refreshNotificationStatus()
+    }
+
     /// After the tabs come up with a session: if notifications are ALREADY allowed, ask APNs for
     /// the token (every launch, as Apple recommends: it can rotate). Never asks for permission.
     func refreshPushRegistration() {
@@ -2333,6 +2368,7 @@ final class AppStore {
         guard !KuraRuntime.usesMock else { return }
         Task {
             if await NotificationPermission.requestIfUndetermined() { NotificationPermission.registerForRemote() }
+            await refreshNotificationStatus()
         }
     }
 
@@ -2807,6 +2843,7 @@ final class AppStore {
         didBootstrap = true
         await bootstrap(emptyLibrary: emptyLibrary, keepLoading: keepLoading)
         refreshPushRegistration()
+        Task { await offerNotificationsIfNeeded() }
         if let route = pendingPush {
             pendingPush = nil
             if path(tab).last != route { push(route) }

@@ -444,3 +444,65 @@ struct MergeConfirmView: View {
         }
     }
 }
+
+// MARK: - ¿te avisamos? (before iOS's permission prompt)
+
+/// Kura's own ask, once per install, after the tabs come up: what the notices are, then iOS's
+/// prompt only on "Activar avisos". "Ahora no" leaves iOS unasked, so Ajustes can offer it later.
+struct NotificationsAskSheet: View {
+    @Environment(AppStore.self) private var store
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("¿te avisamos?")
+                .font(.kura.news(26))
+                .foregroundStyle(KColor.text)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, 8)
+            VStack(alignment: .leading, spacing: 12) {
+                row(.users, "Cuando alguien empiece a seguirte.")
+                row(.clock, "Cuando llegue a cines o a streaming lo que guardaste en no puedo esperar.")
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 10)
+            Text("Nada más. Lo cambias cuando quieras en Ajustes.")
+                .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.top, 12).padding(.bottom, 16)
+            SolidButton(title: busy ? "Un momento…" : "Activar avisos", enabled: !busy) { enable() }
+            Button { store.dismissSheet() } label: {
+                Text("Ahora no")
+                    .font(.kura.ui(16, .medium))
+                    .foregroundStyle(KColor.text)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(busy)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func row(_ glyph: Glyph, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            GlyphView(glyph: glyph, size: 16).frame(width: 20).padding(.top, 2)
+            Text(text).font(.kura.ui(15)).foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func enable() {
+        guard !busy else { return }
+        busy = true
+        store.sheetLocked = true
+        Task {
+            await store.enableNotifications()
+            busy = false
+            store.sheetLocked = false
+            store.dismissSheet()
+        }
+    }
+}
