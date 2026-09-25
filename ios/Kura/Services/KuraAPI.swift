@@ -34,7 +34,8 @@ protocol KuraAPI: Sendable {
     /// `POST /auth/apple` → `{ token, user }` (stores the token like `signIn`). 403 `underage`,
     /// 503 `unavailable` when the server can't verify Apple right now.
     func signInWithApple(_ credential: AppleCredential) async throws -> Me
-    /// `POST /auth/google` `{ idToken, device }` → `{ token, user }`. 503 when Google isn't configured.
+    /// `POST /auth/google` `{ idToken, nonce?, device }` → `{ token, user }`. 503 when Google isn't
+    /// configured. `nonce` is looked up by `LiveAPI` from `GoogleNonce` (set by `GoogleOAuth`).
     func signInWithGoogle(idToken: String) async throws -> Me
 
     // MARK: Devices (sessions + push)
@@ -52,7 +53,7 @@ protocol KuraAPI: Sendable {
     /// `linked_elsewhere` comes back as `.mergeable` (not thrown). A rejected Apple token is
     /// `422 invalid_proof`, thrown as `.forbidden("proof_rejected")`.
     func linkApple(_ credential: AppleCredential) async throws -> LinkOutcome
-    /// `POST /me/identities/google` `{ idToken }`. Same outcomes as `linkApple`.
+    /// `POST /me/identities/google` `{ idToken, nonce? }`. Same outcomes as `linkApple`.
     func linkGoogle(idToken: String) async throws -> LinkOutcome
     /// `DELETE /me/identities/{provider}` → 204. 409 `last_way_in` for Apple when the account email
     /// is an Apple relay and nothing else is linked (nothing is touched).

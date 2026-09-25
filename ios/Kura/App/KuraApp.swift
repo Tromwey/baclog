@@ -8,6 +8,9 @@ struct KuraApp: App {
     @State private var store: AppStore
 
     init() {
+        // FIRST, before any `Session` reads the Keychain: a bearer left behind by a deleted
+        // install is wiped on a fresh install (upgrades keep theirs — rule in `InstallMarker`).
+        InstallMarker.reconcile()
         // Covers come over the network via AsyncImage (URLSession.shared), so
         // give the shared cache room: returning to a screen should not refetch.
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
