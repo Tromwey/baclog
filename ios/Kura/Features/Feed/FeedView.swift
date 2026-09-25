@@ -225,7 +225,7 @@ struct FeedView: View {
             }
         }
         .padding(.leading, 20)
-        .padding(.trailing, 16)
+        .padding(.trailing, KSize.chromeSide)
         .padding(.top, headerTop + 12)
         .frame(height: hdr, alignment: .top)
         .frame(maxWidth: .infinity)

@@ -58,7 +58,8 @@ private struct DockSurface: ViewModifier {
 // MARK: - Tab title
 
 /// A tab root's title row. The title's top is always `KSize.titleTop`: the trailing chip is
-/// centered on the title as an overlay, so a 40 or 44 pt chip (or none) never moves it.
+/// centered on the title as an overlay, so the chip (or none) never moves it. The title sits on
+/// the 20 pt content margin; the chip on `KSize.chromeSide` (24), like every Volver/Opciones.
 struct TabTitleBar<Trailing: View>: View {
     let title: String
     @ViewBuilder var trailing: Trailing
@@ -69,7 +70,7 @@ struct TabTitleBar<Trailing: View>: View {
             .foregroundStyle(KColor.text)
             .accessibilityAddTraits(.isHeader)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .trailing) { trailing }
+            .overlay(alignment: .trailing) { trailing.padding(.trailing, KSize.chromeSide - 20) }
             .padding(.horizontal, 20)
             .padding(.top, KSize.titleTop)
     }

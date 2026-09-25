@@ -23,7 +23,7 @@ struct CollectionsView: View {
 
     private var header: some View {
         TabTitleBar(title: "tus colecciones") {
-            IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
+            IconChip44(systemName: "plus", iconSize: 15, weight: .bold, label: "Nueva colección") {
                 store.present(.newCollection(addingTitleID: nil))
             }
         }
@@ -218,7 +218,7 @@ struct NoCollectionsView: View {
     var body: some View {
         VStack(spacing: 0) {
             TabTitleBar(title: "tus colecciones") {
-                IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
+                IconChip44(systemName: "plus", iconSize: 15, weight: .bold, label: "Nueva colección") {
                     store.present(.newCollection(addingTitleID: nil))
                 }
             }
@@ -243,7 +243,12 @@ struct NoCollectionsView: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.vertical, 20)
-                    .padding(.horizontal, 14)
+                    .padding(.leading, 14)
+                    // Three fixed 100 pt covers + spine are wider than a phone: without this the
+                    // row set the whole screen's width and pushed the title and the + chip past
+                    // their margins. Now the row takes the width it's given and the card clips
+                    // the last (already faded) cover.
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 }
                 .background(KColor.s1)
                 .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))

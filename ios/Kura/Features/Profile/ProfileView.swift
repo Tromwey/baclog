@@ -22,7 +22,7 @@ struct ProfileView: View {
                     .padding(.top, 140)
                 IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") { store.push(.settings) }
                     .padding(.top, KSize.chromeTop)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, KSize.chromeSide)
             }
             .ignoresSafeArea(.container, edges: .top)
         } else if store.collections.isEmpty && store.libraryIDs.isEmpty && store.loadState == .loaded {
@@ -163,7 +163,7 @@ private struct EmptyOwnProfile: View {
                     Spacer()
                     IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") { store.push(.settings) }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, KSize.chromeSide)
                 Seal(person: me, size: 112)
                 Text(me.name).font(.kura.news(30)).foregroundStyle(KColor.text).padding(.top, 6)
                 Text("@\(me.handle)").monoLabel()
