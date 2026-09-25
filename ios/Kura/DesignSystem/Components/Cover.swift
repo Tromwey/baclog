@@ -142,7 +142,13 @@ private struct CoverImageBody: View {
         .animation(KMotion.tint, value: img != nil)
         // Leaving the screen cancels the wait (and the download, once nobody else wants it).
         .task(id: key) {
-            guard let key, CoverImageStore.shared.cached(key) == nil else { return }
+            guard let key else { return }
+            // The cache may have filled between this body and the task (another view finished the
+            // same download): take the hit as ours, or this view keeps drawing the palette.
+            if let hit = CoverImageStore.shared.cached(key) {
+                if loaded?.url != key.url || loaded?.image !== hit { loaded = (key.url, hit) }
+                return
+            }
             if let image = await CoverImageStore.shared.image(for: key), !Task.isCancelled {
                 loaded = (key.url, image)
             }
