@@ -25,10 +25,10 @@ export default function Loading() {
           </div>
           <div className="flex flex-col gap-[9px] pb-5">
             <div className="h-[26px] w-36 rounded-full bg-surface-2" />
-            <div className="h-6 w-3/4 rounded-full bg-surface-2" />
+            <div className="h-7 w-3/4 rounded-full bg-surface-2" />
           </div>
         </div>
-        <div className="-mt-1 h-24 rounded-t-[26px] bg-surface-2" />
+        <div className="h-24 rounded-t-[26px] bg-surface-2" />
       </div>
     </main>
   );

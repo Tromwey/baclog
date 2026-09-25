@@ -4,7 +4,13 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
-import { FIELD, GLASS_BUTTON, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
+import {
+  FIELD,
+  GLASS_BUTTON,
+  SKELETON_PULSE,
+  SOLID_BUTTON,
+  Wordmark,
+} from "@/components/kura/components";
 
 /**
  * Kura · the second half of "entrar." — the code the email carries. Same
@@ -91,9 +97,49 @@ function VerifyForm() {
   );
 }
 
+/**
+ * What paints before useSearchParams resolves (a hard load prerenders only
+ * this): the same chrome at the same geometry — wordmark, title, a disabled
+ * code field and Entrar — with only the address, which is still unknown,
+ * as a pulsing bar. Without it the page flashed blank.
+ */
+function VerifyFallback() {
+  return (
+    <main className="kura relative mx-auto flex min-h-lvh w-full max-w-md flex-col bg-bg px-6 pb-11 text-text">
+      <header className="flex items-center pt-[calc(64px+env(safe-area-inset-top))]">
+        <Wordmark size={30} />
+      </header>
+
+      <div className="mt-[62px] flex flex-col gap-3">
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo.</h1>
+        <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
+          Te mandamos un código a{" "}
+          <span
+            aria-hidden
+            className={`inline-block h-3.5 w-36 translate-y-0.5 rounded-full bg-surface-1 ${SKELETON_PULSE}`}
+          />
+          .
+        </p>
+
+        <div className="mt-5 flex flex-col gap-3">
+          <input
+            disabled
+            aria-label="Código de 6 dígitos"
+            placeholder="000000"
+            className={`${FIELD} text-center font-mono text-[24px] tracking-[0.3em]`}
+          />
+          <button type="button" disabled className={SOLID_BUTTON}>
+            Entrar
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function VerifyPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<VerifyFallback />}>
       <VerifyForm />
     </Suspense>
   );

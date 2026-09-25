@@ -396,7 +396,7 @@ export function SearchView({
   );
 }
 
-/** E5 — the results' own shape (cover 44×66, two bars), pulsing at 1.6 s. */
+/** E5 — the results' own shape (cover 44×66, two bars, the 44 Guardar), pulsing at 1.6 s. */
 function SearchSkeleton() {
   return (
     <div aria-busy="true" aria-label="Buscando" className={`flex flex-col gap-1 px-5 pt-[26px] ${SKELETON_PULSE}`}>
@@ -409,6 +409,7 @@ function SearchSkeleton() {
             <span className="block h-4 w-[70%] rounded-[6px] bg-surface-1" />
             <span className="block h-2.5 w-[45%] rounded-[5px] bg-surface-1" />
           </span>
+          <span className="h-11 w-11 flex-none rounded-full bg-surface-1" />
         </div>
       ))}
     </div>

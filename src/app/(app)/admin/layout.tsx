@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { SKELETON_PULSE } from "@/components/kura/components";
 import { fetched, requireAdmin } from "@/modules/admin/guard";
 import { runHealthChecks, STATUS_WORD } from "@/modules/admin/checks";
 import { AdminTabs } from "./tabs";
@@ -12,6 +14,12 @@ import { STATUS_BG_CLASS, STATUS_TEXT_CLASS } from "./ui";
  * title, and the global health pill (semáforo) linking into Salud.
  * runHealthChecks is React-cached, so the Salud tab shares this execution
  * within a request.
+ *
+ * The layout awaits ONLY requireAdmin (getCurrentUser is request-cached):
+ * the health pill streams in under its own <Suspense>, because a segment's
+ * loading.tsx never wraps its own layout — awaiting the checks here froze
+ * the previous screen on every entry to /admin. The gate still runs before
+ * any chrome renders, so non-admins get the same 404.
  */
 export default async function AdminLayout({
   children,
@@ -19,8 +27,6 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   await requireAdmin();
-  const health = await fetched(runHealthChecks());
-  const status = health.ok ? health.data.status : "none";
 
   return (
     <div className="mx-auto min-h-dvh w-full max-w-md px-[14px] pb-12 pt-[calc(14px+env(safe-area-inset-top))] text-text">
@@ -41,21 +47,41 @@ export default async function AdminLayout({
             Torre de control
           </div>
         </div>
-        <Link
-          href="/admin/salud"
-          className="flex shrink-0 items-center gap-[7px] rounded-full bg-surface-2 px-3 py-2"
-        >
-          <span className={`h-2 w-2 rounded-full ${STATUS_BG_CLASS[status]}`} />
-          <span
-            className={`font-mono text-[10px] tracking-[0.06em] ${STATUS_TEXT_CLASS[status]}`}
-          >
-            {STATUS_WORD[status]}
-          </span>
-        </Link>
+        <Suspense fallback={<HealthPillSkeleton />}>
+          <HealthPill />
+        </Suspense>
       </div>
 
       <AdminTabs />
       {children}
     </div>
+  );
+}
+
+/** The global semáforo pill → Salud. Rendered only past the layout's gate. */
+async function HealthPill() {
+  const health = await fetched(runHealthChecks());
+  const status = health.ok ? health.data.status : "none";
+  return (
+    <Link
+      href="/admin/salud"
+      className="flex shrink-0 items-center gap-[7px] rounded-full bg-surface-2 px-3 py-2"
+    >
+      <span className={`h-2 w-2 rounded-full ${STATUS_BG_CLASS[status]}`} />
+      <span
+        className={`font-mono text-[10px] tracking-[0.06em] ${STATUS_TEXT_CLASS[status]}`}
+      >
+        {STATUS_WORD[status]}
+      </span>
+    </Link>
+  );
+}
+
+/** Pill-shaped placeholder while the checks run (px-3 py-2, dot + word). */
+function HealthPillSkeleton() {
+  return (
+    <div
+      className={`h-[31px] w-[84px] shrink-0 rounded-full bg-surface-2 ${SKELETON_PULSE}`}
+    />
   );
 }

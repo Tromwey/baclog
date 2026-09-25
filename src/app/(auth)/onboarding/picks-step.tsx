@@ -189,13 +189,17 @@ export function PicksStep({
       );
       const res = await completePicksAction(payload);
       if ("backlogId" in res && res.backlogId) {
+        // Stay busy: onDone() is a router.replace to /onboarding/gente, and
+        // this step stays mounted (CTA and all) until that route streams in.
+        // Resetting here re-armed the CTA mid-navigation — a second tap
+        // re-submitted the picks.
         onDone();
         return;
       }
       setFailed(true);
+      setBusy(false);
     } catch {
       setFailed(true);
-    } finally {
       setBusy(false);
     }
   }

@@ -2,11 +2,14 @@ import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
  * 15b Cargando (flujos-v2 02): the real header ("tus colecciones" + the 44
- * chip, so nothing jumps when the page lands) and four card silhouettes —
- * the spine's bar and covers of both formats, the first at 150, the rest at
- * 120 — on `--s1`, with the system's one allowed pulse (opacity, 1.6 s).
- * Shown only on the FIRST (uncached) visit; the detail and lens segments
- * define their own closer loading.tsx.
+ * chip, so nothing jumps when the page lands), the format filter's glass pill
+ * (collection-cards.tsx: p-[5px] around four py-2.5 mono-11 tabs) and four card
+ * silhouettes — the spine's bar and covers of both formats, the first at 150
+ * with the WaitCard's pt-11/pb-18, the rest at 120 with py-4 — on `--s1`,
+ * with the system's one allowed pulse (opacity, 1.6 s).
+ * Shown only on the FIRST (uncached) visit. Every child segment that isn't
+ * this list — a collection, a lens, no-puedo-esperar, the share card —
+ * defines its own loading.tsx; a new one should too, or it inherits this.
  */
 const CARDS: { h: number; spine: number; w: number[] }[] = [
   { h: 150, spine: 96, w: [100, 150, 100] },
@@ -22,30 +25,39 @@ export default function Loading() {
         <h1 className="font-brand text-[36px] font-normal leading-[1.02]">tus colecciones</h1>
         <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
       </header>
-      <div
-        aria-busy="true"
-        aria-label="Cargando colecciones"
-        className={`flex flex-col gap-3 px-3 ${SKELETON_PULSE}`}
-      >
-        {CARDS.map((c, i) => (
-          <div key={i} className="flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1">
-            <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
-              <span className="w-2 rounded-full bg-surface-2" style={{ height: c.spine }} />
-            </span>
-            <div
-              className="flex gap-2.5 overflow-hidden px-3.5"
-              style={{ paddingBlock: c.h >= 150 ? 20 : 16 }}
-            >
-              {c.w.map((w, j) => (
-                <span
-                  key={j}
-                  className="flex-none rounded-[var(--r-cover-l)] bg-surface-2"
-                  style={{ height: c.h, width: w }}
-                />
-              ))}
-            </div>
+      <div aria-busy="true" aria-label="Cargando colecciones" className={SKELETON_PULSE}>
+        <div className="px-5 pb-[22px]">
+          {/* 5 + (10 + 11 × 1.5 + 10) + 5 = the real tablist's 46.5 px */}
+          <div className="flex gap-1 rounded-full bg-[var(--glass-bg)] p-[5px]">
+            {[0, 1, 2, 3].map((i) => (
+              <span
+                key={i}
+                className={`h-[36.5px] flex-1 rounded-full ${i === 0 ? "bg-white/[0.1]" : ""}`}
+              />
+            ))}
           </div>
-        ))}
+        </div>
+        <div className="flex flex-col gap-3 px-3">
+          {CARDS.map((c, i) => (
+            <div key={i} className="flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1">
+              <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
+                <span className="w-2 rounded-full bg-surface-2" style={{ height: c.spine }} />
+              </span>
+              <div
+                className="flex gap-2.5 overflow-hidden px-3.5"
+                style={c.h >= 150 ? { paddingTop: 44, paddingBottom: 18 } : { paddingBlock: 16 }}
+              >
+                {c.w.map((w, j) => (
+                  <span
+                    key={j}
+                    className="flex-none rounded-[var(--r-cover-l)] bg-surface-2"
+                    style={{ height: c.h, width: w }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </main>
   );

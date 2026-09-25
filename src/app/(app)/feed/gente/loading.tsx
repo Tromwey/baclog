@@ -1,4 +1,5 @@
 import { SKELETON_PULSE } from "@/components/kura/components";
+import { PersonRowSkeleton } from "@/components/skeletons/people-skeleton";
 
 /**
  * /feed/gente skeleton — Volver, the title, the search field and a few 72
@@ -15,19 +16,12 @@ export default function Loading() {
         <div className="px-6 pb-5 pt-4">
           <div className="h-9 w-36 rounded-full bg-surface-1" />
         </div>
-        <div className="px-5">
+        <div className="px-5 pb-10">
           <div className="h-12 rounded-full bg-surface-1" />
           <div className="mt-6 h-3 w-24 rounded-full bg-surface-1" />
-          <div className="mt-2 flex flex-col">
+          <div className="mt-1 flex flex-col">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex min-h-[72px] items-center gap-3.5">
-                <div className="h-11 w-11 flex-none rounded-full bg-surface-1" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <div className="h-3.5 w-28 rounded-full bg-surface-1" />
-                  <div className="h-2.5 w-36 rounded-full bg-surface-2" />
-                </div>
-                <div className="h-9 w-[76px] rounded-full bg-surface-1" />
-              </div>
+              <PersonRowSkeleton key={i} />
             ))}
           </div>
         </div>
