@@ -376,7 +376,10 @@ private struct FeedCard: View, Equatable {
         .padding(.bottom, 22)
         .frame(height: height + topInset, alignment: .top)
         .contentShape(Rectangle())
-        .kPressable(.row) {
+        // A plain tap, no press fill: `.row`'s rounded fill is a list-row affordance and on a
+        // full-bleed feed card it drew a stray card-shaped box under the finger. Bursts and
+        // suggestions have no single title to open (their covers are their own buttons).
+        .onTapGesture {
             if let id = event.titleID { store.push(.title(id)) }
         }
         // Tier heights are exact: the card's text stops growing at xxxLarge (it clips past its block).
