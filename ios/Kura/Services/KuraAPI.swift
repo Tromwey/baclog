@@ -310,7 +310,14 @@ struct MockAPI: KuraAPI {
         }
     }
     func setFollowing(handle: String, following: Bool) async throws { try await write() }
-    func feed(cursor: String?) async throws -> FeedPage { FeedPage(items: MockData.feed) }
+    func feed(cursor: String?) async throws -> FeedPage {
+        // Like the wire: a review event carries its review.
+        FeedPage(items: MockData.feed.map { e in
+            var e = e
+            e.embeddedReview = MockData.reviews.first { $0.id == e.reviewID }
+            return e
+        })
+    }
     func feedSuggestion() async throws -> FeedEvent? { nil }
 
     // Recap

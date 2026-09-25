@@ -984,7 +984,7 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
 
     var tier: Tier {
         switch kind {
-        case .reviewed: return .L
+        case .reviewed, .suggestion: return .L
         case .added, .waitingAdd: return .S
         default: return .M
         }

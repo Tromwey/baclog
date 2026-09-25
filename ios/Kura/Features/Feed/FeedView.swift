@@ -6,6 +6,8 @@ import SwiftUI
 struct FeedView: View {
     @Environment(AppStore.self) private var store
     @State private var position: String?
+    /// How far the stack has scrolled (0 at rest). Every pin and band derives from it.
+    @State private var scrolled: CGFloat = 0
 
     /// How far a card's body runs past its own height, so the card rising from
     /// underneath always mounts over filled color instead of bare bg.
@@ -92,42 +94,33 @@ struct FeedView: View {
         .accessibilityLabel("Cargando tu feed")
     }
 
+    private static let space = "feed.stack"
+
+    /// Top of the header block: the status bar, less the 12 pt the design's
+    /// header pads above its bell (so the bell lands on `chromeTop` like every screen).
+    private var headerTop: CGFloat { KSize.chromeTop - 12 }
+    /// Where the stack pins: under the 63 pt sticky header of Feed v10.
+    private var hdr: CGFloat { headerTop + 63 }
+
     private var stack: some View {
-        VStack(spacing: 0) {
-            header
-            if let e = store.loadError(.feed) {
-                // A refresh (or its titles) failed over a feed already on screen: say it's old.
-                RetryStrip(error: e, text: e == .offline ? nil : "No se pudo actualizar tu feed.") {
-                    Task { await store.loadFeed(force: true) }
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
-                .background(KColor.bg)
-            }
-            GeometryReader { geo in
-                let events = store.visibleFeed
+        GeometryReader { geo in
+            let events = store.visibleFeed
+            // The design's frame starts below the status bar: tiers are fractions of that.
+            let base = geo.size.height - headerTop
+            let heights = events.map { tierHeight($0.tier, base: base) }
+            // Layout top of each card on screen at rest: the first runs up behind the header,
+            // each next one starts where the previous card's own height ends.
+            let tops = heights.indices.map { i in i == 0 ? 0 : hdr + heights[..<i].reduce(0, +) }
+            ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         ForEach(Array(events.enumerated()), id: \.element.id) { i, e in
-                            let h = tierHeight(e.tier, viewport: geo.size.height)
-                            FeedCard(event: e, height: h)
-                                .frame(height: h + ext, alignment: .top)
-                                .background(Tint.card(palette(e)))
-                                .clipShape(UnevenRoundedRectangle(topLeadingRadius: KRadius.screen,
-                                                                  topTrailingRadius: KRadius.screen,
-                                                                  style: .continuous))
-                                .kShadow(.stack)
-                                .padding(.bottom, -ext)
-                                .visualEffect { content, proxy in
-                                    let y = proxy.frame(in: .scrollView).minY
-                                    return content.offset(y: y < 0 ? -y : 0)
-                                }
-                                .zIndex(Double(i))
+                            card(e, index: i, height: heights[i], y: tops[i] - scrolled)
                                 .onAppear { if i >= events.count - 2 { Task { await store.loadMoreFeed() } } }
                         }
                         // The stack's light continues past the last card.
                         Tint.ends(palette(events.last)).1.color
-                            .frame(height: max(geo.size.height - tierHeight(events.last?.tier ?? .M, viewport: geo.size.height), 0) + ext)
+                            .frame(height: max(geo.size.height - hdr - tierHeight(events.last?.tier ?? .M, base: base), 0) + ext)
                             .overlay(alignment: .top) {
                                 // The next page failed: no auto-retry on scroll, the end of the stack offers it.
                                 if let e = store.loadError(.feedMore) {
@@ -141,7 +134,17 @@ struct FeedView: View {
                             .zIndex(store.loadError(.feedMore) == nil ? -1 : Double(events.count))
                     }
                     .scrollTargetLayout()
+                    .background {
+                        GeometryReader { g in
+                            Color.clear.onChange(of: g.frame(in: .named(FeedView.space)).minY, initial: true) { _, v in
+                                scrolled = hdr - v
+                            }
+                        }
+                    }
                 }
+                .coordinateSpace(name: FeedView.space)
+                // Cards snap under the header (scroll-padding-top); the first one runs up behind it.
+                .contentMargins(.top, hdr, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $position, anchor: .top)
                 .task {
@@ -149,16 +152,68 @@ struct FeedView: View {
                     try? await Task.sleep(for: .milliseconds(900))
                     position = anchor
                 }
+
+                header(transparent: true)
+                    .zIndex(1)
+
+                if let e = store.loadError(.feed) {
+                    // A refresh (or its titles) failed over a feed already on screen: say it's old.
+                    RetryStrip(error: e, text: e == .offline ? nil : "No se pudo actualizar tu feed.") {
+                        Task { await store.loadFeed(force: true) }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, hdr)
+                    .zIndex(2)
+                }
             }
         }
-        .background(KColor.bg.ignoresSafeArea())
+        .background(KColor.bg)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
-    private var header: some View {
-        HStack(alignment: .bottom) {
+    /// One card of the stack. The first runs up behind the header (no corners); the rest pin
+    /// under it and, as they arrive, raise a band of their own color over the header.
+    /// `y`: where the card's top would be on screen if it didn't pin.
+    private func card(_ e: FeedEvent, index i: Int, height h: CGFloat, y: CGFloat) -> some View {
+        let pal = palette(e)
+        let first = i == 0
+        let pin = first ? 0 : hdr
+        let lift = hdr + KRadius.screen
+        // The band: 0 → 1 over the last 140 pt before the card takes the top place.
+        let p = min(max(1 - (y - hdr) / 140, 0), 1)
+        let rise = lift * p * p * (3 - 2 * p)
+        return FeedCard(event: e, height: h, topInset: first ? hdr : 0)
+            .frame(height: h + ext + (first ? hdr : 0), alignment: .top)
+            .background(Tint.card(pal))
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: first ? 0 : KRadius.screen,
+                                              topTrailingRadius: first ? 0 : KRadius.screen,
+                                              style: .continuous))
+            .background(alignment: .top) {
+                if !first {
+                    // The band: the card's own surface, uncovered upward over the last 140 pt.
+                    UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous)
+                        .fill(Tint.ends(pal).0.color)
+                        .frame(height: lift + KRadius.screen * 2)
+                        .kShadow(.stack)
+                        .offset(y: -rise)
+                }
+            }
+            .padding(.top, first ? -hdr : 0)
+            .padding(.bottom, -ext)
+            .offset(y: max(0, pin - y))
+            .zIndex(Double(i))
+    }
+
+    private var header: some View { header(transparent: false) }
+
+    /// Feed v10 header: 63 pt, Newsreader 36 + the bell. Over the stack it's transparent —
+    /// the card on top paints the band behind it.
+    private func header(transparent: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             Text("tu feed").font(.kura.screenTitle).foregroundStyle(KColor.text)
+                .padding(.top, 6)
                 .accessibilityAddTraits(.isHeader)
+                .allowsHitTesting(false)
             Spacer()
             ZStack(alignment: .topTrailing) {
                 IconChip44(systemName: "bell", iconSize: 17, weight: .medium, label: store.hasUnread ? "Notificaciones, hay nuevas" : "Notificaciones") {
@@ -166,22 +221,26 @@ struct FeedView: View {
                 }
                 if store.hasUnread {
                     Circle().fill(KColor.text).frame(width: 8, height: 8)
-                        .offset(x: -9, y: 9)
+                        .background(Circle().fill(KColor.bg.opacity(0.6)).padding(-2))
+                        .offset(x: -11, y: 10)
                         .allowsHitTesting(false)
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, KSize.chromeTop)
-        .padding(.bottom, 14)
-        .background(KColor.bg)
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+        .padding(.top, headerTop + 12)
+        .frame(height: hdr, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background(transparent ? Color.clear : KColor.bg)
     }
 
-    private func tierHeight(_ t: FeedEvent.Tier, viewport: CGFloat) -> CGFloat {
+    /// Three fixed heights; the fraction only caps them so the next card always shows.
+    private func tierHeight(_ t: FeedEvent.Tier, base: CGFloat) -> CGFloat {
         switch t {
-        case .L: return min(620, viewport * 0.86)
-        case .M: return min(500, viewport * 0.7)
-        case .S: return min(370, viewport * 0.52)
+        case .L: return min(620, base * 0.72)
+        case .M: return min(500, base * 0.58)
+        case .S: return min(370, base * 0.44)
         }
     }
 
@@ -208,27 +267,40 @@ private struct FeedCard: View {
     @Environment(AppStore.self) private var store
     let event: FeedEvent
     let height: CGFloat
+    /// The first card runs up behind the header: its content starts below it.
+    var topInset: CGFloat = 0
 
     private var title: Title? { event.titleID.flatMap { store.title($0) } }
     private var author: Person? { store.person(event.authorID) }
     private var isMe: Bool { event.authorID == store.me.id }
+    private var isSuggestion: Bool { if case .suggestion = event.kind { return true }; return false }
+
+    /// Max height of the text block per tier (L 180 · M/S 105); a suggestion never clips.
+    private var textMax: CGFloat? {
+        if isSuggestion { return nil }
+        return event.tier == .L ? 180 : 105
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let author {
+            if isSuggestion {
+                SuggestionPill()
+            } else if let author {
                 Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
-                    AuthorChip(person: author, age: { if case .suggestion = event.kind { return "para ti" }; return ageLabel(event.ageHours) }())
+                    AuthorChip(person: author, age: FeedCard.when(event.ageHours))
                 }
                 .buttonStyle(.plain)
             }
             art
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             textBlock
+                .frame(maxHeight: textMax, alignment: .top)
+                .clipped()
         }
         .padding(.horizontal, 20)
-        .padding(.top, 18)
+        .padding(.top, 18 + topInset)
         .padding(.bottom, 22)
-        .frame(height: height, alignment: .top)
+        .frame(height: height + topInset, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture {
             if let id = event.titleID { store.push(.title(id)) }
@@ -241,33 +313,42 @@ private struct FeedCard: View {
     @ViewBuilder private var art: some View {
         switch event.kind {
         case .burst(_, let ids):
+            // A strip of the burst's covers, each at its format's ratio; it drops in height
+            // until the widest cover fits the card whole. First snaps to the start, last to the end.
             let ts = ids.compactMap { store.title($0) }
+            let widest = ts.map(\.format.aspect).max() ?? 1
             GeometryReader { geo in
-                let h = min(geo.size.height, 220)
+                let h = min(geo.size.height, (geo.size.width + 40) / widest)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .bottom, spacing: 10) {
+                    HStack(spacing: 14) {
                         ForEach(ts) { t in
                             Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: h) }
                                 .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .frame(height: geo.size.height)
+                    .scrollTargetLayout()
                 }
+                .contentMargins(.horizontal, 20, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
                 .scrollClipDisabled()
+                .frame(height: h)
                 .padding(.horizontal, -20)
+                .frame(width: geo.size.width, height: geo.size.height)
             }
         case .suggestion(_, _, _, let ids):
+            // The title the reason names goes in the middle and in front; the other two flank it.
             let ts = ids.compactMap { store.title($0) }
+            let order = ts.count >= 3 ? [ts[1], ts[0], ts[2]] : ts
+            let front = ts.count >= 3 ? 1 : order.count / 2
             GeometryReader { geo in
-                let h = min(geo.size.height * 0.8, geo.size.width * 0.5, 220)
+                let h = geo.size.height * 0.64
                 ZStack {
-                    ForEach(Array(ts.enumerated()), id: \.element.id) { i, t in
-                        let pos = CGFloat(i) - CGFloat(ts.count - 1) / 2
+                    ForEach(Array(order.enumerated()), id: \.element.id) { i, t in
+                        let pos = CGFloat(i - front)
                         CoverView(title: t, height: h)
                             .rotationEffect(.degrees(Double(pos) * 8))
-                            .offset(x: pos * min(h * 0.5, geo.size.width * 0.24), y: abs(pos) * 8)
-                            .zIndex(i == ts.count / 2 ? 2 : Double(i) * 0.1)
+                            .offset(x: pos * 58)
+                            .zIndex(i == front ? 3 : 1)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -275,10 +356,8 @@ private struct FeedCard: View {
         default:
             if let t = title {
                 GeometryReader { geo in
-                    let maxH = geo.size.height
-                    let w = min(geo.size.width, maxH * t.format.aspect)
-                    CoverView(title: t, width: w, height: w / t.format.aspect,
-                              badge: store.isUnreleased(t) ? .waiting(store.releaseLabel(t) ?? "") : .none)
+                    let w = min(geo.size.width, geo.size.height * t.format.aspect)
+                    CoverView(title: t, width: w, height: w / t.format.aspect)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
@@ -297,81 +376,95 @@ private struct FeedCard: View {
             }
             switch event.kind {
             case .suggestion(let pid, let reason, let social, _):
-                if let p = store.person(pid) {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("@\(p.handle)").font(.kura.newsItalic(26)).foregroundStyle(KColor.text)
-                            Text("\(reason). \(social).")
-                                .font(.kura.ui(15))
-                                .foregroundStyle(KColor.text2)
-                                .lineLimit(3)
-                        }
-                        Spacer(minLength: 0)
-                        FollowToggle(following: store.isFollowing(p.id), honey: true) { store.toggleFollow(p.id) }
-                    }
-                }
-            case .burst(let col, let ids):
-                Text("\(ids.count) títulos a \(col)")
+                Text(reason)
                     .font(.kura.newsItalic(26))
                     .foregroundStyle(KColor.text)
-                Text(ids.compactMap { store.title($0)?.name }.joined(separator: " · "))
-                    .font(.kura.ui(15))
-                    .foregroundStyle(KColor.text2)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let p = store.person(pid) {
+                    Button { store.push(.person(p.id)) } label: {
+                        HStack(spacing: 12) {
+                            Seal(person: p, size: 44)
+                            Text("@\(p.handle)").font(.kura.ui(17, .semibold)).foregroundStyle(KColor.text).lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    Text(social)
+                        .font(.kura.ui(14))
+                        .foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    FollowButton(following: store.isFollowing(p.id)) { store.toggleFollow(p.id) }
+                        .padding(.top, 4)
+                }
+            case .burst:
+                EmptyView()
             default:
                 if let t = title {
                     (Text(t.name).foregroundColor(KColor.text)
-                     + Text(t.creator.map { " · \($0)" } ?? "").foregroundColor(KColor.text2))
+                     + Text(tail(t)).foregroundColor(KColor.text2))
                         .font(.kura.newsItalic(26))
-                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let r = store.review(event.reviewID) {
                     let revealed = !r.spoiler || store.revealedSpoilers.contains(r.id)
-                    ZStack(alignment: .leading) {
+                    ZStack {
                         Text(r.text)
                             .font(.kura.ui(15))
-                            .lineSpacing(3)
+                            .lineSpacing(4)
                             .foregroundStyle(KColor.text)
                             .lineLimit(3)
-                            .blur(radius: revealed ? 0 : 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .opacity(revealed ? 1 : 0.4)
+                            .blur(radius: revealed ? 0 : 6)
                             .accessibilityHidden(!revealed)
                         if !revealed {
                             SpoilerPill { store.revealedSpoilers.insert(r.id) }
-                                .frame(maxWidth: .infinity)
                         }
                     }
+                    .padding(.top, 2)
                     .animation(.easeOut(duration: 0.24), value: revealed)
                 }
             }
         }
     }
 
+    /// " · artist" for music, " · year" for film and series.
+    private func tail(_ t: Title) -> String {
+        if t.format == .album, let c = t.creator { return " · \(c)" }
+        if let y = t.year { return " · \(y)" }
+        return t.creator.map { " · \($0)" } ?? ""
+    }
+
+    /// One vocabulary of states: each is a pill with its glyph. A completed title with a
+    /// reaction shows only the reaction; a waiting add shows only the wait.
     private var pills: [(Glyph, String)] {
+        func react(_ m: Mark?) -> (Glyph, String)? {
+            guard let m, m != .completed else { return nil }
+            return (m.glyph, isMe ? m.myLabel : m.theirLabel)
+        }
         switch event.kind {
         case .obsessed:
             return [(.flame, isMe ? "Me obsesiona" : "Le obsesiona")]
         case .completed(let m):
-            var p: [(Glyph, String)] = [(.check, "Completo")]
-            if let m, m != .completed { p.append((m.glyph, isMe ? m.myLabel : m.theirLabel)) }
-            return p
+            return [react(m) ?? (.check, "Completo")]
         case .reviewed:
-            var p: [(Glyph, String)] = [(.review, isMe ? "Reseñaste" : "Reseñó")]
-            if let m = store.review(event.reviewID)?.mark { p.append((m.glyph, isMe ? m.myLabel : m.theirLabel)) }
-            return p
+            return [(.review, isMe ? "Reseñaste" : "Reseñó")] + [react(store.review(event.reviewID)?.mark)].compactMap { $0 }
         case .added(let c):
             return [(.bookmark, isMe ? "Agregaste a \(c)" : "Agregó a \(c)")]
         case .waitingAdd(_, let label):
             return [(.clock, "No puede esperar · \(label)")]
         case .burst(let c, let ids):
-            return [(.bookmark, isMe ? "Agregaste \(ids.count) a \(c)" : "Agregó \(ids.count) a \(c)")]
+            return [(.bookmark, isMe ? "Agregaste \(ids.count) títulos a \(c)" : "Agregó \(ids.count) títulos a \(c)")]
         case .suggestion:
-            return [(.users, "Te puede interesar")]
+            return []
         }
     }
 
-    private func ageLabel(_ h: Double) -> String {
-        h < 24 ? "hace \(Int(h)) h" : "hace \(Int(h / 24)) d"
+    static func when(_ h: Double) -> String {
+        if h < 1 { return "hace \(max(1, Int(h * 60))) min" }
+        if h < 24 { return "hace \(Int(h)) h" }
+        if h < 7 * 24 { return "hace \(Int(h / 24)) d" }
+        if h < 35 * 24 { return "hace \(Int(h / (7 * 24))) sem" }
+        return "hace \(Int(h / (30 * 24))) meses"
     }
 }
 
@@ -382,12 +475,51 @@ private struct AuthorChip: View {
         HStack(spacing: 8) {
             Seal(person: person, size: 28)
             Text("@\(person.handle)").font(.kura.ui(13, .semibold)).foregroundStyle(KColor.text).lineLimit(1)
-            Text(age).monoLabel(11)
+            Text(age).monoLabel(11).fixedSize()
         }
         .padding(.leading, 4)
         .padding(.trailing, 12)
         .padding(.vertical, 4)
         .background(KColor.glassBg, in: Capsule())
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The suggestion's header, where the author chip goes on every other card.
+private struct SuggestionPill: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            GlyphView(glyph: .users, size: 13)
+            Text("Sugerencia para ti")
+                .font(.kura.mono(12))
+                .tracking(0.72)
+                .textCase(.uppercase)
+                .foregroundStyle(KColor.text)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(KColor.glassBg, in: Capsule())
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Feed v10's Seguir: the screen's one honey action; glass once you follow.
+private struct FollowButton: View {
+    let following: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text(following ? "Siguiendo" : "Seguir")
+                .font(.kura.ui(16, .semibold))
+                .foregroundStyle(following ? KColor.text : KColor.onAccent)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(following ? KColor.glassBg : KColor.accent, in: Capsule())
+                .contentShape(Capsule())
+                .animation(.easeInOut(duration: 0.2), value: following)
+        }
+        .kPress()
+        .accessibilityLabel(following ? "Dejar de seguir" : "Seguir")
     }
 }
