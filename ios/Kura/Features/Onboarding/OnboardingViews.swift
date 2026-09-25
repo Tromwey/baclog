@@ -727,7 +727,18 @@ struct YourPeopleView: View {
         .padding(.top, 72)
         .padding(.horizontal, 20)
         .padding(.bottom, 28)
-        .background(Tint.header3(picked.map(\.palette)))
+        // The tint runs past the hero and fades out vertically under the first rows: header3's
+        // diagonal alone reaches bg only at the bottom-right, so ending it at the hero cut a hard
+        // edge where the list starts.
+        .background {
+            Tint.header3(picked.map(\.palette))
+                .mask(LinearGradient(stops: [
+                    .init(color: .white, location: 0),
+                    .init(color: .white, location: 0.55),
+                    .init(color: .clear, location: 1)
+                ], startPoint: .top, endPoint: .bottom))
+                .padding(.bottom, -140)
+        }
     }
 
     private func personRow(_ p: Person, why: String) -> some View {
