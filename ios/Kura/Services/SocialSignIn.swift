@@ -256,7 +256,8 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
         req.httpBody = form.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B").data(using: .utf8)
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: req)
+            // Ephemeral: Google's token answer (an `id_token`) never touches `URLCache.shared`.
+            (data, response) = try await URLSession(configuration: .ephemeral).data(for: req)
         } catch let u as URLError {
             throw APIClient.map(u) == .offline ? Failure.offline : Failure.rejected
         }

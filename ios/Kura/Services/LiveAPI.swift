@@ -258,6 +258,11 @@ final class APIClient: @unchecked Sendable {
         config.timeoutIntervalForRequest = 20
         config.waitsForConnectivity = false
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // `.reloadIgnoringLocalCacheData` only stops READING the cache: responses were still being
+        // WRITTEN to `URLCache.shared` (256 MB on disk, `KuraApp`), so your library, profile and
+        // feed outlived a sign-out. The API never goes through a URL cache; covers (public art)
+        // keep the shared one.
+        config.urlCache = nil
         urlSession = URLSession(configuration: config, delegate: SameOriginRedirects(), delegateQueue: nil)
     }
 

@@ -15,6 +15,7 @@ struct KuraApp: App {
         // size and keeps the bitmaps in its own NSCache), so give the shared URL cache room for
         // the raw bytes: returning to a screen should not refetch.
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
+        LegacyURLCache.purgeOnce()
         FontCheck.run()
         // `LiveAPI` by default; `MockAPI` for the `-kuraScreen` captures and `-kuraMock` (DEBUG
         // only: Release doesn't compile the mock in).
@@ -69,5 +70,18 @@ extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
 
     public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         viewControllers.count > 1
+    }
+}
+
+/// Builds before 2026-09-25 let `APIClient` write authenticated API responses (library, profile,
+/// feed) into `URLCache.shared` on disk. The API no longer uses a URL cache; this empties what
+/// those builds left, once per install (only covers are lost, and they come back from the CDN).
+enum LegacyURLCache {
+    static let key = "kura.urlCachePurged.v1"
+
+    static func purgeOnce(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: key) else { return }
+        URLCache.shared.removeAllCachedResponses()
+        defaults.set(true, forKey: key)
     }
 }
