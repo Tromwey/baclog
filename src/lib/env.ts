@@ -66,4 +66,13 @@ export const env = {
    *  `aud` of its ID tokens; not a secret). Absent → `auth/google` answers
    *  503 and `auth/providers` says `google: null`. */
   GOOGLE_IOS_CLIENT_ID: process.env.GOOGLE_IOS_CLIENT_ID,
+  /**
+   * Optional (App Review): the ONE demo account whose login code is fixed —
+   * read through `reviewLoginCode()` in src/auth/otp.ts. Both set → asking a
+   * code for `APP_REVIEW_EMAIL` sends no email and arms `APP_REVIEW_CODE`
+   * (6 digits) instead, with the same 5-attempt cap and 60 s cooldown as any
+   * code. Either absent → that email is a normal account. Never an admin.
+   */
+  APP_REVIEW_EMAIL: process.env.APP_REVIEW_EMAIL,
+  APP_REVIEW_CODE: process.env.APP_REVIEW_CODE,
 };

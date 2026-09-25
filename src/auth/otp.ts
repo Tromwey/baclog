@@ -6,6 +6,7 @@ import { users, verificationTokens } from "@/db/schema";
 import { convertOnSignup } from "@/modules/growth/waitlist";
 import { assignFounderIfEligible } from "@/modules/growth/founder";
 import { HANDOFF_IDENTIFIER_PREFIX } from "@/authz/handoff";
+import { env } from "@/lib/env";
 import { sendMergeOtpEmail, sendOtpEmail } from "./mailer";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -54,6 +55,26 @@ async function sweepExpiredNonBlocking(): Promise<void> {
   }
 }
 
+/**
+ * App Review's demo account: the fixed code for `normalized` when it is
+ * `APP_REVIEW_EMAIL` and `APP_REVIEW_CODE` is a valid 6-digit code; null
+ * otherwise (every other email, or the feature unset / misconfigured). The
+ * reviewer can't read our inbox, so `issueOtp` arms this code instead of
+ * mailing a random one. It is stored hashed in a normal row, so verification
+ * is the SAME path as any login (5 attempts per issued code, 60 s cooldown,
+ * single use) — a static code without that cap would be brute-forceable.
+ */
+function reviewLoginCode(normalized: string): string | null {
+  const reviewEmail = env.APP_REVIEW_EMAIL?.trim().toLowerCase();
+  const code = env.APP_REVIEW_CODE?.trim();
+  if (!reviewEmail || !code || normalized !== reviewEmail) return null;
+  if (!/^\d{6}$/.test(code)) {
+    console.error("[otp] APP_REVIEW_CODE must be 6 digits; review login disabled");
+    return null;
+  }
+  return code;
+}
+
 export async function issueOtp(email: string): Promise<void> {
   const normalized = email.trim().toLowerCase();
   // Never touch a handoff/merge row (see `RESERVED_PREFIXES`): the delete
@@ -70,7 +91,8 @@ export async function issueOtp(email: string): Promise<void> {
     if (Date.now() - issuedAt < RESEND_COOLDOWN_MS) throw new OtpCooldownError();
   }
 
-  const code = newCode();
+  const reviewCode = reviewLoginCode(normalized);
+  const code = reviewCode ?? newCode();
 
   // One live code per email; never store the raw code
   await db
@@ -85,6 +107,7 @@ export async function issueOtp(email: string): Promise<void> {
     expires: new Date(Date.now() + OTP_TTL_MS),
   });
 
+  if (reviewCode) return; // the reviewer already has it (App Store Connect notes)
   await sendOtpEmail(normalized, code);
 }
 
