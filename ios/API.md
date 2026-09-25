@@ -185,7 +185,7 @@ Todos bajo `/api/v1`, todos con bearer salvo `auth/otp/*`. Entre paréntesis, el
 
 **Descubrir y búsqueda**
 - `GET /search?q=&kind=all|film|series|album` → `{ items: [SearchResult] }` (`unifiedSearchDetailed`; TMDB + iTunes en paralelo, upsert en `catalog_item`). `503 unavailable` **solo** cuando todos los proveedores pedidos fallaron y no volvió nada; "sin resultados" honesto = 200 con `items: []`.
-- `GET /discover` → `{ recommended: [{ title, reason, seedTitleId }], trending: [{ title, saves, people: [handle] }], upcoming: [{ title, releaseDate }] }` (`getObsessionRails` intercalados por `modules/recs/discover-cards.ts` `recCards` — solo recos YA cacheadas, nunca el motor; `getTrendingAmongFollowed`; `getLibraryUpcoming`).
+- `GET /discover` → `{ recommended: [{ title, reason, seedTitleId }], trending: [{ title, saves, people: [handle] }], upcoming: [{ title, releaseDate }] }` (`getObsessionRails` intercalados por `modules/recs/discover-cards.ts` `recCards` — solo recos YA cacheadas, nunca el motor; `getKuraTrending` — tendencias de TODO Kura en 7 días, no solo de quien sigues (2026-09-25); `saves` = personas públicas distintas; `getLibraryUpcoming`).
 - `GET /onboarding/pool?page=1..20` → `{ items: [Title], nextPage: number | null }` (`getOnboardingPoolPage`, el mismo pool curado que la web; grid "elige tres"; con bearer como la web lo tiene tras sesión). Proveedores caídos y sin caché → `503 unavailable`.
 
 **Gente y feed**

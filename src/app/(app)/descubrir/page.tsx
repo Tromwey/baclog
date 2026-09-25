@@ -7,7 +7,7 @@ import {
   getObsessionRails,
 } from "@/modules/recs/discover-rails";
 import { recCards } from "@/modules/recs/discover-cards";
-import { getTrendingAmongFollowed } from "@/modules/social/trending";
+import { getKuraTrending } from "@/modules/social/trending";
 import { getRenderInstant } from "@/modules/catalog/release";
 import { DescubrirScreen, type SearchBacklog } from "./descubrir-screen";
 import { getLibraryIndex } from "./library-index";
@@ -15,8 +15,8 @@ import { getLibraryIndex } from "./library-index";
 /**
  * Descubrir (Kura · flujos-v2 19a). Everything the home draws is a cache or
  * derived read — NO engine call on load (ADR-009 meters generations): the
- * obsession rails become the "recomendado para ti" cards, the trend is what
- * the people you follow touched this week, the releases are the ones still
+ * obsession rails become the "recomendado para ti" cards, the trend is what's
+ * trending on Kura this week, the releases are the ones still
  * ahead in your own collections. The Double Feature feed is only fetched on
  * its card's tap. Plus what "guardar" needs to be honest: the collections and
  * the caller's own membership index.
@@ -32,7 +32,7 @@ export default async function DescubrirPage() {
       getBacklogsForUser(user.id),
       getFirstRunCounts(user.id),
       getObsessionRails(user.id, { maxRails: 4, perRail: 4 }),
-      getTrendingAmongFollowed(user.id, new Date(now), 15),
+      getKuraTrending(user.id, new Date(now), 15),
       getLibraryUpcoming(user.id, now, 12),
       getLatestDoubleFeature(user.id),
       getLibraryIndex(user.id),

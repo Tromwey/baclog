@@ -41,8 +41,8 @@ export interface RecCard {
  *    rails, read from cache only: a visit never spends a generation), kicker
  *    "porque te obsesiona X", cover 132, italic title, byline, Guardar. More
  *    than one → the cards slide sideways, one object per surface.
- *  - **tendencias** — what the people you follow touched this week (the only
- *    trend the product measures), rank 1–5 in mono.
+ *  - **tendencias** — what's trending on Kura this week (the most distinct
+ *    public people per title), rank 1–5 in mono.
  *  - **próximos lanzamientos** — the releases still ahead in your own
  *    collections, cover 150 with the mono date.
  *  - **double feature** — the cross-media engine's card (not in the mock;
@@ -316,7 +316,7 @@ function TrendRow({
   const meta = [
     KIND_SHORT[row.mediaType],
     row.year,
-    row.count === 1 ? "1 de tu gente" : `${row.count} de tu gente`,
+    row.count === 1 ? "1 persona" : `${row.count} personas`,
   ]
     .filter(Boolean)
     .join(" · ");

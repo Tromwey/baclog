@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   backlogItems,
@@ -13,21 +13,28 @@ import type { MediaType } from "@/modules/catalog/types";
 import { avatarHexesFor } from "@/modules/reviews/queries";
 import { FALLBACK_ADN, WEEK } from "@/modules/reviews/format";
 import { notBlockedWith } from "./block-gate";
-import { getFollowedIds, publicAuthor } from "./queries";
+import { publicAuthor } from "./queries";
 
 /**
- * Revamp UI (2026-09-03) — "Entre quienes sigues · Esta semana": the titles
- * the people you follow touched most in the last 7 days, ranked by how many
- * DISTINCT followed people did something with each (added, completed,
- * obsessed, reviewed — the feed's four sources, same gates).
+ * Descubrir › "tendencias · esta semana" — what's trending ON KURA: the titles
+ * the most DISTINCT public people touched in the last 7 days (added,
+ * completed, obsessed, reviewed — the feed's four sources, same gates).
+ * Until 2026-09-25 it was only the people you follow, which left every new
+ * account (following nobody) with no trends at all; the founder moved it to
+ * Kura-wide.
  *
- * A cross-user read, so it follows social/queries.ts to the letter: every
- * branch re-gates `publicAuthor` (isPublic + username) INSIDE the query, the
- * adds branch additionally requires `backlogs.isPublic` (F3.10.1 — an add to
- * a private backlog is nobody's business), reviews skip hidden ones, and the
- * field list is the public-safe one (username, avatar pointer, catalog
- * metadata). A followed account that went private simply stops counting.
- * Same for a block in either direction (`notBlockedWith`, next to the gate).
+ * A cross-user read over EVERY account, so it follows social/queries.ts to
+ * the letter: every branch re-gates `publicAuthor` (isPublic + username)
+ * INSIDE the query, the adds branch additionally requires `backlogs.isPublic`
+ * (F3.10.1 — an add to a private backlog is nobody's business), reviews skip
+ * hidden ones, and the field list is the public-safe one (username, avatar
+ * pointer, catalog metadata). An account that goes private simply stops
+ * counting. Same for a block in either direction with the viewer
+ * (`notBlockedWith`, next to the gate).
+ *
+ * Each branch keeps its newest `BRANCH_CAP` rows (ordered by the touch
+ * time): at today's volume that is the whole week; if Kura outgrows it, the
+ * ranking should move into SQL (group by title, count distinct users).
  */
 
 export interface TrendingPerson {
@@ -44,7 +51,7 @@ export interface TrendingTitle {
   byline: string | null;
   posterUrl: string | null;
   paletteHex: string[];
-  /** Distinct followed people behind this title this week. */
+  /** Distinct public people behind this title this week. */
   count: number;
   /** Up to three of them, most recent activity first. */
   people: TrendingPerson[];
@@ -61,13 +68,11 @@ interface Touch {
   at: Date | null;
 }
 
-export async function getTrendingAmongFollowed(
+export async function getKuraTrending(
   userId: string,
   now: Date,
   limit = 3,
 ): Promise<TrendingTitle[]> {
-  const ids = await getFollowedIds(userId);
-  if (ids.length === 0) return [];
   const since = new Date(now.getTime() - WEEK);
 
   const person = { username: users.username, image: users.image };
@@ -92,10 +97,10 @@ export async function getTrendingAmongFollowed(
       )
       .where(
         and(
-          inArray(backlogItems.userId, ids),
           gte(backlogItems.addedAt, since),
         ),
       )
+      .orderBy(desc(backlogItems.addedAt))
       .limit(BRANCH_CAP),
     db
       .select({
@@ -111,11 +116,11 @@ export async function getTrendingAmongFollowed(
       )
       .where(
         and(
-          inArray(userItems.userId, ids),
           eq(userItems.status, "completed"),
           gte(userItems.statusChangedAt, since),
         ),
       )
+      .orderBy(desc(userItems.statusChangedAt))
       .limit(BRANCH_CAP),
     db
       .select({
@@ -131,12 +136,12 @@ export async function getTrendingAmongFollowed(
       )
       .where(
         and(
-          inArray(userItems.userId, ids),
           eq(userItems.obsessed, true),
           isNotNull(userItems.obsessedAt),
           gte(userItems.obsessedAt, since),
         ),
       )
+      .orderBy(desc(userItems.obsessedAt))
       .limit(BRANCH_CAP),
     db
       .select({
@@ -152,11 +157,11 @@ export async function getTrendingAmongFollowed(
       )
       .where(
         and(
-          inArray(itemReviews.userId, ids),
           isNull(itemReviews.hiddenAt),
           gte(itemReviews.createdAt, since),
         ),
       )
+      .orderBy(desc(itemReviews.createdAt))
       .limit(BRANCH_CAP),
   ]);
 

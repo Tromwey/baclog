@@ -3,7 +3,7 @@ import { getLibraryUpcoming } from "@/modules/backlog/library";
 import { getCatalogItems } from "@/modules/catalog/cache";
 import { recCards } from "@/modules/recs/discover-cards";
 import { getObsessionRails } from "@/modules/recs/discover-rails";
-import { getTrendingAmongFollowed } from "@/modules/social/trending";
+import { getKuraTrending } from "@/modules/social/trending";
 import { releaseDatesFor } from "../_lib/catalog";
 import { json } from "../_lib/http";
 import { isoDate } from "../_lib/schemas";
@@ -17,9 +17,9 @@ import { toTitleSummary } from "../_lib/wire";
  *
  *  - `recommended`: the obsession rails interleaved into cards by the one
  *    shared rule (`modules/recs/discover-cards.ts`), each with its seed;
- *  - `trending`: what the people the caller follows touched this week
- *    (trending.ts gates every branch on `publicAuthor` + `backlogs.isPublic`);
- *    people are handles only;
+ *  - `trending`: what's trending on Kura this week — the titles the most
+ *    public people touched (trending.ts gates every branch on `publicAuthor`
+ *    + `backlogs.isPublic` + blocks); people are handles only;
  *  - `upcoming`: the caller's own library titles whose release is ahead.
  */
 
@@ -29,7 +29,7 @@ export const GET = withApi(async (_req, { user }) => {
   const now = Date.now();
   const [rails, trending, upcoming] = await Promise.all([
     getObsessionRails(user.id, { maxRails: 4, perRail: 4 }),
-    getTrendingAmongFollowed(user.id, new Date(now), 15),
+    getKuraTrending(user.id, new Date(now), 15),
     getLibraryUpcoming(user.id, now, 12),
   ]);
   const cards = recCards(rails);
