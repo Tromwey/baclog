@@ -204,6 +204,13 @@
       "when": 1790303286571,
       "tag": "0028_user_block",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790304824637,
+      "tag": "0029_device_sessions_push",
+      "breakpoints": true
     }
   ]
 }

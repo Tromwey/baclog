@@ -3,6 +3,8 @@ import UIKit
 
 @main
 struct KuraApp: App {
+    /// APNs registration and notification taps (`Services/Push.swift`).
+    @UIApplicationDelegateAdaptor(KuraAppDelegate.self) private var appDelegate
     @State private var store: AppStore
 
     init() {
@@ -29,6 +31,7 @@ struct KuraApp: App {
         }
         let store = AppStore(api: api, now: mock ? MockData.now : Date())
         DebugLaunch.configure(store)
+        PushBridge.shared.store = store
         _store = State(initialValue: store)
     }
 

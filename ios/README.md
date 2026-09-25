@@ -22,9 +22,17 @@ xcrun simctl launch booted com.tromwey.kura
 - **Base URL** = `KuraAPIBase` en `Info.plist`, armada desde `KURA_API_SCHEME` + `KURA_API_HOST` por configuración en `project.yml` (partida en dos para que `//` nunca entre a un build setting):
   - **Debug** → `http://localhost:3010/api/v1`. El simulador llega al Mac por `localhost`; levanta la web con `pnpm dev --port 3010` (o cambia `KURA_API_HOST` en `project.yml` y regenera). Debug usa `Kura/Info-Debug.plist` (gemelo de `Info.plist` + `NSAppTransportSecurity › NSAllowsLocalNetworking`): si cambias `info.properties` en `project.yml`, replica el cambio ahí.
   - **Release** → `https://baclog.app/api/v1`, sin ATS local.
+- **Entrada**: `GET auth/providers` (sin bearer, se pide durante el splash) decide qué botones se pintan: Apple si `apple`, Google si trae `google.clientId`; si falla, solo correo (nunca un botón que no funcione, guía 2.1). O1a: Apple (botón del sistema `SignInWithAppleButton`, blanco, cápsula) · Google (vidrio) · correo; "¿Ya tienes cuenta? Entrar" abre O1c con Apple/Google arriba y "o con correo"; "Continuar con correo" abre O1c solo con el campo.
+  - **Apple** (`AuthenticationServices`): scopes `fullName` + `email`, nonce aleatorio (`Services/SocialSignIn.swift` › `AppleNonce`: el SHA-256 va a Apple, el crudo a `POST auth/apple` con `identityToken`, `authorizationCode`, `fullName` si Apple lo manda —solo la primera vez— y `device`).
+  - **Google** sin SDK (`GoogleOAuth`): código + PKCE en `ASWebAuthenticationSession` (`prefersEphemeralWebBrowserSession = false`), redirect = esquema invertido del client id (`com.googleusercontent.apps.<X>:/oauth2redirect`; `callbackURLScheme` lo atrapa sin registrar nada en `CFBundleURLTypes`), la app canjea el `code` en `oauth2.googleapis.com/token` con `code_verifier` (cliente iOS, sin secret) y manda el `id_token` a `POST auth/google`.
+  - Las dos devuelven `{ token, user }` como `otp/verify` y siguen el mismo camino (`AppStore.finishSignIn`: Keychain → O1b si falta onboarding → tabs). Cancelar = silencio; `403 underage` = la pantalla de 13 años; `503` = aviso "Apple/Google no responde ahora. Entra con tu correo…".
 - **Sesión**: `POST auth/otp/request` → `POST auth/otp/verify` → JWT en el **Keychain** (`Services/Keychain.swift`, service `com.tromwey.kura`, account `bearer`; nunca `UserDefaults`). `Services/Session.swift` lee `exp` del payload (sin verificar firma) y la app llama `POST auth/refresh` al abrir si faltan < 7 días. Un **401 en cualquier llamada** borra el token, manda `.kuraSessionExpired` y el store vuelve a la entrada.
 - **Cliente** (`Services/LiveAPI.swift`): `APIClient` (URLSession, bearer, `KuraJSON.decoder` que acepta ISO 8601 con y sin fracción, mapeo `error.code`/`reason` → `KuraAPIError`) + `LiveAPI: KuraAPI` endpoint por endpoint. Reintento con backoff (0.5 / 1 / 2 s) **solo en GET**; las escrituras no reintentan: el toast "Reintentar" es el reintento.
 - **Carga por recurso**: al arrancar `GET /me` + `/collections` + `/me/titles` + `/me/following`, luego `GET /titles?ids=` para lo que falte; ficha, colección, feed, descubrir, persona, listas y recap cargan al entrar (`store.load*`). Lo `unsupported` (fijar, orden manual, portada elegida, orden/vista, episodios) vive en `Services/LocalPrefs.swift` (UserDefaults, apagado en mock).
+- **Sesiones activas** (Ajustes › Sesiones activas, `Route.sessions`): `GET me/sessions`, este iPhone primero y marcado ("este iPhone", sin botón), las demás con "Cerrar sesión" + hoja de confirmación → `DELETE me/sessions/{id}`. El dispositivo revocado cae en la entrada con su siguiente 401 (el manejo global de 401 de arriba). "Cerrar sesión" de Ajustes sigue siendo en todos tus dispositivos.
+- **Push** (`Services/Push.swift`): `KuraAppDelegate` vía `UIApplicationDelegateAdaptor`. Nunca pide permiso al abrir: el permiso se pide al guardar algo que no ha salido (`ReleaseNotifier`, como antes) o al volver a encender un switch de notificaciones. Con permiso concedido, cada arranque con sesión llama `registerForRemoteNotifications()`; el token (hex) va a `PUT me/devices/{token}` `{ environment }` (`sandbox` en Debug, `production` en Release). Al cerrar sesión, al olvidar la sesión local y antes de `DELETE /me`: `DELETE me/devices/{token}` best-effort con el bearer capturado ANTES de olvidarlo. Tap (en caliente y en frío): `{ kura: { type: "release", titleId } }` abre la ficha, `{ kura: { type: "follower", handle } }` el perfil (si las tabs aún no están, espera a `startIfNeeded`). En primer plano: banner.
+  - **Local vs. remota (decisión):** mientras el token de este iPhone esté registrado en el servidor (`PushRegistration.isRegistered`), el aviso de estreno llega por push y `ReleaseNotifier` ya no programa el local; al registrarse se borran los `release-*` pendientes. Al des-registrar (logout, borrar cuenta, sesión olvidada) vuelven los locales. El aviso local lleva el mismo payload, así que su tap también abre la ficha.
+  - Ajustes › notificaciones: "Nuevos seguidores" = `Me.notifyFollowers` (default true) con `PATCH /me { notifyFollowers }`, igual que "Estrenos de no puedo esperar".
 - **Mock**: `-kuraScreen <nombre>` o `-kuraMock` (DEBUG) arrancan con `MockAPI` sin servidor; `KuraRuntime.usesMock` lo expone a los modelos (p. ej. `Privacy.options`).
 
 ### Abrir directo en una pantalla (DEBUG)
@@ -33,7 +41,7 @@ xcrun simctl launch booted com.tromwey.kura
 
 | flujo | nombres |
 |---|---|
-| 01 primera vez | `splash` · `onboarding` · `signup` · `username` · `pick` · `people` · `login` |
+| 01 primera vez | `splash` · `onboarding` · `signup` (Apple + Google + correo) · `signupapple` (solo Apple) · `signupemail` (providers falla → solo correo) · `username` · `pick` · `people` · `login` (Apple + Google + "o con correo") · `loginemail` |
 | 02 tus colecciones | `collections` · `loading` · `empty` · `offline` · `newcollection` |
 | 03–05 colección | `collection` · `shelf` · `list` · `auto` · `emptycollection` · `more` · `actions` · `add` · `toast` |
 | 06 obra | `title` · `series` · `album` · `waiting` (37a) · `nostate` (24d) · `slider` / `complete` (26a) · `today` (C4) · `unavailable` (E4) · `announced` (37c) · `aviso` (31c) |
@@ -41,10 +49,10 @@ xcrun simctl launch booted com.tromwey.kura
 | 08 gente | `feed` · `feedreview` · `feedsuggest` · `feedempty` (E1) · `notifications` (31a) · `notificationsempty` (31b) · `person` (20a) · `personoptions` (O10a) · `unfollow` (O10b) · `followers` (20e) · `private` (20d) · `requested` (35d) · `stranger` (K1d) · `strangerprivate` (K1e) |
 | 09 tu perfil | `profile` (20c) · `editprofile` (20f) · `profileempty` (E2) |
 | 10 recap | `recap` (08) · `recapcard` (tarjeta / C2) · `recaphistory` (O8) · `recapempty` (09) |
-| 11 ajustes | `settings` (30a) · `privacy` (K1c) · `musicapp` (30b) · `deleteaccount` (C3) |
+| 11 ajustes | `settings` (30a) · `privacy` (K1c) · `musicapp` (30b) · `deleteaccount` (C3) · `notifysettings` (bajado a notificaciones) · `sessions` · `revokesession` · `sessionsone` |
 | reportar / bloquear | `reportperson` · `reportreview` · `block` · `blocked` (perfil bloqueado) · `blockflow` (el PUT completo: aviso + perfil bloqueado) · `reportsent` (reseña reportada; con `-kuraFailWrites YES` sale Reintentar) · `blockedaccounts` · `blockedempty` |
 
-`-kuraFailWrites YES` (con `-kuraScreen`/`-kuraMock`) hace fallar toda escritura del mock, para ver los avisos de Reintentar.
+`-kuraFailWrites YES` (con `-kuraScreen`/`-kuraMock`) hace fallar toda escritura del mock, para ver los avisos de Reintentar. `-kuraProviders all|apple|google|none|fail` elige qué devuelve `auth/providers` en el mock (por defecto `all`). En el mock, Google no abre el navegador (entra directo).
 
 Al arrancar en DEBUG se verifica que las 9 fuentes estén registradas (`[Kura] fonts OK: 9 faces registered`); si falta alguna se imprimen `UIFont.familyNames`.
 
@@ -70,7 +78,10 @@ ios/
     Models/                   Title, KCollection, Mark, Release, Person, Review, FeedEvent, rutas
     Mock/MockData.swift       todo el mock del brief (hoy = jue 24 sep 2026, 10:00 CDMX)
     Services/                 KuraAPI (protocolo + MockAPI), LiveAPI (APIClient + endpoints), Keychain, Session (JWT exp),
-                              LocalPrefs (lo unsupported, en el dispositivo), ReleaseNotifier
+                              LocalPrefs (lo unsupported, en el dispositivo), ReleaseNotifier, Push (APNs + app delegate),
+                              SocialSignIn (nonce de Apple, Google OAuth PKCE)
+    Kura.entitlements         Release: Sign in with Apple + aps-environment production
+    Kura-Debug.entitlements   Debug: Sign in with Apple + aps-environment development
     State/AppStore.swift      @Observable: sesión, hidratación por recurso, navegación, hojas, avisos, colecciones,
                               membresías (Deshacer diferido 5 s), reacciones, seguidos
     Features/                 Onboarding · Collections · CollectionDetail · Title · Feed (+ notificaciones) ·
@@ -119,14 +130,14 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 
 **Versión:** `MARKETING_VERSION` (`1.0.0`, en `project.yml`) se sube a mano en cada versión de la App Store. `CURRENT_PROJECT_VERSION` vale `"1"` en `project.yml` solo como respaldo; el script lo pisa en la línea de xcodebuild.
 
-**Firma (`DEVELOPMENT_TEAM`):** el Team ID nunca se versiona. `Config/Kura.xcconfig` (versionado, es la configuración base del target) tiene `#include? "Team.xcconfig"` y `DEVELOPMENT_TEAM = $(KURA_TEAM_ID)`. Sin `Config/Team.xcconfig`, el team queda vacío y el build de simulador se hace sin firma, igual que siempre. El script no depende de ese archivo: pasa `DEVELOPMENT_TEAM=$KURA_TEAM_ID` directo a xcodebuild, y eso le gana a cualquier xcconfig. Para correr en un iPhone físico desde Xcode, copia `Config/Team.xcconfig.example` → `Config/Team.xcconfig`, pon tu ID y regenera. Firma automática, **sin entitlements**: nada de Sign in with Apple, push ni Keychain compartido. No fijes `CODE_SIGN_IDENTITY`/perfiles en `project.yml`, porque con Automatic chocan.
+**Firma (`DEVELOPMENT_TEAM`):** el Team ID nunca se versiona. `Config/Kura.xcconfig` (versionado, es la configuración base del target) tiene `#include? "Team.xcconfig"` y `DEVELOPMENT_TEAM = $(KURA_TEAM_ID)`. Sin `Config/Team.xcconfig`, el team queda vacío y el build de simulador se hace sin firma, igual que siempre. El script no depende de ese archivo: pasa `DEVELOPMENT_TEAM=$KURA_TEAM_ID` directo a xcodebuild, y eso le gana a cualquier xcconfig. Para correr en un iPhone físico desde Xcode, copia `Config/Team.xcconfig.example` → `Config/Team.xcconfig`, pon tu ID y regenera. Firma automática con **entitlements** (`CODE_SIGN_ENTITLEMENTS` por configuración en `project.yml`): Sign in with Apple (`com.apple.developer.applesignin = [Default]`) y Push (`aps-environment`: `development` en Debug con `Kura/Kura-Debug.entitlements`, `production` en Release con `Kura/Kura.entitlements`). Sin Keychain compartido ni dominios asociados. No fijes `CODE_SIGN_IDENTITY`/perfiles en `project.yml`, porque con Automatic chocan.
 
 ### Lo que solo puede hacer el founder (Apple ID), en orden
 
 1. **Apple Developer Program activo** (developer.apple.com › Account; la renovación es anual).
 2. **Aceptar los acuerdos pendientes**: el banner de developer.apple.com y App Store Connect › Business. El de Paid Apps no hace falta porque la app es gratis.
 3. **Anotar el Team ID**: developer.apple.com › Account › Membership details.
-4. **Registrar el Bundle ID** en developer.apple.com › Certificates, IDs & Profiles › Identifiers › + › App IDs › App: Bundle ID **explícito** `com.tromwey.kura`, descripción "Kura", **sin capacidades** (no marques Sign in with Apple, Push ni nada más).
+4. **Registrar el Bundle ID** en developer.apple.com › Certificates, IDs & Profiles › Identifiers › + › App IDs › App: Bundle ID **explícito** `com.tromwey.kura`, descripción "Kura", con las capacidades **Sign in with Apple** (Enable as a primary App ID) y **Push Notifications**. Si el App ID ya existe sin ellas: Identifiers › com.tromwey.kura › marca las dos › Save (los perfiles viejos quedan inválidos; la firma automática los regenera). En la práctica, `archive.sh` firma con `-allowProvisioningUpdates` y la firma automática suele habilitar las dos capacidades sola al ver los entitlements; si el archive falla con "Provisioning profile doesn't include the … entitlement", márcalas a mano. Push no necesita certificado `.p12` en la app: el servidor manda con una **llave APNs** (Keys › + › Apple Push Notifications service, `.p8`), que es trabajo del backend.
 5. **Crear la app** en App Store Connect › Apps › + › New App: plataforma iOS, nombre de la ficha ("Kura" estaba tomado; el nombre bajo el ícono sigue siendo Kura, `CFBundleDisplayName`), idioma principal **Spanish (Mexico)**, Bundle ID `com.tromwey.kura`, SKU p. ej. `kura-ios`, acceso completo. Categoría principal: Entertainment (secundaria: Lifestyle o Music).
 6. **Tu Apple ID en Xcode** (Xcode › Settings › Apple Accounts › +) y crea **Apple Distribution**: en Xcode 27 el botón está **dentro del team** (clic en la fila del team › Manage Certificates… › + › Apple Distribution › Done). Es obligatorio aunque exista el certificado en la nube: con la Ñ del team, la firma en la nube genera un `.ipa` inválido (ver `KURA_CLOUD_SIGNING`). La primera vez que `codesign` use la llave nueva, macOS abre un diálogo del llavero: **Always Allow** (con tu contraseña de la Mac); si no lo respondes, el export se queda esperando en silencio. Si el team no tiene ningún iPhone registrado, conecta el tuyo y ábrelo una vez en Xcode: la firma automática necesita un dispositivo para el perfil de desarrollo del archive.
 7. **Generar el build**: `export KURA_TEAM_ID=…` y `ios/scripts/archive.sh`.
@@ -157,15 +168,18 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 - [ ] **App Privacy** (App Store Connect › App Privacy): declarar correo, nombre de usuario, foto de perfil, contenido del usuario (reseñas) e identificadores, ligados a la identidad y sin tracking.
 - [ ] **Cuenta para la revisión**: el acceso es solo con código por correo, así que Beta App Review (TestFlight externo) y App Review necesitan una cuenta demo cuyo código puedan recibir, o un acceso para el revisor. Hay que decidirlo antes del primer grupo externo.
 - [x] Reportar y bloquear (guía 1.2): perfil ajeno › Opciones › Reportar / Bloquear (o Desbloquear), ⋯ en cada reseña ajena (ficha y feed) con "Reportar reseña" y "Bloquear a @…", Ajustes › privacidad › Cuentas bloqueadas. Contra `POST /people/{handle}/report`, `POST /reviews/{id}/report`, `PUT|DELETE /me/blocks/{…}`, `GET /me/blocks`.
-- [x] Sin botones de relleno en la entrada (guía 2.1): solo correo.
+- [x] Sin botones de relleno en la entrada (guía 2.1): Apple y Google solo si `GET auth/providers` dice que funcionan; si no, solo correo.
+- [ ] **Sign in with Apple (guía 4.8)**: al ofrecer Google hay que ofrecer Apple; la app ya lo hace mientras el servidor diga `apple: true`. Si algún día `apple` es false y Google sí, la entrada quedaría fuera de 4.8: el backend no debe apagar Apple sin apagar Google.
+- [ ] **Capacidades en el App ID** (Sign in with Apple + Push Notifications) y **llave APNs** en el servidor antes del primer build con push: ver paso 4 de arriba.
 - [ ] Clasificación por edad (el cuestionario; las reseñas son UGC, así que hay que declarar moderación y reporte) y borrar la cuenta desde la app (Ajustes › Borrar cuenta, requisito 5.1.1(v)): confirmar que funcione contra prod.
 
 ## Pendiente
 
 Cerrado en la fase 4a (2026-09-24): fotos de perfil (`DesignSystem/Components/Avatar.swift`, subida desde Editar perfil con recorte a 512 px y JPEG ≤ 400 KB), colección pública ajena (`Features/People/PublicCollectionView.swift`), "más reseñas" paginado (`GET /titles/{id}/reviews`), estados vacío/error/sin conexión en cada `load*` (`loadErrors`, `RetryStrip`, reintento al volver la red), Dynamic Type (escala con tope `xxxLarge` — desde la auditoría Apple del 2026-09-24 el tope ya no es global: solo el cromo de geometría fija lo lleva vía `kFixedChrome()`; mono, wordmark, sello y dock fijos a propósito), `PrivacyInfo.xcprivacy`, ventana pintada con `bg` desde el primer frame, y el recorrido real contra `next dev` de punta a punta (dos veces, cuenta QA borrada).
 
-- Apple / Google (API.md §2.2, fase 4): hoy solo correo → código. Los botones **no se pintan** (un botón que solo avisa "llega después" es rechazo 2.1); `AuthButton.Kind` conserva `.apple`/`.google` para volver a ponerlos arriba de "Continuar con correo".
-- Push real (hoy notificación local; `device_token` es fase 4b).
+- Apple / Google / sesiones / push (2026-09-24): implementados contra el contrato (`auth/providers`, `auth/apple`, `auth/google`, `me/sessions`, `me/devices`); solo verificados con el mock. Falta el recorrido real contra el backend y en un iPhone físico (Sign in with Apple y APNs no se prueban de punta a punta en el simulador).
+- Botón de Google: usa la "G" de texto del frame, no el logotipo oficial de Google; sus guías de marca piden el logo en color. Decisión de diseño pendiente para el founder.
+- Un 401 global (sesión revocada desde otro lado) olvida el bearer sin poder des-registrar el token de push: el servidor debe dejar de mandar push a los dispositivos de una sesión revocada.
 - Recap: la tarjeta se comparte como link, falta exportarla como imagen (`POST /auth/web-session` es fase 4b). Compartir → "Historia" igual.
 - Modo ordenar usa el `List` del sistema para arrastrar (asa y levantado nativos, no los del frame).
 - Persistencia local / sincronización real del modo sin conexión (hoy la franja + reintento; no hay caché de datos).

@@ -29,6 +29,21 @@ protocol KuraAPI: Sendable {
     /// and lands on `to` (server allow-list: `/recap/tarjeta`, `/recap`; the recap pair
     /// optionally with `?mes=YYYY-MM`). Open it in an `SFSafariViewController`, never share it.
     func webSession(to: String) async throws -> URL
+    /// `GET /auth/providers` (no bearer) — which third-party sign-ins the server can honor.
+    func authProviders() async throws -> AuthProviders
+    /// `POST /auth/apple` → `{ token, user }` (stores the token like `signIn`). 403 `underage`,
+    /// 503 `unavailable` when the server can't verify Apple right now.
+    func signInWithApple(_ credential: AppleCredential) async throws -> Me
+    /// `POST /auth/google` `{ idToken, device }` → `{ token, user }`. 503 when Google isn't configured.
+    func signInWithGoogle(idToken: String) async throws -> Me
+
+    // MARK: Devices (sessions + push)
+    /// `GET /me/sessions` → `{ items }`: every device signed in to this account.
+    func sessions() async throws -> [DeviceSession]
+    /// `DELETE /me/sessions/{id}` → 204. Signs out THAT device only (never the current one here).
+    func revokeSession(id: String) async throws
+    /// `PUT /me/devices/{token}` `{ environment }` → 204. `environment` = `sandbox` | `production`.
+    func registerDevice(pushToken: String, environment: String) async throws
 
     // MARK: Account
     func me() async throws -> Me
@@ -110,7 +125,20 @@ struct MePatch: Encodable, Sendable {
     var notifyReleases: Bool? = nil
     /// The monthly recap email on/off.
     var notifyRecap: Bool? = nil
+    /// Push when someone new follows you.
+    var notifyFollowers: Bool? = nil
     var isPublic: Bool? = nil
+}
+
+/// What `ASAuthorizationAppleIDCredential` hands over, ready for `POST /auth/apple`. `rawNonce`
+/// is the value whose SHA-256 went in the Apple request (the server re-hashes and compares it
+/// with the `nonce` claim of `identityToken`).
+struct AppleCredential: Sendable {
+    var identityToken: String
+    var rawNonce: String
+    var authorizationCode: String?
+    var givenName: String?
+    var familyName: String?
 }
 
 /// `error.code` → typed cases (API.md §1). `unauthorized` anywhere means the
@@ -175,6 +203,26 @@ struct MockAPI: KuraAPI {
         try await write()
         return URL(string: "https://baclog.app\(to)") ?? URL(string: "https://baclog.app/recap/tarjeta")!
     }
+    /// `-kuraProviders all|apple|google|none|fail` (DEBUG captures). Default: Apple + Google.
+    func authProviders() async throws -> AuthProviders {
+        switch UserDefaults.standard.string(forKey: "kuraProviders") ?? "all" {
+        case "apple": return AuthProviders(apple: true, googleClientID: nil)
+        case "google": return AuthProviders(apple: false, googleClientID: MockData.googleClientID)
+        case "none": return .emailOnly
+        case "fail": throw KuraAPIError.offline
+        default: return AuthProviders(apple: true, googleClientID: MockData.googleClientID)
+        }
+    }
+    func signInWithApple(_ credential: AppleCredential) async throws -> Me { try await write(); return Me(person: MockData.me) }
+    func signInWithGoogle(idToken: String) async throws -> Me { try await write(); return Me(person: MockData.me) }
+
+    // Devices
+    func sessions() async throws -> [DeviceSession] { MockDevices.shared.list }
+    func revokeSession(id: String) async throws {
+        try await write()
+        MockDevices.shared.revoke(id)
+    }
+    func registerDevice(pushToken: String, environment: String) async throws { try await write() }
 
     // Account
     func me() async throws -> Me { Me(person: MockData.me) }
@@ -183,6 +231,7 @@ struct MockAPI: KuraAPI {
         var m = Me(person: MockData.me)
         if let v = patch.notifyReleases { m.notifyReleases = v }
         if let v = patch.notifyRecap { m.notifyRecap = v }
+        if let v = patch.notifyFollowers { m.notifyFollowers = v }
         if let v = patch.isPublic { m.isPublic = v }
         return m
     }
@@ -387,4 +436,15 @@ final class MockSafety: @unchecked Sendable {
         lock.withLock { if !blocked.contains(where: { $0.id == a.id }) { blocked.insert(a, at: 0) } }
     }
     func unblock(_ key: String) { lock.withLock { blocked.removeAll { $0.key == key || $0.id == key } } }
+}
+
+/// The mock's signed-in devices (`MockAPI` is a value type): shared, so a revoked row stays gone.
+final class MockDevices: @unchecked Sendable {
+    static let shared = MockDevices()
+    private let lock = NSLock()
+    private var items: [DeviceSession] = MockData.sessions
+
+    var list: [DeviceSession] { lock.withLock { items } }
+    func revoke(_ id: String) { lock.withLock { items.removeAll { $0.id == id && !$0.current } } }
+    func reset(_ list: [DeviceSession]) { lock.withLock { items = list } }
 }

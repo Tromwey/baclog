@@ -1,9 +1,11 @@
 import { assertUser } from "@/authz";
-import { withApi } from "@/authz/api";
+import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
+import { ApiError, withApi } from "@/authz/api";
 import { deleteAccount } from "@/modules/account/delete";
 import { profilePatchSchema, updateProfile } from "@/modules/account/profile";
 import { json, noContent, readJson } from "../_lib/http";
 import { buildMe, freshMe } from "../_lib/me";
+import { NOTIFICATIONS_UNAVAILABLE } from "../_lib/devices";
 
 /**
  * GET /api/v1/me → Me (§4 Cuenta).
@@ -20,12 +22,17 @@ export const GET = withApi(async () => {
 
 /**
  * PATCH /api/v1/me { name?, preferredService?, notifyReleases?, notifyRecap?,
- * isPublic? } → Me. Same validation as the five web actions (`modules/account/profile.ts`
- * is the one write path); a field left out is left alone, an empty body is a
- * no-op that still returns the current `Me`.
+ * notifyFollowers?, isPublic? } → Me. Same validation as the web actions
+ * (`modules/account/profile.ts` is the one write path); a field left out is
+ * left alone, an empty body is a no-op that still returns the current `Me`.
+ * `notifyFollowers` (phase 4e) needs migration 0029: until it is live the
+ * field is 503 `unavailable` and NOTHING in the patch is written.
  */
 export const PATCH = withApi(async (request, { user }) => {
   const patch = await readJson(request, profilePatchSchema);
+  if (patch.notifyFollowers !== undefined && !MIGRATION_0029_LIVE) {
+    throw new ApiError("unavailable", NOTIFICATIONS_UNAVAILABLE);
+  }
   await updateProfile(user.id, patch);
   return json(await freshMe(user.id));
 });

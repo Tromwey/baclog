@@ -43,6 +43,7 @@
 		A02C09A16F88744AC507FDF1 /* Newsreader-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FF0958027829E68051C80A93 /* Newsreader-MediumItalic.ttf */; };
 		A093314B67A3E9ED44EAF429 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7742337E5F84C340B1B8A3B0 /* AppIcon.icon */; };
 		A2B9C78681E9827D1570AAA5 /* PublicCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C149CFC1B11ABD9247F2241D /* PublicCollectionView.swift */; };
+		ACBD2B589BE87A3440214C00 /* Push.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5E95BE7A52B6711E680709 /* Push.swift */; };
 		B1DEB26D7F6E0F62DE978748 /* ReleaseNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726F80C7E1EA01A79FCDECA /* ReleaseNotifier.swift */; };
 		B33F9D80135B6C6DFE36DCE4 /* SafetySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693839847FE7E23404105DB7 /* SafetySheets.swift */; };
 		B4E0A3D82BF54686D9B215B2 /* Pills.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA9B8D2CC3B028EE69A485 /* Pills.swift */; };
@@ -54,6 +55,7 @@
 		D10B2B7E6EE37E1DC5A464D6 /* Newsreader-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4C3D2BDF3D671773F9B2D886 /* Newsreader-Regular.ttf */; };
 		D298F312DF0B056E0709F929 /* RedHatMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0BBDC0DF4BFB4C3A4C30AC42 /* RedHatMono-Medium.ttf */; };
 		D86DAAD558E7D766F8C73BD5 /* CollectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33FCFAB0DF7E52745E0945DC /* CollectionDetailView.swift */; };
+		D8CD782A689077E36A2AC4F6 /* SocialSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B6ECF0930033A62518D1AF /* SocialSignIn.swift */; };
 		DA063859DCB28149DC6C92A8 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2FEB94141FE38ABD189601 /* Tokens.swift */; };
 		DA1C19CB3C7251C1F26BC2A3 /* HankenGrotesk-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 9A7B8A7F9693760E31AA6C2F /* HankenGrotesk-Medium.ttf */; };
 		E42039BEF37971758879D77E /* Buttons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E203B2ABD490B2FFB08968E /* Buttons.swift */; };
@@ -110,6 +112,7 @@
 		C1AB2940F55AB73DE28DAFCE /* AddTitlesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTitlesSheet.swift; sourceTree = "<group>"; };
 		C5AA3449D6002F6F3497A5D3 /* Kura.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Kura.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6BBBBD3BAC0367F7E7563C7 /* HankenGrotesk-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "HankenGrotesk-SemiBold.ttf"; sourceTree = "<group>"; };
+		C8B6ECF0930033A62518D1AF /* SocialSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialSignIn.swift; sourceTree = "<group>"; };
 		CF8E4B94471C71E2BAEA91C3 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 		D0DCA4E6E3361EBF7FAB69D7 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		D2B8AE4C1260B7995DD02575 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -117,6 +120,7 @@
 		D98318B0CA1D0E576A8F3419 /* LoadingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingScreen.swift; sourceTree = "<group>"; };
 		E726F80C7E1EA01A79FCDECA /* ReleaseNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotifier.swift; sourceTree = "<group>"; };
 		E75ABA011572A348B05170AA /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
+		EC5E95BE7A52B6711E680709 /* Push.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Push.swift; sourceTree = "<group>"; };
 		F2E5D7FB7DDFF90FFAEB0F76 /* Cover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cover.swift; sourceTree = "<group>"; };
 		F513E900B3467EC9E49CDE82 /* TitleDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleDetailView.swift; sourceTree = "<group>"; };
 		F636CE66AFA26A9DDC83E857 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
@@ -255,8 +259,10 @@
 				5AC81669DACE442BF0F68E23 /* KuraAPI.swift */,
 				359B629B81F695D1844AB399 /* LiveAPI.swift */,
 				AA79F4E36B8169732C9C35F6 /* LocalPrefs.swift */,
+				EC5E95BE7A52B6711E680709 /* Push.swift */,
 				E726F80C7E1EA01A79FCDECA /* ReleaseNotifier.swift */,
 				29D4C811713FD583D25EF5AC /* Session.swift */,
+				C8B6ECF0930033A62518D1AF /* SocialSignIn.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -494,12 +500,14 @@
 				57BD12DFA9058EF0C99C4D70 /* Press.swift in Sources */,
 				063D7CE4C6BC833E0B45BE54 /* ProfileView.swift in Sources */,
 				A2B9C78681E9827D1570AAA5 /* PublicCollectionView.swift in Sources */,
+				ACBD2B589BE87A3440214C00 /* Push.swift in Sources */,
 				675B2F19EECE813DCA167A47 /* RecapViews.swift in Sources */,
 				B1DEB26D7F6E0F62DE978748 /* ReleaseNotifier.swift in Sources */,
 				5CF711BA2E694C14BA52D064 /* RootView.swift in Sources */,
 				B33F9D80135B6C6DFE36DCE4 /* SafetySheets.swift in Sources */,
 				7A655870EA7526F062546291 /* Session.swift in Sources */,
 				F6B3DEEFE278F7BC224EDA22 /* SettingsViews.swift in Sources */,
+				D8CD782A689077E36A2AC4F6 /* SocialSignIn.swift in Sources */,
 				4F2EEACD6AA7AC1DE80FB770 /* TitleDetailView.swift in Sources */,
 				075E4A4134F30927B2B6626E /* TitleSheets.swift in Sources */,
 				DA063859DCB28149DC6C92A8 /* Tokens.swift in Sources */,
@@ -581,6 +589,7 @@
 			baseConfigurationReference = 1694A7EFEE2726D12AA3DE75 /* Kura.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Kura/Kura-Debug.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;
@@ -664,6 +673,7 @@
 			baseConfigurationReference = 1694A7EFEE2726D12AA3DE75 /* Kura.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Kura/Kura.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = YES;

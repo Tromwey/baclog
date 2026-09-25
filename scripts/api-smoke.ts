@@ -57,6 +57,8 @@ import {
 import { ERA_KEY_RE, monthYear } from "../src/modules/backlog/recap-format";
 // L2
 import {
+  AuthProvidersSchema,
+  MobileSessionSchema,
   BlockedPersonSchema,
   IsoDateSchema,
   PublicMarkSchema,
@@ -238,6 +240,21 @@ function tvOf(token: string): number {
   return typeof payload.tv === "number" ? payload.tv : 0;
 }
 
+/** The `sid` claim of a bearer (phase 4d), unverified; null = none. */
+function sidOf(token: string): string | null {
+  const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { sid?: unknown };
+  return typeof payload.sid === "string" ? payload.sid : null;
+}
+
+/** `MIGRATION_0029_LIVE` as written in src/auth/live-0029.ts (parsed, like
+ *  `TOKEN_VERSION_LIVE`: the smoke never imports server code). */
+async function migration0029LiveInSource(): Promise<boolean> {
+  const src = await readFile(resolvePath("src/auth/live-0029.ts"), "utf8");
+  const m = /^export const MIGRATION_0029_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
+  assert.ok(m, "no encuentro `export const MIGRATION_0029_LIVE = true|false;` en src/auth/live-0029.ts");
+  return m[1] === "true";
+}
+
 // L3 — what crosses between the people/feed cases, and the leak scan.
 const l3: { ownPerson: z.infer<typeof PersonSchema> | null } = { ownPerson: null };
 
@@ -253,6 +270,8 @@ const LEAK_KEYS = new Set([
   // Own mail preferences (`Me` only, phase 4b): never on a Person.
   "notifyReleases",
   "notifyRecap",
+  // Phase 4e — the follower-push opt-out, same posture.
+  "notifyFollowers",
   "isPrivate",
 ]);
 /** `allow`: keys legal on THIS payload only — `isPrivate` exists solely on the
@@ -452,7 +471,10 @@ const auth: Case[] = [
       const now = Math.floor(Date.now() / 1000);
       // At the account's CURRENT version (phase 4b): without `tv` it would
       // read as 0 and be refused once this account has ever logged out.
-      const expiring = await new SignJWT({ tv: tvOf(ctx.token) })
+      // …and the SAME `sid` (phase 4d): a sid-less token would be upgraded
+      // with a NEW session row on this (real) account.
+      const sid = sidOf(ctx.token);
+      const expiring = await new SignJWT(sid ? { tv: tvOf(ctx.token), sid } : { tv: tvOf(ctx.token) })
         .setProtectedHeader({ alg: "HS256" })
         .setSubject(ctx.me.id)
         .setAudience("kura-ios")
@@ -466,8 +488,72 @@ const auth: Case[] = [
       assert.ok(payload.exp > now + 29 * 86400, "el token nuevo vive 30 días");
       assert.notEqual(payload.jti, "smoke-expiring", "jti nuevo");
       assert.equal(payload.tv, tvOf(ctx.token), "el token rotado se acuña con el token_version actual");
+      assert.equal(sidOf(rotated.token), sid, "el token rotado conserva el sid (misma sesión)");
       const me = expectOk(await call("GET", "/me", { token: rotated.token }), 200, MeSchema);
       assert.equal(me.id, ctx.me.id);
+    },
+  },
+  // Phase 4f — the public social sign-in surface. Garbage tokens only: a
+  // real Apple/Google identity token can't be produced by a script.
+  {
+    name: "GET /auth/providers (público) → { apple, google } · auth/apple y auth/google: token basura = 401, body inválido = 400, proveedor apagado = 503",
+    run: async () => {
+      const res = await call("GET", "/auth/providers");
+      const providers = expectOk(res, 200, AuthProvidersSchema);
+      const device = { platform: "ios", name: "api-smoke", appVersion: "0.0.0" };
+      const apple = await call("POST", "/auth/apple", {
+        body: { identityToken: "a.b.c", rawNonce: "n", device },
+      });
+      if (providers.apple) expectError(apple, 401, "unauthorized");
+      else expectError(apple, 503, "unavailable");
+      if (providers.apple) {
+        const bad = expectError(await call("POST", "/auth/apple", { body: { rawNonce: "n", device } }), 400, "invalid");
+        assert.ok(bad.fields?.identityToken, "fields.identityToken");
+      }
+      const google = await call("POST", "/auth/google", { body: { idToken: "a.b.c", device } });
+      if (providers.google) {
+        expectError(google, 401, "unauthorized");
+        const bad = expectError(await call("POST", "/auth/google", { body: { idToken: "a.b.c" } }), 400, "invalid");
+        assert.ok(bad.fields?.device, "fields.device");
+      } else {
+        const err = expectError(google, 503, "unavailable");
+        assert.match(err.message, /Google/);
+      }
+    },
+  },
+  // Phase 4d — `sid` is validated by shape (and, once 0029 is live, against
+  // `mobile_session` in the same re-read). Look-alike tokens only.
+  {
+    name: "bearer con sid malformado → 401 idéntico; sid de una sesión inexistente → 401 idéntico (con 0029 viva)",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me, "hace falta un token");
+      const secret = process.env.AUTH_SECRET;
+      if (!secret) skip("sin AUTH_SECRET en el entorno para firmar tokens con otro sid");
+      const key = new TextEncoder().encode(secret);
+      const now = Math.floor(Date.now() / 1000);
+      const tv = tvOf(ctx.token);
+      const mint = (claims: Record<string, unknown>) =>
+        new SignJWT({ tv, ...claims })
+          .setProtectedHeader({ alg: "HS256" })
+          .setSubject(ctx.me!.id)
+          .setAudience("kura-ios")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 3600)
+          .setJti("smoke-sid")
+          .sign(key);
+      const none = await call("GET", "/me");
+      for (const [label, claims] of [
+        ["sid no-UUID", { sid: "no-es-uuid" }],
+        ["sid numérico", { sid: 42 }],
+        ["sid vacío", { sid: "" }],
+      ] as const) {
+        expectSameError(await call("GET", "/me", { token: await mint(claims) }), none, 401, "unauthorized", `${label}: el 401 no dice qué falló`);
+      }
+      if (!(await migration0029LiveInSource())) {
+        skip("MIGRATION_0029_LIVE = false: un sid bien formado se ignora (sin tabla de sesiones todavía)");
+      }
+      const ghost = await mint({ sid: "00000000-0000-4000-8000-000000000000" });
+      expectSameError(await call("GET", "/me", { token: ghost }), none, 401, "unauthorized", "sid de una sesión que no existe = sin bearer");
     },
   },
   // Phase 4b: `auth/logout` REVOKES every bearer of the account
@@ -622,9 +708,11 @@ const SWEEP_SEGMENTS: Record<string, string> = {
   "[key]": "x",
   "[era]": "2026-08",
   "[reviewId]": "00000000-0000-4000-8000-000000000000",
+  "[apnsToken]": "a".repeat(64),
 };
-/** The only v1 routes that are public by design (`withPublicApi`). */
-const SWEEP_PUBLIC = /^\/auth\/otp\//;
+/** The only v1 routes that are public by design (`withPublicApi`): the OTP
+ *  pair and, since phase 4f, the social sign-ins + the provider list. */
+const SWEEP_PUBLIC = /^\/auth\/(otp|apple|google|providers)\//;
 
 /**
  * Every (verb, path) of `src/app/api/v1/**\/route.ts` except `auth/otp/*`,
@@ -672,6 +760,29 @@ const reads: Case[] = [
       assert.ok(!("isAdmin" in (res.body as object)), "isAdmin no viaja al cliente");
       if (opts.email) assert.equal(me.email, opts.email);
       ctx.me = me;
+    },
+  },
+  {
+    name: "GET /me/sessions → { items: [MobileSession] } con la sesión de este bearer como current (503 sin la migración 0029)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const res = await call("GET", "/me/sessions", { token: ctx.token });
+      if (!(await migration0029LiveInSource())) {
+        expectError(res, 503, "unavailable");
+        skip("MIGRATION_0029_LIVE = false: /me/sessions responde 503 (verificado)");
+      }
+      const { items } = expectOk(res, 200, z.object({ items: z.array(MobileSessionSchema) }));
+      const sid = sidOf(ctx.token);
+      const current = items.filter((i) => i.current);
+      if (sid) {
+        assert.equal(current.length, 1, "exactamente una sesión current");
+        assert.equal(current[0].id, sid, "current = el sid del bearer");
+      } else {
+        assert.equal(current.length, 0, "un bearer sin sid no tiene sesión current");
+      }
+      for (let i = 1; i < items.length; i++) {
+        assert.ok(items[i - 1].lastSeenAt >= items[i].lastSeenAt, "orden lastSeenAt desc");
+      }
     },
   },
   // Phase 1 adds: collections, titles, me/titles, search, discover, people,
@@ -2810,6 +2921,99 @@ const writes: Case[] = [
       const session = await fetch(`${e1Origin}/api/auth/session`, { headers: { Cookie: w.cookieBeforeLogout } });
       const body = (await session.json()) as { tv?: unknown } | null;
       assert.ok(body && typeof body.tv === "number" && body.tv < tvOf(ctx.token!), "la cookie revocada lleva un tv viejo (la sesión de Auth.js sigue descifrable; la revocación es la relectura)");
+    },
+  },
+  // W4 (fase 4d/4e) — per-device sessions + APNs tokens + notifyFollowers,
+  // on the QA account. Without migration 0029 it checks the 503 contract
+  // and skips; with it, it revokes its OWN current session at the end and
+  // signs back in (like W2), so E1 DELETE /me still has a live token.
+  {
+    name: "W4 sesiones y dispositivos: GET /me/sessions, PUT/DELETE /me/devices, PATCH notifyFollowers, DELETE /me/sessions/{id} (ajena/inexistente = 404 idéntico; la propia → 401 y sus tokens APNs borrados)",
+    run: async () => {
+      const hex = "ab".repeat(32);
+      const live = await migration0029LiveInSource();
+      const tables = await smokeSql<{ n: number }>(
+        `select count(*)::int as n from information_schema.tables where table_name in ('mobile_session', 'device_token', 'follow_push_notice')`,
+      );
+      if (tables !== null && tables[0]?.n !== 3) {
+        assert.equal(live, false, "MIGRATION_0029_LIVE = true pero faltan las tablas de 0029: aplica la migración o regresa el switch a false");
+      }
+      if (!live) {
+        expectError(await qaCall("GET", "/me/sessions"), 503, "unavailable");
+        expectError(await qaCall("PUT", `/me/devices/${hex}`, { body: { environment: "sandbox" } }), 503, "unavailable");
+        expectError(await qaCall("DELETE", `/me/devices/${hex}`), 503, "unavailable");
+        expectError(await qaCall("PATCH", "/me", { body: { notifyFollowers: false, name: "No Debe Escribirse" } }), 503, "unavailable");
+        const me = expectOk(await qaCall("GET", "/me"), 200, MeSchema);
+        assert.equal(me.notifyFollowers, true, "sin la migración notifyFollowers lee su default");
+        assert.notEqual(me.name, "No Debe Escribirse", "un PATCH rechazado por notifyFollowers no escribe NADA");
+        skip("MIGRATION_0029_LIVE = false: contrato 503 verificado; el resto espera a la migración 0029");
+      }
+      if (!opts.email || !opts.log) skip("hace falta --email y --log para volver a entrar tras revocar la sesión");
+      const sid = sidOf(ctx.token!);
+      assert.ok(sid, "con 0029 viva, otp/verify acuña con sid");
+
+      const list = expectOk(await qaCall("GET", "/me/sessions"), 200, z.object({ items: z.array(MobileSessionSchema) }));
+      const mine = list.items.find((i) => i.id === sid);
+      assert.ok(mine?.current, "la sesión de este bearer aparece como current");
+      assert.equal(mine.deviceName, "api-smoke");
+
+      // Devices
+      const badTok = expectError(await qaCall("PUT", "/me/devices/zz-no-hex", { body: { environment: "sandbox" } }), 400, "invalid");
+      assert.ok(badTok.fields?.token, "fields.token");
+      const badEnv = expectError(await qaCall("PUT", `/me/devices/${hex}`, { body: { environment: "dev" } }), 400, "invalid");
+      assert.ok(badEnv.fields?.environment, "fields.environment");
+      for (let i = 0; i < 2; i++) {
+        const put = await qaCall("PUT", `/me/devices/${hex.toUpperCase()}`, { body: { environment: "sandbox" } });
+        assert.equal(put.status, 204, `PUT devices: ${put.status} ${put.text}`);
+      }
+      const row = await smokeSql<{ session_id: string | null; environment: string }>(
+        `select session_id, environment::text as environment from device_token where token = $1`,
+        [hex],
+      );
+      if (row !== null) {
+        assert.equal(row.length, 1, "un token, una fila (guardado en minúsculas, idempotente)");
+        assert.equal(row[0].session_id, sid, "el token queda ligado a la sesión del bearer");
+      }
+      assert.equal((await qaCall("DELETE", `/me/devices/${hex}`)).status, 204);
+      assert.equal((await qaCall("DELETE", `/me/devices/${hex}`)).status, 204, "DELETE idempotente");
+      assert.equal((await qaCall("PUT", `/me/devices/${hex}`, { body: { environment: "production" } })).status, 204);
+
+      // notifyFollowers
+      const off = expectOk(await qaCall("PATCH", "/me", { body: { notifyFollowers: false } }), 200, MeSchema);
+      assert.equal(off.notifyFollowers, false);
+      assert.equal(expectOk(await qaCall("GET", "/me"), 200, MeSchema).notifyFollowers, false, "GET /me lo refleja");
+      const badBool = expectError(await qaCall("PATCH", "/me", { body: { notifyFollowers: "no" } }), 400, "invalid");
+      assert.ok(badBool.fields?.notifyFollowers, "fields.notifyFollowers");
+      expectOk(await qaCall("PATCH", "/me", { body: { notifyFollowers: true } }), 200, MeSchema);
+
+      // Revoke: unknown / malformed = the same 404; own current → 204 + 401.
+      expectSameError(
+        await qaCall("DELETE", "/me/sessions/00000000-0000-4000-8000-000000000000"),
+        await qaCall("DELETE", "/me/sessions/no-es-uuid"),
+        404,
+        "not_found",
+        "sesión inexistente y malformada = mismo 404",
+      );
+      const old = ctx.token!;
+      const del = await qaCall("DELETE", `/me/sessions/${sid}`);
+      assert.equal(del.status, 204, `DELETE /me/sessions/{propia}: ${del.status} ${del.text}`);
+      const fresh = await e1SignInAs(opts.email);
+      ctx.token = fresh.token;
+      ctx.me = fresh.me;
+      const none = await call("GET", "/me");
+      expectSameError(await call("GET", "/me", { token: old }), none, 401, "unauthorized", "el bearer de la sesión revocada = sin bearer");
+      expectSameError(
+        await qaCall("DELETE", `/me/sessions/${sid}`),
+        await qaCall("DELETE", "/me/sessions/no-es-uuid"),
+        404,
+        "not_found",
+        "una sesión ya revocada = el mismo 404",
+      );
+      const gone = await smokeSql<{ n: number }>(`select count(*)::int as n from device_token where token = $1`, [hex]);
+      if (gone !== null) assert.equal(gone[0].n, 0, "revocar la sesión borra sus tokens APNs");
+      const after = expectOk(await qaCall("GET", "/me/sessions"), 200, z.object({ items: z.array(MobileSessionSchema) }));
+      assert.ok(!after.items.some((i) => i.id === sid), "la sesión revocada ya no aparece");
+      assert.ok(after.items.some((i) => i.current && i.id === sidOf(ctx.token!)), "la sesión nueva sí, como current");
     },
   },
 ];

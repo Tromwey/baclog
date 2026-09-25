@@ -1,6 +1,8 @@
 import "server-only";
 import { eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { prepareAppleRevocation } from "@/auth/social";
+import { afterResponse } from "@/lib/after-response";
 import {
   analyticsEvents,
   users,
@@ -42,8 +44,18 @@ import {
  * Identity-free aggregates (`release_notice`, counts) cascade or stay as-is.
  * If you add a table that stores an email or a handle as text, scrub it here
  * too and update `app/(marketing)/privacidad/content.ts`.
+ *
+ * Phase 4f — Sign in with Apple revocation (App Store 5.1.1(v)): the Apple
+ * refresh token lives on the `account` row, which cascades with the user, so
+ * it is READ first (`prepareAppleRevocation`) and the revocation call to
+ * Apple runs AFTER the rows are gone, scheduled past the response
+ * (`afterResponse`): best-effort, logged on failure, and it can never block,
+ * delay or undo the deletion. EVERY path that deletes an account must go
+ * through this function (AGENTS.md). Sessions and device tokens cascade.
  */
 export async function deleteAccount(userId: string): Promise<void> {
+  const revokeApple = await prepareAppleRevocation(userId);
+
   const email = sql`(select lower(${users.email}) from ${users} where ${users.id} = ${userId})`;
   const handle = sql`(select lower(${users.username}) from ${users} where ${users.id} = ${userId})`;
 
@@ -65,4 +77,5 @@ export async function deleteAccount(userId: string): Promise<void> {
     db.delete(verificationTokens).where(sql`${verificationTokens.identifier} = ${email}`),
     db.delete(users).where(eq(users.id, userId)),
   ]);
+  afterResponse("auth/apple revoke", revokeApple);
 }

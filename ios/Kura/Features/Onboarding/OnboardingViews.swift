@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - 12 Splash
 
@@ -40,6 +41,8 @@ struct OnboardingFlow: View {
             }
         }
         .animation(KMotion.spring, value: store.onboardingStep)
+        // Which sign-in buttons exist (a no-op when the splash already asked).
+        .task { await store.loadAuthProviders() }
     }
 }
 
@@ -175,11 +178,16 @@ struct SignUpView: View {
 
             VStack(spacing: 10) {
                 Spacer()
-                // Only the code by email today. Apple / Google (API.md §2.2) are NOT rendered until
-                // they work: a button that only says "llega después" is an App Review 2.1 rejection.
-                // `AuthButton.Kind` keeps both cases so they slot back in above this one.
-                AuthButton(kind: .email, primary: true) { store.onboardingStep = .login }
+                // Apple / Google only when `GET /auth/providers` says they work (App Review 2.1:
+                // never a button that only says "llega después"). Correo is always there; it's the
+                // solid one while it's the only way in.
+                SocialSignInButtons()
+                AuthButton(kind: .email, primary: !store.hasSocialSignIn) {
+                    store.emailStep = .email
+                    store.onboardingStep = .email
+                }
                 Button {
+                    store.emailStep = .login
                     store.onboardingStep = .login
                 } label: {
                     (Text("¿Ya tienes cuenta? ").foregroundColor(KColor.text2)
@@ -228,6 +236,66 @@ struct AuthButton: View {
             .contentShape(Capsule())
         }
         .kPress()
+    }
+}
+
+/// Apple (the system button, as Apple's HIG asks: white on the dark entrance, capsule) and Google
+/// (glass), each only when the server can honor it. Nothing while `GET /auth/providers` is pending
+/// or failed: the entrance never shows a button that doesn't work.
+struct SocialSignInButtons: View {
+    @Environment(AppStore.self) private var store
+    /// The raw nonce of the Apple request in flight (its SHA-256 went to Apple).
+    @State private var nonce = ""
+
+    var body: some View {
+        let p = store.authProviders ?? .emailOnly
+        VStack(spacing: 10) {
+            if p.apple {
+                SignInWithAppleButton(.continue) { request in
+                    let raw = AppleNonce.make()
+                    nonce = raw
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = AppleNonce.sha256(raw)
+                } onCompletion: { result in
+                    handleApple(result)
+                }
+                .signInWithAppleButtonStyle(.white)
+                .frame(height: 52)
+                .clipShape(Capsule())
+                .disabled(store.authBusy)
+                .opacity(store.authBusy ? 0.6 : 1)
+                .transition(.opacity)
+            }
+            if p.googleClientID != nil {
+                AuthButton(kind: .google, primary: false) {
+                    Task { await store.signInWithGoogle() }
+                }
+                .disabled(store.authBusy)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func handleApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard let c = auth.credential as? ASAuthorizationAppleIDCredential,
+                  let data = c.identityToken, let token = String(data: data, encoding: .utf8), !nonce.isEmpty else {
+                store.showToast(ToastModel(text: "No se pudo entrar con Apple. Inténtalo de nuevo.", kind: .info))
+                return
+            }
+            let credential = AppleCredential(
+                identityToken: token, rawNonce: nonce,
+                authorizationCode: c.authorizationCode.flatMap { String(data: $0, encoding: .utf8) },
+                givenName: c.fullName?.givenName, familyName: c.fullName?.familyName)
+            nonce = ""
+            Task { await store.signInWithApple(credential) }
+        case .failure(let error):
+            nonce = ""
+            // Closing Apple's sheet is not an error.
+            if let e = error as? ASAuthorizationError, e.code == .canceled { return }
+            store.showToast(ToastModel(text: "No se pudo entrar con Apple. Inténtalo de nuevo.", kind: .info))
+        }
     }
 }
 
@@ -310,7 +378,7 @@ struct UsernameView: View {
             guard !seeded else { return }
             seeded = true
             if let h = store.account?.handle, !h.isEmpty { handle = h }
-            if let n = store.account?.name, !n.isEmpty { name = n }
+            if let n = store.account?.name, !n.isEmpty { name = n } else if name.isEmpty, let n = store.suggestedName { name = n }
         }
         .task(id: clean) {
             status = nil
@@ -675,8 +743,14 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 20)
                     .accessibilityAddTraits(.isHeader)
-                // Correo only (see SignUpView): when Apple / Google work, they go here with an
-                // "o con correo" label between them and the field.
+                // "Entrar" (from O1a's "¿Ya tienes cuenta?") offers Apple / Google first when they
+                // work; "Continuar con correo" already chose correo, so it's the field alone.
+                if store.onboardingStep == .login && store.hasSocialSignIn {
+                    SocialSignInButtons()
+                    Text("o con correo").monoLabel()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
                 GlassField(placeholder: "tu correo", text: $email, focus: $focused)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
@@ -719,7 +793,7 @@ struct CodeView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = .login }
+            OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = store.emailStep }
 
             VStack(spacing: 12) {
                 Text("tu código.")

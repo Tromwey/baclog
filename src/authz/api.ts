@@ -4,7 +4,9 @@ import type { NextRequest } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { ZodError } from "zod";
 import type { CurrentUser } from "@/auth/session";
-import { loadUserWithTokenVersion } from "@/auth/user-row";
+import { loadUserForBearer } from "@/auth/user-row";
+import { SESSION_TOUCH_INTERVAL_MS, touchMobileSession } from "@/auth/mobile-sessions";
+import { afterResponse } from "@/lib/after-response";
 import { apiContext } from "./api-context";
 import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
@@ -18,20 +20,28 @@ export { apiContext } from "./api-context";
  * every v1 request carries `Authorization: Bearer <JWT>`:
  *
  *   HS256 signed with AUTH_SECRET · sub = user.id · aud = "kura-ios"
- *   tv = users.token_version at mint · iat · exp = +30 days · jti random.
- *   No session table.
+ *   tv = users.token_version at mint · iat · exp = +30 days · jti random
+ *   · sid = mobile_session.id (phase 4d; absent on pre-4d tokens).
  *
- * Revocation: every request re-reads the user row (`loadUserWithTokenVersion`,
+ * Revocation: every request re-reads the user row (`loadUserForBearer`,
  * the same field list the cookie session uses — never `birthYear` — plus the
  * version, in ONE query), so a deleted account or a blocked minor is a 401
  * on the next call even with a valid signature, AND a token whose `tv` is
  * not the row's current `token_version` is the same 401. `auth/logout`
- * bumps the version: "cerrar sesión en todos lados", account-level (there is
- * no per-device state). Tokens minted before phase 4b carry no `tv` and read
+ * bumps the version: "cerrar sesión en todos lados", account-level (it also
+ * revokes every device session since 4d; revoking ONE device is
+ * `DELETE /me/sessions/{id}`). Tokens minted before phase 4b carry no `tv` and read
  * as 0 — the column's default — so they live until the account's first
  * logout. `auth/refresh` only issues a new token inside the last 7 days
  * (otherwise it hands the same one back); a refresh never revokes the old
- * one — only its `exp` or a logout does.
+ * one — only its `exp`, a logout or revoking its session does.
+ *
+ * Phase 4d — per-device sessions: a bearer with `sid` is only valid while
+ * its `mobile_session` row exists, belongs to `sub` and is not revoked,
+ * checked in the SAME re-read (`loadUserForBearer` LEFT JOINs the row; no
+ * second query). A bearer without `sid` (minted before 4d) stays valid until
+ * its `exp` as before; `auth/refresh` upgrades it to one with `sid`. A `sid`
+ * that is present but not a UUID is the uniform 401.
  *
  * The user comes from the token and ONLY the token. No handler ever accepts
  * a userId in a body, query or path. `withApi` runs the handler inside
@@ -200,10 +210,16 @@ export const MOBILE_TOKEN_AUDIENCE = "kura-ios";
 const MOBILE_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /** A fresh 30-day bearer for `userId` at the account's current
- *  `token_version` (new `jti` every call — refresh rotates it). */
-export async function issueMobileToken(userId: string, tokenVersion: number): Promise<string> {
+ *  `token_version` (new `jti` every call — refresh rotates it), bound to the
+ *  device session `sessionId` when there is one (`sid`; null = a legacy,
+ *  session-less bearer — only while migration 0029 is not live). */
+export async function issueMobileToken(
+  userId: string,
+  tokenVersion: number,
+  sessionId: string | null,
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ tv: tokenVersion })
+  return new SignJWT(sessionId ? { tv: tokenVersion, sid: sessionId } : { tv: tokenVersion })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setAudience(MOBILE_TOKEN_AUDIENCE)
@@ -221,7 +237,11 @@ export interface MobileTokenClaims {
   /** `users.token_version` the token was minted at. A pre-4b token has no
    *  `tv` claim and reads as 0 (the column default). */
   tv: number;
+  /** `mobile_session.id` (phase 4d). Null = a pre-4d token. */
+  sid: string | null;
 }
+
+const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `auth/refresh` rotates only inside this window before `exp`; earlier it
  *  returns the same token (ios/API.md §2.1: the app refreshes when < 7 days
@@ -248,7 +268,12 @@ export async function verifyMobileToken(
     // integer = forged or broken: refused like any other bad claim.
     const tv = payload.tv === undefined ? 0 : payload.tv;
     if (typeof tv !== "number" || !Number.isInteger(tv) || tv < 0) return null;
-    return { sub: payload.sub, jti: payload.jti, exp: payload.exp, tv };
+    // Absent = a pre-4d token. Present but not a UUID string = refused (it
+    // is compared against a uuid column; a malformed one must never reach
+    // the query).
+    const sid = payload.sid === undefined ? null : payload.sid;
+    if (sid !== null && (typeof sid !== "string" || !SID_RE.test(sid))) return null;
+    return { sub: payload.sub, jti: payload.jti, exp: payload.exp, tv, sid };
   } catch {
     return null;
   }
@@ -297,14 +322,28 @@ export async function requireApiUser(request: Request): Promise<CurrentUser> {
 }
 
 /**
- * Step 2 of the gate — the revocation re-read: the row by `sub` (gone or
- * `isMinor` → null) AND its `token_version` equal to the token's `tv`
- * (behind → null: the account logged out after this token was minted).
- * Null is the ONLY failure signal; callers turn it into the uniform 401.
+ * Step 2 of the gate — the revocation re-read, ONE query: the row by `sub`
+ * (gone or `isMinor` → null), its `token_version` equal to the token's `tv`
+ * (behind → null: the account logged out after this token was minted) and,
+ * when the token has a `sid`, its `mobile_session` row live and owned by
+ * `sub` (revoked / another account's / gone → null). Null is the ONLY
+ * failure signal; callers turn it into the uniform 401.
+ *
+ * A live session whose `last_seen_at` is older than the touch interval gets
+ * its bump scheduled AFTER the response (`afterResponse`): no write on the
+ * hot path, at most one per ~10 min per session.
  */
 async function userForClaims(claims: MobileTokenClaims): Promise<CurrentUser | null> {
-  const row = await loadUserWithTokenVersion(claims.sub);
-  if (!row || row.tokenVersion !== claims.tv) return null;
+  const row = await loadUserForBearer(claims.sub, claims.sid);
+  if (!row || row.tokenVersion !== claims.tv || !row.sessionOk) return null;
+  const sid = claims.sid;
+  if (
+    sid &&
+    row.sessionLastSeenAt &&
+    Date.now() - row.sessionLastSeenAt.getTime() > SESSION_TOUCH_INTERVAL_MS
+  ) {
+    afterResponse("api/v1 session touch", () => touchMobileSession(sid));
+  }
   return row.user;
 }
 
@@ -480,7 +519,8 @@ export function withApi<P extends ApiParams = ApiParams>(
 }
 
 /**
- * Unauthenticated wrapper for `auth/*` only (OTP request/verify): no bearer,
+ * Unauthenticated wrapper for the public `auth/*` routes only (OTP
+ * request/verify, `auth/apple`, `auth/google`, `auth/providers`): no bearer,
  * rate limit by client IP BEFORE anything else runs (write limit — they're
  * all POSTs), same error contract, cache policy and request id. Nothing else
  * in v1 may use it.

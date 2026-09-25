@@ -14,6 +14,7 @@ struct SettingsView: View {
         @Bindable var store = store
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
+            ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 28) {
                     Text("ajustes").font(.kura.screenTitle).foregroundStyle(KColor.text).padding(.horizontal, 8)
@@ -41,6 +42,10 @@ struct SettingsView: View {
                         .buttonStyle(SheetRowStyle())
                         ListDivider()
                         SettingsRow(title: "Correo") { RowValue(text: store.account?.email ?? (KuraRuntime.usesMock ? "mariel@correo.com" : "")) }
+                        ListDivider()
+                        SettingsRow(title: "Sesiones activas", action: { store.push(.sessions) }) {
+                            RowValue(text: store.deviceSessions.map { "\($0.count)" } ?? "")
+                        }
                     }
 
                     section("privacidad") {
@@ -71,7 +76,10 @@ struct SettingsView: View {
                     }
 
                     section("notificaciones") {
-                        SettingsRow(title: "Nuevos seguidores") { KuraSwitch(label: "Nuevos seguidores", isOn: $store.notifyFollowers) }
+                        // Server-owned (`PATCH /me { notifyFollowers }`): the server sends the push.
+                        SettingsRow(title: "Nuevos seguidores", note: "Cuando alguien empieza a seguirte.") {
+                            KuraSwitch(label: "Nuevos seguidores", isOn: $store.notifyFollowers)
+                        }
                         ListDivider()
                         SettingsRow(title: "Estrenos de no puedo esperar", note: "Cuando llega a cines o a streaming.") {
                             KuraSwitch(label: "Estrenos de no puedo esperar", isOn: $store.notifyReleases)
@@ -125,6 +133,15 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }
+            .onAppear {
+                #if DEBUG
+                if let anchor = store.debugSettingsAnchor {
+                    store.debugSettingsAnchor = nil
+                    DispatchQueue.main.async { proxy.scrollTo(anchor, anchor: .top) }
+                }
+                #endif
+            }
+            }
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
@@ -137,6 +154,188 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).monoLabel().padding(.horizontal, 8)
             GroupedList { content() }
+        }
+        .id(title)
+    }
+}
+
+// MARK: - Ajustes · Sesiones activas
+
+/// Every device signed in to the account (`GET /me/sessions`). This one is marked and can't be
+/// closed here (that's Cerrar sesión in Ajustes, which is "everywhere"); the others each have
+/// their own Cerrar sesión, confirmed in a sheet.
+struct SessionsView: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("sesiones activas").font(.kura.screenTitle).foregroundStyle(KColor.text)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Los dispositivos donde entraste a kura. Si no reconoces uno, cierra su sesión.")
+                            .font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 8)
+                    content
+                }
+                .padding(.top, 124)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 56)
+            }
+            TopChrome { EmptyView() }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .task { await store.loadSessions() }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let list = store.deviceSessions {
+            if let e = store.loadError(.sessions) {
+                RetryStrip(error: e) { Task { await store.loadSessions() } }
+            }
+            GroupedList {
+                ForEach(Array(list.enumerated()), id: \.element.id) { i, s in
+                    if i > 0 { ListDivider(inset: 72) }
+                    row(s)
+                }
+            }
+            .animation(KMotion.fade, value: list)
+            if list.count <= 1 {
+                Text("Solo este iPhone tiene tu sesión abierta.")
+                    .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                    .padding(.horizontal, 8)
+            }
+            Text("Para salir de todos a la vez, usa Cerrar sesión en Ajustes.")
+                .font(.kura.ui(13)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+        } else if let e = store.loadError(.sessions) {
+            LoadErrorBlock(error: e, titleSize: 24) { Task { await store.loadSessions() } }
+                .padding(.horizontal, 8)
+        } else {
+            GroupedList {
+                ForEach(0..<2, id: \.self) { i in
+                    if i > 0 { ListDivider(inset: 72) }
+                    HStack(spacing: 14) {
+                        Skeleton(radius: 999).frame(width: 44, height: 44)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Skeleton(radius: 6).frame(width: 110, height: 14)
+                            Skeleton(radius: 5).frame(width: 150, height: 10)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 72)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Cargando")
+        }
+    }
+
+    private func row(_ s: DeviceSession) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: Self.icon(for: s))
+                .font(.system(size: 19, weight: .regular))
+                .foregroundStyle(KColor.text)
+                .frame(width: 44, height: 44)
+                .background(KColor.s2, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(s.title).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text).lineLimit(1)
+                Text(Self.detail(s, now: KuraRuntime.usesMock ? store.now : Date())).font(.kura.mono(11)).foregroundStyle(KColor.text2)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            if !s.current {
+                GlassButton(title: "Cerrar sesión", height: 36, fontSize: 14) {
+                    store.present(.revokeSession(s))
+                }
+                .kHitArea(vertical: 4)
+                .accessibilityLabel("Cerrar sesión en \(s.title)")
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 72)
+    }
+
+    static func icon(for s: DeviceSession) -> String {
+        let n = s.deviceName.lowercased()
+        if n.contains("ipad") { return "ipad" }
+        if s.platform.lowercased() == "web" { return "laptopcomputer" }
+        return "iphone"
+    }
+
+    /// "este iPhone · kura 1.0.0" / "activa hace 2 d · kura 1.0.0".
+    static func detail(_ s: DeviceSession, now: Date) -> String {
+        var parts: [String] = []
+        if s.current {
+            parts.append("este iPhone")
+        } else if let seen = s.lastSeenAt {
+            parts.append("activa " + ago(seen, now: now))
+        }
+        if let v = s.appVersion, !v.isEmpty { parts.append("kura \(v)") }
+        return parts.joined(separator: " · ")
+    }
+
+    static func ago(_ d: Date, now: Date) -> String {
+        let h = max(0, now.timeIntervalSince(d) / 3600)
+        if h < 1 { return "hace \(max(1, Int(h * 60))) min" }
+        if h < 24 { return "hace \(Int(h)) h" }
+        if h < 7 * 24 { return "hace \(Int(h / 24)) d" }
+        if h < 35 * 24 { return "hace \(Int(h / (7 * 24))) sem" }
+        let months = max(1, Int(h / (30 * 24)))
+        return months == 1 ? "hace 1 mes" : "hace \(months) meses"
+    }
+}
+
+/// "¿cerrar sesión en iPad?" — the one confirmation before `DELETE /me/sessions/{id}`.
+struct RevokeSessionSheet: View {
+    @Environment(AppStore.self) private var store
+    let session: DeviceSession
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("¿cerrar sesión en \(session.title)?")
+                .font(.kura.news(26))
+                .foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, 8)
+            Text("Ese dispositivo vuelve a la entrada la próxima vez que abra kura. Tus colecciones no cambian.")
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.top, 4).padding(.bottom, 16)
+            SolidButton(title: busy ? "Cerrando…" : "Cerrar sesión", enabled: !busy) { confirm() }
+            Button { store.dismissSheet() } label: {
+                Text("Cancelar")
+                    .font(.kura.ui(16, .medium))
+                    .foregroundStyle(KColor.text)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(busy)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func confirm() {
+        guard !busy else { return }
+        busy = true
+        store.sheetLocked = true
+        Task {
+            await store.revokeSession(session)
+            busy = false
+            store.sheetLocked = false
+            store.dismissSheet()
         }
     }
 }

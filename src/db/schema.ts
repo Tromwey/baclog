@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -187,6 +188,21 @@ export const users = pgTable(
      * Ajustes web e iOS. Per-user, not per-month.
      */
     notifyRecap: boolean("notify_recap").notNull().default(true),
+    /**
+     * Phase 4e — consent for the "@x te sigue" push (APNs). Default TRUE like
+     * the other notify flags. Own preference: `Me` + `PATCH /me`, never on
+     * `Person`. The only reader is `modules/push/follower.ts`.
+     *
+     * ⚠️ COMMENTED OUT until migration 0029 is applied to the shared DB
+     * (learning 2026-09-24-columna-declarada-sin-migrar-rompe-inserts): Drizzle
+     * names EVERY declared column in each `insert(users)`, so declaring it
+     * before the ALTER breaks every sign-up. The code reads/writes it with raw
+     * SQL behind `MIGRATION_0029_LIVE` (src/auth/live-0029.ts). The 0029
+     * snapshot already includes it: DO NOT run `drizzle-kit generate` while
+     * this line is commented (the diff would emit a DROP COLUMN). After
+     * `drizzle-kit migrate`: uncomment this line, then flip the switch.
+     */
+    // notifyFollowers: boolean("notify_followers").notNull().default(true),
   },
   (t) => [
     uniqueIndex("user_email_unique").on(t.email),
@@ -559,6 +575,93 @@ export const userBlocks = pgTable(
     // the viewer→X probe; the index serves the X→viewer half of the gate.
     primaryKey({ columns: [t.blockerUserId, t.blockedUserId] }),
     index("user_block_blocked_idx").on(t.blockedUserId),
+  ],
+);
+
+// ---------- phase 4d/4e: sesiones por dispositivo + push (APNs) ----------
+
+/**
+ * Phase 4d — one row per signed-in app install. Every bearer minted since 4d
+ * carries its row id as the `sid` claim, and the per-request re-read
+ * (`loadUserForBearer`, src/auth/user-row.ts) LEFT JOINs this table in the
+ * same query as the user row: a `sid` whose row is gone, belongs to someone
+ * else or has `revoked_at` set is the uniform 401. Revoking = stamping
+ * `revoked_at` (the row stays, so a revoked device reads as revoked and not
+ * as "unknown"); `POST /auth/logout` stamps all of them and bumps
+ * `token_version`. `device_name` is free text the client chose (people name
+ * their phone after themselves): shown back ONLY to its owner
+ * (`GET /me/sessions`), never logged.
+ */
+export const mobileSessions = pgTable(
+  "mobile_session",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    deviceName: text("device_name").notNull(),
+    appVersion: text("app_version").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    /** Bumped at most every ~10 min per session (`touchMobileSession`). */
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (t) => [index("mobile_session_user_idx").on(t.userId)],
+);
+
+export const apnsEnvironmentEnum = pgEnum("apns_environment", ["sandbox", "production"]);
+
+/**
+ * Phase 4e — APNs device tokens. The token itself is the key: iOS hands the
+ * same token to whoever is signed in on that install, so a PUT from another
+ * account MOVES the row (last writer wins) instead of fanning one phone out to
+ * two people. Tied to the bearer's session when it has one: revoking that
+ * session (or logging out everywhere) deletes its tokens, so a signed-out
+ * phone stops receiving pushes. APNs 410 / `BadDeviceToken` / `Unregistered`
+ * deletes the row (`modules/push/apns.ts`).
+ */
+export const deviceTokens = pgTable(
+  "device_token",
+  {
+    token: text("token").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => mobileSessions.id, {
+      onDelete: "cascade",
+    }),
+    environment: apnsEnvironmentEnum("environment").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("device_token_user_idx").on(t.userId),
+    index("device_token_session_idx").on(t.sessionId),
+  ],
+);
+
+/**
+ * Phase 4e — throttle for the "@x te sigue" push: at most one per
+ * (follower, followed) pair every 24 h, so unfollow/refollow can't be used
+ * to buzz someone's phone. Claimed atomically (INSERT … ON CONFLICT DO
+ * UPDATE … WHERE sent_at < now() - 24 h RETURNING) BEFORE sending. Holds no
+ * more than the follow edge already did; cascades with either account.
+ */
+export const followPushNotices = pgTable(
+  "follow_push_notice",
+  {
+    followerUserId: text("follower_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followedUserId: text("followed_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.followerUserId, t.followedUserId] }),
+    index("follow_push_notice_followed_idx").on(t.followedUserId),
   ],
 );
 

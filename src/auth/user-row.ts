@@ -1,7 +1,8 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { mobileSessions, users } from "@/db/schema";
+import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
 
 /**
  * The per-request user row, by id — the ONE field list both the cookie
@@ -27,6 +28,13 @@ const USER_COLUMNS = {
   // Phase 4b — the recap email's opt-out: an own preference (Ajustes, `Me`),
   // never on `Person` or any cross-user read.
   notifyRecap: users.notifyRecap,
+  // Phase 4e — the "@x te sigue" push opt-out: an own preference (`Me`),
+  // never on `Person`. Raw SQL behind the 0029 switch: the column is
+  // commented out in schema.ts until the migration is applied (declaring it
+  // early breaks every `insert(users)`); before that it reads as its default.
+  notifyFollowers: MIGRATION_0029_LIVE
+    ? sql<boolean>`"user"."notify_followers"`
+    : sql<boolean>`true`,
   preferredService: users.preferredService,
   isMinor: users.isMinor,
   isFounder: users.isFounder,
@@ -115,4 +123,58 @@ export async function bumpTokenVersion(id: string): Promise<boolean> {
     sql`update "user" set "token_version" = "token_version" + 1 where "id" = ${id}`,
   );
   return true;
+}
+
+/**
+ * The bearer gate's ONE query (phase 4d): `loadUserWithTokenVersion` plus the
+ * token's device session, LEFT JOINed on `(mobile_session.id = sid AND
+ * mobile_session.user_id = user.id)` — so a session of ANOTHER account never
+ * joins — in the SAME round trip as the user row and its `token_version`
+ * (no second query per request).
+ *
+ * `sessionOk`: true when the token carries no `sid` (a pre-4d bearer, valid
+ * until its `exp` as before) or while `MIGRATION_0029_LIVE` is false (the
+ * table may not exist; the gate behaves as in 4b); otherwise the joined row
+ * must exist and have no `revoked_at`. `sessionLastSeenAt` feeds the
+ * throttled `last_seen_at` bump (null when there is nothing to bump).
+ * `sid` must already be UUID-shaped (`verifyMobileToken` refuses anything
+ * else): it is compared against a `uuid` column.
+ */
+export async function loadUserForBearer(
+  id: string,
+  sid: string | null,
+): Promise<{
+  user: UserRow;
+  tokenVersion: number;
+  sessionOk: boolean;
+  sessionLastSeenAt: Date | null;
+} | null> {
+  if (!sid || !MIGRATION_0029_LIVE) {
+    const row = await loadUserWithTokenVersion(id);
+    return row ? { ...row, sessionOk: true, sessionLastSeenAt: null } : null;
+  }
+  const [row] = await db
+    .select({
+      ...USER_COLUMNS,
+      tokenVersion: TOKEN_VERSION_LIVE ? TOKEN_VERSION : sql<number>`0`.mapWith(Number),
+      sessionId: mobileSessions.id,
+      sessionRevokedAt: mobileSessions.revokedAt,
+      sessionLastSeenAt: mobileSessions.lastSeenAt,
+    })
+    .from(users)
+    .leftJoin(
+      mobileSessions,
+      and(eq(mobileSessions.id, sid), eq(mobileSessions.userId, users.id)),
+    )
+    .where(eq(users.id, id))
+    .limit(1);
+  if (!row || row.isMinor) return null;
+  const { tokenVersion, sessionId, sessionRevokedAt, sessionLastSeenAt, ...user } = row;
+  const sessionOk = sessionId !== null && sessionRevokedAt === null;
+  return {
+    user,
+    tokenVersion,
+    sessionOk,
+    sessionLastSeenAt: sessionOk ? sessionLastSeenAt : null,
+  };
 }

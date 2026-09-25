@@ -314,6 +314,9 @@ export const MeSchema = z.object({
   /** Phase 4b — the monthly recap email's opt-out (`PATCH /me`). Own
    *  preference: never on `Person`. */
   notifyRecap: z.boolean(),
+  /** Phase 4e — the "@x te sigue" push opt-out (`PATCH /me`). Own
+   *  preference: never on `Person`. `true` until migration 0029 is live. */
+  notifyFollowers: z.boolean(),
   isFounder: z.boolean(),
   /** `name` is set — the app skips onboarding. */
   onboardingComplete: z.boolean(),
@@ -480,6 +483,68 @@ export const AuthSessionSchema = z.object({
   user: MeSchema,
 });
 export type AuthSession = z.infer<typeof AuthSessionSchema>;
+
+/** `POST auth/refresh` body (optional, phase 4d): the install's current
+ *  device — updates its session's name/version, or names the session a
+ *  pre-4d bearer gets on upgrade. */
+export const RefreshBodySchema = z.object({
+  device: DeviceSchema.optional(),
+});
+export type RefreshBody = z.infer<typeof RefreshBodySchema>;
+
+/** `POST auth/apple` (phase 4f). `rawNonce` is the nonce BEFORE hashing:
+ *  the app put `sha256hex(rawNonce)` in the Apple request. */
+export const AppleSignInBodySchema = z.object({
+  identityToken: z.string().trim().min(1, "Falta el token de Apple.").max(10_000),
+  rawNonce: z.string().min(1, "Falta el nonce.").max(200),
+  authorizationCode: z.string().trim().min(1).max(2_000).optional(),
+  /** Accepted for forward-compat and IGNORED by the server (see §2.2): the
+   *  app pre-fills the onboarding name with it. */
+  fullName: z
+    .object({
+      givenName: z.string().max(100).nullable().optional(),
+      familyName: z.string().max(100).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  device: DeviceSchema,
+});
+export type AppleSignInBody = z.infer<typeof AppleSignInBodySchema>;
+
+/** `POST auth/google` (phase 4f). */
+export const GoogleSignInBodySchema = z.object({
+  idToken: z.string().trim().min(1, "Falta el token de Google.").max(10_000),
+  device: DeviceSchema,
+});
+export type GoogleSignInBody = z.infer<typeof GoogleSignInBodySchema>;
+
+/** `GET auth/providers` (public): which social buttons the app may paint. */
+export const AuthProvidersSchema = z.object({
+  apple: z.boolean(),
+  google: z.object({ clientId: z.string().min(1) }).nullable(),
+});
+export type AuthProviders = z.infer<typeof AuthProvidersSchema>;
+
+// ---------- sessions & devices (phase 4d/4e) ----------
+
+/** One signed-in install of the caller (`GET /me/sessions`). */
+export const MobileSessionSchema = z.object({
+  id: z.string().uuid(),
+  platform: z.string().min(1),
+  deviceName: z.string().min(1),
+  appVersion: z.string().min(1),
+  createdAt: IsoDateSchema,
+  lastSeenAt: IsoDateSchema,
+  /** The session of the bearer making this request. */
+  current: z.boolean(),
+});
+export type MobileSession = z.infer<typeof MobileSessionSchema>;
+
+/** `PUT /me/devices/{apnsToken}` body. */
+export const DeviceTokenBodySchema = z.object({
+  environment: z.enum(["sandbox", "production"]),
+});
+export type DeviceTokenBody = z.infer<typeof DeviceTokenBodySchema>;
 
 /** `POST auth/web-session` body (optional): where the web should land.
  *  Validated against the handoff allow-list (`src/authz/handoff.ts`

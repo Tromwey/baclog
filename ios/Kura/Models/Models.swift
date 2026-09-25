@@ -636,6 +636,8 @@ struct Me: Hashable, Decodable {
     var notifyReleases: Bool
     /// The monthly recap email (`notify_recap`). Absent on an older server → assumed on (its default).
     var notifyRecap: Bool
+    /// Push when someone new follows you (`notify_followers`). Absent → assumed on.
+    var notifyFollowers: Bool
     var isPublic: Bool
     var avatarURL: URL?
     var isFounder: Bool
@@ -650,18 +652,19 @@ struct Me: Hashable, Decodable {
     }
 
     init(person p: Person, email: String? = nil, preferredService: String? = nil, notifyReleases: Bool = true,
-         notifyRecap: Bool = true, isPublic: Bool = true, onboarded: Bool = true) {
+         notifyRecap: Bool = true, notifyFollowers: Bool = true, isPublic: Bool = true, onboarded: Bool = true) {
         handle = p.handle.isEmpty ? nil : p.handle
         name = p.name; initials = p.initials; hexes = p.hexes; featuredTitleID = p.featuredTitleID
         followers = p.followers; followingCount = p.followingCount; stats = p.stats
         self.email = email; self.preferredService = preferredService; self.notifyReleases = notifyReleases
         self.notifyRecap = notifyRecap
+        self.notifyFollowers = notifyFollowers
         self.isPublic = isPublic; avatarURL = p.avatarURL; isFounder = false; self.onboarded = onboarded
     }
 
     private enum CodingKeys: String, CodingKey {
         case handle, username, name, displayName, initials, hexes, featuredTitleId, followers, followersCount, followingCount,
-             stats, email, preferredService, notifyReleases, notifyRecap, isPublic, avatarUrl, isFounder, onboardingComplete
+             stats, email, preferredService, notifyReleases, notifyRecap, notifyFollowers, isPublic, avatarUrl, isFounder, onboardingComplete
     }
 
     init(from decoder: Decoder) throws {
@@ -680,6 +683,7 @@ struct Me: Hashable, Decodable {
         preferredService = try c.decodeIfPresent(String.self, forKey: .preferredService)
         notifyReleases = try c.decodeIfPresent(Bool.self, forKey: .notifyReleases) ?? true
         notifyRecap = try c.decodeIfPresent(Bool.self, forKey: .notifyRecap) ?? true
+        notifyFollowers = try c.decodeIfPresent(Bool.self, forKey: .notifyFollowers) ?? true
         isPublic = try c.decodeIfPresent(Bool.self, forKey: .isPublic) ?? true
         avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
         isFounder = try c.decodeIfPresent(Bool.self, forKey: .isFounder) ?? false
@@ -1375,10 +1379,96 @@ enum UsernameStatus: String, Decodable {
     case free, taken, invalid
 }
 
-/// `POST auth/otp/verify` / `POST auth/refresh` → `{ token, user }`.
+/// `POST auth/otp/verify` / `POST auth/refresh` / `POST auth/apple` / `POST auth/google` → `{ token, user }`.
 struct AuthSession: Decodable {
     let token: String
     let user: Me
+}
+
+/// `GET /auth/providers` → `{ apple: Bool, google: { clientId } | null }`. The entrance paints
+/// ONLY the buttons that work (App Review 2.1): Apple when `apple`, Google when there's a client id.
+/// If the call fails the entrance is correo only (`.emailOnly`).
+struct AuthProviders: Hashable, Decodable, Sendable {
+    var apple: Bool
+    /// The iOS OAuth client id (`….apps.googleusercontent.com`); nil = no Google button.
+    var googleClientID: String?
+
+    static let emailOnly = AuthProviders(apple: false, googleClientID: nil)
+
+    init(apple: Bool, googleClientID: String?) {
+        self.apple = apple; self.googleClientID = googleClientID
+    }
+
+    private enum CodingKeys: String, CodingKey { case apple, google }
+    private struct Google: Decodable { let clientId: String? }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        apple = try c.decodeIfPresent(Bool.self, forKey: .apple) ?? false
+        let id = try c.decodeIfPresent(Google.self, forKey: .google)?.clientId?.trimmingCharacters(in: .whitespaces)
+        googleClientID = (id?.isEmpty ?? true) ? nil : id
+    }
+}
+
+/// One signed-in device (`GET /me/sessions` → `{ items }`). `current` = the bearer making the call.
+struct DeviceSession: Identifiable, Hashable, Decodable, Sendable {
+    let id: String
+    var platform: String
+    var deviceName: String
+    var appVersion: String?
+    var createdAt: Date?
+    var lastSeenAt: Date?
+    var current: Bool
+
+    init(id: String, platform: String, deviceName: String, appVersion: String?, createdAt: Date?, lastSeenAt: Date?, current: Bool) {
+        self.id = id; self.platform = platform; self.deviceName = deviceName; self.appVersion = appVersion
+        self.createdAt = createdAt; self.lastSeenAt = lastSeenAt; self.current = current
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, platform, deviceName, appVersion, createdAt, lastSeenAt, current }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        platform = try c.decodeIfPresent(String.self, forKey: .platform) ?? "ios"
+        let n = try c.decodeIfPresent(String.self, forKey: .deviceName)?.trimmingCharacters(in: .whitespaces) ?? ""
+        deviceName = n
+        appVersion = try c.decodeIfPresent(String.self, forKey: .appVersion)
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
+        lastSeenAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
+        current = try c.decodeIfPresent(Bool.self, forKey: .current) ?? false
+    }
+
+    /// The row title: the device name, or the platform when the name is empty.
+    var title: String {
+        if !deviceName.isEmpty { return deviceName }
+        switch platform.lowercased() {
+        case "ios": return "iPhone"
+        case "web": return "Navegador"
+        default: return platform
+        }
+    }
+}
+
+/// `{ kura: { type: "release", titleId } }` / `{ kura: { type: "follower", handle } }` — what a
+/// remote notification opens when tapped.
+enum PushDestination: Hashable, Sendable {
+    case title(String)
+    case person(String)
+
+    init?(userInfo: [AnyHashable: Any]) {
+        guard let k = userInfo["kura"] as? [String: Any], let type = k["type"] as? String else { return nil }
+        switch type {
+        case "release":
+            guard let id = k["titleId"] as? String, !id.isEmpty else { return nil }
+            self = .title(id)
+        case "follower":
+            guard let h = k["handle"] as? String, !h.isEmpty else { return nil }
+            self = .person(h)
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Navigation
@@ -1419,6 +1509,8 @@ enum Route: Hashable {
     case profileAsStranger
     /// Ajustes › privacidad › Cuentas bloqueadas (`GET /me/blocks`).
     case blockedAccounts
+    /// Ajustes › Sesiones activas (`GET /me/sessions`).
+    case sessions
 }
 
 enum OnboardingStep: Hashable {

@@ -37,6 +37,8 @@ enum SheetRoute: Identifiable, Hashable {
     case block(String)
     case deleteAccount
     case addTitles(String)
+    /// Ajustes › Sesiones activas › "Cerrar sesión" on another device (`DELETE /me/sessions/{id}`).
+    case revokeSession(DeviceSession)
 
     var id: String { String(describing: self) }
 
@@ -80,6 +82,7 @@ enum LoadKey: Hashable {
     case publicCollection(String)
     case moreReviews(String)
     case blocks
+    case sessions
 }
 
 @MainActor
@@ -112,6 +115,17 @@ final class AppStore {
     var authEmail = ""
     var authBusy = false
     var authError: String?
+    /// `GET /auth/providers`: which buttons the entrance paints. nil = not asked yet; a failure is
+    /// `.emailOnly` (correo only, never a button that doesn't work) and is asked again next time.
+    var authProviders: AuthProviders?
+    @ObservationIgnored private var authProvidersStale = true
+    /// Where the correo screen came from: `.login` ("Entrar", with Apple/Google above the field) or
+    /// `.email` ("Continuar con correo" on O1a, correo only). The code screen goes back there.
+    var emailStep: OnboardingStep = .login
+    /// The name Sign in with Apple handed over (first authorization only), to pre-fill O1b.
+    var suggestedName: String?
+    /// True when the entrance paints at least one of Apple / Google.
+    var hasSocialSignIn: Bool { authProviders.map { $0.apple || $0.googleClientID != nil } ?? false }
 
     // MARK: Data
     var people: [String: Person] = [:]
@@ -180,13 +194,14 @@ final class AppStore {
     var blocked: Set<String> = []
     /// `GET /me/blocks` for Ajustes › Cuentas bloqueadas; nil until it loads.
     var blockedAccounts: [BlockedAccount]?
+    /// `GET /me/sessions` for Ajustes › Sesiones activas; nil until it loads.
+    var deviceSessions: [DeviceSession]?
     /// Reviews you reported this session: the card folds to "Gracias. La revisamos." (like the web).
     var reportedReviews: Set<String> = []
     var notifications: [KNotification]
     var requestStates: [String: RequestState] = [:]
     var recentSearches: [String]
     var showCommon = true
-    var notifyFollowers = true
     var defaultPrivacy: Privacy = .onlyMe
     /// "Avísame cuando llegue" (E4) — titles you asked to be told about.
     var alerts: Set<String> = []
@@ -198,11 +213,14 @@ final class AppStore {
     @ObservationIgnored var debugEmptyFollowing = false
     var debugOverlay: DebugOverlay?
     @ObservationIgnored var debugDiscoverQuery: (text: String, submit: Bool)?
+    /// DEBUG: Ajustes opens scrolled to this section (`-kuraScreen notifysettings`).
+    @ObservationIgnored var debugSettingsAnchor: String?
 
     // Settings the API owns (`PATCH /me`) — stored locally, patched on change.
     private var _profilePrivate = false
     private var _notifyReleases = true
     private var _notifyRecap = true
+    private var _notifyFollowers = true
     private var _musicApp = "Apple Music"
 
     var profilePrivate: Bool {
@@ -220,6 +238,19 @@ final class AppStore {
             guard _notifyReleases != newValue else { return }
             _notifyReleases = newValue
             patchMe(MePatch(notifyReleases: newValue))
+            if newValue { askNotificationsIfNeeded() }
+        }
+    }
+
+    /// "Nuevos seguidores" — push when someone new follows you (`PATCH /me { notifyFollowers }`).
+    /// Turning it on is also a moment to ask for notification permission (never on a cold open).
+    var notifyFollowers: Bool {
+        get { _notifyFollowers }
+        set {
+            guard _notifyFollowers != newValue else { return }
+            _notifyFollowers = newValue
+            patchMe(MePatch(notifyFollowers: newValue))
+            if newValue { askNotificationsIfNeeded() }
         }
     }
 
@@ -287,6 +318,9 @@ final class AppStore {
     @ObservationIgnored var didBootstrap = false
     @ObservationIgnored var pendingListCollection: String?
     @ObservationIgnored var pendingAction: (() -> Void)?
+    /// A notification tapped before the tabs were up (cold start, splash, entrance): opened once
+    /// the library has loaded.
+    @ObservationIgnored var pendingPush: Route?
     @ObservationIgnored var debugFeedAnchor: String?
 
     @ObservationIgnored private var toastTask: Task<Void, Never>?
@@ -431,6 +465,7 @@ final class AppStore {
         _profilePrivate = !m.isPublic
         _notifyReleases = m.notifyReleases
         _notifyRecap = m.notifyRecap
+        _notifyFollowers = m.notifyFollowers
         if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
@@ -2123,7 +2158,10 @@ final class AppStore {
         let deadline = clock.now.advanced(by: minimumHold)
         func hold() async { try? await Task.sleep(until: deadline, clock: clock) }
         guard api.hasSession else {
+            // The entrance's buttons depend on it: ask during the brand beat, not after it.
+            async let providers: Void = loadAuthProviders()
             await hold()
+            await providers
             onboardingStep = entryStep
             withAnimation(KMotion.fade) { phase = .onboarding }
             return
@@ -2170,12 +2208,194 @@ final class AppStore {
         defer { authBusy = false }
         do {
             let m = try await api.signIn(email: authEmail, code: code.trimmingCharacters(in: .whitespaces))
-            applyMe(m)
-            if route(after: m) { enterMain() }
+            finishSignIn(m)
             return true
         } catch {
             authError = noteError(error).authText
             return false
+        }
+    }
+
+    /// The one path after ANY sign-in (código, Apple, Google): token already stored by the API,
+    /// then O1b if the account isn't set up, else the tabs.
+    private func finishSignIn(_ m: Me) {
+        applyMe(m)
+        if route(after: m) { enterMain() }
+    }
+
+    // MARK: Sign in with Apple / Google
+
+    /// `GET /auth/providers`. Failure → correo only (and asked again on the next entrance).
+    func loadAuthProviders() async {
+        guard authProvidersStale else { return }
+        do {
+            let p = try await api.authProviders()
+            authProvidersStale = false
+            withAnimation(KMotion.fade) { authProviders = p }
+        } catch {
+            if case .cancelled = noteError(error) { return }
+            authProviders = .emailOnly
+        }
+    }
+
+    /// `POST /auth/apple` with what `SignInWithAppleButton` returned.
+    func signInWithApple(_ credential: AppleCredential) async {
+        guard !authBusy, !signingOut else { return }
+        authBusy = true
+        authError = nil
+        defer { authBusy = false }
+        do {
+            // The server ignores `fullName`: it only pre-fills "tu nombre" on O1b (Apple sends it once).
+            let given = [credential.givenName, credential.familyName].compactMap { $0 }.joined(separator: " ")
+            suggestedName = given.isEmpty ? nil : given.lowercased()
+            finishSignIn(try await api.signInWithApple(credential))
+        } catch {
+            socialSignInFailed(error, provider: "Apple")
+        }
+    }
+
+    /// Google: the browser round trip (PKCE) for an `id_token`, then `POST /auth/google`.
+    func signInWithGoogle() async {
+        guard !authBusy, !signingOut, let clientID = authProviders?.googleClientID else { return }
+        authBusy = true
+        authError = nil
+        defer { authBusy = false }
+        do {
+            // The mock never opens accounts.google.com: the captures stay offline and deterministic.
+            let idToken = KuraRuntime.usesMock ? "mock.id.token" : try await GoogleOAuth.idToken(clientID: clientID)
+            finishSignIn(try await api.signInWithGoogle(idToken: idToken))
+        } catch {
+            socialSignInFailed(error, provider: "Google")
+        }
+    }
+
+    /// Cancelling is silent; `403 underage` is the same screen as the code path; everything else is
+    /// an honest toast (the entrance has no inline error line under the buttons).
+    func socialSignInFailed(_ error: Error, provider: String) {
+        if let g = error as? GoogleOAuth.Failure {
+            switch g {
+            case .cancelled: return
+            case .offline:
+                offline = true
+                showToast(ToastModel(text: "Sin conexión. Revisa tu red e inténtalo de nuevo.", kind: .info))
+            case .rejected:
+                showToast(ToastModel(text: "No se pudo entrar con Google. Inténtalo de nuevo.", kind: .info))
+            }
+            return
+        }
+        let e = noteError(error)
+        let text: String
+        switch e {
+        case .cancelled: return
+        case .forbidden(let code) where code == "underage":
+            onboardingStep = .underage
+            return
+        case .unavailable: text = "\(provider) no responde ahora. Entra con tu correo o prueba en un rato."
+        case .offline: text = "Sin conexión. Revisa tu red e inténtalo de nuevo."
+        case .rateLimited: text = "Demasiados intentos. Espera un momento."
+        case .conflict(_, let m) where !m.isEmpty: text = m
+        case .invalid(_, let m) where !m.isEmpty: text = m
+        default: text = "No se pudo entrar con \(provider). Inténtalo de nuevo."
+        }
+        showToast(ToastModel(text: text, kind: .info))
+    }
+
+    // MARK: Push
+
+    /// After the tabs come up with a session: if notifications are ALREADY allowed, ask APNs for
+    /// the token (every launch, as Apple recommends: it can rotate). Never asks for permission.
+    func refreshPushRegistration() {
+        guard !KuraRuntime.usesMock else { return }
+        Task {
+            if await NotificationPermission.isAllowed() { NotificationPermission.registerForRemote() }
+        }
+    }
+
+    /// A switch turned back on in Ajustes: the one other moment Kura asks (if it never did).
+    private func askNotificationsIfNeeded() {
+        guard !KuraRuntime.usesMock else { return }
+        Task {
+            if await NotificationPermission.requestIfUndetermined() { NotificationPermission.registerForRemote() }
+        }
+    }
+
+    /// APNs answered with this install's token → `PUT /me/devices/{token}` (idempotent). Once the
+    /// server has it, release notices come as push: the pending local ones are removed.
+    func didReceivePushToken(_ hex: String) {
+        PushRegistration.store(token: hex)
+        guard api.hasSession, phase == .main else { return }
+        let api = self.api
+        Task {
+            do {
+                try await api.registerDevice(pushToken: hex, environment: PushRegistration.environment)
+                PushRegistration.markRegistered()
+                ReleaseNotifier.cancelAll()
+            } catch {
+                // Not the user's problem right now: the next launch registers again.
+                KuraLog.api.error("push register failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// A tapped notification: the release's ficha or the new follower's profile, on top of the
+    /// current tab. Before the tabs are up it waits for `startIfNeeded`.
+    func openPush(_ d: PushDestination) {
+        let route: Route
+        switch d {
+        case .title(let id): route = .title(id)
+        case .person(let handle): route = .person(handle)
+        }
+        guard phase == .main, didBootstrap, loadState != .loading else {
+            pendingPush = route
+            return
+        }
+        if sheet != nil { dismissSheet() }
+        if path(tab).last != route { push(route) }
+    }
+
+    // MARK: Sesiones activas
+
+    func loadSessions() async {
+        do {
+            let items = try await api.sessions()
+            loaded(.sessions)
+            // This device first, then the most recently seen.
+            deviceSessions = items.sorted {
+                if $0.current != $1.current { return $0.current }
+                return ($0.lastSeenAt ?? .distantPast) > ($1.lastSeenAt ?? .distantPast)
+            }
+        } catch {
+            fail(.sessions, error)
+        }
+    }
+
+    /// `DELETE /me/sessions/{id}` → that device lands on the entrance on its next call (its 401).
+    @discardableResult
+    func revokeSession(_ s: DeviceSession) async -> Bool {
+        do {
+            try await api.revokeSession(id: s.id)
+            online()
+            withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == s.id } }
+            KHaptic.impact(.light)
+            showToast(ToastModel(text: "Cerraste la sesión en \(s.title).", kind: .info))
+            return true
+        } catch {
+            let e = noteError(error)
+            switch e {
+            case .cancelled, .unauthorized:
+                return false
+            case .notFound:
+                // Already gone (signed out there, or expired): the list just catches up.
+                withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == s.id } }
+                return true
+            default:
+                let text = e == .offline ? "Sin conexión. La sesión sigue abierta." : "No se pudo cerrar esa sesión."
+                showToast(ToastModel(text: text, kind: .retry) { [weak self] in
+                    self?.dismissToast()
+                    Task { await self?.revokeSession(s) }
+                })
+                return false
+            }
         }
     }
 
@@ -2298,6 +2518,11 @@ final class AppStore {
         guard !didBootstrap else { return }
         didBootstrap = true
         await bootstrap(emptyLibrary: emptyLibrary, keepLoading: keepLoading)
+        refreshPushRegistration()
+        if let route = pendingPush {
+            pendingPush = nil
+            if path(tab).last != route { push(route) }
+        }
         if debugEmptyFollowing { following = [] }
         if let id = pendingListCollection, let i = collections.firstIndex(where: { $0.id == id }) {
             collections[i].layout = .list
@@ -2412,6 +2637,11 @@ final class AppStore {
         muted = []
         blocked = []
         blockedAccounts = nil
+        deviceSessions = nil
+        pendingPush = nil
+        authProvidersStale = true
+        emailStep = .login
+        suggestedName = nil
         reportedReviews = []
         feedDirty = false
         alerts = []

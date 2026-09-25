@@ -2,7 +2,9 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userFollows, users } from "@/db/schema";
+import { afterResponse } from "@/lib/after-response";
 import { parseHandleOrNull } from "@/modules/account/username";
+import { notifyNewFollower } from "@/modules/push/follower";
 import { notBlockedWith } from "./block-gate";
 import { publicAuthor } from "./queries";
 
@@ -31,6 +33,11 @@ export type FollowResult = { ok: true } | { error: "not_found" | "invalid" };
  * A block in EITHER direction (`user_block`, App Store 1.2) is the same
  * not_found too — the gate sits in the same query, so a follow can't be
  * recreated while the block exists.
+ *
+ * Phase 4e: when the edge is NEW (the insert returned a row — not an
+ * idempotent re-follow), the "@x te sigue" push is scheduled after the
+ * response (`notifyNewFollower`: its own gates + a 24 h per-pair throttle).
+ * It can't block or fail the follow; errors only reach the log.
  */
 export async function followUser(
   viewerId: string,
@@ -52,10 +59,15 @@ export async function followUser(
     .limit(1);
   if (!target || target.id === viewerId) return { error: "not_found" };
 
-  await db
+  const created = await db
     .insert(userFollows)
     .values({ followerUserId: viewerId, followedUserId: target.id })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: userFollows.id });
+  if (created.length > 0) {
+    const followedId = target.id;
+    afterResponse("push/follower", () => notifyNewFollower(viewerId, followedId));
+  }
   return { ok: true };
 }
 

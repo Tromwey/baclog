@@ -73,18 +73,37 @@ export function sendReleaseEmail(
     waitedDays: number | null;
   },
 ): Promise<void> {
-  const { artist, pronoun, cta } = releaseCopyFor(title.format, title.byline);
+  const { pronoun, cta } = releaseCopyFor(title.format, title.byline);
   const waited =
     title.addedOn && title.waitedDays != null && title.waitedDays > 0
       ? `${pronoun} guardaste en una colección el ${title.addedOn}, cuando faltaban ${title.waitedDays} días. La espera terminó.\n\n`
       : "";
   const body =
-    `Hoy sale ${title.title}${artist}.\n\n` +
+    `${releaseFirstLine(title)}\n\n` +
     waited +
     `${cta}: ${title.itemUrl}\n\n` +
     `—\nTe avisamos porque está en tus colecciones. Si no quieres estos avisos, ` +
     `apágalos en https://baclog.app/settings`;
-  return send(email, `${title.title} ya salió ✦`, body, "RELEASE");
+  return send(email, releaseSubject(title.title), body, "RELEASE");
+}
+
+/**
+ * The release email's first line ("Hoy sale X, de Y."), shared with the
+ * release push (`api/cron/release`), so the phone and the inbox say the
+ * same thing.
+ */
+export function releaseFirstLine(title: {
+  format: ReleaseFormat;
+  title: string;
+  byline: string | null;
+}): string {
+  const { artist } = releaseCopyFor(title.format, title.byline);
+  return `Hoy sale ${title.title}${artist}.`;
+}
+
+/** The release email's subject, also the release push's title. */
+export function releaseSubject(title: string): string {
+  return `${title} ya salió ✦`;
 }
 
 type ReleaseFormat = (typeof mediaTypeEnum.enumValues)[number];

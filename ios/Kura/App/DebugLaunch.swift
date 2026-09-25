@@ -3,10 +3,10 @@ import Foundation
 /// DEBUG: `-kuraScreen <name>` opens the app directly on a screen so the
 /// simulator can be screenshotted without driving the UI.
 ///
-/// splash · onboarding · signup · username · pick · people · login ·
+/// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
 /// collections · loading · empty · offline · newcollection · collection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
-/// complete · feed · discover · profile
+/// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings
 enum DebugLaunch {
     /// `-kuraScreen <name>` or `-kuraMock` → the app runs on `MockAPI` (DEBUG only).
     static var wantsMock: Bool {
@@ -49,6 +49,18 @@ enum DebugLaunch {
             store.onboardingPicks = ["chihiro", "ma", "severance"]
         case "login":
             store.phase = .onboarding; store.onboardingStep = .login
+        // Sign in with Apple / Google: the buttons follow `GET /auth/providers` (mock: `-kuraProviders
+        // all|apple|google|none|fail`, default all). These register the value in the volatile
+        // registration domain, so a launch argument still wins and nothing persists.
+        case "signupapple":
+            UserDefaults.standard.register(defaults: ["kuraProviders": "apple"])
+            store.phase = .onboarding; store.onboardingStep = .signup
+        case "signupemail":
+            // The providers call fails → correo only.
+            UserDefaults.standard.register(defaults: ["kuraProviders": "fail"])
+            store.phase = .onboarding; store.onboardingStep = .signup
+        case "loginemail":
+            store.phase = .onboarding; store.onboardingStep = .email; store.emailStep = .email
         case "collections":
             main()
         case "loading":
@@ -220,6 +232,17 @@ enum DebugLaunch {
             main(.profile, [.settings, .musicApp])
         case "deleteaccount":
             main(.profile, [.settings], sheet: .deleteAccount)
+        case "sessions":
+            main(.profile, [.settings, .sessions])
+        case "revokesession":
+            main(.profile, [.settings, .sessions], sheet: .revokeSession(MockData.sessions[1]))
+        case "sessionsone":
+            MockDevices.shared.reset(MockData.sessions.filter(\.current))
+            main(.profile, [.settings, .sessions])
+        case "notifysettings":
+            // Ajustes scrolled to "notificaciones" (Nuevos seguidores is server-owned now).
+            store.debugSettingsAnchor = "notificaciones"
+            main(.profile, [.settings])
         default:
             break
         }

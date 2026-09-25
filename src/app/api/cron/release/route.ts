@@ -23,7 +23,8 @@ import {
 } from "@/db/schema";
 import { getAlbumDetail } from "@/modules/catalog/itunes";
 import { homeDayLong } from "@/modules/catalog/release";
-import { sendReleaseEmail } from "@/auth/mailer";
+import { releaseFirstLine, releaseSubject, sendReleaseEmail } from "@/auth/mailer";
+import { pushToUsers, type PushTarget } from "@/modules/push/apns";
 import { sweepExpiredVerificationTokens } from "@/auth/otp";
 
 export const maxDuration = 60;
@@ -161,6 +162,17 @@ async function refreshAlbum(
  *    this pass (a chart row already carries its year; the item view re-reads
  *    the date — `getItemDisplayMedia` → `cacheReleaseDate`).
  *
+ * 3. PUSH (phase 4e). Every recipient whose email went out also gets an APNs
+ *    push on their registered devices (title = the email subject, body = its
+ *    first line, payload `{ kura: { type: "release", titleId } }`). Queued
+ *    during pass 1 and sent in ONE batch at the end (`pushToUsers`: one
+ *    HTTP/2 connection per APNs environment). Same audience as the email by
+ *    construction (only after `sent++`), so it inherits the `notifyReleases`
+ *    opt-out and the release_notice claim — a retried email never double-
+ *    pushes. A push failure never fails the run (the email is the delivery
+ *    of record); it is counted in `pushFailed` and logged. Without migration
+ *    0029 or the APPLE_* env it is a logged no-op (`pushSkipped`).
+ *
  * Idempotency is the recap cron's: the INSERT … ON CONFLICT DO NOTHING
  * RETURNING on release_notice is an atomic claim, so an at-least-once trigger
  * (retry, manual run, overlap) can't double-send. One user's failure never
@@ -284,6 +296,8 @@ export async function GET(request: Request) {
   // The email went out but `email_sent_at` didn't get stamped: the user WAS
   // told (not a `failed`), the audit row is just incomplete.
   let stampFailed = 0;
+  // Pass 3's queue: one entry per recipient whose email went out.
+  const pushQueue: PushTarget[] = [];
 
   for (const item of landed) {
     // Non-null by the window filter; narrowed for the type checker.
@@ -377,6 +391,18 @@ export async function GET(request: Request) {
             throw err;
           }
           sent++;
+          pushQueue.push({
+            userId: owner.userId,
+            message: {
+              title: releaseSubject(item.title),
+              body: releaseFirstLine({
+                format: item.mediaType,
+                title: item.title,
+                byline: item.byline,
+              }),
+              data: { type: "release", titleId: item.id },
+            },
+          });
           try {
             await db
               .update(releaseNotices)
@@ -455,6 +481,9 @@ export async function GET(request: Request) {
     }
   }
 
+  // ---- 3. PUSH the recipients pass 1 emailed. Never throws.
+  const push = await pushToUsers(pushQueue);
+
   // 500 when somebody who should have been told wasn't (failed), when a sent
   // email left its audit row unstamped, or when the OTP sweep broke: Vercel
   // shows the run as failed. iTunes being down (refreshUnavailable) is NOT a
@@ -477,6 +506,10 @@ export async function GET(request: Request) {
       alreadySent,
       failed,
       stampFailed,
+      pushed: push.sent,
+      pushFailed: push.failed,
+      pushPruned: push.pruned,
+      pushSkipped: push.skipped,
     },
     { status: ok ? 200 : 500 },
   );

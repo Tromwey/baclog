@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` generada, SIN aplicar)
+> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -26,7 +26,7 @@ Tablas principales en `schema.ts`: `users` (con `token_version` y `notify_recap`
 NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews`, `userFollows`,
 `mediaLinks`, `crossMediaLinks`, `crossMediaRecs`, `crossMediaRecUsage`, `crossMediaRecSeen`,
 `crossMediaRecoFeedback`, `llmCallLog`, `analyticsEvents`, `waitlistEntries`, `waitlistReferrals`,
-`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11), `userBlocks` (App Store 1.2, 0028 — sin aplicar).
+`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11), `userBlocks` (App Store 1.2, 0028 — sin aplicar), `mobileSessions`, `deviceTokens` (+ enum `apns_environment`), `followPushNotices` (fases 4d/4e, 0029 — sin aplicar).
 
 Últimas migraciones: **0023 `user_follows`** (F3.10, aditiva-inocua — `user_follow` con unique
 `(follower, followed)` + índice en `followed`) y **0024 `backlog_visibility`** (F3.10.1, aditiva —
@@ -70,6 +70,8 @@ reseñas de la ficha, búsqueda, `followUser`) y sin la tabla responden 500 (42P
 sobre un Postgres 17 local limpio: 0000–0028 aplican en orden sin errores. Borrar una cuenta cascadea sus
 bloqueos en ambos sentidos (no hace falta tocar `deleteAccount`).
 
+**0029 `device_sessions_push`** (Kura iOS fases 4d/4e, 2026-09-24; **generada con `drizzle-kit generate`, NO aplicada**). Aditiva: `CREATE TYPE apns_environment ('sandbox','production')`; `mobile_session (id uuid PK DEFAULT gen_random_uuid(), user_id text NOT NULL → user CASCADE, platform/device_name/app_version text NOT NULL, created_at/last_seen_at timestamp DEFAULT now() NOT NULL, revoked_at timestamp)` + índice `mobile_session_user_idx`; `device_token (token text PK, user_id → user CASCADE, session_id uuid → mobile_session CASCADE NULL, environment apns_environment NOT NULL, created_at, updated_at)` + índices por `user_id` y `session_id`; `follow_push_notice (follower_user_id, followed_user_id → user CASCADE, sent_at DEFAULT now(), PK (follower, followed))` + índice por `followed_user_id`; `ALTER TABLE "user" ADD COLUMN notify_followers boolean DEFAULT true NOT NULL`. Probada sobre Postgres 17 local limpio: 0000–0029 aplican en orden sin errores. ⚠️ `users.notifyFollowers` está **COMENTADA** en `schema.ts` (Drizzle nombra toda columna declarada en cada `insert(users)`: declararla antes del ALTER rompe todo alta de cuenta — learning 2026-09-24-columna-declarada-sin-migrar-rompe-inserts); se lee/escribe con SQL crudo detrás de `MIGRATION_0029_LIVE`. El snapshot 0029 SÍ la incluye: **nadie corre `drizzle-kit generate` mientras la línea esté comentada** (emitiría un DROP COLUMN). Las tres tablas nuevas sí están declaradas (declarar una tabla no afecta queries ajenas; solo se consultan con el switch en `true`). Borrar una cuenta cascadea sesiones, tokens y throttle.
+
 Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
 (escanean por `user_id` y ordenan). Costo por página de `/feed` (feed v2): 1 query de ids seguidos + por
 chunk 4 ramas en paralelo (`limit+1` = 25 filas cada una) + 1 query de ADN solo para autores no vistos;
@@ -94,6 +96,7 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 - **0028 `user_block` pendiente de aplicar (2026-09-24)** — `drizzle/0028_user_block.sql` + snapshot/journal 0028
   en el árbol, sin commit. Aplicarla (founder) antes de cualquier deploy que incluya `modules/social/block-gate.ts`.
   Después: `pnpm tsx scripts/api-smoke.ts --only writes` con cuenta QA corre los casos E1 de reportar/bloquear.
+- **0029 `device_sessions_push` pendiente de aplicar (2026-09-24)** — `drizzle/0029_device_sessions_push.sql` + snapshot/journal 0029 en el árbol, sin commit. Aplicarla (founder) es independiente del deploy (el código corre sin ella con `MIGRATION_0029_LIVE = false`). Al aplicarla, en este orden: `drizzle-kit migrate` → descomentar `notifyFollowers` en `src/db/schema.ts` → `MIGRATION_0029_LIVE = true` en `src/auth/live-0029.ts` → deploy → smoke `writes` (W4).
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->

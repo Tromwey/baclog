@@ -298,6 +298,7 @@ struct LiveAPI: KuraAPI {
     private struct OTPRequest: Encodable { let email: String }
     private struct Device: Encodable { let platform = "ios"; let name: String; let appVersion: String }
     private struct OTPVerify: Encodable { let email: String; let code: String; let device: Device }
+    private struct RefreshBody: Encodable { let device: Device }
 
     func requestCode(email: String) async throws {
         try await client.send(try .post("auth/otp/request", OTPRequest(email: email), auth: false))
@@ -311,9 +312,54 @@ struct LiveAPI: KuraAPI {
     }
 
     func refresh() async throws -> Me {
-        let s: AuthSession = try await client.decode(.post("auth/refresh"))
+        // The optional `device` keeps this install's row in Sesiones activas named and versioned.
+        let s: AuthSession = try await client.decode(try .post("auth/refresh", RefreshBody(device: Device(name: deviceName, appVersion: appVersion))))
         session.store(s.token)
         return s.user
+    }
+
+    private struct AppleName: Encodable { let givenName: String?; let familyName: String? }
+    private struct AppleBody: Encodable {
+        let identityToken: String
+        let rawNonce: String
+        let authorizationCode: String?
+        let fullName: AppleName?
+        let device: Device
+    }
+    private struct GoogleBody: Encodable { let idToken: String; let device: Device }
+
+    func authProviders() async throws -> AuthProviders {
+        try await client.decode(Endpoint(method: .get, path: "auth/providers", auth: false))
+    }
+
+    func signInWithApple(_ c: AppleCredential) async throws -> Me {
+        // Apple sends the name only on the FIRST authorization of this app: forward it when present.
+        let name = (c.givenName ?? c.familyName) == nil ? nil : AppleName(givenName: c.givenName, familyName: c.familyName)
+        let body = AppleBody(identityToken: c.identityToken, rawNonce: c.rawNonce, authorizationCode: c.authorizationCode,
+                             fullName: name, device: Device(name: deviceName, appVersion: appVersion))
+        let s: AuthSession = try await client.decode(try .post("auth/apple", body, auth: false))
+        session.store(s.token)
+        return s.user
+    }
+
+    func signInWithGoogle(idToken: String) async throws -> Me {
+        let body = GoogleBody(idToken: idToken, device: Device(name: deviceName, appVersion: appVersion))
+        let s: AuthSession = try await client.decode(try .post("auth/google", body, auth: false))
+        session.store(s.token)
+        return s.user
+    }
+
+    /// `DELETE /me/devices/{token}` with a bearer captured BEFORE the session was forgotten.
+    /// Best effort: a failure (offline, already gone, 401) never blocks leaving; the local flag
+    /// goes off either way so release notices fall back to local ones.
+    private func unregisterPush(bearer: String?) async {
+        defer { PushRegistration.markUnregistered() }
+        guard let bearer, let push = PushRegistration.token else { return }
+        var e = Endpoint.delete("me/devices/\(push)")
+        e.auth = false
+        e.explicitBearer = bearer
+        e.suppressExpiry = true
+        try? await client.send(e)
     }
 
     func logout() async throws {
@@ -321,9 +367,11 @@ struct LiveAPI: KuraAPI {
         // (already-revoked or expired token) must not broadcast "session expired" to the store,
         // and isn't a failure: that token can't revoke anything anymore. Anything else
         // (offline, 5xx, 429) propagates — the other devices are still signed in.
+        // The push token goes first (with the same bearer): after the logout it can't be removed.
         let token = session.token
         session.clear()
         guard let token else { return }
+        await unregisterPush(bearer: token)
         var e = Endpoint.post("auth/logout")
         e.auth = false
         e.explicitBearer = token
@@ -339,7 +387,14 @@ struct LiveAPI: KuraAPI {
         }
     }
 
-    func forgetSession() { session.clear() }
+    func forgetSession() {
+        // The bearer is captured before it's cleared, so the device can still be unregistered
+        // (a later sign-in on this iPhone never has its new token wiped by this).
+        let token = session.token
+        session.clear()
+        guard token != nil, PushRegistration.token != nil else { return }
+        Task { await unregisterPush(bearer: token) }
+    }
 
     private struct WebSessionBody: Encodable { let to: String }
     private struct WebSessionResponse: Decodable { let url: URL }
@@ -422,8 +477,27 @@ struct LiveAPI: KuraAPI {
         // `-kuraDelete401 YES`: send a bearer the server rejects, to see the honest 401 path.
         if UserDefaults.standard.bool(forKey: "kuraDelete401") { e.explicitBearer = "debug.invalid.bearer" }
         #endif
+        // Best effort, before the account (and this bearer) is gone.
+        await unregisterPush(bearer: session.token)
         try await client.send(e)
         session.clear()
+    }
+
+    // MARK: Devices
+
+    func sessions() async throws -> [DeviceSession] {
+        let r: Items<DeviceSession> = try await client.decode(.get("me/sessions"))
+        return r.items
+    }
+
+    func revokeSession(id: String) async throws {
+        try await client.send(.delete("me/sessions/\(id)"))
+    }
+
+    private struct DeviceBody: Encodable { let environment: String }
+
+    func registerDevice(pushToken: String, environment: String) async throws {
+        try await client.send(try .put("me/devices/\(pushToken)", DeviceBody(environment: environment)))
     }
 
     // MARK: Collections

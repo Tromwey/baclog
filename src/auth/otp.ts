@@ -155,29 +155,58 @@ export async function verifyOtp(email: string, code: string) {
     .delete(verificationTokens)
     .where(eq(verificationTokens.identifier, normalized));
 
-  let [user] = await db
+  return findOrCreateUserByVerifiedEmail(normalized);
+}
+
+/**
+ * The account behind an email that was JUST proven (an OTP typed back, or a
+ * provider's `email_verified` identity — `src/auth/social.ts`): the existing
+ * row (stamping `emailVerified` if it was never set), or a new one with the
+ * one-time sign-up hooks (F3.1 waitlist link, F3.2 founder badge;
+ * best-effort — a hook failure never blocks the sign-in). `email` must
+ * already be trimmed + lowercased. Returns the explicit `OTP_USER_COLUMNS`,
+ * never a bare `select()`.
+ *
+ * Two concurrent first sign-ins of the same email race on the unique index:
+ * the loser's insert is a no-op (`onConflictDoNothing`) and it re-reads the
+ * winner's row, so both land on ONE account and only the winner runs hooks.
+ */
+export async function findOrCreateUserByVerifiedEmail(normalized: string) {
+  const [existing] = await db
     .select(OTP_USER_COLUMNS)
     .from(users)
     .where(eq(users.email, normalized))
     .limit(1);
-  if (!user) {
-    [user] = await db
-      .insert(users)
-      .values({ email: normalized, emailVerified: new Date() })
-      .returning(OTP_USER_COLUMNS);
-    // One-time-at-account-creation hooks (F3.1 waitlist link + F3.2 badge).
-    // Best-effort: a failure here must not block sign-in.
-    try {
-      await assignFounderIfEligible(user.id);
-      await convertOnSignup(normalized, user.id);
-    } catch (err) {
-      console.error("[otp] post-signup hooks failed:", err);
+  if (existing) {
+    if (!existing.emailVerified) {
+      await db
+        .update(users)
+        .set({ emailVerified: new Date() })
+        .where(eq(users.id, existing.id));
     }
-  } else if (!user.emailVerified) {
-    await db
-      .update(users)
-      .set({ emailVerified: new Date() })
-      .where(eq(users.id, user.id));
+    return existing;
   }
-  return user;
+  const [created] = await db
+    .insert(users)
+    .values({ email: normalized, emailVerified: new Date() })
+    .onConflictDoNothing({ target: users.email })
+    .returning(OTP_USER_COLUMNS);
+  if (!created) {
+    const [winner] = await db
+      .select(OTP_USER_COLUMNS)
+      .from(users)
+      .where(eq(users.email, normalized))
+      .limit(1);
+    if (!winner) throw new Error("findOrCreateUserByVerifiedEmail: row vanished after conflict");
+    return winner;
+  }
+  // One-time-at-account-creation hooks (F3.1 waitlist link + F3.2 badge).
+  // Best-effort: a failure here must not block sign-in.
+  try {
+    await assignFounderIfEligible(created.id);
+    await convertOnSignup(normalized, created.id);
+  } catch (err) {
+    console.error("[otp] post-signup hooks failed:", err);
+  }
+  return created;
 }

@@ -263,6 +263,21 @@ enum MockData {
         BlockedAccount(id: "u-7c1e", handle: nil, name: "Perfil privado")
     ]
 
+    // MARK: Devices
+
+    /// A plausible iOS OAuth client id: only its reversed form (the redirect scheme) matters to the mock.
+    static let googleClientID = "000000000000-kuramock.apps.googleusercontent.com"
+
+    /// Ajustes › Sesiones activas: this iPhone plus two others.
+    static let sessions: [DeviceSession] = [
+        DeviceSession(id: "s-this", platform: "ios", deviceName: "iPhone", appVersion: "1.0.0",
+                      createdAt: date(2026, 9, 2, 18), lastSeenAt: now, current: true),
+        DeviceSession(id: "s-ipad", platform: "ios", deviceName: "iPad", appVersion: "1.0.0",
+                      createdAt: date(2026, 8, 14, 21), lastSeenAt: date(2026, 9, 22, 23), current: false),
+        DeviceSession(id: "s-old", platform: "ios", deviceName: "iPhone", appVersion: "0.9.0",
+                      createdAt: date(2026, 6, 30, 12), lastSeenAt: date(2026, 8, 3, 9), current: false)
+    ]
+
     // MARK: Reviews
 
     static let reviews: [Review] = [
