@@ -24,16 +24,21 @@ extension AppStore {
         authBusy = true
         authError = nil
         defer { authBusy = false }
+        // Bound to the session that sent it: after Volver (a fresh `SessionData`) a late claim or
+        // onboarding answer must not write the abandoned account into the entrance.
+        let session = s
         do {
             var m = account
             if account?.handle != handle {
                 m = try await api.claimUsername(handle)
+                try check(session)
                 applyMe(m!)
             }
             let freshOnboarding = !(m?.onboarded ?? false)
             if freshOnboarding {
                 guard let birthYear else { authError = "Falta tu año de nacimiento."; return false }
                 m = try await api.completeOnboarding(name: name.trimmingCharacters(in: .whitespaces).lowercased(), birthYear: birthYear)
+                try check(session)
                 applyMe(m!)
                 onboardingStep = .pick
                 Task { await loadOnboardingGrid() }
@@ -42,6 +47,7 @@ extension AppStore {
             }
             return true
         } catch {
+            guard s === session else { return false }
             let e = noteError(error)
             if case .forbidden(let code) = e, code == "underage" {
                 onboardingStep = .underage
@@ -83,8 +89,10 @@ extension AppStore {
         authBusy = true
         authError = nil
         defer { authBusy = false }
+        let session = s
         do {
             let c = try await api.onboardingPicks(onboardingPicks.map(TitleRef.from(localID:)))
+            try check(session)
             for t in c.embeddedTitles { register(t) }
             if !collections.contains(where: { $0.id == c.id }) { collections.append(applyLocal(c)) }
             for id in c.titleIDs { ensureUserState(id); userTitles[id]?.mark = .obsessed }
@@ -93,6 +101,7 @@ extension AppStore {
             await loadOnboardingPeople()
             return true
         } catch {
+            guard s === session else { return false }
             authError = noteError(error).authText
             return false
         }

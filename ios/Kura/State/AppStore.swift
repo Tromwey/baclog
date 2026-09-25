@@ -69,6 +69,14 @@ struct ToastModel: Identifiable, Equatable {
 
 enum LoadState: Equatable { case loading, loaded, failed }
 
+/// What `AppStore.boundWrite` came back with.
+enum BoundWrite<T> {
+    case ok(T)
+    case failed(KuraAPIError)
+    /// The session changed while the write was in flight: the caller drops it whole.
+    case stale
+}
+
 /// A per-screen read that can fail. A 404 is not a load error (the screen
 /// shows its "ya no existe" shape); everything else — offline, 5xx, 429 — is,
 /// and the screen offers Reintentar until a retry succeeds.
@@ -738,6 +746,33 @@ final class AppStore {
         if s !== session { throw StaleSession() }
     }
 
+    // MARK: Writes bound to their session
+
+    /// A write awaited in place (not queued by `sync`: block, report, avatar, sessions,
+    /// identities, merge, onboarding…), bound to the session that sent it like reads and `sync`
+    /// are. The answer of an old session is `.stale` — no state, no toast, no Reintentar — and its
+    /// error never reaches `noteError`, so the 401 of a revoked bearer can't expire the new
+    /// session. Success clears the offline strip; a failure has already been through `noteError`.
+    func boundWrite<T>(_ op: () async throws -> T) async -> BoundWrite<T> {
+        let session = s
+        do {
+            let value = try await op()
+            guard s === session else { return .stale }
+            online()
+            return .ok(value)
+        } catch {
+            guard s === session else { return .stale }
+            return .failed(noteError(error))
+        }
+    }
+
+    /// Runs `apply` only while `session` is still the current one: the state writes a `sync`
+    /// op does after its `await` (the server's answer landing in memory) go through here.
+    func on(_ session: SessionData, _ apply: () -> Void) {
+        guard s === session else { return }
+        apply()
+    }
+
     /// Fetches the titles we don't know yet (`GET /titles?ids=`), ≤ 50 per call. A failure is
     /// recorded on `key` (the screen that needed them) so it says "incompleto · Reintentar"
     /// instead of drawing an empty shelf as if it were the truth.
@@ -1064,9 +1099,11 @@ final class AppStore {
     }
 
     func patchMe(_ patch: MePatch) {
-        sync(key: WriteKey.mePatch) { api in
+        let session = s
+        sync(key: WriteKey.mePatch) { [weak self] api in
+            let store = self
             let m = try await api.updateMe(patch)
-            await MainActor.run { [weak self] in self?.account = m }
+            await MainActor.run { store?.on(session) { store?.account = m } }
         }
     }
 

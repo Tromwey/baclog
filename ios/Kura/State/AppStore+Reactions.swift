@@ -22,6 +22,7 @@ extension AppStore {
             default: break
             }
         }
+        let session = s
         sync(key: WriteKey.mark(titleID), titleID: titleID, onError: { [weak self] e in
             guard let self else { return true }
             // Neither is retryable. The optimistic state goes: an unsaved title leaves the library
@@ -47,7 +48,7 @@ extension AppStore {
             let store = self
             let s = try await api.setMark(titleID: titleID, mark: mark, preview: preview)
             await MainActor.run {
-                guard let self = store, self.userTitles[titleID]?.mark == mark else { return }
+                guard let self = store, self.s === session, self.userTitles[titleID]?.mark == mark else { return }
                 if let rid = s.reviewID { self.userTitles[titleID]?.reviewID = rid }
                 self.userTitles[titleID]?.savedAt = s.savedAt
                 // The ficha's "obsesionados / completos" are server aggregates (formatted "12,4 k"):
@@ -144,6 +145,7 @@ extension AppStore {
             localID = r.id
         }
         setReviews(titleID, list)
+        let session = s
         sync(key: WriteKey.review(titleID), titleID: titleID, onError: { [weak self] e in
             // No reaction on the server (`obsessed || verdict != null`): the review never existed
             // there. Put back what was before and say the real rule — never a "Reintentar" that
@@ -161,7 +163,7 @@ extension AppStore {
             let store = self
             let saved = try await api.saveReview(titleID: titleID, body: trimmed, hasSpoiler: spoiler)
             await MainActor.run {
-                guard let self = store else { return }
+                guard let self = store, self.s === session else { return }
                 var list = self.reviewList(titleID)
                 guard let i = list.firstIndex(where: { $0.id == localID }) else { return }
                 list[i] = Review(id: saved.id, authorID: self.me.id, titleID: titleID, text: list[i].text,

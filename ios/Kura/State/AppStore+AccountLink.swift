@@ -59,9 +59,13 @@ extension AppStore {
         PushRegistration.store(token: hex)
         guard api.hasSession, phase == .main else { return }
         let api = self.api
-        Task {
+        let session = s
+        Task { [weak self] in
             do {
                 try await api.registerDevice(pushToken: hex, environment: PushRegistration.environment)
+                // Registered for the account that asked: if it signed out meanwhile, the exit
+                // already marked this install unregistered, and that stands.
+                guard let self, self.s === session else { return }
                 PushRegistration.markRegistered()
                 ReleaseNotifier.cancelAll()
             } catch {
@@ -119,6 +123,7 @@ extension AppStore {
     func connect(_ p: IdentityProvider, fromMerge: Bool = false) async {
         guard identityBusy == nil, !mergeBusy, canRun(p) else { return }
         identityBusy = p
+        let session = s
         let outcome: LinkOutcome
         do {
             switch p {
@@ -136,11 +141,13 @@ extension AppStore {
                 outcome = try await api.linkGoogle(idToken: idToken)
             }
         } catch {
-            identityBusy = nil
+            session.identityBusy = nil
+            guard s === session else { return }
             identityFailed(error, provider: p)
             return
         }
-        identityBusy = nil
+        session.identityBusy = nil
+        guard s === session else { return }
         online()
         switch outcome {
         case .linked:
@@ -199,17 +206,18 @@ extension AppStore {
     @discardableResult
     func disconnect(_ p: IdentityProvider) async -> Bool {
         guard identityBusy == nil else { return false }
-        identityBusy = p
-        defer { identityBusy = nil }
-        do {
-            try await api.unlinkIdentity(p)
-            online()
+        let session = s
+        session.identityBusy = p
+        defer { session.identityBusy = nil }
+        switch await boundWrite({ try await api.unlinkIdentity(p) }) {
+        case .stale:
+            return false
+        case .ok:
             setLinked(p, false)
             KHaptic.impact(.light)
             showToast(ToastModel(text: "Desconectaste \(p.label). Sigues entrando con tu correo.", kind: .info))
             return true
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized: return false
             case .notFound:
@@ -236,17 +244,18 @@ extension AppStore {
         let own = (identities?.email ?? account?.email ?? "").lowercased()
         guard e != own else { mergeError = "Ese es el correo de esta cuenta. Escribe el de la otra."; return false }
         guard !mergeBusy else { return false }
-        mergeBusy = true
+        let session = s
+        session.mergeBusy = true
         mergeError = nil
-        defer { mergeBusy = false }
-        do {
-            try await api.requestMergeCode(email: e)
-            online()
+        defer { session.mergeBusy = false }
+        switch await boundWrite({ try await api.requestMergeCode(email: e) }) {
+        case .stale:
+            return false
+        case .ok:
             mergeEmail = e
             mergeRetryAt = nil
             return true
-        } catch {
-            let err = noteError(error)
+        case .failed(let err):
             if case .rateLimited(let s) = err { mergeRetryAt = Date().addingTimeInterval(TimeInterval(max(s ?? 60, 1))) }
             mergeError = mergeText(err)
             return false
@@ -256,15 +265,18 @@ extension AppStore {
     /// Fusionar › código: `POST /me/merge/otp/verify` → the confirmation screen.
     func verifyMergeCode(_ code: String) async {
         guard !mergeBusy else { return }
-        mergeBusy = true
+        let session = s
+        session.mergeBusy = true
         mergeError = nil
-        defer { mergeBusy = false }
-        do {
-            mergeProof = try await api.verifyMergeCode(email: mergeEmail, code: code)
-            online()
+        defer { session.mergeBusy = false }
+        let email = mergeEmail
+        switch await boundWrite({ try await api.verifyMergeCode(email: email, code: code) }) {
+        case .stale:
+            return
+        case .ok(let proof):
+            mergeProof = proof
             push(.mergeConfirm)
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             if case .forbidden(let c) = e, c == "proof_rejected" {
                 mergeError = "Ese código no sirve. Revísalo o pide otro."
             } else {
@@ -292,15 +304,18 @@ extension AppStore {
     /// depends on the account is read again from the returned `Me`, and Ajustes comes back.
     func confirmMerge() async {
         guard let proof = mergeProof, !mergeBusy else { return }
-        mergeBusy = true
+        let session = s
+        session.mergeBusy = true
         mergeError = nil
-        sheetLocked = true
-        defer { mergeBusy = false; sheetLocked = false }
+        session.sheetLocked = true
+        defer { session.mergeBusy = false; session.sheetLocked = false }
         let m: Me
-        do {
-            m = try await api.merge(token: proof.mergeToken)
-        } catch {
-            let e = noteError(error)
+        switch await boundWrite({ try await api.merge(token: proof.mergeToken) }) {
+        case .stale:
+            return
+        case .ok(let merged):
+            m = merged
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized: return
             case .forbidden(let c) where c == "underage":
@@ -324,7 +339,6 @@ extension AppStore {
             }
             return
         }
-        online()
         let moved = proof.source.display
         mergeProof = nil
         mergeEmail = ""
@@ -386,28 +400,28 @@ extension AppStore {
 
     /// `DELETE /me/sessions/{id}` → that device lands on the entrance on its next call (its 401).
     @discardableResult
-    func revokeSession(_ s: DeviceSession) async -> Bool {
-        do {
-            try await api.revokeSession(id: s.id)
-            online()
-            withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == s.id } }
+    func revokeSession(_ device: DeviceSession) async -> Bool {
+        switch await boundWrite({ try await api.revokeSession(id: device.id) }) {
+        case .stale:
+            return false
+        case .ok:
+            withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == device.id } }
             KHaptic.impact(.light)
-            showToast(ToastModel(text: "Cerraste la sesión en \(s.title).", kind: .info))
+            showToast(ToastModel(text: "Cerraste la sesión en \(device.title).", kind: .info))
             return true
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized:
                 return false
             case .notFound:
                 // Already gone (signed out there, or expired): the list just catches up.
-                withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == s.id } }
+                withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == device.id } }
                 return true
             default:
                 let text = e == .offline ? "Sin conexión. La sesión sigue abierta." : "No se pudo cerrar esa sesión."
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
-                    Task { await self?.revokeSession(s) }
+                    Task { await self?.revokeSession(device) }
                 })
                 return false
             }

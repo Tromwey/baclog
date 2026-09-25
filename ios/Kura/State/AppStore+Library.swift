@@ -251,11 +251,12 @@ extension AppStore {
     }
 
     private func syncAdd(_ titleID: String, to collectionID: String) {
+        let session = s
         sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
             let store = self
             let cid = try await store?.resolveCollectionID(collectionID) ?? collectionID
             let r = try await api.createTitleMembership(collectionID: cid, ref: TitleRef.from(localID: titleID))
-            await MainActor.run { store?.absorb(r, localID: titleID) }
+            await MainActor.run { store?.on(session) { store?.absorb(r, localID: titleID) } }
         }
     }
 

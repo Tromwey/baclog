@@ -20,20 +20,23 @@ extension AppStore {
     /// Reintentar with the same reason (nothing is lost); a 404 means it's already gone.
     @discardableResult
     func report(_ target: ReportTarget, reason: String, details: String? = nil) async -> Bool {
-        do {
+        let result = await boundWrite { () async throws -> Void in
             switch target {
             case .person(let handle):
                 try await api.reportPerson(handle: handle, reason: reason, details: details)
             case .review(let id, _, _):
                 try await api.reportReview(id: id, reason: reason)
             }
-            online()
+        }
+        switch result {
+        case .stale:
+            return false
+        case .ok:
             if case .review(let id, _, _) = target { reportedReviews.insert(id) }
             KHaptic.impact(.light)
             showToast(ToastModel(text: target.isReview ? "Gracias. La revisamos." : "Gracias. Lo revisamos.", kind: .info))
             return true
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized:
                 break
@@ -55,15 +58,15 @@ extension AppStore {
     /// drops the follows both ways — the app mirrors it, it doesn't guess ahead).
     @discardableResult
     func block(_ handle: String) async -> Bool {
-        do {
-            try await api.block(handle: handle)
-            online()
+        switch await boundWrite({ try await api.block(handle: handle) }) {
+        case .stale:
+            return false
+        case .ok:
             applyBlock(handle)
             KHaptic.impact(.medium)
             showToast(ToastModel(text: "Bloqueaste a @\(handle).", kind: .info))
             return true
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized:
                 break
@@ -115,9 +118,10 @@ extension AppStore {
     @discardableResult
     func unblock(_ key: String, handle: String?) async -> Bool {
         let shown = handle.map { "@\($0)" } ?? "esta cuenta"
-        do {
-            try await api.unblock(key)
-            online()
+        switch await boundWrite({ try await api.unblock(key) }) {
+        case .stale:
+            return false
+        case .ok:
             if let handle {
                 blocked.remove(handle)
                 if var p = people[handle] { p.isBlocked = false; people[handle] = p }
@@ -129,8 +133,7 @@ extension AppStore {
             showToast(ToastModel(text: "Desbloqueaste a \(shown).", kind: .info))
             if let handle, people[handle] != nil { await loadPerson(handle, force: true) }
             return true
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             switch e {
             case .cancelled, .unauthorized:
                 break

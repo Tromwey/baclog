@@ -87,16 +87,17 @@ extension AppStore {
             showToast(ToastModel(text: "Esa imagen no se pudo leer. Prueba con otra.", kind: .info))
             return
         }
-        avatarBusy = true
-        defer { avatarBusy = false }
-        do {
-            let m = try await api.uploadAvatar(data, contentType: "image/jpeg")
+        let session = s
+        session.avatarBusy = true
+        defer { session.avatarBusy = false }
+        switch await boundWrite({ try await api.uploadAvatar(data, contentType: "image/jpeg") }) {
+        case .stale:
+            return
+        case .ok(let m):
             if let url = m.avatarURL { AvatarStore.shared.prime(url, preview) }
             adoptAvatar(from: m)
-            online()
             showToast(ToastModel(text: "Foto actualizada", kind: .info))
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             guard e != .unauthorized, e != .cancelled else { return }
             let text: String
             if case .invalid(_, let m) = e, !m.isEmpty { text = m } else { text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto" }
@@ -116,13 +117,16 @@ extension AppStore {
 
     func removeAvatar() async {
         guard !avatarBusy, me.avatarURL != nil else { return }
-        avatarBusy = true
-        defer { avatarBusy = false }
-        do {
-            adoptAvatar(from: try await api.deleteAvatar())
+        let session = s
+        session.avatarBusy = true
+        defer { session.avatarBusy = false }
+        switch await boundWrite({ try await api.deleteAvatar() }) {
+        case .stale:
+            return
+        case .ok(let m):
+            adoptAvatar(from: m)
             showToast(ToastModel(text: "Foto quitada", kind: .info))
-        } catch {
-            let e = noteError(error)
+        case .failed(let e):
             guard e != .unauthorized, e != .cancelled else { return }
             showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
         }
@@ -130,11 +134,16 @@ extension AppStore {
 
     /// C3 · the second irreversible action (typing your @ confirms it).
     func deleteAccount() {
+        let session = s
         Task { [weak self] in
             guard let self else { return }
             do {
                 try await api.deleteAccount()
+                // Bound to the session that asked (like `boundWrite`, but the 401 has its own
+                // message): a late answer never signs out whoever is in now.
+                guard s === session else { return }
             } catch {
+                guard s === session else { return }
                 // Only a 204 confirms the deletion. A 401 is a revoked/expired bearer (logout on
                 // another device, token past `exp`) on an account that is still ALIVE: say so and
                 // send them to sign in again — never "Tu cuenta se borró.".
