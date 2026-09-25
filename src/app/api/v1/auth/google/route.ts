@@ -3,10 +3,8 @@ import { verifyGoogleIdToken } from "@/auth/social-tokens";
 import { apiError, withPublicApi } from "@/authz/api";
 import { json, readJson } from "../../_lib/http";
 import { completeAppSignIn } from "../../_lib/sign-in";
-import { googleIosClientId } from "../../_lib/social";
+import { GOOGLE_401, GOOGLE_UNAVAILABLE, googleIosClientId } from "../../_lib/social";
 import { GoogleSignInBodySchema } from "../../_lib/schemas";
-
-const GOOGLE_401 = "No pudimos confirmar tu cuenta de Google. Inténtalo de nuevo o entra con tu correo.";
 
 /**
  * POST /api/v1/auth/google { idToken, device } → { token, user: Me } — the
@@ -24,7 +22,7 @@ const GOOGLE_401 = "No pudimos confirmar tu cuenta de Google. Inténtalo de nuev
 export const POST = withPublicApi(async (request) => {
   const clientId = googleIosClientId();
   if (!clientId) {
-    return apiError("unavailable", "Google no está disponible por ahora.");
+    return apiError("unavailable", GOOGLE_UNAVAILABLE);
   }
   const body = await readJson(request, GoogleSignInBodySchema);
 

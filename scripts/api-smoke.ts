@@ -709,6 +709,8 @@ const SWEEP_SEGMENTS: Record<string, string> = {
   "[era]": "2026-08",
   "[reviewId]": "00000000-0000-4000-8000-000000000000",
   "[apnsToken]": "a".repeat(64),
+  // Phase 4g: `me/identities/{provider}` (the sweep only sends it without a bearer).
+  "[provider]": "apple",
 };
 /** The only v1 routes that are public by design (`withPublicApi`): the OTP
  *  pair and, since phase 4f, the social sign-ins + the provider list. */

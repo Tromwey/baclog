@@ -100,12 +100,19 @@ export const ErrorBodySchema = z.object({
     /** Final Spanish copy — show as is. */
     message: z.string().min(1),
     /** Sub-code the app branches on — `forbidden`: "underage" · `conflict`:
-     *  "not_released", "reaction_required", "taken". */
+     *  "not_released", "reaction_required", "taken", "linked_elsewhere",
+     *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
+     *  422, phase 4g): "invalid_proof" = a rejected provider token / merge
+     *  code on an authenticated route (the ONLY `invalid` that isn't 400). */
     reason: z.string().optional(),
     /** `invalid` only: field → message. */
     fields: z.record(z.string(), z.string()).optional(),
     /** `rate_limited` only. */
     retryAfterSeconds: z.number().int().positive().optional(),
+    /** `conflict` + reason `linked_elsewhere` only (phase 4g,
+     *  `POST /me/identities/{provider}`): the proof to merge that account. */
+    mergeToken: z.string().min(1).optional(),
+    source: z.lazy(() => MergeSourceSchema).optional(),
   }),
 });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
@@ -524,6 +531,91 @@ export const AuthProvidersSchema = z.object({
   google: z.object({ clientId: z.string().min(1) }).nullable(),
 });
 export type AuthProviders = z.infer<typeof AuthProvidersSchema>;
+
+// ---------- identities & account merge (phase 4g) ----------
+
+export const SocialProviderSchema = z.enum(["apple", "google"]);
+export type SocialProviderWire = z.infer<typeof SocialProviderSchema>;
+
+/** `GET /me/identities`: the ways into THIS account. `email` (the account's
+ *  own address, always a way in by code) + the providers ENABLED on this
+ *  deploy (same rule as `auth/providers`) and whether each is linked. */
+export const IdentitiesSchema = z.object({
+  email: z.string().min(1),
+  /** The account email is an Apple private relay (`@privaterelay.appleid.com`):
+   *  disconnecting Apple may stop the relay forwarding codes, so
+   *  `DELETE /me/identities/apple` answers 409 `last_way_in` when Apple is
+   *  the only provider linked. */
+  emailIsRelay: z.boolean(),
+  providers: z.array(z.object({ provider: SocialProviderSchema, linked: z.boolean() })),
+});
+export type Identities = z.infer<typeof IdentitiesSchema>;
+
+/** `POST /me/identities/apple` — same token fields as `auth/apple`, no device. */
+export const AppleLinkBodySchema = z.object({
+  identityToken: z.string().trim().min(1, "Falta el token de Apple.").max(10_000),
+  rawNonce: z.string().min(1, "Falta el nonce.").max(200),
+  authorizationCode: z.string().trim().min(1).max(2_000).optional(),
+});
+export type AppleLinkBody = z.infer<typeof AppleLinkBodySchema>;
+
+/** `POST /me/identities/google`. */
+export const GoogleLinkBodySchema = z.object({
+  idToken: z.string().trim().min(1, "Falta el token de Google.").max(10_000),
+});
+export type GoogleLinkBody = z.infer<typeof GoogleLinkBodySchema>;
+
+/** `POST /me/identities/{provider}` → 200. */
+export const IdentityLinkedSchema = z.object({ linked: z.literal(true) });
+export type IdentityLinked = z.infer<typeof IdentityLinkedSchema>;
+
+/** The account the caller proved it owns and is about to absorb. Carries its
+ *  email: the caller just proved that mailbox/provider is theirs. */
+export const MergeSourceSchema = z.object({
+  handle: z.string().nullable(),
+  name: z.string().nullable(),
+  email: z.string().min(1),
+  /** The source was publicly visible (public + handle). false → warn: its
+   *  per-title activity and reviews show under a public destination. */
+  isPublic: z.boolean(),
+  counts: z.object({
+    titles: z.number().int().nonnegative(),
+    collections: z.number().int().nonnegative(),
+    reviews: z.number().int().nonnegative(),
+    followers: z.number().int().nonnegative(),
+    following: z.number().int().nonnegative(),
+  }),
+});
+export type MergeSource = z.infer<typeof MergeSourceSchema>;
+
+/** A proof of ownership: 200 of `me/merge/otp/verify`, and the extra keys
+ *  inside the 409 `linked_elsewhere` error of `me/identities/{provider}`.
+ *  `mergeToken` = single use, 10 minutes, bound to the caller's account. */
+export const MergeProofSchema = z.object({
+  mergeToken: z.string().min(1),
+  source: MergeSourceSchema,
+});
+export type MergeProof = z.infer<typeof MergeProofSchema>;
+
+export const MergeOtpRequestBodySchema = z.object({
+  email: z.string().trim().email("Escribe un correo válido.").max(254, "Ese correo es demasiado largo."),
+});
+export type MergeOtpRequestBody = z.infer<typeof MergeOtpRequestBodySchema>;
+
+export const MergeOtpVerifyBodySchema = z.object({
+  email: z.string().trim().email("Escribe un correo válido.").max(254, "Ese correo es demasiado largo."),
+  code: z.string().trim().regex(/^\d{6}$/, "Seis dígitos"),
+});
+export type MergeOtpVerifyBody = z.infer<typeof MergeOtpVerifyBodySchema>;
+
+export const MergeBodySchema = z.object({
+  mergeToken: z.string().trim().min(1, "Falta el permiso para fusionar.").max(4_000),
+});
+export type MergeBody = z.infer<typeof MergeBodySchema>;
+
+/** `POST /me/merge` → 200: the destination (the caller), after absorbing. */
+export const MergeResultSchema = z.object({ user: MeSchema });
+export type MergeResult = z.infer<typeof MergeResultSchema>;
 
 // ---------- sessions & devices (phase 4d/4e) ----------
 

@@ -1,14 +1,10 @@
 import "server-only";
-import { eq, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { prepareAppleRevocation } from "@/auth/social";
 import { afterResponse } from "@/lib/after-response";
-import {
-  analyticsEvents,
-  users,
-  verificationTokens,
-  waitlistEntries,
-} from "@/db/schema";
+import { users } from "@/db/schema";
+import { identityScrubStatements } from "./scrub";
 
 /**
  * F2.4 — deletes the user row; every user-owned table cascades (backlogs,
@@ -20,30 +16,13 @@ import {
  * server" file; the action signs out + redirects, the API answers 204.
  *
  * Fase 4b — the tables that hold the user's EMAIL or HANDLE without a FK to
- * `user` (so no cascade reaches them) are scrubbed in the SAME batch (Neon
- * HTTP `batch` = one transaction), BEFORE the user row goes. Each statement
- * reads the email/handle through a subquery on `user` by id, so there is no
- * read-then-write window and no second round trip:
- *   - `waitlist_entry`: the entry is deleted (not just unlinked — the FK's
- *     `set null` would leave the email behind). Matched by email as it was
- *     stored (`joinWaitlist` lowercases + trims) OR by `converted_user_id`.
- *     Its `waitlist_referral` rows cascade; the referrer's
- *     `referral_count` stays (a count, no identity).
- *   - `analytics_event.target_username`: nulled where it is the user's
- *     CURRENT handle. That covers the whole history because, since phase 4b,
- *     `claimUsername` rewrites `target_username` old → new on every rename
- *     (inside the rename's own transaction, under a lock on the user row),
- *     so events never stay behind under a handle the user no longer has.
- *     Renames from BEFORE 4b did leave events under released handles; those
- *     were nulled by the one-off cleanup of 2026-09-24 (every
- *     `target_username` no current account holds → null).
- *   - `verificationToken` rows whose identifier is the email: a still-live
- *     login code (an expired one is already swept by `issueOtp`/`verifyOtp`
- *     and the daily cron, `sweepExpiredVerificationTokens`). Handoff rows
- *     (`handoff:<jti>`) carry no email and are untouched.
+ * `user` (so no cascade reaches them: `waitlist_entry`, `analytics_event.
+ * target_username`, `verificationToken`) are scrubbed in the SAME batch (Neon
+ * HTTP `batch` = one transaction), BEFORE the user row goes. The statements
+ * live in `scrub.ts` (`identityScrubStatements`), shared with
+ * `mergeAccounts` so both disappearance paths scrub identically — the
+ * details of each scrub are documented there.
  * Identity-free aggregates (`release_notice`, counts) cascade or stay as-is.
- * If you add a table that stores an email or a handle as text, scrub it here
- * too and update `app/(marketing)/privacidad/content.ts`.
  *
  * Phase 4f — Sign in with Apple revocation (App Store 5.1.1(v)): the Apple
  * refresh token lives on the `account` row, which cascades with the user, so
@@ -51,30 +30,17 @@ import {
  * Apple runs AFTER the rows are gone, scheduled past the response
  * (`afterResponse`): best-effort, logged on failure, and it can never block,
  * delay or undo the deletion. EVERY path that deletes an account must go
- * through this function (AGENTS.md). Sessions and device tokens cascade.
+ * through this function (AGENTS.md). The one exception is `mergeAccounts`
+ * (`merge.ts`, phase 4g): the absorbed source's `account` rows MOVE to the
+ * destination and its Apple link stays alive, so nothing is revoked — but it
+ * runs the very same `identityScrubStatements` before deleting the row.
+ * Sessions and device tokens cascade.
  */
 export async function deleteAccount(userId: string): Promise<void> {
   const revokeApple = await prepareAppleRevocation(userId);
 
-  const email = sql`(select lower(${users.email}) from ${users} where ${users.id} = ${userId})`;
-  const handle = sql`(select lower(${users.username}) from ${users} where ${users.id} = ${userId})`;
-
   await db.batch([
-    db
-      .delete(waitlistEntries)
-      .where(
-        or(
-          eq(waitlistEntries.convertedUserId, userId),
-          sql`lower(${waitlistEntries.email}) = ${email}`,
-        ),
-      ),
-    // A null handle makes `= (null)` false: a user who never claimed one
-    // touches no rows.
-    db
-      .update(analyticsEvents)
-      .set({ targetUsername: null })
-      .where(sql`lower(${analyticsEvents.targetUsername}) = ${handle}`),
-    db.delete(verificationTokens).where(sql`${verificationTokens.identifier} = ${email}`),
+    ...identityScrubStatements(userId),
     db.delete(users).where(eq(users.id, userId)),
   ]);
   afterResponse("auth/apple revoke", revokeApple);

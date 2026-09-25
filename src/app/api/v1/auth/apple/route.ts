@@ -4,10 +4,8 @@ import { apiError, withPublicApi } from "@/authz/api";
 import { afterResponse } from "@/lib/after-response";
 import { json, readJson } from "../../_lib/http";
 import { completeAppSignIn } from "../../_lib/sign-in";
-import { appleSignInEnabled } from "../../_lib/social";
+import { APPLE_401, APPLE_UNAVAILABLE, appleSignInEnabled } from "../../_lib/social";
 import { AppleSignInBodySchema } from "../../_lib/schemas";
-
-const APPLE_401 = "No pudimos confirmar tu cuenta de Apple. Inténtalo de nuevo o entra con tu correo.";
 
 /**
  * POST /api/v1/auth/apple { identityToken, rawNonce, authorizationCode?,
@@ -35,7 +33,7 @@ const APPLE_401 = "No pudimos confirmar tu cuenta de Apple. Inténtalo de nuevo 
  */
 export const POST = withPublicApi(async (request) => {
   if (!appleSignInEnabled()) {
-    return apiError("unavailable", "Apple no está disponible por ahora. Entra con tu correo.");
+    return apiError("unavailable", APPLE_UNAVAILABLE);
   }
   const body = await readJson(request, AppleSignInBodySchema);
 

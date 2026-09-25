@@ -46,6 +46,25 @@ export function sendOtpEmail(email: string, code: string): Promise<void> {
 }
 
 /**
+ * Phase 4g — the code that proves you own THIS address's Kura account so
+ * another account you're signed into can absorb it. Same transport and shape
+ * as the login code; the copy says what the code does (merging, not signing
+ * in) and what happens if you ignore it (nothing).
+ */
+export function sendMergeOtpEmail(email: string, code: string): Promise<void> {
+  return send(
+    email,
+    `${code} es tu código para fusionar cuentas de kura`,
+    `Desde otra cuenta de Kura pidieron fusionar la cuenta de este correo con la suya. ` +
+      `Si fuiste tú, tu código es ${code}. Expira en 10 minutos. No compartas este código con nadie.\n\n` +
+      `Al fusionar, tus colecciones, títulos, reseñas y seguidores pasan a la otra cuenta ` +
+      `y esta cuenta deja de existir. Si no fuiste tú, ignora este correo: sin el código ` +
+      `no se puede fusionar nada.`,
+    "MERGE-OTP",
+  );
+}
+
+/**
  * F3.8 — the release-day notice. The whole point of the feature's back half:
  * you put something in your backlog before it existed, and on the morning it
  * exists, we say so.

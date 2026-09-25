@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
+> Actualizado: 2026-09-24 (fase 4g fusión de cuentas, sin migración · migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -90,6 +90,7 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
+- **Fusionar cuentas (fase 4g, 2026-09-24) no tiene tabla ni migración.** Vínculos de proveedor = filas `account` (PK `(provider, provider_account_id)`: una cuenta puede quedar con dos `sub` del mismo proveedor tras fusionar). Un solo uso en `verificationToken` con dos espacios de nombres nuevos: `merge:<destinoId>:<correo>` (código de fusión, hash sha256 como el OTP; lleva el correo del ORIGEN en texto, por eso `identityScrubStatements` lo limpia al borrar o fusionar cualquiera de las dos cuentas — con `starts_with`/`right`, nunca LIKE: `_` es comodín y es común en correos) y `merge-token:<jti>` (sin PII). La semántica por tabla (qué se mueve, qué se funde con qué regla de choque, qué cae por cascada) vive en `src/modules/account/merge-coverage.ts` (`MERGE_COVERAGE`): **una tabla nueva con FK a `user`, columna `*user_id` o correo/handle en texto rompe `scripts/check-merge-coverage.ts` hasta que se decida su regla en `merge.ts`**. `user_item.added_at` tras un choque = el menor (el gate de "guardado antes del estreno" sigue siendo verdad); `cross_media_rec_usage` se SUMA por mes (fusionar no reinicia la cuota); `release_notice` se conserva (no re-avisa un estreno ya avisado).
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->

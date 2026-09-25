@@ -107,6 +107,16 @@ export interface ApiErrorExtra {
   fields?: Record<string, string>;
   /** `rate_limited` only. */
   retryAfterSeconds?: number;
+  /** `conflict` + `linked_elsewhere` only (phase 4g): the ownership proof
+   *  rides INSIDE the error envelope, next to `reason`. */
+  mergeToken?: string;
+  source?: unknown;
+  /** HTTP status override — only 422, only for `invalid` + reason
+   *  `invalid_proof` (phase 4g): a rejected ownership proof (provider token,
+   *  merge code) on an AUTHENTICATED route. Not 401, which the app reads as
+   *  "session dead" and signs out; not 400, which means "your body is
+   *  malformed" (`fields`). */
+  status?: 422;
 }
 
 /**
@@ -140,7 +150,8 @@ export function finalizeApiResponse(res: Response): Response {
   }
 }
 
-/** `{ error: { code, message, reason?, fields?, retryAfterSeconds? } }`. */
+/** `{ error: { code, message, reason?, fields?, retryAfterSeconds?,
+ *  mergeToken?, source? } }`. */
 export function apiError(
   code: ApiErrorCode,
   message: string = API_MESSAGES[code],
@@ -155,6 +166,8 @@ export function apiError(
       ...(extra.retryAfterSeconds !== undefined
         ? { retryAfterSeconds: extra.retryAfterSeconds }
         : {}),
+      ...(extra.mergeToken ? { mergeToken: extra.mergeToken } : {}),
+      ...(extra.source !== undefined ? { source: extra.source } : {}),
     },
   };
   const headers = new Headers({
@@ -164,7 +177,7 @@ export function apiError(
   if (extra.retryAfterSeconds !== undefined) {
     headers.set("Retry-After", String(Math.max(1, Math.ceil(extra.retryAfterSeconds))));
   }
-  return new Response(JSON.stringify(body), { status: STATUS[code], headers });
+  return new Response(JSON.stringify(body), { status: extra.status ?? STATUS[code], headers });
 }
 
 /** Maps anything a handler can throw onto the contract. Unknown → 500 + log. */

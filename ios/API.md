@@ -13,9 +13,10 @@
 ## 1. Convenciones
 
 - **Base** `/api/v1`. JSON UTF-8, claves **camelCase**, ids como string (UUID de la base; las personas se identifican por `handle`, nunca por id). Fechas **ISO 8601 UTC sin fracción de segundo** (`"2026-09-24T15:00:00Z"`, `isoDate()` en `schemas.ts`): el `JSONDecoder.iso8601` de Swift rechaza `.000Z`.
-- **Errores**: `{ "error": { "code", "message", "reason"?, "fields"?, "retryAfterSeconds"? } }`.
+- **Errores**: `{ "error": { "code", "message", "reason"?, "fields"?, "retryAfterSeconds"?, "mergeToken"?, "source"? } }` (`mergeToken`/`source` solo en el `409 linked_elsewhere` de §2.5).
   - `code` fijo: `unauthorized` 401 · `forbidden` 403 · `not_found` 404 · `invalid` 400 · `conflict` 409 · `rate_limited` 429 · `unsupported` 501 · `unavailable` 503 · `internal` 500.
-  - `reason` = **sub-código opcional** sobre el que la app ramifica: `underage` (bajo `forbidden`), `not_released` y `reaction_required` (bajo `conflict`), `taken` (bajo `conflict`, username).
+  - **Única excepción de status (fase 4g)**: `invalid` + `reason: "invalid_proof"` sale con **HTTP 422**, no 400 — una prueba de propiedad rechazada (token de Apple/Google o código de fusión) en una ruta CON bearer (§2.5). No es 401 porque la app trata todo 401 como "sesión muerta" y cierra sesión; el 401 queda solo para un bearer ausente/inválido.
+  - `reason` = **sub-código opcional** sobre el que la app ramifica: `underage` (bajo `forbidden`), `not_released` y `reaction_required` (bajo `conflict`), `taken` (bajo `conflict`, username), `linked_elsewhere` · `provider_already_linked` · `merge_token_invalid` · `last_way_in` (bajo `conflict`, fase 4g) e `invalid_proof` (bajo `invalid`, HTTP 422, fase 4g).
   - `fields` solo en `invalid`: `campo → mensaje`, **en español**, listo para pintar bajo el campo (viene de `ZodError` o del handler).
   - `message` es texto final en la voz Kura (qué pasó y qué hacer; sin guiño). Todo 401 es el MISMO cuerpo, falle lo que falle (sin header, firma, `aud`, `exp`, usuario borrado, menor): un 401 distinguible es un oráculo.
   - Headers: **`X-Request-Id`** en toda respuesta v1 (para correlacionar un reporte de la app con el log); **`Retry-After`** (segundos) en todo 429.
@@ -83,6 +84,50 @@ Cada inicio de sesión (OTP, Apple, Google, o el `refresh` que mejora un token l
 - Un token que APNs responde `410` o `BadDeviceToken`/`Unregistered` se borra solo. Sin las env `APPLE_TEAM_ID`/`APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` (o sin la migración 0029) el envío es un no-op con log `[push] …`: los endpoints de registro funcionan igual (con la migración) y nada falla.
 - `GET /me/notifications` → sigue sin existir (sin modelo de bandeja).
 
+### 2.5 Conectar Apple/Google y fusionar cuentas (fase 4g, implementado)
+
+Todo con bearer (`withApi`); ningún endpoint acepta un `userId`. **La cuenta del bearer es el DESTINO** (se queda); la otra, el **ORIGEN**, se absorbe y desaparece. Sin migración: vínculos en `account` (PK `(provider, provider_account_id)`), un solo uso en `verificationToken`, JWS propio.
+
+**Identidades**
+
+1. `GET /me/identities` → `200 { email, emailIsRelay, providers: [{ provider: "apple" | "google", linked: boolean }] }`. `email` = el correo de la cuenta (siempre es una entrada: código por correo). `emailIsRelay` = el correo es un relay de "Ocultar mi correo" de Apple (`@privaterelay.appleid.com`): la app lo explica antes de ofrecer desconectar Apple. `providers` lista solo los proveedores **habilitados en este deploy** (misma regla que `auth/providers`: Apple salvo `AUTH_APPLE_DISABLED`, Google solo con `GOOGLE_IOS_CLIENT_ID`); `linked` = hay fila `account` de ese proveedor para esta cuenta.
+2. `POST /me/identities/apple` `{ identityToken, rawNonce, authorizationCode? }` · `POST /me/identities/google` `{ idToken }` — mismas verificaciones que §2.2, sin `device`:
+   - `200 { linked: true }` — quedó conectado, o ya era de ESTA cuenta (idempotente).
+   - `409 { error: { code: "conflict", message, reason: "linked_elsewhere", mergeToken, source: MergeSource } }` — la identidad es de **otra** cuenta Kura: por su fila `account`, o (sin fila) porque su correo verificado es el de otra cuenta (la cuenta a la que ese proveedor entraría hoy; en ese caso el servidor la liga a ESA cuenta, como haría el login, y el vínculo pasa a la tuya con la fusión). El token del proveedor ya probó la propiedad: el `mergeToken` va **dentro del envelope de error**, junto a `reason`.
+   - `409 { error: { code: "conflict", message, reason: "provider_already_linked" } }` — esta cuenta ya tiene OTRA identidad de ese proveedor (otro `sub`). Sin `mergeToken`.
+   - `422 { error: { code: "invalid", message, reason: "invalid_proof" } }` — token rechazado (firma, `aud`, `exp`, nonce, `email_verified` de Google…): un solo cuerpo por proveedor, falle lo que falle. **No 401** (ver §1).
+   - `400 invalid` + `fields` — body mal formado. `503 unavailable` — proveedor apagado. `404` — proveedor desconocido en el path.
+   - Apple: `authorizationCode` se intercambia DESPUÉS de responder (como el login) → refresh token en la fila `account`, para poder revocar.
+3. `DELETE /me/identities/{apple|google}` → `204` (idempotente). Borra las filas `account` de ese proveedor de esta cuenta; Apple: revoca el refresh token después de responder (best-effort). Permitido (el correo sigue siendo entrada) **salvo** Apple cuando el correo de la cuenta es un relay de Apple y no hay otro proveedor conectado → `409 { error: { code: "conflict", message, reason: "last_way_in" } }`, sin tocar nada (al revocar Apple el relay podría dejar de reenviar los códigos y la cuenta quedaría sin entrada). Proveedor desconocido → `404`.
+
+**Probar que el ORIGEN es tuyo** — los tres caminos terminan en `{ mergeToken, source }`:
+
+- (a/c) El `409 linked_elsewhere` de arriba (Apple o Google).
+- (b) Código por correo:
+  - `POST /me/merge/otp/request { email }` → **`204` siempre**, exista o no una cuenta con ese correo, y aunque sea el propio (sin oráculo: el mismo row y el mismo cooldown en los dos casos; el correo solo sale si hay OTRA cuenta con ese correo, y se manda después de responder). Cooldown de 60 s por (tu cuenta, correo) → `429 rate_limited` con `retryAfterSeconds: 60`; además, **máximo 3 códigos por hora por correo destino**, sumando TODAS las cuentas que lo pidan → `429 rate_limited` con `retryAfterSeconds` hasta que el más viejo cumpla la hora. Los dos límites valen igual exista o no la cuenta. `400 invalid` si el correo no es válido. El código es de 6 dígitos, vive 10 min, 5 intentos (atómicos: intentos en paralelo no pasan de 5), y **no sirve como código de login** (identificador `merge:<tuId>:<correo>`; `verifyOtp` rechaza ese espacio de nombres).
+  - `POST /me/merge/otp/verify { email, code }` → `200 { mergeToken, source }`, o **`422 { error: { code: "invalid", message: "El código no es válido o ya venció. Pide uno nuevo.", reason: "invalid_proof" } }`** — el MISMO para código malo, vencido, quemado, o sin cuenta con ese correo.
+
+`MergeSource = { handle: string | null, name: string | null, email: string, isPublic: boolean, counts: { titles, collections, reviews, followers, following } }` (enteros ≥ 0). Lleva el correo del origen: quien lo pide acaba de probar que es suyo. `isPublic` = el origen era visible públicamente (público y con handle); si es `false` y tu cuenta es pública, **avisa**: su actividad por título y sus reseñas se verán en tu perfil (sus colecciones llegan como Privadas). La app lo muestra antes de confirmar y **avisa que, tras fusionar, el correo del origen deja de ser una entrada** (un código a ese correo crearía una cuenta nueva y vacía).
+
+`mergeToken` = JWS HS256 (`AUTH_SECRET`), `aud = "kura-merge"`, `sub` = tu cuenta, `src` = el origen, `jti`, **10 minutos, un solo uso** (`jti` en `verificationToken` como `merge-token:<jti>`, se quema con `DELETE … RETURNING`). Opaco para la app: guárdalo solo en memoria.
+
+**Fusionar**
+
+- `POST /me/merge { mergeToken }` → `200 { user: Me }` (el `Me` del destino, ya con lo absorbido).
+  - Token vencido, ya usado, de otra cuenta, mal firmado, o su origen ya no existe → **`409 { error: { code: "conflict", message: "El permiso para fusionar venció o ya se usó. Vuelve a confirmar la otra cuenta.", reason: "merge_token_invalid" } }`** (uno solo; no 401: tu bearer es válido).
+  - Origen o destino menor de edad → `403 forbidden` + `reason: "underage"`, sin tocar nada.
+  - Body sin `mergeToken` → `400 invalid` + `fields.mergeToken`.
+  - Una transacción (`db.batch`): todo o nada. Después, las sesiones del origen mueren (su `user` se borra: sus bearers y cookies son 401 en la siguiente relectura).
+
+**Qué pasa con los datos** (detalle y guardrail en `src/modules/account/merge.ts` / `merge-coverage.ts`):
+
+- Identidad del destino intacta (`email`, `handle`, `name`, año de nacimiento, `isPublic`, foto salvo que no tenga). `isFounder` = destino OR origen (insignia de cohorte).
+- Proveedores (`account`) → al destino (si ya tenía ese proveedor con otro `sub`, quedan los dos y `linked` sigue `true`). Colecciones y membresías → al destino (no hay nombre único: puede quedar un "Obsesiones" repetido); si el origen era privado o sin handle, sus colecciones llegan como **Privadas**.
+- Estado por título, choque: gana el **estado más avanzado** (`on_my_radar` < `in_progress` < `completed`; empate = el del destino) con su `statusChangedAt`; veredicto del destino si lo tiene, si no el del origen; obsesión = OR con la fecha más antigua; `addedAt` = la más antigua.
+- Reseñas, choque: se queda la del destino y la del origen se borra (con sus reportes). Una reseña oculta sigue oculta.
+- Seguidos y bloqueos: se mueven en ambos sentidos, sin duplicados ni aristas contigo mismo; un follow entre tú y alguien que (ahora) bloqueas o te bloquea se borra. **Seguidores** del origen pasan a ti solo si tu perfil es público y tiene handle (si no, se pierden: nadie sigue a un perfil privado).
+- Foto: la del origen solo si el destino no tiene. Sesiones, tokens de push del origen: mueren. Medidor de recos del mes: se SUMA.
+
 ## 3. Modelos del contrato (JSON) y su origen en la base
 
 La forma exacta está en `schemas.ts`; los `struct` del iOS (`ios/Kura/Models/Models.swift`) la espejan clave por clave. Aquí va de dónde sale cada campo y qué NO existe.
@@ -106,7 +151,7 @@ La forma exacta está en `schemas.ts`; los `struct` del iOS (`ios/Kura/Models/Mo
 
 Todos bajo `/api/v1`, todos con bearer salvo `auth/otp/*`. Entre paréntesis, el módulo que se reutiliza.
 
-**Auth** — ver §2.1 (OTP, refresh, logout, web-session) y §2.2 (`auth/providers`, `auth/apple`, `auth/google`). **Sesiones y dispositivos** — ver §2.3 (`GET /me/sessions`, `DELETE /me/sessions/{id}`) y §2.4 (`PUT|DELETE /me/devices/{apnsToken}`).
+**Auth** — ver §2.1 (OTP, refresh, logout, web-session) y §2.2 (`auth/providers`, `auth/apple`, `auth/google`). **Sesiones y dispositivos** — ver §2.3 (`GET /me/sessions`, `DELETE /me/sessions/{id}`) y §2.4 (`PUT|DELETE /me/devices/{apnsToken}`). **Identidades y fusión** — ver §2.5 (`GET /me/identities`, `POST|DELETE /me/identities/{apple|google}`, `POST /me/merge/otp/request`, `POST /me/merge/otp/verify`, `POST /me/merge`).
 
 **Cuenta**
 - `GET /me` → `Me` (`assertUser` + `_lib/me.ts`).

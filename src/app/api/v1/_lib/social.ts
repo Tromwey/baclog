@@ -11,3 +11,10 @@ export function appleSignInEnabled(): boolean {
 export function googleIosClientId(): string | null {
   return env.GOOGLE_IOS_CLIENT_ID?.trim() || null;
 }
+
+/** The ONE 401 copy for a rejected Apple / Google token — sign-in
+ *  (`auth/{apple,google}`) and linking (`me/identities/{provider}`) alike. */
+export const APPLE_401 = "No pudimos confirmar tu cuenta de Apple. Inténtalo de nuevo o entra con tu correo.";
+export const GOOGLE_401 = "No pudimos confirmar tu cuenta de Google. Inténtalo de nuevo o entra con tu correo.";
+export const APPLE_UNAVAILABLE = "Apple no está disponible por ahora. Entra con tu correo.";
+export const GOOGLE_UNAVAILABLE = "Google no está disponible por ahora.";

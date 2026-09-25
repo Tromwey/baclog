@@ -62,6 +62,130 @@ export async function signInWithIdentity(
   return row ?? null;
 }
 
+// ---------- phase 4g: link a provider to the SIGNED-IN account ----------
+
+export type LinkOutcome =
+  /** The identity is (now) linked to `userId` — inserted or already there. */
+  | { kind: "linked" }
+  /** The identity belongs to ANOTHER Kura account: by its `account` link,
+   *  or (no link) because its verified email is that account's email — the
+   *  account this provider would sign into today. The provider token just
+   *  proved ownership of it: the caller mints a mergeToken. */
+  | { kind: "elsewhere"; ownerId: string }
+  /** `userId` already has a DIFFERENT identity of this provider. */
+  | { kind: "provider_already_linked" };
+
+async function linkOwner(provider: SocialProvider, sub: string): Promise<string | null> {
+  const [row] = await db
+    .select({ userId: accounts.userId })
+    .from(accounts)
+    .where(and(eq(accounts.provider, provider), eq(accounts.providerAccountId, sub)))
+    .limit(1);
+  return row?.userId ?? null;
+}
+
+/**
+ * `POST /api/v1/me/identities/{provider}` — attach a VERIFIED provider
+ * identity to `userId` (the bearer's account, never a body field), in the
+ * contract's order: link of this `sub` (mine → linked, other → elsewhere);
+ * else a verified email that is ANOTHER account's → link it to THAT account
+ * (as sign-in would) and → elsewhere; else this
+ * user already has another `sub` of the provider → provider_already_linked;
+ * else insert. The insert races on the (provider, sub) PK: the loser re-reads
+ * the owner. Never changes any account's email.
+ */
+export async function linkIdentity(
+  userId: string,
+  provider: SocialProvider,
+  identity: VerifiedIdentity,
+): Promise<LinkOutcome> {
+  const owner = await linkOwner(provider, identity.sub);
+  if (owner) return owner === userId ? { kind: "linked" } : { kind: "elsewhere", ownerId: owner };
+
+  if (identity.email && identity.emailVerified) {
+    const [byEmail] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, identity.email))
+      .limit(1);
+    if (byEmail && byEmail.id !== userId) {
+      // Link the identity to THAT account — the same trust
+      // `signInWithIdentity` gives a verified email — so the link travels to
+      // the caller with the merge instead of being lost. A concurrent link
+      // wins the PK; the re-read says whose it is.
+      await db
+        .insert(accounts)
+        .values({ userId: byEmail.id, type: "oidc", provider, providerAccountId: identity.sub })
+        .onConflictDoNothing();
+      const owner = await linkOwner(provider, identity.sub);
+      if (owner === userId) return { kind: "linked" };
+      return { kind: "elsewhere", ownerId: owner ?? byEmail.id };
+    }
+  }
+
+  const [mine] = await db
+    .select({ one: accounts.provider })
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.provider, provider)))
+    .limit(1);
+  if (mine) return { kind: "provider_already_linked" };
+
+  await db
+    .insert(accounts)
+    .values({ userId, type: "oidc", provider, providerAccountId: identity.sub })
+    .onConflictDoNothing();
+  const winner = await linkOwner(provider, identity.sub);
+  if (winner === userId) return { kind: "linked" };
+  if (winner) return { kind: "elsewhere", ownerId: winner };
+  throw new Error("linkIdentity: account row vanished after insert");
+}
+
+/** Which providers `userId` has linked (`GET /me/identities`). */
+export async function linkedProviders(userId: string): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ provider: accounts.provider })
+    .from(accounts)
+    .where(eq(accounts.userId, userId));
+  return new Set(rows.map((r) => r.provider));
+}
+
+/** Apple "Hide My Email" relay domain. */
+const APPLE_RELAY_SUFFIX = "@privaterelay.appleid.com";
+
+export function isAppleRelayEmail(email: string): boolean {
+  return email.trim().toLowerCase().endsWith(APPLE_RELAY_SUFFIX);
+}
+
+/**
+ * Unlinking Apple from an account whose ONLY other way in is an Apple relay
+ * address would likely lock it out: once the Apple link is revoked the relay
+ * may stop forwarding, so the login code never arrives. True = refuse
+ * (`409 last_way_in`): relay email AND no link of another provider.
+ */
+export async function appleIsLastWayIn(userId: string, email: string): Promise<boolean> {
+  if (!isAppleRelayEmail(email)) return false;
+  const providers = await linkedProviders(userId);
+  return ![...providers].some((p) => p !== "apple");
+}
+
+/**
+ * `DELETE /api/v1/me/identities/{provider}` — drop every `account` row of
+ * that provider for `userId`. For Apple, the refresh tokens are read FIRST
+ * and the returned function revokes them (the caller schedules it after the
+ * response: best-effort, like `deleteAccount`). Always allowed: the account's
+ * email stays a way in.
+ */
+export async function unlinkProvider(
+  userId: string,
+  provider: SocialProvider,
+): Promise<() => Promise<void>> {
+  const revoke = provider === "apple" ? await prepareAppleRevocation(userId) : async () => {};
+  await db
+    .delete(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.provider, provider)));
+  return revoke;
+}
+
 const APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token";
 const APPLE_REVOKE_URL = "https://appleid.apple.com/auth/revoke";
 const APPLE_HTTP_TIMEOUT_MS = 8000;
