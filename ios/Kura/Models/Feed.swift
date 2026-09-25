@@ -16,7 +16,7 @@ enum FeedKind: Hashable {
 }
 
 struct FeedEvent: Identifiable, Hashable, Decodable {
-    let id: String
+    var id: String
     let authorID: String
     var kind: FeedKind
     var titleID: String? = nil
@@ -29,6 +29,10 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
     var embeddedTitle: Title? = nil
     var embeddedAuthor: Person? = nil
     var embeddedReview: Review? = nil
+    /// `added` only: the collection's id — a burst joins by id (names aren't unique per user).
+    var collectionID: String? = nil
+    /// `.burst` only: when its OLDEST add happened (`at` is the newest), for the sitting gap.
+    var oldestAt: Date? = nil
 
     enum Tier { case L, M, S }
 
@@ -45,7 +49,7 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, at, author, titleId, title, collectionName, releaseDate, mark,
+        case id, kind, at, author, titleId, title, collectionId, collectionName, releaseDate, mark,
              reviewId, reviewBody, hasSpoiler, suggest
     }
 
@@ -78,11 +82,56 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
         case "obsessed": kind = .obsessed
         case "completed": kind = .completed(mark == .completed ? nil : mark)
         case "reviewed": kind = .reviewed
-        case "added": kind = .added(collection: try c.decodeIfPresent(String.self, forKey: .collectionName) ?? "")
+        case "added":
+            kind = .added(collection: try c.decodeIfPresent(String.self, forKey: .collectionName) ?? "")
+            collectionID = try c.decodeIfPresent(String.self, forKey: .collectionId)
         case "suggest":
             let s = try c.decodeIfPresent(Suggest.self, forKey: .suggest)
             kind = .suggestion(personID: authorID, reason: s?.reason ?? "", social: s?.common ?? "", titleIDs: s?.titleIds ?? [])
         default: kind = .added(collection: "")
+        }
+    }
+}
+
+// MARK: - Bursts
+
+/// The app's half of the feed's card assembly — the same rule as the web's `groupIntoCards`
+/// (src/modules/social/group.ts): consecutive adds by the same author to the SAME collection
+/// (by id), each within `gap` of the run's previous add, fold into one `.burst` from the second
+/// one on (threshold 2). "No puede esperar" adds, and any other event, break the run. `GET /feed`
+/// sends loose events on purpose ("the app groups bursts itself"); without this every add of a
+/// sitting was its own card.
+enum FeedBursts {
+    static let gap: TimeInterval = 6 * 3600
+
+    /// Appends `events` (newest first, like the wire) to `feed`, folding as it goes. Works across
+    /// pages: the next page's first add joins the burst the previous page ended with.
+    static func append(_ events: [FeedEvent], to feed: inout [FeedEvent]) {
+        for e in events {
+            if let last = feed.last, let joined = join(last, e) { feed[feed.count - 1] = joined } else { feed.append(e) }
+        }
+    }
+
+    private static func join(_ run: FeedEvent, _ e: FeedEvent) -> FeedEvent? {
+        guard case .added = e.kind, let col = e.collectionID, let tid = e.titleID, let at = e.at,
+              run.authorID == e.authorID, run.collectionID == col else { return nil }
+        switch run.kind {
+        case .added(let name):
+            guard let first = run.titleID, let runAt = run.at, runAt.timeIntervalSince(at) <= gap else { return nil }
+            var b = run
+            b.id = "burst:\(run.id)"
+            b.kind = .burst(collection: name, titleIDs: [first, tid])
+            b.titleID = nil
+            b.oldestAt = at
+            return b
+        case .burst(let name, let ids):
+            guard let oldest = run.oldestAt, oldest.timeIntervalSince(at) <= gap, !ids.contains(tid) else { return nil }
+            var b = run
+            b.kind = .burst(collection: name, titleIDs: ids + [tid])
+            b.oldestAt = at
+            return b
+        default:
+            return nil
         }
     }
 }

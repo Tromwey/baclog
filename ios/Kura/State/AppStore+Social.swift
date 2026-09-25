@@ -19,7 +19,8 @@ extension AppStore {
             async let sug = api.feedSuggestion()
             let (first, suggestion) = try await (page, sug)
             try check(session)
-            var events = first.items.map(ingest)
+            var events: [FeedEvent] = []
+            FeedBursts.append(first.items.map(ingest), to: &events)
             feedCursor = first.nextCursor
             if let suggestion {
                 events.insert(ingest(suggestion), at: min(3, events.count))
@@ -69,8 +70,11 @@ extension AppStore {
                 try check(session)
                 let known = Set(feed.map(\.id))
                 let fresh = events.filter { !known.contains($0.id) }
-                feed += fresh
-                if fresh.contains(where: isVisible) { return }
+                let before = feed.count
+                FeedBursts.append(fresh, to: &feed)
+                // Only a NEW visible card ends the loop: a page that folded entirely into the last
+                // burst adds no card to appear and ask for more, so keep paging.
+                if feed[before...].contains(where: isVisible) { return }
             } catch {
                 guard s === session else { return }
                 fail(.feedMore, error)
