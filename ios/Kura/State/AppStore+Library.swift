@@ -115,8 +115,36 @@ extension AppStore {
         change(&collections[i])
     }
 
-    private func syncCollection(_ id: String, name: String? = nil, privacy: Privacy? = nil) {
-        sync(key: WriteKey.collection(canonicalCollectionID(id))) { [weak self] api in
+    /// `PATCH /collections/{id}` for a rename or a privacy change. On ANY failure the collection
+    /// goes back to what it was (the server kept it) — only if it still shows what this write set,
+    /// so a later edit isn't undone. A rejected value (400) says why; anything else offers
+    /// Reintentar, which applies the change again and resends it.
+    private func syncCollection(_ id: String, name: String? = nil, privacy: Privacy? = nil,
+                                was old: (name: String?, privacy: Privacy?)) {
+        sync(key: WriteKey.collection(canonicalCollectionID(id)), onError: { [weak self] e in
+            guard let self else { return true }
+            self.update(id) { c in
+                if let name, c.name == name, let o = old.name { c.name = o }
+                if let privacy, c.privacy == privacy, let o = old.privacy { c.privacy = o }
+            }
+            switch e {
+            case .cancelled, .unauthorized, .notFound, .unsupported:
+                return true
+            case .invalid:
+                self.showToast(ToastModel(text: e.toast, kind: .info))
+            default:
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    guard let self, self.collection(id) != nil else { return }
+                    self.dismissToast()
+                    self.update(id) { c in
+                        if let name { c.name = name }
+                        if let privacy { c.privacy = privacy }
+                    }
+                    self.syncCollection(id, name: name, privacy: privacy, was: old)
+                })
+            }
+            return true
+        }) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
             _ = try await api.updateCollection(id: sid, name: name, privacy: privacy)
         }
@@ -127,20 +155,20 @@ extension AppStore {
         guard !trimmed.isEmpty, let old = collection(id)?.name else { return }
         let new = trimmed.lowercased()
         update(id) { $0.name = new }
-        syncCollection(id, name: new)
+        syncCollection(id, name: new, was: (old, nil))
         undoToast("Renombrada") { [weak self] in
             self?.update(id) { $0.name = old }
-            self?.syncCollection(id, name: old)
+            self?.syncCollection(id, name: old, was: (new, nil))
         }
     }
 
     func setPrivacy(_ id: String, _ p: Privacy) {
         guard let old = collection(id)?.privacy, old != p else { return }
         update(id) { $0.privacy = p }
-        syncCollection(id, privacy: p)
+        syncCollection(id, privacy: p, was: (nil, old))
         undoToast("Ahora la ve: \(p.label.lowercased())") { [weak self] in
             self?.update(id) { $0.privacy = old }
-            self?.syncCollection(id, privacy: old)
+            self?.syncCollection(id, privacy: old, was: (nil, p))
         }
     }
 
