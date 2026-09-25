@@ -90,72 +90,54 @@ enum LoadKey: Hashable {
     case identities
 }
 
+/// Everything that belongs to ONE signed-in account (and the entrance that leads to it). Signing
+/// out, a deleted account and a 401 all replace it whole (`AppStore.resetData` → `SessionData()`),
+/// so nothing of account A can leak into account B because someone forgot to clear one field by
+/// hand. **A new per-account field goes HERE, never as a stored property of `AppStore`**; the
+/// store forwards it (`get` / `_modify` / `set`, so in-place mutation doesn't copy the collection).
+/// It's its own `@Observable` class so views keep observing field by field, not the whole bag.
 @MainActor
 @Observable
-final class AppStore {
-    // MARK: Dependencies
-    @ObservationIgnored let api: KuraAPI
-    @ObservationIgnored let prefs: LocalPrefs
-    var now: Date
-
-    // MARK: Phase / navigation
-    var phase: AppPhase = .splash
+final class SessionData {
+    // Navigation (a new account starts at the root of Colecciones)
     var tab: Tab = .collections
     var paths: [Tab: [Route]] = [:]
     var sheet: SheetRoute?
-    /// A sheet mid-write (Completar + reseña): the scrim tap and the grabber drag don't close it,
-    /// so the text and the outcome aren't lost behind the user's back.
     var sheetLocked = false
-    var toast: ToastModel?
-    var offline = false
     var loadState: LoadState = .loading
+    var dockHidden = false
 
-    // MARK: Account / session
-    var me: Person
+    // Account / entrance
+    var me = Person(handle: "", name: "", initials: "k", hexes: [])
     var account: Me?
-    /// `POST auth/logout` in flight: the app waits for it before letting anyone sign in again
-    /// (a late logout would revoke the NEW token too, it's account-wide).
-    var signingOut = false
-    /// Entrance flow (O1c/O1a): the email the code was sent to, busy flag, inline error.
     var authEmail = ""
-    var authBusy = false
     var authError: String?
-    /// `GET /auth/providers`: which buttons the entrance paints. nil = not asked yet; a failure is
-    /// `.emailOnly` (correo only, never a button that doesn't work) and is asked again next time.
-    var authProviders: AuthProviders?
-    @ObservationIgnored private var authProvidersStale = true
-    /// The name Sign in with Apple handed over (first authorization only), to pre-fill O1b.
     var suggestedName: String?
-    /// True when the entrance paints at least one of Apple / Google.
-    var hasSocialSignIn: Bool { authProviders.map { $0.apple || $0.googleClientID != nil } ?? false }
+    var onboardingPicks: [String] = []
+    var pendingSaveTitle: Title?
 
-    // MARK: Data
+    // Data
     var people: [String: Person] = [:]
     var titles: [String: Title] = [:]
-    /// Ids in the order we learned them (drives local search, "también de").
     var catalogOrder: [String] = []
     var collections: [KCollection] = []
     var userTitles: [String: UserTitleState] = [:]
     var following: Set<String> = []
-    var reviews: [Review] = []
+    /// Reviews by title id, in display order (`reviewTitleIndex` finds one by its own id).
+    var reviewsByTitle: [String: [Review]] = [:]
     var feed: [FeedEvent] = []
     var revealedSpoilers: Set<String> = []
-    /// Last collection used in "guardar en" — preselected next time.
     var lastUsedCollectionID: String?
-    /// `GET /titles/{id}.following` — what followed people did with a title.
     var titleActivity: [String: [PeopleMark]] = [:]
 
     // Per-screen loads
-    /// Failed reads by screen (see `LoadKey`); cleared when the same read succeeds.
     var loadErrors: [LoadKey: KuraAPIError] = [:]
     var loadedCollections: Set<String> = []
     var loadedTitles: Set<String> = []
     var loadingTitles: Set<String> = []
     var missingTitles: Set<String> = []
-    /// `GET /titles/{id}.reviews.nextCursor` (and each "más reseñas" page after it).
     var reviewCursors: [String: String] = [:]
     var reviewsPaging: Set<String> = []
-    /// Someone else's public collections, by `publicKey(handle:id:)`; `states` are the owner's.
     var publicCollections: [String: CollectionDetail] = [:]
     var missingPublicCollections: Set<String> = []
     var avatarBusy = false
@@ -166,12 +148,6 @@ final class AppStore {
     var feedLoaded = false
     var feedLoading = false
     var feedCursor: String?
-    /// The followed set the feed was built from — a follow/unfollow makes it stale.
-    @ObservationIgnored private var feedFollowingKey: Set<String> = []
-    /// A block/unblock changes whose activity the server returns, without touching `following`'s
-    /// meaning for the feed key: the next visit re-reads the feed.
-    @ObservationIgnored private var feedDirty = false
-    var feedStale: Bool { feedLoaded && (feedDirty || feedFollowingKey != following) }
     var discover: DiscoverPayload?
     var discoverLoading = false
     var searchQuery = ""
@@ -180,7 +156,6 @@ final class AppStore {
     var searchLoading = false
     var searchError: KuraAPIError?
     var onboardingGrid: [Title] = []
-    /// `GET /onboarding/pool` failed (503 when every provider is down): the grid offers Reintentar.
     var onboardingGridError: KuraAPIError?
     var onboardingPeople: [Person] = []
     var onboardingPeopleLoaded = false
@@ -191,37 +166,244 @@ final class AppStore {
     // Social / settings
     var requested: Set<String> = []
     var muted: Set<String> = []
-    /// Handles you blocked (from `GET /people/{handle}.isBlocked`, `GET /me/blocks` and your own
-    /// blocks). The server already hides their content; this hides what was cached before.
     var blocked: Set<String> = []
-    /// `GET /me/blocks` for Ajustes › Cuentas bloqueadas; nil until it loads.
     var blockedAccounts: [BlockedAccount]?
-    /// `GET /me/sessions` for Ajustes › Sesiones activas; nil until it loads.
     var deviceSessions: [DeviceSession]?
-    /// `GET /me/identities` for Ajustes › Inicio de sesión; nil until it loads.
     var identities: Identities?
-    /// The provider whose Conectar / Desconectar is in flight (its row shows a spinner).
     var identityBusy: IdentityProvider?
-    /// Fusionar otra cuenta: the other account's email (code path), the proof once it's yours,
-    /// the busy flag and the inline error of the chooser / code screens.
     var mergeEmail = ""
     var mergeProof: MergeProof?
     var mergeBusy = false
     var mergeError: String?
-    /// A 429 on `merge/otp/request` (60 s cooldown or 3 codes/hour per email): no new code before this.
     var mergeRetryAt: Date?
-    /// Reviews you reported this session: the card folds to "Gracias. La revisamos." (like the web).
     var reportedReviews: Set<String> = []
-    var notifications: [KNotification]
+    var notifications: [KNotification] = []
     var requestStates: [String: RequestState] = [:]
-    var recentSearches: [String]
+    var recentSearches: [String] = []
     var showCommon = true
     var defaultPrivacy: Privacy = .onlyMe
-    /// "Avísame cuando llegue" (E4) — titles you asked to be told about.
     var alerts: Set<String> = []
+    var recentlyViewed: [String] = []
+    // `PATCH /me` settings, raw (the store's setters patch the server)
+    var profilePrivate = false
+    var notifyReleases = true
+    var notifyRecap = true
+    var notifyFollowers = true
+    var musicApp = "Apple Music"
+
+    // Bookkeeping nobody draws
+    @ObservationIgnored var feedFollowingKey: Set<String> = []
+    @ObservationIgnored var feedDirty = false
+    @ObservationIgnored var pendingPush: Route?
+    /// Collections created optimistically: local id → the POST that gives the server id.
+    @ObservationIgnored var pendingCollections: [String: Task<String, Error>] = [:]
+    /// Local id → server id, forever (an undo captured with the local id still finds it).
+    @ObservationIgnored var collectionAliases: [String: String] = [:]
+    /// Removals waiting for the Deshacer window to close.
+    @ObservationIgnored var deferredWrites: [String: Task<Void, Never>] = [:]
+    /// Titles with a write in flight (a read must not clobber the optimistic state).
+    @ObservationIgnored var inflight: [String: Int] = [:]
+    /// The last write queued per key (`AppStore.WriteKey`): the next one for the same key waits for it.
+    @ObservationIgnored var writeChains: [String: (token: UUID, task: Task<Void, Never>)] = [:]
+    /// What `LocalPrefs` holds for THIS account; `localDirty` = memory is ahead of it.
+    @ObservationIgnored var local = LocalPrefs.Payload()
+    @ObservationIgnored var localDirty = false
+    /// Collections whose manual order the user set on this device (only those persist an order).
+    @ObservationIgnored var reorderedCollections: Set<String> = []
+    @ObservationIgnored var reviewTitleIndex: [String: String] = [:]
+    @ObservationIgnored var derived = DerivedCache()
+
+    /// Values recomputed only after what they depend on changed (see `AppStore` forwarders).
+    struct DerivedCache {
+        var ordered: [KCollection]?
+        var indexByID: [String: Int]?
+        var containing: [String: [Int]]?
+        var libraryIDs: Set<String>?
+        var waiting: [Title]?
+        var titlesIn: [String: (collection: KCollection, list: [Title])] = [:]
+
+        mutating func collectionsChanged() {
+            ordered = nil; indexByID = nil; containing = nil; libraryIDs = nil; waiting = nil; titlesIn = [:]
+        }
+        mutating func statesChanged() { libraryIDs = nil; waiting = nil; titlesIn = [:] }
+        mutating func titlesChanged() { waiting = nil; titlesIn = [:] }
+    }
+
+    /// Cancels every write and timer of this session (it's being replaced).
+    func cancelAll() {
+        for (_, t) in deferredWrites { t.cancel() }
+        for (_, c) in writeChains { c.task.cancel() }
+        for (_, t) in pendingCollections { t.cancel() }
+        deferredWrites = [:]
+        writeChains = [:]
+        pendingCollections = [:]
+    }
+}
+
+@MainActor
+@Observable
+final class AppStore {
+    // MARK: Dependencies
+    @ObservationIgnored let api: KuraAPI
+    @ObservationIgnored let prefs: LocalPrefs
+    /// The per-account state (see `SessionData`): replaced whole on every way out of a session.
+    private(set) var s = SessionData()
+
+    /// The store's clock. Mock: fixed (the captures read a known date). Live: advanced when the
+    /// app comes to the foreground and each minute while it's active (`startClock`).
+    var now: Date {
+        get { clock }
+        set { clock = newValue; s.derived.waiting = nil }
+    }
+    private var clock: Date
+    @ObservationIgnored private var clockTask: Task<Void, Never>?
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+
+    // MARK: Phase / navigation
+    var phase: AppPhase = .splash
+    var tab: Tab { get { s.tab } set { s.tab = newValue } }
+    var paths: [Tab: [Route]] { get { s.paths } _modify { yield &s.paths } set { s.paths = newValue } }
+    var sheet: SheetRoute? { get { s.sheet } set { s.sheet = newValue } }
+    /// A sheet mid-write (Completar + reseña): the scrim tap and the grabber drag don't close it,
+    /// so the text and the outcome aren't lost behind the user's back.
+    var sheetLocked: Bool { get { s.sheetLocked } set { s.sheetLocked = newValue } }
+    var toast: ToastModel?
+    var offline = false
+    var loadState: LoadState { get { s.loadState } set { s.loadState = newValue } }
+
+    // MARK: Account / session
+    var me: Person { get { s.me } _modify { yield &s.me } set { s.me = newValue } }
+    var account: Me? { get { s.account } set { s.account = newValue } }
+    /// `POST auth/logout` in flight: the app waits for it before letting anyone sign in again
+    /// (a late logout would revoke the NEW token too, it's account-wide).
+    var signingOut = false
+    /// Entrance flow (O1c/O1a): the email the code was sent to, busy flag, inline error.
+    var authEmail: String { get { s.authEmail } set { s.authEmail = newValue } }
+    var authBusy = false
+    var authError: String? { get { s.authError } set { s.authError = newValue } }
+    /// `GET /auth/providers`: which buttons the entrance paints. nil = not asked yet; a failure is
+    /// `.emailOnly` (correo only, never a button that doesn't work) and is asked again next time.
+    var authProviders: AuthProviders?
+    @ObservationIgnored private var authProvidersStale = true
+    /// The name Sign in with Apple handed over (first authorization only), to pre-fill O1b.
+    var suggestedName: String? { get { s.suggestedName } set { s.suggestedName = newValue } }
+    /// True when the entrance paints at least one of Apple / Google.
+    var hasSocialSignIn: Bool { authProviders.map { $0.apple || $0.googleClientID != nil } ?? false }
+
+    // MARK: Data
+    var people: [String: Person] { get { s.people } _modify { yield &s.people } set { s.people = newValue } }
+    var titles: [String: Title] {
+        get { s.titles }
+        _modify { yield &s.titles; s.derived.titlesChanged() }
+        set { s.titles = newValue; s.derived.titlesChanged() }
+    }
+    /// Ids in the order we learned them (drives local search, "también de").
+    var catalogOrder: [String] { get { s.catalogOrder } _modify { yield &s.catalogOrder } set { s.catalogOrder = newValue } }
+    var collections: [KCollection] {
+        get { s.collections }
+        _modify { yield &s.collections; s.derived.collectionsChanged() }
+        set { s.collections = newValue; s.derived.collectionsChanged() }
+    }
+    var userTitles: [String: UserTitleState] {
+        get { s.userTitles }
+        _modify { yield &s.userTitles; s.derived.statesChanged() }
+        set { s.userTitles = newValue; s.derived.statesChanged() }
+    }
+    var following: Set<String> { get { s.following } _modify { yield &s.following } set { s.following = newValue } }
+    var feed: [FeedEvent] { get { s.feed } _modify { yield &s.feed } set { s.feed = newValue } }
+    var revealedSpoilers: Set<String> { get { s.revealedSpoilers } _modify { yield &s.revealedSpoilers } set { s.revealedSpoilers = newValue } }
+    /// Last collection used in "guardar en" — preselected next time.
+    var lastUsedCollectionID: String? { get { s.lastUsedCollectionID } set { s.lastUsedCollectionID = newValue } }
+    /// `GET /titles/{id}.following` — what followed people did with a title.
+    var titleActivity: [String: [PeopleMark]] { get { s.titleActivity } _modify { yield &s.titleActivity } set { s.titleActivity = newValue } }
+
+    // Per-screen loads
+    /// Failed reads by screen (see `LoadKey`); cleared when the same read succeeds.
+    var loadErrors: [LoadKey: KuraAPIError] { get { s.loadErrors } _modify { yield &s.loadErrors } set { s.loadErrors = newValue } }
+    var loadedCollections: Set<String> { get { s.loadedCollections } _modify { yield &s.loadedCollections } set { s.loadedCollections = newValue } }
+    var loadedTitles: Set<String> { get { s.loadedTitles } _modify { yield &s.loadedTitles } set { s.loadedTitles = newValue } }
+    var loadingTitles: Set<String> { get { s.loadingTitles } _modify { yield &s.loadingTitles } set { s.loadingTitles = newValue } }
+    var missingTitles: Set<String> { get { s.missingTitles } _modify { yield &s.missingTitles } set { s.missingTitles = newValue } }
+    /// `GET /titles/{id}.reviews.nextCursor` (and each "más reseñas" page after it).
+    var reviewCursors: [String: String] { get { s.reviewCursors } _modify { yield &s.reviewCursors } set { s.reviewCursors = newValue } }
+    var reviewsPaging: Set<String> { get { s.reviewsPaging } _modify { yield &s.reviewsPaging } set { s.reviewsPaging = newValue } }
+    /// Someone else's public collections, by `publicKey(handle:id:)`; `states` are the owner's.
+    var publicCollections: [String: CollectionDetail] { get { s.publicCollections } _modify { yield &s.publicCollections } set { s.publicCollections = newValue } }
+    var missingPublicCollections: Set<String> { get { s.missingPublicCollections } _modify { yield &s.missingPublicCollections } set { s.missingPublicCollections = newValue } }
+    var avatarBusy: Bool { get { s.avatarBusy } set { s.avatarBusy = newValue } }
+    var loadedPeople: Set<String> { get { s.loadedPeople } _modify { yield &s.loadedPeople } set { s.loadedPeople = newValue } }
+    var loadingPeople: Set<String> { get { s.loadingPeople } _modify { yield &s.loadingPeople } set { s.loadingPeople = newValue } }
+    var missingPeople: Set<String> { get { s.missingPeople } _modify { yield &s.missingPeople } set { s.missingPeople = newValue } }
+    var peopleLists: [String: [Person]] { get { s.peopleLists } _modify { yield &s.peopleLists } set { s.peopleLists = newValue } }
+    var feedLoaded: Bool { get { s.feedLoaded } set { s.feedLoaded = newValue } }
+    var feedLoading: Bool { get { s.feedLoading } set { s.feedLoading = newValue } }
+    var feedCursor: String? { get { s.feedCursor } set { s.feedCursor = newValue } }
+    /// The followed set the feed was built from — a follow/unfollow makes it stale.
+    private var feedFollowingKey: Set<String> { get { s.feedFollowingKey } set { s.feedFollowingKey = newValue } }
+    /// A block/unblock changes whose activity the server returns, without touching `following`'s
+    /// meaning for the feed key: the next visit re-reads the feed.
+    private var feedDirty: Bool { get { s.feedDirty } set { s.feedDirty = newValue } }
+    var feedStale: Bool { feedLoaded && (feedDirty || feedFollowingKey != following) }
+    var discover: DiscoverPayload? { get { s.discover } set { s.discover = newValue } }
+    var discoverLoading: Bool { get { s.discoverLoading } set { s.discoverLoading = newValue } }
+    var searchQuery: String { get { s.searchQuery } set { s.searchQuery = newValue } }
+    var searchResults: [SearchResult] { get { s.searchResults } set { s.searchResults = newValue } }
+    var searchPeople: [Person] { get { s.searchPeople } _modify { yield &s.searchPeople } set { s.searchPeople = newValue } }
+    var searchLoading: Bool { get { s.searchLoading } set { s.searchLoading = newValue } }
+    var searchError: KuraAPIError? { get { s.searchError } set { s.searchError = newValue } }
+    var onboardingGrid: [Title] { get { s.onboardingGrid } set { s.onboardingGrid = newValue } }
+    /// `GET /onboarding/pool` failed (503 when every provider is down): the grid offers Reintentar.
+    var onboardingGridError: KuraAPIError? { get { s.onboardingGridError } set { s.onboardingGridError = newValue } }
+    var onboardingPeople: [Person] { get { s.onboardingPeople } _modify { yield &s.onboardingPeople } set { s.onboardingPeople = newValue } }
+    var onboardingPeopleLoaded: Bool { get { s.onboardingPeopleLoaded } set { s.onboardingPeopleLoaded = newValue } }
+    var recapMonths: [RecapMonth]? { get { s.recapMonths } set { s.recapMonths = newValue } }
+    var recaps: [String: RecapPayload] { get { s.recaps } _modify { yield &s.recaps } set { s.recaps = newValue } }
+    var recapLoading: Bool { get { s.recapLoading } set { s.recapLoading = newValue } }
+
+    // Social / settings
+    /// ⚠️ Solo mock / no-op en live: "Solicitado" en un perfil privado. `followFromProfile` solo
+    /// lo cambia en memoria y NUNCA llama a la API — el servidor solo deja seguir perfiles públicos
+    /// (`user_follow` es unilateral, F3.10) y no existe el modelo de solicitudes. Para que sea real
+    /// haría falta en el servidor: tabla de solicitudes, `POST/DELETE /me/follow-requests/{handle}`,
+    /// aprobar/rechazar del lado del dueño y su notificación.
+    var requested: Set<String> { get { s.requested } _modify { yield &s.requested } set { s.requested = newValue } }
+    var muted: Set<String> { get { s.muted } _modify { yield &s.muted } set { s.muted = newValue } }
+    /// Handles you blocked (from `GET /people/{handle}.isBlocked`, `GET /me/blocks` and your own
+    /// blocks). The server already hides their content; this hides what was cached before.
+    var blocked: Set<String> { get { s.blocked } _modify { yield &s.blocked } set { s.blocked = newValue } }
+    /// `GET /me/blocks` for Ajustes › Cuentas bloqueadas; nil until it loads.
+    var blockedAccounts: [BlockedAccount]? { get { s.blockedAccounts } _modify { yield &s.blockedAccounts } set { s.blockedAccounts = newValue } }
+    /// `GET /me/sessions` for Ajustes › Sesiones activas; nil until it loads.
+    var deviceSessions: [DeviceSession]? { get { s.deviceSessions } _modify { yield &s.deviceSessions } set { s.deviceSessions = newValue } }
+    /// `GET /me/identities` for Ajustes › Inicio de sesión; nil until it loads.
+    var identities: Identities? { get { s.identities } _modify { yield &s.identities } set { s.identities = newValue } }
+    /// The provider whose Conectar / Desconectar is in flight (its row shows a spinner).
+    var identityBusy: IdentityProvider? { get { s.identityBusy } set { s.identityBusy = newValue } }
+    /// Fusionar otra cuenta: the other account's email (code path), the proof once it's yours,
+    /// the busy flag and the inline error of the chooser / code screens.
+    var mergeEmail: String { get { s.mergeEmail } set { s.mergeEmail = newValue } }
+    var mergeProof: MergeProof? { get { s.mergeProof } set { s.mergeProof = newValue } }
+    var mergeBusy: Bool { get { s.mergeBusy } set { s.mergeBusy = newValue } }
+    var mergeError: String? { get { s.mergeError } set { s.mergeError = newValue } }
+    /// A 429 on `merge/otp/request` (60 s cooldown or 3 codes/hour per email): no new code before this.
+    var mergeRetryAt: Date? { get { s.mergeRetryAt } set { s.mergeRetryAt = newValue } }
+    /// Reviews you reported this session: the card folds to "Gracias. La revisamos." (like the web).
+    var reportedReviews: Set<String> { get { s.reportedReviews } _modify { yield &s.reportedReviews } set { s.reportedReviews = newValue } }
+    /// ⚠️ Solo mock / no-op en live: la campana del feed (31a). En live siempre está vacía — la API
+    /// no tiene modelo de notificaciones (§4, 501), así que nada la llena y `hasUnread` es false.
+    /// Haría falta en el servidor: tabla de notificaciones (seguidor nuevo, estreno, recap,
+    /// solicitudes), `GET /me/notifications` paginado y `POST /me/notifications/read`.
+    var notifications: [KNotification] { get { s.notifications } _modify { yield &s.notifications } set { s.notifications = newValue } }
+    /// ⚠️ Solo mock / no-op en live: estado local de aprobar/rechazar una solicitud (ver `setRequest`).
+    var requestStates: [String: RequestState] { get { s.requestStates } _modify { yield &s.requestStates } set { s.requestStates = newValue } }
+    var recentSearches: [String] { get { s.recentSearches } _modify { yield &s.recentSearches } set { s.recentSearches = newValue } }
+    var showCommon: Bool { get { s.showCommon } set { s.showCommon = newValue } }
+    var defaultPrivacy: Privacy { get { s.defaultPrivacy } set { s.defaultPrivacy = newValue } }
+    /// "Avísame cuando llegue" (E4) — titles you asked to be told about.
+    var alerts: Set<String> { get { s.alerts } _modify { yield &s.alerts } set { s.alerts = newValue } }
     /// Discover's search mode hides the dock (the keyboard owns the bottom).
-    var dockHidden = false
-    var recentlyViewed: [String]
+    var dockHidden: Bool { get { s.dockHidden } set { s.dockHidden = newValue } }
+    var recentlyViewed: [String] { get { s.recentlyViewed } _modify { yield &s.recentlyViewed } set { s.recentlyViewed = newValue } }
     @ObservationIgnored var debugEmptyRecap = false
     @ObservationIgnored var debugFailHydrate = false
     @ObservationIgnored var debugEmptyFollowing = false
@@ -230,12 +412,12 @@ final class AppStore {
     /// DEBUG: Ajustes opens scrolled to this section (`-kuraScreen notifysettings`).
     @ObservationIgnored var debugSettingsAnchor: String?
 
-    // Settings the API owns (`PATCH /me`) — stored locally, patched on change.
-    private var _profilePrivate = false
-    private var _notifyReleases = true
-    private var _notifyRecap = true
-    private var _notifyFollowers = true
-    private var _musicApp = "Apple Music"
+    // Settings the API owns (`PATCH /me`) — stored in the session, patched on change.
+    private var _profilePrivate: Bool { get { s.profilePrivate } set { s.profilePrivate = newValue } }
+    private var _notifyReleases: Bool { get { s.notifyReleases } set { s.notifyReleases = newValue } }
+    private var _notifyRecap: Bool { get { s.notifyRecap } set { s.notifyRecap = newValue } }
+    private var _notifyFollowers: Bool { get { s.notifyFollowers } set { s.notifyFollowers = newValue } }
+    private var _musicApp: String { get { s.musicApp } set { s.musicApp = newValue } }
 
     var profilePrivate: Bool {
         get { _profilePrivate }
@@ -308,7 +490,7 @@ final class AppStore {
     }
 
     /// Onboarding picks (the three obsessions).
-    var onboardingPicks: [String] = []
+    var onboardingPicks: [String] { get { s.onboardingPicks } _modify { yield &s.onboardingPicks } set { s.onboardingPicks = newValue } }
     var onboardingStep: OnboardingStep = .welcome
 
     /// The welcome (13) is a first-launch screen, not the door every time: once it's been
@@ -322,7 +504,7 @@ final class AppStore {
     /// The title a shared web link was about, when the app was installed/opened from it.
     /// O1a only says "Para guardar <título>…" when this is set; nil for everyone else.
     /// (Nothing sets it yet: it waits on universal links / deferred deep linking.)
-    var pendingSaveTitle: Title?
+    var pendingSaveTitle: Title? { get { s.pendingSaveTitle } set { s.pendingSaveTitle = newValue } }
 
     // MARK: Launch options (DEBUG screenshots)
     @ObservationIgnored var holdSplash = false
@@ -334,43 +516,85 @@ final class AppStore {
     @ObservationIgnored var pendingAction: (() -> Void)?
     /// A notification tapped before the tabs were up (cold start, splash, entrance): opened once
     /// the library has loaded.
-    @ObservationIgnored var pendingPush: Route?
+    var pendingPush: Route? { get { s.pendingPush } set { s.pendingPush = newValue } }
     @ObservationIgnored var debugFeedAnchor: String?
 
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     /// Collections created optimistically: local id → the server id once it exists.
-    @ObservationIgnored private var pendingCollections: [String: Task<String, Error>] = [:]
+    private var pendingCollections: [String: Task<String, Error>] { get { s.pendingCollections } _modify { yield &s.pendingCollections } set { s.pendingCollections = newValue } }
     /// Removals waiting for the Deshacer window to close (5 s).
-    @ObservationIgnored private var deferredWrites: [String: Task<Void, Never>] = [:]
+    private var deferredWrites: [String: Task<Void, Never>] { get { s.deferredWrites } _modify { yield &s.deferredWrites } set { s.deferredWrites = newValue } }
     /// Titles with a write in flight (a read must not clobber the optimistic state).
-    @ObservationIgnored private var inflight: [String: Int] = [:]
-    /// A write on this title is still on its way to the server.
-    func isInflight(_ titleID: String) -> Bool { inflight[titleID, default: 0] > 0 }
+    private var inflight: [String: Int] { get { s.inflight } _modify { yield &s.inflight } set { s.inflight = newValue } }
     @ObservationIgnored private var expiryObserver: NSObjectProtocol?
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
     @ObservationIgnored private var pathSatisfied = true
 
-    init(api: KuraAPI = MockAPI(), now: Date = MockData.now) {
+    /// `KuraApp` hands both in: `LiveAPI` + `Date()` in live, `MockAPI` + `MockData.now` for the captures.
+    init(api: KuraAPI, now: Date) {
         self.api = api
-        self.now = now
+        self.clock = now
         let mock = KuraRuntime.usesMock
         prefs = LocalPrefs(enabled: !mock)
-        me = mock ? MockData.me : Person(handle: "", name: "", initials: "k", hexes: [])
-        notifications = mock ? MockData.notifications : []
-        recentSearches = mock ? MockData.recentSearches : []
-        recentlyViewed = mock ? ["chihiro", "ma", "severance", "mala", "pearl"] : []
-        if mock {
-            // The mock catalog/people are local and instant; the library arrives with latency.
-            for t in MockData.titles { register(t) }
-            for p in MockData.people { people[p.id] = p }
-            defaultPrivacy = .followers
-        } else {
-            loadLocal()
-        }
+        #if DEBUG
+        if mock { seedMock() } else { loadLocal() }
+        #else
+        loadLocal()
+        #endif
         expiryObserver = NotificationCenter.default.addObserver(forName: .kuraSessionExpired, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.sessionExpired() }
         }
         if !mock { watchConnectivity() }
+    }
+
+    #if DEBUG
+    /// The mock account (a fresh `SessionData` after a sign-out too): its catalog and people are
+    /// local and instant; the library arrives with latency (`MockAPI`).
+    private func seedMock() {
+        me = MockData.me
+        notifications = MockData.notifications
+        recentSearches = MockData.recentSearches
+        recentlyViewed = ["chihiro", "ma", "severance", "mala", "pearl"]
+        for t in MockData.titles { register(t) }
+        for p in MockData.people { people[p.id] = p }
+        defaultPrivacy = .followers
+    }
+    #endif
+
+    // MARK: Clock
+
+    /// The scene came to the foreground: catch the clock up at once ("hoy", "14 h", "ya salió"
+    /// were frozen while the app slept) and keep it moving each minute while it's active.
+    func sceneBecameActive() {
+        tickClock()
+        startClock()
+    }
+
+    /// The scene left the foreground: stop the minute timer and write what's pending to disk.
+    func sceneWentInactive() {
+        clockTask?.cancel()
+        clockTask = nil
+        flushLocal()
+    }
+
+    /// Live only — the mock's clock is fixed (captures) or set by `DebugLaunch`.
+    private func startClock() {
+        guard !KuraRuntime.usesMock, clockTask == nil else { return }
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                self?.tickClock()
+            }
+        }
+    }
+
+    /// Moves `now` to the real time, but only when the minute changed: every view that reads a
+    /// countdown re-renders on each assignment, so no sub-minute churn.
+    private func tickClock() {
+        guard !KuraRuntime.usesMock else { return }
+        let real = Date()
+        if Int(real.timeIntervalSince1970 / 60) != Int(clock.timeIntervalSince1970 / 60) { now = real }
     }
 
     /// The network came back: drop the offline strip and retry a launch that failed.
@@ -558,11 +782,11 @@ final class AppStore {
             async let m = api.me()
             async let cols = api.collections()
             async let states = api.myTitles()
-            async let fol = api.people(kind: .following, cursor: nil)
-            let (account, library, myStates, followingPage) = try await (m, cols, states, fol)
+            async let fol = allPeople(.following)
+            let (account, library, myStates, followed) = try await (m, cols, states, fol)
             loaded(.library)
-            for p in followingPage.items { register(p) }
-            following = Set(followingPage.items.map(\.id)).union(following)
+            for p in followed { register(p) }
+            following = Set(followed.map(\.id)).union(following)
             var merged = myStates
             for (id, s) in userTitles where merged[id] == nil { merged[id] = s }
             if emptyLibrary {
@@ -576,6 +800,9 @@ final class AppStore {
                 lastUsedCollectionID = collections.first(where: \.pinned)?.id
             }
             applyMe(account)
+            // Still AWAITED before `.loaded`: the collection cards and "no puedo esperar" draw only
+            // the titles they know (`titles(in:)` drops the missing ones), so flipping to `.loaded`
+            // first would paint half-empty cards and the "Faltan títulos" strip for a beat.
             await hydrateTitles(Array(libraryIDs) + [account.featuredTitleID].compactMap { $0 }, for: .library)
             if me.hexes.isEmpty, let id = me.featuredTitleID, let t = titles[id] { me.hexes = t.palette }
             if !keepLoading { loadState = .loaded }
@@ -600,6 +827,7 @@ final class AppStore {
 
     /// `GET /collections/{id}` — the titles and your states for one collection.
     func loadCollection(_ id: String, force: Bool = false) async {
+        let id = canonicalCollectionID(id)
         guard force || !loadedCollections.contains(id), pendingCollections[id] == nil else { return }
         do {
             let d = try await api.collection(id: id)
@@ -650,8 +878,11 @@ final class AppStore {
             for pm in d.following { if let p = pm.person { register(p) } }
             titleActivity[id] = d.following
             for r in d.reviews { if let a = r.author { register(a) } }
-            reviews.removeAll { $0.titleID == id && !(inflight[id, default: 0] > 0 && $0.authorID == me.id) }
-            reviews.append(contentsOf: d.reviews.filter { r in !reviews.contains { $0.id == r.id } })
+            // Your optimistic review survives a read that raced its write; the rest is the server's.
+            let writing = inflight[id, default: 0] > 0
+            let kept = reviewList(id).filter { writing && $0.authorID == me.id }
+            let keptIDs = Set(kept.map(\.id))
+            setReviews(id, kept + d.reviews.filter { !keptIDs.contains($0.id) })
             reviewCursors[id] = d.reviewsCursor
             missingTitles.remove(id)
             loadedTitles.insert(id)
@@ -671,7 +902,8 @@ final class AppStore {
             let page = try await api.moreReviews(titleID: id, cursor: cursor)
             loaded(.moreReviews(id))
             for r in page.items { if let a = r.author { register(a) } }
-            reviews.append(contentsOf: page.items.filter { r in !reviews.contains { $0.id == r.id } })
+            let known = Set(reviewList(id).map(\.id))
+            setReviews(id, reviewList(id) + page.items.filter { !known.contains($0.id) })
             reviewCursors[id] = page.nextCursor
         } catch {
             switch fail(.moreReviews(id), error) {
@@ -723,19 +955,32 @@ final class AppStore {
 
     /// Next page when the stack nears its end. A failure doesn't retry on its own
     /// (every card appearing would hammer the API): the end of the stack offers Reintentar.
+    /// A page can bring nothing you'd see (all muted, blocked or already there) while the cursor
+    /// goes on: then the stack's last card never appears again to ask for more and the feed stalls.
+    /// So one call keeps paging — at most `maxFeedPagesPerCall` — until something visible arrives.
+    private static let maxFeedPagesPerCall = 3
+
     func loadMoreFeed(retry: Bool = false) async {
-        guard let cursor = feedCursor, !feedLoading, retry || loadErrors[.feedMore] == nil else { return }
+        guard feedCursor != nil, !feedLoading, retry || loadErrors[.feedMore] == nil else { return }
         feedLoading = true
         defer { feedLoading = false }
-        do {
-            let page = try await api.feed(cursor: cursor)
-            loaded(.feedMore)
-            let events = page.items.map(ingest)
-            feedCursor = page.nextCursor
-            await hydrateTitles(events.compactMap(\.titleID), for: .feedMore)
-            feed += events.filter { e in !feed.contains { $0.id == e.id } }
-        } catch {
-            fail(.feedMore, error)
+        var pages = 0
+        while let cursor = feedCursor, pages < Self.maxFeedPagesPerCall {
+            pages += 1
+            do {
+                let page = try await api.feed(cursor: cursor)
+                loaded(.feedMore)
+                let events = page.items.map(ingest)
+                feedCursor = page.nextCursor
+                await hydrateTitles(events.compactMap(\.titleID), for: .feedMore)
+                let known = Set(feed.map(\.id))
+                let fresh = events.filter { !known.contains($0.id) }
+                feed += fresh
+                if fresh.contains(where: isVisible) { return }
+            } catch {
+                fail(.feedMore, error)
+                return
+            }
         }
     }
 
@@ -744,7 +989,7 @@ final class AppStore {
         var e = event
         if let t = e.embeddedTitle { register(t) }
         if let p = e.embeddedAuthor { register(p) }
-        if let r = e.embeddedReview, !reviews.contains(where: { $0.id == r.id }) { reviews.append(r) }
+        if let r = e.embeddedReview, review(r.id) == nil { setReviews(r.titleID, reviewList(r.titleID) + [r]) }
         if let at = e.at { e.ageHours = max(0, now.timeIntervalSince(at) / 3600) }
         if case .added(let col) = e.kind, let rd = e.releaseDate, rd > now {
             e.kind = .waitingAdd(collection: col, label: sentence(for: .day(KuraJSON.dayAtNoon(rd))))
@@ -855,21 +1100,46 @@ final class AppStore {
 
     static func peopleListKey(of personID: String, following: Bool) -> String { "\(personID)|\(following ? "following" : "followers")" }
 
-    /// Followers / following of someone. Only the owner's lists exist on the
-    /// API (§4); another profile's list is empty on live and mock-only otherwise.
+    /// Upper bound for walking one of your own lists (`me/following`, `me/followers`): 30 per page,
+    /// so 1 500 people — past that the list is cut rather than looping on a server that misbehaves.
+    private static let maxPeoplePages = 50
+
+    /// Every page of one of YOUR lists (`GET /me/following` · `/me/followers`), until `nextCursor`
+    /// is nil. `following` needs all of it: it decides Seguir/Siguiendo on every row of the app.
+    private func allPeople(_ kind: PeopleKind) async throws -> [Person] {
+        var out: [Person] = []
+        var seen: Set<String> = []
+        var cursor: String?
+        for _ in 0..<Self.maxPeoplePages {
+            let page = try await api.people(kind: kind, cursor: cursor)
+            for p in page.items where seen.insert(p.id).inserted { out.append(p) }
+            guard let next = page.nextCursor, next != cursor else { break }
+            cursor = next
+        }
+        return out
+    }
+
+    /// Followers / following of someone. Your own lists come whole (every page, `allPeople`).
+    ///
+    /// ⚠️ Solo mock / no-op en live para OTRA persona: la API solo expone las listas de su dueño
+    /// (§4 — "las listas solo las ve su dueño", F3.10), así que en live esto guarda `[]` y la
+    /// pantalla dice "Solo @… ve su lista." (los conteos sí son públicos). Para que sea real haría
+    /// falta en el servidor una ruta `GET /people/{handle}/followers|following` con el gate
+    /// `publicAuthor` + `notBlockedWith` por fila y una decisión de producto sobre exponerlas.
     func loadPeopleList(of personID: String, following: Bool) async {
         let key = AppStore.peopleListKey(of: personID, following: following)
         guard peopleLists[key] == nil else { return }
         do {
             let items: [Person]
             if personID == me.id {
-                let page = try await api.people(kind: following ? .following : .followers, cursor: nil)
-                items = page.items
+                items = try await allPeople(following ? .following : .followers)
                 if following { self.following.formUnion(items.map(\.id)) }
-            } else if let mock = api as? MockAPI {
-                items = mock.peopleOf(personID, following: following)
             } else {
+                #if DEBUG
+                items = (api as? MockAPI)?.peopleOf(personID, following: following) ?? []
+                #else
                 items = []
+                #endif
             }
             loaded(.peopleList(key))
             for p in items { register(p) }
@@ -926,24 +1196,71 @@ final class AppStore {
 
     func title(_ id: String) -> Title? { titles[id] }
     func person(_ id: String) -> Person? { id == me.id ? me : people[id] }
-    func collection(_ id: String) -> KCollection? { collections.first { $0.id == id } }
+    /// A collection by id — a local id adopted by the server still finds it (`collectionAliases`).
+    func collection(_ id: String) -> KCollection? {
+        let cols = collections // observed: a view that asks re-renders when any collection changes
+        let key = canonicalCollectionID(id)
+        if s.derived.indexByID == nil {
+            s.derived.indexByID = Dictionary(cols.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+        }
+        return s.derived.indexByID?[key].map { cols[$0] }
+    }
     func mark(_ titleID: String) -> Mark? { userTitles[titleID]?.mark }
-    func review(_ id: String?) -> Review? { id.flatMap { rid in reviews.first { $0.id == rid } } }
-    func myReview(_ titleID: String) -> Review? { reviews.first { $0.titleID == titleID && $0.authorID == me.id } }
+    func review(_ id: String?) -> Review? {
+        guard let id else { return nil }
+        let byTitle = s.reviewsByTitle // observed
+        guard let tid = s.reviewTitleIndex[id] else { return nil }
+        return byTitle[tid]?.first { $0.id == id }
+    }
+    func myReview(_ titleID: String) -> Review? { reviewList(titleID).first { $0.authorID == me.id } }
 
-    /// Decorative covers for the entrance screens (never part of the live library).
-    func decor(_ id: String) -> Title? { titles[id] ?? MockData.titles.first { $0.id == id } }
+    // MARK: Reviews storage (by title; `reviewTitleIndex` = review id → title id)
 
-    /// Collections ordered for "tus colecciones": pinned first, then newest.
+    private func reviewList(_ titleID: String) -> [Review] { s.reviewsByTitle[titleID] ?? [] }
+
+    /// Replaces a title's reviews (in display order) and keeps the id index in step.
+    private func setReviews(_ titleID: String, _ list: [Review]) {
+        for r in reviewList(titleID) where s.reviewTitleIndex[r.id] == titleID { s.reviewTitleIndex[r.id] = nil }
+        for r in list { s.reviewTitleIndex[r.id] = titleID }
+        s.reviewsByTitle[titleID] = list.isEmpty ? nil : list
+    }
+
+    private func removeReviews(of titleID: String, where drop: (Review) -> Bool) {
+        let list = reviewList(titleID)
+        guard list.contains(where: drop) else { return }
+        setReviews(titleID, list.filter { !drop($0) })
+    }
+
+    /// Decorative covers for the entrance screens (never part of the live library). The mock's
+    /// catalog has them registered (`titles`); live falls back to `WelcomeArt`, a fixed art source.
+    func decor(_ id: String) -> Title? { titles[id] ?? WelcomeArt.title(id) }
+
+    /// Collections ordered for "tus colecciones": pinned first, then newest. Cached until
+    /// `collections` changes (every card, row and sheet asks, several times per frame).
     var orderedCollections: [KCollection] {
-        collections.sorted { a, b in
+        let cols = collections
+        if let o = s.derived.ordered { return o }
+        let o = cols.sorted { a, b in
             if a.pinned != b.pinned { return a.pinned }
             if a.titleIDs.isEmpty != b.titleIDs.isEmpty { return !a.titleIDs.isEmpty }
             return a.createdAt > b.createdAt
         }
+        s.derived.ordered = o
+        return o
     }
 
+    /// A collection's titles, filtered and sorted. Cached per (collection, format) until titles,
+    /// states or that collection change (a sort by name is `localizedCompare` n·log n per render).
     func titles(in c: KCollection, format: MediaFormat? = nil) -> [Title] {
+        _ = (titles, userTitles) // observed
+        let key = "\(c.id)|\(format?.rawValue ?? "*")"
+        if let hit = s.derived.titlesIn[key], hit.collection == c { return hit.list }
+        let list = sortedTitles(in: c, format: format)
+        s.derived.titlesIn[key] = (c, list)
+        return list
+    }
+
+    private func sortedTitles(in c: KCollection, format: MediaFormat?) -> [Title] {
         var list = c.titleIDs.compactMap { titles[$0] }
         if let format { list = list.filter { $0.format == format } }
         switch c.sort {
@@ -972,8 +1289,16 @@ final class AppStore {
 
     func palette(of c: KCollection) -> [String]? { coverTitle(of: c)?.palette }
 
+    /// The collections a title is in, in `orderedCollections` order. One index (title → positions)
+    /// built once per change of `collections`, instead of a sort + scan on every call.
     func collectionsContaining(_ titleID: String) -> [KCollection] {
-        orderedCollections.filter { $0.titleIDs.contains(titleID) }
+        let ordered = orderedCollections
+        if s.derived.containing == nil {
+            var index: [String: [Int]] = [:]
+            for (i, c) in ordered.enumerated() { for t in Set(c.titleIDs) { index[t, default: []].append(i) } }
+            s.derived.containing = index
+        }
+        return (s.derived.containing?[titleID] ?? []).map { ordered[$0] }
     }
 
     /// In at least one collection ("Guardado"). Not the same as being in your library: a mark from
@@ -983,15 +1308,25 @@ final class AppStore {
     /// Your library: every title with your state (`GET /me/titles`, in a collection or not) plus the
     /// memberships whose state hasn't landed yet. Counts, "no puedo esperar" and hydration read
     /// THIS, never `collections` alone.
-    var libraryIDs: Set<String> { Set(userTitles.keys).union(collections.flatMap(\.titleIDs)) }
+    var libraryIDs: Set<String> {
+        let (states, cols) = (userTitles, collections)
+        if let ids = s.derived.libraryIDs { return ids }
+        let ids = Set(states.keys).union(cols.flatMap(\.titleIDs))
+        s.derived.libraryIDs = ids
+        return ids
+    }
 
     /// Reviews you wrote: the server count until the local list catches up.
-    var reviewCount: Int { max(account?.stats.reviews ?? 0, reviews.filter { $0.authorID == me.id }.count) }
+    var reviewCount: Int {
+        let mine = s.reviewsByTitle.values.reduce(0) { n, list in n + list.filter { $0.authorID == me.id }.count }
+        return max(account?.stats.reviews ?? 0, mine)
+    }
 
     // MARK: No puedo esperar
 
     private static let months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
-    var cal: Calendar { MockData.calendar }
+    /// Release days are read on Mexico City's calendar (`KCalendar`), in live and mock alike.
+    var cal: Calendar { KCalendar.kura }
 
     /// True while the title (or, for a series, its announced season) is not out.
     func isUnreleased(_ t: Title) -> Bool {
@@ -1082,7 +1417,17 @@ final class AppStore {
     /// (or while we don't know yet when you saved it):
     /// the wire sends `release` for every dated title, past or future, so without this an old
     /// album you never completed would land here the moment you opened its ficha.
+    /// Cached until titles, states, collections or the clock change (both the tab root and the
+    /// automatic collection ask on every render).
     var waitingTitles: [Title] {
+        _ = (titles, userTitles, collections, now) // observed
+        if let w = s.derived.waiting { return w }
+        let w = computeWaitingTitles()
+        s.derived.waiting = w
+        return w
+    }
+
+    private func computeWaitingTitles() -> [Title] {
         let list = libraryIDs.compactMap { titles[$0] }.filter { t in
             guard let r = t.release, mark(t.id) == nil else { return false }
             if isUnreleased(t) || t.upcomingSeason != nil { return true }
@@ -1167,36 +1512,65 @@ final class AppStore {
     /// Runs an API write; on failure offers "Reintentar" (with the error's own
     /// text when it says what to do). `onError` lets a caller revert its
     /// optimistic change for errors that a retry can't fix.
-    private func sync(titleID: String? = nil,
+    ///
+    /// `key` serializes writes to the same thing (`WriteKey`): each `sync` is its own `Task`, so a
+    /// Guardar → Deshacer (or follow → unfollow) could otherwise reach the server in the reverse
+    /// order and leave it in the state the user undid. A write with a key waits for the previous
+    /// one with that key (success or failure) before it goes out.
+    ///
+    /// Everything is bound to the session that queued it: once the account changes (sign-out, 401),
+    /// its late failures and "Reintentar" never surface — a retry would run the old account's write
+    /// with the new account's token.
+    private func sync(key: String? = nil,
+                      titleID: String? = nil,
                       onError: (@MainActor (KuraAPIError) -> Bool)? = nil,
                       _ op: @escaping @Sendable (KuraAPI) async throws -> Void) {
         let api = self.api
-        if let titleID { inflight[titleID, default: 0] += 1 }
-        Task { [weak self] in
-            do {
-                try await op(api)
-                await MainActor.run { self?.online() }
-            } catch {
-                await MainActor.run {
-                    guard let self else { return }
-                    let e = self.noteError(error)
-                    if let onError, onError(e) { return }
-                    switch e {
-                    case .unauthorized, .notFound, .unsupported, .cancelled:
-                        return
-                    default:
-                        self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
-                            self?.sync(titleID: titleID, onError: onError, op)
-                        })
-                    }
-                }
+        let session = s
+        if let titleID { session.inflight[titleID, default: 0] += 1 }
+        let previous = key.flatMap { session.writeChains[$0]?.task }
+        let token = UUID()
+        let task = Task { [weak self] in
+            await previous?.value
+            var failure: Error?
+            if Task.isCancelled {
+                failure = CancellationError()
+            } else {
+                do { try await op(api) } catch { failure = error }
             }
-            await MainActor.run { if let titleID, let self { self.inflight[titleID, default: 1] -= 1 } }
+            defer {
+                if let titleID { session.inflight[titleID, default: 1] -= 1 }
+                if let key, session.writeChains[key]?.token == token { session.writeChains[key] = nil }
+            }
+            guard let self, self.s === session else { return }
+            guard let failure else { self.online(); return }
+            let e = self.noteError(failure)
+            if let onError, onError(e) { return }
+            switch e {
+            case .unauthorized, .notFound, .unsupported, .cancelled:
+                return
+            default:
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    self?.sync(key: key, titleID: titleID, onError: onError, op)
+                })
+            }
         }
+        if let key { session.writeChains[key] = (token, task) }
+    }
+
+    /// Keys for `sync(key:)` — writes that contradict each other share one.
+    private enum WriteKey {
+        static func membership(_ titleID: String, _ collectionID: String) -> String { "m|\(titleID)|\(collectionID)" }
+        static func collection(_ id: String) -> String { "c|\(id)" }
+        static func mark(_ titleID: String) -> String { "mark|\(titleID)" }
+        static func review(_ titleID: String) -> String { "review|\(titleID)" }
+        static func follow(_ handle: String) -> String { "follow|\(handle)" }
+        static let username = "me|username"
+        static let mePatch = "me|patch"
     }
 
     private func patchMe(_ patch: MePatch) {
-        sync { api in
+        sync(key: WriteKey.mePatch) { api in
             let m = try await api.updateMe(patch)
             await MainActor.run { [weak self] in self?.account = m }
         }
@@ -1247,13 +1621,31 @@ final class AppStore {
 
     /// The server id for a collection created optimistically (or the id itself).
     private func resolveCollectionID(_ id: String) async throws -> String {
+        if let sid = s.collectionAliases[id] { return sid }
         guard let task = pendingCollections[id] else { return id }
         return try await task.value
     }
 
+    /// The id a collection has NOW: a local id already adopted maps to the server's (forever, so
+    /// a Deshacer or a sheet that captured the local id keeps working after the swap).
+    private func canonicalCollectionID(_ id: String) -> String { s.collectionAliases[id] ?? id }
+
     /// Swaps a temporary collection id for the one the server assigned.
     private func adopt(serverID: String, for localID: String) {
         guard serverID != localID else { return }
+        s.collectionAliases[localID] = serverID
+        // Pending removals and write queues keyed by the local id follow it to the server id, so
+        // `cancelRemove` and the per-key ordering still match what's queued.
+        let suffix = "|\(localID)"
+        for (k, t) in deferredWrites where k.hasSuffix(suffix) {
+            deferredWrites[k] = nil
+            deferredWrites[String(k.dropLast(suffix.count)) + "|\(serverID)"] = t
+        }
+        for (k, c) in s.writeChains where k.hasSuffix(suffix) {
+            s.writeChains[k] = nil
+            s.writeChains[String(k.dropLast(suffix.count)) + "|\(serverID)"] = c
+        }
+        if s.reorderedCollections.remove(localID) != nil { s.reorderedCollections.insert(serverID) }
         if let i = collections.firstIndex(where: { $0.id == localID }) {
             let c = collections[i]
             var moved = KCollection(id: serverID, name: c.name, titleIDs: c.titleIDs, privacy: c.privacy, pinned: c.pinned,
@@ -1292,47 +1684,49 @@ final class AppStore {
         loadedCollections.insert(c.id)
         let localID = c.id
         let api = self.api
+        let session = s
+        // The POST alone: once it answered, the collection EXISTS on the server. The first title's
+        // membership is a separate write (below) whose Reintentar retries only the membership
+        // against the server id — never the POST again, which would leave a duplicate collection.
         let task = Task<String, Error> { [weak self] in
             let created = try await api.createCollection(name: finalName, privacy: privacy)
-            await MainActor.run { self?.adopt(serverID: created.id, for: localID) }
-            if let titleID {
-                let r = try await api.createTitleMembership(collectionID: created.id, ref: TitleRef.from(localID: titleID))
-                await MainActor.run { self?.absorb(r, localID: titleID) }
-            }
+            if let self, self.s === session { self.adopt(serverID: created.id, for: localID) }
             return created.id
         }
         pendingCollections[localID] = task
         Task { [weak self] in
             do {
                 let sid = try await task.value
-                await MainActor.run {
-                    self?.pendingCollections[localID] = nil
-                    self?.pendingCollections[sid] = nil
-                    self?.online()
+                guard let self, self.s === session else { return }
+                self.pendingCollections[localID] = nil
+                self.online()
+                // Only if it's still there: a quick Quitar before the POST answered wins.
+                if let titleID, self.collection(sid)?.titleIDs.contains(titleID) == true {
+                    self.syncAdd(titleID, to: sid)
                 }
             } catch {
-                await MainActor.run {
-                    guard let self else { return }
-                    self.pendingCollections[localID] = nil
-                    let e = self.noteError(error)
-                    self.collections.removeAll { $0.id == localID }
-                    if let titleID { self.gcUserState(titleID) }
-                    self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
-                        self?.createCollection(name: finalName, privacy: privacy, adding: titleID)
-                    })
-                }
+                guard let self, self.s === session else { return }
+                self.pendingCollections[localID] = nil
+                let e = self.noteError(error)
+                self.collections.removeAll { $0.id == localID }
+                if let titleID { self.gcUserState(titleID) }
+                guard e != .cancelled, e != .unauthorized else { return }
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    self?.createCollection(name: finalName, privacy: privacy, adding: titleID)
+                })
             }
         }
         return c.id
     }
 
     private func update(_ id: String, _ change: (inout KCollection) -> Void) {
+        let id = canonicalCollectionID(id)
         guard let i = collections.firstIndex(where: { $0.id == id }) else { return }
         change(&collections[i])
     }
 
     private func syncCollection(_ id: String, name: String? = nil, privacy: Privacy? = nil) {
-        sync { [weak self] api in
+        sync(key: WriteKey.collection(canonicalCollectionID(id))) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
             _ = try await api.updateCollection(id: sid, name: name, privacy: privacy)
         }
@@ -1387,6 +1781,7 @@ final class AppStore {
     func setLayout(_ id: String, _ l: CollectionLayout) { update(id) { $0.layout = l }; saveLocal() }
 
     func reorder(_ id: String, from: IndexSet, to: Int) {
+        s.reorderedCollections.insert(canonicalCollectionID(id))
         update(id) { c in
             c.titleIDs.move(fromOffsets: from, toOffset: to)
             c.sort = .manual
@@ -1395,6 +1790,7 @@ final class AppStore {
     }
 
     func deleteCollection(_ id: String) {
+        let id = canonicalCollectionID(id)
         collections.removeAll { $0.id == id }
         for tab in Tab.allCases {
             paths[tab]?.removeAll { r in
@@ -1403,7 +1799,8 @@ final class AppStore {
             }
         }
         for (key, task) in deferredWrites where key.hasSuffix("|\(id)") { task.cancel(); deferredWrites[key] = nil }
-        sync { [weak self] api in
+        s.reorderedCollections.remove(id)
+        sync(key: WriteKey.collection(id)) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
             try await api.deleteCollection(id: sid)
         }
@@ -1423,7 +1820,8 @@ final class AppStore {
     private func gcUserState(_ titleID: String) {
         if !isSaved(titleID) {
             userTitles[titleID] = nil
-            reviews.removeAll { $0.titleID == titleID && $0.authorID == me.id }
+            let mine = me.id
+            removeReviews(of: titleID) { $0.authorID == mine }
         }
     }
 
@@ -1463,7 +1861,7 @@ final class AppStore {
     }
 
     private func syncAdd(_ titleID: String, to collectionID: String) {
-        sync(titleID: titleID) { [weak self] api in
+        sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
             let store = self
             let cid = try await store?.resolveCollectionID(collectionID) ?? collectionID
             let r = try await api.createTitleMembership(collectionID: cid, ref: TitleRef.from(localID: titleID))
@@ -1472,7 +1870,7 @@ final class AppStore {
     }
 
     private func syncRemove(_ titleID: String, from collectionID: String) {
-        sync(titleID: titleID) { [weak self] api in
+        sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
             let cid = try await self?.resolveCollectionID(collectionID) ?? collectionID
             try await api.removeTitleMembership(collectionID: cid, titleID: titleID)
         }
@@ -1481,7 +1879,7 @@ final class AppStore {
     /// Removals wait for the Deshacer window (`undoWindow`, 5 s / 15 s with VoiceOver): undoing never round-trips,
     /// and the server keeps the title's state until the window closes.
     private func deferRemove(_ titleID: String, from collectionID: String) {
-        let key = "\(titleID)|\(collectionID)"
+        let key = removalKey(titleID, collectionID)
         deferredWrites[key]?.cancel()
         let window = Self.undoWindow
         deferredWrites[key] = Task { [weak self] in
@@ -1489,16 +1887,22 @@ final class AppStore {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self else { return }
-                self.deferredWrites[key] = nil
+                // Recomputed: `adopt` may have moved the entry to the server id meanwhile.
+                self.deferredWrites[self.removalKey(titleID, collectionID)] = nil
                 self.syncRemove(titleID, from: collectionID)
             }
         }
     }
 
+    /// `deferredWrites` key: title + the collection's CURRENT id (see `adopt`).
+    private func removalKey(_ titleID: String, _ collectionID: String) -> String {
+        "\(titleID)|\(canonicalCollectionID(collectionID))"
+    }
+
     /// Cancels a pending removal; true when there was one (nothing to re-add on the server).
     @discardableResult
     private func cancelRemove(_ titleID: String, from collectionID: String) -> Bool {
-        let key = "\(titleID)|\(collectionID)"
+        let key = removalKey(titleID, collectionID)
         guard let t = deferredWrites[key] else { return false }
         t.cancel()
         deferredWrites[key] = nil
@@ -1506,10 +1910,12 @@ final class AppStore {
     }
 
     private func pendingRemovals(in collectionID: String) -> [String] {
-        deferredWrites.keys.filter { $0.hasSuffix("|\(collectionID)") }.map { String($0.split(separator: "|")[0]) }
+        let collectionID = canonicalCollectionID(collectionID)
+        return deferredWrites.keys.filter { $0.hasSuffix("|\(collectionID)") }.map { String($0.split(separator: "|")[0]) }
     }
 
     func add(_ titleID: String, to collectionID: String, toast: Bool = true) {
+        let collectionID = canonicalCollectionID(collectionID)
         guard let c = collection(collectionID), !c.titleIDs.contains(titleID) else { return }
         let hadState = userTitles[titleID]
         ensureUserState(titleID)
@@ -1527,15 +1933,17 @@ final class AppStore {
 
     /// Silent inverse used by the add sheet's ✓ → + toggle.
     func removeSilently(_ titleID: String, from collectionID: String) {
+        let collectionID = canonicalCollectionID(collectionID)
         update(collectionID) { $0.titleIDs.removeAll { $0 == titleID } }
         syncRemove(titleID, from: collectionID)
         gcUserState(titleID)
     }
 
     func remove(_ titleID: String, from collectionID: String) {
+        let collectionID = canonicalCollectionID(collectionID)
         guard let c = collection(collectionID), let idx = c.titleIDs.firstIndex(of: titleID) else { return }
         let state = userTitles[titleID]
-        let myReviews = reviews.filter { $0.titleID == titleID && $0.authorID == me.id }
+        let myReviews = reviewList(titleID).filter { $0.authorID == me.id }
         update(collectionID) { $0.titleIDs.remove(at: idx) }
         gcUserState(titleID)
         deferRemove(titleID, from: collectionID)
@@ -1544,11 +1952,13 @@ final class AppStore {
             self.cancelRemove(titleID, from: collectionID)
             self.update(collectionID) { $0.titleIDs.insert(titleID, at: min(idx, $0.titleIDs.count)) }
             if self.userTitles[titleID] == nil { self.userTitles[titleID] = state }
-            for r in myReviews where !self.reviews.contains(r) { self.reviews.append(r) }
+            let back = myReviews.filter { self.review($0.id) == nil }
+            if !back.isEmpty { self.setReviews(titleID, self.reviewList(titleID) + back) }
         }
     }
 
     func move(_ titleID: String, from fromID: String, to toID: String) {
+        let fromID = canonicalCollectionID(fromID), toID = canonicalCollectionID(toID)
         guard fromID != toID, let from = collection(fromID), let to = collection(toID),
               let idx = from.titleIDs.firstIndex(of: titleID) else { return }
         let alreadyThere = to.titleIDs.contains(titleID)
@@ -1572,6 +1982,7 @@ final class AppStore {
 
     /// "Guardar en": sets the exact membership of a title.
     func setMembership(_ titleID: String, collections ids: Set<String>) {
+        let ids = Set(ids.map(canonicalCollectionID))
         let before = Set(collectionsContaining(titleID).map(\.id))
         guard before != ids else { return }
         let hadState = userTitles[titleID]
@@ -1629,7 +2040,7 @@ final class AppStore {
             default: break
             }
         }
-        sync(titleID: titleID, onError: { [weak self] e in
+        sync(key: WriteKey.mark(titleID), titleID: titleID, onError: { [weak self] e in
             guard let self else { return true }
             // Neither is retryable. The optimistic state goes: an unsaved title leaves the library
             // it had just entered; a saved one gets its previous mark back.
@@ -1696,17 +2107,33 @@ final class AppStore {
         ensureUserState(titleID)
         userTitles[titleID]?.mark = mark
         inflight[titleID, default: 0] += 1
-        defer { inflight[titleID, default: 1] -= 1 }
+        let session = s
+        defer { session.inflight[titleID, default: 1] -= 1 }
+        // In line behind any `setMark` still queued for this title (`WriteKey.mark`), and ahead of
+        // whatever comes after it: the order the user tapped is the order the server sees.
+        let key = WriteKey.mark(titleID)
+        let previous = session.writeChains[key]?.task
+        let api = self.api
+        let call = Task { () async throws -> UserTitleState in
+            await previous?.value
+            try Task.checkCancellation()
+            return try await api.setMark(titleID: titleID, mark: mark, preview: preview)
+        }
+        let token = UUID()
+        session.writeChains[key] = (token, Task { _ = try? await call.value })
+        defer { if session.writeChains[key]?.token == token { session.writeChains[key] = nil } }
         do {
-            let s = try await api.setMark(titleID: titleID, mark: mark, preview: preview)
+            let ack = try await call.value
+            guard s === session else { return .cancelled }
             online()
             if userTitles[titleID]?.mark == mark {
-                if let rid = s.reviewID { userTitles[titleID]?.reviewID = rid }
-                userTitles[titleID]?.savedAt = s.savedAt
+                if let rid = ack.reviewID { userTitles[titleID]?.reviewID = rid }
+                userTitles[titleID]?.savedAt = ack.savedAt
                 if loadedTitles.contains(titleID) { Task { await loadTitle(titleID, force: true) } }
             }
             return nil
         } catch {
+            guard s === session else { return .cancelled }
             let e = noteError(error)
             if hadState != nil { userTitles[titleID]?.mark = hadState?.mark } else if !isSaved(titleID) { userTitles[titleID] = nil }
             return e
@@ -1719,27 +2146,31 @@ final class AppStore {
         ensureUserState(titleID)
         let mark = self.mark(titleID)
         let localID: String
-        let previous = reviews.first(where: { $0.titleID == titleID && $0.authorID == me.id })
+        var list = reviewList(titleID)
+        let previous = list.first(where: { $0.authorID == me.id })
         let previousReviewID = userTitles[titleID]?.reviewID
-        if let i = reviews.firstIndex(where: { $0.titleID == titleID && $0.authorID == me.id }) {
-            reviews[i].text = trimmed
-            reviews[i].spoiler = spoiler
-            reviews[i].mark = mark
-            localID = reviews[i].id
+        if let i = list.firstIndex(where: { $0.authorID == me.id }) {
+            list[i].text = trimmed
+            list[i].spoiler = spoiler
+            list[i].mark = mark
+            localID = list[i].id
         } else {
             let r = Review(id: "r-\(UUID().uuidString.prefix(6))", authorID: me.id, titleID: titleID,
                            text: trimmed, mark: mark, spoiler: spoiler, date: Date())
-            reviews.insert(r, at: 0)
+            list.insert(r, at: 0)
             userTitles[titleID]?.reviewID = r.id
             localID = r.id
         }
-        sync(titleID: titleID, onError: { [weak self] e in
+        setReviews(titleID, list)
+        sync(key: WriteKey.review(titleID), titleID: titleID, onError: { [weak self] e in
             // No reaction on the server (`obsessed || verdict != null`): the review never existed
             // there. Put back what was before and say the real rule — never a "Reintentar" that
             // can only fail again.
             guard case .conflict(let code, _) = e, code == "reaction_required", let self else { return false }
-            if let i = self.reviews.firstIndex(where: { $0.id == localID }) {
-                if let previous { self.reviews[i] = previous } else { self.reviews.remove(at: i) }
+            var list = self.reviewList(titleID)
+            if let i = list.firstIndex(where: { $0.id == localID }) {
+                if let previous { list[i] = previous } else { list.remove(at: i) }
+                self.setReviews(titleID, list)
             }
             self.userTitles[titleID]?.reviewID = previousReviewID
             self.showToast(ToastModel(text: e.toast, kind: .info))
@@ -1748,12 +2179,12 @@ final class AppStore {
             let store = self
             let saved = try await api.saveReview(titleID: titleID, body: trimmed, hasSpoiler: spoiler)
             await MainActor.run {
-                guard let self = store, let i = self.reviews.firstIndex(where: { $0.id == localID }) else { return }
-                var r = saved
-                r.author = nil
-                let merged = Review(id: saved.id, authorID: self.me.id, titleID: titleID, text: self.reviews[i].text,
-                                    mark: saved.mark ?? self.reviews[i].mark, spoiler: self.reviews[i].spoiler, date: saved.date)
-                self.reviews[i] = merged
+                guard let self = store else { return }
+                var list = self.reviewList(titleID)
+                guard let i = list.firstIndex(where: { $0.id == localID }) else { return }
+                list[i] = Review(id: saved.id, authorID: self.me.id, titleID: titleID, text: list[i].text,
+                                 mark: saved.mark ?? list[i].mark, spoiler: list[i].spoiler, date: saved.date)
+                self.setReviews(titleID, list)
                 self.userTitles[titleID]?.reviewID = saved.id
                 self.revealedSpoilers.remove(localID)
             }
@@ -1761,14 +2192,15 @@ final class AppStore {
     }
 
     func deleteReview(titleID: String) {
-        let mine = reviews.filter { $0.titleID == titleID && $0.authorID == me.id }
+        let me = self.me.id
+        let mine = reviewList(titleID).filter { $0.authorID == me }
         guard !mine.isEmpty else { return }
-        reviews.removeAll { $0.titleID == titleID && $0.authorID == me.id }
+        removeReviews(of: titleID) { $0.authorID == me }
         userTitles[titleID]?.reviewID = nil
-        sync(titleID: titleID) { api in try await api.deleteReview(titleID: titleID) }
+        sync(key: WriteKey.review(titleID), titleID: titleID) { api in try await api.deleteReview(titleID: titleID) }
         undoToast("Reseña borrada") { [weak self] in
             guard let self else { return }
-            self.reviews.append(contentsOf: mine)
+            self.setReviews(titleID, self.reviewList(titleID) + mine.filter { self.review($0.id) == nil })
             if let r = mine.first { self.publishReview(titleID: titleID, text: r.text, spoiler: r.spoiler) }
         }
     }
@@ -1789,41 +2221,65 @@ final class AppStore {
     func isFollowing(_ id: String) -> Bool { following.contains(id) }
 
     func toggleFollow(_ id: String) {
-        let now = !following.contains(id)
-        if now { following.insert(id) } else { following.remove(id) }
-        if var p = people[id] { p.isFollowing = now; people[id] = p }
-        me.followingCount = max(0, me.followingCount + (now ? 1 : -1))
         KHaptic.impact(.light)
-        sync { api in try await api.setFollowing(handle: id, following: now) }
+        setFollow(id, !following.contains(id))
     }
 
-    /// Followed people who did something with this title.
+    /// Followed people who did something with this title (`GET /titles/{id}.following` already
+    /// returns only people you follow).
     func followedMarks(for titleID: String) -> [(Person, PeopleMark)] {
         (titleActivity[titleID] ?? []).compactMap { pm in
-            guard following.contains(pm.personID), let p = people[pm.personID] else { return nil }
-            return (p, pm)
+            people[pm.personID].map { ($0, pm) }
         }
     }
 
-    /// Follow from a profile: public → follow; private → request (Solicitado).
-    /// Tapping Siguiendo unfollows at once with Deshacer (no confirmation).
+    /// Follow from a profile: public → follow; private → "Solicitado" (see `requested`: ⚠️ no-op
+    /// en live). Tapping Siguiendo unfollows at once with Deshacer (no confirmation).
     func followFromProfile(_ id: String) {
         guard let p = people[id], !blocked.contains(id) else { return }
         if following.contains(id) {
-            following.remove(id)
-            me.followingCount = max(0, me.followingCount - 1)
-            sync { api in try await api.setFollowing(handle: id, following: false) }
-            undoToast("Dejaste de seguir a @\(p.handle)") { [weak self] in
-                self?.following.insert(id)
-                self?.me.followingCount += 1
-                self?.sync { api in try await api.setFollowing(handle: id, following: true) }
-            }
+            setFollow(id, false)
+            undoToast("Dejaste de seguir a @\(p.handle)") { [weak self] in self?.setFollow(id, true) }
         } else if p.isPrivate {
+            // ⚠️ Solo mock / no-op en live: nunca llama a la API (el servidor solo deja seguir
+            // perfiles públicos y no hay modelo de solicitudes). Ver `requested`.
             if requested.contains(id) { requested.remove(id) } else { requested.insert(id) }
             KHaptic.impact(.light)
         } else {
             toggleFollow(id)
         }
+    }
+
+    /// The one follow write: optimistic (`following`, `people[id].isFollowing`, your count), then
+    /// `PUT/DELETE /me/following/{handle}` in order per handle. A failure puts it all back — unless
+    /// a later tap already changed it again (that write is queued behind this one): a 404 says the
+    /// profile isn't there to follow; anything retryable offers Reintentar.
+    private func setFollow(_ id: String, _ on: Bool) {
+        guard following.contains(id) != on else { return }
+        applyFollow(id, on)
+        sync(key: WriteKey.follow(id), onError: { [weak self] e in
+            guard let self else { return true }
+            guard self.following.contains(id) == on else { return true }
+            self.applyFollow(id, !on)
+            switch e {
+            case .cancelled, .unauthorized:
+                break
+            case .notFound:
+                self.showToast(ToastModel(text: "Ese perfil ya no está disponible.", kind: .info))
+            default:
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    self?.dismissToast()
+                    self?.setFollow(id, on)
+                })
+            }
+            return true
+        }) { api in try await api.setFollowing(handle: id, following: on) }
+    }
+
+    private func applyFollow(_ id: String, _ on: Bool) {
+        if on { following.insert(id) } else { following.remove(id) }
+        if var p = people[id] { p.isFollowing = on; people[id] = p }
+        me.followingCount = max(0, me.followingCount + (on ? 1 : -1))
     }
 
     func toggleMute(_ id: String) {
@@ -1844,7 +2300,7 @@ final class AppStore {
     /// Reviews to show for a title: nobody you blocked (the server already filters; this covers
     /// what was cached before the block).
     func visibleReviews(_ titleID: String) -> [Review] {
-        reviews.filter { $0.titleID == titleID && !blocked.contains($0.authorID) }
+        reviewList(titleID).filter { !blocked.contains($0.authorID) }
     }
 
     /// Sends a report and says "Gracias" only once the server answered 204. A failure offers
@@ -1928,7 +2384,7 @@ final class AppStore {
             if case .suggestion(let pid, _, _, _) = e.kind { return pid == handle }
             return false
         }
-        reviews.removeAll { $0.authorID == handle }
+        for tid in Array(s.reviewsByTitle.keys) { removeReviews(of: tid) { $0.authorID == handle } }
         for (k, v) in titleActivity { titleActivity[k] = v.filter { $0.personID != handle } }
         for (k, v) in peopleLists { peopleLists[k] = v.filter { $0.id != handle } }
         searchPeople.removeAll { $0.id == handle }
@@ -1993,26 +2449,35 @@ final class AppStore {
     }
 
     func creator(_ name: String) -> Creator {
+        #if DEBUG
         if KuraRuntime.usesMock, let c = MockData.creators[name] { return c }
+        #endif
         let works = catalogOrder.compactMap { titles[$0] }.filter { $0.creator == name }
         let isMusic = works.contains { $0.format == .album }
         return Creator(name: name, role: isMusic ? "artista" : "director", works: max(works.count, 1))
     }
 
     /// Visible feed: nobody you muted.
-    var visibleFeed: [FeedEvent] {
-        feed.filter { e in
-            if muted.contains(e.authorID) || blocked.contains(e.authorID) { return false }
-            if case .suggestion(let pid, _, _, _) = e.kind, blocked.contains(pid) { return false }
-            return true
-        }
+    var visibleFeed: [FeedEvent] { feed.filter(isVisible) }
+
+    private func isVisible(_ e: FeedEvent) -> Bool {
+        if muted.contains(e.authorID) || blocked.contains(e.authorID) { return false }
+        if case .suggestion(let pid, _, _, _) = e.kind, blocked.contains(pid) { return false }
+        return true
     }
 
+    /// ⚠️ Solo mock / no-op en live: aprobar o rechazar una solicitud de seguimiento (31a) solo
+    /// cambia `requestStates` en memoria — no hay solicitudes en el servidor (solo se siguen
+    /// perfiles públicos) y en live la lista `notifications` está siempre vacía, así que nadie
+    /// llega aquí. Haría falta: el modelo de solicitudes y `PUT /me/follow-requests/{id}`.
     func setRequest(_ notificationID: String, _ state: RequestState) {
         requestStates[notificationID] = state
         KHaptic.impact(.light)
     }
 
+    /// ⚠️ Solo mock / no-op en live: marca leídas las notificaciones locales; en live no hay
+    /// ninguna (ver `notifications`) y nada se avisa al servidor. Haría falta
+    /// `POST /me/notifications/read` una vez exista el modelo.
     func markNotificationsRead() {
         for i in notifications.indices { notifications[i].unread = false }
     }
@@ -2043,11 +2508,7 @@ final class AppStore {
         let newHandle = cleanHandle.isEmpty ? oldHandle : cleanHandle
         let handleChanged = newHandle != oldHandle
         if handleChanged {
-            let avatar = updated.avatarURL
-            updated = Person(handle: newHandle, name: updated.name, initials: updated.initials, hexes: updated.hexes,
-                             featuredTitleID: updated.featuredTitleID, isPrivate: updated.isPrivate,
-                             followers: updated.followers, followingCount: updated.followingCount, stats: updated.stats)
-            updated.avatarURL = avatar
+            updated = Self.rehandled(updated, newHandle)
             people[oldHandle] = nil
         }
         me = updated
@@ -2057,9 +2518,16 @@ final class AppStore {
         saveLocal()
         if !cleanName.isEmpty, cleanName != oldName { patchMe(MePatch(name: cleanName)) }
         if handleChanged {
-            sync(onError: { [weak self] e in
-                guard case .conflict = e else { return false }
-                self?.showToast(ToastModel(text: "@\(newHandle) ya está tomado", kind: .info))
+            sync(key: WriteKey.username, onError: { [weak self] e in
+                // Taken (409) or rejected (400): the server kept the old handle, so the app does too.
+                let text: String
+                switch e {
+                case .conflict: text = "@\(newHandle) ya está tomado"
+                case .invalid(let fields, let m): text = fields["username"] ?? (m.isEmpty ? "Ese @ no se puede usar." : m)
+                default: return false
+                }
+                self?.revertHandle(from: newHandle, to: oldHandle)
+                self?.showToast(ToastModel(text: text, kind: .info))
                 return true
             }) { [weak self] api in
                 let store = self
@@ -2068,6 +2536,24 @@ final class AppStore {
             }
         }
         showToast(ToastModel(text: "Perfil actualizado", kind: .info))
+    }
+
+    /// The same person under another handle (`Person.handle` is its identity, so it's rebuilt).
+    private static func rehandled(_ p: Person, _ handle: String) -> Person {
+        var out = Person(handle: handle, name: p.name, initials: p.initials, hexes: p.hexes,
+                         featuredTitleID: p.featuredTitleID, isPrivate: p.isPrivate,
+                         followers: p.followers, followingCount: p.followingCount, stats: p.stats)
+        out.avatarURL = p.avatarURL
+        return out
+    }
+
+    /// `PUT /me/username` refused the new handle: `me` and `people` go back to the old one (the
+    /// rest of the edit — name, featured — stays, it went through `PATCH /me` on its own).
+    private func revertHandle(from newHandle: String, to oldHandle: String) {
+        guard me.handle == newHandle else { return }
+        me = Self.rehandled(me, oldHandle)
+        people[newHandle] = nil
+        if !oldHandle.isEmpty { people[oldHandle] = me }
     }
 
     /// 20f · Cambiar foto: square crop + 512 px + JPEG on the device (the server only
@@ -2158,7 +2644,6 @@ final class AppStore {
     // MARK: Counters (profile ribbon)
 
     func count(of mark: Mark) -> Int { userTitles.values.filter { $0.mark == mark }.count }
-    var savedCount: Int { libraryIDs.count }
 
     // MARK: Session
 
@@ -2834,6 +3319,10 @@ final class AppStore {
         paths = [:]
         tab = .collections
         didBootstrap = false
+        // Whatever this device holds for the account that just came in (every exit clears it,
+        // so after a sign-in this is normally empty — never the previous account's).
+        flushLocal()
+        loadLocal()
         withAnimation(KMotion.short) { phase = .main }
     }
 
@@ -2892,9 +3381,7 @@ final class AppStore {
 
     /// The common exit: nothing of the old account stays on the device.
     private func leaveSession(message: String?) {
-        resetData()
-        prefs.clear()
-        clearWebSession()
+        endSession()
         withAnimation(KMotion.short) { phase = .onboarding }
         if let message { showToast(ToastModel(text: message, kind: .info)) }
     }
@@ -2909,93 +3396,58 @@ final class AppStore {
     }
 
     /// A 401 anywhere: the token is already gone, back to the entrance.
+    ///
+    /// Same cleanup as a sign-out, prefs on disk included (decision, 2026-09-25): on a shared
+    /// iPhone whoever signs in next must not inherit the muted list, the "avísame" alerts or the
+    /// watched episodes. The cost: re-entering the SAME account after an expiry starts those local
+    /// conveniences over (the server-side library is untouched).
     private func sessionExpired(message: String = "Tu sesión terminó. Entra de nuevo.") {
         // A sign-out in flight already cleared the token: the 401s it causes aren't news.
         guard !signingOut else { return }
         guard phase != .onboarding || didBootstrap else { return }
-        resetData()
-        clearWebSession()
+        endSession()
         withAnimation(KMotion.short) { phase = .onboarding }
         showToast(ToastModel(text: message, kind: .info))
     }
 
+    /// Every way out of a session (sign-out, deleted account, 401) ends here.
+    private func endSession() {
+        resetData()
+        prefs.clear()
+        clearWebSession()
+        // This install's token is no longer the server's for any account we know of: release
+        // notices fall back to local ones on the next save, and none of the old account's stay queued.
+        PushRegistration.markUnregistered()
+        ReleaseNotifier.cancelAll()
+    }
+
+    /// Drops the whole `SessionData` (every per-account field, by construction) and cancels what
+    /// it had in flight. What lives outside it is reset by hand right here.
     private func resetData() {
-        sheet = nil
-        sheetLocked = false
+        s.cancelAll()
+        saveTask?.cancel()
+        saveTask = nil
+        s = SessionData()
+        // A "Reintentar" of the old account must not survive into the next one.
+        toastTask?.cancel()
+        toast = nil
+        #if DEBUG
+        if KuraRuntime.usesMock { seedMock() }
+        #endif
         onboardingStep = entryStep
-        pendingSaveTitle = nil
-        paths = [:]
-        tab = .collections
         didBootstrap = false
-        loadState = .loading
-        account = nil
-        me = KuraRuntime.usesMock ? MockData.me : Person(handle: "", name: "", initials: "k", hexes: [])
-        collections = []
-        userTitles = [:]
-        following = []
-        reviews = []
-        feed = []
-        feedLoaded = false
-        feedCursor = nil
-        discover = nil
-        titleActivity = [:]
-        loadedCollections = []
-        loadedTitles = []
-        missingTitles = []
-        loadedPeople = []
-        missingPeople = []
-        peopleLists = [:]
-        searchResults = []
-        searchPeople = []
-        onboardingPicks = []
-        onboardingGrid = []
-        onboardingPeople = []
-        onboardingPeopleLoaded = false
-        loadErrors = [:]
-        reviewCursors = [:]
-        publicCollections = [:]
-        missingPublicCollections = []
-        AvatarStore.shared.clear()
-        recapMonths = nil
-        recaps = [:]
-        requested = []
-        muted = []
-        blocked = []
-        blockedAccounts = nil
-        deviceSessions = nil
-        identities = nil
-        identityBusy = nil
-        mergeEmail = ""
-        mergeProof = nil
-        mergeBusy = false
-        mergeError = nil
-        mergeRetryAt = nil
-        pendingPush = nil
         authProvidersStale = true
-        suggestedName = nil
-        reportedReviews = []
-        feedDirty = false
-        alerts = []
-        authEmail = ""
-        authError = nil
-        for (_, t) in deferredWrites { t.cancel() }
-        deferredWrites = [:]
-        pendingCollections = [:]
-        if !KuraRuntime.usesMock {
-            people = [:]
-            titles = [:]
-            catalogOrder = []
-            recentSearches = []
-            recentlyViewed = []
-        }
+        AvatarStore.shared.clear()
     }
 
     // MARK: Local prefs (what the API marks unsupported)
 
-    private var local = LocalPrefs.Payload()
+    private var local: LocalPrefs.Payload { get { s.local } _modify { yield &s.local } set { s.local = newValue } }
 
     private func loadLocal() {
         local = prefs.load()
+        s.localDirty = false
+        s.reorderedCollections = []
         recentSearches = local.recentSearches
         recentlyViewed = local.recentlyViewed
         alerts = Set(local.alerts)
@@ -3005,6 +3457,7 @@ final class AppStore {
     }
 
     private func applyLocal(_ c: KCollection) -> KCollection {
+        syncLocalIfDirty()
         guard let l = local.collections[c.id] else { return c }
         var out = c
         out.pinned = l.pinned
@@ -3012,35 +3465,71 @@ final class AppStore {
         out.sort = l.sort
         out.layout = l.layout
         if let order = l.order {
-            let known = order.filter { c.titleIDs.contains($0) }
-            out.titleIDs = known + c.titleIDs.filter { !known.contains($0) }
+            let present = Set(c.titleIDs)
+            let known = order.filter { present.contains($0) }
+            let placed = Set(known)
+            out.titleIDs = known + c.titleIDs.filter { !placed.contains($0) }
         }
         return out
     }
 
     private func applyLocalEpisodes() {
+        syncLocalIfDirty()
         for (id, eps) in local.watchedEpisodes where userTitles[id] != nil {
             userTitles[id]?.watchedEpisodes = Set(eps)
         }
     }
 
+    /// Something device-local changed. Memory is the truth right away; the disk write is debounced
+    /// (0.5 s) so a burst — `noteViewed` on every ficha, a drag reorder — is one write, off the tap.
+    /// `sceneWentInactive` flushes early; an exit cancels it (the prefs are cleared anyway).
     func saveLocal() {
         guard prefs.enabled else { return }
+        s.localDirty = true
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.flushLocal()
+        }
+    }
+
+    /// Writes the pending prefs now (no-op when nothing changed).
+    func flushLocal() {
+        saveTask?.cancel()
+        saveTask = nil
+        guard prefs.enabled, s.localDirty else { return }
+        local = currentLocalPayload()
+        s.localDirty = false
+        prefs.save(local)
+    }
+
+    /// Rebuilds `local` from memory when memory is ahead of it (a read — `applyLocal` — must see
+    /// the latest pin/cover/sort before the debounced write lands). Stays dirty: the disk still lags.
+    private func syncLocalIfDirty() {
+        guard s.localDirty else { return }
+        local = currentLocalPayload()
+    }
+
+    private func currentLocalPayload() -> LocalPrefs.Payload {
         var p = LocalPrefs.Payload()
         for c in collections {
+            // A manual order is only persisted for collections the user actually reordered here
+            // (or that already had one saved): freezing the server's order for every collection
+            // would push titles added on the web to the end.
+            let keepsOrder = c.sort == .manual && (s.reorderedCollections.contains(c.id) || local.collections[c.id]?.order != nil)
             let entry = LocalPrefs.Collection(pinned: c.pinned, coverTitleID: c.coverTitleID, sort: c.sort, layout: c.layout,
-                                              order: c.sort == .manual ? c.titleIDs : nil)
+                                              order: keepsOrder ? c.titleIDs : nil)
             if entry != LocalPrefs.Collection() { p.collections[c.id] = entry }
         }
-        for (id, s) in userTitles where !s.watchedEpisodes.isEmpty { p.watchedEpisodes[id] = Array(s.watchedEpisodes).sorted() }
+        for (id, state) in userTitles where !state.watchedEpisodes.isEmpty { p.watchedEpisodes[id] = Array(state.watchedEpisodes).sorted() }
         p.recentSearches = recentSearches
         p.recentlyViewed = recentlyViewed
         p.alerts = Array(alerts).sorted()
         p.muted = Array(muted).sorted()
         p.showCommon = showCommon
         p.defaultPrivacy = defaultPrivacy.rawValue
-        local = p
-        prefs.save(p)
+        return p
     }
 }
 

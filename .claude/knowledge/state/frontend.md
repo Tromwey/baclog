@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-24 (auditoría Apple web: un solo toast, zoom con spring, foco de hojas) · 2026-09-24 (**Kura en TODA la app web**, superficies públicas, app iOS nativa en `ios/` y su `LiveAPI` contra `/api/v1`) · 2026-09-21 (re-sync del Revamp UI contra el mock actualizado) · 2026-09-17 (capa de movimiento Apple: springs, hojas con gesto, press states) · 2026-09-03 (Revamp UI)
+> Actualizado: 2026-09-25 (iOS: `SessionData` por cuenta, escrituras en orden por clave, reloj vivo, funciones sin efecto en live) · 2026-09-24 (auditoría Apple web: un solo toast, zoom con spring, foco de hojas) · 2026-09-24 (**Kura en TODA la app web**, superficies públicas, app iOS nativa en `ios/` y su `LiveAPI` contra `/api/v1`) · 2026-09-21 (re-sync del Revamp UI contra el mock actualizado) · 2026-09-17 (capa de movimiento Apple: springs, hojas con gesto, press states) · 2026-09-03 (Revamp UI)
 
 ## Qué cubre este dominio
 <!-- Pantallas, componentes, sistema visual (aura/paleta), navegación y texto visible.
@@ -78,6 +78,23 @@ El founder decidió el 2026-09-24 que la app web firmada adopta Kura (dominio y 
 - **El límite de reseña sigue en 280** aunque el mock diga 600: `REVIEW_MAX_LENGTH` + la columna; subirlo es una migración.
 - **"No me gustó" solo vive en la hoja Completar (08)** y "En progreso" ya no tiene UI (el dato queda): el mock colapsa el estado a me gustó · obsesión · completo.
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
+
+## iOS · el store (`ios/Kura/State/AppStore.swift`, 2026-09-25)
+- **Estado por cuenta = `SessionData`** (clase `@Observable` en el mismo archivo). `AppStore` la reenvía campo por campo (`get` / `_modify` / `set`, para que mutar en sitio no copie el diccionario) y **toda salida de sesión** (cerrar sesión, cuenta borrada, 401) pasa por `endSession()` → `resetData()` = `s = SessionData()` + `prefs.clear()` + web session + `PushRegistration.markUnregistered()` + `ReleaseNotifier.cancelAll()`. Un campo nuevo por cuenta va en `SessionData`, nunca como propiedad guardada de `AppStore` (así ninguno se queda sin limpiar). Un 401 limpia las prefs del disco igual que cerrar sesión (privacidad en un iPhone compartido); entrar a main (`enterMain`) vuelve a leerlas.
+- **Escrituras en orden por clave**: `sync(key:)` encadena las escrituras de la misma cosa (`WriteKey`: membresía título+colección, colección, marca, reseña, follow, @usuario, `PATCH /me`); cada `sync` está atado a su sesión (un fallo tardío o un Reintentar de la cuenta anterior nunca aparece en la siguiente). Una colección creada en optimista guarda `localID → serverID` para siempre (`collectionAliases`); crear con título = POST y luego la membresía como escritura aparte (Reintentar reintenta solo la membresía).
+- **Reloj**: `store.now` avanza en live al volver al primer plano y cada minuto activo (`sceneBecameActive` / `sceneWentInactive` desde `RootView`); en mock queda fijo. Producción usa `KCalendar.kura` (CDMX), nunca `MockData.calendar`; el arte de la bienvenida sale de `WelcomeArt` (Models.swift), no del mock.
+- **Derivados cacheados** (`SessionData.DerivedCache`, se invalidan en los forwarders de `collections` / `titles` / `userTitles` y en el setter de `now`): `orderedCollections`, `collection(_:)`, `collectionsContaining`, `libraryIDs`, `waitingTitles`, `titles(in:)`. Las reseñas viven por título (`reviewsByTitle` + índice id → título). Las prefs locales se escriben con debounce de 0,5 s (`saveLocal` → `flushLocal`, también al salir del primer plano) y solo guardan orden manual de las colecciones que el usuario reordenó.
+- **Bootstrap sigue esperando la hidratación** de títulos antes de `.loaded` (las cards dibujan solo los títulos que conocen; mostrar antes pintaría cards a medias y la tira "Faltan títulos"). Cambiarlo requiere portadas placeholder en `Features/` primero.
+
+### Funciones sin efecto en live
+Existen en la UI y funcionan en el mock (`-kuraMock` / `-kuraScreen`), pero en live no llegan al servidor o no tienen de dónde leer. Documentadas en el código con `⚠️ Solo mock / no-op en live`.
+
+| Símbolo | Qué ve el usuario en live | Qué haría falta en el backend |
+|---|---|---|
+| `AppStore.followFromProfile` → `requested` ("Solicitado") | En un perfil privado, Seguir cambia a "Solicitado" solo en memoria; nunca sale una llamada y el dueño no se entera. Se pierde al reiniciar. | Modelo de solicitudes de seguimiento (tabla, `POST/DELETE /me/follow-requests/{handle}`, aprobar/rechazar del dueño, notificación). Hoy `user_follow` solo acepta perfiles públicos (F3.10). |
+| `Privacy.followers` (Models.swift) | No se ofrece en live (`Privacy.options`); si llegara al cable se guarda como `link` (cualquiera con el link la ve). | Un tercer valor de visibilidad por colección y gatear cada lectura cross-user de `backlog` por `user_follow` viewer → dueño. |
+| `AppStore.loadPeopleList` para OTRA persona | "Solo @… ve su lista." (lista vacía; los conteos sí son públicos). | `GET /people/{handle}/followers|following` con `publicAuthor` + `notBlockedWith` por fila, y la decisión de producto de exponer listas (hoy "las listas solo las ve su dueño"). |
+| `AppStore.notifications` / `setRequest` / `markNotificationsRead` (+ `KNotification`, `NotificationKind`, `RequestState` en Models.swift) | La campana del feed abre vacía y nunca tiene punto (`hasUnread` = false); aprobar/rechazar no existe. | Tabla de notificaciones (seguidor nuevo, estreno, recap, solicitudes), `GET /me/notifications` paginado, `POST /me/notifications/read`. Los push reales (estrenos, seguidores) sí funcionan por `Push.swift`. |
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
