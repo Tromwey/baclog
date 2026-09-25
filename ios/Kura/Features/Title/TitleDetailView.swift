@@ -487,16 +487,27 @@ struct SpoilerPill: View {
             .textCase(.uppercase)
             .padding(.horizontal, 14)
             .frame(height: 36)
-            .background {
+            .modifier(SpoilerSurface())
+            .environment(\.colorScheme, .dark)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Contiene spoiler. Mostrar")
+    }
+}
+
+/// iOS 26+: the spoiler control is Liquid Glass over the blurred text.
+private struct SpoilerSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            content.background {
                 ZStack {
                     Capsule().fill(.ultraThinMaterial)
                     Capsule().fill(KColor.glassArt)
                 }
             }
-            .environment(\.colorScheme, .dark)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Contiene spoiler. Mostrar")
     }
 }
 

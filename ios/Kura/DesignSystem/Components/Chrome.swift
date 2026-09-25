@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Dock
 
 /// Floating dock: 4 tabs, rgba(20,20,26,.5) + blur, pill, float shadow.
+/// iOS 26+: a Liquid Glass capsule (the system draws its own depth).
 struct Dock: View {
     @Environment(AppStore.self) private var store
 
@@ -30,14 +31,25 @@ struct Dock: View {
             }
         }
         .padding(6)
-        .background {
-            ZStack {
-                Capsule().fill(.ultraThinMaterial)
-                Capsule().fill(KColor.dock)
-            }
-        }
+        .modifier(DockSurface())
         .environment(\.colorScheme, .dark)
-        .kShadow(.float)
+    }
+}
+
+private struct DockSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background {
+                    ZStack {
+                        Capsule().fill(.ultraThinMaterial)
+                        Capsule().fill(KColor.dock)
+                    }
+                }
+                .kShadow(.float)
+        }
     }
 }
 
@@ -72,8 +84,8 @@ struct ToastView: View {
         .padding(.leading, 18)
         .padding(.trailing, 8)
         .frame(minHeight: 52)
-        .background(KColor.s2, in: Capsule())
-        .kShadow(.float)
+        .kGlass(Capsule(), fill: KColor.s2, tint: KColor.s2.opacity(0.7))
+        .modifier(PreGlassShadow())
         .accessibilityElement(children: .contain)
     }
 }
@@ -154,8 +166,8 @@ struct SheetHost: View {
                     SheetContent(route: route)
                 }
                 .padding(.bottom, 26)
-                .background(KColor.s2, in: RoundedRectangle(cornerRadius: KRadius.sheet, style: .continuous))
-                .kShadow(.float)
+                .kGlass(RoundedRectangle(cornerRadius: KRadius.sheet, style: .continuous), fill: KColor.s2, tint: KColor.s2.opacity(0.7))
+                .modifier(PreGlassShadow())
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
@@ -183,6 +195,13 @@ struct SheetHost: View {
                 .padding(.bottom, 22)
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// The float shadow of pre-26 surfaces; Liquid Glass brings its own depth.
+struct PreGlassShadow: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) { content } else { content.kShadow(.float) }
     }
 }
 

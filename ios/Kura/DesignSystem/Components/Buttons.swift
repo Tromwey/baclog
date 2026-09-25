@@ -43,10 +43,10 @@ struct GlassButton: View {
             .padding(.trailing, 16)
             .frame(height: height)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .background(fill, in: Capsule())
+            .modifier(ChromeFill(fill: fill, shape: Capsule()))
             .contentShape(Capsule())
         }
-        .kPress()
+        .modifier(ChromePress(glass: fill == KColor.glassBg))
     }
 }
 
@@ -134,11 +134,31 @@ struct IconChip44: View {
                 .font(.system(size: iconSize, weight: weight))
                 .foregroundStyle(KColor.text)
                 .frame(width: size, height: size)
-                .background(fill, in: Circle())
+                .modifier(ChromeFill(fill: fill, shape: Circle()))
                 .contentShape(Circle())
         }
-        .kPress()
+        .modifier(ChromePress(glass: fill == KColor.glassBg))
         .accessibilityLabel(label)
+    }
+}
+
+/// Default glass fill → Liquid Glass on iOS 26+; any other fill (selected, s2…) stays flat.
+private struct ChromeFill<S: Shape>: ViewModifier {
+    let fill: Color
+    let shape: S
+    func body(content: Content) -> some View {
+        if fill == KColor.glassBg {
+            content.kGlass(shape, fill: fill, interactive: true)
+        } else {
+            content.background(fill, in: shape)
+        }
+    }
+}
+
+private struct ChromePress: ViewModifier {
+    let glass: Bool
+    func body(content: Content) -> some View {
+        if glass { content.kGlassPress() } else { content.kPress() }
     }
 }
 
