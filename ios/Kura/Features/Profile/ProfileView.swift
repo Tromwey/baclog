@@ -39,13 +39,6 @@ struct ProfileView: View {
         return obsessions.first?.palette
     }
 
-    private var shareChip: some View {
-        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
-            .foregroundStyle(KColor.text)
-            .frame(width: 44, height: 44)
-            .kGlass(Circle(), interactive: true)
-    }
-
     private var full: some View {
         let me = store.me
         return ZStack(alignment: .top) {
@@ -56,15 +49,8 @@ struct ProfileView: View {
                         HStack(spacing: 8) {
                             Spacer()
                             // Private profile: its link would 404, so say why instead of sharing it.
-                            if let link = store.myProfileLink {
-                                ShareLink(item: link) { shareChip }
-                                    .accessibilityLabel("Compartir perfil")
-                            } else {
-                                Button {
-                                    store.showToast(ToastModel(text: AppStore.privateProfileShareNote, kind: .info))
-                                } label: { shareChip }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Compartir perfil")
+                            ShareChip(link: store.myProfileLink) {
+                                store.showToast(ToastModel(text: AppStore.privateProfileShareNote, kind: .info))
                             }
                             IconChip44(systemName: "gearshape", iconSize: 17, weight: .medium, label: "Ajustes") {
                                 store.push(.settings)
@@ -111,7 +97,7 @@ struct ProfileView: View {
                             VStack(alignment: .leading, spacing: 14) {
                                 SectionTitle(text: "me obsesiona").padding(.horizontal, 20)
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(alignment: .bottom, spacing: 12) {
+                                    LazyHStack(alignment: .bottom, spacing: 12) {
                                         ForEach(obsessions) { t in
                                             Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
                                                 .buttonStyle(.plain)

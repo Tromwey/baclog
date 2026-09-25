@@ -564,7 +564,7 @@ private struct SearchMode: View {
                                         }
                                         Spacer()
                                         // Honey once per screen: the first user only.
-                                        FollowToggle(following: store.isFollowing(p.id), honey: i == 0) { store.followFromProfile(p.id) }
+                                        FollowButton(state: FollowState(following: store.isFollowing(p.id)), honey: i == 0) { store.followFromProfile(p.id) }
                                     }
                                     .padding(.horizontal, 20)
                                     .contentShape(Rectangle())

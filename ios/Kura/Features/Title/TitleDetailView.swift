@@ -7,16 +7,12 @@ struct TitleDetailView: View {
     let titleID: String
 
     var body: some View {
-        Group {
-            if let t = store.title(titleID) {
-                detail(t)
-            } else if store.missingTitles.contains(titleID) {
-                GoneView(title: "este título ya no está.", note: "Se quitó del catálogo o dejó de estar disponible.")
-            } else if let e = store.loadError(.title(titleID)) {
-                LoadErrorScreen(error: e) { Task { await store.loadTitle(titleID, force: true) } }
-            } else {
-                LoadingScreen()
-            }
+        ResourceScreen(value: store.title(titleID),
+                       missing: store.missingTitles.contains(titleID),
+                       error: store.loadError(.title(titleID)),
+                       retry: { Task { await store.loadTitle(titleID, force: true) } },
+                       gone: ("este título ya no está.", "Se quitó del catálogo o dejó de estar disponible.")) { t in
+            detail(t)
         }
         .task(id: titleID) { await store.loadTitle(titleID) }
     }

@@ -6,8 +6,9 @@ import SwiftUI
 struct FeedView: View {
     @Environment(AppStore.self) private var store
     @State private var position: String?
-    /// How far the stack has scrolled (0 at rest). Every pin and band derives from it.
-    @State private var scrolled: CGFloat = 0
+    /// How far the stack has scrolled. Held in a reference so a scroll frame only
+    /// re-renders the cards' pin/band (`FeedStackCard`), never this view or the cards' content.
+    @State private var scroll = FeedScroll()
 
     /// How far a card's body runs past its own height, so the card rising from
     /// underneath always mounts over filled color instead of bare bg.
@@ -107,20 +108,26 @@ struct FeedView: View {
             let events = store.visibleFeed
             // The design's frame starts below the status bar: tiers are fractions of that.
             let base = geo.size.height - headerTop
-            let heights = events.map { tierHeight($0.tier, base: base) }
-            // Layout top of each card on screen at rest: the first runs up behind the header,
-            // each next one starts where the previous card's own height ends.
-            let tops = heights.indices.map { i in i == 0 ? 0 : hdr + heights[..<i].reduce(0, +) }
+            let rows = layout(events, base: base)
+            let scroll = self.scroll
             ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(events.enumerated()), id: \.element.id) { i, e in
-                            card(e, index: i, height: heights[i], y: tops[i] - scrolled)
-                                .onAppear { if i >= events.count - 2 { Task { await store.loadMoreFeed() } } }
+                    // Lazy: only the cards near the screen exist (a long history never mounts whole).
+                    LazyVStack(spacing: 0) {
+                        ForEach(rows) { row in
+                            FeedStackCard(row: row, hdr: hdr, ext: ext, scroll: scroll)
                         }
                         // The stack's light continues past the last card.
-                        Tint.ends(palette(events.last)).1.color
+                        Tint.ends(rows.last?.palette ?? palette(nil)).1.color
                             .frame(height: max(geo.size.height - hdr - tierHeight(events.last?.tier ?? .M, base: base), 0) + ext)
+                            .overlay(alignment: .top) {
+                                // The next page loads when the END of the stack comes into view — its own
+                                // view, re-made per page, so a page that adds little (or nothing visible)
+                                // still asks again when it lands on screen.
+                                Color.clear.frame(height: 1)
+                                    .onAppear { Task { await store.loadMoreFeed() } }
+                                    .id(rows.last?.id)
+                            }
                             .overlay(alignment: .top) {
                                 // The next page failed: no auto-retry on scroll, the end of the stack offers it.
                                 if let e = store.loadError(.feedMore) {
@@ -137,7 +144,7 @@ struct FeedView: View {
                     .background {
                         GeometryReader { g in
                             Color.clear.onChange(of: g.frame(in: .named(FeedView.space)).minY, initial: true) { _, v in
-                                scrolled = hdr - v
+                                scroll.offset = hdr - v
                             }
                         }
                     }
@@ -171,37 +178,21 @@ struct FeedView: View {
         .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
-    /// One card of the stack. The first runs up behind the header (no corners); the rest pin
-    /// under it and, as they arrive, raise a band of their own color over the header.
-    /// `y`: where the card's top would be on screen if it didn't pin.
-    private func card(_ e: FeedEvent, index i: Int, height h: CGFloat, y: CGFloat) -> some View {
-        let pal = palette(e)
-        let first = i == 0
-        let pin = first ? 0 : hdr
-        let lift = hdr + KRadius.screen
-        // The band: 0 → 1 over the last 140 pt before the card takes the top place.
-        let p = min(max(1 - (y - hdr) / 140, 0), 1)
-        let rise = lift * p * p * (3 - 2 * p)
-        return FeedCard(event: e, height: h, topInset: first ? hdr : 0)
-            .frame(height: h + ext + (first ? hdr : 0), alignment: .top)
-            .background(Tint.card(pal))
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: first ? 0 : KRadius.screen,
-                                              topTrailingRadius: first ? 0 : KRadius.screen,
-                                              style: .continuous))
-            .background(alignment: .top) {
-                if !first {
-                    // The band: the card's own surface, uncovered upward over the last 140 pt.
-                    UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous)
-                        .fill(Tint.ends(pal).0.color)
-                        .frame(height: lift + KRadius.screen * 2)
-                        .kShadow(.stack)
-                        .offset(y: -rise)
-                }
-            }
-            .padding(.top, first ? -hdr : 0)
-            .padding(.bottom, -ext)
-            .offset(y: max(0, pin - y))
-            .zIndex(Double(i))
+    /// Everything a card needs that doesn't move with the scroll, computed once per data
+    /// (or size) change: its height, its layout top at rest (a running sum, not a sum per
+    /// card) and its palette.
+    private func layout(_ events: [FeedEvent], base: CGFloat) -> [FeedStackRow] {
+        var rows: [FeedStackRow] = []
+        rows.reserveCapacity(events.count)
+        // Layout top of each card on screen at rest: the first runs up behind the header,
+        // each next one starts where the previous card's own height ends.
+        var above: CGFloat = 0
+        for (i, e) in events.enumerated() {
+            let h = tierHeight(e.tier, base: base)
+            rows.append(FeedStackRow(event: e, index: i, height: h, top: i == 0 ? 0 : hdr + above, palette: palette(e)))
+            above += h
+        }
+        return rows
     }
 
     private var header: some View { header(transparent: false) }
@@ -263,14 +254,83 @@ struct FeedView: View {
     }
 }
 
+// MARK: - Stack
+
+/// The stack's scroll offset (0 at rest). Only `FeedStackCard` reads it.
+@Observable
+private final class FeedScroll {
+    var offset: CGFloat = 0
+}
+
+/// One card's place in the stack, fixed until the data (or the screen size) changes.
+private struct FeedStackRow: Identifiable {
+    let event: FeedEvent
+    let index: Int
+    let height: CGFloat
+    /// Layout top at rest.
+    let top: CGFloat
+    /// The card is never lit by nothing: the cover's palette, else the author's.
+    let palette: [String]
+    var id: String { event.id }
+}
+
+/// One card of the stack. The first runs up behind the header (no corners); the rest pin
+/// under it and, as they arrive, raise a band of their own color over the header.
+/// The only part of the feed that re-renders per scroll frame; its content (`FeedCard`)
+/// doesn't depend on the offset and is skipped.
+private struct FeedStackCard: View {
+    let row: FeedStackRow
+    let hdr: CGFloat
+    let ext: CGFloat
+    let scroll: FeedScroll
+
+    var body: some View {
+        let first = row.index == 0
+        let h = row.height
+        // Where the card's top would be on screen if it didn't pin.
+        let y = row.top - scroll.offset
+        let pin = first ? 0 : hdr
+        let lift = hdr + KRadius.screen
+        // The band: 0 → 1 over the last 140 pt before the card takes the top place.
+        let p = min(max(1 - (y - hdr) / 140, 0), 1)
+        let rise = lift * p * p * (3 - 2 * p)
+        FeedCard(event: row.event, height: h, topInset: first ? hdr : 0)
+            .equatable()
+            .frame(height: h + ext + (first ? hdr : 0), alignment: .top)
+            .background(Tint.card(row.palette))
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: first ? 0 : KRadius.screen,
+                                              topTrailingRadius: first ? 0 : KRadius.screen,
+                                              style: .continuous))
+            .background(alignment: .top) {
+                if !first {
+                    // The band: the card's own surface, uncovered upward over the last 140 pt.
+                    UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous)
+                        .fill(Tint.ends(row.palette).0.color)
+                        .frame(height: lift + KRadius.screen * 2)
+                        .kShadow(.stack)
+                        .offset(y: -rise)
+                }
+            }
+            .padding(.top, first ? -hdr : 0)
+            .padding(.bottom, -ext)
+            .offset(y: max(0, pin - y))
+            .zIndex(Double(row.index))
+    }
+}
+
 // MARK: - Card
 
-private struct FeedCard: View {
+private struct FeedCard: View, Equatable {
     @Environment(AppStore.self) private var store
     let event: FeedEvent
     let height: CGFloat
     /// The first card runs up behind the header: its content starts below it.
     var topInset: CGFloat = 0
+
+    /// What the parent hands in; the store's changes reach the body through Observation.
+    static func == (a: FeedCard, b: FeedCard) -> Bool {
+        a.event == b.event && a.height == b.height && a.topInset == b.topInset
+    }
 
     private var title: Title? { event.titleID.flatMap { store.title($0) } }
     private var author: Person? { store.person(event.authorID) }
@@ -403,7 +463,7 @@ private struct FeedCard: View {
                         .font(.kura.ui(14))
                         .foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)
-                    FollowButton(following: store.isFollowing(p.id)) { store.toggleFollow(p.id) }
+                    FollowButton(state: FollowState(following: store.isFollowing(p.id)), size: .card, honey: true) { store.toggleFollow(p.id) }
                         .padding(.top, 4)
                 }
             case .burst:
@@ -512,25 +572,5 @@ private struct SuggestionPill: View {
         .background(KColor.glassBg, in: Capsule())
         .fixedSize()
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Feed v10's Seguir: the screen's one honey action; glass once you follow.
-private struct FollowButton: View {
-    let following: Bool
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Text(following ? "Siguiendo" : "Seguir")
-                .font(.kura.ui(16, .semibold))
-                .foregroundStyle(following ? KColor.text : KColor.onAccent)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .background(following ? KColor.glassBg : KColor.accent, in: Capsule())
-                .contentShape(Capsule())
-                .animation(KMotion.fade, value: following)
-        }
-        .kPress()
-        .accessibilityLabel(following ? "Dejar de seguir" : "Seguir")
     }
 }

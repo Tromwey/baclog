@@ -156,7 +156,7 @@ struct NotificationsView: View {
             }
         case .newFollower(let id):
             // Honey: the one "Seguir" on this screen.
-            FollowToggle(following: store.isFollowing(id), honey: true) { store.toggleFollow(id) }
+            FollowButton(state: FollowState(following: store.isFollowing(id)), honey: true) { store.toggleFollow(id) }
         default:
             EmptyView()
         }

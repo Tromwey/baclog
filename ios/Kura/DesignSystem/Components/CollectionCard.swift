@@ -40,6 +40,9 @@ struct CollectionCard: View {
     /// The covers push their own ficha (not the collection): they're zoom sources.
     var coversOpenTitles = false
 
+    /// Covers mounted per card: enough to overflow any screen, never a whole long collection.
+    static let teaserLimit = 12
+
     private var vPad: CGFloat { coverHeight >= 150 ? 20 : 16 }
     private var cardHeight: CGFloat { coverHeight + vPad * 2 }
 
@@ -58,7 +61,9 @@ struct CollectionCard: View {
                                     .opacity(i == 2 ? 0.5 : 1)
                             }
                         }
-                        ForEach(titles) { t in
+                        // A teaser, not the shelf: the collection itself shows everything. Counts
+                        // (VoiceOver's included) still read the full `titles`.
+                        ForEach(titles.prefix(CollectionCard.teaserLimit)) { t in
                             CoverView(title: t, height: coverHeight, badge: badge(for: t))
                                 .zoomSource(coversOpenTitles ? ZoomID.title(t.id) : nil)
                                 .onTapGesture { (onTitleTap ?? { _ in onTap() })(t) }
@@ -113,7 +118,7 @@ struct WaitingCard: View {
                 HStack(spacing: 0) {
                     SpineLabel(text: "no puedo esperar", height: cardHeight)
                     HStack(alignment: .bottom, spacing: 10) {
-                        ForEach(titles) { t in
+                        ForEach(titles.prefix(CollectionCard.teaserLimit)) { t in
                             CoverView(title: t, height: coverHeight, badge: .waiting(label(t)), badgeHeight: 24)
                                 .zoomSource(ZoomID.title(t.id))
                                 .onTapGesture { onTitleTap(t) }

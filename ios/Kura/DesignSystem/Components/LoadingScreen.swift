@@ -35,8 +35,10 @@ struct LoadingScreen: View {
 
 /// The 404 shape: something that was here is gone (collection, title, person).
 struct GoneView: View {
-    var title = "esta colección ya no existe."
-    var note = "Se borró o dejó de estar disponible."
+    static let defaultTitle = "esta colección ya no existe."
+    static let defaultNote = "Se borró o dejó de estar disponible."
+    var title = GoneView.defaultTitle
+    var note = GoneView.defaultNote
     var body: some View {
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
@@ -52,6 +54,44 @@ struct GoneView: View {
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+/// The scaffold of a pushed screen that reads one resource (ficha, perfil, colección):
+/// the content once it's here; the 404 shape when the server said it's gone; the error
+/// screen with Reintentar when the read failed; the skeleton meanwhile. The caller keeps
+/// its own `.task` (what to load and when).
+struct ResourceScreen<Value, Content: View>: View {
+    let value: Value?
+    let missing: Bool
+    let error: KuraAPIError?
+    let retry: () -> Void
+    let gone: (title: String, note: String)
+    var square: Bool
+    @ViewBuilder let content: (Value) -> Content
+
+    init(value: Value?, missing: Bool, error: KuraAPIError?, retry: @escaping () -> Void,
+         gone: (title: String, note: String) = (GoneView.defaultTitle, GoneView.defaultNote),
+         square: Bool = false, @ViewBuilder content: @escaping (Value) -> Content) {
+        self.value = value
+        self.missing = missing
+        self.error = error
+        self.retry = retry
+        self.gone = gone
+        self.square = square
+        self.content = content
+    }
+
+    var body: some View {
+        if let value {
+            content(value)
+        } else if missing {
+            GoneView(title: gone.title, note: gone.note)
+        } else if let error {
+            LoadErrorScreen(error: error, retry: retry)
+        } else {
+            LoadingScreen(square: square)
+        }
     }
 }
 
