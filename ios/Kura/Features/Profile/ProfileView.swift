@@ -43,7 +43,7 @@ struct ProfileView: View {
         Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
             .foregroundStyle(KColor.text)
             .frame(width: 44, height: 44)
-            .background(KColor.glassBg, in: Circle())
+            .kGlass(Circle(), interactive: true)
     }
 
     private var full: some View {

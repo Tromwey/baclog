@@ -355,5 +355,8 @@ struct TopChrome<Right: View>: View {
         }
         .padding(.horizontal, KSize.chromeSide)
         .padding(.top, KSize.chromeTop)
+        // chromeTop is measured from the screen's edge, never from the safe area: otherwise
+        // a screen whose container respects the safe area drops its chips ~60 pt lower.
+        .ignoresSafeArea(.container, edges: .top)
     }
 }

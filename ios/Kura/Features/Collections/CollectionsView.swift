@@ -176,8 +176,9 @@ struct CollectionsSkeleton: View {
             HStack(alignment: .bottom) {
                 Text("tus colecciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
                 Spacer()
-                Circle().fill(KColor.glassBg).frame(width: 44, height: 44)
-                    .overlay(Image(systemName: "plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(KColor.text))
+                Image(systemName: "plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(KColor.text)
+                    .frame(width: 44, height: 44)
+                    .kGlass(Circle())
             }
             .padding(.horizontal, 20)
             .padding(.top, KSize.chromeTop)

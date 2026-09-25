@@ -155,7 +155,7 @@ struct RecapHistoryView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack { BackChip(); Spacer() }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, KSize.chromeSide)
                     .padding(.bottom, 14)
                 Text("recap · \(current?.month ?? "") \(current.map { String($0.year) } ?? "")").monoLabel().padding(.horizontal, 20)
                 Text(current?.month ?? "recap").font(.kura.news(40)).foregroundStyle(KColor.text).padding(.horizontal, 20).padding(.top, 6)

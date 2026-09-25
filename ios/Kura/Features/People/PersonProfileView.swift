@@ -61,9 +61,20 @@ struct PersonProfileView: View {
 
     private func header(_ p: Person, following: Bool, locked: Bool) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
+            HStack(spacing: 8) {
                 BackChip()
                 Spacer()
+                // Next to Opciones, like Compartir next to Ajustes on your own profile.
+                // Someone else's profile we can open is public, so its link is live.
+                if let link = PublicLinks.profile(p.handle) {
+                    ShareLink(item: link) {
+                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(KColor.text)
+                            .frame(width: 44, height: 44)
+                            .kGlass(Circle(), interactive: true)
+                    }
+                    .accessibilityLabel("Compartir perfil")
+                }
                 IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones") { store.present(.personOptions(p.id)) }
             }
             Seal(person: p, size: 128)
@@ -84,16 +95,6 @@ struct PersonProfileView: View {
             }
             HStack(spacing: 8) {
                 followButton(p, following: following)
-                // Someone else's profile we can open is public, so its link is live.
-                if let link = PublicLinks.profile(p.handle) {
-                    ShareLink(item: link) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(KColor.text)
-                            .frame(width: 44, height: 44)
-                            .background(KColor.glassBg, in: Circle())
-                    }
-                    .accessibilityLabel("Compartir perfil")
-                }
             }
         }
         .padding(.top, KSize.chromeTop)
@@ -115,7 +116,7 @@ struct PersonProfileView: View {
                 .foregroundStyle(honey ? KColor.onAccent : KColor.text)
                 .padding(.horizontal, 28)
                 .frame(height: 48)
-                .background(honey ? KColor.accent : KColor.glassBg, in: Capsule())
+                .modifier(FollowSurface(honey: honey))
                 .contentShape(Capsule())
                 .animation(.easeInOut(duration: 0.2), value: label)
         }
@@ -662,5 +663,14 @@ struct ProfileAsStrangerView: View {
                 Text("vista previa").monoLabel()
             }
         }
+    }
+}
+
+/// Seguir is the screen's honey accent (flat on every OS); Siguiendo / Solicitado sit next to
+/// the share chip, so they take the same glass.
+private struct FollowSurface: ViewModifier {
+    let honey: Bool
+    func body(content: Content) -> some View {
+        if honey { content.background(KColor.accent, in: Capsule()) } else { content.kGlass(Capsule(), interactive: true) }
     }
 }
