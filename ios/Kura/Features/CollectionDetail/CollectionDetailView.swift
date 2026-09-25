@@ -140,6 +140,7 @@ struct CollectionHeader<Lead: View>: View {
             }
             .animation(KMotion.tint, value: palette)
         }
+        .kOverscrollFill(Tint.headerTop(palette))
     }
 }
 

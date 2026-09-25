@@ -314,6 +314,10 @@ private struct FeedStackCard: View {
                         .frame(height: lift + KRadius.screen * 2)
                         .kShadow(.stack)
                         .offset(y: -rise)
+                } else {
+                    // The first card runs up behind the header; pulled past the top, its color
+                    // keeps going instead of opening a black gap.
+                    Color.clear.kOverscrollFill(Tint.ends(row.palette).0.color)
                 }
             }
             .padding(.top, first ? -hdr : 0)

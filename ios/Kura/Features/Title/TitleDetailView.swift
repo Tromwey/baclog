@@ -124,6 +124,7 @@ private struct TitleHeader: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 30)
         .background(Tint.header(t.palette))
+        .kOverscrollFill(Tint.headerTop(t.palette))
     }
 
     private func completeButton(_ t: Title, mark: Mark?, solid: Bool) -> some View {

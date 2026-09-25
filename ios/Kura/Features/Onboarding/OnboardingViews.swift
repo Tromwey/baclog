@@ -739,6 +739,7 @@ struct YourPeopleView: View {
                 ], startPoint: .top, endPoint: .bottom))
                 .padding(.bottom, -140)
         }
+        .kOverscrollFill(Tint.headerTop(picked.first?.palette))
     }
 
     private func personRow(_ p: Person, why: String) -> some View {

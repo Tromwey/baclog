@@ -115,6 +115,7 @@ struct PersonProfileView: View {
             // No cover to tint from (or locked): the same neutral s1 → bg as every other hero.
             if let pal = palette(p), !locked { Tint.header(pal) } else { Tint.neutralHeader }
         }
+        .kOverscrollFill(Tint.headerTop(locked ? nil : palette(p)))
     }
 
     @ViewBuilder private func followButton(_ p: Person, following: Bool) -> some View {
@@ -540,6 +541,7 @@ struct CreatorView: View {
                     .padding(.top, KSize.pushedTitleTop)
                     .padding(.bottom, 28)
                     .background(works.first.map { Tint.header($0.palette) } ?? Tint.neutralHeader)
+                    .kOverscrollFill(Tint.headerTop(works.first?.palette))
 
                     VStack(alignment: .leading, spacing: 28) {
                         if !saved.isEmpty {

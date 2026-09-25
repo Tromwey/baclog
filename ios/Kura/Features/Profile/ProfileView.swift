@@ -101,6 +101,7 @@ struct ProfileView: View {
                     .padding(.horizontal, 24)
                     .padding(.bottom, 34)
                     .background(headerPalette.map { Tint.header($0) } ?? Tint.neutralHeader)
+                    .kOverscrollFill(Tint.headerTop(headerPalette))
                     .animation(KMotion.tint, value: headerPalette)
 
                     VStack(alignment: .leading, spacing: 30) {
@@ -301,6 +302,7 @@ struct EditProfileView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 30)
                 .background(palette.map { Tint.header($0) } ?? Tint.neutralHeader)
+                .kOverscrollFill(Tint.headerTop(palette))
                 .animation(KMotion.tint, value: featured)
 
                 VStack(alignment: .leading, spacing: 24) {

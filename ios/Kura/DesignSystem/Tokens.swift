@@ -155,6 +155,15 @@ enum KShadow {
 }
 
 extension View {
+    /// Paints `color` ABOVE the view's top edge, so pulling a scroll view down past its top (the
+    /// rubber band) shows the header's own color stretching up instead of bare `bg`. Put it on
+    /// the tinted header (or the feed's first card), with that surface's top color.
+    func kOverscrollFill(_ color: Color) -> some View {
+        background(alignment: .top) {
+            color.frame(height: 1200).offset(y: -1200).allowsHitTesting(false)
+        }
+    }
+
     func kShadow(_ s: KShadow) -> some View {
         shadow(color: s.color, radius: s.radius, x: 0, y: s.y)
     }
@@ -206,6 +215,13 @@ enum Tint {
 
     /// Without a cover there is no color: s1 → bg.
     static let neutralHeader = LinearGradient(colors: [KColor.s1, KColor.bg], startPoint: .top, endPoint: .bottom)
+
+    /// The top edge of `header`/`card` (its palette's first end) — or `neutralHeader`'s s1 without
+    /// one. What `kOverscrollFill` extends upward.
+    static func headerTop(_ palette: [String]?) -> Color {
+        guard let palette, !palette.isEmpty else { return KColor.s1 }
+        return ends(palette).0.color
+    }
 
     /// Palette fallback for a cover still loading / failed: 160° between the two hex.
     static func coverFallback(_ palette: [String]) -> LinearGradient {
