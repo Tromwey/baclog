@@ -336,10 +336,9 @@ struct SheetShareRow: View {
     var systemImage = "square.and.arrow.up"
     let label: String
     let item: URL
-    var message: Text? = nil
 
     var body: some View {
-        ShareLink(item: item, message: message) {
+        ShareLink(item: item) {
             SheetRowLabel(systemImage: systemImage, label: label) { EmptyView() }
         }
         .buttonStyle(SheetRowStyle())

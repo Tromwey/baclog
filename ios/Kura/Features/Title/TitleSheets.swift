@@ -383,7 +383,7 @@ struct TitleMoreSheet: View {
                 }
                 // `/{you}/item/{id}` — only while your profile is public (otherwise it 404s).
                 if let url = store.myItemLink(t.id) {
-                    SheetShareRow(label: "Compartir", item: url, message: Text("\(t.name) en kura"))
+                    SheetShareRow(label: "Compartir", item: url)
                 } else if store.profilePrivate {
                     // Same note as the collection's share sheet: the link would 404.
                     Text(AppStore.privateProfileShareNote)

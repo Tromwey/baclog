@@ -322,7 +322,7 @@ struct ShareCollectionSheet: View {
                         store.dismissSheet()
                         store.showToast(ToastModel(text: "Link copiado", kind: .info))
                     }
-                    ShareLink(item: url, message: Text("\(c.name) en kura")) {
+                    ShareLink(item: url) {
                         roundLabel("rectangle.portrait", "Historia")
                     }
                     .buttonStyle(.plain)
