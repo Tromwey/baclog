@@ -707,6 +707,18 @@ final class AppStore {
         if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
+    // MARK: Reads bound to their session
+
+    /// A read that started in one session and answers in another is dropped whole: its data, and
+    /// its 401 from a revoked bearer, belong to the old account (the same rule as `sync`'s
+    /// `self.s === session`). Every `load*` captures `let session = s` first, calls
+    /// `try check(session)` after each await and opens its `catch` with `guard s === session`.
+    private struct StaleSession: Error {}
+
+    private func check(_ session: SessionData) throws {
+        if s !== session { throw StaleSession() }
+    }
+
     /// Fetches the titles we don't know yet (`GET /titles?ids=`), ≤ 50 per call. A failure is
     /// recorded on `key` (the screen that needed them) so it says "incompleto · Reintentar"
     /// instead of drawing an empty shelf as if it were the truth.
@@ -714,13 +726,17 @@ final class AppStore {
     func hydrateTitles(_ ids: some Sequence<String>, for key: LoadKey) async -> Bool {
         let missing = Array(Set(ids.filter { titles[$0] == nil && ExternalRef.parse(localID: $0) == nil }))
         guard !missing.isEmpty else { return true }
+        let session = s
         do {
             #if DEBUG
             if debugFailHydrate { throw KuraAPIError.server("hydrate simulado (-kuraFailHydrate)") }
             #endif
-            for t in try await api.titles(ids: missing) { register(t) }
+            let fetched = try await api.titles(ids: missing)
+            try check(session)
+            for t in fetched { register(t) }
             return true
         } catch {
+            guard s === session else { return false }
             fail(key, error)
             return false
         }
@@ -734,7 +750,8 @@ final class AppStore {
     /// Reintentar on a launch whose library arrived but whose titles didn't.
     func retryLibraryTitles() async {
         loadErrors[.library] = nil
-        if await hydrateTitles(libraryIDs, for: .library) { online() }
+        let session = s
+        if await hydrateTitles(libraryIDs, for: .library), s === session { online() }
     }
 
     // MARK: Errors
@@ -778,12 +795,14 @@ final class AppStore {
     func bootstrap(emptyLibrary: Bool = false, keepLoading: Bool = false) async {
         loadState = .loading
         loadErrors[.library] = nil
+        let session = s
         do {
             async let m = api.me()
             async let cols = api.collections()
             async let states = api.myTitles()
             async let fol = allPeople(.following)
             let (account, library, myStates, followed) = try await (m, cols, states, fol)
+            try check(session)
             loaded(.library)
             for p in followed { register(p) }
             following = Set(followed.map(\.id)).union(following)
@@ -804,9 +823,11 @@ final class AppStore {
             // the titles they know (`titles(in:)` drops the missing ones), so flipping to `.loaded`
             // first would paint half-empty cards and the "Faltan títulos" strip for a beat.
             await hydrateTitles(Array(libraryIDs) + [account.featuredTitleID].compactMap { $0 }, for: .library)
+            try check(session)
             if me.hexes.isEmpty, let id = me.featuredTitleID, let t = titles[id] { me.hexes = t.palette }
             if !keepLoading { loadState = .loaded }
         } catch {
+            guard s === session else { return }
             // The launch failed (offline, 5xx): the collections tab shows the error with
             // Reintentar instead of a skeleton that never ends. 401 already went to the entrance.
             let e = fail(.library, error)
@@ -829,8 +850,10 @@ final class AppStore {
     func loadCollection(_ id: String, force: Bool = false) async {
         let id = canonicalCollectionID(id)
         guard force || !loadedCollections.contains(id), pendingCollections[id] == nil else { return }
+        let session = s
         do {
             let d = try await api.collection(id: id)
+            try check(session)
             loaded(.collection(id))
             for t in d.titles { register(t) }
             for (tid, s) in d.states where inflight[tid, default: 0] == 0 {
@@ -850,6 +873,7 @@ final class AppStore {
             }
             loadedCollections.insert(id)
         } catch {
+            guard s === session else { return }
             let e = fail(.collection(id), error)
             if case .notFound = e { collections.removeAll { $0.id == id } }
         }
@@ -860,9 +884,11 @@ final class AppStore {
         guard ExternalRef.parse(localID: id) == nil else { return }
         guard force || !loadedTitles.contains(id), !loadingTitles.contains(id) else { return }
         loadingTitles.insert(id)
-        defer { loadingTitles.remove(id) }
+        let session = s
+        defer { session.loadingTitles.remove(id) }
         do {
             let d = try await api.title(id: id)
+            try check(session)
             loaded(.title(id))
             loadErrors[.moreReviews(id)] = nil
             register(d.title)
@@ -887,6 +913,7 @@ final class AppStore {
             missingTitles.remove(id)
             loadedTitles.insert(id)
         } catch {
+            guard s === session else { return }
             let e = fail(.title(id), error)
             if case .notFound = e { missingTitles.insert(id) }
         }
@@ -897,15 +924,18 @@ final class AppStore {
     func loadMoreReviews(_ id: String) async {
         guard let cursor = reviewCursors[id], !reviewsPaging.contains(id) else { return }
         reviewsPaging.insert(id)
-        defer { reviewsPaging.remove(id) }
+        let session = s
+        defer { session.reviewsPaging.remove(id) }
         do {
             let page = try await api.moreReviews(titleID: id, cursor: cursor)
+            try check(session)
             loaded(.moreReviews(id))
             for r in page.items { if let a = r.author { register(a) } }
             let known = Set(reviewList(id).map(\.id))
             setReviews(id, reviewList(id) + page.items.filter { !known.contains($0.id) })
             reviewCursors[id] = page.nextCursor
         } catch {
+            guard s === session else { return }
             switch fail(.moreReviews(id), error) {
             case .notFound:
                 // The title itself is gone: nothing more to page.
@@ -926,14 +956,17 @@ final class AppStore {
         guard force || !feedLoaded, !feedLoading else { return }
         feedLoading = true
         loadErrors[.feed] = nil
-        defer { feedLoading = false }
+        let session = s
+        defer { session.feedLoading = false }
         do {
             async let page = api.feed(cursor: nil)
             async let sug = api.feedSuggestion()
-            var events = try await page.items.map(ingest)
-            feedCursor = try await page.nextCursor
-            if let s = try await sug {
-                events.insert(ingest(s), at: min(3, events.count))
+            let (first, suggestion) = try await (page, sug)
+            try check(session)
+            var events = first.items.map(ingest)
+            feedCursor = first.nextCursor
+            if let suggestion {
+                events.insert(ingest(suggestion), at: min(3, events.count))
             }
             loaded(.feed)
             loadErrors[.feedMore] = nil
@@ -944,11 +977,13 @@ final class AppStore {
                 if case .suggestion(_, _, _, let more) = e.kind { ids += more }
             }
             await hydrateTitles(ids, for: .feed)
+            try check(session)
             feed = events
             feedLoaded = true
             feedFollowingKey = following
             feedDirty = false
         } catch {
+            guard s === session else { return }
             fail(.feed, error)
         }
     }
@@ -963,21 +998,25 @@ final class AppStore {
     func loadMoreFeed(retry: Bool = false) async {
         guard feedCursor != nil, !feedLoading, retry || loadErrors[.feedMore] == nil else { return }
         feedLoading = true
-        defer { feedLoading = false }
+        let session = s
+        defer { session.feedLoading = false }
         var pages = 0
         while let cursor = feedCursor, pages < Self.maxFeedPagesPerCall {
             pages += 1
             do {
                 let page = try await api.feed(cursor: cursor)
+                try check(session)
                 loaded(.feedMore)
                 let events = page.items.map(ingest)
                 feedCursor = page.nextCursor
                 await hydrateTitles(events.compactMap(\.titleID), for: .feedMore)
+                try check(session)
                 let known = Set(feed.map(\.id))
                 let fresh = events.filter { !known.contains($0.id) }
                 feed += fresh
                 if fresh.contains(where: isVisible) { return }
             } catch {
+                guard s === session else { return }
                 fail(.feedMore, error)
                 return
             }
@@ -1001,9 +1040,11 @@ final class AppStore {
     func loadDiscover(force: Bool = false) async {
         guard force || discover == nil, !discoverLoading else { return }
         discoverLoading = true
-        defer { discoverLoading = false }
+        let session = s
+        defer { session.discoverLoading = false }
         do {
             let d = try await api.discover()
+            try check(session)
             loaded(.discover)
             for t in d.allTitles { register(t) }
             // `upcoming` = your library's titles with a release day still ahead (web's
@@ -1016,6 +1057,7 @@ final class AppStore {
             }
             discover = d
         } catch {
+            guard s === session else { return }
             fail(.discover, error)
         }
     }
@@ -1027,11 +1069,13 @@ final class AppStore {
         guard !query.isEmpty else { searchResults = []; searchPeople = []; return }
         searchLoading = true
         searchError = nil
-        defer { if searchQuery == query { searchLoading = false } }
+        let session = s
+        defer { if session.searchQuery == query { session.searchLoading = false } }
         do {
             async let t = api.search(query, kind: kind)
             async let p = api.people(kind: .search(query), cursor: nil)
             let (results, page) = try await (t, p)
+            try check(session)
             guard searchQuery == query else { return }
             online()
             for r in results { registerPartial(r.title) }
@@ -1039,7 +1083,7 @@ final class AppStore {
             searchResults = results
             searchPeople = page.items
         } catch {
-            guard searchQuery == query else { return }
+            guard s === session, searchQuery == query else { return }
             searchError = noteError(error)
             searchResults = []
             searchPeople = []
@@ -1058,18 +1102,22 @@ final class AppStore {
     func loadPerson(_ handle: String, force: Bool = false) async {
         guard handle != me.id, force || !loadedPeople.contains(handle), !loadingPeople.contains(handle) else { return }
         loadingPeople.insert(handle)
-        defer { loadingPeople.remove(handle) }
+        let session = s
+        defer { session.loadingPeople.remove(handle) }
         do {
             let p = try await api.person(handle: handle)
+            try check(session)
             loaded(.person(handle))
             register(p)
             // Only this read says whether you blocked them; every other payload is silent.
             if p.isBlocked { blocked.insert(handle) } else { blocked.remove(handle) }
             await hydrateTitles(p.obsessions + p.common + p.collections.flatMap(\.titleIDs) + [p.featuredTitleID].compactMap { $0 },
                                 for: .person(handle))
+            try check(session)
             missingPeople.remove(handle)
             loadedPeople.insert(handle)
         } catch {
+            guard s === session else { return }
             let e = fail(.person(handle), error)
             if case .notFound = e { missingPeople.insert(handle) }
         }
@@ -1083,13 +1131,16 @@ final class AppStore {
     func loadPublicCollection(handle: String, id: String, force: Bool = false) async {
         let key = AppStore.publicKey(handle: handle, id: id)
         guard force || publicCollections[key] == nil else { return }
+        let session = s
         do {
             let d = try await api.personCollection(handle: handle, id: id)
+            try check(session)
             loaded(.publicCollection(key))
             for t in d.titles { register(t) }
             missingPublicCollections.remove(key)
             publicCollections[key] = d
         } catch {
+            guard s === session else { return }
             let e = fail(.publicCollection(key), error)
             if case .notFound = e {
                 missingPublicCollections.insert(key)
@@ -1129,10 +1180,12 @@ final class AppStore {
     func loadPeopleList(of personID: String, following: Bool) async {
         let key = AppStore.peopleListKey(of: personID, following: following)
         guard peopleLists[key] == nil else { return }
+        let session = s
         do {
             let items: [Person]
             if personID == me.id {
                 items = try await allPeople(following ? .following : .followers)
+                try check(session)
                 if following { self.following.formUnion(items.map(\.id)) }
             } else {
                 #if DEBUG
@@ -1145,6 +1198,7 @@ final class AppStore {
             for p in items { register(p) }
             peopleLists[key] = items
         } catch {
+            guard s === session else { return }
             fail(.peopleList(key), error)
         }
     }
@@ -1154,19 +1208,26 @@ final class AppStore {
         guard !recapLoading else { return }
         if let era, recaps[era] != nil { return }
         recapLoading = true
-        defer { recapLoading = false }
+        let session = s
+        defer { session.recapLoading = false }
         do {
-            if recapMonths == nil { recapMonths = try await api.recapMonths() }
+            if recapMonths == nil {
+                let months = try await api.recapMonths()
+                try check(session)
+                recapMonths = months
+            }
             loaded(.recap)
             guard let target = era ?? recapMonths?.first?.era else { return }
             if recaps[target] == nil {
                 let r = try await api.recap(era: target)
+                try check(session)
                 loaded(.recap)
                 if let t = r.top { register(t) }
                 for t in r.also { register(t) }
                 recaps[target] = r
             }
         } catch {
+            guard s === session else { return }
             fail(.recap, error)
         }
     }
@@ -1185,9 +1246,13 @@ final class AppStore {
     /// `GET /recap/months` alone (the profile button); the month itself loads in the recap.
     func loadRecapMonths() async {
         guard recapMonths == nil, !recapLoading else { return }
+        let session = s
         do {
-            recapMonths = try await api.recapMonths()
+            let months = try await api.recapMonths()
+            try check(session)
+            recapMonths = months
         } catch {
+            guard s === session else { return }
             noteError(error) // the button keeps "tu recap"; the recap screen has its own error state
         }
     }
@@ -2441,12 +2506,15 @@ final class AppStore {
 
     /// `GET /me/blocks` (Ajustes › Cuentas bloqueadas), on every visit.
     func loadBlocks() async {
+        let session = s
         do {
             let items = try await api.blocks()
+            try check(session)
             loaded(.blocks)
             blocked.formUnion(items.compactMap(\.handle))
             blockedAccounts = items
         } catch {
+            guard s === session else { return }
             fail(.blocks, error)
         }
     }
@@ -2902,11 +2970,14 @@ final class AppStore {
     /// `GET /me/identities` (+ `auth/providers` for Google's client id, which the flow needs).
     func loadIdentities() async {
         async let providers: Void = loadAuthProviders()
+        let session = s
         do {
             let v = try await api.identities()
+            try check(session)
             loaded(.identities)
             withAnimation(KMotion.fade) { identities = v }
         } catch {
+            guard s === session else { return }
             fail(.identities, error)
         }
         await providers
@@ -3175,8 +3246,10 @@ final class AppStore {
     // MARK: Sesiones activas
 
     func loadSessions() async {
+        let session = s
         do {
             let items = try await api.sessions()
+            try check(session)
             loaded(.sessions)
             // This device first, then the most recently seen.
             deviceSessions = items.sorted {
@@ -3184,6 +3257,7 @@ final class AppStore {
                 return ($0.lastSeenAt ?? .distantPast) > ($1.lastSeenAt ?? .distantPast)
             }
         } catch {
+            guard s === session else { return }
             fail(.sessions, error)
         }
     }
@@ -3276,11 +3350,14 @@ final class AppStore {
     func loadOnboardingGrid() async {
         guard onboardingGrid.isEmpty else { return }
         onboardingGridError = nil
+        let session = s
         do {
             let g = try await api.onboardingGrid()
+            try check(session)
             for t in g { registerPartial(t) }
             onboardingGrid = g
         } catch {
+            guard s === session else { return }
             let e = noteError(error)
             if e != .cancelled { onboardingGridError = e }
         }
@@ -3309,13 +3386,16 @@ final class AppStore {
 
     func loadOnboardingPeople(force: Bool = false) async {
         guard force || !onboardingPeopleLoaded else { return }
+        let session = s
         do {
             let list = try await api.onboardingPeople()
+            try check(session)
             loaded(.onboardingPeople)
             for p in list { register(p) }
             onboardingPeople = list
             onboardingPeopleLoaded = true
         } catch {
+            guard s === session else { return }
             fail(.onboardingPeople, error)
         }
     }
