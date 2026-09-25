@@ -64,13 +64,8 @@ struct DiscoverView: View {
     private var editorial: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("descubrir")
-                    .font(.kura.screenTitle)
-                    .foregroundStyle(KColor.text)
-                    .padding(.top, KSize.chromeTop)
+                TabTitleBar(title: "descubrir")
                     .padding(.bottom, 16)
-                    .padding(.horizontal, 20)
-                    .accessibilityAddTraits(.isHeader)
 
                 Button {
                     withAnimation(KMotion.short) { searching = true }

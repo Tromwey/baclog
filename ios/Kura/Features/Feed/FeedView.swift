@@ -211,7 +211,8 @@ struct FeedView: View {
     private func header(transparent: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text("tu feed").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                .padding(.top, 6)
+                // Lands on `KSize.titleTop`, like every tab's title.
+                .padding(.top, KSize.titleTop - headerTop - 12)
                 .accessibilityAddTraits(.isHeader)
                 .allowsHitTesting(false)
             Spacer()

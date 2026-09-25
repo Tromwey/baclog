@@ -13,7 +13,7 @@ struct NotificationsView: View {
             if store.notifications.isEmpty {
                 VStack(alignment: .leading) {
                     Text("notificaciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                        .padding(.top, 124).padding(.horizontal, 24)
+                        .padding(.top, KSize.pushedTitleTop).padding(.horizontal, 24)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -39,7 +39,7 @@ struct NotificationsView: View {
                             ForEach(week) { row($0) }
                         }
                     }
-                    .padding(.top, 124)
+                    .padding(.top, KSize.pushedTitleTop)
                     .padding(.bottom, 56)
                 }
             }
@@ -173,7 +173,7 @@ struct FeedEmptyView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("feed").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                    .padding(.top, KSize.chromeTop).padding(.bottom, 14)
+                    .padding(.top, KSize.titleTop).padding(.bottom, 14)
                     .accessibilityAddTraits(.isHeader)
                 Text("tu gente todavía no llega.").font(.kura.news(30)).foregroundStyle(KColor.text)
                 Text("Sigue a quien comparte tus obsesiones y aquí vas a ver lo que completan y les obsesiona.")

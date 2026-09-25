@@ -106,6 +106,11 @@ enum KRadius {
 enum KSize {
     static let touch: CGFloat = 44
     static let chromeTop: CGFloat = 64
+    /// Top of a tab root's title (tus colecciones, descubrir, tu feed): one value for every
+    /// tab and every state (loading, empty, loaded), whatever chip sits beside it.
+    static let titleTop: CGFloat = chromeTop + 4
+    /// Top of the content under the back chip on a pushed screen (its title, usually).
+    static let pushedTitleTop: CGFloat = 124
     static let chromeSide: CGFloat = 24
     static let rowSettings: CGFloat = 52
     static let rowPeople: CGFloat = 72

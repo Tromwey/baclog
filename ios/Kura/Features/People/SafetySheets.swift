@@ -261,7 +261,7 @@ struct BlockedAccountsView: View {
                     .padding(.horizontal, 8)
                     content
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }

@@ -124,7 +124,7 @@ private struct TitleHeader: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 124)
+        .padding(.top, KSize.pushedTitleTop)
         .padding(.horizontal, 24)
         .padding(.bottom, 30)
         .background(Tint.header(t.palette))

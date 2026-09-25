@@ -22,18 +22,11 @@ struct CollectionsView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .bottom) {
-            Text("tus colecciones")
-                .font(.kura.screenTitle)
-                .foregroundStyle(KColor.text)
-                .accessibilityAddTraits(.isHeader)
-            Spacer()
+        TabTitleBar(title: "tus colecciones") {
             IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
                 store.present(.newCollection(addingTitleID: nil))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, KSize.chromeTop)
         .padding(.bottom, 18)
     }
 
@@ -173,15 +166,11 @@ struct CollectionsView: View {
 struct CollectionsSkeleton: View {
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .bottom) {
-                Text("tus colecciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                Spacer()
-                Image(systemName: "plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(KColor.text)
-                    .frame(width: 44, height: 44)
+            TabTitleBar(title: "tus colecciones") {
+                Image(systemName: "plus").font(.system(size: 15, weight: .bold)).foregroundStyle(KColor.text)
+                    .frame(width: 40, height: 40)
                     .kGlass(Circle())
             }
-            .padding(.horizontal, 20)
-            .padding(.top, KSize.chromeTop)
             .padding(.bottom, 18)
 
             VStack(spacing: 12) {
@@ -228,15 +217,11 @@ struct NoCollectionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .bottom) {
-                Text("tus colecciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                Spacer()
-                IconChip44(systemName: "plus", label: "Nueva colección") {
+            TabTitleBar(title: "tus colecciones") {
+                IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
                     store.present(.newCollection(addingTitleID: nil))
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, KSize.chromeTop)
             .padding(.bottom, 18)
 
             Spacer(minLength: 0)

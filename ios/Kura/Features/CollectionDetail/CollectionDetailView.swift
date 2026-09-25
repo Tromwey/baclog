@@ -138,7 +138,7 @@ struct CollectionHeader<Lead: View>: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 124)
+        .padding(.top, KSize.pushedTitleTop)
         .padding(.horizontal, 24)
         .padding(.bottom, 28)
         .background {
@@ -355,7 +355,7 @@ struct EmptyCollectionHeader: View {
                     .accessibilityLabel("Agregar a \(collection.name)")
                 Text(collection.name).font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 8)
             }
-            .padding(.top, 124)
+            .padding(.top, KSize.pushedTitleTop)
             VStack(spacing: 10) {
                 Text("colección nueva, repisa vacía.")
                     .font(.kura.news(28))

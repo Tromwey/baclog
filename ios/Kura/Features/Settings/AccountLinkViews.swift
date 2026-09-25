@@ -222,7 +222,7 @@ struct MergeAccountView: View {
                         .multilineTextAlignment(.center)
                         .padding(.top, 2)
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
                 .animation(KMotion.fade, value: providers)
@@ -299,7 +299,7 @@ struct MergeCodeView: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 124)
+            .padding(.top, KSize.pushedTitleTop)
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
@@ -340,7 +340,7 @@ struct MergeConfirmView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
             }
             TopChrome { EmptyView() }
         }
@@ -388,7 +388,7 @@ struct MergeConfirmView: View {
                     }
                     .padding(.horizontal, 8)
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 170)
             }

@@ -549,7 +549,7 @@ struct CreatorView: View {
                         Text("\(c.role) · \(c.works) obras").monoLabel()
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 124)
+                    .padding(.top, KSize.pushedTitleTop)
                     .padding(.bottom, 28)
                     .background(works.first.map { Tint.header($0.palette) } ?? Tint.neutralHeader)
 
@@ -704,7 +704,7 @@ struct ProfileAsStrangerView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 24)
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.bottom, 60)
             }
             .ignoresSafeArea(.container, edges: .top)

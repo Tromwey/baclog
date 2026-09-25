@@ -220,7 +220,7 @@ struct ChangeCoverView: View {
                             Text(c.name).font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 8)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 124)
+                        .padding(.top, KSize.pushedTitleTop)
                         .padding(.bottom, 28)
                         .background(Tint.header(current?.palette ?? []).animation(KMotion.tint, value: current?.id))
 
