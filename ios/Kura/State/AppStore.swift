@@ -208,6 +208,9 @@ final class SessionData {
     /// What `LocalPrefs` holds for THIS account; `localDirty` = memory is ahead of it.
     @ObservationIgnored var local = LocalPrefs.Payload()
     @ObservationIgnored var localDirty = false
+    /// `bootstrap` put the server's collections and states in memory. Until then the pins, covers,
+    /// orders and watched episodes on disk are the truth (memory has nothing to rebuild them from).
+    @ObservationIgnored var libraryLoaded = false
     /// Collections whose manual order the user set on this device (only those persist an order).
     @ObservationIgnored var reorderedCollections: Set<String> = []
     @ObservationIgnored var reviewTitleIndex: [String: String] = [:]
@@ -1100,9 +1103,12 @@ final class AppStore {
         tab = .collections
         didBootstrap = false
         // Whatever this device holds for the account that just came in (every exit clears it,
-        // so after a sign-in this is normally empty — never the previous account's).
-        flushLocal()
-        loadLocal()
+        // so after a sign-in this is normally empty — never the previous account's). Not in the
+        // mock: its prefs are off, so the "disk" is an empty payload that would wipe the seed.
+        if prefs.enabled {
+            flushLocal()
+            loadLocal()
+        }
         withAnimation(KMotion.short) { phase = .main }
     }
 

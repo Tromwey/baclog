@@ -35,6 +35,7 @@ extension AppStore {
                 applyLocalEpisodes()
                 lastUsedCollectionID = collections.first(where: \.pinned)?.id
             }
+            s.libraryLoaded = true
             applyMe(account)
             // Still AWAITED before `.loaded`: the collection cards and "no puedo esperar" draw only
             // the titles they know (`titles(in:)` drops the missing ones), so flipping to `.loaded`

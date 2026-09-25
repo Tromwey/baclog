@@ -79,6 +79,20 @@ extension AppStore {
 
     private func currentLocalPayload() -> LocalPrefs.Payload {
         var p = LocalPrefs.Payload()
+        p.recentSearches = recentSearches
+        p.recentlyViewed = recentlyViewed
+        p.alerts = Array(alerts).sorted()
+        p.muted = Array(muted).sorted()
+        p.showCommon = showCommon
+        p.defaultPrivacy = defaultPrivacy.rawValue
+        // Before the library loaded, `collections` / `userTitles` are empty (or a fragment): what
+        // derives from them stays as it is on disk, or a recent search typed during the launch
+        // would erase every pin and watched episode.
+        guard s.libraryLoaded else {
+            p.collections = local.collections
+            p.watchedEpisodes = local.watchedEpisodes
+            return p
+        }
         for c in collections {
             // A manual order is only persisted for collections the user actually reordered here
             // (or that already had one saved): freezing the server's order for every collection
@@ -89,12 +103,6 @@ extension AppStore {
             if entry != LocalPrefs.Collection() { p.collections[c.id] = entry }
         }
         for (id, state) in userTitles where !state.watchedEpisodes.isEmpty { p.watchedEpisodes[id] = Array(state.watchedEpisodes).sorted() }
-        p.recentSearches = recentSearches
-        p.recentlyViewed = recentlyViewed
-        p.alerts = Array(alerts).sorted()
-        p.muted = Array(muted).sorted()
-        p.showCommon = showCommon
-        p.defaultPrivacy = defaultPrivacy.rawValue
         return p
     }
 }
