@@ -22,11 +22,13 @@ enum AppleNonce {
     }
 }
 
-/// Google sign-in's nonce. `GoogleOAuth` generates a random one per flow (same generator as
-/// `AppleNonce`), sends it as `nonce` in the authorization URL — Google copies it verbatim into the
-/// `nonce` claim of the `id_token` — and checks the returned token carries it. The raw value then
-/// travels as `nonce` in the body of `POST /auth/google` and `POST /me/identities/google`, where the
-/// server requires `id_token.nonce === body.nonce` when the field is present.
+/// Google sign-in's nonce, same scheme as Apple's. `GoogleOAuth` generates a random raw value per
+/// flow (`AppleNonce.make`) and sends `AppleNonce.sha256(raw)` (lowercase hex) as `nonce` in the
+/// authorization URL — Google copies it verbatim into the `nonce` claim of the `id_token` — and
+/// rejects a returned token whose claim isn't that hash. The RAW value then travels as `nonce` in
+/// the body of `POST /auth/google` and `POST /me/identities/google`, where the server requires
+/// `id_token.nonce === sha256hex(body.nonce)` when the field is present: a captured `id_token`
+/// only exposes the hash, so it can't be replayed without the raw value.
 ///
 /// `KuraAPI.signInWithGoogle(idToken:)`/`linkGoogle(idToken:)` only take the token, so the nonce
 /// rides alongside in this small in-memory map keyed by the token (the last few flows only; never
@@ -186,7 +188,7 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "state", value: state),
-            URLQueryItem(name: "nonce", value: nonce),
+            URLQueryItem(name: "nonce", value: AppleNonce.sha256(nonce)),
             URLQueryItem(name: "prompt", value: "select_account")
         ]
         guard let url = comps.url else { throw Failure.rejected }
@@ -199,8 +201,8 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
         }
         guard item("state") == state, let code = item("code"), !code.isEmpty else { throw Failure.rejected }
         let idToken = try await exchange(code: code, verifier: verifier, clientID: clientID, redirect: redirect)
-        // A token without THIS flow's nonce never leaves the app.
-        guard GoogleNonce.claim(of: idToken) == nonce else {
+        // A token not bound to THIS flow's nonce (claim = sha256 of the raw) never leaves the app.
+        guard GoogleNonce.claim(of: idToken) == AppleNonce.sha256(nonce) else {
             KuraLog.api.error("google id_token nonce mismatch")
             throw Failure.rejected
         }
