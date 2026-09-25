@@ -21,7 +21,8 @@ async function send(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Baclog <auth@baclog.app>",
+        // Display name entre comillas: los paréntesis son sintaxis de comentario en RFC 5322.
+        from: `"Kura (anteriormente Baclog)" <auth@baclog.app>`,
         to: [to],
         subject,
         text,
@@ -125,6 +126,6 @@ export function sendRecapEmail(
 ): Promise<void> {
   // Recap has no permanent nav tab (it's a monthly moment) — this link is its
   // in-app entry point, so the ritual stays reachable without a constant tab.
-  const body = `Tu ${recap.label} en Baclog: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Ve y comparte tu tarjeta del mes: https://baclog.app/recap`;
+  const body = `Tu ${recap.label} en Kura: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Ve y comparte tu tarjeta del mes: https://baclog.app/recap`;
   return send(email, `Tu ${recap.label} está lista ✦`, body, "RECAP");
 }
