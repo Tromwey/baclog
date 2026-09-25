@@ -2225,11 +2225,14 @@ final class AppStore {
         setFollow(id, !following.contains(id))
     }
 
-    /// Followed people who did something with this title (`GET /titles/{id}.following` already
-    /// returns only people you follow).
+    /// Followed people who did something with this title. `GET /titles/{id}.following` already
+    /// returns only people you follow, but that answer is as old as the last load: filtering by
+    /// `following` (complete — every page of `me/following`) makes an unfollow take the person
+    /// out of "gente que sigues" at once, and a Deshacer puts them back.
     func followedMarks(for titleID: String) -> [(Person, PeopleMark)] {
         (titleActivity[titleID] ?? []).compactMap { pm in
-            people[pm.personID].map { ($0, pm) }
+            guard following.contains(pm.personID), let p = people[pm.personID] else { return nil }
+            return (p, pm)
         }
     }
 
