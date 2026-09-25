@@ -56,8 +56,9 @@ async function sweepExpiredNonBlocking(): Promise<void> {
 }
 
 /**
- * App Review's demo account: the fixed code for `normalized` when it is
- * `APP_REVIEW_EMAIL` and `APP_REVIEW_CODE` is a valid 6-digit code; null
+ * App Review's demo accounts: the fixed code for `normalized` when it is one
+ * of the comma-separated `APP_REVIEW_EMAIL` addresses (all share the one
+ * code) and `APP_REVIEW_CODE` is a valid 6-digit code; null
  * otherwise (every other email, or the feature unset / misconfigured). The
  * reviewer can't read our inbox, so `issueOtp` arms this code instead of
  * mailing a random one. It is stored hashed in a normal row, so verification
@@ -65,9 +66,12 @@ async function sweepExpiredNonBlocking(): Promise<void> {
  * single use) — a static code without that cap would be brute-forceable.
  */
 function reviewLoginCode(normalized: string): string | null {
-  const reviewEmail = env.APP_REVIEW_EMAIL?.trim().toLowerCase();
+  const reviewEmails = (env.APP_REVIEW_EMAIL ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
   const code = env.APP_REVIEW_CODE?.trim();
-  if (!reviewEmail || !code || normalized !== reviewEmail) return null;
+  if (!code || !reviewEmails.includes(normalized)) return null;
   if (!/^\d{6}$/.test(code)) {
     console.error("[otp] APP_REVIEW_CODE must be 6 digits; review login disabled");
     return null;
