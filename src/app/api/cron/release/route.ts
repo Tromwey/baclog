@@ -26,6 +26,7 @@ import { homeDayLong } from "@/modules/catalog/release";
 import { releaseFirstLine, releaseSubject, sendReleaseEmail } from "@/auth/mailer";
 import { pushToUsers, type PushTarget } from "@/modules/push/apns";
 import { sweepExpiredVerificationTokens } from "@/auth/otp";
+import { pruneStaleDeviceTokens } from "@/modules/push/devices";
 
 export const maxDuration = 60;
 
@@ -193,6 +194,16 @@ export async function GET(request: Request) {
     otpSwept = await sweepExpiredVerificationTokens();
   } catch (err) {
     console.error("[cron/release] expired OTP sweep failed:", err);
+  }
+  // ---- H. HOUSEKEEPING: APNs tokens of signed-out installs (session
+  // revoked, or unseen for the bearer lifetime). `pushToUsers` already skips
+  // them; this keeps `device_token` from filling with dead phones. null = the
+  // prune failed (the run answers 500, like the OTP sweep).
+  let devicesPruned: number | null = null;
+  try {
+    devicesPruned = await pruneStaleDeviceTokens(now);
+  } catch (err) {
+    console.error("[cron/release] stale device-token prune failed:", err);
   }
 
   // ---- 0. RETROACTIVE RESOLVE. Albums that entered the catalog BEFORE F3.8
@@ -485,13 +496,15 @@ export async function GET(request: Request) {
   const push = await pushToUsers(pushQueue);
 
   // 500 when somebody who should have been told wasn't (failed), when a sent
-  // email left its audit row unstamped, or when the OTP sweep broke: Vercel
+  // email left its audit row unstamped, or when the OTP sweep or the
+  // device-token prune broke: Vercel
   // shows the run as failed. iTunes being down (refreshUnavailable) is NOT a
   // failure — the upstream is flaky by nature and the next run retries.
-  const ok = failed === 0 && stampFailed === 0 && otpSwept !== null;
+  const ok = failed === 0 && stampFailed === 0 && otpSwept !== null && devicesPruned !== null;
   return NextResponse.json(
     {
       otpSwept,
+      devicesPruned,
       resolved,
       resolveFailed,
       landed: landed.length,

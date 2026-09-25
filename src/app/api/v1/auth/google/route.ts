@@ -7,12 +7,13 @@ import { GOOGLE_401, GOOGLE_UNAVAILABLE, googleIosClientId } from "../../_lib/so
 import { GoogleSignInBodySchema } from "../../_lib/schemas";
 
 /**
- * POST /api/v1/auth/google { idToken, device } → { token, user: Me } — the
+ * POST /api/v1/auth/google { idToken, nonce?, device } → { token, user: Me } — the
  * SAME response as `otp/verify` (phase 4f).
  *
  * `idToken` verified against Google's JWKS (`iss` ∈ {https://accounts.google.com,
  * accounts.google.com}, `aud` = GOOGLE_IOS_CLIENT_ID, `exp`) with
- * `email_verified` true REQUIRED (`verifyGoogleIdToken`); then the
+ * `email_verified` true REQUIRED and, when the body carries the raw `nonce`,
+ * the token's `nonce` = sha256hex(nonce), as Apple (`verifyGoogleIdToken`); then the
  * `account(provider="google", sub)` link or the verified email (link or
  * create), a minor → 403 `underage`, else session + bearer + `Me`. Any
  * token failure → ONE 401. Without GOOGLE_IOS_CLIENT_ID → 503 `unavailable`
@@ -26,7 +27,7 @@ export const POST = withPublicApi(async (request) => {
   }
   const body = await readJson(request, GoogleSignInBodySchema);
 
-  const identity = await verifyGoogleIdToken(body.idToken, clientId);
+  const identity = await verifyGoogleIdToken(body.idToken, clientId, body.nonce);
   if (!identity) return apiError("unauthorized", GOOGLE_401);
 
   const account = await signInWithIdentity("google", identity);

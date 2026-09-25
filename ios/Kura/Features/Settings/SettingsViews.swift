@@ -155,7 +155,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 4)
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }
@@ -210,7 +210,7 @@ struct SessionsView: View {
                     .padding(.horizontal, 8)
                     content
                 }
-                .padding(.top, 124)
+                .padding(.top, KSize.pushedTitleTop)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }
@@ -379,7 +379,7 @@ struct PrivacySettingsView: View {
             KColor.bg.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 6) {
                 Text("privacidad").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                    .padding(.horizontal, 20).padding(.bottom, 18)
+                    .padding(.horizontal, 24).padding(.bottom, 18)
                     .accessibilityAddTraits(.isHeader)
                 row("Perfil privado", note: "Nadie más ve tu perfil ni tus colecciones.") {
                     KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
@@ -406,7 +406,7 @@ struct PrivacySettingsView: View {
                 .buttonStyle(SheetRowStyle())
                 Spacer()
             }
-            .padding(.top, 130)
+            .padding(.top, KSize.pushedTitleTop)
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
@@ -465,7 +465,7 @@ struct MusicAppView: View {
                     .font(.kura.ui(13)).foregroundStyle(KColor.text2).padding(.horizontal, 8)
                 Spacer()
             }
-            .padding(.top, 124)
+            .padding(.top, KSize.pushedTitleTop)
             .padding(.horizontal, 16)
             TopChrome { EmptyView() }
         }

@@ -30,17 +30,3 @@ extension View {
         }
     }
 }
-
-/// Groups neighbouring glass so it samples and blends as one surface (iOS 26+).
-struct KGlassGroup<Content: View>: View {
-    var spacing: CGFloat = 12
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: spacing) { content() }
-        } else {
-            content()
-        }
-    }
-}

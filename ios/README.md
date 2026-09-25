@@ -34,7 +34,7 @@ xcrun simctl launch booted com.tromwey.kura
 - **Push** (`Services/Push.swift`): `KuraAppDelegate` vía `UIApplicationDelegateAdaptor`. Nunca pide permiso al abrir: el permiso se pide al guardar algo que no ha salido (`ReleaseNotifier`, como antes) o al volver a encender un switch de notificaciones. Con permiso concedido, cada arranque con sesión llama `registerForRemoteNotifications()`; el token (hex) va a `PUT me/devices/{token}` `{ environment }` (`sandbox` en Debug, `production` en Release). Al cerrar sesión, al olvidar la sesión local y antes de `DELETE /me`: `DELETE me/devices/{token}` best-effort con el bearer capturado ANTES de olvidarlo. Tap (en caliente y en frío): `{ kura: { type: "release", titleId } }` abre la ficha, `{ kura: { type: "follower", handle } }` el perfil (si las tabs aún no están, espera a `startIfNeeded`). En primer plano: banner.
   - **Local vs. remota (decisión):** mientras el token de este iPhone esté registrado en el servidor (`PushRegistration.isRegistered`), el aviso de estreno llega por push y `ReleaseNotifier` ya no programa el local; al registrarse se borran los `release-*` pendientes. Al des-registrar (logout, borrar cuenta, sesión olvidada) vuelven los locales. El aviso local lleva el mismo payload, así que su tap también abre la ficha.
   - Ajustes › notificaciones: "Nuevos seguidores" = `Me.notifyFollowers` (default true) con `PATCH /me { notifyFollowers }`, igual que "Estrenos de no puedo esperar".
-- **Mock**: `-kuraScreen <nombre>` o `-kuraMock` (DEBUG) arrancan con `MockAPI` sin servidor; `KuraRuntime.usesMock` lo expone a los modelos (p. ej. `Privacy.options`).
+- **Mock**: `-kuraScreen <nombre>` o `-kuraMock` (DEBUG) arrancan con `MockAPI` sin servidor; `KuraRuntime.usesMock` lo expone a los modelos (p. ej. `Privacy.options`). **El mock solo existe en DEBUG**: `Mock/**` está bajo `#if DEBUG` y cualquier referencia nueva a `MockData`/`MockAPI` fuera de ahí tiene que ir igual (si no, Release no compila). Para revisar que no se coló nada: `strings <DerivedData>/Build/Products/Release-iphonesimulator/Kura.app/Kura | grep -c mariel` debe dar 0.
 
 ### Abrir directo en una pantalla (DEBUG)
 
@@ -73,19 +73,38 @@ ios/
       Tokens.swift            colores, radios, medidas, sombras, Tint (mezcla de paleta, 168°/180°), movimiento
       Typography.swift        Font.kura.* (Newsreader / Hanken Grotesk / Red Hat Mono), monoLabel, Wordmark, FontCheck
       Glyph.swift             glifos → SF Symbols con su color; íconos del dock dibujados
-      Components/             Buttons (Glass/Solid/Honey/IconChip44/Follow/Radio), Cover, Pills (StatusPill,
-                              CountRibbon, Seal, SectionTitle, MonoSegmented, FlowLayout, Skeleton),
-                              CollectionCard/WaitingCard, Chrome (Dock, Toast, SheetHost, SheetRow, GlassField…),
-                              ZoomTransition (portada compartida)
-    Models/                   Title, KCollection, Mark, Release, Person, Review, FeedEvent, rutas
-    Mock/MockData.swift       todo el mock del brief (hoy = jue 24 sep 2026, 10:00 CDMX)
-    Services/                 KuraAPI (protocolo + MockAPI), LiveAPI (APIClient + endpoints), Keychain, Session (JWT exp),
-                              LocalPrefs (lo unsupported, en el dispositivo), ReleaseNotifier, Push (APNs + app delegate),
-                              SocialSignIn (nonce de Apple, Google OAuth PKCE)
+      Components/             Buttons (Glass/Solid/IconChip44/BackChip/Radio + un solo FollowButton con
+                              FollowState y tamaños row/list/card/hero + ShareChip; ya no hay HoneyButton: la miel
+                              es SolidButton/FollowButton con `honey`), Cover (CoverView + CoverImage sobre
+                              CoverImageStore: ImageIO al tamaño dibujado, NSCache, pedidos unidos y cancelables),
+                              Pills (StatusPill, CountRibbon, Seal, SectionTitle, MonoSegmented, FlowLayout, Skeleton),
+                              CollectionCard/WaitingCard, Chrome (Dock, Toast, SheetHost, SheetRow/SheetShareRow,
+                              GlassField…), LoadingScreen (ResourceScreen = contenido · GoneView · LoadErrorScreen ·
+                              LoadingScreen), Glass (kGlass), Avatar, Press, ZoomTransition (portada compartida)
+    Models/                   Title (formato, marca, estreno, título, estado por título, reseñas, payloads de la ficha) ·
+                              Person (persona, marcas, notificaciones, reportar/bloquear, páginas de gente) ·
+                              Collection (privacidad, orden, KCollection, detalle) · Feed (FeedEvent, Descubrir, recap) ·
+                              Account (Me, entrada, identidades, fusión, sesiones, push) · Navigation (Tab, Route,
+                              OnboardingStep) · Runtime (KuraJSON, KCalendar, WelcomeArt, KuraRuntime, PublicLinks)
+    Mock/                     SOLO DEBUG (`#if DEBUG` en todo el directorio): MockData (el mock del brief, hoy = jue
+                              24 sep 2026, 10:00 CDMX) y MockAPI (+ MockSafety/MockDevices/MockIdentities). Release no
+                              lleva nada del mock: `KuraRuntime.usesMock` es la constante `false` y los rellenos de
+                              formulario pasan por `MockPrefill` (DebugLaunch.swift), vacíos en live y en Release.
+    Services/                 KuraAPI (protocolo + KuraAPIError), LiveAPI (APIPath con segmentos codificados,
+                              RetryPolicy con jitter, APIClient + endpoints, GET en vuelo unidos), Keychain (+ InstallMarker:
+                              borra el bearer de una instalación borrada), Session (JWT exp), LocalPrefs (lo unsupported,
+                              en el dispositivo), ReleaseNotifier, Push (APNs + app delegate), SocialSignIn (nonce de
+                              Apple, Google OAuth PKCE con nonce)
     Kura.entitlements         Release: Sign in with Apple + aps-environment production
     Kura-Debug.entitlements   Debug: Sign in with Apple + aps-environment development
-    State/AppStore.swift      @Observable: sesión, hidratación por recurso, navegación, hojas, avisos, colecciones,
-                              membresías (Deshacer diferido 5 s), reacciones, seguidos
+    State/                    AppStore.swift = SessionData (estado por cuenta) + propiedades guardadas + núcleo
+                              (registro, errores, lookups, avisos, `sync` por clave, hojas, ciclo de sesión). Extensiones
+                              por dominio: +Loading (bootstrap y lecturas por recurso) · +Social (seguir, gente, feed) ·
+                              +Library (colecciones, membresías, Deshacer diferido 5 s) · +Reactions (marcas, reseñas,
+                              episodios) · +Releases (no puedo esperar) · +Safety (reportar/bloquear) · +Profile ·
+                              +Auth (splash, código, Apple/Google) · +AccountLink (push, identidades, fusión, sesiones) ·
+                              +Onboarding · +LocalPrefs. Una propiedad guardada nueva va en AppStore.swift (una extensión
+                              no puede tenerlas) o, si es por cuenta, en SessionData.
     Features/                 Onboarding · Collections · CollectionDetail · Title · Feed (+ notificaciones) ·
                               Discover (+ búsqueda) · People (perfil ajeno, seguidores, creador) · Profile ·
                               Recap · Settings · Add
@@ -107,7 +126,7 @@ ios/
 ## Dónde enchufar la API real
 
 1. `Services/LiveAPI.swift` ya es la implementación real de `KuraAPI`; `KuraApp.init` elige `LiveAPI` salvo `-kuraScreen`/`-kuraMock`.
-2. Un endpoint nuevo = un método en el protocolo `KuraAPI` + su versión en `LiveAPI` (ruta) y `MockAPI` (dato de `MockData`) + un `load*`/`sync` en `AppStore`.
+2. Un endpoint nuevo = un método en el protocolo `KuraAPI` + su versión en `LiveAPI` (ruta) y `MockAPI` (dato de `MockData`, en `Mock/MockAPI.swift`) + un `load*`/`sync` en la extensión de `AppStore` de su dominio. Un `load*` captura `let session = s`, llama `try check(session)` después de cada `await` y abre su `catch` con `guard s === session` (una respuesta de la sesión anterior se tira).
 3. La autorización se queda en el servidor (como en la web): la app nunca manda un `userId`; las escrituras van por título (`catalogItemId`) o por colección.
 4. `MockData` se queda para previews y para `-kuraScreen`.
 

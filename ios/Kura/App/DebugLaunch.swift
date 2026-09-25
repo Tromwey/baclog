@@ -291,3 +291,21 @@ enum DebugLaunch {
         #endif
     }
 }
+
+/// Form prefills for the mock captures (the entrance, O1b and Ajustes › Correo open filled in with
+/// the mock account). Always empty in live, and compiled out of Release with the rest of the mock.
+enum MockPrefill {
+    #if DEBUG
+    static var email: String { pick("mariel@correo.com") }
+    static var handle: String { pick(MockData.me.handle) }
+    static var name: String { pick(MockData.me.name) }
+    static var birthYear: String { pick("1998") }
+
+    private static func pick(_ value: @autoclosure () -> String) -> String { KuraRuntime.usesMock ? value() : "" }
+    #else
+    static let email = ""
+    static let handle = ""
+    static let name = ""
+    static let birthYear = ""
+    #endif
+}

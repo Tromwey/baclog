@@ -22,18 +22,11 @@ struct CollectionsView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .bottom) {
-            Text("tus colecciones")
-                .font(.kura.screenTitle)
-                .foregroundStyle(KColor.text)
-                .accessibilityAddTraits(.isHeader)
-            Spacer()
+        TabTitleBar(title: "tus colecciones") {
             IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
                 store.present(.newCollection(addingTitleID: nil))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, KSize.chromeTop)
         .padding(.bottom, 18)
     }
 
@@ -85,7 +78,7 @@ struct CollectionsView: View {
 
     // All: automatic card + one card per collection (pinned 150, compact 120).
     private var cards: some View {
-        VStack(spacing: 12) {
+        LazyVStack(spacing: 12) {
             let waiting = store.waitingTitles
             if !waiting.isEmpty {
                 WaitingCard(titles: waiting,
@@ -114,7 +107,7 @@ struct CollectionsView: View {
             let ts = store.titles(in: c, format: f)
             return ts.isEmpty ? nil : (c, ts)
         }
-        return VStack(spacing: 32) {
+        return LazyVStack(spacing: 32) {
             if rows.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("nada de \(f.sectionName) todavía.")
@@ -138,7 +131,7 @@ struct CollectionsView: View {
                     }
                     .buttonStyle(.plain)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .bottom, spacing: 10) {
+                        LazyHStack(alignment: .bottom, spacing: 10) {
                             ForEach(ts) { t in
                                 Button { store.push(.title(t.id)) } label: {
                                     CoverView(title: t, height: 150, badge: badge(t)).zoomSource(ZoomID.title(t.id))
@@ -173,15 +166,11 @@ struct CollectionsView: View {
 struct CollectionsSkeleton: View {
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .bottom) {
-                Text("tus colecciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                Spacer()
-                Image(systemName: "plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(KColor.text)
-                    .frame(width: 44, height: 44)
+            TabTitleBar(title: "tus colecciones") {
+                Image(systemName: "plus").font(.system(size: 15, weight: .bold)).foregroundStyle(KColor.text)
+                    .frame(width: 40, height: 40)
                     .kGlass(Circle())
             }
-            .padding(.horizontal, 20)
-            .padding(.top, KSize.chromeTop)
             .padding(.bottom, 18)
 
             VStack(spacing: 12) {
@@ -228,15 +217,11 @@ struct NoCollectionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .bottom) {
-                Text("tus colecciones").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                Spacer()
-                IconChip44(systemName: "plus", label: "Nueva colección") {
+            TabTitleBar(title: "tus colecciones") {
+                IconChip44(systemName: "plus", size: 40, iconSize: 15, weight: .bold, label: "Nueva colección") {
                     store.present(.newCollection(addingTitleID: nil))
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, KSize.chromeTop)
             .padding(.bottom, 18)
 
             Spacer(minLength: 0)

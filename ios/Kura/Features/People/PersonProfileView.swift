@@ -5,22 +5,28 @@ import SwiftUI
 struct PersonProfileView: View {
     @Environment(AppStore.self) private var store
     let personID: String
+    /// "Así te ven": draw this person (you, as a stranger sees you) without loading anything,
+    /// with the chips and Seguir as pictures (nothing to act on).
+    var preview: Person? = nil
 
     var body: some View {
-        Group {
-            if let p = store.person(personID) {
+        if let preview {
+            content(preview)
+        } else {
+            // Private and nonexistent are the same 404 (API.md §3): never say which.
+            ResourceScreen(value: store.person(personID),
+                           missing: store.missingPeople.contains(personID),
+                           error: store.loadError(.person(personID)),
+                           retry: { Task { await store.loadPerson(personID, force: true) } },
+                           gone: ("@\(personID) no está disponible.", "El perfil es privado o ya no existe."),
+                           square: true) { p in
                 content(p)
-            } else if store.missingPeople.contains(personID) {
-                // Private and nonexistent are the same 404 (API.md §3): never say which.
-                GoneView(title: "@\(personID) no está disponible.", note: "El perfil es privado o ya no existe.")
-            } else if let e = store.loadError(.person(personID)) {
-                LoadErrorScreen(error: e) { Task { await store.loadPerson(personID, force: true) } }
-            } else {
-                LoadingScreen(square: true)
             }
+            .task(id: personID) { await store.loadPerson(personID) }
         }
-        .task(id: personID) { await store.loadPerson(personID) }
     }
+
+    private var isPreview: Bool { preview != nil }
 
     private func palette(_ p: Person) -> [String]? {
         if let id = p.featuredTitleID, let t = store.title(id) { return t.palette }
@@ -28,15 +34,15 @@ struct PersonProfileView: View {
     }
 
     private func content(_ p: Person) -> some View {
-        let following = store.isFollowing(p.id)
-        let blocked = store.isBlocked(p.id)
+        let following = !isPreview && store.isFollowing(p.id)
+        let blocked = !isPreview && store.isBlocked(p.id)
         let locked = blocked || (p.isPrivate && !following)
         return ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     header(p, following: following, locked: locked, blocked: blocked)
-                    if let e = store.loadError(.person(p.id)) {
+                    if !isPreview, let e = store.loadError(.person(p.id)) {
                         // What's on screen came from a list (counts 0, no collections): say it's partial.
                         RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar todo el perfil.") {
                             Task { await store.loadPerson(p.id, force: true) }
@@ -68,26 +74,22 @@ struct PersonProfileView: View {
             HStack(spacing: 8) {
                 BackChip()
                 Spacer()
-                // Next to Opciones, like Compartir next to Ajustes on your own profile.
-                // Someone else's profile we can open is public, so its link is live.
-                if let link = PublicLinks.profile(p.handle) {
-                    ShareLink(item: link) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(KColor.text)
-                            .frame(width: 44, height: 44)
-                            .kGlass(Circle(), interactive: true)
-                    }
-                    .accessibilityLabel("Compartir perfil")
+                if isPreview {
+                    Text("vista previa").monoLabel()
+                } else {
+                    // Next to Opciones, like Compartir next to Ajustes on your own profile.
+                    // Someone else's profile we can open is public, so its link is live.
+                    ShareChip(link: PublicLinks.profile(p.handle))
+                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones") { store.present(.personOptions(p.id)) }
                 }
-                IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones") { store.present(.personOptions(p.id)) }
             }
             Seal(person: p, size: 128)
             VStack(alignment: .leading, spacing: 6) {
                 Text(p.name).font(.kura.profile).foregroundStyle(KColor.text).accessibilityAddTraits(.isHeader)
                 Text("@\(p.handle)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
                 FollowCounts(followers: p.followers, following: p.followingCount,
-                             onFollowers: { if !locked { store.push(.followers(p.id, showFollowing: false)) } },
-                             onFollowing: { if !locked { store.push(.followers(p.id, showFollowing: true)) } })
+                             onFollowers: { if !locked && !isPreview { store.push(.followers(p.id, showFollowing: false)) } },
+                             onFollowing: { if !locked && !isPreview { store.push(.followers(p.id, showFollowing: true)) } })
             }
             if !locked && (p.stats.obsessed + p.stats.completed) > 0 {
                 FlowLayout(spacing: 7, lineSpacing: 7) {
@@ -115,21 +117,11 @@ struct PersonProfileView: View {
     }
 
     @ViewBuilder private func followButton(_ p: Person, following: Bool) -> some View {
-        let requested = store.requested.contains(p.id)
-        let label = following ? "Siguiendo" : (requested ? "Solicitado" : "Seguir")
-        let honey = !following && !requested
-        Button { store.followFromProfile(p.id) } label: {
-            Text(label)
-                .font(.kura.ui(16, .semibold))
-                .foregroundStyle(honey ? KColor.onAccent : KColor.text)
-                .padding(.horizontal, 28)
-                .frame(height: 48)
-                .modifier(FollowSurface(honey: honey))
-                .contentShape(Capsule())
-                .animation(KMotion.fade, value: label)
+        // Seguir is the screen's honey accent (flat on every OS).
+        FollowButton(state: FollowState(following: following, requested: !isPreview && store.requested.contains(p.id)),
+                     size: .hero, honey: true, handle: p.handle, interactive: !isPreview) {
+            store.followFromProfile(p.id)
         }
-        .kPress()
-        .accessibilityLabel(following ? "Dejar de seguir a @\(p.handle)" : label)
     }
 
     @ViewBuilder
@@ -148,7 +140,7 @@ struct PersonProfileView: View {
                     }
                     .padding(.horizontal, 20)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .bottom, spacing: 12) {
+                        LazyHStack(alignment: .bottom, spacing: 12) {
                             ForEach(common) { t in
                                 Button { store.push(.title(t.id)) } label: {
                                     CoverView(title: t, height: 72, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id))
@@ -171,7 +163,7 @@ struct PersonProfileView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionTitle(text: "le obsesiona").padding(.horizontal, 20)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .bottom, spacing: 12) {
+                        LazyHStack(alignment: .bottom, spacing: 12) {
                             ForEach(obs) { t in
                                 Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
                                     .buttonStyle(.plain)
@@ -194,7 +186,7 @@ struct PersonProfileView: View {
                     .padding(.horizontal, 20)
                     let visible = p.collections.filter { $0.privacy == .publicAccess || following }
                     let hidden = p.collections.count - visible.count
-                    VStack(spacing: 12) {
+                    LazyVStack(spacing: 12) {
                         ForEach(visible) { pc in PersonCollectionCard(collection: pc, ownerHandle: p.handle, coverHeight: 104) }
                         if hidden > 0 {
                             FollowersOnlyCard(count: hidden, note: "Síguela para verla.").padding(.horizontal, 12)
@@ -506,15 +498,10 @@ struct FollowersView: View {
                 Text("@\(p.handle) · " + (n == 0 ? "nada en común aún" : "\(n) en común")).font(.kura.mono(11)).foregroundStyle(KColor.text2).lineLimit(1)
             }
             Spacer(minLength: 8)
-            Button { store.followFromProfile(p.id) } label: {
-                Text(f ? "Siguiendo" : (store.requested.contains(p.id) ? "Solicitado" : "Seguir"))
-                    .font(.kura.ui(14, .semibold))
-                    .foregroundStyle(f ? KColor.text2 : KColor.text)
-                    .padding(.horizontal, 16)
-                    .frame(height: 40)
-                    .background(f ? Color.clear : KColor.glassBg, in: Capsule())
+            FollowButton(state: FollowState(following: f, requested: store.requested.contains(p.id)), size: .list,
+                         handle: p.handle) {
+                store.followFromProfile(p.id)
             }
-            .kPress()
         }
         .frame(minHeight: 68)
         .contentShape(Rectangle())
@@ -549,7 +536,7 @@ struct CreatorView: View {
                         Text("\(c.role) · \(c.works) obras").monoLabel()
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 124)
+                    .padding(.top, KSize.pushedTitleTop)
                     .padding(.bottom, 28)
                     .background(works.first.map { Tint.header($0.palette) } ?? Tint.neutralHeader)
 
@@ -558,7 +545,7 @@ struct CreatorView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 SectionTitle(text: "en tus colecciones", trailing: "\(saved.count)").padding(.horizontal, 20)
                                 ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(alignment: .bottom, spacing: 12) {
+                                    LazyHStack(alignment: .bottom, spacing: 12) {
                                         ForEach(saved) { t in
                                             Button { store.push(.title(t.id)) } label: {
                                                 CoverView(title: t, height: 150, badge: store.mark(t.id).map { .mark($0) } ?? .none).zoomSource(ZoomID.title(t.id))
@@ -593,6 +580,7 @@ struct CreatorView: View {
                                 .contentShape(Rectangle())
                                 .kPressable(.row) { store.push(.title(t.id)) }
                             }
+                            #if DEBUG
                             if filter == nil || filter == .film, KuraRuntime.usesMock {
                                 ForEach(MockData.otherWorks[name] ?? [], id: \.0) { w in
                                     HStack(spacing: 14) {
@@ -607,6 +595,7 @@ struct CreatorView: View {
                                     .frame(minHeight: 84)
                                 }
                             }
+                            #endif
                         }
                         if !people.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
@@ -670,56 +659,35 @@ struct ProfileAsStrangerView: View {
         .ignoresSafeArea(.container, edges: .top)
     }
 
-    @ViewBuilder private var publicPreview: some View {
-        let me = store.me
-        let publicCols = store.orderedCollections.filter { $0.privacy == .publicAccess && !$0.titleIDs.isEmpty }
-        let followersOnly = store.collections.filter { $0.privacy == .followers }.count
-        ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 10) {
-                    Seal(person: me, size: 112)
-                    Text(me.name).font(.kura.news(30)).foregroundStyle(KColor.text).padding(.top, 6)
-                    Text("@\(me.handle)").monoLabel()
-                    Text("Seguir")
-                        .font(.kura.ui(15, .semibold))
-                        .foregroundStyle(KColor.onAccent)
-                        .padding(.horizontal, 20)
-                        .frame(height: 44)
-                        .background(KColor.accent, in: Capsule())
-                        .padding(.top, 8)
-                        .accessibilityHidden(true)
+    /// The very screen a stranger opens (`PersonProfileView`), fed with what they'd get:
+    /// your public collections, the followers-only ones as a count, nothing in common.
+    private var publicPreview: some View {
+        PersonProfileView(personID: store.me.id, preview: meAsStranger)
+    }
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("colecciones").font(.kura.section).foregroundStyle(KColor.text).padding(.horizontal, 8)
-                        ForEach(publicCols) { c in
-                            CollectionCard(collection: c, titles: store.titles(in: c), marks: [:], palette: store.palette(of: c),
-                                           coverHeight: 110)
-                                .padding(.horizontal, -12)
-                        }
-                        if followersOnly > 0 {
-                            FollowersOnlyCard(count: followersOnly, note: "Síguela para verla.")
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 24)
-                }
-                .padding(.top, 124)
-                .padding(.bottom, 60)
-            }
-            .ignoresSafeArea(.container, edges: .top)
-            TopChrome {
-                Text("vista previa").monoLabel()
+    private var meAsStranger: Person {
+        var p = store.me
+        p.followingCount = max(p.followingCount, store.following.count)
+        p.stats = PersonStats(obsessed: store.count(of: .obsessed),
+                              completed: store.count(of: .completed) + store.count(of: .liked) + store.count(of: .obsessed),
+                              liked: store.count(of: .liked),
+                              reviews: store.reviewCount)
+        p.obsessions = store.userTitles.filter { $0.value.mark == .obsessed }
+            .sorted { $0.value.savedAt < $1.value.savedAt }
+            .map(\.key)
+        p.common = []
+        // Public ones as cards; followers-only ones only as "N colecciones para seguidores".
+        // No backend id: in the preview the covers open their ficha, not your own public page.
+        p.collections = store.orderedCollections.compactMap { c in
+            switch c.privacy {
+            case .publicAccess where !c.titleIDs.isEmpty, .followers:
+                var pc = PersonCollection(name: c.name, titleIDs: c.titleIDs, privacy: c.privacy)
+                pc.coverTitleID = store.coverTitle(of: c)?.id
+                return pc
+            default:
+                return nil
             }
         }
-    }
-}
-
-/// Seguir is the screen's honey accent (flat on every OS); Siguiendo / Solicitado sit next to
-/// the share chip, so they take the same glass.
-private struct FollowSurface: ViewModifier {
-    let honey: Bool
-    func body(content: Content) -> some View {
-        if honey { content.background(KColor.accent, in: Capsule()) } else { content.kGlass(Capsule(), interactive: true) }
+        return p
     }
 }

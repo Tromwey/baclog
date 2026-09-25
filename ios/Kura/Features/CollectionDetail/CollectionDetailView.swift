@@ -8,21 +8,14 @@ struct CollectionDetailView: View {
     @State private var filter: MediaFormat? = nil
 
     var body: some View {
-        Group {
-            if let c = store.collection(collectionID) {
-                if !c.titleIDs.isEmpty && store.titles(in: c).isEmpty {
-                    // Ids known, titles not (yet): never draw "repisa vacía" for a full collection.
-                    if let e = loadError(c) {
-                        LoadErrorScreen(error: e) { Task { await store.loadCollection(c.id, force: true) } }
-                    } else {
-                        LoadingScreen()
-                    }
-                } else {
-                    content(c)
-                }
-            } else {
-                GoneView()
-            }
+        let c = store.collection(collectionID)
+        // Ids known, titles not (yet): never draw "repisa vacía" for a full collection.
+        let ready = c.flatMap { c in (!c.titleIDs.isEmpty && store.titles(in: c).isEmpty) ? nil : c }
+        ResourceScreen(value: ready,
+                       missing: c == nil,
+                       error: c.flatMap(loadError),
+                       retry: { Task { await store.loadCollection(collectionID, force: true) } }) { c in
+            content(c)
         }
         .task(id: collectionID) { await store.loadCollection(collectionID) }
     }
@@ -138,7 +131,7 @@ struct CollectionHeader<Lead: View>: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 124)
+        .padding(.top, KSize.pushedTitleTop)
         .padding(.horizontal, 24)
         .padding(.bottom, 28)
         .background {
@@ -261,7 +254,7 @@ struct GroupedShelves: View {
                         }
                         .padding(.horizontal, 20)
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .bottom, spacing: 12) {
+                            LazyHStack(alignment: .bottom, spacing: 12) {
                                 ForEach(items) { t in
                                     ShelfItem(title: t, collectionID: collectionID, width: t.format == .album ? 150 : 100)
                                 }
@@ -301,7 +294,7 @@ struct TitleList: View {
     let collectionID: String
 
     var body: some View {
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             ForEach(titles) { t in
                 HStack(spacing: 14) {
                     CoverView(title: t, width: t.format == .album ? 56 : 40, height: t.format == .album ? 56 : 60,
@@ -355,7 +348,7 @@ struct EmptyCollectionHeader: View {
                     .accessibilityLabel("Agregar a \(collection.name)")
                 Text(collection.name).font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 8)
             }
-            .padding(.top, 124)
+            .padding(.top, KSize.pushedTitleTop)
             VStack(spacing: 10) {
                 Text("colección nueva, repisa vacía.")
                     .font(.kura.news(28))

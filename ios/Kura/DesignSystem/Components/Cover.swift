@@ -1,4 +1,6 @@
 import SwiftUI
+import ImageIO
+import UIKit
 
 /// What sits on a cover's top-left corner.
 enum CoverBadge: Equatable {
@@ -13,7 +15,7 @@ enum CoverBadge: Equatable {
     case chosen
 }
 
-/// A cover: AsyncImage, the palette as a 160° gradient while it loads or if it
+/// A cover: the downsampled image (`CoverImage`), the palette as a 160° gradient while it loads or if it
 /// fails, the DS corner radius and cover shadow.
 struct CoverView: View {
     let title: Title
@@ -102,20 +104,155 @@ private struct ConditionalShadow: ViewModifier {
 }
 
 /// The image itself, with the palette fallback. Fades in (240 ms, the tint timing).
+/// Decoded and downsampled to the size it's drawn at (`CoverImageStore`), never the
+/// CDN's 600×600 for a 40 pt thumb.
 struct CoverImage: View {
     let url: URL?
     let palette: [String]
 
     var body: some View {
-        AsyncImage(url: url, transaction: Transaction(animation: KMotion.tint)) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
+        GeometryReader { geo in
+            CoverImageBody(url: url, palette: palette, size: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+    }
+}
+
+private struct CoverImageBody: View {
+    let url: URL?
+    let palette: [String]
+    let size: CGSize
+    @Environment(\.displayScale) private var scale
+    /// The last image this view drew: kept while a new size bucket loads (no flash
+    /// back to the palette when a cover grows or shrinks).
+    @State private var loaded: (url: URL, image: UIImage)?
+
+    var body: some View {
+        let key = url.map { CoverImageStore.Key(url: $0, size: size, scale: scale) }
+        let img = key.flatMap { CoverImageStore.shared.cached($0) } ?? (loaded?.url == url ? loaded?.image : nil)
+        ZStack {
+            if let img {
+                Image(uiImage: img).resizable().scaledToFill()
+                    .frame(width: size.width, height: size.height)
                     .transition(.opacity)
-            default:
+            } else {
                 Tint.coverFallback(palette)
             }
         }
+        .animation(KMotion.tint, value: img != nil)
+        // Leaving the screen cancels the wait (and the download, once nobody else wants it).
+        .task(id: key) {
+            guard let key else { return }
+            // The cache may have filled between this body and the task (another view finished the
+            // same download): take the hit as ours, or this view keeps drawing the palette.
+            if let hit = CoverImageStore.shared.cached(key) {
+                if loaded?.url != key.url || loaded?.image !== hit { loaded = (key.url, hit) }
+                return
+            }
+            if let image = await CoverImageStore.shared.image(for: key), !Task.isCancelled {
+                loaded = (key.url, image)
+            }
+        }
+    }
+}
+
+/// Decoded, downsampled covers in memory — the cover twin of `AvatarStore`. Cover art is
+/// public CDN art (TMDB, iTunes…): no bearer, and the raw bytes also sit in
+/// `URLCache.shared` (sized in `KuraApp`), so a cover evicted from here comes back from
+/// disk, not the network.
+///
+/// Keyed by URL + the size bucket it's drawn at; a request for a key already in flight
+/// joins it, and the download is cancelled once every view waiting on it is gone.
+@MainActor
+final class CoverImageStore {
+    static let shared = CoverImageStore()
+
+    struct Key: Hashable {
+        let url: URL
+        /// Longest drawn side in pixels, rounded up to a 64 px step: a cover that moves a
+        /// few points (zoom, Dynamic Type) doesn't decode again.
+        let bucket: Int
+
+        init(url: URL, size: CGSize, scale: CGFloat) {
+            self.url = url
+            let px = max(size.width, size.height, 1) * max(scale, 1)
+            bucket = Int((px / 64).rounded(.up)) * 64
+        }
+
+        var nsKey: NSString { "\(bucket)|\(url.absoluteString)" as NSString }
+    }
+
+    private let cache = NSCache<NSString, UIImage>()
+    private var inflight: [Key: (task: Task<UIImage?, Never>, waiters: Int)] = [:]
+
+    private init() {
+        // Cost = decoded bytes: a 300 pt cover at 3× is ~3 MB. iOS trims it under pressure.
+        cache.totalCostLimit = 96 * 1024 * 1024
+    }
+
+    func cached(_ key: Key) -> UIImage? { cache.object(forKey: key.nsKey) }
+
+    func image(for key: Key) async -> UIImage? {
+        if let img = cached(key) { return img }
+        let task: Task<UIImage?, Never>
+        if let entry = inflight[key] {
+            task = entry.task
+            inflight[key]?.waiters += 1
+        } else {
+            task = Task.detached(priority: .userInitiated) { await CoverImageStore.fetch(key) }
+            inflight[key] = (task, 1)
+        }
+        let img = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            Task { @MainActor in CoverImageStore.shared.leave(key) }
+        }
+        // The download is over (done, failed or cancelled): nobody needs to join it anymore.
+        if inflight[key]?.task == task { inflight[key] = nil }
+        if let img, cached(key) == nil {
+            cache.setObject(img, forKey: key.nsKey, cost: img.cgImage.map { $0.bytesPerRow * $0.height } ?? 0)
+        }
+        return img
+    }
+
+    /// One waiter fewer; the last one out cancels the download.
+    private func leave(_ key: Key) {
+        guard let entry = inflight[key] else { return }
+        if entry.waiters <= 1 {
+            inflight[key] = nil
+            entry.task.cancel()
+        } else {
+            inflight[key]?.waiters -= 1
+        }
+    }
+
+    private nonisolated static func fetch(_ key: Key) async -> UIImage? {
+        guard let (data, response) = try? await URLSession.shared.data(from: key.url),
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+              !Task.isCancelled else { return nil }
+        return downsample(data, maxPixel: CGFloat(key.bucket))
+    }
+
+    /// ImageIO thumbnail: decodes straight at the target size (never the full image).
+    private nonisolated static func downsample(_ data: Data, maxPixel: CGFloat) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        // `maxPixel` bounds the drawn frame's longest side. The image FILLS that frame, so its
+        // short side has to reach it (a 2:3 poster in a square slot) — never past the original.
+        var limit = maxPixel
+        if let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+           let w = (props[kCGImagePropertyPixelWidth] as? NSNumber).map({ CGFloat($0.doubleValue) }),
+           let h = (props[kCGImagePropertyPixelHeight] as? NSNumber).map({ CGFloat($0.doubleValue) }),
+           min(w, h) > 0 {
+            limit = min(max(w, h), maxPixel * max(w, h) / min(w, h))
+        }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(limit, 1),
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 

@@ -25,7 +25,48 @@ enum PushRegistration {
     }
 
     static func markRegistered() { UserDefaults.standard.set(true, forKey: registeredKey) }
-    static func markUnregistered() { UserDefaults.standard.set(false, forKey: registeredKey) }
+
+    /// This install's token is NOT (or no longer) on the server for the current account: logout,
+    /// account deletion, a forgotten session, and `AppStore.sessionExpired` (a 401 anywhere —
+    /// e.g. an account-wide logout on another device, which also deletes every `device_token`).
+    /// Turns local release notices back on (`ReleaseNotifier.schedule` stops skipping them) and
+    /// forgets the last registration, so the next session always sends its `PUT` again.
+    static func markUnregistered() {
+        let d = UserDefaults.standard
+        d.set(false, forKey: registeredKey)
+        d.removeObject(forKey: lastRegistrationKey)
+    }
+
+    // MARK: Skipping the cold-start PUT
+
+    private static let lastRegistrationKey = "kuraPushLastRegistration"
+    /// A registration older than this is sent again even if nothing changed (the server may have
+    /// pruned the token after an APNs `Unregistered`, which the app never hears about).
+    static let maxRegistrationAge: TimeInterval = 7 * 24 * 3600
+
+    /// `token|environment|sha256(account)` — the account is the bearer's `sub`, hashed so the
+    /// user id itself never lands in UserDefaults.
+    private static func fingerprint(token: String, environment: String, account: String) -> String {
+        "\(token)|\(environment)|\(AppleNonce.sha256(account))"
+    }
+
+    /// True when `PUT /me/devices/{token}` already succeeded for exactly this token, gateway and
+    /// account, less than `maxRegistrationAge` ago, and nothing marked it unregistered since.
+    static func isCurrent(token: String, environment: String, account: String, now: Date = Date()) -> Bool {
+        let d = UserDefaults.standard
+        guard d.bool(forKey: registeredKey),
+              let last = d.dictionary(forKey: lastRegistrationKey),
+              let fp = last["fp"] as? String, let at = last["at"] as? Double else { return false }
+        let age = now.timeIntervalSince1970 - at
+        return fp == fingerprint(token: token, environment: environment, account: account)
+            && age >= 0 && age < maxRegistrationAge
+    }
+
+    /// Called by `LiveAPI.registerDevice` after the server answered 204.
+    static func recordRegistration(token: String, environment: String, account: String, now: Date = Date()) {
+        UserDefaults.standard.set(["fp": fingerprint(token: token, environment: environment, account: account),
+                                   "at": now.timeIntervalSince1970], forKey: lastRegistrationKey)
+    }
 
     /// APNs gateway the token belongs to, read from how THIS binary was signed — not from
     /// Debug/Release: a Release build installed by cable is signed for development and gets

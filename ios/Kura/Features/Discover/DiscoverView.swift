@@ -64,13 +64,8 @@ struct DiscoverView: View {
     private var editorial: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("descubrir")
-                    .font(.kura.screenTitle)
-                    .foregroundStyle(KColor.text)
-                    .padding(.top, KSize.chromeTop)
+                TabTitleBar(title: "descubrir")
                     .padding(.bottom, 16)
-                    .padding(.horizontal, 20)
-                    .accessibilityAddTraits(.isHeader)
 
                 Button {
                     withAnimation(KMotion.short) { searching = true }
@@ -569,7 +564,7 @@ private struct SearchMode: View {
                                         }
                                         Spacer()
                                         // Honey once per screen: the first user only.
-                                        FollowToggle(following: store.isFollowing(p.id), honey: i == 0) { store.followFromProfile(p.id) }
+                                        FollowButton(state: FollowState(following: store.isFollowing(p.id)), honey: i == 0) { store.followFromProfile(p.id) }
                                     }
                                     .padding(.horizontal, 20)
                                     .contentShape(Rectangle())

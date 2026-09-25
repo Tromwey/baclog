@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { deviceTokens } from "@/db/schema";
+import { deviceTokens, mobileSessions } from "@/db/schema";
 import { appleKeyConfig, signApnsProviderToken, type AppleKeyConfig } from "@/auth/apple-key";
 import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
 import {
@@ -11,13 +11,18 @@ import {
   type ApnsDelivery,
   type PushMessage,
 } from "./apns-transport";
+import { deviceTokenIsLive } from "./liveness";
 
 export type { PushMessage } from "./apns-transport";
 
 /**
  * Phase 4e — THE entry point for push notifications (AGENTS.md: external
  * effects go through one place). `pushToUsers` sends a message to every
- * registered device of each user, prunes the tokens Apple says are dead, and
+ * registered device of each user whose install is still signed in
+ * (`deviceTokenIsLive`: its session live and seen within the bearer
+ * lifetime — an expired bearer deletes nothing, so without the gate a
+ * signed-out phone kept getting the account's pushes), prunes the tokens
+ * Apple says are dead, and
  * NEVER throws: callers (the release cron, the follow side effect) must not
  * fail because a phone is unreachable. It returns counters for the caller's
  * own log/response.
@@ -79,14 +84,30 @@ export async function pushToUsers(targets: PushTarget[]): Promise<PushOutcome> {
 
   try {
     const userIds = [...new Set(targets.map((t) => t.userId))];
-    const rows = await db
+    const registered = await db
       .select({
         token: deviceTokens.token,
         userId: deviceTokens.userId,
         environment: deviceTokens.environment,
+        sessionId: deviceTokens.sessionId,
+        updatedAt: deviceTokens.updatedAt,
+        joinedSessionId: mobileSessions.id,
+        sessionRevokedAt: mobileSessions.revokedAt,
+        sessionLastSeenAt: mobileSessions.lastSeenAt,
       })
       .from(deviceTokens)
+      .leftJoin(
+        mobileSessions,
+        and(
+          eq(mobileSessions.id, deviceTokens.sessionId),
+          eq(mobileSessions.userId, deviceTokens.userId),
+        ),
+      )
       .where(inArray(deviceTokens.userId, userIds));
+    // Signed-out installs (bearer expired, session revoked) never get a push;
+    // the daily cron deletes those rows (`pruneStaleDeviceTokens`).
+    const now = Date.now();
+    const rows = registered.filter((r) => deviceTokenIsLive(r, now));
     const deliveries: ApnsDelivery[] = [];
     for (const t of targets) {
       for (const r of rows) {

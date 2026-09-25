@@ -1,7 +1,9 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { deviceTokens } from "@/db/schema";
+import { deviceTokens, mobileSessions } from "@/db/schema";
+import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
+import { DEVICE_TOKEN_LIVE_WINDOW_MS } from "./liveness";
 
 /**
  * Phase 4e — APNs device tokens (`device_token`). Keyed by the token: iOS
@@ -48,4 +50,41 @@ export async function unregisterDeviceToken(userId: string, token: string): Prom
   await db
     .delete(deviceTokens)
     .where(and(eq(deviceTokens.token, token), eq(deviceTokens.userId, userId)));
+}
+
+/**
+ * Daily housekeeping (`/api/cron/release`, pass H): deletes every token
+ * `deviceTokenIsLive` (`./liveness.ts`) would refuse — bound to a session
+ * that is gone, revoked or unseen for the bearer lifetime, or session-less
+ * and not re-registered within it. `pushToUsers` already skips those rows;
+ * this keeps the table from growing with dead installs. Returns the number
+ * deleted; throws on a DB error (the cron reports it, never swallows it).
+ * No-op (0) while migration 0029 is not live.
+ */
+export async function pruneStaleDeviceTokens(now: Date = new Date()): Promise<number> {
+  if (!MIGRATION_0029_LIVE) return 0;
+  // Column-bound operators (not a raw Date in a sql`` template): the columns
+  // are `timestamp` without zone (learning 2026-09-02-date-crudo-en-sql…).
+  const cutoff = new Date(now.getTime() - DEVICE_TOKEN_LIVE_WINDOW_MS);
+  const liveSession = db
+    .select({ one: sql`1` })
+    .from(mobileSessions)
+    .where(
+      and(
+        eq(mobileSessions.id, deviceTokens.sessionId),
+        eq(mobileSessions.userId, deviceTokens.userId),
+        isNull(mobileSessions.revokedAt),
+        gte(mobileSessions.lastSeenAt, cutoff),
+      ),
+    );
+  const deleted = await db
+    .delete(deviceTokens)
+    .where(
+      or(
+        and(isNull(deviceTokens.sessionId), lt(deviceTokens.updatedAt, cutoff)),
+        and(isNotNull(deviceTokens.sessionId), notExists(liveSession)),
+      ),
+    )
+    .returning({ token: deviceTokens.token });
+  return deleted.length;
 }

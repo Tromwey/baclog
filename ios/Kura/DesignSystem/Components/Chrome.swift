@@ -2,8 +2,9 @@ import SwiftUI
 
 // MARK: - Dock
 
-/// Floating dock: 4 tabs, rgba(20,20,26,.5) + blur, pill, float shadow.
-/// iOS 26+: a Liquid Glass capsule (the system draws its own depth).
+/// Floating dock for iOS 17–25: 4 tabs, rgba(20,20,26,.5) + blur, pill, float shadow.
+/// On iOS 26+ the dock is the system tab bar instead (`MainTabs`), so the selection is
+/// Apple's own Liquid Glass droplet — don't imitate it here.
 struct Dock: View {
     @Environment(AppStore.self) private var store
 
@@ -52,6 +53,30 @@ private struct DockSurface: ViewModifier {
                 .kShadow(.float)
         }
     }
+}
+
+// MARK: - Tab title
+
+/// A tab root's title row. The title's top is always `KSize.titleTop`: the trailing chip is
+/// centered on the title as an overlay, so a 40 or 44 pt chip (or none) never moves it.
+struct TabTitleBar<Trailing: View>: View {
+    let title: String
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        Text(title)
+            .font(.kura.screenTitle)
+            .foregroundStyle(KColor.text)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .trailing) { trailing }
+            .padding(.horizontal, 20)
+            .padding(.top, KSize.titleTop)
+    }
+}
+
+extension TabTitleBar where Trailing == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
 }
 
 // MARK: - Toast ("avisos")
@@ -296,25 +321,53 @@ struct SheetRow<Trailing: View>: View {
     var glyph: Glyph? = nil
     let action: () -> Void
     @ViewBuilder var trailing: Trailing
-    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Group {
-                    if let glyph { GlyphView(glyph: glyph, size: 16) }
-                    else { Image(systemName: systemImage).font(.system(size: iconSize, weight: .regular)).foregroundStyle(iconColor) }
-                }
-                .frame(width: 24)
-                Text(label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
-                Spacer(minLength: 8)
-                trailing
-            }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 54)
-            .contentShape(Rectangle())
+            SheetRowLabel(systemImage: systemImage, label: label, iconColor: iconColor, glyph: glyph) { trailing }
         }
         .buttonStyle(SheetRowStyle())
+    }
+}
+
+/// A `SheetRow` that opens the system share sheet (a public link) instead of running an action.
+struct SheetShareRow: View {
+    var systemImage = "square.and.arrow.up"
+    let label: String
+    let item: URL
+    var message: Text? = nil
+
+    var body: some View {
+        ShareLink(item: item, message: message) {
+            SheetRowLabel(systemImage: systemImage, label: label) { EmptyView() }
+        }
+        .buttonStyle(SheetRowStyle())
+    }
+}
+
+/// What every sheet row draws: icon in a 24 slot, label 16/500, optional trailing.
+private struct SheetRowLabel<Trailing: View>: View {
+    let systemImage: String
+    let label: String
+    var iconColor: Color = KColor.text
+    var glyph: Glyph? = nil
+    @ViewBuilder var trailing: Trailing
+    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Group {
+                if let glyph { GlyphView(glyph: glyph, size: 16) }
+                else { Image(systemName: systemImage).font(.system(size: iconSize, weight: .regular)).foregroundStyle(iconColor) }
+            }
+            .frame(width: 24)
+            Text(label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 54)
+        .contentShape(Rectangle())
     }
 }
 

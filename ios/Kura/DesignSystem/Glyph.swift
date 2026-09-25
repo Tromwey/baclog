@@ -50,39 +50,54 @@ struct DockIcon: View {
     let tab: Tab
     var body: some View {
         Canvas { ctx, size in
-            let s = size.width / 24
-            func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
-                CGRect(x: x * s, y: y * s, width: w * s, height: h * s)
-            }
-            var path = Path()
-            switch tab {
-            case .collections:
-                path.addRoundedRect(in: r(4, 4, 16, 6.6), cornerSize: CGSize(width: 1.7 * s, height: 1.7 * s))
-                path.addRoundedRect(in: r(4, 13.4, 16, 6.6), cornerSize: CGSize(width: 1.7 * s, height: 1.7 * s))
-            case .discover:
-                path.move(to: CGPoint(x: 12 * s, y: 2 * s))
-                path.addLine(to: CGPoint(x: 14 * s, y: 10 * s))
-                path.addLine(to: CGPoint(x: 22 * s, y: 12 * s))
-                path.addLine(to: CGPoint(x: 14 * s, y: 14 * s))
-                path.addLine(to: CGPoint(x: 12 * s, y: 22 * s))
-                path.addLine(to: CGPoint(x: 10 * s, y: 14 * s))
-                path.addLine(to: CGPoint(x: 2 * s, y: 12 * s))
-                path.addLine(to: CGPoint(x: 10 * s, y: 10 * s))
-                path.closeSubpath()
-            case .feed:
-                path.addEllipse(in: r(8 - 4.2, 12 - 4.2, 8.4, 8.4))
-                path.addRoundedRect(in: r(16, 7.6, 4, 3.2), cornerSize: CGSize(width: 1.6 * s, height: 1.6 * s))
-                path.addRoundedRect(in: r(16, 13.2, 2.2, 3.2), cornerSize: CGSize(width: 1.1 * s, height: 1.6 * s))
-            case .profile:
-                path.addEllipse(in: r(12 - 3.8, 8.5 - 3.8, 7.6, 7.6))
-                path.move(to: CGPoint(x: 5 * s, y: 20.5 * s))
-                path.addRelativeArc(center: CGPoint(x: 12 * s, y: 20.5 * s), radius: 7 * s,
-                                    startAngle: .degrees(180), delta: .degrees(180))
-                path.closeSubpath()
-            }
-            ctx.fill(path, with: .foreground)
+            ctx.fill(Self.path(tab, side: size.width), with: .foreground)
         }
         .frame(width: 21, height: 21)
         .accessibilityHidden(true)
+    }
+
+    /// The same shape as a template image, for the system tab bar (iOS 26).
+    static func image(_ tab: Tab) -> UIImage {
+        let side: CGFloat = 24
+        let img = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { r in
+            UIColor.black.setFill()
+            r.cgContext.addPath(path(tab, side: side).cgPath)
+            r.cgContext.fillPath()
+        }
+        return img.withRenderingMode(.alwaysTemplate)
+    }
+
+    static func path(_ tab: Tab, side: CGFloat) -> Path {
+        let s = side / 24
+        func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
+            CGRect(x: x * s, y: y * s, width: w * s, height: h * s)
+        }
+        var path = Path()
+        switch tab {
+        case .collections:
+            path.addRoundedRect(in: r(4, 4, 16, 6.6), cornerSize: CGSize(width: 1.7 * s, height: 1.7 * s))
+            path.addRoundedRect(in: r(4, 13.4, 16, 6.6), cornerSize: CGSize(width: 1.7 * s, height: 1.7 * s))
+        case .discover:
+            path.move(to: CGPoint(x: 12 * s, y: 2 * s))
+            path.addLine(to: CGPoint(x: 14 * s, y: 10 * s))
+            path.addLine(to: CGPoint(x: 22 * s, y: 12 * s))
+            path.addLine(to: CGPoint(x: 14 * s, y: 14 * s))
+            path.addLine(to: CGPoint(x: 12 * s, y: 22 * s))
+            path.addLine(to: CGPoint(x: 10 * s, y: 14 * s))
+            path.addLine(to: CGPoint(x: 2 * s, y: 12 * s))
+            path.addLine(to: CGPoint(x: 10 * s, y: 10 * s))
+            path.closeSubpath()
+        case .feed:
+            path.addEllipse(in: r(8 - 4.2, 12 - 4.2, 8.4, 8.4))
+            path.addRoundedRect(in: r(16, 7.6, 4, 3.2), cornerSize: CGSize(width: 1.6 * s, height: 1.6 * s))
+            path.addRoundedRect(in: r(16, 13.2, 2.2, 3.2), cornerSize: CGSize(width: 1.1 * s, height: 1.6 * s))
+        case .profile:
+            path.addEllipse(in: r(12 - 3.8, 8.5 - 3.8, 7.6, 7.6))
+            path.move(to: CGPoint(x: 5 * s, y: 20.5 * s))
+            path.addRelativeArc(center: CGPoint(x: 12 * s, y: 20.5 * s), radius: 7 * s,
+                                startAngle: .degrees(180), delta: .degrees(180))
+            path.closeSubpath()
+        }
+        return path
     }
 }

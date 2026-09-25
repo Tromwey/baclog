@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { ZodError } from "zod";
+import { MOBILE_TOKEN_TTL_SECONDS } from "./token-ttl";
 import type { CurrentUser } from "@/auth/session";
 import { loadUserForBearer } from "@/auth/user-row";
 import { SESSION_TOUCH_INTERVAL_MS, touchMobileSession } from "@/auth/mobile-sessions";
@@ -220,7 +221,6 @@ export interface RequestMeta {
 // ---------- bearer tokens ----------
 
 export const MOBILE_TOKEN_AUDIENCE = "kura-ios";
-const MOBILE_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /** A fresh 30-day bearer for `userId` at the account's current
  *  `token_version` (new `jti` every call — refresh rotates it), bound to the

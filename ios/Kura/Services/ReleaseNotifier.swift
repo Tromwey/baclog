@@ -29,7 +29,7 @@ enum ReleaseNotifier {
             }()
             // Same payload as the remote push: a tap opens the ficha.
             content.userInfo = ["kura": ["type": "release", "titleId": t.id]]
-            var comps = MockData.calendar.dateComponents([.year, .month, .day], from: d)
+            var comps = KCalendar.kura.dateComponents([.year, .month, .day], from: d)
             comps.hour = 9
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             try? await UNUserNotificationCenter.current()
