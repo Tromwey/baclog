@@ -13,14 +13,18 @@ struct FeedView: View {
     /// How far a card's body runs past its own height, so the card rising from
     /// underneath always mounts over filled color instead of bare bg.
     private let ext: CGFloat = 120
+    /// E1 stays up once shown, until you leave the tab: following the first suggestion used to
+    /// flip the feed to "quiet" on the spot and the other suggestions went with it.
+    @State private var holdEmpty = false
 
     var body: some View {
         Group {
             if store.loadState == .failed {
                 // The launch failed: "nobody you follow" would be a lie — we don't know yet.
                 failed(store.loadError(.library) ?? .server("")) { Task { await store.bootstrap() } }
-            } else if store.following.isEmpty && store.me.followingCount == 0 {
+            } else if holdEmpty || (store.following.isEmpty && store.me.followingCount == 0) {
                 FeedEmptyView()
+                    .onAppear { holdEmpty = true }
             } else if !store.feedLoaded && store.visibleFeed.isEmpty, let e = store.loadError(.feed) {
                 failed(e) { Task { await store.loadFeed(force: true) } }
             } else if !store.feedLoaded && store.visibleFeed.isEmpty {
@@ -35,6 +39,7 @@ struct FeedView: View {
         // Every tab is mounted at launch, so the first load may predate the first follow:
         // reload when the tab is shown with a stale followed set.
         .onChange(of: store.tab) { _, tab in
+            if tab != .feed { holdEmpty = false }
             if tab == .feed && store.feedStale { Task { await store.loadFeed(force: true) } }
         }
     }
