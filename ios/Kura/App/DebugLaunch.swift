@@ -48,7 +48,7 @@ enum DebugLaunch {
             store.phase = .onboarding; store.onboardingStep = .people
             store.onboardingPicks = ["chihiro", "ma", "severance"]
         case "login":
-            store.phase = .onboarding; store.onboardingStep = .login
+            store.phase = .onboarding; store.onboardingStep = .signup
         // Sign in with Apple / Google: the buttons follow `GET /auth/providers` (mock: `-kuraProviders
         // all|apple|google|none|fail`, default all). These register the value in the volatile
         // registration domain, so a launch argument still wins and nothing persists.
@@ -60,7 +60,7 @@ enum DebugLaunch {
             UserDefaults.standard.register(defaults: ["kuraProviders": "fail"])
             store.phase = .onboarding; store.onboardingStep = .signup
         case "loginemail":
-            store.phase = .onboarding; store.onboardingStep = .email; store.emailStep = .email
+            store.phase = .onboarding; store.onboardingStep = .signup
         case "collections":
             main()
         case "loading":

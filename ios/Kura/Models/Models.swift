@@ -1514,9 +1514,10 @@ enum Route: Hashable {
 }
 
 enum OnboardingStep: Hashable {
-    case welcome, signup, username, pick, people, login
-    /// Correo → código (O1c/O1a against `auth/otp/*`).
-    case email, code
+    /// `signup` is the one entrance (Apple · Google · correo) for new and returning people.
+    case welcome, signup, username, pick, people
+    /// The code sent by email (`auth/otp/verify`).
+    case code
     /// `POST /me/onboarding` answered `403 underage`.
     case underage
 }

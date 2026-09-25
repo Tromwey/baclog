@@ -35,7 +35,6 @@ struct OnboardingFlow: View {
             case .username: UsernameView().transition(.opacity)
             case .pick: PickThreeView(ns: ns).transition(.opacity)
             case .people: YourPeopleView(ns: ns).transition(.opacity)
-            case .login, .email: LoginView().transition(.opacity)
             case .code: CodeView().transition(.opacity)
             case .underage: UnderageView().transition(.opacity)
             }
@@ -145,15 +144,20 @@ struct WelcomeView: View {
     }
 }
 
-// MARK: - O1a Crear cuenta
+// MARK: - O1a Entrar (crear cuenta y entrar son la misma puerta)
 
+/// One door for new and returning people: Apple, Google or a code by email. The server tells
+/// them apart after the code (`route(after:)` sends a fresh account to O1b), so the entrance
+/// never asks "¿ya tienes cuenta?".
 struct SignUpView: View {
     @Environment(AppStore.self) private var store
+    @State private var email = KuraRuntime.usesMock ? "mariel@correo.com" : ""
+    @FocusState private var focused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
             // Volver only when the welcome is part of this entrance (first launch).
-            OnboardingChrome(step: "1 de 2", back: store.welcomeSeen ? nil : { store.onboardingStep = .welcome })
+            OnboardingChrome(step: nil, back: store.welcomeSeen ? nil : { store.onboardingStep = .welcome })
 
             VStack(alignment: .leading, spacing: 14) {
                 // Only for someone who arrived from a title shared on the web.
@@ -166,11 +170,15 @@ struct SignUpView: View {
                             .lineSpacing(3)
                     }
                 }
-                Text("crea tu cuenta.")
+                Text("entra a kura.")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .padding(.top, 14)
                     .accessibilityAddTraits(.isHeader)
+                Text("Si es tu primera vez, tu cuenta se crea al entrar.")
+                    .font(.kura.ui(15))
+                    .foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 24)
             .padding(.top, 170)
@@ -179,29 +187,47 @@ struct SignUpView: View {
             VStack(spacing: 10) {
                 Spacer()
                 // Apple / Google only when `GET /auth/providers` says they work (App Review 2.1:
-                // never a button that only says "llega después"). Correo is always there; it's the
-                // solid one while it's the only way in.
+                // never a button that only says "llega después"). Correo is always there.
                 SocialSignInButtons()
-                AuthButton(kind: .email, primary: !store.hasSocialSignIn) {
-                    store.emailStep = .email
-                    store.onboardingStep = .email
+                if store.hasSocialSignIn {
+                    Text("o con correo").monoLabel()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
                 }
-                Button {
-                    store.emailStep = .login
-                    store.onboardingStep = .login
-                } label: {
-                    (Text("¿Ya tienes cuenta? ").foregroundColor(KColor.text2)
-                     + Text("Entrar").fontWeight(.semibold).foregroundColor(KColor.text))
-                        .font(.kura.ui(15))
-                        .frame(minHeight: 44)
+                GlassField(placeholder: "tu correo", text: $email, focus: $focused)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .submitLabel(.send)
+                    .onSubmit(send)
+                // Solid while correo is the only way in; glass next to Apple's white button.
+                if store.hasSocialSignIn {
+                    GlassButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", height: 52, fontSize: 16, fullWidth: true, action: send)
+                        .disabled(store.authBusy)
+                } else {
+                    SolidButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", enabled: !store.authBusy, action: send)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 2)
+                InlineError(text: store.authError)
+                Text("Sin contraseña: te mandamos un código de seis dígitos.")
+                    .font(.kura.ui(13))
+                    .foregroundStyle(KColor.text2)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 2)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 34)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .onAppear { if !store.authEmail.isEmpty { email = store.authEmail } }
+    }
+
+    private func send() {
+        guard !store.authBusy else { return }
+        focused = false
+        Task {
+            if await store.requestCode(email: email) {
+                store.onboardingStep = .code
+            }
+        }
     }
 }
 
@@ -326,7 +352,7 @@ struct UsernameView: View {
         ZStack(alignment: .top) {
             // Volver on O1b = forget this device's token (API.md §5: it was already issued). Never
             // the global logout: backing out of a sign-up must not sign out your other devices.
-            OnboardingChrome(step: "2 de 2") {
+            OnboardingChrome(step: nil) {
                 if store.account == nil { store.onboardingStep = .signup } else { store.signOut(global: false) }
             }
 
@@ -725,63 +751,6 @@ struct YourPeopleView: View {
     }
 }
 
-// MARK: - O1c Entrar (correo)
-
-struct LoginView: View {
-    @Environment(AppStore.self) private var store
-    @State private var email = KuraRuntime.usesMock ? "mariel@correo.com" : ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            OnboardingChrome(step: nil) { store.onboardingStep = store.entryStep }
-
-            VStack(spacing: 12) {
-                Text("entrar.")
-                    .font(.kura.news(40))
-                    .foregroundStyle(KColor.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 20)
-                    .accessibilityAddTraits(.isHeader)
-                // "Entrar" (from O1a's "¿Ya tienes cuenta?") offers Apple / Google first when they
-                // work; "Continuar con correo" already chose correo, so it's the field alone.
-                if store.onboardingStep == .login && store.hasSocialSignIn {
-                    SocialSignInButtons()
-                    Text("o con correo").monoLabel()
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                GlassField(placeholder: "tu correo", text: $email, focus: $focused)
-                    .keyboardType(.emailAddress)
-                    .textContentType(.emailAddress)
-                    .submitLabel(.send)
-                    .onSubmit(send)
-                GlassButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", height: 52, fontSize: 16, fullWidth: true, action: send)
-                    .disabled(store.authBusy)
-                InlineError(text: store.authError)
-                Text("Sin contraseña: te mandamos un código de seis dígitos.")
-                    .font(.kura.ui(13))
-                    .foregroundStyle(KColor.text2)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 170)
-        }
-        .ignoresSafeArea(.container, edges: .top)
-        .onAppear { if !store.authEmail.isEmpty { email = store.authEmail } }
-    }
-
-    private func send() {
-        guard !store.authBusy else { return }
-        focused = false
-        Task {
-            if await store.requestCode(email: email) {
-                store.onboardingStep = .code
-            }
-        }
-    }
-}
-
 // MARK: - O1c · el código
 
 struct CodeView: View {
@@ -793,7 +762,7 @@ struct CodeView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = store.emailStep }
+            OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = .signup }
 
             VStack(spacing: 12) {
                 Text("tu código.")

@@ -119,9 +119,6 @@ final class AppStore {
     /// `.emailOnly` (correo only, never a button that doesn't work) and is asked again next time.
     var authProviders: AuthProviders?
     @ObservationIgnored private var authProvidersStale = true
-    /// Where the correo screen came from: `.login` ("Entrar", with Apple/Google above the field) or
-    /// `.email` ("Continuar con correo" on O1a, correo only). The code screen goes back there.
-    var emailStep: OnboardingStep = .login
     /// The name Sign in with Apple handed over (first authorization only), to pre-fill O1b.
     var suggestedName: String?
     /// True when the entrance paints at least one of Apple / Google.
@@ -2640,7 +2637,6 @@ final class AppStore {
         deviceSessions = nil
         pendingPush = nil
         authProvidersStale = true
-        emailStep = .login
         suggestedName = nil
         reportedReviews = []
         feedDirty = false
