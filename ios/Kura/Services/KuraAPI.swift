@@ -45,6 +45,28 @@ protocol KuraAPI: Sendable {
     /// `PUT /me/devices/{token}` `{ environment }` → 204. `environment` = `sandbox` | `production`.
     func registerDevice(pushToken: String, environment: String) async throws
 
+    // MARK: Identities and merge (fase 4g)
+    /// `GET /me/identities` → the account email + the enabled providers and whether each is linked.
+    func identities() async throws -> Identities
+    /// `POST /me/identities/apple` `{ identityToken, rawNonce, authorizationCode? }`. A 409
+    /// `linked_elsewhere` comes back as `.mergeable` (not thrown). A rejected Apple token is
+    /// `422 invalid_proof`, thrown as `.forbidden("proof_rejected")`.
+    func linkApple(_ credential: AppleCredential) async throws -> LinkOutcome
+    /// `POST /me/identities/google` `{ idToken }`. Same outcomes as `linkApple`.
+    func linkGoogle(idToken: String) async throws -> LinkOutcome
+    /// `DELETE /me/identities/{provider}` → 204. 409 `last_way_in` for Apple when the account email
+    /// is an Apple relay and nothing else is linked (nothing is touched).
+    func unlinkIdentity(_ provider: IdentityProvider) async throws
+    /// `POST /me/merge/otp/request { email }` → 204 always (no oracle); 429 on the 60 s cooldown or
+    /// the 3-per-hour cap per target email (`retryAfterSeconds` up to ~3600).
+    func requestMergeCode(email: String) async throws
+    /// `POST /me/merge/otp/verify { email, code }` → `{ mergeToken, source }`. A bad/expired code
+    /// (or no such account) is `422 invalid_proof`, thrown as `.forbidden("proof_rejected")`.
+    func verifyMergeCode(email: String, code: String) async throws -> MergeProof
+    /// `POST /me/merge { mergeToken }` → `{ user: Me }` (this account, with the other one folded in).
+    /// 409 `merge_token_invalid` (expired / used), 403 `underage`.
+    func merge(token: String) async throws -> Me
+
     // MARK: Account
     func me() async throws -> Me
     func updateMe(_ patch: MePatch) async throws -> Me
@@ -223,6 +245,51 @@ struct MockAPI: KuraAPI {
         MockDevices.shared.revoke(id)
     }
     func registerDevice(pushToken: String, environment: String) async throws { try await write() }
+
+    // Identities and merge — Apple answers `linked_elsewhere` so the merge path is demoable;
+    // Google links; code `000000` is rejected; `-kuraMergeError underage|expired` fails the merge.
+    func identities() async throws -> Identities { MockIdentities.shared.current }
+    func linkApple(_ credential: AppleCredential) async throws -> LinkOutcome {
+        try await write()
+        return .mergeable(MockData.mergeProof)
+    }
+    func linkGoogle(idToken: String) async throws -> LinkOutcome {
+        try await write()
+        MockIdentities.shared.set(.google, linked: true)
+        return .linked
+    }
+    func unlinkIdentity(_ provider: IdentityProvider) async throws {
+        try await write()
+        if provider == .apple, MockIdentities.shared.current.appleIsLastWayIn {
+            throw KuraAPIError.conflict(code: "last_way_in", message: "")
+        }
+        MockIdentities.shared.set(provider, linked: false)
+    }
+    func requestMergeCode(email: String) async throws {
+        try await write()
+        // `-kuraMergeLimit YES`: the 3-codes-per-hour cap on the target email (40 min left).
+        if UserDefaults.standard.bool(forKey: "kuraMergeLimit") { throw KuraAPIError.rateLimited(retryAfter: 2400) }
+    }
+    func verifyMergeCode(email: String, code: String) async throws -> MergeProof {
+        try await write()
+        if code == "000000" { throw KuraAPIError.forbidden(code: "proof_rejected") }
+        var proof = MockData.mergeProof
+        proof.source.email = email
+        return proof
+    }
+    func merge(token: String) async throws -> Me {
+        try await Task.sleep(for: .milliseconds(700))
+        try await write()
+        switch UserDefaults.standard.string(forKey: "kuraMergeError") {
+        case "underage": throw KuraAPIError.forbidden(code: "underage")
+        case "expired": throw KuraAPIError.conflict(code: "merge_token_invalid", message: "")
+        case "offline": throw KuraAPIError.offline
+        default: break
+        }
+        MockIdentities.shared.set(.apple, linked: true)
+        return Me(person: MockData.me, email: MockIdentities.shared.current.email)
+    }
+
 
     // Account
     func me() async throws -> Me { Me(person: MockData.me) }
@@ -447,4 +514,37 @@ final class MockDevices: @unchecked Sendable {
     var list: [DeviceSession] { lock.withLock { items } }
     func revoke(_ id: String) { lock.withLock { items.removeAll { $0.id == id && !$0.current } } }
     func reset(_ list: [DeviceSession]) { lock.withLock { items = list } }
+}
+
+/// The mock's linked providers (`MockAPI` is a value type): shared, so a link/unlink sticks.
+final class MockIdentities: @unchecked Sendable {
+    static let shared = MockIdentities()
+    private let lock = NSLock()
+    private var value = Identities(email: "mariel@correo.com",
+                                   providers: [.init(provider: .apple, linked: false), .init(provider: .google, linked: true)])
+
+    var current: Identities {
+        lock.withLock {
+            // Only what `-kuraProviders` enables, like the server's `auth/providers` rules.
+            var v = value
+            switch UserDefaults.standard.string(forKey: "kuraProviders") ?? "all" {
+            case "apple": v.providers.removeAll { $0.provider == .google }
+            case "google": v.providers.removeAll { $0.provider == .apple }
+            case "none", "fail": v.providers = []
+            default: break
+            }
+            return v
+        }
+    }
+    func setRelay(_ relay: Bool) {
+        lock.withLock {
+            value.emailIsRelay = relay
+            value.email = relay ? "x7k2m9pq4d@privaterelay.appleid.com" : "mariel@correo.com"
+        }
+    }
+    func set(_ p: IdentityProvider, linked: Bool) {
+        lock.withLock {
+            if let i = value.providers.firstIndex(where: { $0.provider == p }) { value.providers[i].linked = linked }
+        }
+    }
 }

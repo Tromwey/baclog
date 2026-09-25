@@ -29,6 +29,7 @@
 		65D8526902D6A6670328C876 /* KuraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB6EFAAB0741C435C162CA3 /* KuraApp.swift */; };
 		675B2F19EECE813DCA167A47 /* RecapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD76236F207A0B338E85E9F /* RecapViews.swift */; };
 		6CF0704F6DED9E7BDF8FC76B /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2921E5B162BAA165396004AF /* Keychain.swift */; };
+		6D4D7A3476B4602F7E4BF742 /* AccountLinkViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E33135F90BB0DCE06210064 /* AccountLinkViews.swift */; };
 		7571A847D59287134A9AAA3F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8F08A2167AEAE688CDACA39A /* PrivacyInfo.xcprivacy */; };
 		79C1D95382CD42043BDDF162 /* OnboardingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DBBBEC18D9BF9BD0037E0FD /* OnboardingViews.swift */; };
 		7A655870EA7526F062546291 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29D4C811713FD583D25EF5AC /* Session.swift */; };
@@ -88,6 +89,7 @@
 		4558D53D4718F35BB6D89D4E /* TitleSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleSheets.swift; sourceTree = "<group>"; };
 		4568E178755CE7254A40502B /* Glyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glyph.swift; sourceTree = "<group>"; };
 		4C3D2BDF3D671773F9B2D886 /* Newsreader-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Newsreader-Regular.ttf"; sourceTree = "<group>"; };
+		4E33135F90BB0DCE06210064 /* AccountLinkViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountLinkViews.swift; sourceTree = "<group>"; };
 		51883A81E47B20D988ADAC4F /* Newsreader-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Newsreader-Medium.ttf"; sourceTree = "<group>"; };
 		51F9E780278E4FF272759D21 /* DebugLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLaunch.swift; sourceTree = "<group>"; };
 		52009EBC11CDCDA41F528ADC /* HankenGrotesk-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "HankenGrotesk-Regular.ttf"; sourceTree = "<group>"; };
@@ -203,6 +205,7 @@
 		6FA5E4A6DC99E22241C3C86A /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				4E33135F90BB0DCE06210064 /* AccountLinkViews.swift */,
 				77548D94658292AE0E375FF4 /* SettingsViews.swift */,
 			);
 			path = Settings;
@@ -469,6 +472,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6D4D7A3476B4602F7E4BF742 /* AccountLinkViews.swift in Sources */,
 				F4EF91AA70E0F9D449E2AF05 /* AddTitlesSheet.swift in Sources */,
 				BF84DA70350C22370BA5E25F /* AppStore.swift in Sources */,
 				7B5D9FDC542014698FF13930 /* Avatar.swift in Sources */,

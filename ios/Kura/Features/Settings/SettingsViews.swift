@@ -41,11 +41,14 @@ struct SettingsView: View {
                         }
                         .buttonStyle(SheetRowStyle())
                         ListDivider()
-                        SettingsRow(title: "Correo") { RowValue(text: store.account?.email ?? (KuraRuntime.usesMock ? "mariel@correo.com" : "")) }
-                        ListDivider()
                         SettingsRow(title: "Sesiones activas", action: { store.push(.sessions) }) {
                             RowValue(text: store.deviceSessions.map { "\($0.count)" } ?? "")
                         }
+                    }
+
+                    section("inicio de sesión") { IdentityRows() }
+                    if let e = store.loadError(.identities) {
+                        RetryStrip(error: e) { Task { await store.loadIdentities() } }
                     }
 
                     section("privacidad") {
@@ -145,6 +148,7 @@ struct SettingsView: View {
             TopChrome { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
+        .task { await store.loadIdentities() }
         .fullScreenCover(isPresented: $showPrivacyNotice) {
             SafariView(url: Self.privacyNoticeURL).ignoresSafeArea()
         }

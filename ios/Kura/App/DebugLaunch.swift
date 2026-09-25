@@ -6,7 +6,8 @@ import Foundation
 /// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
 /// collections · loading · empty · offline · newcollection · collection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
-/// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings
+/// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
+/// identities · unlinkidentity · lastwayin · lastwayintoast · mergechooser · mergecode · mergelimit · mergeconfirm
 enum DebugLaunch {
     /// `-kuraScreen <name>` or `-kuraMock` → the app runs on `MockAPI` (DEBUG only).
     static var wantsMock: Bool {
@@ -239,6 +240,39 @@ enum DebugLaunch {
         case "sessionsone":
             MockDevices.shared.reset(MockData.sessions.filter(\.current))
             main(.profile, [.settings, .sessions])
+        // Fase 4g · inicio de sesión y fusionar cuentas (mock: Apple answers `linked_elsewhere`,
+        // code 000000 is rejected, `-kuraMergeError underage|expired|offline` fails the merge).
+        case "identities":
+            main(.profile, [.settings])
+        case "unlinkidentity":
+            main(.profile, [.settings], sheet: .unlinkIdentity(.google))
+        case "lastwayin":
+            // Account email is an Apple relay and Apple is the only link: no Desconectar on its row.
+            MockIdentities.shared.setRelay(true)
+            MockIdentities.shared.set(.apple, linked: true)
+            MockIdentities.shared.set(.google, linked: false)
+            main(.profile, [.settings])
+        case "lastwayintoast":
+            // The server's 409 `last_way_in` (reached anyway): the same explanation as a toast.
+            MockIdentities.shared.setRelay(true)
+            MockIdentities.shared.set(.apple, linked: true)
+            MockIdentities.shared.set(.google, linked: false)
+            main(.profile, [.settings])
+            store.pendingAction = { [weak store] in Task { await store?.disconnect(.apple) } }
+        case "mergelimit":
+            // 429 on "Mandar otro código": the 3-per-hour cap, in minutes, button disabled.
+            UserDefaults.standard.register(defaults: ["kuraMergeLimit": true])
+            store.mergeEmail = "mariel.ortega@icloud.com"
+            main(.profile, [.settings, .mergeAccount, .mergeCode])
+            store.pendingAction = { [weak store] in Task { _ = await store?.requestMergeCode(email: "mariel.ortega@icloud.com") } }
+        case "mergechooser":
+            main(.profile, [.settings, .mergeAccount])
+        case "mergecode":
+            store.mergeEmail = "mariel.ortega@icloud.com"
+            main(.profile, [.settings, .mergeAccount, .mergeCode])
+        case "mergeconfirm":
+            store.mergeProof = MockData.mergeProof
+            main(.profile, [.settings, .mergeAccount, .mergeConfirm])
         case "notifysettings":
             // Ajustes scrolled to "notificaciones" (Nuevos seguidores is server-owned now).
             store.debugSettingsAnchor = "notificaciones"

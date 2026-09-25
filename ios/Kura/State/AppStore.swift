@@ -39,6 +39,8 @@ enum SheetRoute: Identifiable, Hashable {
     case addTitles(String)
     /// Ajustes › Sesiones activas › "Cerrar sesión" on another device (`DELETE /me/sessions/{id}`).
     case revokeSession(DeviceSession)
+    /// Ajustes › Inicio de sesión › Apple/Google conectada › "¿desconectar…?" (`DELETE /me/identities/{p}`).
+    case unlinkIdentity(IdentityProvider)
 
     var id: String { String(describing: self) }
 
@@ -83,6 +85,7 @@ enum LoadKey: Hashable {
     case moreReviews(String)
     case blocks
     case sessions
+    case identities
 }
 
 @MainActor
@@ -193,6 +196,18 @@ final class AppStore {
     var blockedAccounts: [BlockedAccount]?
     /// `GET /me/sessions` for Ajustes › Sesiones activas; nil until it loads.
     var deviceSessions: [DeviceSession]?
+    /// `GET /me/identities` for Ajustes › Inicio de sesión; nil until it loads.
+    var identities: Identities?
+    /// The provider whose Conectar / Desconectar is in flight (its row shows a spinner).
+    var identityBusy: IdentityProvider?
+    /// Fusionar otra cuenta: the other account's email (code path), the proof once it's yours,
+    /// the busy flag and the inline error of the chooser / code screens.
+    var mergeEmail = ""
+    var mergeProof: MergeProof?
+    var mergeBusy = false
+    var mergeError: String?
+    /// A 429 on `merge/otp/request` (60 s cooldown or 3 codes/hour per email): no new code before this.
+    var mergeRetryAt: Date?
     /// Reviews you reported this session: the card folds to "Gracias. La revisamos." (like the web).
     var reportedReviews: Set<String> = []
     var notifications: [KNotification]
@@ -2258,12 +2273,17 @@ final class AppStore {
         authError = nil
         defer { authBusy = false }
         do {
-            // The mock never opens accounts.google.com: the captures stay offline and deterministic.
-            let idToken = KuraRuntime.usesMock ? "mock.id.token" : try await GoogleOAuth.idToken(clientID: clientID)
+            let idToken = try await googleIDToken(clientID: clientID)
             finishSignIn(try await api.signInWithGoogle(idToken: idToken))
         } catch {
             socialSignInFailed(error, provider: "Google")
         }
+    }
+
+    /// The browser round trip for Google's `id_token` (sign-in and Conectar share it).
+    /// The mock never opens accounts.google.com: the captures stay offline and deterministic.
+    private func googleIDToken(clientID: String) async throws -> String {
+        KuraRuntime.usesMock ? "mock.id.token" : try await GoogleOAuth.idToken(clientID: clientID)
     }
 
     /// Cancelling is silent; `403 underage` is the same screen as the code path; everything else is
@@ -2348,6 +2368,277 @@ final class AppStore {
         }
         if sheet != nil { dismissSheet() }
         if path(tab).last != route { push(route) }
+    }
+
+    // MARK: Inicio de sesión (identities) and Fusionar otra cuenta
+
+    /// `GET /me/identities` (+ `auth/providers` for Google's client id, which the flow needs).
+    func loadIdentities() async {
+        async let providers: Void = loadAuthProviders()
+        do {
+            let v = try await api.identities()
+            loaded(.identities)
+            withAnimation(KMotion.fade) { identities = v }
+        } catch {
+            fail(.identities, error)
+        }
+        await providers
+    }
+
+    /// Google can only run with the iOS client id from `auth/providers`.
+    func canRun(_ p: IdentityProvider) -> Bool {
+        switch p {
+        case .apple: return true
+        case .google: return authProviders?.googleClientID != nil
+        }
+    }
+
+    /// The provider's own sheet, then `POST /me/identities/{p}`. `linked_elsewhere` goes straight
+    /// to the merge confirmation for that account. `fromMerge`: started on Fusionar otra cuenta,
+    /// where a plain link (that Apple/Google had no other account) is news worth saying.
+    func connect(_ p: IdentityProvider, fromMerge: Bool = false) async {
+        guard identityBusy == nil, !mergeBusy, canRun(p) else { return }
+        identityBusy = p
+        let outcome: LinkOutcome
+        do {
+            switch p {
+            case .apple:
+                let credential = KuraRuntime.usesMock
+                    ? AppleCredential(identityToken: "mock.apple.token", rawNonce: "mock", authorizationCode: nil, givenName: nil, familyName: nil)
+                    : try await AppleAuthorization.credential()
+                outcome = try await api.linkApple(credential)
+            case .google:
+                let idToken = try await googleIDToken(clientID: authProviders?.googleClientID ?? "")
+                outcome = try await api.linkGoogle(idToken: idToken)
+            }
+        } catch {
+            identityBusy = nil
+            identityFailed(error, provider: p)
+            return
+        }
+        identityBusy = nil
+        online()
+        switch outcome {
+        case .linked:
+            setLinked(p, true)
+            KHaptic.impact(.light)
+            showToast(ToastModel(text: fromMerge
+                ? "Ese \(p.label) no tenía otra cuenta en kura: quedó conectado a esta."
+                : "\(p.label) conectada. Ya puedes entrar con \(p.label).", kind: .info))
+        case .mergeable(let proof):
+            mergeProof = proof
+            push(.mergeConfirm)
+        }
+    }
+
+    private func setLinked(_ p: IdentityProvider, _ linked: Bool) {
+        guard let i = identities?.providers.firstIndex(where: { $0.provider == p }) else { return }
+        withAnimation(KMotion.fade) { identities?.providers[i].linked = linked }
+    }
+
+    private func identityFailed(_ error: Error, provider p: IdentityProvider) {
+        if let a = error as? AppleAuthorization.Failure {
+            if a == .rejected { showToast(ToastModel(text: "Apple no respondió. Inténtalo de nuevo.", kind: .info)) }
+            return
+        }
+        if let g = error as? GoogleOAuth.Failure {
+            switch g {
+            case .cancelled: return
+            case .offline:
+                offline = true
+                showToast(ToastModel(text: "Sin conexión. Revisa tu red e inténtalo de nuevo.", kind: .info))
+            case .rejected:
+                showToast(ToastModel(text: "Google no respondió. Inténtalo de nuevo.", kind: .info))
+            }
+            return
+        }
+        let e = noteError(error)
+        let text: String
+        switch e {
+        case .cancelled, .unauthorized: return
+        case .conflict(let code, _) where code == "provider_already_linked":
+            text = "Ya tienes otra cuenta de \(p.label) conectada. Desconéctala primero."
+        case .forbidden(let code) where code == "proof_rejected":
+            text = "\(p.label) no confirmó esa cuenta. Inténtalo de nuevo."
+        case .unavailable: text = "\(p.label) no responde ahora. Prueba en un rato."
+        case .offline: text = "Sin conexión. Revisa tu red e inténtalo de nuevo."
+        case .rateLimited: text = "Demasiados intentos. Espera un momento."
+        default: text = "No se pudo conectar \(p.label). Inténtalo de nuevo."
+        }
+        showToast(ToastModel(text: text, kind: .info))
+    }
+
+    /// Why Apple can't be disconnected (the row, the 409 toast and the sheet say the same).
+    static let lastWayInText = "Tu correo es el privado de Apple: sin Apple no te quedaría cómo entrar. Conecta Google antes."
+
+    /// `DELETE /me/identities/{p}`. 409 `last_way_in`: Apple is the only real way in (relay email).
+    @discardableResult
+    func disconnect(_ p: IdentityProvider) async -> Bool {
+        guard identityBusy == nil else { return false }
+        identityBusy = p
+        defer { identityBusy = nil }
+        do {
+            try await api.unlinkIdentity(p)
+            online()
+            setLinked(p, false)
+            KHaptic.impact(.light)
+            showToast(ToastModel(text: "Desconectaste \(p.label). Sigues entrando con tu correo.", kind: .info))
+            return true
+        } catch {
+            let e = noteError(error)
+            switch e {
+            case .cancelled, .unauthorized: return false
+            case .notFound:
+                setLinked(p, false)
+                return true
+            case .conflict(let c, _) where c == "last_way_in":
+                showToast(ToastModel(text: Self.lastWayInText, kind: .info))
+                return false
+            default:
+                let text = e == .offline ? "Sin conexión. \(p.label) sigue conectada." : "No se pudo desconectar \(p.label)."
+                showToast(ToastModel(text: text, kind: .retry) { [weak self] in
+                    self?.dismissToast()
+                    Task { await self?.disconnect(p) }
+                })
+                return false
+            }
+        }
+    }
+
+    /// Fusionar › correo: `POST /me/merge/otp/request` (204 whether or not the account exists).
+    func requestMergeCode(email: String) async -> Bool {
+        let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard e.contains("@"), e.contains(".") else { mergeError = "Revisa el correo."; return false }
+        let own = (identities?.email ?? account?.email ?? "").lowercased()
+        guard e != own else { mergeError = "Ese es el correo de esta cuenta. Escribe el de la otra."; return false }
+        guard !mergeBusy else { return false }
+        mergeBusy = true
+        mergeError = nil
+        defer { mergeBusy = false }
+        do {
+            try await api.requestMergeCode(email: e)
+            online()
+            mergeEmail = e
+            mergeRetryAt = nil
+            return true
+        } catch {
+            let err = noteError(error)
+            if case .rateLimited(let s) = err { mergeRetryAt = Date().addingTimeInterval(TimeInterval(max(s ?? 60, 1))) }
+            mergeError = mergeText(err)
+            return false
+        }
+    }
+
+    /// Fusionar › código: `POST /me/merge/otp/verify` → the confirmation screen.
+    func verifyMergeCode(_ code: String) async {
+        guard !mergeBusy else { return }
+        mergeBusy = true
+        mergeError = nil
+        defer { mergeBusy = false }
+        do {
+            mergeProof = try await api.verifyMergeCode(email: mergeEmail, code: code)
+            online()
+            push(.mergeConfirm)
+        } catch {
+            let e = noteError(error)
+            if case .forbidden(let c) = e, c == "proof_rejected" {
+                mergeError = "Ese código no sirve. Revísalo o pide otro."
+            } else {
+                mergeError = mergeText(e)
+            }
+        }
+    }
+
+    private func mergeText(_ e: KuraAPIError) -> String? {
+        switch e {
+        case .cancelled, .unauthorized: return nil
+        case .offline: return "Sin conexión. Revisa tu red e inténtalo de nuevo."
+        case .rateLimited(let s):
+            guard let s, s > 0 else { return "Demasiados intentos. Espera un momento." }
+            if s < 90 { return "Espera \(s) s para pedir otro código." }
+            let min = Int((Double(s) / 60).rounded(.up))
+            return "Ya pediste varios códigos para ese correo. Intenta en \(min) min."
+        case .invalid(_, let m) where !m.isEmpty: return m
+        case .invalid: return "Revisa el correo."
+        default: return "Algo falló de nuestro lado. Inténtalo de nuevo."
+        }
+    }
+
+    /// `POST /me/merge`: the other account folds into this one. On success everything that
+    /// depends on the account is read again from the returned `Me`, and Ajustes comes back.
+    func confirmMerge() async {
+        guard let proof = mergeProof, !mergeBusy else { return }
+        mergeBusy = true
+        mergeError = nil
+        sheetLocked = true
+        defer { mergeBusy = false; sheetLocked = false }
+        let m: Me
+        do {
+            m = try await api.merge(token: proof.mergeToken)
+        } catch {
+            let e = noteError(error)
+            switch e {
+            case .cancelled, .unauthorized: return
+            case .forbidden(let c) where c == "underage":
+                mergeProof = nil
+                popToSettings()
+                showToast(ToastModel(text: "Una de las dos cuentas es de alguien menor de 13. No se pueden juntar.", kind: .info))
+            case .conflict(let c, _) where c == "merge_token_invalid":
+                mergeProof = nil
+                popToSettings(keeping: .mergeAccount)
+                showToast(ToastModel(text: "Pasaron más de 10 minutos. Vuelve a probar que la otra cuenta es tuya.", kind: .info))
+            case .offline:
+                showToast(ToastModel(text: "Sin conexión. No se movió nada.", kind: .retry) { [weak self] in
+                    self?.dismissToast()
+                    Task { await self?.confirmMerge() }
+                })
+            default:
+                showToast(ToastModel(text: "No se pudo fusionar. No se movió nada.", kind: .retry) { [weak self] in
+                    self?.dismissToast()
+                    Task { await self?.confirmMerge() }
+                })
+            }
+            return
+        }
+        online()
+        let moved = proof.source.display
+        mergeProof = nil
+        mergeEmail = ""
+        applyMe(m)
+        popToSettings()
+        KHaptic.impact(.medium)
+        showToast(ToastModel(text: "Listo. Todo lo de \(moved) ya está aquí.", kind: .info))
+        await reloadAfterMerge()
+    }
+
+    /// Everything read for the old shape of the account goes stale: library, feed, people,
+    /// recap, Ajustes' lists. The library re-bootstraps; the rest reloads on its next visit.
+    private func reloadAfterMerge() async {
+        feed = []
+        feedLoaded = false
+        feedCursor = nil
+        feedDirty = false
+        discover = nil
+        loadedCollections = []
+        loadedPeople = []
+        peopleLists = [:]
+        recapMonths = nil
+        recaps = [:]
+        blockedAccounts = nil
+        deviceSessions = nil
+        identities = nil
+        await bootstrap()
+        await loadIdentities()
+    }
+
+    /// Back to Ajustes in the current tab (optionally leaving one screen on top of it).
+    private func popToSettings(keeping extra: Route? = nil) {
+        var p = paths[tab] ?? []
+        if let i = p.lastIndex(of: .settings) {
+            p = Array(p.prefix(through: i))
+            if let extra { p.append(extra) }
+            paths[tab] = p
+        }
     }
 
     // MARK: Sesiones activas
@@ -2635,6 +2926,13 @@ final class AppStore {
         blocked = []
         blockedAccounts = nil
         deviceSessions = nil
+        identities = nil
+        identityBusy = nil
+        mergeEmail = ""
+        mergeProof = nil
+        mergeBusy = false
+        mergeError = nil
+        mergeRetryAt = nil
         pendingPush = nil
         authProvidersStale = true
         suggestedName = nil

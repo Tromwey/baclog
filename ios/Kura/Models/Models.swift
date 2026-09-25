@@ -1410,6 +1410,105 @@ struct AuthProviders: Hashable, Decodable, Sendable {
     }
 }
 
+// MARK: - Identities and merge (fase 4g)
+
+/// A third-party sign-in that can be attached to the account.
+enum IdentityProvider: String, Hashable, Sendable, CaseIterable, Identifiable {
+    case apple, google
+    var id: String { rawValue }
+    var label: String { self == .apple ? "Apple" : "Google" }
+}
+
+/// `GET /me/identities` → `{ email, providers: [{ provider, linked }] }`. `providers` only lists
+/// what the server has enabled today; an unknown provider string is dropped.
+struct Identities: Hashable, Decodable, Sendable {
+    struct Link: Hashable, Sendable {
+        var provider: IdentityProvider
+        var linked: Bool
+    }
+    var email: String
+    var providers: [Link]
+    /// The account email is an Apple private relay: with no other provider linked, Apple is the
+    /// only real way in, so the server refuses to disconnect it (409 `last_way_in`).
+    var emailIsRelay: Bool
+
+    init(email: String, providers: [Link], emailIsRelay: Bool = false) {
+        self.email = email; self.providers = providers; self.emailIsRelay = emailIsRelay
+    }
+
+    /// Disconnecting Apple would leave only a relay email (which the person may not be able to read).
+    var appleIsLastWayIn: Bool {
+        emailIsRelay && link(.apple)?.linked == true && !providers.contains { $0.provider != .apple && $0.linked }
+    }
+
+    func link(_ p: IdentityProvider) -> Link? { providers.first { $0.provider == p } }
+
+    private enum CodingKeys: String, CodingKey { case email, providers, emailIsRelay }
+    private struct Raw: Decodable { let provider: String; let linked: Bool? }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        email = try c.decodeIfPresent(String.self, forKey: .email) ?? ""
+        let raw = try c.decodeIfPresent([Raw].self, forKey: .providers) ?? []
+        providers = raw.compactMap { r in IdentityProvider(rawValue: r.provider).map { Link(provider: $0, linked: r.linked ?? false) } }
+        emailIsRelay = try c.decodeIfPresent(Bool.self, forKey: .emailIsRelay) ?? false
+    }
+}
+
+/// The OTHER account (the one that disappears) as the merge screens show it. Its owner already
+/// proved it's theirs, so its email is visible.
+struct MergeSource: Hashable, Decodable, Sendable {
+    struct Counts: Hashable, Decodable, Sendable {
+        var titles: Int
+        var collections: Int
+        var reviews: Int
+        var followers: Int
+        var following: Int
+    }
+    var handle: String?
+    var name: String?
+    var email: String
+    var counts: Counts
+    /// The other account was public (and had a handle). Absent on an older server → assumed
+    /// public, so no warning is shown that the server didn't ask for.
+    var isPublic: Bool
+
+    init(handle: String?, name: String?, email: String, counts: Counts, isPublic: Bool = true) {
+        self.handle = handle; self.name = name; self.email = email; self.counts = counts; self.isPublic = isPublic
+    }
+
+    private enum CodingKeys: String, CodingKey { case handle, name, email, counts, isPublic }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        handle = try c.decodeIfPresent(String.self, forKey: .handle)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        email = try c.decode(String.self, forKey: .email)
+        counts = try c.decode(Counts.self, forKey: .counts)
+        isPublic = try c.decodeIfPresent(Bool.self, forKey: .isPublic) ?? true
+    }
+
+    /// "@mariel.viejo", else the name, else the email.
+    var display: String {
+        if let h = handle, !h.isEmpty { return "@\(h)" }
+        if let n = name, !n.isEmpty { return n }
+        return email
+    }
+}
+
+/// `{ mergeToken, source }`: proof that the other account is yours (10 min, one use).
+struct MergeProof: Hashable, Decodable, Sendable {
+    var mergeToken: String
+    var source: MergeSource
+}
+
+/// `POST /me/identities/{provider}`: attached to this account, or it belongs to another Kura
+/// account (409 `linked_elsewhere`), which comes with the proof to merge that one in.
+enum LinkOutcome: Sendable {
+    case linked
+    case mergeable(MergeProof)
+}
+
 /// One signed-in device (`GET /me/sessions` → `{ items }`). `current` = the bearer making the call.
 struct DeviceSession: Identifiable, Hashable, Decodable, Sendable {
     let id: String
@@ -1511,6 +1610,12 @@ enum Route: Hashable {
     case blockedAccounts
     /// Ajustes › Sesiones activas (`GET /me/sessions`).
     case sessions
+    /// Ajustes › Fusionar otra cuenta: prove the other account is yours (Apple, Google, correo).
+    case mergeAccount
+    /// The 6-digit code sent to the other account's email (`POST /me/merge/otp/verify`).
+    case mergeCode
+    /// What moves and what disappears, then `POST /me/merge` (the proof lives in `AppStore.mergeProof`).
+    case mergeConfirm
 }
 
 enum OnboardingStep: Hashable {

@@ -268,6 +268,13 @@ enum MockData {
     /// A plausible iOS OAuth client id: only its reversed form (the redirect scheme) matters to the mock.
     static let googleClientID = "000000000000-kuramock.apps.googleusercontent.com"
 
+    /// Ajustes › Fusionar otra cuenta: the older account the mock "proves" is yours.
+    static let mergeProof = MergeProof(
+        mergeToken: "mock.merge.token",
+        source: MergeSource(handle: "mariel.viejo", name: "mariel", email: "mariel.ortega@icloud.com",
+                            counts: .init(titles: 38, collections: 4, reviews: 6, followers: 12, following: 20),
+                            isPublic: false))
+
     /// Ajustes › Sesiones activas: this iPhone plus two others.
     static let sessions: [DeviceSession] = [
         DeviceSession(id: "s-this", platform: "ios", deviceName: "iPhone", appVersion: "1.0.0",

@@ -80,6 +80,13 @@ extension Notification.Name {
     static let kuraSessionExpired = Notification.Name("com.tromwey.kura.sessionExpired")
 }
 
+/// A `409 linked_elsewhere` from `POST /me/identities/{provider}`: that sign-in belongs to another
+/// Kura account, and the server already issued the proof to merge it in. `LiveAPI` turns it into
+/// `LinkOutcome.mergeable`; it never reaches the store as an error.
+struct MergeableConflict: Error {
+    let proof: MergeProof
+}
+
 // MARK: - Client
 
 /// `URLSession` + bearer + decoder/encoder + error mapping. Reads (`GET`)
@@ -118,6 +125,8 @@ final class APIClient: @unchecked Sendable {
         }
         let error: Body
     }
+
+    private struct MergeEnvelope: Decodable { let error: MergeProof }
 
     private func request(for e: Endpoint) throws -> URLRequest {
         var path = base.path
@@ -181,6 +190,12 @@ final class APIClient: @unchecked Sendable {
             KuraLog.api.error("\(e.method.rawValue, privacy: .public) \(e.path, privacy: .public) → HTTP \(http.statusCode, privacy: .public) rid=\(rid ?? "-", privacy: .public)")
         }
         let env = try? KuraJSON.decoder.decode(ErrorEnvelope.self, from: data)
+        // `409 linked_elsewhere` carries the proof to merge the other account inside the envelope
+        // (`error.mergeToken` + `error.source`): hand it over instead of a bare conflict.
+        if http.statusCode == 409, env?.error.reason == "linked_elsewhere",
+           let proof = (try? KuraJSON.decoder.decode(MergeEnvelope.self, from: data))?.error {
+            throw MergeableConflict(proof: proof)
+        }
         let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
         if case .unauthorized = err, e.auth, !e.suppressExpiry {
             session.clear()
@@ -239,6 +254,9 @@ final class APIClient: @unchecked Sendable {
         case "unauthorized": return .unauthorized
         case "forbidden": return .forbidden(code: envelope?.reason)
         case "not_found": return .notFound
+        // `me/identities/{provider}` and `me/merge/otp/verify`: the provider token or the code was
+        // rejected (422, same body whatever failed). The store knows it as `proof_rejected`.
+        case "invalid" where envelope?.reason == "invalid_proof": return .forbidden(code: "proof_rejected")
         case "invalid": return .invalid(fields: envelope?.fields ?? [:], message: message)
         case "conflict": return .conflict(code: envelope?.reason, message: message)
         case "rate_limited": return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init))
@@ -492,6 +510,52 @@ struct LiveAPI: KuraAPI {
 
     func revokeSession(id: String) async throws {
         try await client.send(.delete("me/sessions/\(id)"))
+    }
+
+    // MARK: Identities and merge (fase 4g)
+
+    func identities() async throws -> Identities { try await client.decode(.get("me/identities")) }
+
+    private struct LinkAppleBody: Encodable { let identityToken: String; let rawNonce: String; let authorizationCode: String? }
+    private struct LinkGoogleBody: Encodable { let idToken: String }
+    private struct MergeOTPRequest: Encodable { let email: String }
+    private struct MergeOTPVerify: Encodable { let email: String; let code: String }
+    private struct MergeBody: Encodable { let mergeToken: String }
+    private struct UserEnvelope: Decodable { let user: Me }
+
+    private func link(_ e: Endpoint) async throws -> LinkOutcome {
+        do {
+            try await client.send(e)
+            return .linked
+        } catch let c as MergeableConflict {
+            return .mergeable(c.proof)
+        }
+    }
+
+    func linkApple(_ c: AppleCredential) async throws -> LinkOutcome {
+        try await link(try .post("me/identities/apple",
+                                 LinkAppleBody(identityToken: c.identityToken, rawNonce: c.rawNonce, authorizationCode: c.authorizationCode)))
+    }
+
+    func linkGoogle(idToken: String) async throws -> LinkOutcome {
+        try await link(try .post("me/identities/google", LinkGoogleBody(idToken: idToken)))
+    }
+
+    func unlinkIdentity(_ provider: IdentityProvider) async throws {
+        try await client.send(.delete("me/identities/\(provider.rawValue)"))
+    }
+
+    func requestMergeCode(email: String) async throws {
+        try await client.send(try .post("me/merge/otp/request", MergeOTPRequest(email: email)))
+    }
+
+    func verifyMergeCode(email: String, code: String) async throws -> MergeProof {
+        try await client.decode(try .post("me/merge/otp/verify", MergeOTPVerify(email: email, code: code)))
+    }
+
+    func merge(token: String) async throws -> Me {
+        let r: UserEnvelope = try await client.decode(try .post("me/merge", MergeBody(mergeToken: token)))
+        return r.user
     }
 
     private struct DeviceBody: Encodable { let environment: String }

@@ -138,6 +138,9 @@ struct RouteView: View {
             case .profileAsStranger: ProfileAsStrangerView()
             case .blockedAccounts: BlockedAccountsView()
             case .sessions: SessionsView()
+            case .mergeAccount: MergeAccountView()
+            case .mergeCode: MergeCodeView()
+            case .mergeConfirm: MergeConfirmView()
             }
         }
         .background(KColor.bg.ignoresSafeArea())
@@ -169,6 +172,7 @@ struct SheetContent: View {
         case .deleteAccount: DeleteAccountSheet()
         case .addTitles(let c): AddTitlesSheet(collectionID: c)
         case .revokeSession(let s): RevokeSessionSheet(session: s)
+        case .unlinkIdentity(let p): UnlinkIdentitySheet(provider: p)
         }
     }
 }

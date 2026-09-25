@@ -22,6 +22,78 @@ enum AppleNonce {
     }
 }
 
+extension AppleCredential {
+    /// What an Apple authorization hands over, ready for `POST /auth/apple` or
+    /// `POST /me/identities/apple`. nil when Apple didn't return an identity token.
+    init?(authorization: ASAuthorization, rawNonce: String) {
+        guard let c = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let data = c.identityToken, let token = String(data: data, encoding: .utf8), !rawNonce.isEmpty else { return nil }
+        self.init(identityToken: token, rawNonce: rawNonce,
+                  authorizationCode: c.authorizationCode.flatMap { String(data: $0, encoding: .utf8) },
+                  givenName: c.fullName?.givenName, familyName: c.fullName?.familyName)
+    }
+}
+
+/// Sign in with Apple driven from code (no system button): for Ajustes › Conectar, where the
+/// row's own button starts it. The entrance keeps `SignInWithAppleButton` (HIG); both end in the
+/// same `AppleCredential`.
+@MainActor
+final class AppleAuthorization: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    enum Failure: Error, Equatable {
+        /// Closed Apple's sheet: silent.
+        case cancelled
+        case rejected
+    }
+
+    private var continuation: CheckedContinuation<AppleCredential, Error>?
+    private var rawNonce = ""
+    /// Kept alive while Apple's sheet is up.
+    private static var inFlight: AppleAuthorization?
+
+    /// Runs Apple's sheet. Linking needs no name or email scopes: the server only reads `sub`
+    /// and the verified email already inside the identity token.
+    static func credential(scopes: [ASAuthorization.Scope] = [.email]) async throws -> AppleCredential {
+        let flow = AppleAuthorization()
+        inFlight = flow
+        defer { inFlight = nil }
+        return try await flow.run(scopes: scopes)
+    }
+
+    private func run(scopes: [ASAuthorization.Scope]) async throws -> AppleCredential {
+        try await withCheckedThrowingContinuation { cont in
+            continuation = cont
+            rawNonce = AppleNonce.make()
+            let request = ASAuthorizationAppleIDProvider().createRequest()
+            request.requestedScopes = scopes
+            request.nonce = AppleNonce.sha256(rawNonce)
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            controller.performRequests()
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let c = AppleCredential(authorization: authorization, rawNonce: rawNonce) {
+            continuation?.resume(returning: c)
+        } else {
+            continuation?.resume(throwing: Failure.rejected)
+        }
+        continuation = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        let cancelled = (error as? ASAuthorizationError)?.code == .canceled
+        continuation?.resume(throwing: cancelled ? Failure.cancelled : Failure.rejected)
+        continuation = nil
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        return windows.first { $0.isKeyWindow } ?? windows.first ?? ASPresentationAnchor()
+    }
+}
+
 /// Google sign-in without a third-party SDK: OAuth 2.0 authorization code + PKCE in an
 /// `ASWebAuthenticationSession`, then the code is exchanged at Google's token endpoint by the app
 /// itself (an iOS client has no secret; the `code_verifier` is the proof) for an `id_token`, which

@@ -71,7 +71,7 @@ private struct OnboardingChrome: View {
 }
 
 /// Inline error under a field, in the Kura voice.
-private struct InlineError: View {
+struct InlineError: View {
     let text: String?
     var body: some View {
         if let text {
@@ -305,15 +305,10 @@ struct SocialSignInButtons: View {
     private func handleApple(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let auth):
-            guard let c = auth.credential as? ASAuthorizationAppleIDCredential,
-                  let data = c.identityToken, let token = String(data: data, encoding: .utf8), !nonce.isEmpty else {
+            guard let credential = AppleCredential(authorization: auth, rawNonce: nonce) else {
                 store.showToast(ToastModel(text: "No se pudo entrar con Apple. Inténtalo de nuevo.", kind: .info))
                 return
             }
-            let credential = AppleCredential(
-                identityToken: token, rawNonce: nonce,
-                authorizationCode: c.authorizationCode.flatMap { String(data: $0, encoding: .utf8) },
-                givenName: c.fullName?.givenName, familyName: c.fullName?.familyName)
             nonce = ""
             Task { await store.signInWithApple(credential) }
         case .failure(let error):
