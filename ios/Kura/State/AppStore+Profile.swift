@@ -40,25 +40,52 @@ extension AppStore {
         self.showCommon = showCommon
         saveLocal()
         if !cleanName.isEmpty, cleanName != oldName { patchMe(MePatch(name: cleanName)) }
-        if handleChanged {
-            sync(key: WriteKey.username, onError: { [weak self] e in
-                // Taken (409) or rejected (400): the server kept the old handle, so the app does too.
-                let text: String
-                switch e {
-                case .conflict: text = "@\(newHandle) ya está tomado"
-                case .invalid(let fields, let m): text = fields["username"] ?? (m.isEmpty ? "Ese @ no se puede usar." : m)
-                default: return false
-                }
-                self?.revertHandle(from: newHandle, to: oldHandle)
-                self?.showToast(ToastModel(text: text, kind: .info))
-                return true
-            }) { [weak self] api in
-                let store = self
-                let m = try await api.claimUsername(newHandle)
-                await MainActor.run { store?.account = m }
-            }
-        }
+        if handleChanged { claimHandle(newHandle, from: oldHandle) }
         showToast(ToastModel(text: "Perfil actualizado", kind: .info))
+    }
+
+    /// `PUT /me/username`. On ANY failure the app goes back to the old @ (the server kept it): the
+    /// profile and every share link never show a handle that isn't yours. Taken / rejected says
+    /// why; anything else (offline, 5xx) offers Reintentar, which puts the new @ back and sends it
+    /// again.
+    private func claimHandle(_ newHandle: String, from oldHandle: String) {
+        let session = s
+        sync(key: WriteKey.username, onError: { [weak self] e in
+            guard let self else { return true }
+            self.revertHandle(from: newHandle, to: oldHandle)
+            let text: String
+            switch e {
+            case .cancelled, .unauthorized:
+                return true
+            case .conflict:
+                text = "@\(newHandle) ya está tomado"
+            case .invalid(let fields, let m):
+                text = fields["username"] ?? (m.isEmpty ? "Ese @ no se puede usar." : m)
+            case .notFound, .unsupported:
+                text = e.toast
+            default:
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    guard let self, self.me.handle == oldHandle else { return }
+                    self.dismissToast()
+                    self.applyHandle(newHandle, from: oldHandle)
+                    self.claimHandle(newHandle, from: oldHandle)
+                })
+                return true
+            }
+            self.showToast(ToastModel(text: text, kind: .info))
+            return true
+        }) { [weak self] api in
+            let store = self
+            let m = try await api.claimUsername(newHandle)
+            await MainActor.run { store?.on(session) { store?.account = m } }
+        }
+    }
+
+    /// `me` (and its `people` entry) under the new handle, optimistically.
+    private func applyHandle(_ newHandle: String, from oldHandle: String) {
+        me = Self.rehandled(me, newHandle)
+        people[oldHandle] = nil
+        if !me.id.isEmpty { people[me.id] = me }
     }
 
     /// The same person under another handle (`Person.handle` is its identity, so it's rebuilt).
@@ -70,8 +97,8 @@ extension AppStore {
         return out
     }
 
-    /// `PUT /me/username` refused the new handle: `me` and `people` go back to the old one (the
-    /// rest of the edit — name, featured — stays, it went through `PATCH /me` on its own).
+    /// `PUT /me/username` failed: `me` and `people` go back to the old handle (the rest of the
+    /// edit — name, featured — stays, it went through `PATCH /me` on its own).
     private func revertHandle(from newHandle: String, to oldHandle: String) {
         guard me.handle == newHandle else { return }
         me = Self.rehandled(me, oldHandle)
