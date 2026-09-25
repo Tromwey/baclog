@@ -390,22 +390,22 @@ private struct FeedCard: View, Equatable {
         switch event.kind {
         case .burst(_, let ids):
             // A strip of the burst's covers, each at its format's ratio; it drops in height
-            // until the widest cover fits the card whole. First snaps to the start, last to the end.
+            // until the widest cover fits the card whole. The snap centers a cover — except the
+            // first, which snaps to the start, and the last, to the end (`BurstSnap`).
             let ts = ids.compactMap { store.title($0) }
             let widest = ts.map(\.format.aspect).max() ?? 1
             GeometryReader { geo in
                 let h = min(geo.size.height, (geo.size.width + 40) / widest)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
+                    HStack(spacing: BurstSnap.spacing) {
                         ForEach(ts) { t in
                             Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: h).zoomSource(ZoomID.title(t.id)) }
                                 .buttonStyle(.plain)
                         }
                     }
-                    .scrollTargetLayout()
+                    .padding(.horizontal, BurstSnap.margin)
                 }
-                .contentMargins(.horizontal, 20, for: .scrollContent)
-                .scrollTargetBehavior(.viewAligned)
+                .scrollTargetBehavior(BurstSnap(widths: ts.map { h * $0.format.aspect }))
                 .scrollClipDisabled()
                 .frame(height: h)
                 .padding(.horizontal, -20)
@@ -577,5 +577,33 @@ private struct SuggestionPill: View {
         .background(KColor.glassBg, in: Capsule())
         .fixedSize()
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The burst strip's magnet: the cover nearest to where the fling would land is centered in the
+/// card; the first cover rests at the start and the last at the end instead (centering them would
+/// leave empty track on their outer side). Positions are computed from the covers' widths, which
+/// is why the strip pads its content itself instead of using `contentMargins`.
+private struct BurstSnap: ScrollTargetBehavior {
+    static let spacing: CGFloat = 14
+    static let margin: CGFloat = 20
+    let widths: [CGFloat]
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let viewport = context.containerSize.width
+        let total = widths.reduce(0, +) + Self.spacing * CGFloat(max(widths.count - 1, 0)) + Self.margin * 2
+        let maxOffset = max(0, total - viewport)
+        guard widths.count > 1, maxOffset > 0 else { target.rect.origin.x = 0; return }
+        var stops: [CGFloat] = [0]
+        var x = Self.margin
+        for (i, w) in widths.enumerated() {
+            if i > 0 && i < widths.count - 1 {
+                stops.append(min(max(x + w / 2 - viewport / 2, 0), maxOffset))
+            }
+            x += w + Self.spacing
+        }
+        stops.append(maxOffset)
+        let proposed = target.rect.origin.x
+        target.rect.origin.x = stops.min { abs($0 - proposed) < abs($1 - proposed) } ?? proposed
     }
 }
