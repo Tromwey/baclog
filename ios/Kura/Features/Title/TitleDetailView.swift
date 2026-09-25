@@ -193,7 +193,10 @@ private struct TitleHeader: View {
 
     private func ribbonA11y(_ c: TitleCounts) -> String {
         var s: [String] = []
-        if c.obsessed != "—" { s += ["\(c.obsessed) obsesionados", "\(c.liked) les gusta", "\(c.completed) completos"] }
+        // Only what the ribbon shows: a missing count ("—") is never read aloud.
+        if c.obsessed != "—" { s.append("\(c.obsessed) obsesionados") }
+        if c.liked != "—" { s.append("\(c.liked) les gusta") }
+        if c.completed != "—" { s.append("\(c.completed) completos") }
         if let w = c.waiting { s.append("\(w) esperando") }
         if c.saved != "—" { s.append("\(c.saved) guardados") }
         return s.joined(separator: ", ")

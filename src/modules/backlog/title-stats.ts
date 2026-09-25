@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { userItems } from "@/db/schema";
+import { backlogItems, userItems } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 
 /**
@@ -19,6 +19,10 @@ import type { MediaType } from "@/modules/catalog/types";
 export interface TitleStats {
   obsessed: number;
   completed: number;
+  /** Verdict "me gusta" (independent of completion and obsession). */
+  liked: number;
+  /** People with the title in at least one collection (distinct, not memberships). */
+  saved: number;
 }
 
 export async function getTitleStats(catalogItemId: string): Promise<TitleStats> {
@@ -26,10 +30,19 @@ export async function getTitleStats(catalogItemId: string): Promise<TitleStats> 
     .select({
       obsessed: sql<number>`(count(*) filter (where ${userItems.obsessed}))::int`,
       completed: sql<number>`(count(*) filter (where ${userItems.status} = 'completed'))::int`,
+      liked: sql<number>`(count(*) filter (where ${userItems.verdict} = 'liked'))::int`,
+      // A title can be marked from its ficha without being saved (a user_item with no
+      // membership), so "guardado" counts distinct people in backlog_item instead.
+      saved: sql<number>`(select count(distinct ${backlogItems.userId}) from ${backlogItems} where ${backlogItems.catalogItemId} = ${catalogItemId})::int`,
     })
     .from(userItems)
     .where(eq(userItems.catalogItemId, catalogItemId));
-  return { obsessed: row?.obsessed ?? 0, completed: row?.completed ?? 0 };
+  return {
+    obsessed: row?.obsessed ?? 0,
+    completed: row?.completed ?? 0,
+    liked: row?.liked ?? 0,
+    saved: row?.saved ?? 0,
+  };
 }
 
 /** The mock's thousands: "1.240" (a dot, never a comma). */

@@ -158,10 +158,13 @@ export const SeriesStatusSchema = z.object({
 export type SeriesStatus = z.infer<typeof SeriesStatusSchema>;
 
 /** Aggregate over ALL users (modules/backlog/title-stats.ts) — counts only,
- *  never identities. `liked`/`saved`/`waiting` do not exist server-side. */
+ *  never identities. `saved` = distinct people with it in a collection.
+ *  `waiting` does not exist server-side (the app skips it). */
 export const TitleCountsSchema = z.object({
   obsessed: z.number().int().nonnegative(),
   completed: z.number().int().nonnegative(),
+  liked: z.number().int().nonnegative(),
+  saved: z.number().int().nonnegative(),
 });
 export type TitleCounts = z.infer<typeof TitleCountsSchema>;
 
