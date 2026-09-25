@@ -106,7 +106,7 @@ struct NotificationsView: View {
                 .font(.custom(KFontName.kanji, fixedSize: 20))
                 .foregroundStyle(KColor.text)
                 .frame(width: 44, height: 66)
-                .background(LinearGradient(colors: [Color(hex: "#49291d"), Color(hex: "#34211a")], startPoint: .top, endPoint: .bottom),
+                .background(LinearGradient(colors: KColor.recapTile, startPoint: .top, endPoint: .bottom),
                             in: RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous))
         case .followers(let ids, _):
             ZStack(alignment: .topLeading) {

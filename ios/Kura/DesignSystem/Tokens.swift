@@ -68,9 +68,12 @@ enum KColor {
     static let accent = Color(hex: "#efce8d")
     static let onAccent = Color(hex: "#0b0b0d")
 
-    static let obsessed = Color(hex: "#ec8e76")
-    static let liked = Color(hex: "#9cbae1")
-    static let completed = Color(hex: "#a0cba0")
+    static let obsessedHex = "#ec8e76"
+    static let likedHex = "#9cbae1"
+    static let completedHex = "#a0cba0"
+    static let obsessed = Color(hex: obsessedHex)
+    static let liked = Color(hex: likedHex)
+    static let completed = Color(hex: completedHex)
     static let waiting = Color(hex: "#b9a6e8")
 
     /// Dock: `rgba(20,20,26,.5)` over a blur.
@@ -86,6 +89,11 @@ enum KColor {
     static let radioRing = Color(hex: textHex, opacity: 0.24)
     /// Selected glass (`rgba(255,255,255,.22)`) — pressed/selected state for glass controls.
     static let glassSelected = Color.white.opacity(0.22)
+
+    /// Fixed art tiles that have no cover to tint from — the only gradients not born from a
+    /// palette. The recap notification's 蔵 tile (warm) and "no puedo esperar"'s lead (pizarra).
+    static let recapTile = [Color(hex: "#49291d"), Color(hex: "#34211a")]
+    static let waitingLead = [Color(hex: "#3a5a70"), Color(hex: "#1c2a35")]
 }
 
 // MARK: - Radii / sizes
@@ -117,10 +125,12 @@ enum KSize {
 
 /// CSS box-shadows approximated for SwiftUI (radius ≈ blur / 2; SwiftUI has no spread).
 enum KShadow {
-    case cover, stack, float
+    /// `control`: a draggable knob lifted off its track (the mark slider).
+    case cover, stack, float, control
 
     var color: Color {
         switch self {
+        case .control: return Color.black.opacity(0.5)
         case .cover: return Color.black.opacity(0.72)
         case .stack: return Color.black.opacity(0.42)
         case .float: return Color.black.opacity(0.55)
@@ -128,6 +138,7 @@ enum KShadow {
     }
     var radius: CGFloat {
         switch self {
+        case .control: return 8
         case .cover: return 11
         case .stack: return 9
         case .float: return 22
@@ -135,6 +146,7 @@ enum KShadow {
     }
     var y: CGFloat {
         switch self {
+        case .control: return 6
         case .cover: return 14
         case .stack: return -8
         case .float: return 14

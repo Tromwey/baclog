@@ -518,12 +518,7 @@ private struct SpoilerSurface: ViewModifier {
         if #available(iOS 26.0, *) {
             content.glassEffect(.regular.interactive(), in: Capsule())
         } else {
-            content.background {
-                ZStack {
-                    Capsule().fill(.ultraThinMaterial)
-                    Capsule().fill(KColor.glassArt)
-                }
-            }
+            content.kArtGlass(in: Capsule())
         }
     }
 }

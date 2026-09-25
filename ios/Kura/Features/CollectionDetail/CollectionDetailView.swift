@@ -387,7 +387,7 @@ struct WaitingCollectionView: View {
                 VStack(spacing: 0) {
                     CollectionHeader(name: "no puedo esperar", palette: ["#5ca6cb", "#33566e"], lead: {
                         ZStack(alignment: .bottomLeading) {
-                            LinearGradient(colors: [Color(hex: "#3a5a70"), Color(hex: "#1c2a35")],
+                            LinearGradient(colors: KColor.waitingLead,
                                            startPoint: Tint.angle160.start, endPoint: Tint.angle160.end)
                             Image(systemName: "clock.fill")
                                 .font(.system(size: 96))

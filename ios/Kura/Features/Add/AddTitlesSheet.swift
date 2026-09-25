@@ -32,7 +32,7 @@ struct AddTitlesSheet: View {
                 .padding(.top, 8)
                 .padding(.bottom, 14)
 
-                SearchPill(placeholder: "Buscar títulos", text: $query, fill: Color.white.opacity(0.08), focus: $focused)
+                SearchPill(placeholder: "Buscar títulos", text: $query, focus: $focused)
                     .padding(.horizontal, 20)
 
                 ScrollView(.horizontal, showsIndicators: false) {

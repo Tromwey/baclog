@@ -267,6 +267,21 @@ final class CoverImageStore {
     }
 }
 
+/// Glass-art: the system's one surface for small controls/badges ON artwork — a blur plus
+/// rgba(11,11,13,.5), dark on every OS (content stays flat: it is never Liquid Glass). Every
+/// badge over a cover goes through this instead of hand-pairing a material with a fill.
+extension View {
+    func kArtGlass<S: Shape>(in shape: S) -> some View {
+        background {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(KColor.glassArt)
+            }
+        }
+        .environment(\.colorScheme, .dark)
+    }
+}
+
 /// Glass-art circle that sits over artwork (blur + rgba(11,11,13,.5)).
 struct ArtCircle<Content: View>: View {
     var size: CGFloat = 26
@@ -274,13 +289,7 @@ struct ArtCircle<Content: View>: View {
     var body: some View {
         content
             .frame(width: size, height: size)
-            .background {
-                ZStack {
-                    Circle().fill(.ultraThinMaterial)
-                    Circle().fill(KColor.glassArt)
-                }
-            }
-            .environment(\.colorScheme, .dark)
+            .kArtGlass(in: Circle())
     }
 }
 
@@ -301,13 +310,7 @@ struct WaitingPill: View {
         .padding(.leading, 7)
         .padding(.trailing, 9)
         .frame(height: height)
-        .background {
-            ZStack {
-                Capsule().fill(.ultraThinMaterial)
-                Capsule().fill(KColor.glassArt)
-            }
-        }
-        .environment(\.colorScheme, .dark)
+        .kArtGlass(in: Capsule())
         .fixedSize()
     }
 }

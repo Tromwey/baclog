@@ -112,7 +112,8 @@ struct PersonProfileView: View {
         .padding(.bottom, 34)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            if let pal = palette(p), !locked { Tint.header(pal) } else { Color.clear }
+            // No cover to tint from (or locked): the same neutral s1 → bg as every other hero.
+            if let pal = palette(p), !locked { Tint.header(pal) } else { Tint.neutralHeader }
         }
     }
 

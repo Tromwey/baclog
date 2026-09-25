@@ -89,9 +89,9 @@ struct ReactionSlider: View {
     @State private var lastStop = 0
 
     static let stops: [(mark: Mark, label: String, hex: String)] = [
-        (.completed, "Completo", "#a0cba0"),
-        (.liked, "Me gusta", "#9cbae1"),
-        (.obsessed, "Me obsesiona", "#ec8e76")
+        (.completed, "Completo", KColor.completedHex),
+        (.liked, "Me gusta", KColor.likedHex),
+        (.obsessed, "Me obsesiona", KColor.obsessedHex)
     ]
 
     var stop: Int { min(2, max(0, Int(value.rounded()))) }
@@ -118,7 +118,7 @@ struct ReactionSlider: View {
                     .fill(Color(hex: s.hex))
                     .frame(width: 56, height: 56)
                     .overlay(GlyphView(glyph: s.mark.glyph, size: 24, color: KColor.bg))
-                    .shadow(color: .black.opacity(0.5), radius: 8, y: 6)
+                    .kShadow(.control)
                     .kScale(stop == 2 ? 1.12 : 1)
                     .kAnimation(KMotion.snappy, value: stop)
                     .offset(x: (w - 64) * value / 2 + 4, y: 4)

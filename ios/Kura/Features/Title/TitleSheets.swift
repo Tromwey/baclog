@@ -84,7 +84,7 @@ struct CompleteSheet: View {
                     }
                 }
                 .frame(minHeight: 96)
-                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+                .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
                 .padding(.horizontal, 4)
                 .padding(.top, 14)
                 if !text.isEmpty {
