@@ -234,8 +234,8 @@ extension AppStore {
         }
     }
 
-    /// The one follow write: optimistic (`following`, `people[id].isFollowing`, your count), then
-    /// `PUT/DELETE /me/following/{handle}` in order per handle. A failure puts it all back — unless
+    /// The one follow write: optimistic (`following`, `people[id].isFollowing` and `.followers`,
+    /// your count), then `PUT/DELETE /me/following/{handle}` in order per handle. A failure puts it all back — unless
     /// a later tap already changed it again (that write is queued behind this one): a 404 says the
     /// profile isn't there to follow; anything retryable offers Reintentar.
     private func setFollow(_ id: String, _ on: Bool) {
@@ -262,7 +262,13 @@ extension AppStore {
 
     private func applyFollow(_ id: String, _ on: Bool) {
         if on { following.insert(id) } else { following.remove(id) }
-        if var p = people[id] { p.isFollowing = on; people[id] = p }
+        // Their follower count moves with it (and back on a revert): the profile shows "12
+        // seguidores" next to the button, and the next `GET /people/{handle}` brings the truth.
+        if var p = people[id] {
+            p.isFollowing = on
+            p.followers = max(0, p.followers + (on ? 1 : -1))
+            people[id] = p
+        }
         me.followingCount = max(0, me.followingCount + (on ? 1 : -1))
     }
 
