@@ -52,10 +52,13 @@ private struct StepLabel: View {
 /// Volver + step marker at 64/24.
 private struct OnboardingChrome: View {
     let step: String?
-    let back: () -> Void
+    /// nil = no Volver (the screen is the first of the entrance).
+    let back: (() -> Void)?
     var body: some View {
         HStack {
-            IconChip44(systemName: "chevron.left", iconSize: 17, label: "Volver", action: back)
+            if let back {
+                IconChip44(systemName: "chevron.left", iconSize: 17, label: "Volver", action: back)
+            }
             Spacer()
             if let step { StepLabel(text: step) }
         }
@@ -127,6 +130,7 @@ struct WelcomeView: View {
             }
 
             GlassButton(title: "Empezar", height: 52, fontSize: 16, fullWidth: true) {
+                store.welcomeSeen = true
                 store.onboardingStep = .signup
             }
         }
@@ -145,17 +149,19 @@ struct SignUpView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            OnboardingChrome(step: "1 de 2") { store.onboardingStep = .welcome }
+            // Volver only when the welcome is part of this entrance (first launch).
+            OnboardingChrome(step: "1 de 2", back: store.welcomeSeen ? nil : { store.onboardingStep = .welcome })
 
             VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 14) {
-                    if let t = store.decor("chihiro") {
+                // Only for someone who arrived from a title shared on the web.
+                if let t = store.pendingSaveTitle {
+                    HStack(spacing: 14) {
                         CoverView(title: t, width: 44, height: 66, radius: KRadius.coverS)
+                        (Text("Para guardar ").font(.kura.ui(14)).foregroundColor(KColor.text2)
+                         + Text(t.name).font(.kura.newsItalic(16)).foregroundColor(KColor.text)
+                         + Text(" en una colección.").font(.kura.ui(14)).foregroundColor(KColor.text2))
+                            .lineSpacing(3)
                     }
-                    (Text("Para guardar ").font(.kura.ui(14)).foregroundColor(KColor.text2)
-                     + Text("El viaje de Chihiro").font(.kura.newsItalic(16)).foregroundColor(KColor.text)
-                     + Text(" en una colección.").font(.kura.ui(14)).foregroundColor(KColor.text2))
-                        .lineSpacing(3)
                 }
                 Text("crea tu cuenta.")
                     .font(.kura.news(40))
@@ -656,7 +662,7 @@ struct LoginView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            OnboardingChrome(step: nil) { store.onboardingStep = .welcome }
+            OnboardingChrome(step: nil) { store.onboardingStep = store.entryStep }
 
             VStack(spacing: 12) {
                 Text("entrar.")

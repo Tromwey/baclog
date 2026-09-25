@@ -251,6 +251,19 @@ final class AppStore {
     var onboardingPicks: [String] = []
     var onboardingStep: OnboardingStep = .welcome
 
+    /// The welcome (13) is a first-launch screen, not the door every time: once it's been
+    /// passed — or anyone has signed in on this device — the entrance starts at O1a.
+    var welcomeSeen: Bool {
+        get { UserDefaults.standard.bool(forKey: "kura.welcomeSeen") }
+        set { UserDefaults.standard.set(newValue, forKey: "kura.welcomeSeen") }
+    }
+    var entryStep: OnboardingStep { welcomeSeen ? .signup : .welcome }
+
+    /// The title a shared web link was about, when the app was installed/opened from it.
+    /// O1a only says "Para guardar <título>…" when this is set; nil for everyone else.
+    /// (Nothing sets it yet: it waits on universal links / deferred deep linking.)
+    var pendingSaveTitle: Title?
+
     // MARK: Launch options (DEBUG screenshots)
     @ObservationIgnored var holdSplash = false
     @ObservationIgnored var emptyLibrary = false
@@ -395,6 +408,7 @@ final class AppStore {
 
     private func applyMe(_ m: Me) {
         account = m
+        welcomeSeen = true
         var p = m.person
         if p.hexes.isEmpty, let id = p.featuredTitleID, let t = titles[id] { p.hexes = t.palette }
         me = p
@@ -1911,6 +1925,7 @@ final class AppStore {
     func finishSplash() async {
         guard phase == .splash else { return }
         guard api.hasSession else {
+            onboardingStep = entryStep
             withAnimation(.easeInOut(duration: 0.2)) { phase = .onboarding }
             return
         }
@@ -2154,7 +2169,8 @@ final class AppStore {
     private func resetData() {
         sheet = nil
         sheetLocked = false
-        onboardingStep = .welcome
+        onboardingStep = entryStep
+        pendingSaveTitle = nil
         paths = [:]
         tab = .collections
         didBootstrap = false
