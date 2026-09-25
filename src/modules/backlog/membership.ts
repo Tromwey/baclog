@@ -1,8 +1,8 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
-import { getCatalogItem } from "@/modules/catalog/cache";
+import { backlogItems, backlogs, userItems } from "@/db/schema";
+import { fillCatalogPalette, getCatalogItem } from "@/modules/catalog/cache";
 import { backfillPreorderDate } from "@/modules/catalog/preorder";
 import { deleteOwnReview } from "@/modules/reviews/write";
 
@@ -31,17 +31,7 @@ export async function ensureUserItemAndMembership(opts: {
   // 1. Persist the cover-derived palette onto the shared catalog row — only if
   //    absent, so one user's extraction fills it for everyone and a CORS-empty
   //    ([]) or a re-add never clobbers a real value.
-  if (opts.paletteHex && opts.paletteHex.length > 0) {
-    await db
-      .update(catalogItems)
-      .set({ paletteHex: opts.paletteHex })
-      .where(
-        and(
-          eq(catalogItems.id, opts.catalogItemId),
-          isNull(catalogItems.paletteHex),
-        ),
-      );
-  }
+  await fillCatalogPalette(opts.catalogItemId, opts.paletteHex);
 
   // 2. Ensure the per-title state row. Existing state WINS (onConflictDoNothing):
   //    re-adding a title, or accepting a reco for one you already have, never

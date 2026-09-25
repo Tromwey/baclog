@@ -266,6 +266,16 @@ final class AppStore {
     // MARK: Dependencies
     @ObservationIgnored let api: KuraAPI
     @ObservationIgnored let prefs: LocalPrefs
+
+    // MARK: Cover palettes (catalog facts, not per account — see AppStore+Palette)
+    /// Titles whose empty palette this launch already tried (in flight, done or failed): a cover
+    /// that can't be read isn't downloaded again on every render.
+    @ObservationIgnored var paletteAttempts: Set<String> = []
+    /// Palettes extracted here that the server hasn't confirmed: they ride the next membership PUT.
+    @ObservationIgnored var unsentPalettes: [String: [String]] = [:]
+    /// The palette PUTs, one after another and spaced (`paletteSendGap`): they share the API's
+    /// 60 writes/min with everything the user does, and a grid of gray covers must not spend it.
+    @ObservationIgnored var paletteSendQueue: Task<Void, Never>?
     /// The per-account state (see `SessionData`): replaced whole on every way out of a session.
     private(set) var s = SessionData()
 
@@ -694,6 +704,9 @@ final class AppStore {
             merged.coverURL = t.coverURL ?? old.coverURL
         }
         merged.release = t.release ?? old.release
+        // A palette only ever fills (first-writer-wins on the server): a payload read before an
+        // on-device extraction (`fillPaletteIfNeeded`) must not send it back to the gray fallback.
+        if merged.palette.isEmpty { merged.palette = old.palette }
         titles[t.id] = merged
     }
 

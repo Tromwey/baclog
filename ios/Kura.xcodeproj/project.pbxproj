@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FEDF916C8B3F9CD8AD0B3C46 /* CoverPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0837E35412489EED27BFCD07 /* CoverPalette.swift */; };
+		249ADF7C3E63E474C86045EE /* AppStore+Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB6D57859D41DE3F41AB34B /* AppStore+Palette.swift */; };
 		000CF9A05AD1DBFAC1804AB7 /* Feed.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4E7762932B27E52D228F44F /* Feed.swift */; };
 		063D7CE4C6BC833E0B45BE54 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EAB03F9CCC6689EEC1415F /* ProfileView.swift */; };
 		075E4A4134F30927B2B6626E /* TitleSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4558D53D4718F35BB6D89D4E /* TitleSheets.swift */; };
@@ -86,6 +88,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0837E35412489EED27BFCD07 /* CoverPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverPalette.swift; sourceTree = "<group>"; };
+		7AB6D57859D41DE3F41AB34B /* AppStore+Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Palette.swift"; sourceTree = "<group>"; };
 		0BBDC0DF4BFB4C3A4C30AC42 /* RedHatMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "RedHatMono-Medium.ttf"; sourceTree = "<group>"; };
 		0E9E7332F0D38DC678F7B409 /* AppStore+Reactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Reactions.swift"; sourceTree = "<group>"; };
 		0F08B00EC6CF7156CDD3888E /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
@@ -295,6 +299,7 @@
 			isa = PBXGroup;
 			children = (
 				2921E5B162BAA165396004AF /* Keychain.swift */,
+				0837E35412489EED27BFCD07 /* CoverPalette.swift */,
 				5AC81669DACE442BF0F68E23 /* KuraAPI.swift */,
 				359B629B81F695D1844AB399 /* LiveAPI.swift */,
 				AA79F4E36B8169732C9C35F6 /* LocalPrefs.swift */,
@@ -317,6 +322,7 @@
 				99A6B715B8CF04D591199B8C /* AppStore+LocalPrefs.swift */,
 				D0471E499224BC7AEC528A72 /* AppStore+Onboarding.swift */,
 				58B5B780D02E8E6402FD9E79 /* AppStore+Profile.swift */,
+				7AB6D57859D41DE3F41AB34B /* AppStore+Palette.swift */,
 				0E9E7332F0D38DC678F7B409 /* AppStore+Reactions.swift */,
 				33DC8E082F999BF4A321343E /* AppStore+Releases.swift */,
 				8BB38A2E3276AEBA47C73C5A /* AppStore+Safety.swift */,
@@ -536,6 +542,7 @@
 				76C4F86B8F14E9F4206FE76A /* AppStore+LocalPrefs.swift in Sources */,
 				F088D7E5868F8A3A3D8156B2 /* AppStore+Onboarding.swift in Sources */,
 				2E8BF449DD06A3144CB42A7F /* AppStore+Profile.swift in Sources */,
+				249ADF7C3E63E474C86045EE /* AppStore+Palette.swift in Sources */,
 				09998722C725671C1513E4EB /* AppStore+Reactions.swift in Sources */,
 				88BDC0CDB4359B10A786BE0C /* AppStore+Releases.swift in Sources */,
 				DC908028F9DE5441F8BDF721 /* AppStore+Safety.swift in Sources */,
@@ -583,6 +590,7 @@
 				7A655870EA7526F062546291 /* Session.swift in Sources */,
 				F6B3DEEFE278F7BC224EDA22 /* SettingsViews.swift in Sources */,
 				D8CD782A689077E36A2AC4F6 /* SocialSignIn.swift in Sources */,
+				FEDF916C8B3F9CD8AD0B3C46 /* CoverPalette.swift in Sources */,
 				DFF33BB30FE2B1E844C8EEF8 /* Title.swift in Sources */,
 				4F2EEACD6AA7AC1DE80FB770 /* TitleDetailView.swift in Sources */,
 				075E4A4134F30927B2B6626E /* TitleSheets.swift in Sources */,

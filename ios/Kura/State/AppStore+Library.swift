@@ -283,8 +283,13 @@ extension AppStore {
         sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
             let store = self
             let cid = try await store?.resolveCollectionID(collectionID) ?? collectionID
-            let r = try await api.createTitleMembership(collectionID: cid, ref: TitleRef.from(localID: titleID))
-            await MainActor.run { store?.on(session) { store?.absorb(r, localID: titleID) } }
+            let palette = await MainActor.run { store?.unsentPalettes[titleID] }
+            let r = try await api.createTitleMembership(collectionID: cid, ref: TitleRef.from(localID: titleID), paletteHex: palette)
+            await MainActor.run {
+                // The server now has a palette (ours, or the one that beat it): nothing left to send.
+                if palette != nil { store?.unsentPalettes[titleID] = nil }
+                store?.on(session) { store?.absorb(r, localID: titleID) }
+            }
         }
     }
 

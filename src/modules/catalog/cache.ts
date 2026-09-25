@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
 import type { FilmFactsWrite } from "./film-facts";
@@ -28,6 +28,29 @@ export async function getCatalogItem(
     ...row,
     isStale: Date.now() - row.refreshedAt.getTime() > STALE_MS,
   };
+}
+
+/**
+ * Fill the shared cover palette (`catalog_item.paletteHex`) — ONLY while it is
+ * still NULL: first-writer-wins, so one device's extraction fills it for
+ * everyone and nothing (a re-add, a second viewer, a hostile client) ever
+ * clobbers a real value. The server never sees the artwork (ADR-007/008): the
+ * hexes are extracted on-device. Callers validate with `paletteHexSchema`
+ * first; an empty array is a no-op (a failed extraction must not persist).
+ *
+ * The one write path for a view-or-save palette fill: the add
+ * (`ensureUserItemAndMembership`), the web view fill (`cacheItemPaletteAction`)
+ * and the app's `PUT /api/v1/titles/{id}/palette`.
+ */
+export async function fillCatalogPalette(
+  catalogItemId: string,
+  paletteHex: string[] | null | undefined,
+): Promise<void> {
+  if (!paletteHex || paletteHex.length === 0) return;
+  await db
+    .update(catalogItems)
+    .set({ paletteHex })
+    .where(and(eq(catalogItems.id, catalogItemId), isNull(catalogItems.paletteHex)));
 }
 
 /**
