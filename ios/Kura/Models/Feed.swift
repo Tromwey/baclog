@@ -39,7 +39,8 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
     var tier: Tier {
         switch kind {
         case .reviewed, .suggestion: return .L
-        case .added, .waitingAdd: return .S
+        // Single adds and "no puede esperar" used to be S (a smaller cover); every cover card —
+        // add, burst, obsession, completion — is now one size.
         default: return .M
         }
     }
