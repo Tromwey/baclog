@@ -164,8 +164,8 @@ extension View {
         }
     }
 
-    func kShadow(_ s: KShadow) -> some View {
-        shadow(color: s.color, radius: s.radius, x: 0, y: s.y)
+    func kShadow(_ s: KShadow, opacity: Double = 1) -> some View {
+        shadow(color: s.color.opacity(opacity), radius: s.radius, x: 0, y: s.y)
     }
 }
 

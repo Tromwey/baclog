@@ -312,7 +312,9 @@ private struct FeedStackCard: View {
                     UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous)
                         .fill(Tint.ends(row.palette).0.color)
                         .frame(height: lift + KRadius.screen * 2)
-                        .kShadow(.stack)
+                        // The stack shadow casts UPWARD: as the band reaches the top it crossed the
+                        // status bar as a dark line. It fades out as the band finishes rising.
+                        .kShadow(.stack, opacity: 1 - p)
                         .offset(y: -rise)
                 } else {
                     // The first card runs up behind the header; pulled past the top, its color
