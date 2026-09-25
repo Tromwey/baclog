@@ -412,7 +412,10 @@ struct UsernameView: View {
     }
 
     @ViewBuilder private var availability: some View {
-        if clean.count >= 3, let status {
+        // 1–2 chars: the handle can't be checked yet (USERNAME_RE = 3–30), say why the CTA is off.
+        if (1..<3).contains(clean.count) {
+            Text("mín. 3").monoLabel(11, color: KColor.text2)
+        } else if clean.count >= 3, let status {
             HStack(spacing: 6) {
                 if status == .free { GlyphView(glyph: .check, size: 13) }
                 Text(status == .free ? "libre" : (status == .taken ? "ocupado" : "no vale"))
