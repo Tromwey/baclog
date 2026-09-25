@@ -321,25 +321,53 @@ struct SheetRow<Trailing: View>: View {
     var glyph: Glyph? = nil
     let action: () -> Void
     @ViewBuilder var trailing: Trailing
-    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Group {
-                    if let glyph { GlyphView(glyph: glyph, size: 16) }
-                    else { Image(systemName: systemImage).font(.system(size: iconSize, weight: .regular)).foregroundStyle(iconColor) }
-                }
-                .frame(width: 24)
-                Text(label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
-                Spacer(minLength: 8)
-                trailing
-            }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 54)
-            .contentShape(Rectangle())
+            SheetRowLabel(systemImage: systemImage, label: label, iconColor: iconColor, glyph: glyph) { trailing }
         }
         .buttonStyle(SheetRowStyle())
+    }
+}
+
+/// A `SheetRow` that opens the system share sheet (a public link) instead of running an action.
+struct SheetShareRow: View {
+    var systemImage = "square.and.arrow.up"
+    let label: String
+    let item: URL
+    var message: Text? = nil
+
+    var body: some View {
+        ShareLink(item: item, message: message) {
+            SheetRowLabel(systemImage: systemImage, label: label) { EmptyView() }
+        }
+        .buttonStyle(SheetRowStyle())
+    }
+}
+
+/// What every sheet row draws: icon in a 24 slot, label 16/500, optional trailing.
+private struct SheetRowLabel<Trailing: View>: View {
+    let systemImage: String
+    let label: String
+    var iconColor: Color = KColor.text
+    var glyph: Glyph? = nil
+    @ViewBuilder var trailing: Trailing
+    @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Group {
+                if let glyph { GlyphView(glyph: glyph, size: 16) }
+                else { Image(systemName: systemImage).font(.system(size: iconSize, weight: .regular)).foregroundStyle(iconColor) }
+            }
+            .frame(width: 24)
+            Text(label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 54)
+        .contentShape(Rectangle())
     }
 }
 

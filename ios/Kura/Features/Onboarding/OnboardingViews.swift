@@ -740,7 +740,7 @@ struct YourPeopleView: View {
                 }
             }
             Spacer(minLength: 8)
-            FollowToggle(following: store.isFollowing(p.id)) { store.toggleFollow(p.id) }
+            FollowButton(state: FollowState(following: store.isFollowing(p.id))) { store.toggleFollow(p.id) }
         }
         .frame(minHeight: 72)
     }

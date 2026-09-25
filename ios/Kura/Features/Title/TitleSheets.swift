@@ -186,6 +186,9 @@ struct CompleteSheet: View {
         // a title in no collection — the mark stands either way).
         guard !review.isEmpty, choice != .completed else {
             withAnimation(KMotion.spring) { store.setMark(t.id, choice, haptic: false, preview: preview) }
+            // Emptying an existing review and saving deletes it (with its own Deshacer);
+            // saving only the mark would leave the old text published.
+            if review.isEmpty, store.myReview(t.id) != nil { store.deleteReview(titleID: t.id) }
             done()
             return
         }
@@ -380,18 +383,7 @@ struct TitleMoreSheet: View {
                 }
                 // `/{you}/item/{id}` — only while your profile is public (otherwise it 404s).
                 if let url = store.myItemLink(t.id) {
-                    ShareLink(item: url, message: Text("\(t.name) en kura")) {
-                        HStack(spacing: 14) {
-                            Image(systemName: "square.and.arrow.up").font(.system(size: 17)).frame(width: 24)
-                            Text("Compartir").font(.kura.ui(16, .medium))
-                            Spacer()
-                        }
-                        .foregroundStyle(KColor.text)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 54)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(SheetRowStyle())
+                    SheetShareRow(label: "Compartir", item: url, message: Text("\(t.name) en kura"))
                 } else if store.profilePrivate {
                     // Same note as the collection's share sheet: the link would 404.
                     Text(AppStore.privateProfileShareNote)

@@ -36,10 +36,6 @@ struct RGB: Hashable {
     var inverted: RGB { RGB(r: 255 - r, g: 255 - g, b: 255 - b) }
 
     var color: Color { Color(.sRGB, red: r / 255, green: g / 255, blue: b / 255, opacity: 1) }
-
-    var hexString: String {
-        String(format: "#%02x%02x%02x", Int(r), Int(g), Int(b))
-    }
 }
 
 extension Color {
@@ -112,9 +108,6 @@ enum KSize {
     /// Top of the content under the back chip on a pushed screen (its title, usually).
     static let pushedTitleTop: CGFloat = 124
     static let chromeSide: CGFloat = 24
-    static let rowSettings: CGFloat = 52
-    static let rowPeople: CGFloat = 72
-    static let rowTitle: CGFloat = 80
     static let spine: CGFloat = 40
     static let cardCoverPinned: CGFloat = 150
     static let cardCoverCompact: CGFloat = 120
@@ -163,7 +156,6 @@ enum Tint {
     static let k: Double = 1 - 0.45 * 0.78
     static let topTarget = RGB(hex: "#101013")
     static let bottomTarget = RGB(hex: "#0c0c10")
-    static let bgRGB = RGB(hex: KColor.bgHex)
 
     static func ends(_ palette: [String]) -> (RGB, RGB) {
         let a = RGB(hex: palette.first ?? "#6c6b76")

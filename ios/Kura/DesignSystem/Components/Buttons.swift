@@ -88,47 +88,148 @@ struct SolidButton: View {
     }
 }
 
-/// Honey — only "Seguir", once per screen.
-struct HoneyButton: View {
-    var title = "Seguir"
-    var height: CGFloat = 36
-    let action: () -> Void
+/// Where a follow stands, from the viewer's side. `requested` is the private-profile
+/// request (a no-op against the live API today, kept on screen on purpose).
+enum FollowState: Equatable {
+    case follow, following, requested
 
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.kura.ui(14, .semibold))
-                .foregroundStyle(KColor.onAccent)
-                .padding(.horizontal, 14)
-                .frame(height: height)
-                .background(KColor.accent, in: Capsule())
-                // 44 pt to the finger, same pill to the eye.
-                .kHitArea(vertical: max(0, (44 - height) / 2))
+    init(following: Bool, requested: Bool = false) {
+        self = following ? .following : (requested ? .requested : .follow)
+    }
+
+    var label: String {
+        switch self {
+        case .follow: return "Seguir"
+        case .following: return "Siguiendo"
+        case .requested: return "Solicitado"
         }
-        .kPress()
     }
 }
 
-/// Follow toggle for places where honey is already spent (or not allowed):
-/// Seguir in glass ↔ Siguiendo quiet.
-struct FollowToggle: View {
-    let following: Bool
+/// The one Seguir button. Honey (the screen's one accent) only on `Seguir` and only
+/// where the caller spends it; Siguiendo / Solicitado go quiet per size.
+struct FollowButton: View {
+    enum Size {
+        /// 36 pt pill in a list row (Descubrir, Avisos, onboarding). Siguiendo loses its fill.
+        case row
+        /// 40 pt pill in Seguidores / Siguiendo. Siguiendo loses its fill.
+        case list
+        /// The feed's suggestion card: 16 pt label. Siguiendo keeps a flat glass fill.
+        case card
+        /// A profile's hero, 48 pt. Siguiendo / Solicitado sit next to the share chip, so they
+        /// take the chrome's glass (Liquid Glass on iOS 26).
+        case hero
+    }
+
+    let state: FollowState
+    var size: Size = .row
+    /// Seguir in honey (otherwise glass).
     var honey = false
-    let action: () -> Void
+    /// For VoiceOver: "Dejar de seguir a @handle".
+    var handle: String? = nil
+    /// false = a picture of the button (the "así te ven" preview): no action, hidden from VoiceOver.
+    var interactive = true
+    var action: () -> Void = {}
 
     var body: some View {
-        Button(action: action) {
-            Text(following ? "Siguiendo" : "Seguir")
-                .font(.kura.ui(14, .semibold))
-                .foregroundStyle(following ? KColor.text2 : (honey ? KColor.onAccent : KColor.text))
-                .padding(.horizontal, 14)
-                .frame(minHeight: 36)
-                .background(following ? Color.clear : (honey ? KColor.accent : KColor.glassBg), in: Capsule())
-                .kHitArea(vertical: 4)
-                .animation(KMotion.fade, value: following)
+        if interactive {
+            Button(action: action) { face }
+                .kPress()
+                .accessibilityLabel(accessibilityText)
+        } else {
+            face.accessibilityHidden(true)
         }
-        .kPress()
-        .accessibilityLabel(following ? "Dejar de seguir" : "Seguir")
+    }
+
+    private var accessibilityText: String {
+        guard state == .following else { return state.label }
+        return handle.map { "Dejar de seguir a @\($0)" } ?? "Dejar de seguir"
+    }
+
+    private var metrics: (font: CGFloat, hPad: CGFloat, hit: CGFloat) {
+        switch size {
+        case .row: return (14, 14, 4)
+        case .list: return (14, 16, 2)
+        case .card: return (16, 24, 0)
+        case .hero: return (16, 28, 0)
+        }
+    }
+
+    private var fill: FollowFill.Kind {
+        if state == .follow && honey { return .honey }
+        switch size {
+        case .row, .list: return state == .following ? .none : .flatGlass
+        case .card: return .flatGlass
+        case .hero: return .chromeGlass
+        }
+    }
+
+    private var foreground: Color {
+        switch fill {
+        case .honey: return KColor.onAccent
+        case .none: return KColor.text2
+        case .flatGlass, .chromeGlass: return KColor.text
+        }
+    }
+
+    @ViewBuilder private var face: some View {
+        let m = metrics
+        let label = Text(state.label)
+            .font(.kura.ui(m.font, .semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, m.hPad)
+        Group {
+            switch size {
+            case .row: label.frame(minHeight: 36)
+            case .list: label.frame(height: 40)
+            case .card: label.padding(.vertical, 14)
+            case .hero: label.frame(height: 48)
+            }
+        }
+        .modifier(FollowFill(kind: fill))
+        .contentShape(Capsule())
+        .kHitArea(vertical: m.hit)
+        .animation(KMotion.fade, value: state)
+    }
+}
+
+private struct FollowFill: ViewModifier {
+    enum Kind { case honey, flatGlass, chromeGlass, none }
+    let kind: Kind
+    func body(content: Content) -> some View {
+        switch kind {
+        case .honey: content.background(KColor.accent, in: Capsule())
+        case .flatGlass: content.background(KColor.glassBg, in: Capsule())
+        case .chromeGlass: content.kGlass(Capsule(), interactive: true)
+        case .none: content.background(Color.clear, in: Capsule())
+        }
+    }
+}
+
+/// 44 pt round share chip (your profile, someone else's): the system share sheet with the
+/// public link. `link == nil` (a private profile would 404) → `unavailable` says why, or
+/// the chip isn't drawn.
+struct ShareChip: View {
+    let link: URL?
+    var label = "Compartir perfil"
+    var unavailable: (() -> Void)? = nil
+
+    var body: some View {
+        if let link {
+            ShareLink(item: link) { face }
+                .accessibilityLabel(label)
+        } else if let unavailable {
+            Button(action: unavailable) { face }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+        }
+    }
+
+    private var face: some View {
+        Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .medium))
+            .foregroundStyle(KColor.text)
+            .frame(width: 44, height: 44)
+            .kGlass(Circle(), interactive: true)
     }
 }
 

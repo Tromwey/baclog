@@ -245,7 +245,14 @@ struct RecapShareView: View {
         Task {
             defer { opening = false }
             do {
-                webCard = WebCardURL(url: try await store.api.webSession(to: to))
+                let url = try await store.api.webSession(to: to)
+                // The handoff URL carries a signed-in session: open it only on our own origin
+                // (scheme + host + port of the API). The mock serves a fixed baclog.app URL.
+                guard KuraRuntime.usesMock || AvatarStore.isAPIOrigin(url) else {
+                    store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Inténtalo de nuevo.", kind: .info))
+                    return
+                }
+                webCard = WebCardURL(url: url)
             } catch {
                 // Through `noteError`: a 401 ends the session (entrance), offline lights the strip.
                 let e = store.noteError(error)

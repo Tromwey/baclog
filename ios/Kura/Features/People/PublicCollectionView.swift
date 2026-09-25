@@ -15,16 +15,12 @@ struct PublicCollectionView: View {
     private var key: String { AppStore.publicKey(handle: handle, id: collectionID) }
 
     var body: some View {
-        Group {
-            if let d = store.publicCollections[key] {
-                content(d)
-            } else if store.missingPublicCollections.contains(key) {
-                GoneView(title: "esta colección no está disponible.", note: "Es privada o ya no existe.")
-            } else if let e = store.loadError(.publicCollection(key)) {
-                LoadErrorScreen(error: e) { Task { await store.loadPublicCollection(handle: handle, id: collectionID, force: true) } }
-            } else {
-                LoadingScreen()
-            }
+        ResourceScreen(value: store.publicCollections[key],
+                       missing: store.missingPublicCollections.contains(key),
+                       error: store.loadError(.publicCollection(key)),
+                       retry: { Task { await store.loadPublicCollection(handle: handle, id: collectionID, force: true) } },
+                       gone: ("esta colección no está disponible.", "Es privada o ya no existe.")) { d in
+            content(d)
         }
         .task(id: key) { await store.loadPublicCollection(handle: handle, id: collectionID) }
     }
