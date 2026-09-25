@@ -518,9 +518,10 @@ export const AppleSignInBodySchema = z.object({
 });
 export type AppleSignInBody = z.infer<typeof AppleSignInBodySchema>;
 
-/** The nonce the app handed Google Sign-In for this sign-in (verbatim, not
- *  hashed). Optional while older builds don't send it; when present the ID
- *  token's `nonce` must match (`verifyGoogleIdToken`).
+/** The RAW nonce of this Google sign-in (Apple's scheme): the app gave
+ *  Google `sha256hex(nonce)` (lowercase hex) and sends the raw value here.
+ *  Optional while older builds don't send it; when present the ID token's
+ *  `nonce` claim must equal its hash (`verifyGoogleIdToken`).
  *  TODO(nonce): required once every build in the field sends it. */
 const GoogleNonceSchema = z.string().min(1, "Falta el nonce.").max(200).optional();
 

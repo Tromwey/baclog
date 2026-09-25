@@ -12,8 +12,8 @@ import { GoogleSignInBodySchema } from "../../_lib/schemas";
  *
  * `idToken` verified against Google's JWKS (`iss` ∈ {https://accounts.google.com,
  * accounts.google.com}, `aud` = GOOGLE_IOS_CLIENT_ID, `exp`) with
- * `email_verified` true REQUIRED and, when the body carries `nonce`, the
- * token's `nonce` equal to it (`verifyGoogleIdToken`); then the
+ * `email_verified` true REQUIRED and, when the body carries the raw `nonce`,
+ * the token's `nonce` = sha256hex(nonce), as Apple (`verifyGoogleIdToken`); then the
  * `account(provider="google", sub)` link or the verified email (link or
  * create), a minor → 403 `underage`, else session + bearer + `Me`. Any
  * token failure → ONE 401. Without GOOGLE_IOS_CLIENT_ID → 503 `unavailable`
