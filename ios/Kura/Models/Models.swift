@@ -119,8 +119,13 @@ enum WelcomeArt {
 
 /// Runtime switches that a model needs before the store exists.
 enum KuraRuntime {
-    /// True when the app runs on `MockAPI` (`-kuraScreen` / `-kuraMock`).
+    /// True when the app runs on `MockAPI` (`-kuraScreen` / `-kuraMock`). A constant `false` in
+    /// Release, where the mock isn't compiled in.
+    #if DEBUG
     nonisolated(unsafe) static var usesMock = false
+    #else
+    static let usesMock = false
+    #endif
     /// Origin of `KURA_API_BASE` (no `/api/v1`): relative `avatarUrl`s resolve against it.
     nonisolated(unsafe) static var apiOrigin: URL?
     /// The session's bearer, for requests outside `APIClient` (profile photos on

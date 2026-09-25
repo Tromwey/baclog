@@ -151,7 +151,7 @@ struct WelcomeView: View {
 /// never asks "¿ya tienes cuenta?".
 struct SignUpView: View {
     @Environment(AppStore.self) private var store
-    @State private var email = KuraRuntime.usesMock ? "mariel@correo.com" : ""
+    @State private var email = MockPrefill.email
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -324,9 +324,9 @@ struct SocialSignInButtons: View {
 
 struct UsernameView: View {
     @Environment(AppStore.self) private var store
-    @State private var handle = KuraRuntime.usesMock ? "mariel.ok" : ""
-    @State private var name = KuraRuntime.usesMock ? "mariel ortega" : ""
-    @State private var year = KuraRuntime.usesMock ? "1998" : ""
+    @State private var handle = MockPrefill.handle
+    @State private var name = MockPrefill.name
+    @State private var year = MockPrefill.birthYear
     @State private var status: UsernameStatus?
     @State private var seeded = false
 

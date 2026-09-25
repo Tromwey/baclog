@@ -36,6 +36,7 @@
 		7B5D9FDC542014698FF13930 /* Avatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08B5C51F538F704C7097066 /* Avatar.swift */; };
 		8122A670621D786042352D74 /* KuraAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AC81669DACE442BF0F68E23 /* KuraAPI.swift */; };
 		8653B73DA89217370EEF1E57 /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF602E63448C53E2094A9C1 /* Controls.swift */; };
+		8C78D718703D6E93D959AFA7 /* MockAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44BFFCD2B4BE8474C34A2310 /* MockAPI.swift */; };
 		91ADEA3BA01C3A099F854A09 /* Newsreader-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 51883A81E47B20D988ADAC4F /* Newsreader-Medium.ttf */; };
 		973DF6EB0B5E038A47DF0AF2 /* HankenGrotesk-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 52009EBC11CDCDA41F528ADC /* HankenGrotesk-Regular.ttf */; };
 		9797C0F087B0C0CDFCCD4E5F /* LiveAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359B629B81F695D1844AB399 /* LiveAPI.swift */; };
@@ -86,6 +87,7 @@
 		3D5E639D989ADFE6535FE9E4 /* RedHatMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "RedHatMono-Regular.ttf"; sourceTree = "<group>"; };
 		3DB6EFAAB0741C435C162CA3 /* KuraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KuraApp.swift; sourceTree = "<group>"; };
 		3DBBBEC18D9BF9BD0037E0FD /* OnboardingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViews.swift; sourceTree = "<group>"; };
+		44BFFCD2B4BE8474C34A2310 /* MockAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAPI.swift; sourceTree = "<group>"; };
 		4558D53D4718F35BB6D89D4E /* TitleSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleSheets.swift; sourceTree = "<group>"; };
 		4568E178755CE7254A40502B /* Glyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glyph.swift; sourceTree = "<group>"; };
 		4C3D2BDF3D671773F9B2D886 /* Newsreader-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Newsreader-Regular.ttf"; sourceTree = "<group>"; };
@@ -332,6 +334,7 @@
 		CCC801970FEC18C14716DFA2 /* Mock */ = {
 			isa = PBXGroup;
 			children = (
+				44BFFCD2B4BE8474C34A2310 /* MockAPI.swift */,
 				CF8E4B94471C71E2BAEA91C3 /* MockData.swift */,
 			);
 			path = Mock;
@@ -495,6 +498,7 @@
 				9797C0F087B0C0CDFCCD4E5F /* LiveAPI.swift in Sources */,
 				370E72CC1470A098A4F47E89 /* LoadingScreen.swift in Sources */,
 				C76683673A7F189F89019384 /* LocalPrefs.swift in Sources */,
+				8C78D718703D6E93D959AFA7 /* MockAPI.swift in Sources */,
 				E4AA7C26F76300F2D4FFCB22 /* MockData.swift in Sources */,
 				EC9C099739F0DF23E6974D71 /* Models.swift in Sources */,
 				3AEDE8DEC95202754C0EF489 /* NotificationsView.swift in Sources */,

@@ -8,7 +8,7 @@ struct IdentityRows: View {
     @Environment(AppStore.self) private var store
 
     private var email: String {
-        store.identities?.email ?? store.account?.email ?? (KuraRuntime.usesMock ? "mariel@correo.com" : "")
+        store.identities?.email ?? store.account?.email ?? MockPrefill.email
     }
 
     var body: some View {

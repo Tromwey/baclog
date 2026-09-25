@@ -580,6 +580,7 @@ struct CreatorView: View {
                                 .contentShape(Rectangle())
                                 .kPressable(.row) { store.push(.title(t.id)) }
                             }
+                            #if DEBUG
                             if filter == nil || filter == .film, KuraRuntime.usesMock {
                                 ForEach(MockData.otherWorks[name] ?? [], id: \.0) { w in
                                     HStack(spacing: 14) {
@@ -594,6 +595,7 @@ struct CreatorView: View {
                                     .frame(minHeight: 84)
                                 }
                             }
+                            #endif
                         }
                         if !people.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {

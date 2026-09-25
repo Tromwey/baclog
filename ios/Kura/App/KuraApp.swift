@@ -11,17 +11,29 @@ struct KuraApp: App {
         // FIRST, before any `Session` reads the Keychain: a bearer left behind by a deleted
         // install is wiped on a fresh install (upgrades keep theirs — rule in `InstallMarker`).
         InstallMarker.reconcile()
-        // Covers come over the network via AsyncImage (URLSession.shared), so
-        // give the shared cache room: returning to a screen should not refetch.
+        // Cover bytes come over URLSession.shared (`CoverImageStore` decodes them to the drawn
+        // size and keeps the bitmaps in its own NSCache), so give the shared URL cache room for
+        // the raw bytes: returning to a screen should not refetch.
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         FontCheck.run()
-        // `LiveAPI` by default; `MockAPI` for the `-kuraScreen` captures and `-kuraMock` (DEBUG).
+        // `LiveAPI` by default; `MockAPI` for the `-kuraScreen` captures and `-kuraMock` (DEBUG
+        // only: Release doesn't compile the mock in).
+        let api: KuraAPI
+        var now = Date()
+        #if DEBUG
         let mock = DebugLaunch.wantsMock
         KuraRuntime.usesMock = mock
-        let api: KuraAPI
+        #else
+        let mock = false
+        #endif
         if mock {
+            #if DEBUG
             // `-kuraFailWrites YES`: every mock write fails (the Reintentar paths).
             api = MockAPI(failWrites: UserDefaults.standard.bool(forKey: "kuraFailWrites"))
+            now = MockData.now
+            #else
+            fatalError("unreachable: no mock in Release")
+            #endif
         } else {
             let client = APIClient()
             var origin = URLComponents(url: client.base, resolvingAgainstBaseURL: false)
@@ -32,7 +44,7 @@ struct KuraApp: App {
             KuraRuntime.bearer = { session.token }
             api = LiveAPI(client: client)
         }
-        let store = AppStore(api: api, now: mock ? MockData.now : Date())
+        let store = AppStore(api: api, now: now)
         DebugLaunch.configure(store)
         PushBridge.shared.store = store
         _store = State(initialValue: store)

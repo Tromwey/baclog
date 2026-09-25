@@ -2770,7 +2770,10 @@ final class AppStore {
     /// The browser round trip for Google's `id_token` (sign-in and Conectar share it).
     /// The mock never opens accounts.google.com: the captures stay offline and deterministic.
     private func googleIDToken(clientID: String) async throws -> String {
-        KuraRuntime.usesMock ? "mock.id.token" : try await GoogleOAuth.idToken(clientID: clientID)
+        #if DEBUG
+        if KuraRuntime.usesMock { return "mock.id.token" }
+        #endif
+        return try await GoogleOAuth.idToken(clientID: clientID)
     }
 
     /// Cancelling is silent; `403 underage` is the same screen as the code path; everything else is
@@ -2924,9 +2927,13 @@ final class AppStore {
         do {
             switch p {
             case .apple:
+                #if DEBUG
                 let credential = KuraRuntime.usesMock
                     ? AppleCredential(identityToken: "mock.apple.token", rawNonce: "mock", authorizationCode: nil, givenName: nil, familyName: nil)
                     : try await AppleAuthorization.credential()
+                #else
+                let credential = try await AppleAuthorization.credential()
+                #endif
                 outcome = try await api.linkApple(credential)
             case .google:
                 let idToken = try await googleIDToken(clientID: authProviders?.googleClientID ?? "")
@@ -3337,7 +3344,7 @@ final class AppStore {
             pendingPush = nil
             if path(tab).last != route { push(route) }
         }
-        if debugEmptyFollowing { following = [] }
+        if debugEmptyFollowing { following = []; me.followingCount = 0 }
         if let id = pendingListCollection, let i = collections.firstIndex(where: { $0.id == id }) {
             collections[i].layout = .list
         }

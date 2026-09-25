@@ -1,5 +1,8 @@
 import Foundation
 
+// DEBUG only: Release carries no mock data (test names, emails, handles).
+#if DEBUG
+
 /// Everything the mock app shows. "Today" is Thursday 24 Sep 2026, 10:00 in
 /// Mexico City, so Showgirl (25 sep) is "14 h" away.
 enum MockData {
@@ -68,6 +71,8 @@ enum MockData {
     ]
 
     /// Who mariel already follows (nico.ve is the feed's suggestion).
+    /// E1 (feed vacío): the three people it offers.
+    static let feedEmptySuggestions = ["danpix", "mili.v", "ghibli.club"]
     static let following: Set<String> = ["tono_v", "luciarrr", "danpix", "mili.v"]
 
     /// Who follows a given profile (20e) — for the mock, lucía's.
@@ -325,3 +330,4 @@ enum MockData {
         ("tono_v", "Le obsesiona Mind of Mine")
     ]
 }
+#endif

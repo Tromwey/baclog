@@ -168,8 +168,17 @@ struct NotificationsView: View {
 struct FeedEmptyView: View {
     @Environment(AppStore.self) private var store
 
+    /// Who to follow: the same "gente para seguir" the onboarding uses (`GET me/onboarding/people`),
+    /// the first three. The mock keeps E1's three people.
+    private var suggestions: [Person] {
+        #if DEBUG
+        if KuraRuntime.usesMock { return MockData.feedEmptySuggestions.compactMap { store.person($0) } }
+        #endif
+        return Array(store.onboardingPeople.prefix(3))
+    }
+
     var body: some View {
-        let suggestions = ["danpix", "mili.v", "ghibli.club"].compactMap { store.person($0) }
+        let suggestions = suggestions
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("feed").font(.kura.screenTitle).foregroundStyle(KColor.text)
@@ -180,17 +189,19 @@ struct FeedEmptyView: View {
                     .font(.kura.ui(14)).foregroundStyle(KColor.text2).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
                 let all = suggestions.allSatisfy { store.isFollowing($0.id) }
-                Button {
-                    for p in suggestions where !store.isFollowing(p.id) { store.toggleFollow(p.id) }
-                } label: {
-                    Text(all ? "Siguiendo a los \(suggestions.count)" : "Seguir a los \(suggestions.count)")
-                        .font(.kura.ui(16, .semibold))
-                        .foregroundStyle(all ? KColor.text : KColor.onAccent)
-                        .frame(maxWidth: .infinity).frame(height: 52)
-                        .background(all ? KColor.glassBg : KColor.accent, in: Capsule())
+                if !suggestions.isEmpty {
+                    Button {
+                        for p in suggestions where !store.isFollowing(p.id) { store.toggleFollow(p.id) }
+                    } label: {
+                        Text(all ? "Siguiendo a los \(suggestions.count)" : "Seguir a los \(suggestions.count)")
+                            .font(.kura.ui(16, .semibold))
+                            .foregroundStyle(all ? KColor.text : KColor.onAccent)
+                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .background(all ? KColor.glassBg : KColor.accent, in: Capsule())
+                    }
+                    .kPress()
+                    .padding(.top, 18).padding(.bottom, 6)
                 }
-                .kPress()
-                .padding(.top, 18).padding(.bottom, 6)
                 ForEach(suggestions) { p in
                     HStack(spacing: 14) {
                         Seal(person: p, size: 44)
@@ -217,6 +228,7 @@ struct FeedEmptyView: View {
             .padding(.bottom, 140)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .task { if !KuraRuntime.usesMock { await store.loadOnboardingPeople() } }
     }
 }
 
