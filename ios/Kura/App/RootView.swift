@@ -37,9 +37,18 @@ struct RootView: View {
             #endif
         }
         .animation(KMotion.fade, value: store.phase)
-        // Coming back from the iPhone's Ajustes (where a "no" to notifications is undone).
-        .onChange(of: scenePhase) { _, p in
-            if p == .active, store.phase == .main { Task { await store.refreshNotificationStatus() } }
+        .onChange(of: scenePhase, initial: true) { _, p in
+            switch p {
+            case .active:
+                // The clock moves again (live only): countdowns were frozen while the app slept.
+                store.sceneBecameActive()
+                // Coming back from the iPhone's Ajustes (where a "no" to notifications is undone).
+                if store.phase == .main { Task { await store.refreshNotificationStatus() } }
+            case .inactive, .background:
+                store.sceneWentInactive()
+            @unknown default:
+                break
+            }
         }
         // Dynamic Type scales the Kura faces (Typography.swift) all the way into the
         // accessibility sizes. Only fixed-geometry chrome caps itself at xxxLarge

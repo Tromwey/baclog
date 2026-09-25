@@ -86,6 +86,37 @@ enum KuraJSON {
     }
 }
 
+/// Kura's calendar for release days and countdowns ("hoy", "14 h", "16 oct"): Gregorian on
+/// Mexico City time, Spanish (MX). Production code reads THIS — `MockData.calendar` is the mock's
+/// copy and doesn't exist outside DEBUG.
+enum KCalendar {
+    static let kura: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Mexico_City") ?? .current
+        c.locale = Locale(identifier: "es_MX")
+        return c
+    }()
+}
+
+/// The three covers fanned out on the welcome (13). A fixed, named art source — NOT the mock:
+/// the welcome is drawn before any account exists, so live has no catalog to take them from.
+/// Same titles and covers the mock shows (the mock's `titles` registry wins when it has them).
+enum WelcomeArt {
+    private static func tmdb(_ path: String) -> URL? { URL(string: "https://image.tmdb.org/t/p/w500/\(path)") }
+
+    static let titles: [Title] = [
+        Title(id: "chihiro", name: "El viaje de Chihiro", format: .film, year: 2001, creator: "Hayao Miyazaki",
+              palette: ["#c53e42", "#794244"], coverURL: tmdb("2RcxjDykOssx4SfqshewyI9vfSl.jpg")),
+        Title(id: "odyssey", name: "The Odyssey", format: .film, year: 2026, creator: "Christopher Nolan",
+              palette: ["#5ca6cb", "#33566e"], coverURL: tmdb("mKPGRRyXIwN8JOLhAbWnxV1gNrS.jpg")),
+        Title(id: "ma", name: "Ma", format: .album, year: 2019, creator: "Devendra Banhart",
+              palette: ["#c33d3b", "#ae4c69"],
+              coverURL: URL(string: "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/b3/84/c8/b384c84d-b4a8-8f05-a37e-8aab02ba698d/075597924053.jpg/600x600bb.jpg")),
+    ]
+
+    static func title(_ id: String) -> Title? { titles.first { $0.id == id } }
+}
+
 /// Runtime switches that a model needs before the store exists.
 enum KuraRuntime {
     /// True when the app runs on `MockAPI` (`-kuraScreen` / `-kuraMock`).
@@ -755,6 +786,13 @@ struct Creator: Hashable, Identifiable {
 
 // MARK: - Notifications (31a) — local only until the API has a model (§4, 501)
 
+// ⚠️ Solo mock / no-op en live: `KNotification`, `NotificationKind` y `RequestState` solo existen
+// en memoria. En live nada los llena (no hay `GET /me/notifications`), así que la campana del
+// feed siempre abre vacía y sin punto; `AppStore.setRequest` / `markNotificationsRead` no llaman
+// a la API. Haría falta en el servidor: tabla de notificaciones, lectura paginada, marcar leídas
+// y — para `followRequest` — el modelo de solicitudes de seguimiento (hoy solo se siguen perfiles
+// públicos). Los avisos que SÍ son reales en live son los push (`Push.swift`).
+
 enum NotificationKind: Hashable {
     case followRequest(personID: String)
     case release(titleID: String, text: String)
@@ -893,6 +931,11 @@ struct BlockedAccount: Identifiable, Hashable, Decodable {
 /// Who sees a collection. Wire (`visibility`): `private` | `link` | `profile`.
 /// `.followers` is what the K1a/K1b frames ask for but the model doesn't have
 /// yet (API.md §7.4): it's only offered on the mock and encodes as `link`.
+///
+/// ⚠️ Solo mock / no-op en live: `.followers` ("Seguidores") no se ofrece en live (`options`) y,
+/// si llegara al cable, se guarda como `link` — cualquiera con el link la vería, no "solo quien te
+/// sigue". Para que sea real haría falta en el servidor un tercer valor de visibilidad por
+/// colección y gatear cada lectura cross-user de `backlog` por `user_follow` (viewer → dueño).
 enum Privacy: String, CaseIterable, Identifiable, Hashable {
     case publicAccess, followers, onlyMe, link
     var id: String { rawValue }
