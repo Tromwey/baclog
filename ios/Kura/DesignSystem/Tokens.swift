@@ -158,6 +158,17 @@ extension View {
     /// Paints `color` ABOVE the view's top edge, so pulling a scroll view down past its top (the
     /// rubber band) shows the header's own color stretching up instead of bare `bg`. Put it on
     /// the tinted header (or the feed's first card), with that surface's top color.
+    /// iOS 26+ draws its own scroll-edge effect (a dimmed, blurred band) under the status bar
+    /// once content scrolls beneath it. On a screen whose chrome floats transparently over its
+    /// own tinted surface (the feed) that band reads as a cut across the status bar: hide it there.
+    @ViewBuilder func kNoTopEdgeEffect() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            self
+        }
+    }
+
     func kOverscrollFill(_ color: Color) -> some View {
         background(alignment: .top) {
             color.frame(height: 1200).offset(y: -1200).allowsHitTesting(false)

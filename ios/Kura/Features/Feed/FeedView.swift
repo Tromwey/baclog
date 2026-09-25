@@ -155,6 +155,7 @@ struct FeedView: View {
                     }
                 }
                 .coordinateSpace(name: FeedView.space)
+                .kNoTopEdgeEffect()
                 // Cards snap under the header (scroll-padding-top); the first one runs up behind it.
                 .contentMargins(.top, hdr, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
