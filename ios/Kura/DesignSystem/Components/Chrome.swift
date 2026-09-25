@@ -2,160 +2,46 @@ import SwiftUI
 
 // MARK: - Dock
 
-/// Floating dock: 4 equal tabs, rgba(20,20,26,.5) + blur, pill, float shadow.
-/// iOS 26+: a Liquid Glass capsule, and the selection behaves like the system tab bar's
-/// "gota": touching lifts a glass lens that follows the finger (it stretches with speed and
-/// magnifies the icon under it), and a tap glides it to the new tab and settles back into
-/// the flat pill. Before 26 the same pill slides, without the glass.
-///
-/// Touch is one drag gesture on the whole bar (tap = drag of ~0), so the items aren't
-/// Buttons; each one is still a button for VoiceOver (`accessibilityAction`).
+/// Floating dock for iOS 17–25: 4 tabs, rgba(20,20,26,.5) + blur, pill, float shadow.
+/// On iOS 26+ the dock is the system tab bar instead (`MainTabs`), so the selection is
+/// Apple's own Liquid Glass droplet — don't imitate it here.
 struct Dock: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.accessibilityReduceMotion) private var reduce
-    /// Finger x in the bar's space while touching; nil at rest.
-    @State private var touchX: CGFloat?
-    /// Horizontal finger speed (pt/s), for the lens' stretch.
-    @State private var speed: CGFloat = 0
-    /// The lens stays lifted for the glide after a tap.
-    @State private var gliding = false
-    /// Resets itself when the system cancels the touch (onEnded never runs then).
-    @GestureState private var pressing = false
-
-    private static let itemW: CGFloat = 82
-    private static let itemH: CGFloat = 56
-    private static let tabs = Tab.allCases
-
-    private var lifted: Bool { touchX != nil || gliding }
-
-    /// 0…0.28: the lens elongates with finger speed, and a little on a tap's glide.
-    private var stretch: CGFloat {
-        if reduce { return 0 }
-        if touchX != nil { return min(speed / 2600, 0.28) }
-        return gliding ? 0.14 : 0
-    }
-
-    private func index(at x: CGFloat) -> Int {
-        min(max(Int(x / Self.itemW), 0), Self.tabs.count - 1)
-    }
-
-    /// The tab under the finger while touching, else the selected one.
-    private var focused: Tab { touchX.map { Self.tabs[index(at: $0)] } ?? store.tab }
-
-    private var lensX: CGFloat {
-        let half = Self.itemW / 2
-        if let x = touchX { return min(max(x, half), Self.itemW * CGFloat(Self.tabs.count) - half) - half }
-        return Self.itemW * CGFloat(Self.tabs.firstIndex(of: store.tab) ?? 0)
-    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Self.tabs) { tab in item(tab) }
+        HStack(spacing: 6) {
+            ForEach(Tab.allCases) { tab in
+                let on = store.tab == tab
+                Button {
+                    store.select(tab)
+                } label: {
+                    VStack(spacing: 3) {
+                        DockIcon(tab: tab)
+                        Text(tab.label).font(.kura.ui(10, .medium, fixed: true))
+                    }
+                    .foregroundStyle(on ? KColor.text : KColor.text2)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 22)
+                    .background(on ? KColor.dockActive : Color.clear, in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.label)
+                .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
+                .accessibilityShowsLargeContentViewer { DockIcon(tab: tab); Text(tab.label) }
+            }
         }
-        .background(alignment: .leading) {
-            ZStack(alignment: .leading) { pill; lens }
-        }
-        .contentShape(Capsule())
-        .gesture(drag)
         .padding(6)
         .modifier(DockSurface())
         .environment(\.colorScheme, .dark)
         .kFixedChrome()
-        .onChange(of: store.tab) { _, _ in
-            guard touchX == nil, !reduce else { return }
-            gliding = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { gliding = false }
-        }
-        .onChange(of: focused) { _, _ in if touchX != nil { KHaptic.select() } }
-        .onChange(of: pressing) { _, p in if !p, touchX != nil { touchX = nil; speed = 0 } }
-    }
-
-    private func item(_ tab: Tab) -> some View {
-        VStack(spacing: 3) {
-            DockIcon(tab: tab)
-            Text(tab.label).font(.kura.ui(10, .medium, fixed: true)).lineLimit(1)
-        }
-        .foregroundStyle(focused == tab ? KColor.text : KColor.text2)
-        // The icon under the droplet swells with it, as through a lens.
-        .scaleEffect(touchX != nil && focused == tab && glassLens ? 1.14 : 1)
-        .animation(KMotion.momentum, value: focused)
-        .animation(KMotion.momentum, value: touchX == nil)
-        .frame(width: Self.itemW, height: Self.itemH)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(tab.label)
-        .accessibilityAddTraits(store.tab == tab ? [.isSelected, .isButton] : .isButton)
-        .accessibilityAction { store.select(tab) }
-        .accessibilityShowsLargeContentViewer { DockIcon(tab: tab); Text(tab.label) }
-    }
-
-    private var glassLens: Bool {
-        if #available(iOS 26.0, *) { return !reduce } else { return false }
-    }
-
-    /// The flat selection pill (at rest; before 26 it is also the moving lens).
-    private var pill: some View {
-        Capsule()
-            .fill(lifted && !glassLens ? KColor.glassSelected : KColor.dockActive)
-            .frame(width: Self.itemW, height: Self.itemH)
-            .scaleEffect(x: 1 + stretch, y: 1 - stretch * 0.35)
-            .scaleEffect(lifted && !reduce && !glassLens ? 1.06 : 1)
-            .offset(x: lensX)
-            .opacity(lifted && glassLens ? 0 : 1)
-            .animation(motion, value: lensX)
-            .animation(KMotion.momentum, value: lifted)
-            .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.7), value: stretch)
-            .allowsHitTesting(false)
-    }
-
-    /// iOS 26: the glass droplet, between the bar's glass and the items (glass drawn over the
-    /// icons would blur them away), with the icon above it magnified by `item`.
-    @ViewBuilder private var lens: some View {
-        if #available(iOS 26.0, *), glassLens {
-            Color.clear
-                .frame(width: Self.itemW, height: Self.itemH)
-                .glassEffect(.clear.interactive(), in: Capsule())
-                .scaleEffect(x: 1 + stretch, y: 1 - stretch * 0.35)
-                .scaleEffect(lifted ? 1.16 : 0.7)
-                .offset(x: lensX)
-                .opacity(lifted ? 1 : 0)
-                .animation(motion, value: lensX)
-                .animation(KMotion.momentum, value: lifted)
-                .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.7), value: stretch)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
-    }
-
-    /// Follows the finger tightly; glides between tabs with a little overshoot.
-    private var motion: Animation? {
-        if reduce { return nil }
-        return touchX != nil ? .interactiveSpring(response: 0.18, dampingFraction: 0.86) : KMotion.momentum
-    }
-
-    private var drag: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .updating($pressing) { _, p, _ in p = true }
-            .onChanged { v in
-                touchX = v.location.x
-                speed = abs(v.velocity.width)
-            }
-            .onEnded { v in
-                let tab = Self.tabs[index(at: v.location.x)]
-                let tapped = abs(v.translation.width) < 10 && abs(v.translation.height) < 10
-                touchX = nil
-                speed = 0
-                // A tap on the active tab pops it to root; a scrub that lands back on it doesn't.
-                if tapped || tab != store.tab { store.select(tab) }
-            }
     }
 }
 
 private struct DockSurface: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            // Glass as a layer behind the items, not wrapping them: the lens is glass too,
-            // and glass nested inside glass can't sample what's under it.
-            content.background { Color.clear.glassEffect(.regular, in: Capsule()) }
+            content.glassEffect(.regular, in: Capsule())
         } else {
             content
                 .background {
