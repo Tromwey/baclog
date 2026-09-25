@@ -16,9 +16,9 @@
 
 export const PRIVACY_EFFECTIVE_DATE = "24 de septiembre de 2026";
 
-export const CONTACT_EMAIL = "[CORREO DE CONTACTO]";
+export const CONTACT_EMAIL = "ericbriseno@baclog.app";
 const RESPONSIBLE = "Tromwey";
-const ADDRESS = "[DOMICILIO]";
+const ADDRESS = "Querétaro, Querétaro, México";
 
 /** True while any founder placeholder is still unfilled: `page.tsx` answers
  *  404 instead of publishing an aviso with `[CORCHETES]` in it (an App
