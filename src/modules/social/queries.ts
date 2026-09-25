@@ -54,6 +54,7 @@ import {
   type PersonRow,
 } from "./types";
 import { closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
+import { notBlockedWith } from "./block-gate";
 
 /**
  * F3.10 — reads for the social feed and the follow graph.
@@ -65,6 +66,10 @@ import { closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
  * query and selects an explicit public-safe field list. That gate is what
  * makes a follow row inert the moment its target goes private: the
  * feed/suggestions simply stop returning them, with nothing to clean up.
+ *
+ * Every read that has a viewer ALSO gates `notBlockedWith(viewerId, …)`
+ * (block-gate.ts, App Store 1.2): anyone with a `user_block` row in either
+ * direction vanishes, in the same query, next to `publicAuthor`.
  *
  * THE FEED IS DERIVED, NOT STORED. Four branch queries (adds, completions,
  * obsessions, reviews) over the followed ids, each keyset-paginated on
@@ -212,6 +217,7 @@ interface FeedChunk {
  * seen yet). Not the feed's public page shape: that is cards, never events.
  */
 async function fetchFeedChunk(
+  viewerId: string,
   ids: string[],
   cursor: string | null,
   now: number,
@@ -248,7 +254,11 @@ async function fetchFeedChunk(
       .from(backlogItems)
       .innerJoin(
         users,
-        and(eq(users.id, backlogItems.userId), publicAuthor),
+        and(
+          eq(users.id, backlogItems.userId),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
       )
       // F3.10.1 — an add to a PRIVATE backlog is not activity anyone gets to
       // see: the whole event vanishes (not just the shelf name). Read-time
@@ -295,7 +305,14 @@ async function fetchFeedChunk(
         verdict: userItems.verdict,
       })
       .from(userItems)
-      .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(
+          eq(users.id, userItems.userId),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
+      )
       .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
       .where(
         and(
@@ -329,7 +346,14 @@ async function fetchFeedChunk(
         releaseDate: catalogItems.releaseDate,
       })
       .from(userItems)
-      .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(
+          eq(users.id, userItems.userId),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
+      )
       .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
       .where(
         and(
@@ -369,7 +393,14 @@ async function fetchFeedChunk(
         obsessed: userItems.obsessed,
       })
       .from(itemReviews)
-      .innerJoin(users, and(eq(users.id, itemReviews.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(
+          eq(users.id, itemReviews.userId),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
+      )
       .innerJoin(catalogItems, eq(catalogItems.id, itemReviews.catalogItemId))
       .leftJoin(
         userItems,
@@ -550,6 +581,7 @@ export async function getFollowSuggestions(
       and(
         publicAuthor,
         ne(users.id, viewerId),
+        notBlockedWith(viewerId, users.id),
         sql`not exists (select 1 from ${userFollows} f where f.follower_user_id = ${viewerId} and f.followed_user_id = ${users.id})`,
       ),
     )
@@ -694,7 +726,11 @@ export async function getFeedSuggestion(
     .from(userFollows)
     .innerJoin(
       users,
-      and(eq(users.id, userFollows.followerUserId), publicAuthor),
+      and(
+        eq(users.id, userFollows.followerUserId),
+        publicAuthor,
+        notBlockedWith(viewerId, users.id),
+      ),
     )
     .where(
       and(
@@ -715,7 +751,13 @@ export async function getFeedSuggestion(
     const [row] = await db
       .select({ id: users.id })
       .from(users)
-      .where(and(eq(users.username, fallback.username), publicAuthor))
+      .where(
+        and(
+          eq(users.username, fallback.username),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
+      )
       .limit(1);
     if (!row) return null;
     candidateId = row.id;
@@ -728,7 +770,9 @@ export async function getFeedSuggestion(
       db
         .select({ username: users.username, image: users.image })
         .from(users)
-        .where(and(eq(users.id, cid), publicAuthor))
+        .where(
+          and(eq(users.id, cid), publicAuthor, notBlockedWith(viewerId, users.id)),
+        )
         .limit(1),
       avatarHexesFor([cid]),
       // The shared follows, newest first — only PUBLIC ones get named.
@@ -738,7 +782,11 @@ export async function getFeedSuggestion(
             .from(userFollows)
             .innerJoin(
               users,
-              and(eq(users.id, userFollows.followedUserId), publicAuthor),
+              and(
+                eq(users.id, userFollows.followedUserId),
+                publicAuthor,
+                notBlockedWith(viewerId, users.id),
+              ),
             )
             .where(
               and(
@@ -915,6 +963,7 @@ export async function searchProfiles(
       and(
         publicAuthor,
         ne(users.id, viewerId),
+        notBlockedWith(viewerId, users.id),
         or(like(users.username, contains), ilike(foldedName, contains)),
       ),
     )
@@ -963,7 +1012,12 @@ export async function getFollowingPreview(
     .select({ userId: users.id, isPublic: users.isPublic, image: users.image })
     .from(userFollows)
     .innerJoin(users, eq(users.id, userFollows.followedUserId))
-    .where(eq(userFollows.followerUserId, viewerId))
+    .where(
+      and(
+        eq(userFollows.followerUserId, viewerId),
+        notBlockedWith(viewerId, users.id),
+      ),
+    )
     .orderBy(desc(userFollows.createdAt), desc(userFollows.id))
     .limit(limit);
 
@@ -1035,6 +1089,9 @@ export async function getPeoplePage(
       and(
         eq(scopeCol, viewerId),
         identifiable,
+        // Blocking deletes both edges, so this only matters for a follow that
+        // raced the block — belt and braces, same gate as every list.
+        notBlockedWith(viewerId, users.id),
         after
           ? or(
               sql`date_trunc('milliseconds', ${userFollows.createdAt}) < ${atParam(after.at)}`,
@@ -1083,6 +1140,7 @@ export async function getPeoplePage(
             and(
               eq(userFollows.followedUserId, viewerId),
               or(isNull(users.username), eq(users.isPublic, false)),
+              notBlockedWith(viewerId, users.id),
             ),
           )
       : Promise.resolve([{ n: 0 }]),
@@ -1132,7 +1190,7 @@ export async function getFeedEventsPage(
   const now = opts.now ?? Date.now();
   const ids = await getFollowedIds(viewerId);
   if (ids.length === 0) return { events: [], nextCursor: null };
-  return fetchFeedChunk(ids, opts.cursor ?? null, now, new Map());
+  return fetchFeedChunk(viewerId, ids, opts.cursor ?? null, now, new Map());
 }
 
 // ---------- feed v2: cards (bursts + singles), paged by CARDS ----------
@@ -1174,7 +1232,7 @@ export async function getFeedCards(
   let cards: FeedCard[] = [];
 
   for (let i = 0; i < FEED_MAX_CHUNKS; i++) {
-    const chunk = await fetchFeedChunk(ids, cursor, now, hexCache);
+    const chunk = await fetchFeedChunk(viewerId, ids, cursor, now, hexCache);
     events.push(...chunk.events);
     cursor = chunk.nextCursor;
     more = cursor !== null;

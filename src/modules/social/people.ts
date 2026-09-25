@@ -5,6 +5,7 @@ import { catalogItems, userFollows, userItems, users } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 import { FALLBACK_ADN } from "@/modules/reviews/format";
 import { avatarHexesFor } from "@/modules/reviews/queries";
+import { notBlockedWith } from "@/modules/social/block-gate";
 import { getFollowSuggestions, publicAuthor } from "@/modules/social/queries";
 
 /**
@@ -15,7 +16,8 @@ import { getFollowSuggestions, publicAuthor } from "@/modules/social/queries";
  * social module lives by: every query that touches another user's rows gates
  * on `publicAuthor` (isPublic + username) INSIDE the query and selects a
  * public-safe field list (handle, display name, photo URL, a title they
- * obsess over). A private account is never offered, never named. Include it
+ * obsess over). A private account is never offered, never named, and neither
+ * is anyone with a block in either direction (`notBlockedWith`). Include it
  * in any audit of cross-user reads (AGENTS.md · Authorization).
  */
 
@@ -76,6 +78,7 @@ export async function getPeopleForPicks(
 ): Promise<OnboardingPerson[]> {
   const mineObsessed = sql`exists (select 1 from ${userItems} mine where mine.user_id = ${viewerId} and mine.catalog_item_id = ${userItems.catalogItemId} and mine.obsessed = true)`;
   const shared = sql<number>`count(distinct ${userItems.catalogItemId})::int`;
+  const visible = notBlockedWith(viewerId, users.id);
 
   const matches = await db
     .select({
@@ -86,7 +89,10 @@ export async function getPeopleForPicks(
       shared,
     })
     .from(userItems)
-    .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+    .innerJoin(
+      users,
+      and(eq(users.id, userItems.userId), publicAuthor, visible),
+    )
     .where(
       and(
         ne(userItems.userId, viewerId),
@@ -110,7 +116,10 @@ export async function getPeopleForPicks(
           })
           .from(userItems)
           .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
-          .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+          .innerJoin(
+            users,
+            and(eq(users.id, userItems.userId), publicAuthor, visible),
+          )
           .where(
             and(
               inArray(userItems.userId, ids),

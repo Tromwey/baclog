@@ -534,6 +534,34 @@ export const userFollows = pgTable(
   ],
 );
 
+/**
+ * Trust & safety (App Store 1.2, 2026-09-24) — one row per "A bloqueó a B".
+ * Directional in storage, MUTUAL in visibility: every cross-user read that has
+ * a viewer excludes anyone with a block in EITHER direction
+ * (`notBlockedWith` in `modules/social/block-gate.ts`, inside the query, next
+ * to the `publicAuthor` gate). Blocking also deletes both follow edges in the
+ * same batch, and `followUser` refuses to recreate them while the row exists.
+ * Any existing account can be blocked, public or not.
+ */
+export const userBlocks = pgTable(
+  "user_block",
+  {
+    blockerUserId: text("blocker_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    blockedUserId: text("blocked_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // The PK's leftmost prefix serves "a quién bloqueé" (the owner's list) and
+    // the viewer→X probe; the index serves the X→viewer half of the gate.
+    primaryKey({ columns: [t.blockerUserId, t.blockedUserId] }),
+    index("user_block_blocked_idx").on(t.blockedUserId),
+  ],
+);
+
 // ---------- F3.11 foto de perfil ----------
 
 /**

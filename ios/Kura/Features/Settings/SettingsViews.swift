@@ -52,6 +52,10 @@ struct SettingsView: View {
                             RowValue(text: store.profilePrivate ? "Solo tú" : "Todos")
                         }
                         ListDivider()
+                        SettingsRow(title: "Cuentas bloqueadas", action: { store.push(.blockedAccounts) }) {
+                            RowValue(text: store.blockedAccounts.map { $0.isEmpty ? "" : "\($0.count)" } ?? "")
+                        }
+                        ListDivider()
                         SettingsRow(title: "Aviso de privacidad", action: { showPrivacyNotice = true }) {
                             Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(KColor.text2)

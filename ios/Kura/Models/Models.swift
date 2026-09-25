@@ -535,6 +535,9 @@ struct Person: Identifiable, Hashable, Decodable {
     var avatarURL: URL? = nil
     /// Whether you follow them (from `GET /people/{handle}`); nil when unknown.
     var isFollowing: Bool? = nil
+    /// `GET /people/{handle}` only: you blocked them (the profile still opens, to unblock).
+    /// Absent on every other payload — the store keeps the truth in `AppStore.blocked`.
+    var isBlocked = false
     /// Titles embedded in the payload (obsessions / common), registered by the store.
     var embeddedTitles: [Title] = []
 
@@ -554,7 +557,7 @@ struct Person: Identifiable, Hashable, Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case handle, username, name, displayName, initials, hexes, featuredTitleId, isPrivate, followers, followersCount,
-             followingCount, following, stats, obsessions, common, collections, why, reason, avatarUrl, isFollowing
+             followingCount, following, stats, obsessions, common, collections, why, reason, avatarUrl, isFollowing, isBlocked
     }
 
     /// Lists of titles come either as ids or as embedded `Title` objects.
@@ -592,6 +595,7 @@ struct Person: Identifiable, Hashable, Decodable {
         why = try c.decodeIfPresent(String.self, forKey: .why) ?? c.decodeIfPresent(String.self, forKey: .reason)
         avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
         isFollowing = try c.decodeIfPresent(Bool.self, forKey: .isFollowing)
+        isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
     }
 }
 
@@ -802,6 +806,81 @@ struct Review: Identifiable, Hashable, Decodable {
         date = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         author = a
+    }
+}
+
+// MARK: - Safety (reportar · bloquear, App Review 1.2)
+
+/// What a report points at. A review carries its title so the sheet can drop
+/// "Spoiler sin marcar" on albums (no spoiler switch there, like the web).
+enum ReportTarget: Hashable {
+    case person(handle: String)
+    case review(id: String, authorHandle: String, titleID: String)
+
+    var isReview: Bool { if case .review = self { return true }; return false }
+}
+
+/// One reason in the report sheet: `id` is the wire value, `label` the copy (same as the web).
+struct ReportReason: Hashable, Identifiable {
+    let id: String
+    let label: String
+
+    /// `POST /people/{handle}/report`.
+    static let profile: [ReportReason] = [
+        ReportReason(id: "spam", label: "Spam"),
+        ReportReason(id: "impersonation", label: "Se hace pasar por otra persona"),
+        ReportReason(id: "harassment", label: "Acoso"),
+        ReportReason(id: "illegal_content", label: "Contenido ilegal"),
+        ReportReason(id: "other", label: "Otro")
+    ]
+
+    /// `POST /reviews/{id}/report`.
+    static let review: [ReportReason] = [
+        ReportReason(id: "unmarked_spoiler", label: "Spoiler sin marcar"),
+        ReportReason(id: "spam", label: "Spam"),
+        ReportReason(id: "harassment", label: "Acoso"),
+        ReportReason(id: "hate", label: "Odio o discriminación"),
+        ReportReason(id: "illegal_content", label: "Contenido ilegal"),
+        ReportReason(id: "off_topic", label: "No habla de la obra"),
+        ReportReason(id: "other", label: "Otro")
+    ]
+
+    /// `details` on a profile report: at most 500 characters (server-checked too).
+    static let detailsLimit = 500
+}
+
+/// A row of `GET /me/blocks`. `handle` (and `avatarUrl`) are null once the blocked account is no
+/// longer public — the server then sends `name: "Perfil privado"` — so unblocking goes by `id`
+/// (`DELETE /me/blocks/{handleOrId}` takes either).
+struct BlockedAccount: Identifiable, Hashable, Decodable {
+    let id: String
+    let handle: String?
+    var name: String
+    var avatarURL: URL?
+
+    init(id: String, handle: String?, name: String, avatarURL: URL? = nil) {
+        self.id = id; self.handle = handle; self.name = name; self.avatarURL = avatarURL
+    }
+
+    /// What `DELETE /me/blocks/{…}` takes.
+    var key: String { handle ?? id }
+
+    /// For the seal (initials / photo): never registered in the store.
+    var person: Person {
+        var p = Person(handle: handle ?? "", name: name, initials: Person.initials(of: name), hexes: [])
+        p.avatarURL = avatarURL
+        return p
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, handle, name, avatarUrl }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        let h = try c.decodeIfPresent(String.self, forKey: .handle)
+        handle = (h?.isEmpty ?? true) ? nil : h
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? h ?? ""
+        avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
     }
 }
 
@@ -1338,6 +1417,8 @@ enum Route: Hashable {
     case editProfile
     /// K1d / K1e — how your profile looks to someone who doesn't follow you.
     case profileAsStranger
+    /// Ajustes › privacidad › Cuentas bloqueadas (`GET /me/blocks`).
+    case blockedAccounts
 }
 
 enum OnboardingStep: Hashable {

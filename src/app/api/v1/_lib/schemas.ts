@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  profileReportBodySchema,
+  reviewReportBodySchema,
+} from "@/modules/reports/types";
 
 // Every zod message the API emits (`fields` on a 400 `invalid`) is Spanish:
 // configured ONCE here, the module every handler and the smoke import.
@@ -261,6 +265,12 @@ export type PersonCollection = z.infer<typeof PersonCollectionSchema>;
  * caller's own `GET /me/following` / `GET /me/followers`, on a row whose
  * account went private after the follow (the viewer's own edge stays listed
  * so it stays removable; photo, hexes and counts are stripped).
+ *
+ * `isBlocked` = the CALLER blocked them (`PUT /me/blocks/{handle}`). Blocks
+ * are mutual in visibility, so it can only be true on `GET /people/{handle}`
+ * — the one read that still serves the blocker the profile they blocked
+ * (to unblock from there); every list leaves blocked people out, so it is
+ * always false there.
  */
 export const PersonSchema = z.object({
   handle: z.string().min(1),
@@ -284,6 +294,8 @@ export const PersonSchema = z.object({
   why: z.string().nullable().optional(),
   /** Own following/followers lists only: they went private after the follow. */
   isPrivate: z.boolean().optional(),
+  /** The caller blocked them (only ever true on `GET /people/{handle}`). */
+  isBlocked: z.boolean(),
 });
 export type Person = z.infer<typeof PersonSchema>;
 
@@ -332,6 +344,34 @@ export const ReviewSchema = z.object({
   hidden: z.boolean().optional(),
 });
 export type Review = z.infer<typeof ReviewSchema>;
+
+// ---------- Trust & safety (App Store 1.2) ----------
+
+/** `POST /people/{handle}/report` body. Same schema as the web sheet
+ *  (`modules/reports/types.ts`). */
+export const ProfileReportBodySchema = profileReportBodySchema;
+export type ProfileReportBody = z.infer<typeof ProfileReportBodySchema>;
+
+/** `POST /reviews/{reviewId}/report` body — reasons = `REVIEW_REPORT_REASONS`. */
+export const ReviewReportBodySchema = reviewReportBodySchema;
+export type ReviewReportBody = z.infer<typeof ReviewReportBodySchema>;
+
+/**
+ * One row of `GET /me/blocks` — the caller's own block list. The ONE place
+ * the wire carries another user's `id`: it is opaque, only ever shown to the
+ * blocker, and exists so a row whose `handle` is null (the blocked account
+ * is no longer public, or has no handle) can still be unblocked with
+ * `DELETE /me/blocks/{id}`. `handle`, a real `name` and `avatarUrl` travel
+ * only while they are a public profile; otherwise `handle`/`avatarUrl` are
+ * null and `name` is "Perfil privado".
+ */
+export const BlockedPersonSchema = z.object({
+  id: z.string().min(1),
+  handle: z.string().min(1).nullable(),
+  name: z.string(),
+  avatarUrl: z.string().nullable(),
+});
+export type BlockedPerson = z.infer<typeof BlockedPersonSchema>;
 
 // ---------- Feed ----------
 

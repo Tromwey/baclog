@@ -42,6 +42,9 @@ xcrun simctl launch booted com.tromwey.kura
 | 09 tu perfil | `profile` (20c) · `editprofile` (20f) · `profileempty` (E2) |
 | 10 recap | `recap` (08) · `recapcard` (tarjeta / C2) · `recaphistory` (O8) · `recapempty` (09) |
 | 11 ajustes | `settings` (30a) · `privacy` (K1c) · `musicapp` (30b) · `deleteaccount` (C3) |
+| reportar / bloquear | `reportperson` · `reportreview` · `block` · `blocked` (perfil bloqueado) · `blockflow` (el PUT completo: aviso + perfil bloqueado) · `reportsent` (reseña reportada; con `-kuraFailWrites YES` sale Reintentar) · `blockedaccounts` · `blockedempty` |
+
+`-kuraFailWrites YES` (con `-kuraScreen`/`-kuraMock`) hace fallar toda escritura del mock, para ver los avisos de Reintentar.
 
 Al arrancar en DEBUG se verifica que las 9 fuentes estén registradas (`[Kura] fonts OK: 9 faces registered`); si falta alguna se imprimen `UIFont.familyNames`.
 
@@ -153,14 +156,16 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 - [ ] **URL de la política de privacidad: `https://baclog.app/privacidad`** — la página ya existe (aviso de privacidad integral, pública y sin sesión; texto en `src/app/(marketing)/privacidad/content.ts`). Va en App Store Connect › App Information › Privacy Policy URL (también la pide TestFlight externo). Antes de mandarla, el founder rellena `[RAZÓN SOCIAL]`, `[DOMICILIO]` y `[CORREO DE CONTACTO]` en ese archivo y despliega. En la app, Ajustes › privacidad › "Aviso de privacidad" ya abre esa URL en `SFSafariViewController`.
 - [ ] **App Privacy** (App Store Connect › App Privacy): declarar correo, nombre de usuario, foto de perfil, contenido del usuario (reseñas) e identificadores, ligados a la identidad y sin tracking.
 - [ ] **Cuenta para la revisión**: el acceso es solo con código por correo, así que Beta App Review (TestFlight externo) y App Review necesitan una cuenta demo cuyo código puedan recibir, o un acceso para el revisor. Hay que decidirlo antes del primer grupo externo.
+- [x] Reportar y bloquear (guía 1.2): perfil ajeno › Opciones › Reportar / Bloquear (o Desbloquear), ⋯ en cada reseña ajena (ficha y feed) con "Reportar reseña" y "Bloquear a @…", Ajustes › privacidad › Cuentas bloqueadas. Contra `POST /people/{handle}/report`, `POST /reviews/{id}/report`, `PUT|DELETE /me/blocks/{…}`, `GET /me/blocks`.
+- [x] Sin botones de relleno en la entrada (guía 2.1): solo correo.
 - [ ] Clasificación por edad (el cuestionario; las reseñas son UGC, así que hay que declarar moderación y reporte) y borrar la cuenta desde la app (Ajustes › Borrar cuenta, requisito 5.1.1(v)): confirmar que funcione contra prod.
 
 ## Pendiente
 
 Cerrado en la fase 4a (2026-09-24): fotos de perfil (`DesignSystem/Components/Avatar.swift`, subida desde Editar perfil con recorte a 512 px y JPEG ≤ 400 KB), colección pública ajena (`Features/People/PublicCollectionView.swift`), "más reseñas" paginado (`GET /titles/{id}/reviews`), estados vacío/error/sin conexión en cada `load*` (`loadErrors`, `RetryStrip`, reintento al volver la red), Dynamic Type (escala con tope `xxxLarge` — desde la auditoría Apple del 2026-09-24 el tope ya no es global: solo el cromo de geometría fija lo lleva vía `kFixedChrome()`; mono, wordmark, sello y dock fijos a propósito), `PrivacyInfo.xcprivacy`, ventana pintada con `bg` desde el primer frame, y el recorrido real contra `next dev` de punta a punta (dos veces, cuenta QA borrada).
 
-- Apple / Google (API.md §2.2, fase 4): hoy solo correo → código; esos botones avisan.
-- Bloquear/reportar (hoy un aviso), push real (hoy notificación local; `device_token` es fase 4b).
+- Apple / Google (API.md §2.2, fase 4): hoy solo correo → código. Los botones **no se pintan** (un botón que solo avisa "llega después" es rechazo 2.1); `AuthButton.Kind` conserva `.apple`/`.google` para volver a ponerlos arriba de "Continuar con correo".
+- Push real (hoy notificación local; `device_token` es fase 4b).
 - Recap: la tarjeta se comparte como link, falta exportarla como imagen (`POST /auth/web-session` es fase 4b). Compartir → "Historia" igual.
 - Modo ordenar usa el `List` del sistema para arrastrar (asa y levantado nativos, no los del frame).
 - Persistencia local / sincronización real del modo sin conexión (hoy la franja + reintento; no hay caché de datos).

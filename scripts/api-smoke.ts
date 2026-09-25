@@ -57,6 +57,7 @@ import {
 import { ERA_KEY_RE, monthYear } from "../src/modules/backlog/recap-format";
 // L2
 import {
+  BlockedPersonSchema,
   IsoDateSchema,
   PublicMarkSchema,
   ReviewSchema,
@@ -620,6 +621,7 @@ const SWEEP_SEGMENTS: Record<string, string> = {
   "[handle]": "eric",
   "[key]": "x",
   "[era]": "2026-08",
+  "[reviewId]": "00000000-0000-4000-8000-000000000000",
 };
 /** The only v1 routes that are public by design (`withPublicApi`). */
 const SWEEP_PUBLIC = /^\/auth\/otp\//;
@@ -2111,6 +2113,93 @@ const writes: Case[] = [
       const nobody = await qaCall("DELETE", "/me/following/nadieexiste12345");
       assert.equal(nobody.status, 204, "handle desconocido → 204, la respuesta nunca varía");
       expectError(await qaCall("DELETE", "/me/following/ab"), 404, "not_found");
+    },
+  },
+  // App Store 1.2 — reportar y bloquear (migración 0028 `user_block`). Ningún
+  // caso inserta un reporte real: cada POST apunta a algo que el módulo
+  // descarta (propio, inexistente, malformado), así el smoke no deja filas en
+  // la tabla `report` de la DB compartida.
+  {
+    name: "E1 POST /people/{h}/report · /reviews/{id}/report → 204 siempre (sin oráculo); body inválido → 400 fields",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me?.handle, "hace falta token y handle");
+      const before = await smokeSql<{ n: number }>(
+        `select count(*)::int as n from report where reporter_user_id = $1`,
+        [ctx.me.id],
+      );
+      for (const h of [ctx.me.handle, "nadieexiste12345", "ab"]) {
+        const res = await qaCall("POST", `/people/${h}/report`, { body: { reason: "spam", details: "smoke" } });
+        assert.equal(res.status, 204, `report ${h}: esperaba 204, llegó ${res.status}: ${res.text}`);
+        expectNoStore(res);
+      }
+      for (const id of ["00000000-0000-4000-8000-000000000000", "no-es-uuid"]) {
+        const res = await qaCall("POST", `/reviews/${id}/report`, { body: { reason: "unmarked_spoiler" } });
+        assert.equal(res.status, 204, `report review ${id}: esperaba 204, llegó ${res.status}: ${res.text}`);
+      }
+      const bad = expectError(await qaCall("POST", "/people/eric/report", { body: { reason: "unmarked_spoiler" } }), 400, "invalid");
+      assert.ok(bad.fields?.reason, "fields.reason en español");
+      const long = expectError(await qaCall("POST", "/people/eric/report", { body: { reason: "other", details: "x".repeat(501) } }), 400, "invalid");
+      assert.ok(long.fields?.details, "details > 500 → fields.details");
+      expectError(await qaCall("POST", "/reviews/00000000-0000-4000-8000-000000000000/report", { body: { reason: "impersonation" } }), 400, "invalid");
+      const after = await smokeSql<{ n: number }>(
+        `select count(*)::int as n from report where reporter_user_id = $1`,
+        [ctx.me.id],
+      );
+      if (before && after) assert.equal(after[0].n, before[0].n, "ningún caso del smoke inserta un reporte");
+    },
+  },
+  {
+    name: "E1 PUT/DELETE /me/blocks/eric → bloqueo mutuo: sin follow, perfil con isBlocked, colecciones 404, fuera de búsqueda",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me?.handle, "hace falta token y handle");
+      // Start from a follow, so the block has an edge to delete.
+      assert.equal((await qaCall("PUT", "/me/following/eric")).status, 204);
+      const pre = expectOk(await call("GET", "/people/eric", { token: ctx.token }), 200, PersonSchema);
+      assert.equal(pre.isBlocked, false);
+      assert.equal(pre.isFollowing, true);
+      const followingBefore = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema).followingCount;
+
+      const put = await qaCall("PUT", "/me/blocks/eric");
+      assert.equal(put.status, 204, `esperaba 204, llegó ${put.status}: ${put.text}`);
+      expectNoStore(put);
+      assert.equal((await qaCall("PUT", "/me/blocks/%40ERIC")).status, 204, "idempotente y normaliza el handle");
+
+      const me = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema);
+      assert.equal(me.followingCount, followingBefore - 1, "bloquear borra el follow");
+      const person = expectOk(await call("GET", "/people/eric", { token: ctx.token }), 200, PersonSchema);
+      assert.equal(person.isBlocked, true, "el bloqueador sí ve el perfil, marcado");
+      assert.equal(person.isFollowing, false);
+      assert.deepEqual(person.collections, [], "sin colecciones: cada link sería 404");
+      assert.deepEqual(person.common, []);
+
+      const nobody = await qaCall("PUT", "/me/following/nadieexiste12345");
+      expectSameError(await qaCall("PUT", "/me/following/eric"), nobody, 404, "not_found", "seguir a quien bloqueaste = el mismo 404");
+      if (pre.collections[0]) {
+        const coll = await call("GET", `/people/eric/collections/${pre.collections[0].id}`, { token: ctx.token });
+        const none = await call("GET", "/people/eric/collections/00000000-0000-4000-8000-000000000000", { token: ctx.token });
+        expectSameError(coll, none, 404, "not_found", "colección de alguien bloqueado = 404 idéntico");
+      }
+      const search = expectOk(await call("GET", "/people/search?q=eric", { token: ctx.token }), 200, z.object({ items: z.array(PersonSchema) }));
+      assert.ok(!search.items.some((p) => p.handle === "eric"), "un bloqueado no aparece en Buscar gente");
+
+      const list = expectOk(await call("GET", "/me/blocks", { token: ctx.token }), 200, z.object({ items: z.array(BlockedPersonSchema) }));
+      const row = list.items.find((b) => b.handle === "eric");
+      assert.ok(row, "@eric aparece en GET /me/blocks");
+
+      const bNobody = await qaCall("PUT", "/me/blocks/nadieexiste12345");
+      expectSameError(await qaCall("PUT", `/me/blocks/${ctx.me.handle}`), bNobody, 404, "not_found", "bloquearte = inexistente");
+      expectSameError(await qaCall("PUT", "/me/blocks/ab"), bNobody, 404, "not_found", "malformado = inexistente");
+
+      // Unblock by the opaque id (the path for a row whose handle is null).
+      assert.equal((await qaCall("DELETE", `/me/blocks/${row.id}`)).status, 204);
+      const after = expectOk(await call("GET", "/me/blocks", { token: ctx.token }), 200, z.object({ items: z.array(BlockedPersonSchema) }));
+      assert.ok(!after.items.some((b) => b.id === row.id), "desbloqueado por id");
+      assert.equal((await qaCall("DELETE", "/me/blocks/eric")).status, 204, "idempotente por handle");
+      assert.equal((await qaCall("DELETE", "/me/blocks/nadieexiste12345")).status, 204, "desconocido → 204");
+      expectSameError(await qaCall("DELETE", "/me/blocks/ab"), bNobody, 404, "not_found", "DELETE malformado = el mismo 404 que PUT");
+      const back = expectOk(await call("GET", "/people/eric", { token: ctx.token }), 200, PersonSchema);
+      assert.equal(back.isBlocked, false);
+      assert.equal(back.isFollowing, false, "desbloquear no restaura el follow");
     },
   },
   {

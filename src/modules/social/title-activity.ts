@@ -5,6 +5,7 @@ import { itemReviews, userItems, users } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 import { FALLBACK_ADN } from "@/modules/reviews/format";
 import { avatarHexesFor, initialOf } from "@/modules/reviews/queries";
+import { notBlockedWith } from "./block-gate";
 import { getFollowedIds, publicAuthor } from "./queries";
 
 /**
@@ -16,7 +17,8 @@ import { getFollowedIds, publicAuthor } from "./queries";
  * Cross-user read, so it follows the social module's posture to the letter:
  * the followed set comes from the viewer's own follow rows, and every row is
  * re-gated on `publicAuthor` INSIDE the query (a followed profile that went
- * private vanishes here the same instant it vanishes from the feed) with an
+ * private vanishes here the same instant it vanishes from the feed; so does
+ * anyone with a block in either direction, `notBlockedWith`) with an
  * explicit public-safe field list — handle, photo, and the reaction the
  * person volunteered. A "no me gustó" is NEVER surfaced: someone whose only
  * signal is a dislike isn't in the result at all, and a reviewer with a
@@ -81,7 +83,14 @@ export async function getTitleActivityAmongFollowed(
       reviewedAt: itemReviews.createdAt,
     })
     .from(userItems)
-    .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+    .innerJoin(
+      users,
+      and(
+        eq(users.id, userItems.userId),
+        publicAuthor,
+        notBlockedWith(viewerId, users.id),
+      ),
+    )
     .leftJoin(
       itemReviews,
       and(

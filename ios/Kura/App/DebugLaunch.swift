@@ -154,6 +154,31 @@ enum DebugLaunch {
             main(.feed, [.person("luciarrr")])
         case "personoptions":
             main(.feed, [.person("luciarrr")], sheet: .personOptions("luciarrr"))
+        // App Review 1.2 · reportar y bloquear
+        case "reportperson":
+            main(.feed, [.person("luciarrr")], sheet: .report(.person(handle: "luciarrr")))
+        case "reportreview":
+            main(.collections, [.title("chihiro")], sheet: .report(.review(id: "r-chihiro", authorHandle: "danpix", titleID: "chihiro")))
+        case "block":
+            main(.feed, [.person("luciarrr")], sheet: .block("luciarrr"))
+        case "blocked":
+            MockSafety.shared.block(BlockedAccount(id: "u-luciarrr", handle: "luciarrr", name: "lucía rivas"))
+            main(.feed, [.person("luciarrr")])
+        case "blockflow":
+            // The whole PUT: toast, follow gone, profile in its blocked shape.
+            main(.feed, [.person("luciarrr")])
+            store.pendingAction = { [weak store] in Task { await store?.block("luciarrr") } }
+        case "reportsent":
+            // A review reported (add `-kuraFailWrites YES` to see the Reintentar toast instead).
+            main(.collections, [.title("chihiro")])
+            store.pendingAction = { [weak store] in
+                Task { await store?.report(.review(id: "r-chihiro", authorHandle: "danpix", titleID: "chihiro"), reason: "spam") }
+            }
+        case "blockedaccounts":
+            main(.profile, [.settings, .blockedAccounts])
+        case "blockedempty":
+            for a in MockSafety.shared.list { MockSafety.shared.unblock(a.key) }
+            main(.profile, [.settings, .blockedAccounts])
         case "unfollow":
             main(.feed, [.person("luciarrr")])
             store.pendingAction = { [weak store] in store?.followFromProfile("luciarrr") }

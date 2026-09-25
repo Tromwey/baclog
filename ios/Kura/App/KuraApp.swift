@@ -15,7 +15,8 @@ struct KuraApp: App {
         KuraRuntime.usesMock = mock
         let api: KuraAPI
         if mock {
-            api = MockAPI()
+            // `-kuraFailWrites YES`: every mock write fails (the Reintentar paths).
+            api = MockAPI(failWrites: UserDefaults.standard.bool(forKey: "kuraFailWrites"))
         } else {
             let client = APIClient()
             var origin = URLComponents(url: client.base, resolvingAgainstBaseURL: false)

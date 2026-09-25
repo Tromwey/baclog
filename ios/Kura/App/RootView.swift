@@ -136,6 +136,7 @@ struct RouteView: View {
             case .musicApp: MusicAppView()
             case .editProfile: EditProfileView()
             case .profileAsStranger: ProfileAsStrangerView()
+            case .blockedAccounts: BlockedAccountsView()
             }
         }
         .background(KColor.bg.ignoresSafeArea())
@@ -162,6 +163,8 @@ struct SheetContent: View {
         case .saveTo(let t): SaveToSheet(titleID: t)
         case .titleMore(let t): TitleMoreSheet(titleID: t)
         case .personOptions(let p): PersonOptionsSheet(personID: p)
+        case .report(let target): ReportSheet(target: target)
+        case .block(let handle): BlockSheet(handle: handle)
         case .deleteAccount: DeleteAccountSheet()
         case .addTitles(let c): AddTitlesSheet(collectionID: c)
         }

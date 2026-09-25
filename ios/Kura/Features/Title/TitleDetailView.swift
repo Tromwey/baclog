@@ -348,7 +348,7 @@ private struct TitleSections: View {
 
     @ViewBuilder
     private func reviewsSection(_ t: Title) -> some View {
-        let reviews = store.reviews.filter { $0.titleID == t.id }
+        let reviews = store.visibleReviews(t.id)
         if !reviews.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 SectionTitle(text: "reseñas")
@@ -441,8 +441,21 @@ struct ReviewCard: View {
     var lineLimit: Int? = nil
 
     var body: some View {
+        if store.reportedReviews.contains(review.id) {
+            // Folds in place after a report (like the web): the page never jumps.
+            Text("Gracias. La revisamos.")
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18).padding(.vertical, 16)
+                .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         let revealed = !review.spoiler || store.revealedSpoilers.contains(review.id)
-        VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 if let p = store.person(review.authorID) {
                     Seal(person: p, size: 32)
@@ -454,6 +467,10 @@ struct ReviewCard: View {
                 }
                 Spacer()
                 if let m = review.mark { GlyphView(glyph: m.glyph, size: 14) }
+                if ReviewMenu.applies(to: review, me: store.me.id) {
+                    ReviewMenu(review: review)
+                        .padding(.trailing, -6)
+                }
             }
             ZStack {
                 Text(review.text)

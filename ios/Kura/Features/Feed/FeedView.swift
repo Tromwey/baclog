@@ -287,10 +287,17 @@ private struct FeedCard: View {
             if isSuggestion {
                 SuggestionPill()
             } else if let author {
-                Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
-                    AuthorChip(person: author, age: FeedCard.when(event.ageHours))
+                HStack(spacing: 8) {
+                    Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
+                        AuthorChip(person: author, age: FeedCard.when(event.ageHours))
+                    }
+                    .buttonStyle(.plain)
+                    Spacer(minLength: 0)
+                    // Someone else's review: report it (or block its author) right here.
+                    if let r = store.review(event.reviewID), ReviewMenu.applies(to: r, me: store.me.id) {
+                        ReviewMenu(review: r)
+                    }
                 }
-                .buttonStyle(.plain)
             }
             art
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -596,6 +596,32 @@ struct LiveAPI: KuraAPI {
         return env.event
     }
 
+    // MARK: Safety
+
+    private struct PersonReport: Encodable { let reason: String; let details: String? } // nil → key omitted
+    private struct ReviewReport: Encodable { let reason: String }
+
+    func reportPerson(handle: String, reason: String, details: String?) async throws {
+        try await client.send(try .post("people/\(handle)/report", PersonReport(reason: reason, details: details)))
+    }
+
+    func reportReview(id: String, reason: String) async throws {
+        try await client.send(try .post("reviews/\(id)/report", ReviewReport(reason: reason)))
+    }
+
+    func block(handle: String) async throws {
+        try await client.send(.put("me/blocks/\(handle)"))
+    }
+
+    func unblock(_ handleOrID: String) async throws {
+        try await client.send(.delete("me/blocks/\(handleOrID)"))
+    }
+
+    func blocks() async throws -> [BlockedAccount] {
+        let r: Items<BlockedAccount> = try await client.decode(.get("me/blocks"))
+        return r.items
+    }
+
     // MARK: Recap
 
     func recapMonths() async throws -> [RecapMonth] {

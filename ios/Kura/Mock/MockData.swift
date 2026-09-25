@@ -254,6 +254,15 @@ enum MockData {
         return d
     }()
 
+    // MARK: Blocks
+
+    /// Ajustes › Cuentas bloqueadas starts with one account that isn't anywhere else in the mock.
+    static let blocked: [BlockedAccount] = [
+        BlockedAccount(id: "u-promo", handle: "pelis.gratis.hd", name: "pelis gratis hd"),
+        // Went private after the block: the server hides who it is.
+        BlockedAccount(id: "u-7c1e", handle: nil, name: "Perfil privado")
+    ]
+
     // MARK: Reviews
 
     static let reviews: [Review] = [

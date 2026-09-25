@@ -12,6 +12,7 @@ import {
 import type { MediaType } from "@/modules/catalog/types";
 import { avatarHexesFor } from "@/modules/reviews/queries";
 import { FALLBACK_ADN, WEEK } from "@/modules/reviews/format";
+import { notBlockedWith } from "./block-gate";
 import { getFollowedIds, publicAuthor } from "./queries";
 
 /**
@@ -26,6 +27,7 @@ import { getFollowedIds, publicAuthor } from "./queries";
  * a private backlog is nobody's business), reviews skip hidden ones, and the
  * field list is the public-safe one (username, avatar pointer, catalog
  * metadata). A followed account that went private simply stops counting.
+ * Same for a block in either direction (`notBlockedWith`, next to the gate).
  */
 
 export interface TrendingPerson {
@@ -69,6 +71,7 @@ export async function getTrendingAmongFollowed(
   const since = new Date(now.getTime() - WEEK);
 
   const person = { username: users.username, image: users.image };
+  const visible = notBlockedWith(userId, users.id);
 
   const [adds, completions, obsessions, reviews] = await Promise.all([
     db
@@ -79,7 +82,10 @@ export async function getTrendingAmongFollowed(
         ...person,
       })
       .from(backlogItems)
-      .innerJoin(users, and(eq(users.id, backlogItems.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(eq(users.id, backlogItems.userId), publicAuthor, visible),
+      )
       .innerJoin(
         backlogs,
         and(eq(backlogs.id, backlogItems.backlogId), eq(backlogs.isPublic, true)),
@@ -99,7 +105,10 @@ export async function getTrendingAmongFollowed(
         ...person,
       })
       .from(userItems)
-      .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(eq(users.id, userItems.userId), publicAuthor, visible),
+      )
       .where(
         and(
           inArray(userItems.userId, ids),
@@ -116,7 +125,10 @@ export async function getTrendingAmongFollowed(
         ...person,
       })
       .from(userItems)
-      .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(eq(users.id, userItems.userId), publicAuthor, visible),
+      )
       .where(
         and(
           inArray(userItems.userId, ids),
@@ -134,7 +146,10 @@ export async function getTrendingAmongFollowed(
         ...person,
       })
       .from(itemReviews)
-      .innerJoin(users, and(eq(users.id, itemReviews.userId), publicAuthor))
+      .innerJoin(
+        users,
+        and(eq(users.id, itemReviews.userId), publicAuthor, visible),
+      )
       .where(
         and(
           inArray(itemReviews.userId, ids),

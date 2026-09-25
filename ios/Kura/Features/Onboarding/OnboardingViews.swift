@@ -175,10 +175,10 @@ struct SignUpView: View {
 
             VStack(spacing: 10) {
                 Spacer()
-                // Apple / Google arrive in a later phase (API.md §2.2); today only the code by email.
-                AuthButton(kind: .apple) { store.showToast(ToastModel(text: "Apple llega después. Por ahora, con correo.", kind: .info)) }
-                AuthButton(kind: .google) { store.showToast(ToastModel(text: "Google llega después. Por ahora, con correo.", kind: .info)) }
-                AuthButton(kind: .email) { store.onboardingStep = .login }
+                // Only the code by email today. Apple / Google (API.md §2.2) are NOT rendered until
+                // they work: a button that only says "llega después" is an App Review 2.1 rejection.
+                // `AuthButton.Kind` keeps both cases so they slot back in above this one.
+                AuthButton(kind: .email, primary: true) { store.onboardingStep = .login }
                 Button {
                     store.onboardingStep = .login
                 } label: {
@@ -200,7 +200,11 @@ struct SignUpView: View {
 struct AuthButton: View {
     enum Kind { case apple, google, email }
     let kind: Kind
+    /// The solid pill (text fill). Apple's by default; correo takes it while it's the only way in.
+    var primary: Bool? = nil
     let action: () -> Void
+
+    private var solid: Bool { primary ?? (kind == .apple) }
 
     var body: some View {
         Button(action: action) {
@@ -217,10 +221,10 @@ struct AuthButton: View {
                 }
             }
             .font(.kura.ui(16, .semibold))
-            .foregroundStyle(kind == .apple ? KColor.bg : KColor.text)
+            .foregroundStyle(solid ? KColor.bg : KColor.text)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(kind == .apple ? KColor.text : KColor.glassBg, in: Capsule())
+            .background(solid ? KColor.text : KColor.glassBg, in: Capsule())
             .contentShape(Capsule())
         }
         .kPress()
@@ -671,12 +675,8 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 20)
                     .accessibilityAddTraits(.isHeader)
-                AuthButton(kind: .apple) { store.showToast(ToastModel(text: "Apple llega después. Por ahora, con correo.", kind: .info)) }
-                AuthButton(kind: .google) { store.showToast(ToastModel(text: "Google llega después. Por ahora, con correo.", kind: .info)) }
-                Text("o con correo")
-                    .monoLabel(11, color: KColor.text3)
-                    .padding(.top, 14)
-                    .padding(.bottom, 2)
+                // Correo only (see SignUpView): when Apple / Google work, they go here with an
+                // "o con correo" label between them and the field.
                 GlassField(placeholder: "tu correo", text: $email, focus: $focused)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)

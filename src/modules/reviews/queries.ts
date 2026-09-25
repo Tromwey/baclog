@@ -8,6 +8,7 @@ import {
   users,
 } from "@/db/schema";
 import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
+import { notBlockedWith } from "@/modules/social/block-gate";
 import { decodeCursor, encodeCursor } from "./cursor";
 import { FALLBACK_ADN, isLegibleBehindText, relativeWhen } from "./format";
 import {
@@ -152,6 +153,13 @@ export async function getReviewFeedPage(
      * are keyed on handles, never ids).
      */
     excludeUsername?: string | null;
+    /**
+     * The signed-in viewer, when there is one: authors with a block in
+     * EITHER direction (`user_block`, App Store 1.2) are left out of every
+     * page, inside the query. Anonymous pages pass nothing — no viewer, no
+     * block to honor.
+     */
+    viewerId?: string | null;
     cursor?: string | null;
     limit?: number;
     now?: number;
@@ -193,6 +201,7 @@ export async function getReviewFeedPage(
         opts.excludeUsername
           ? sql`${users.username} <> ${opts.excludeUsername}`
           : undefined,
+        opts.viewerId ? notBlockedWith(opts.viewerId, users.id) : undefined,
         after
           ? or(
               lt(itemReviews.createdAt, after.at),
@@ -250,7 +259,9 @@ export async function getReviewFeedPage(
  *    embeds); a cursor = a following page at `REVIEW_MORE_SIZE` (the web's
  *    "ver más" size). Keyset, so mixing sizes is safe.
  * Public gate (`publicAuthor` + `hidden_at IS NULL`) inside the query, as for
- * every read in this file. The caller validates the cursor (`decodeCursor`).
+ * every read in this file, plus the block gate for this viewer (an author
+ * with a block in either direction is out of every page). The caller
+ * validates the cursor (`decodeCursor`).
  */
 export async function getOthersReviewsPage(
   viewerId: string,
@@ -260,6 +271,7 @@ export async function getOthersReviewsPage(
 ): Promise<ReviewFeedPage> {
   return getReviewFeedPage(catalogItemId, {
     excludeUserId: viewerId,
+    viewerId,
     cursor,
     limit: cursor ? REVIEW_MORE_SIZE : REVIEW_PAGE_SIZE,
     now,

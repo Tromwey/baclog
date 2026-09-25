@@ -85,6 +85,19 @@ protocol KuraAPI: Sendable {
     func feed(cursor: String?) async throws -> FeedPage
     func feedSuggestion() async throws -> FeedEvent?
 
+    // MARK: Safety (App Review 1.2: report and block user-generated content)
+    /// `POST /people/{handle}/report` `{ reason, details? }` → 204. `reason` is a `ReportReason.profile` id.
+    func reportPerson(handle: String, reason: String, details: String?) async throws
+    /// `POST /reviews/{id}/report` `{ reason }` → 204. `reason` is a `ReportReason.review` id.
+    func reportReview(id: String, reason: String) async throws
+    /// `PUT /me/blocks/{handle}` → 204 (404 when the handle doesn't exist). The server drops the
+    /// follows both ways and hides each one's activity, reviews, search and suggestions from the other.
+    func block(handle: String) async throws
+    /// `DELETE /me/blocks/{handleOrId}` → 204.
+    func unblock(_ handleOrID: String) async throws
+    /// `GET /me/blocks` → `{ items }`.
+    func blocks() async throws -> [BlockedAccount]
+
     // MARK: Recap
     func recapMonths() async throws -> [RecapMonth]
     func recap(era: String) async throws -> RecapPayload
@@ -115,6 +128,8 @@ enum KuraAPIError: Error, Equatable {
     /// The task was cancelled (a view went away): never retried, never shown.
     case cancelled
     case server(String)
+
+    var isRateLimit: Bool { if case .rateLimited = self { return true }; return false }
 
     /// Text for the toast, in the Kura voice (what happened, what to do).
     var toast: String {
@@ -281,7 +296,8 @@ struct MockAPI: KuraAPI {
     // People and feed
     func person(handle: String) async throws -> Person {
         guard var p = MockData.people.first(where: { $0.id == handle }) else { throw KuraAPIError.notFound }
-        p.isFollowing = MockData.following.contains(handle)
+        p.isBlocked = MockSafety.shared.contains(handle)
+        p.isFollowing = !p.isBlocked && MockData.following.contains(handle)
         return p
     }
     func personCollection(handle: String, id: String) async throws -> CollectionDetail {
@@ -320,6 +336,20 @@ struct MockAPI: KuraAPI {
     }
     func feedSuggestion() async throws -> FeedEvent? { nil }
 
+    // Safety — the block list lives in `MockSafety` so blocking, the profile and Ajustes agree.
+    func reportPerson(handle: String, reason: String, details: String?) async throws { try await write() }
+    func reportReview(id: String, reason: String) async throws { try await write() }
+    func block(handle: String) async throws {
+        try await write()
+        guard let p = MockData.people.first(where: { $0.id == handle }) else { throw KuraAPIError.notFound }
+        MockSafety.shared.block(BlockedAccount(id: "u-\(p.handle)", handle: p.handle, name: p.name))
+    }
+    func unblock(_ handleOrID: String) async throws {
+        try await write()
+        MockSafety.shared.unblock(handleOrID)
+    }
+    func blocks() async throws -> [BlockedAccount] { MockSafety.shared.list }
+
     // Recap
     func recapMonths() async throws -> [RecapMonth] {
         [RecapMonth(era: "2026-08", label: "agosto 2026"), RecapMonth(era: "2026-07", label: "julio 2026"),
@@ -342,4 +372,19 @@ extension MockAPI {
         let ids = (following ? MockData.followingOf[handle] : MockData.followersOf[handle]) ?? []
         return ids.compactMap { id in MockData.people.first { $0.id == id } }
     }
+}
+
+/// The mock's block list (`MockAPI` is a value type): shared, so a block from a profile shows up
+/// in Ajustes › Cuentas bloqueadas and a reopened profile comes back blocked.
+final class MockSafety: @unchecked Sendable {
+    static let shared = MockSafety()
+    private let lock = NSLock()
+    private var blocked: [BlockedAccount] = MockData.blocked
+
+    var list: [BlockedAccount] { lock.withLock { blocked } }
+    func contains(_ handle: String) -> Bool { lock.withLock { blocked.contains { $0.handle == handle } } }
+    func block(_ a: BlockedAccount) {
+        lock.withLock { if !blocked.contains(where: { $0.id == a.id }) { blocked.insert(a, at: 0) } }
+    }
+    func unblock(_ key: String) { lock.withLock { blocked.removeAll { $0.key == key || $0.id == key } } }
 }

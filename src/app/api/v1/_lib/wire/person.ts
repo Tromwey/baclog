@@ -47,6 +47,9 @@ export function toPersonLite(row: PersonLiteInput): Person {
     common: [],
     collections: [],
     isFollowing: row.following ?? false,
+    // Lists never contain someone the caller blocked (block-gate.ts), so a
+    // lite card is never blocked; only `GET /people/{handle}` sets it.
+    isBlocked: false,
     why: row.why ?? null,
     ...(row.isPrivate ? { isPrivate: true } : {}),
   };

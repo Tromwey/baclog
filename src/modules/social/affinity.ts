@@ -11,6 +11,7 @@ import {
   users,
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
+import { notBlockedWith } from "./block-gate";
 import { publicAuthor } from "./queries";
 
 /**
@@ -26,7 +27,9 @@ import { publicAuthor } from "./queries";
  * the profile owner keeps them in a PUBLIC backlog (`backlog.is_public`).
  * The count and the strip come from the same gated set on purpose: a count
  * that included private shelves would let a viewer add a title and watch the
- * number tick, which is an oracle on a private backlog. The viewer's own side
+ * number tick, which is an oracle on a private backlog. A block in either
+ * direction (`notBlockedWith`) makes the whole thing null, and a blocked
+ * account is never named as a shared follow. The viewer's own side
  * needs no gate (it's their own library). Never accepts a user id from the
  * client: `viewerId` is the session's.
  */
@@ -55,7 +58,14 @@ export async function getAffinity(
   const [profile] = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.username, username), publicAuthor, ne(users.id, viewerId)))
+    .where(
+      and(
+        eq(users.username, username),
+        publicAuthor,
+        ne(users.id, viewerId),
+        notBlockedWith(viewerId, users.id),
+      ),
+    )
     .limit(1);
   if (!profile) return null;
   const profileId = profile.id;
@@ -94,7 +104,14 @@ export async function getAffinity(
           eq(theirs.followedUserId, userFollows.followedUserId),
         ),
       )
-      .innerJoin(users, and(eq(users.id, userFollows.followedUserId), publicAuthor))
+      .innerJoin(
+        users,
+        and(
+          eq(users.id, userFollows.followedUserId),
+          publicAuthor,
+          notBlockedWith(viewerId, users.id),
+        ),
+      )
       .where(eq(userFollows.followerUserId, viewerId))
       .orderBy(desc(userFollows.createdAt)),
     db

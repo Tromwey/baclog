@@ -1,17 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getCurrentUser } from "@/auth";
 import { assertOwnsUserItem, assertUser } from "@/authz";
-import { db } from "@/db";
-import { itemReviews, reports } from "@/db/schema";
 import { getReviewFeedPage } from "@/modules/reviews/queries";
 import { deleteOwnReview, saveReview } from "@/modules/reviews/write";
+import { reviewReportBodySchema } from "@/modules/reports/types";
+import { reportReview } from "@/modules/reports/write";
 import {
   REVIEW_MORE_SIZE,
-  REVIEW_REPORT_REASONS,
   type ReviewFeedPage,
   type ReviewReportReason,
 } from "@/modules/reviews/types";
@@ -91,6 +89,7 @@ export async function loadMoreReviewsAction(input: {
   const viewer = await getCurrentUser();
   return getReviewFeedPage(id.data, {
     excludeUserId: viewer?.id ?? null,
+    viewerId: viewer?.id ?? null,
     excludeUsername: owner.data ?? null,
     cursor: cursor.data,
     limit: REVIEW_MORE_SIZE,
@@ -99,56 +98,21 @@ export async function loadMoreReviewsAction(input: {
 
 /**
  * Report someone else's review. Signed-in only — the public page shows no ⋯
- * for anonymous viewers, and a report with nobody behind it is worth less than
- * the abuse surface it opens.
- *
- * `targetUserId` carries the review's AUTHOR so the moderation queue gets
- * repeat-offender context without a second join. Like the profile report, the
- * response is always the same: it never confirms whether the review exists,
- * whether it was already reported, or whether anything happened.
+ * for anonymous viewers. The rules (author as `targetUserId`, own / missing /
+ * already-reported skipped) live in `modules/reports/write.ts`, shared with
+ * `POST /api/v1/reviews/{id}/report`. Like the profile report, the response is
+ * always the same: it never confirms whether the review exists, whether it was
+ * already reported, or whether anything happened.
  */
-const REVIEW_REASONS = REVIEW_REPORT_REASONS.map((r) => r.id) as [
-  ReviewReportReason,
-  ...ReviewReportReason[],
-];
-
 export async function reportReviewAction(input: {
   reviewId: string;
   reason: ReviewReportReason;
 }) {
   const user = await assertUser();
-  const parsed = z
-    .object({ reviewId: z.string().min(1), reason: z.enum(REVIEW_REASONS) })
-    .safeParse(input);
-  if (!parsed.success) return { ok: true as const };
+  const reviewId = z.string().min(1).safeParse(input.reviewId);
+  const body = reviewReportBodySchema.safeParse({ reason: input.reason });
+  if (!reviewId.success || !body.success) return { ok: true as const };
 
-  const [review] = await db
-    .select({ id: itemReviews.id, authorId: itemReviews.userId })
-    .from(itemReviews)
-    .where(eq(itemReviews.id, parsed.data.reviewId))
-    .limit(1);
-  // Nonexistent, or your own: same silent success as a real report.
-  if (!review || review.authorId === user.id) return { ok: true as const };
-
-  // One open report per (reporter, review) — re-tapping shouldn't inflate the
-  // count the queue sorts by.
-  const [existing] = await db
-    .select({ id: reports.id })
-    .from(reports)
-    .where(
-      and(
-        eq(reports.targetReviewId, review.id),
-        eq(reports.reporterUserId, user.id),
-      ),
-    )
-    .limit(1);
-  if (existing) return { ok: true as const };
-
-  await db.insert(reports).values({
-    reporterUserId: user.id,
-    targetUserId: review.authorId,
-    targetReviewId: review.id,
-    reason: parsed.data.reason,
-  });
+  await reportReview(user.id, reviewId.data, body.data);
   return { ok: true as const };
 }

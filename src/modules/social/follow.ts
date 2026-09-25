@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userFollows, users } from "@/db/schema";
 import { parseHandleOrNull } from "@/modules/account/username";
+import { notBlockedWith } from "./block-gate";
 import { publicAuthor } from "./queries";
 
 /**
@@ -27,6 +28,9 @@ export type FollowResult = { ok: true } | { error: "not_found" | "invalid" };
  * apart), so a private handle and a nonexistent one fail identically (no
  * enumeration oracle, same posture as getPublicProfile). Self-follow resolves
  * to the same not_found. Re-following is an upsert no-op (the pair unique).
+ * A block in EITHER direction (`user_block`, App Store 1.2) is the same
+ * not_found too — the gate sits in the same query, so a follow can't be
+ * recreated while the block exists.
  */
 export async function followUser(
   viewerId: string,
@@ -38,7 +42,13 @@ export async function followUser(
   const [target] = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.username, handle), publicAuthor))
+    .where(
+      and(
+        eq(users.username, handle),
+        publicAuthor,
+        notBlockedWith(viewerId, users.id),
+      ),
+    )
     .limit(1);
   if (!target || target.id === viewerId) return { error: "not_found" };
 

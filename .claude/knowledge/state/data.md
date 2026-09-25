@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap`)
+> Actualizado: 2026-09-24 (migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` generada, SIN aplicar)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -26,7 +26,7 @@ Tablas principales en `schema.ts`: `users` (con `token_version` y `notify_recap`
 NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews`, `userFollows`,
 `mediaLinks`, `crossMediaLinks`, `crossMediaRecs`, `crossMediaRecUsage`, `crossMediaRecSeen`,
 `crossMediaRecoFeedback`, `llmCallLog`, `analyticsEvents`, `waitlistEntries`, `waitlistReferrals`,
-`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11).
+`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11), `userBlocks` (App Store 1.2, 0028 — sin aplicar).
 
 Últimas migraciones: **0023 `user_follows`** (F3.10, aditiva-inocua — `user_follow` con unique
 `(follower, followed)` + índice en `followed`) y **0024 `backlog_visibility`** (F3.10.1, aditiva —
@@ -60,6 +60,16 @@ con que se acuñó y la relectura por request lo compara; el ÚNICO escritor es 
 (default `true` como `notify_releases`, porque el correo ya existía); SÍ va en `USER_COLUMNS` → `CurrentUser`
 → `Me`, nunca en `Person`; lectores: `api/cron/recap` (audiencia) y Ajustes.
 
+**0028 `user_block`** (App Store 1.2 — reportar y bloquear, 2026-09-24; **generada con `drizzle-kit generate`, NO
+aplicada**: la aplica el founder en la DB compartida). Aditiva-inocua: `CREATE TABLE user_block (blocker_user_id
+text NOT NULL → user ON DELETE CASCADE, blocked_user_id text NOT NULL → user ON DELETE CASCADE, created_at
+timestamp DEFAULT now() NOT NULL, PK (blocker_user_id, blocked_user_id))` + índice `user_block_blocked_idx` en
+`blocked_user_id` (la otra mitad del gate). Guardada en un sentido, **mutua en visibilidad** (AGENTS.md). ⚠️ **Orden
+obligatorio: aplicar 0028 ANTES de desplegar el código** — `notBlockedWith` vive en queries calientes (feed,
+reseñas de la ficha, búsqueda, `followUser`) y sin la tabla responden 500 (42P01); no hay kill-switch. Probada
+sobre un Postgres 17 local limpio: 0000–0028 aplican en orden sin errores. Borrar una cuenta cascadea sus
+bloqueos en ambos sentidos (no hace falta tocar `deleteAccount`).
+
 Deuda anotada: las ramas del feed ordenan por timestamps sin índice compuesto `(user_id, <at>)`
 (escanean por `user_id` y ordenan). Costo por página de `/feed` (feed v2): 1 query de ids seguidos + por
 chunk 4 ramas en paralelo (`limit+1` = 25 filas cada una) + 1 query de ADN solo para autores no vistos;
@@ -81,6 +91,9 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
+- **0028 `user_block` pendiente de aplicar (2026-09-24)** — `drizzle/0028_user_block.sql` + snapshot/journal 0028
+  en el árbol, sin commit. Aplicarla (founder) antes de cualquier deploy que incluya `modules/social/block-gate.ts`.
+  Después: `pnpm tsx scripts/api-smoke.ts --only writes` con cuenta QA corre los casos E1 de reportar/bloquear.
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->

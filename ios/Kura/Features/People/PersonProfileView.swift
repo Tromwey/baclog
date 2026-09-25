@@ -29,12 +29,13 @@ struct PersonProfileView: View {
 
     private func content(_ p: Person) -> some View {
         let following = store.isFollowing(p.id)
-        let locked = p.isPrivate && !following
+        let blocked = store.isBlocked(p.id)
+        let locked = blocked || (p.isPrivate && !following)
         return ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    header(p, following: following, locked: locked)
+                    header(p, following: following, locked: locked, blocked: blocked)
                     if let e = store.loadError(.person(p.id)) {
                         // What's on screen came from a list (counts 0, no collections): say it's partial.
                         RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar todo el perfil.") {
@@ -43,7 +44,10 @@ struct PersonProfileView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 12)
                     }
-                    if locked {
+                    if blocked {
+                        BlockedNote(handle: p.handle)
+                            .padding(.top, 4)
+                    } else if locked {
                         LockedCollections(firstName: firstName(p))
                             .padding(.top, 10)
                     } else {
@@ -59,7 +63,7 @@ struct PersonProfileView: View {
 
     private func firstName(_ p: Person) -> String { p.name.split(separator: " ").first.map(String.init) ?? p.handle }
 
-    private func header(_ p: Person, following: Bool, locked: Bool) -> some View {
+    private func header(_ p: Person, following: Bool, locked: Bool, blocked: Bool) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 8) {
                 BackChip()
@@ -94,7 +98,11 @@ struct PersonProfileView: View {
                 }
             }
             HStack(spacing: 8) {
-                followButton(p, following: following)
+                if blocked {
+                    UnblockButton(handle: p.handle)
+                } else {
+                    followButton(p, following: following)
+                }
             }
         }
         .padding(.top, KSize.chromeTop)
@@ -286,6 +294,43 @@ private struct LockedCollections: View {
     }
 }
 
+/// A profile you blocked: the shape stays (so you know whose it is), nothing of theirs shows.
+private struct BlockedNote: View {
+    let handle: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Bloqueaste a @\(handle).")
+                .font(.kura.news(24)).foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text("No ves su actividad ni sus reseñas, y no ve las tuyas. Si la desbloqueas, no vuelven a seguirse solos.")
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 24)
+    }
+}
+
+/// Replaces Seguir on a blocked profile: `DELETE /me/blocks/{handle}`, then the profile re-reads.
+private struct UnblockButton: View {
+    @Environment(AppStore.self) private var store
+    let handle: String
+    @State private var busy = false
+
+    var body: some View {
+        GlassButton(title: busy ? "Desbloqueando…" : "Desbloquear", height: 48, fontSize: 16) {
+            guard !busy else { return }
+            busy = true
+            Task {
+                await store.unblock(handle, handle: handle)
+                busy = false
+            }
+        }
+        .disabled(busy)
+        .accessibilityLabel(busy ? "Desbloqueando" : "Desbloquear a @\(handle)")
+    }
+}
+
 // MARK: - O10a Opciones de perfil
 
 struct PersonOptionsSheet: View {
@@ -303,32 +348,36 @@ struct PersonOptionsSheet: View {
                     }
                 }
                 .padding(.bottom, 10)
-                if let link = PublicLinks.profile(p.handle) {
-                    ShareLink(item: link) {
-                        optionRow("square.and.arrow.up", "Compartir perfil", note: nil)
+                if store.isBlocked(p.id) {
+                    Button {
+                        store.dismissSheet()
+                        Task { await store.unblock(p.handle, handle: p.handle) }
+                    } label: {
+                        optionRow("nosign", "Desbloquear", note: "Vuelves a ver su actividad y sus reseñas.")
+                    }
+                    .buttonStyle(SheetRowStyle())
+                } else {
+                    if let link = PublicLinks.profile(p.handle) {
+                        ShareLink(item: link) {
+                            optionRow("square.and.arrow.up", "Compartir perfil", note: nil)
+                        }
+                        .buttonStyle(SheetRowStyle())
+                    }
+                    Button {
+                        store.dismissSheet()
+                        store.toggleMute(p.id)
+                    } label: {
+                        optionRow(store.muted.contains(p.id) ? "speaker.wave.2" : "speaker.slash",
+                                  store.muted.contains(p.id) ? "Volver a mostrar en el feed" : "Silenciar en el feed",
+                                  note: "La quita del feed sin dejar de seguirla; no se entera.")
+                    }
+                    .buttonStyle(SheetRowStyle())
+                    Button { store.present(.block(p.id)) } label: {
+                        optionRow("nosign", "Bloquear", note: "Dejan de seguirse y no ven lo que hace el otro.")
                     }
                     .buttonStyle(SheetRowStyle())
                 }
-                Button {
-                    store.dismissSheet()
-                    store.toggleMute(p.id)
-                } label: {
-                    optionRow(store.muted.contains(p.id) ? "speaker.wave.2" : "speaker.slash",
-                              store.muted.contains(p.id) ? "Volver a mostrar en el feed" : "Silenciar en el feed",
-                              note: "La quita del feed sin dejar de seguirla; no se entera.")
-                }
-                .buttonStyle(SheetRowStyle())
-                Button {
-                    store.dismissSheet()
-                    store.showToast(ToastModel(text: "Bloquear llega con la API real.", kind: .info))
-                } label: {
-                    optionRow("nosign", "Bloquear", note: "Abre su propia hoja con lo que pasa.")
-                }
-                .buttonStyle(SheetRowStyle())
-                Button {
-                    store.dismissSheet()
-                    store.showToast(ToastModel(text: "Gracias. Lo revisamos.", kind: .info))
-                } label: {
+                Button { store.present(.report(.person(handle: p.handle))) } label: {
                     optionRow("flag", "Reportar", note: nil)
                 }
                 .buttonStyle(SheetRowStyle())
