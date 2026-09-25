@@ -194,6 +194,30 @@ function noReviewNear(userCol: AnyColumn, catalogCol: AnyColumn, atCol: AnyColum
   return sql`not exists (select 1 from ${itemReviews} where ${itemReviews.userId} = ${userCol} and ${itemReviews.catalogItemId} = ${catalogCol} and ${itemReviews.hiddenAt} is null and ${sameMoment(itemReviews.createdAt, atCol)})`;
 }
 
+/**
+ * One sitting's adds of a title to several public backlogs → one event. The
+ * names read "A y B" / "A, B y C" (newest first); the id becomes the SORTED
+ * ids joined by "+" — a grouping key, not a URL: bursts (web `group.ts`, the
+ * app's `FeedBursts`) join on equal ids, so five titles each filed into the
+ * same pair still fold into one "Agregó 5 títulos a Pendientes y 2026".
+ */
+function joinShelves(
+  shelves: unknown,
+  backlogId: string,
+  backlogName: string,
+): { backlogId: string; backlogName: string } {
+  const parsed = typeof shelves === "string" ? JSON.parse(shelves) : shelves;
+  const list = Array.isArray(parsed)
+    ? (parsed as [string, string][]).filter((x) => Array.isArray(x) && x.length === 2)
+    : [];
+  if (list.length < 2) return { backlogId, backlogName };
+  const names = list.map(([, n]) => n);
+  return {
+    backlogId: list.map(([id]) => id).sort().join("+"),
+    backlogName: `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`,
+  };
+}
+
 interface RawEvent {
   kind: FeedEventKind;
   rowId: string;
@@ -260,8 +284,12 @@ async function fetchFeedChunk(
   const [adds, completions, obsessions, reviews] = await Promise.all([
     // "Agregó {título} a {backlog}" — per MEMBERSHIP add, so filing a title
     // into a second backlog is (correctly) new activity, with the shelf named.
+    // Filing it into SEVERAL public backlogs in one sitting is ONE event
+    // (founder, 2026-09-25): the newest add survives and `shelves` lists
+    // every public backlog of that sitting → "Agregó a Pendientes y 2026".
     db
       .select({
+        shelves: sql<unknown>`(select json_agg(json_build_array(b2.id, b2.name) order by bi2.added_at desc, bi2.id desc) from ${backlogItems} bi2 join ${backlogs} b2 on b2.id = bi2.backlog_id and b2.is_public where bi2.user_id = ${backlogItems.userId} and bi2.catalog_item_id = ${backlogItems.catalogItemId} and (bi2.id = ${backlogItems.id} or ((bi2.added_at < ${backlogItems.addedAt} or (bi2.added_at = ${backlogItems.addedAt} and bi2.id < ${backlogItems.id})) and ${sameMoment(sql`bi2.added_at`, backlogItems.addedAt)})))`,
         rowId: backlogItems.id,
         at: backlogItems.addedAt,
         userId: backlogItems.userId,
@@ -307,6 +335,9 @@ async function fetchFeedChunk(
             sql`'added:' || ${backlogItems.id}`,
             after,
           ),
+          // Not the newest public add of this title in its sitting: the newest
+          // one carries this backlog in its `shelves`.
+          sql`not exists (select 1 from ${backlogItems} bi2 join ${backlogs} b2 on b2.id = bi2.backlog_id and b2.is_public where bi2.user_id = ${backlogItems.userId} and bi2.catalog_item_id = ${backlogItems.catalogItemId} and (bi2.added_at > ${backlogItems.addedAt} or (bi2.added_at = ${backlogItems.addedAt} and bi2.id > ${backlogItems.id})) and ${sameMoment(sql`bi2.added_at`, backlogItems.addedAt)})`,
           // A save is the least relevant event: any reaction in the sitting wins.
           sql`not exists (select 1 from ${userItems} where ${userItems.userId} = ${backlogItems.userId} and ${userItems.catalogItemId} = ${backlogItems.catalogItemId} and ((${userItems.status} = 'completed' and ${sameMoment(userItems.statusChangedAt, backlogItems.addedAt)}) or (${userItems.obsessed} and ${sameMoment(userItems.obsessedAt, backlogItems.addedAt)})))`,
           noReviewNear(backlogItems.userId, backlogItems.catalogItemId, backlogItems.addedAt),
@@ -460,8 +491,9 @@ async function fetchFeedChunk(
   ]);
 
   const raw: RawEvent[] = [
-    ...adds.map((r) => ({
+    ...adds.map(({ shelves, ...r }) => ({
       ...r,
+      ...joinShelves(shelves, r.backlogId, r.backlogName),
       kind: "added" as const,
       verdict: null,
       obsessed: false,
