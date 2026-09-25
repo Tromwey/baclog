@@ -34,6 +34,17 @@ struct ProfileView: View {
         }
     }
 
+    /// "tus colecciones" on the profile: a collection whose every title is already an obsession
+    /// repeats "me obsesiona" (the onboarding's "Obsesiones" is exactly that), so it's left out
+    /// here — only here: it's still a normal collection in the Colecciones tab. It comes back the
+    /// moment it holds something that isn't an obsession. Nothing left = no section.
+    private var profileCollections: [KCollection] {
+        let obsessed = Set(obsessions.map(\.id))
+        return Array(store.orderedCollections
+            .filter { !$0.titleIDs.isEmpty && !Set($0.titleIDs).isSubset(of: obsessed) }
+            .prefix(4))
+    }
+
     private var headerPalette: [String]? {
         if let id = store.me.featuredTitleID, let t = store.title(id) { return t.palette }
         return obsessions.first?.palette
@@ -109,6 +120,7 @@ struct ProfileView: View {
                                 .scrollClipDisabled()
                             }
                         }
+                        if !profileCollections.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text("tus colecciones").font(.kura.section).foregroundStyle(KColor.text)
@@ -119,7 +131,7 @@ struct ProfileView: View {
                             }
                             .padding(.horizontal, 20)
                             VStack(spacing: 12) {
-                                ForEach(store.orderedCollections.filter { !$0.titleIDs.isEmpty }.prefix(4)) { c in
+                                ForEach(profileCollections) { c in
                                     CollectionCard(collection: c, titles: store.titles(in: c), marks: [:],
                                                    palette: store.palette(of: c), coverHeight: 104, spineSize: 11,
                                                    waitingLabel: { store.isUnreleased($0) ? store.releaseLabel($0) : nil },
@@ -127,6 +139,7 @@ struct ProfileView: View {
                                                    onLongPress: { store.present(.collectionQuick(c.id)) })
                                 }
                             }
+                        }
                         }
                     }
                     .padding(.top, 8)
