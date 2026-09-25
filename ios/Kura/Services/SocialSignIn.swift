@@ -22,6 +22,42 @@ enum AppleNonce {
     }
 }
 
+/// Google sign-in's nonce. `GoogleOAuth` generates a random one per flow (same generator as
+/// `AppleNonce`), sends it as `nonce` in the authorization URL — Google copies it verbatim into the
+/// `nonce` claim of the `id_token` — and checks the returned token carries it. The raw value then
+/// travels as `nonce` in the body of `POST /auth/google` and `POST /me/identities/google`, where the
+/// server requires `id_token.nonce === body.nonce` when the field is present.
+///
+/// `KuraAPI.signInWithGoogle(idToken:)`/`linkGoogle(idToken:)` only take the token, so the nonce
+/// rides alongside in this small in-memory map keyed by the token (the last few flows only; never
+/// persisted, never logged). A lookup is NOT consuming: the store's "Reintentar" after an offline
+/// failure re-sends the same token and must send the same nonce.
+enum GoogleNonce {
+    private static let lock = NSLock()
+    private static var byToken: [String: String] = [:]
+    private static var order: [String] = []
+    private static let capacity = 4
+
+    static func make() -> String { AppleNonce.make() }
+
+    static func remember(_ nonce: String, for idToken: String) {
+        lock.withLock {
+            if byToken.updateValue(nonce, forKey: idToken) == nil { order.append(idToken) }
+            while order.count > capacity { byToken[order.removeFirst()] = nil }
+        }
+    }
+
+    static func nonce(for idToken: String) -> String? {
+        lock.withLock { byToken[idToken] }
+    }
+
+    /// The `nonce` claim of an `id_token` (payload decoded, signature NOT checked — the server is
+    /// the authority; this only catches a token that didn't come from this flow).
+    static func claim(of idToken: String) -> String? {
+        Session.claims(of: idToken)?["nonce"] as? String
+    }
+}
+
 extension AppleCredential {
     /// What an Apple authorization hands over, ready for `POST /auth/apple` or
     /// `POST /me/identities/apple`. nil when Apple didn't return an identity token.
@@ -139,6 +175,7 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
         let verifier = Self.base64URL(Self.randomBytes(32))
         let challenge = Self.base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
         let state = Self.base64URL(Self.randomBytes(16))
+        let nonce = GoogleNonce.make()
 
         var comps = URLComponents(url: Self.authorizeURL, resolvingAgainstBaseURL: false)!
         comps.queryItems = [
@@ -149,6 +186,7 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "nonce", value: nonce),
             URLQueryItem(name: "prompt", value: "select_account")
         ]
         guard let url = comps.url else { throw Failure.rejected }
@@ -160,7 +198,14 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
             throw error == "access_denied" ? Failure.cancelled : Failure.rejected
         }
         guard item("state") == state, let code = item("code"), !code.isEmpty else { throw Failure.rejected }
-        return try await exchange(code: code, verifier: verifier, clientID: clientID, redirect: redirect)
+        let idToken = try await exchange(code: code, verifier: verifier, clientID: clientID, redirect: redirect)
+        // A token without THIS flow's nonce never leaves the app.
+        guard GoogleNonce.claim(of: idToken) == nonce else {
+            KuraLog.api.error("google id_token nonce mismatch")
+            throw Failure.rejected
+        }
+        GoogleNonce.remember(nonce, for: idToken)
+        return idToken
     }
 
     private func present(url: URL, scheme: String) async throws -> URL {

@@ -26,6 +26,8 @@ final class Session: @unchecked Sendable {
         cached = token
         loaded = true
         keychain.write(token)
+        // A bearer on disk always comes with the marker (see `InstallMarker`).
+        InstallMarker.markPresent()
     }
 
     func clear() {

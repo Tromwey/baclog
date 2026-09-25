@@ -34,13 +34,88 @@ final class SameOriginRedirects: NSObject, URLSessionTaskDelegate, @unchecked Se
 
 // MARK: - Endpoint
 
+/// One path segment built from a runtime value (a handle, an id, an APNs token, an era).
+///
+/// `URLComponents.path` lets `/` and `..` through untouched (`people/../../account/x` resolved to
+/// `/api/account/x`), so a value that came from the server, a deep link or a push payload could
+/// steer a bearer-carrying request to another route. Every interpolated value is therefore ONE
+/// segment: percent-encoded with `urlPathAllowed` minus `/` and `;` (so `%`, `?`, `#`, `/` are
+/// escaped), and the dot segments `.` / `..` — which the WHATWG URL parser also recognizes when
+/// spelled `%2e` — plus the empty string are rejected outright (`nil`): the request fails locally
+/// as `notFound`, the server's own posture for a malformed id in the path. Normal values
+/// (`[a-z0-9_]` handles, UUIDs, hex tokens, `YYYY-MM` eras) come out byte-for-byte unchanged.
+enum PathSegment {
+    static let allowed: CharacterSet = {
+        var s = CharacterSet.urlPathAllowed
+        s.remove(charactersIn: "/;")
+        return s
+    }()
+
+    static func encode(_ raw: String) -> String? {
+        guard !raw.isEmpty, raw != ".", raw != ".." else { return nil }
+        return raw.addingPercentEncoding(withAllowedCharacters: allowed)
+    }
+}
+
+/// A path under `/api/v1`, written as a string literal with interpolations:
+/// `"people/\(handle)/collections/\(id)"`. The literal text is ours (the route shape) and passes
+/// through as-is; EVERY interpolated value goes through `PathSegment.encode`, so no call site can
+/// forget to encode. `template` is the same path with each value as `:id` — the only form of a
+/// path that may be logged `.public`.
+struct APIPath: ExpressibleByStringInterpolation, Equatable, Sendable {
+    /// Percent-encoded, relative to the base (no leading slash).
+    let encoded: String
+    /// Route shape for public logs (`people/:id/collections/:id`).
+    let template: String
+    /// False when a value was empty or a dot segment: the request is never sent.
+    let isValid: Bool
+
+    init(stringLiteral value: String) {
+        encoded = value
+        template = value
+        isValid = true
+    }
+
+    init(stringInterpolation s: Interpolation) {
+        encoded = s.encoded
+        template = s.template
+        isValid = s.isValid
+    }
+
+    struct Interpolation: StringInterpolationProtocol {
+        var encoded = ""
+        var template = ""
+        var isValid = true
+
+        init(literalCapacity: Int, interpolationCount: Int) {
+            encoded.reserveCapacity(literalCapacity + interpolationCount * 36)
+        }
+
+        mutating func appendLiteral(_ literal: String) {
+            encoded += literal
+            template += literal
+        }
+
+        /// Only `String` on purpose: every value is named explicitly (`provider.rawValue`).
+        mutating func appendInterpolation(_ value: String) {
+            template += ":id"
+            if let seg = PathSegment.encode(value) {
+                encoded += seg
+            } else {
+                isValid = false
+                encoded += "_"
+            }
+        }
+    }
+}
+
 /// One HTTP call under `/api/v1`. Paths are relative to the base URL from
 /// `Info.plist` (`KuraAPIBase`, set per configuration in `project.yml`).
-struct Endpoint {
-    enum Method: String { case get = "GET", post = "POST", put = "PUT", patch = "PATCH", delete = "DELETE" }
+struct Endpoint: Sendable {
+    enum Method: String, Sendable { case get = "GET", post = "POST", put = "PUT", patch = "PATCH", delete = "DELETE" }
 
     var method: Method
-    var path: String
+    var path: APIPath
     var query: [URLQueryItem] = []
     var body: Data? = nil
     /// `Content-Type` of `body` (JSON unless a raw upload says otherwise).
@@ -52,27 +127,27 @@ struct Endpoint {
     /// True when a 401 must NOT end the session (logout).
     var suppressExpiry = false
 
-    static func get(_ path: String, _ query: [URLQueryItem] = []) -> Endpoint {
+    static func get(_ path: APIPath, _ query: [URLQueryItem] = []) -> Endpoint {
         Endpoint(method: .get, path: path, query: query)
     }
 
-    static func post<B: Encodable>(_ path: String, _ body: B, auth: Bool = true) throws -> Endpoint {
+    static func post<B: Encodable>(_ path: APIPath, _ body: B, auth: Bool = true) throws -> Endpoint {
         Endpoint(method: .post, path: path, body: try KuraJSON.encoder.encode(body), auth: auth)
     }
 
-    static func post(_ path: String) -> Endpoint { Endpoint(method: .post, path: path) }
+    static func post(_ path: APIPath) -> Endpoint { Endpoint(method: .post, path: path) }
 
-    static func put<B: Encodable>(_ path: String, _ body: B) throws -> Endpoint {
+    static func put<B: Encodable>(_ path: APIPath, _ body: B) throws -> Endpoint {
         Endpoint(method: .put, path: path, body: try KuraJSON.encoder.encode(body))
     }
 
-    static func put(_ path: String) -> Endpoint { Endpoint(method: .put, path: path) }
+    static func put(_ path: APIPath) -> Endpoint { Endpoint(method: .put, path: path) }
 
-    static func patch<B: Encodable>(_ path: String, _ body: B) throws -> Endpoint {
+    static func patch<B: Encodable>(_ path: APIPath, _ body: B) throws -> Endpoint {
         Endpoint(method: .patch, path: path, body: try KuraJSON.encoder.encode(body))
     }
 
-    static func delete(_ path: String) -> Endpoint { Endpoint(method: .delete, path: path) }
+    static func delete(_ path: APIPath) -> Endpoint { Endpoint(method: .delete, path: path) }
 }
 
 extension Notification.Name {
@@ -89,14 +164,85 @@ struct MergeableConflict: Error {
 
 // MARK: - Client
 
-/// `URLSession` + bearer + decoder/encoder + error mapping. Reads (`GET`)
-/// retry with exponential backoff (0.5 / 1 / 2 s) on transport failures and
-/// 5xx; writes never retry — the store's "Reintentar" toast is the retry.
+/// When a failed `GET` is tried again (writes never are — the store's "Reintentar" toast is the
+/// retry). Pure, so the scratch test can pin it down.
+///
+/// - Transport failures (offline, connection lost, DNS…) and 5xx: up to 3 retries with FULL
+///   jitter — a uniform delay in `0...0.5 s`, `0...1 s`, `0...2 s` — so thousands of phones that
+///   lost the same backend don't come back in lockstep.
+/// - A timeout never retries: the request already waited `timeoutIntervalForRequest` (20 s), and
+///   retrying it turned one slow backend into ~80 s of spinner and 4× the load.
+/// - `503`/`429` honor `Retry-After` (header or envelope) when it is at most `maxRetryAfter`
+///   seconds (+ up to 0.5 s of jitter); a longer wait is surfaced instead of slept through. A `429`
+///   without `Retry-After` isn't retried; a `503` without it backs off like any 5xx.
+enum RetryPolicy {
+    static let maxRetries = 3
+    static let backoff: [Double] = [0.5, 1, 2]
+    static let maxRetryAfter: Double = 5
+
+    enum Failure: Equatable {
+        case transport
+        case timedOut
+        case http(status: Int, retryAfter: Double?)
+        /// Cancelled, unauthorized, a bad response, any 4xx…: never retried.
+        case final
+    }
+
+    /// Seconds to wait before retry number `attempt + 1`, or nil to give up. `jitter(x)` returns a
+    /// uniform value in `0...x` (injectable for the test).
+    static func delay(afterAttempt attempt: Int, failure: Failure,
+                      jitter: (Double) -> Double = { Double.random(in: 0...$0) }) -> Double? {
+        guard attempt >= 0, attempt < maxRetries else { return nil }
+        switch failure {
+        case .timedOut, .final:
+            return nil
+        case .transport:
+            return jitter(backoff[attempt])
+        case .http(let status, let retryAfter):
+            if status == 429 || status == 503, let retryAfter {
+                return retryAfter <= maxRetryAfter ? max(0, retryAfter) + jitter(0.5) : nil
+            }
+            if status == 429 { return nil }
+            return (500...599).contains(status) ? jitter(backoff[attempt]) : nil
+        }
+    }
+
+    /// `Retry-After` as seconds: delta-seconds or an HTTP-date.
+    static func parseRetryAfter(_ header: String?, now: Date = Date()) -> Double? {
+        guard let raw = header?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        if let s = Double(raw) { return s >= 0 ? s : nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        guard let d = f.date(from: raw) else { return nil }
+        return max(0, d.timeIntervalSince(now))
+    }
+}
+
+/// `URLSession` + bearer + decoder/encoder + error mapping. Reads (`GET`) retry per
+/// `RetryPolicy`; identical reads in flight at the same time share one request.
 final class APIClient: @unchecked Sendable {
+    typealias Response = (data: Data, requestID: String?)
+
     let base: URL
     let session: Session
     private let urlSession: URLSession
-    private let retryDelays: [Duration] = [.milliseconds(500), .seconds(1), .seconds(2)]
+
+    /// One failed attempt: the error the caller sees + how `RetryPolicy` should read it.
+    private struct AttemptFailure: Error {
+        let error: Error
+        let kind: RetryPolicy.Failure
+    }
+
+    /// A `GET` in flight, shared by every caller that asks for the same URL with the same bearer.
+    private final class InFlight: @unchecked Sendable {
+        let id = UUID()
+        var task: Task<Response, Error>?
+        var waiters = 1
+    }
+    private let inFlightLock = NSLock()
+    private var inFlight: [String: InFlight] = [:]
 
     /// `KuraAPIBase` from `Info.plist`; Release falls back to production.
     static var configuredBase: URL {
@@ -129,11 +275,16 @@ final class APIClient: @unchecked Sendable {
     private struct MergeEnvelope: Decodable { let error: MergeProof }
 
     private func request(for e: Endpoint) throws -> URLRequest {
-        var path = base.path
+        // A value that was empty or a dot segment: never sent (the server would say 404 too).
+        guard e.path.isValid else { throw KuraAPIError.notFound }
+        guard var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            throw KuraAPIError.server("URL inválida")
+        }
+        // `percentEncodedPath`: `APIPath.encoded` is already escaped — the plain `path` setter
+        // would escape the `%` again (`%2F` → `%252F`).
+        var path = comps.percentEncodedPath
         if !path.hasSuffix("/") { path += "/" }
-        path += e.path
-        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
-        comps.path = path
+        comps.percentEncodedPath = path + e.path.encoded
         comps.queryItems = e.query.isEmpty ? nil : e.query
         guard let url = comps.url else { throw KuraAPIError.server("URL inválida") }
         var r = URLRequest(url: url)
@@ -157,51 +308,115 @@ final class APIClient: @unchecked Sendable {
     func data(_ e: Endpoint) async throws -> Data { try await fetch(e).data }
 
     /// The body plus the server's `X-Request-Id` (for the log).
-    private func fetch(_ e: Endpoint) async throws -> (data: Data, requestID: String?) {
+    ///
+    /// A `GET` whose exact URL (path + query) is already in flight WITH THE SAME BEARER joins that
+    /// request instead of sending another (two screens hydrating the same title on appear). The
+    /// bearer is part of the key on purpose: a response is never handed to a different session
+    /// (logout → sign in as someone else while the old read is still in flight).
+    private func fetch(_ e: Endpoint) async throws -> Response {
         let req = try request(for: e)
+        guard e.method == .get, e.body == nil, let url = req.url?.absoluteString else {
+            return try await run(req, endpoint: e)
+        }
+        let key = (req.value(forHTTPHeaderField: "Authorization") ?? "-") + " " + url
+        return try await shared(key) { [self] in try await run(req, endpoint: e) }
+    }
+
+    private func shared(_ key: String, _ work: @escaping @Sendable () async throws -> Response) async throws -> Response {
+        let entry: InFlight = inFlightLock.withLock {
+            if let existing = inFlight[key] {
+                existing.waiters += 1
+                return existing
+            }
+            let fresh = InFlight()
+            let id = fresh.id
+            fresh.task = Task { [weak self] in
+                defer { self?.finish(key, id: id) }
+                return try await work()
+            }
+            inFlight[key] = fresh
+            return fresh
+        }
+        return try await withTaskCancellationHandler {
+            guard let task = entry.task else { throw KuraAPIError.cancelled }
+            let r = try await task.value
+            if Task.isCancelled { throw KuraAPIError.cancelled }
+            return r
+        } onCancel: { [self] in
+            // The shared request dies only when EVERY caller has gone (same cut as before: a
+            // cancelled screen stops its own read and the retry sleep).
+            inFlightLock.withLock {
+                entry.waiters -= 1
+                guard entry.waiters <= 0 else { return }
+                entry.task?.cancel()
+                if inFlight[key]?.id == entry.id { inFlight[key] = nil }
+            }
+        }
+    }
+
+    private func finish(_ key: String, id: UUID) {
+        inFlightLock.withLock {
+            if inFlight[key]?.id == id { inFlight[key] = nil }
+        }
+    }
+
+    /// One call with the `RetryPolicy` loop around it (writes: a single attempt).
+    private func run(_ req: URLRequest, endpoint e: Endpoint) async throws -> Response {
         var attempt = 0
         while true {
             do {
                 return try await perform(req, endpoint: e)
-            } catch let err as KuraAPIError {
-                guard e.method == .get, attempt < retryDelays.count, err.isRetryable else { throw err }
+            } catch let f as AttemptFailure {
+                guard e.method == .get, let wait = RetryPolicy.delay(afterAttempt: attempt, failure: f.kind) else {
+                    throw f.error
+                }
                 // A throwing sleep: cancelling the task cuts the retry loop.
-                do { try await Task.sleep(for: retryDelays[attempt]) } catch { throw KuraAPIError.cancelled }
+                do { try await Task.sleep(for: .seconds(wait)) } catch { throw KuraAPIError.cancelled }
                 attempt += 1
             }
         }
     }
 
-    private func perform(_ req: URLRequest, endpoint e: Endpoint) async throws -> (data: Data, requestID: String?) {
+    private func perform(_ req: URLRequest, endpoint e: Endpoint) async throws -> Response {
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await urlSession.data(for: req)
         } catch is CancellationError {
-            throw KuraAPIError.cancelled
+            throw AttemptFailure(error: KuraAPIError.cancelled, kind: .final)
         } catch let u as URLError {
-            throw APIClient.map(u)
+            let mapped = APIClient.map(u)
+            let kind: RetryPolicy.Failure = u.code == .timedOut ? .timedOut : (mapped == .offline ? .transport : .final)
+            throw AttemptFailure(error: mapped, kind: kind)
         } catch {
-            throw KuraAPIError.server(error.localizedDescription)
+            throw AttemptFailure(error: KuraAPIError.server(error.localizedDescription), kind: .final)
         }
-        guard let http = response as? HTTPURLResponse else { throw KuraAPIError.server("Respuesta inválida") }
+        guard let http = response as? HTTPURLResponse else {
+            throw AttemptFailure(error: KuraAPIError.server("Respuesta inválida"), kind: .final)
+        }
         let rid = http.value(forHTTPHeaderField: "X-Request-Id")
         if (200..<300).contains(http.statusCode) { return (data, rid) }
         if http.statusCode >= 500 {
-            KuraLog.api.error("\(e.method.rawValue, privacy: .public) \(e.path, privacy: .public) → HTTP \(http.statusCode, privacy: .public) rid=\(rid ?? "-", privacy: .public)")
+            // The route shape is public; the real path (handles, ids, tokens) only `.private`.
+            KuraLog.api.error("\(e.method.rawValue, privacy: .public) \(e.path.template, privacy: .public) → HTTP \(http.statusCode, privacy: .public) rid=\(rid ?? "-", privacy: .public) path=\(e.path.encoded, privacy: .private)")
         }
         let env = try? KuraJSON.decoder.decode(ErrorEnvelope.self, from: data)
         // `409 linked_elsewhere` carries the proof to merge the other account inside the envelope
         // (`error.mergeToken` + `error.source`): hand it over instead of a bare conflict.
         if http.statusCode == 409, env?.error.reason == "linked_elsewhere",
            let proof = (try? KuraJSON.decoder.decode(MergeEnvelope.self, from: data))?.error {
-            throw MergeableConflict(proof: proof)
+            throw AttemptFailure(error: MergeableConflict(proof: proof), kind: .final)
         }
-        let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"))
-        if case .unauthorized = err, e.auth, !e.suppressExpiry {
-            session.clear()
-            await MainActor.run { NotificationCenter.default.post(name: .kuraSessionExpired, object: nil) }
+        let retryAfterHeader = http.value(forHTTPHeaderField: "Retry-After")
+        let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: retryAfterHeader)
+        if case .unauthorized = err {
+            if e.auth, !e.suppressExpiry {
+                session.clear()
+                await MainActor.run { NotificationCenter.default.post(name: .kuraSessionExpired, object: nil) }
+            }
+            throw AttemptFailure(error: err, kind: .final)
         }
-        throw err
+        let retryAfter = RetryPolicy.parseRetryAfter(retryAfterHeader) ?? env?.error.retryAfterSeconds.map(Double.init)
+        throw AttemptFailure(error: err, kind: .http(status: http.statusCode, retryAfter: retryAfter))
     }
 
     func decode<T: Decodable>(_ e: Endpoint) async throws -> T {
@@ -211,9 +426,9 @@ final class APIClient: @unchecked Sendable {
         } catch {
             // A contract change must leave a trace outside DEBUG too: where it broke (type + key
             // path), never the payload.
-            KuraLog.api.error("decode \(e.method.rawValue, privacy: .public) \(e.path, privacy: .public) as \(String(describing: T.self), privacy: .public) rid=\(rid ?? "-", privacy: .public): \(APIClient.describe(error), privacy: .public)")
+            KuraLog.api.error("decode \(e.method.rawValue, privacy: .public) \(e.path.template, privacy: .public) as \(String(describing: T.self), privacy: .public) rid=\(rid ?? "-", privacy: .public): \(APIClient.describe(error), privacy: .public) path=\(e.path.encoded, privacy: .private)")
             #if DEBUG
-            print("[Kura] decode \(e.method.rawValue) \(e.path) failed: \(error)\n\(String(data: data.prefix(600), encoding: .utf8) ?? "")")
+            print("[Kura] decode \(e.method.rawValue) \(e.path.encoded) failed: \(error)\n\(String(data: data.prefix(600), encoding: .utf8) ?? "")")
             #endif
             throw KuraAPIError.server("Respuesta inesperada del servidor")
         }
@@ -280,16 +495,6 @@ final class APIClient: @unchecked Sendable {
     }
 }
 
-private extension KuraAPIError {
-    /// Transport trouble and 5xx retry; a cancelled task never does.
-    var isRetryable: Bool {
-        switch self {
-        case .offline, .unavailable, .server: return true
-        default: return false
-        }
-    }
-}
-
 // MARK: - Live API
 
 /// `KuraAPI` over HTTP (API.md §4). Every path below is the wire contract this
@@ -344,7 +549,9 @@ struct LiveAPI: KuraAPI {
         let fullName: AppleName?
         let device: Device
     }
-    private struct GoogleBody: Encodable { let idToken: String; let device: Device }
+    /// `nonce`: the raw value this app put in Google's authorization URL (`GoogleNonce`);
+    /// the key is omitted when there is none.
+    private struct GoogleBody: Encodable { let idToken: String; let nonce: String?; let device: Device }
 
     func authProviders() async throws -> AuthProviders {
         try await client.decode(Endpoint(method: .get, path: "auth/providers", auth: false))
@@ -361,7 +568,7 @@ struct LiveAPI: KuraAPI {
     }
 
     func signInWithGoogle(idToken: String) async throws -> Me {
-        let body = GoogleBody(idToken: idToken, device: Device(name: deviceName, appVersion: appVersion))
+        let body = GoogleBody(idToken: idToken, nonce: GoogleNonce.nonce(for: idToken), device: Device(name: deviceName, appVersion: appVersion))
         let s: AuthSession = try await client.decode(try .post("auth/google", body, auth: false))
         session.store(s.token)
         return s.user
@@ -517,7 +724,7 @@ struct LiveAPI: KuraAPI {
     func identities() async throws -> Identities { try await client.decode(.get("me/identities")) }
 
     private struct LinkAppleBody: Encodable { let identityToken: String; let rawNonce: String; let authorizationCode: String? }
-    private struct LinkGoogleBody: Encodable { let idToken: String }
+    private struct LinkGoogleBody: Encodable { let idToken: String; let nonce: String? }
     private struct MergeOTPRequest: Encodable { let email: String }
     private struct MergeOTPVerify: Encodable { let email: String; let code: String }
     private struct MergeBody: Encodable { let mergeToken: String }
@@ -538,7 +745,7 @@ struct LiveAPI: KuraAPI {
     }
 
     func linkGoogle(idToken: String) async throws -> LinkOutcome {
-        try await link(try .post("me/identities/google", LinkGoogleBody(idToken: idToken)))
+        try await link(try .post("me/identities/google", LinkGoogleBody(idToken: idToken, nonce: GoogleNonce.nonce(for: idToken))))
     }
 
     func unlinkIdentity(_ provider: IdentityProvider) async throws {
@@ -560,8 +767,15 @@ struct LiveAPI: KuraAPI {
 
     private struct DeviceBody: Encodable { let environment: String }
 
+    /// Skips the `PUT` when THIS token + environment were already registered for THIS account
+    /// (the bearer's `sub`) in the last `PushRegistration.maxRegistrationAge` — the cold-start
+    /// `PUT` on every launch was pure load. Any change (rotated token, other gateway, another
+    /// account signed in, `markUnregistered()` on logout/expiry, a week passed) sends it again.
     func registerDevice(pushToken: String, environment: String) async throws {
+        let account = session.token.flatMap { Session.claims(of: $0)?["sub"] as? String }
+        if let account, PushRegistration.isCurrent(token: pushToken, environment: environment, account: account) { return }
         try await client.send(try .put("me/devices/\(pushToken)", DeviceBody(environment: environment)))
+        if let account { PushRegistration.recordRegistration(token: pushToken, environment: environment, account: account) }
     }
 
     // MARK: Collections
@@ -643,13 +857,39 @@ struct LiveAPI: KuraAPI {
         try await client.decode(.get("titles/\(titleID)/reviews", [URLQueryItem(name: "cursor", value: cursor)]))
     }
 
+    /// `GET /titles?ids=` in chunks of 50, at most 4 in flight at once. The result is the
+    /// chunks' items concatenated IN CHUNK ORDER (same as the old serial loop); the first chunk
+    /// that fails fails the whole call and cancels the rest (same error behavior as before).
     func titles(ids: [String]) async throws -> [Title] {
-        var out: [Title] = []
-        for chunk in stride(from: 0, to: ids.count, by: 50).map({ Array(ids[$0..<min($0 + 50, ids.count)]) }) {
+        let chunks = stride(from: 0, to: ids.count, by: 50).map { Array(ids[$0..<min($0 + 50, ids.count)]) }
+        let client = self.client
+        @Sendable func fetch(_ chunk: [String]) async throws -> [Title] {
             let r: Items<Title> = try await client.decode(.get("titles", [URLQueryItem(name: "ids", value: chunk.joined(separator: ","))]))
-            out += r.items
+            return r.items
         }
-        return out
+        if chunks.count <= 1 {
+            guard let only = chunks.first else { return [] }
+            return try await fetch(only)
+        }
+        let maxConcurrent = 4
+        var results = [[Title]](repeating: [], count: chunks.count)
+        try await withThrowingTaskGroup(of: (Int, [Title]).self) { group in
+            var next = 0
+            while next < min(maxConcurrent, chunks.count) {
+                let i = next
+                group.addTask { (i, try await fetch(chunks[i])) }
+                next += 1
+            }
+            while let (i, items) = try await group.next() {
+                results[i] = items
+                if next < chunks.count {
+                    let j = next
+                    group.addTask { (j, try await fetch(chunks[j])) }
+                    next += 1
+                }
+            }
+        }
+        return results.flatMap { $0 }
     }
 
     func myTitles() async throws -> [String: UserTitleState] {
