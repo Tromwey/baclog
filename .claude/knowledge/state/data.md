@@ -96,7 +96,7 @@ local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date
 - **0028 `user_block` pendiente de aplicar (2026-09-24)** — `drizzle/0028_user_block.sql` + snapshot/journal 0028
   en el árbol, sin commit. Aplicarla (founder) antes de cualquier deploy que incluya `modules/social/block-gate.ts`.
   Después: `pnpm tsx scripts/api-smoke.ts --only writes` con cuenta QA corre los casos E1 de reportar/bloquear.
-- **0029 `device_sessions_push` pendiente de aplicar (2026-09-24)** — `drizzle/0029_device_sessions_push.sql` + snapshot/journal 0029 en el árbol, sin commit. Aplicarla (founder) es independiente del deploy (el código corre sin ella con `MIGRATION_0029_LIVE = false`). Al aplicarla, en este orden: `drizzle-kit migrate` → descomentar `notifyFollowers` en `src/db/schema.ts` → `MIGRATION_0029_LIVE = true` en `src/auth/live-0029.ts` → deploy → smoke `writes` (W4).
+- **0028 `user_block` y 0029 `device_sessions_push` APLICADAS en la DB compartida (2026-09-24, por el founder; 30 migraciones; `notifyFollowers` descomentada y `MIGRATION_0029_LIVE = true`).** Nota histórica — 0029 pendiente de aplicar (2026-09-24) — `drizzle/0029_device_sessions_push.sql` + snapshot/journal 0029 en el árbol, sin commit. Aplicarla (founder) es independiente del deploy (el código corre sin ella con `MIGRATION_0029_LIVE = false`). Al aplicarla, en este orden: `drizzle-kit migrate` → descomentar `notifyFollowers` en `src/db/schema.ts` → `MIGRATION_0029_LIVE = true` en `src/auth/live-0029.ts` → deploy → smoke `writes` (W4).
 
 ## Deuda conocida
 <!-- Lo que sabemos que está mal y aún no arreglamos, con el costo de dejarlo así. -->

@@ -193,16 +193,11 @@ export const users = pgTable(
      * the other notify flags. Own preference: `Me` + `PATCH /me`, never on
      * `Person`. The only reader is `modules/push/follower.ts`.
      *
-     * ⚠️ COMMENTED OUT until migration 0029 is applied to the shared DB
-     * (learning 2026-09-24-columna-declarada-sin-migrar-rompe-inserts): Drizzle
-     * names EVERY declared column in each `insert(users)`, so declaring it
-     * before the ALTER breaks every sign-up. The code reads/writes it with raw
-     * SQL behind `MIGRATION_0029_LIVE` (src/auth/live-0029.ts). The 0029
-     * snapshot already includes it: DO NOT run `drizzle-kit generate` while
-     * this line is commented (the diff would emit a DROP COLUMN). After
-     * `drizzle-kit migrate`: uncomment this line, then flip the switch.
+     * Migration 0029 was applied to the shared DB on 2026-09-24; the code still
+     * reads/writes it with raw SQL behind `MIGRATION_0029_LIVE`
+     * (src/auth/live-0029.ts), which is now true.
      */
-    // notifyFollowers: boolean("notify_followers").notNull().default(true),
+    notifyFollowers: boolean("notify_followers").notNull().default(true),
   },
   (t) => [
     uniqueIndex("user_email_unique").on(t.email),

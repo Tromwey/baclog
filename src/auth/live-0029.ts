@@ -24,4 +24,5 @@
  * No `server-only` on purpose: pure constant, the smoke reads it as text and
  * scratch test harnesses alias it.
  */
-export const MIGRATION_0029_LIVE = false;
+// Applied to the shared Neon DB on 2026-09-24 (30 migrations, all four objects verified).
+export const MIGRATION_0029_LIVE = true;
