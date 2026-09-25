@@ -1,0 +1,92 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "extended-srgb:0.13725,0.13725,0.16078,1.00000",
+      "extended-srgb:0.05882,0.05882,0.07059,1.00000"
+    ]
+  },
+  "groups": [
+    {
+      "name": "4 k",
+      "layers": [
+        {
+          "name": "k",
+          "image-name": "4-k.svg"
+        }
+      ],
+      "lighting": "individual",
+      "specular": false,
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "name": "3 Miel",
+      "layers": [
+        {
+          "name": "Miel",
+          "image-name": "3-miel.svg"
+        }
+      ],
+      "lighting": "individual",
+      "specular": true,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "name": "2 Washi",
+      "layers": [
+        {
+          "name": "Washi",
+          "image-name": "2-washi.svg"
+        }
+      ],
+      "lighting": "individual",
+      "specular": true,
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "name": "1 Fantasmas",
+      "layers": [
+        {
+          "name": "Fantasmas",
+          "image-name": "1-fantasmas.svg",
+          "opacity": 0.16
+        }
+      ],
+      "lighting": "individual",
+      "specular": false,
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "iOS"
+    ]
+  }
+}

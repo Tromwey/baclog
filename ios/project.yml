@@ -31,8 +31,16 @@ targets:
       - path: Kura
         excludes:
           - "Resources/AppIcon-1024.png"
+          - "Resources/AppIcon.icon"
           - "Info.plist"
           - "Info-Debug.plist"
+      # Ícono Liquid Glass por capas (Icon Composer), generado por scripts/build-app-icon.py.
+      # Va como archivo (no como carpeta) para que actool lo compile; con el mismo nombre que
+      # ASSETCATALOG_COMPILER_APPICON_NAME reemplaza al AppIcon.appiconset, y Xcode genera
+      # desde él las versiones planas para iOS < 26.
+      - path: Kura/Resources/AppIcon.icon
+        type: file
+        buildPhase: resources
     info:
       path: Kura/Info.plist
       properties:

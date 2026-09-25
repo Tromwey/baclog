@@ -73,7 +73,7 @@ ios/
     Features/                 Onboarding · Collections · CollectionDetail · Title · Feed (+ notificaciones) ·
                               Discover (+ búsqueda) · People (perfil ajeno, seguidores, creador) · Profile ·
                               Recap · Settings · Add
-    Resources/                fuentes TTF, Assets.xcassets (AppIcon 1024 + LaunchBackground)
+    Resources/                fuentes TTF, AppIcon.icon (Liquid Glass por capas), Assets.xcassets (AppIcon 1024 heredado + LaunchBackground)
 ```
 
 ### Cómo está armado
@@ -139,7 +139,12 @@ En orden: revisa las herramientas (xcodegen, xcodebuild, git, plutil, security) 
 
 ### Checklist antes del primer envío
 
-- [x] Ícono 1024 (`Resources/Assets.xcassets/AppIcon.appiconset`, sin transparencia).
+- [x] Ícono Liquid Glass por capas: `Resources/AppIcon.icon` (Icon Composer), generado con
+  `python3 ios/scripts/build-app-icon.py`. 4 grupos planos (fantasmas · washi · miel · k); el
+  vidrio lo pone el sistema. Reemplaza al `AppIcon.appiconset` (queda como respaldo) y Xcode genera
+  desde él las versiones planas para iOS < 26. Previsualizar sin abrir Icon Composer:
+  `"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" ios/Kura/Resources/AppIcon.icon --export-image --output-file out.png --platform iOS --rendition Default --width 1024 --height 1024 --scale 1`
+  (renditions: `Default`, `Dark`, `ClearLight`, `ClearDark`, `TintedLight`, `TintedDark`).
 - [x] `UILaunchScreen` → `UIColorName: LaunchBackground` (color en el catálogo), idéntico en `Info.plist` e `Info-Debug.plist`.
 - [x] `ITSAppUsesNonExemptEncryption = false`, `LSRequiresIPhoneOS`, solo iPhone (`TARGETED_DEVICE_FAMILY 1`), solo vertical, `CFBundleDevelopmentRegion es-MX`.
 - [x] Release apunta a `https://baclog.app/api/v1`, sin excepciones de ATS (solo Debug permite `localhost`).

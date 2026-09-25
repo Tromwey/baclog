@@ -40,6 +40,7 @@
 		998A5977A70FB9433EF52A87 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED163FB3A27B50B2ECD0316 /* FeedView.swift */; };
 		9FE40BA192B19E0163AD65E1 /* Newsreader-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1D6BAB853C099B59E3C0BB14 /* Newsreader-Italic.ttf */; };
 		A02C09A16F88744AC507FDF1 /* Newsreader-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FF0958027829E68051C80A93 /* Newsreader-MediumItalic.ttf */; };
+		A093314B67A3E9ED44EAF429 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7742337E5F84C340B1B8A3B0 /* AppIcon.icon */; };
 		A2B9C78681E9827D1570AAA5 /* PublicCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C149CFC1B11ABD9247F2241D /* PublicCollectionView.swift */; };
 		B1DEB26D7F6E0F62DE978748 /* ReleaseNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726F80C7E1EA01A79FCDECA /* ReleaseNotifier.swift */; };
 		B4E0A3D82BF54686D9B215B2 /* Pills.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA9B8D2CC3B028EE69A485 /* Pills.swift */; };
@@ -87,6 +88,7 @@
 		51F9E780278E4FF272759D21 /* DebugLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLaunch.swift; sourceTree = "<group>"; };
 		52009EBC11CDCDA41F528ADC /* HankenGrotesk-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "HankenGrotesk-Regular.ttf"; sourceTree = "<group>"; };
 		5AC81669DACE442BF0F68E23 /* KuraAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KuraAPI.swift; sourceTree = "<group>"; };
+		7742337E5F84C340B1B8A3B0 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		77548D94658292AE0E375FF4 /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
 		7A1A1ED30047BCF97E1A15EB /* CollectionSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionSheets.swift; sourceTree = "<group>"; };
 		7F4697357313399FE5AF1B88 /* ZoomTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomTransition.swift; sourceTree = "<group>"; };
@@ -167,6 +169,7 @@
 		48D92AA1D4D70D2063CE2E93 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				7742337E5F84C340B1B8A3B0 /* AppIcon.icon */,
 				D2B8AE4C1260B7995DD02575 /* Assets.xcassets */,
 				7052B26A90D9D3281A7A24A3 /* Fonts */,
 			);
@@ -431,6 +434,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A093314B67A3E9ED44EAF429 /* AppIcon.icon in Resources */,
 				49B22B39A89D1BF2A724ED08 /* Assets.xcassets in Resources */,
 				DA1C19CB3C7251C1F26BC2A3 /* HankenGrotesk-Medium.ttf in Resources */,
 				973DF6EB0B5E038A47DF0AF2 /* HankenGrotesk-Regular.ttf in Resources */,
