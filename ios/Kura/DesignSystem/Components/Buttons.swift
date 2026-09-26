@@ -259,6 +259,25 @@ struct IconChip44: View {
     }
 }
 
+/// An `IconChip44` that opens the system share sheet with a public link.
+struct ShareChip44: View {
+    let item: URL
+    var label = "Compartir"
+
+    var body: some View {
+        ShareLink(item: item) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(KColor.text)
+                .frame(width: 44, height: 44)
+                .modifier(ChromeFill(fill: KColor.glassBg, shape: Circle()))
+                .contentShape(Circle())
+        }
+        .modifier(ChromePress(glass: true))
+        .accessibilityLabel(label)
+    }
+}
+
 /// Default glass fill → Liquid Glass on iOS 26+; any other fill (selected, s2…) stays flat.
 private struct ChromeFill<S: Shape>: ViewModifier {
     let fill: Color

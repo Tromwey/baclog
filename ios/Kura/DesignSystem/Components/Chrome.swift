@@ -331,20 +331,6 @@ struct SheetRow<Trailing: View>: View {
     }
 }
 
-/// A `SheetRow` that opens the system share sheet (a public link) instead of running an action.
-struct SheetShareRow: View {
-    var systemImage = "square.and.arrow.up"
-    let label: String
-    let item: URL
-
-    var body: some View {
-        ShareLink(item: item) {
-            SheetRowLabel(systemImage: systemImage, label: label) { EmptyView() }
-        }
-        .buttonStyle(SheetRowStyle())
-    }
-}
-
 /// What every sheet row draws: icon in a 24 slot, label 16/500, optional trailing.
 private struct SheetRowLabel<Trailing: View>: View {
     let systemImage: String

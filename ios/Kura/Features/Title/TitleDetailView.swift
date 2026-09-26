@@ -39,8 +39,14 @@ struct TitleDetailView: View {
                 .ignoresSafeArea(.container, edges: .top)
 
                 TopChrome {
-                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones") {
-                        store.present(.titleMore(t.id))
+                    HStack(spacing: 8) {
+                        // `/{you}/item/{id}` — only while your profile is public (otherwise it 404s).
+                        if let url = store.myItemLink(t.id) {
+                            ShareChip44(item: url)
+                        }
+                        IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones") {
+                            store.present(.titleMore(t.id))
+                        }
                     }
                 }
             }

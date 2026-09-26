@@ -61,8 +61,13 @@ struct CollectionDetailView: View {
             .ignoresSafeArea(.container, edges: .top)
 
             TopChrome {
-                IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de la colección") {
-                    store.present(.more(c.id))
+                HStack(spacing: 8) {
+                    IconChip44(systemName: "square.and.arrow.up", label: "Compartir colección") {
+                        store.present(.share(c.id))
+                    }
+                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de la colección") {
+                        store.present(.more(c.id))
+                    }
                 }
             }
         }

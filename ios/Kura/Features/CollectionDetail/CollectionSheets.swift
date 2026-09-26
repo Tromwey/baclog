@@ -13,7 +13,6 @@ struct MoreSheet: View {
                 SheetRow(systemImage: c.pinned ? "pin.slash" : "pin", label: c.pinned ? "Desfijar" : "Fijar") {
                     store.dismissSheet(); store.togglePin(c.id)
                 }
-                SheetRow(systemImage: "square.and.arrow.up", label: "Compartir") { store.present(.share(c.id)) }
                 Color.clear.frame(height: 8)
                 SheetRow(systemImage: c.layout == .list ? "square.grid.2x2" : "list.bullet",
                          label: c.layout == .list ? "Ver como portadas" : "Ver como lista") {
