@@ -227,6 +227,7 @@ export default async function ItemPage({
           )}
           <CountRibbon
             className="mt-0.5"
+            reserve
             counts={[
               { kind: "obsessed", n: stats.obsessed, label: "obsesionados" },
               { kind: "completed", n: stats.completed, label: "completos" },

@@ -78,11 +78,17 @@ private struct KPressable: ViewModifier {
 enum KHaptic {
     private static let light = UIImpactFeedbackGenerator(style: .light)
     private static let medium = UIImpactFeedbackGenerator(style: .medium)
+    /// The feed's "card hits the top" (`FeedHits`): a hard edge, not a soft bump.
+    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
     private static let selection = UISelectionFeedbackGenerator()
     private static let notification = UINotificationFeedbackGenerator()
 
     private static func generator(_ style: UIImpactFeedbackGenerator.FeedbackStyle) -> UIImpactFeedbackGenerator {
-        style == .medium || style == .heavy || style == .rigid ? medium : light
+        switch style {
+        case .rigid: return rigid
+        case .medium, .heavy: return medium
+        default: return light
+        }
     }
 
     static func prepare(_ style: UIImpactFeedbackGenerator.FeedbackStyle) { generator(style).prepare() }
@@ -90,6 +96,13 @@ enum KHaptic {
     static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         let g = generator(style)
         g.impactOccurred()
+        g.prepare()
+    }
+
+    /// An impact at a given strength (0…1), for feedback that scales with a gesture's speed.
+    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle, intensity: CGFloat) {
+        let g = generator(style)
+        g.impactOccurred(intensity: min(max(intensity, 0), 1))
         g.prepare()
     }
 

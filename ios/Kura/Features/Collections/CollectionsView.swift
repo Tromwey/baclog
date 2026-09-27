@@ -15,10 +15,12 @@ import SwiftUI
 ///  - the whole page in the feed gradient of its front cover (760), continuing in its bottom tone
 ///    under the dock.
 ///
-/// Pinned first, the empty ones after the rest, "no puedo esperar" penultimate and the ghost
-/// "nueva colección" last (its "+" fan, the phrase and the glass Nueva colección; the chips fade
-/// over it). The current one is remembered by id (a pin reorders the list, you stay where you
-/// were). Twin of the web's `collection-cards.tsx`.
+/// The ghost "nueva colección" FIRST (its "+" fan, the phrase and the glass Nueva colección; the
+/// chips fade over it), then pinned, the rest, the empty ones and "no puedo esperar" last. The
+/// current one is remembered by id (a pin reorders the list, you stay where you were); with none
+/// remembered — or a remembered one that's gone — it opens on the first REAL collection (index 1),
+/// never on the ghost, which peeks to the left as a dimmed name. Twin of the web's
+/// `collection-cards.tsx`.
 struct CollectionsView: View {
     @Environment(AppStore.self) private var store
 
@@ -63,7 +65,7 @@ struct CollectionsView: View {
 }
 
 /// One stop of the carousel: a collection of yours, the automatic "no puedo esperar", or the
-/// ghost "nueva colección" that closes it.
+/// ghost "nueva colección" that opens it (to the left of the first collection).
 private enum CarouselEntry: Identifiable {
     case shelf(KCollection)
     case auto([Title])
@@ -128,20 +130,30 @@ private struct CollectionsCarousel: View {
     /// THE position.
     @State private var pos = KSpring(0)
     @State private var grab: CarouselGrab?
+    /// The first appearance already chose where to start (see `onAppear`).
+    @State private var placed = false
     @GestureState private var dragging = false
 
     /// One collection per 320 pt of finger; the rubber band's dimension.
     private static let step: CGFloat = 320
     private static let band: CGFloat = 390
 
-    /// Pinned first, then the rest, the empty ones after (`orderedCollections`); "no puedo
-    /// esperar" PENULTIMATE and the ghost "nueva colección" LAST (founder, propuesta 10).
+    /// The ghost "nueva colección" FIRST (founder, 2026-09-27: to the left of the first
+    /// collection), then pinned, the rest, the empty ones (`orderedCollections`) and "no puedo
+    /// esperar" LAST.
     private var entries: [CarouselEntry] {
-        var list = store.orderedCollections.map(CarouselEntry.shelf)
+        var list: [CarouselEntry] = [.new]
+        list += store.orderedCollections.map(CarouselEntry.shelf)
         let waiting = store.waitingTitles
         if !waiting.isEmpty { list.append(.auto(waiting)) }
-        list.append(.new)
         return list
+    }
+
+    /// Where `currentID` sits; nothing remembered (or it's gone) = the first REAL collection,
+    /// index 1 — never the ghost at 0. (`CollectionsView` only shows the carousel with at least
+    /// one collection; the clamp is for safety.)
+    private static func index(of id: String, in list: [CarouselEntry]) -> Int {
+        list.firstIndex { $0.id == id } ?? min(1, list.count - 1)
     }
 
     private func fan(_ e: CarouselEntry) -> [Title] {
@@ -162,7 +174,7 @@ private struct CollectionsCarousel: View {
 
     var body: some View {
         let list = entries
-        let idx = list.firstIndex { $0.id == currentID } ?? 0
+        let idx = Self.index(of: currentID, in: list)
         let cur = list[idx]
         let tints = list.map(hexes)
         ZStack(alignment: .top) {
@@ -195,11 +207,17 @@ private struct CollectionsCarousel: View {
         .overlay(alignment: .bottom) { CarouselDockBand(pos: pos, tints: tints) }
         .background { CarouselIndexWatcher(pos: pos, count: list.count) { i in centre(on: i) } }
         .onAppear {
+            // Opening Tus colecciones never lands on the ghost: a remembered "nueva colección"
+            // (left there last session) starts on the first collection instead. Only on the first
+            // appearance — a list change while you're on the ghost keeps you there.
+            if !placed, currentID == CarouselEntry.newID { currentID = "" }
             #if DEBUG
             // `-kuraCarousel <id>`: the captures open the carousel on a given collection
-            // (`nueva-coleccion` = the ghost, `no-puedo-esperar` = the automatic one).
-            if let id = UserDefaults.standard.string(forKey: "kuraCarousel") { currentID = id }
+            // (`nueva-coleccion` = the ghost, first; `no-puedo-esperar` = the automatic one, last).
+            if !placed, let id = UserDefaults.standard.string(forKey: "kuraCarousel") { currentID = id }
             #endif
+            placed = true
+            // `pos.set` = no spring: the first frame is already on it, nothing slides in.
             sync(list)
         }
         .onChange(of: list.map(\.id)) { _, _ in sync(entries) }
@@ -223,7 +241,7 @@ private struct CollectionsCarousel: View {
     /// The position on the collection in `currentID` (first appearance, a pin or a new
     /// collection reordering the list). Never while a finger holds it.
     private func sync(_ list: [CarouselEntry]) {
-        let i = list.firstIndex { $0.id == currentID } ?? 0
+        let i = Self.index(of: currentID, in: list)
         if currentID != list[i].id { currentID = list[i].id }
         guard grab == nil, pos.target != CGFloat(i) else { return }
         pos.set(CGFloat(i))
@@ -316,7 +334,7 @@ private struct CollectionsCarousel: View {
     // MARK: Header
 
     /// "tus colecciones" + Compartir and Opciones (glass 44) over the collection in the centre,
-    /// the same pair as 10b. Nueva colección is no longer a chip: it's the last fan. Over the
+    /// the same pair as 10b. Nueva colección is no longer a chip: it's the first fan. Over the
     /// ghost (and the automatic one, which has neither a link nor options) the pair fades out.
     private func header(_ cur: CarouselEntry) -> some View {
         TabTitleBar(title: "tus colecciones") {
@@ -608,18 +626,16 @@ private struct CarouselTail: View {
     }
 }
 
-/// The 150 band under the tab bar, crossing the same way.
+/// The 150 band under the tab bar, crossing the same way: ONE band over the crossing tail. Two
+/// stacked bands (`band(lo)` + `band(hi).opacity(t)`) over-darken where the ramp is partial and
+/// the band popped as a shadow while dragging (2026-09-27).
 private struct CarouselDockBand: View {
     let pos: KSpring
     let tints: [[String]]
 
     var body: some View {
-        let (lo, hi, t) = between(pos.value, tints.count)
-        ZStack {
-            Color.clear.kFeedDockBand(tints[lo])
-            Color.clear.kFeedDockBand(tints[hi]).opacity(Double(t))
-        }
-        .allowsHitTesting(false)
+        Color.clear.kFeedDockBand(fill: CarouselTail(pos: pos, tints: tints))
+            .allowsHitTesting(false)
     }
 }
 

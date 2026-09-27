@@ -244,12 +244,26 @@ export function Seal({
 export function CountRibbon({
   counts,
   className = "",
+  reserve = false,
 }: {
   counts: { kind: GlyphKind; n: number; label: string }[];
   className?: string;
+  /** Keep the row's height when every count is zero (the ficha: its
+   *  skeleton, and iOS while the counts load, hold this row — collapsing it
+   *  would move the actions under a cover that is still landing). */
+  reserve?: boolean;
 }) {
   const shown = counts.filter((c) => c.n > 0);
-  if (shown.length === 0) return null;
+  if (shown.length === 0) {
+    if (!reserve) return null;
+    return (
+      <div aria-hidden className={`invisible flex justify-center ${className}`}>
+        <span className="inline-flex items-center gap-[5px] font-mono text-[12px]">
+          <Glyph kind="completed" size={14} />0
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       role="img"

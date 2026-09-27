@@ -11,6 +11,11 @@ import SwiftUI
 /// or two) is an empty `s1` slot; `ghost` draws all three empty with the dashed "+" in front (the
 /// empty and loading states). No art = the palette fallback (`CoverImage`).
 ///
+/// A collection of one or two titles shows only the covers it has — the front cover alone at one,
+/// front + the left card at two — never an empty dark slot standing in for a title that doesn't
+/// exist. `ghost` (the empty collection / "Nueva colección" affordance) is unaffected: it always
+/// draws all three empty with the dashed "+" in front.
+///
 /// The twin of the web's `src/components/kura/fan.tsx` — same numbers; change both or neither.
 struct FanView: View {
     /// Up to three, front first (`AppStore.fan(of:)`).
@@ -39,14 +44,20 @@ struct FanView: View {
     private var s: CGFloat { lead / 225 }
     private var radius: CGFloat { s >= 0.5 ? 14 : s >= 0.35 ? 10 : s >= 0.18 ? 7 : 4 }
 
+    // Below three covers (and not the ghost/empty state), only draw the slots that have a real
+    // title: front alone at one, front + left at two.
+    private var showLeft: Bool { ghost || covers.count >= 2 }
+    private var showRight: Bool { ghost || covers.count >= 3 }
+    private var showFront: Bool { ghost || covers.count >= 1 }
+
     var body: some View {
         let size = Self.box(lead)
         ZStack(alignment: .topLeading) {
             if s >= 0.35 { floor(size) }
             // Painted back to front: left, right, then the front one.
-            slot(covers[safe: 1], index: 0)
-            slot(covers[safe: 2], index: 1)
-            slot(covers[safe: 0], index: 2)
+            if showLeft { slot(covers[safe: 1], index: 0) }
+            if showRight { slot(covers[safe: 2], index: 1) }
+            if showFront { slot(covers[safe: 0], index: 2) }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .accessibilityElement(children: .ignore)

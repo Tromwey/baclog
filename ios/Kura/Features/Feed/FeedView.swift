@@ -9,6 +9,8 @@ struct FeedView: View {
     /// How far the stack has scrolled. Held in a reference so a scroll frame only
     /// re-renders the cards' pin/band (`FeedStackCard`), never this view or the cards' content.
     @State private var scroll = FeedScroll()
+    /// The "card hits the top" haptic. A plain reference: scroll frames never re-render through it.
+    @State private var hits = FeedHits()
 
     /// How far a card's body runs past its own height, so the card rising from
     /// underneath always mounts over filled color instead of bare bg.
@@ -115,6 +117,9 @@ struct FeedView: View {
             let base = geo.size.height - headerTop
             let rows = layout(events, base: base)
             let scroll = self.scroll
+            // Card i ≥ 1 pins under the header when the stack has scrolled by its layout top
+            // less `hdr` (the heights of the cards above it): that's where it hits the top.
+            let marks = rows.dropFirst().map { $0.top - hdr }
             ZStack(alignment: .top) {
                 ScrollView(showsIndicators: false) {
                     // Lazy: only the cards near the screen exist (a long history never mounts whole).
@@ -160,6 +165,10 @@ struct FeedView: View {
                 .contentMargins(.top, hdr, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $position, anchor: .top)
+                .feedHits(hits, marks: marks)
+                #if DEBUG
+                .background { FeedHitDemo(hits: hits, marks: marks) }
+                #endif
                 .task {
                     guard let anchor = store.debugFeedAnchor else { return }
                     try? await Task.sleep(for: .milliseconds(900))
@@ -259,6 +268,207 @@ struct FeedView: View {
         return store.person(e.authorID)?.hexes ?? ["#6c6b76"]
     }
 }
+
+// MARK: - Hits
+
+/// "La card golpea la parte superior" (founder, 2026-09-27): a rigid tap the instant a card's
+/// top reaches the line it pins at — under the 63 pt header, `hdr`. That line is the top of the
+/// visible content (above it is chrome: status bar, title, bell) and it's where the card
+/// physically STOPS in this stack, so it's the collision, not an arbitrary line.
+///
+/// - Only rising cards (the offset grows past a mark) and only under the finger or its
+///   momentum (`.interacting` / `.decelerating`, or an `.animating` settle right after them):
+///   the first load, content that lands, a programmatic jump (`scrollPosition`, scroll-to-top,
+///   which start from `.idle`) move the marks silently.
+/// - Once per crossing: a mark re-arms only after its card drops `rearm` pt back below it
+///   (the snap's last fractions of a point and the rubber band never re-fire it).
+/// - One tap per burst: several marks in one frame, or within `gap`, are one hit.
+/// - Strength follows the speed over the last ~100 ms: `floor` for the snap's slow landing
+///   (it decelerates exponentially into the mark, so it always arrives slow), up to `cap` for
+///   a fling that runs cards through the top.
+///
+/// iOS 18+ (`onScrollPhaseChange` is what tells a finger from code); on 17 there's no hit
+/// rather than a hit that could fire on a programmatic scroll.
+@MainActor
+private final class FeedHits {
+    /// Scroll offsets at which card 1, 2, … pins. Ascending.
+    private var marks: [CGFloat] = []
+    /// How many marks the stack is past; the rest are armed.
+    private var passed = 0
+    private var offset: CGFloat = 0
+    private var userDriven = false
+    private var samples: [(t: CFTimeInterval, y: CGFloat)] = []
+    private var lastHit: CFTimeInterval = -1
+
+    /// How close counts as touching. The snap decelerates exponentially into the mark and
+    /// crawls its last points (UIKit's rate: ~0.8 s from 4 pt to 1 pt); 4 pt is contact to the
+    /// eye (a hairline gap under the header) without the tap arriving late.
+    private static let tolerance: CGFloat = 4
+    private static let rearm: CGFloat = 8
+    private static let gap: CFTimeInterval = 0.06
+    private static let window: CFTimeInterval = 0.1
+    private static let floor: CGFloat = 0.4
+    private static let cap: CGFloat = 0.9
+    /// Speed (pt/s) at which the tap reaches `cap`.
+    private static let fullSpeed: CGFloat = 2400
+
+    func setMarks(_ m: [CGFloat]) {
+        guard m != marks else { return }
+        marks = m
+        // New data (a page, a refresh) never fires: re-seat on the current offset.
+        passed = m.prefix { $0 - Self.tolerance <= offset }.count
+    }
+
+    func phase(user: Bool, active: Bool) {
+        userDriven = user
+        if active { KHaptic.prepare(.rigid) } else { samples.removeAll(keepingCapacity: true) }
+        #if DEBUG
+        KBodyLog.hit("FEEDHIT phase user=\(user) active=\(active) off \(Int(offset))")
+        #endif
+    }
+
+    func scrolled(to y: CGFloat) {
+        offset = y
+        let now = CACurrentMediaTime()
+        samples.append((now, y))
+        samples.removeAll { now - $0.t > Self.window }
+
+        var crossed = 0
+        while passed < marks.count, y >= marks[passed] - Self.tolerance { passed += 1; crossed += 1 }
+        while passed > 0, y < marks[passed - 1] - Self.tolerance - Self.rearm { passed -= 1 }
+        guard crossed > 0 else { return }
+
+        #if DEBUG
+        let card = passed  // mark k is card k + 1: the last one that reached the top
+        #endif
+        guard userDriven else {
+            #if DEBUG
+            KBodyLog.hit("FEEDHIT silent card \(card) (not the finger) off \(Int(y))")
+            #endif
+            return
+        }
+        guard now - lastHit >= Self.gap else {
+            #if DEBUG
+            KBodyLog.hit("FEEDHIT merged card \(card) (\(Int((now - lastHit) * 1000)) ms after the last)")
+            #endif
+            return
+        }
+        let first = samples.first ?? (now, y)
+        let dt = now - first.t
+        let speed = dt > 0.008 ? max(0, (y - first.y) / CGFloat(dt)) : 0
+        let intensity = min(Self.cap, Self.floor + (Self.cap - Self.floor) * speed / Self.fullSpeed)
+        KHaptic.impact(.rigid, intensity: intensity)
+        lastHit = now
+        #if DEBUG
+        KBodyLog.hit(String(format: "FEEDHIT card %d x%d off %.1f mark %.1f speed %.0f intensity %.2f",
+                            card, crossed, y, marks[passed - 1], speed, intensity))
+        #endif
+    }
+}
+
+private extension View {
+    @ViewBuilder func feedHits(_ hits: FeedHits, marks: [CGFloat]) -> some View {
+        if #available(iOS 18.0, *) {
+            onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
+                hits.scrolled(to: y)
+            }
+            .onScrollPhaseChange { old, p in
+                // A finger, its momentum, or the settle that follows them (should the snap report
+                // `.animating`). Code-driven scrolls start from `.idle`: never user.
+                let fromUser = old == .interacting || old == .decelerating
+                hits.phase(user: p == .interacting || p == .decelerating || (p == .animating && fromUser),
+                           active: p != .idle)
+            }
+            .onChange(of: marks, initial: true) { _, m in hits.setMarks(m) }
+        } else {
+            self
+        }
+    }
+}
+
+#if DEBUG
+/// `-kuraFeedHitDemo YES` (with `-kuraScreen feed -kuraBodyLog YES`): the simulator can't drive a
+/// finger and plays no haptics, so this moves the REAL scroll view frame by frame (its geometry
+/// reaches `FeedHits` through the same `onScrollGeometryChange`) and stands in for
+/// `onScrollPhaseChange` — a programmatic move reports no finger. The log shows each `FEEDHIT`.
+/// A drag through card 1, a fling through card 2, a snap-like landing on card 3, back up to the
+/// top (silent), down through card 1 again (re-armed), two cards in one frame (one hit), and a
+/// jump with no finger (silent).
+private struct FeedHitDemo: UIViewRepresentable {
+    let hits: FeedHits
+    let marks: [CGFloat]
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        guard UserDefaults.standard.bool(forKey: "kuraFeedHitDemo") else { return v }
+        let hits = self.hits, marks = self.marks
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1500))
+            // The ScrollView's own UIScrollView: the nearest one around the stack.
+            var sv: UIView? = v
+            while let s = sv, !(s is UIScrollView) { sv = s.superview }
+            if sv == nil {
+                // `.background` of the ScrollView sits beside it: look in the parent's subtree.
+                sv = v.superview?.superview.flatMap { Self.find(in: $0) }
+            }
+            guard let scroll = sv as? UIScrollView, marks.count >= 5 else {
+                KBodyLog.hit("FEEDHIT demo: no scroll view / marks \(marks.count)"); return
+            }
+            let top = scroll.adjustedContentInset.top
+            @MainActor func set(_ y: CGFloat) { scroll.contentOffset.y = y - top }
+            var y: CGFloat = 0
+            // Main actor explicitly: a local async func doesn't inherit the Task's isolation, and
+            // UIKit moved off the main thread traps.
+            @MainActor func line(to target: CGFloat, speed: CGFloat) async {
+                let step = speed / 60 * (target > y ? 1 : -1)
+                while (step > 0 && y < target) || (step < 0 && y > target) {
+                    y = step > 0 ? min(y + step, target) : max(y + step, target)
+                    set(y)
+                    try? await Task.sleep(for: .milliseconds(16))
+                }
+            }
+            KBodyLog.hit(String(format: "FEEDHIT demo marks %@", marks.prefix(5).map { String(format: "%.0f", $0) }.joined(separator: ",")))
+            hits.phase(user: true, active: true)
+            KBodyLog.hit("FEEDHIT demo A: drag 800 pt/s through card 1")
+            await line(to: marks[0] + 40, speed: 800)
+            KBodyLog.hit("FEEDHIT demo B: fling 2000 pt/s through card 2")
+            await line(to: marks[1] + 60, speed: 2000)
+            KBodyLog.hit("FEEDHIT demo C: decelerate into card 3 (snap landing)")
+            let y0 = y, target = marks[2]
+            for i in 1...75 {
+                y = target - (target - y0) * exp(-CGFloat(i) * 0.016 / 0.15)
+                set(y)
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            y = target; set(y)
+            try? await Task.sleep(for: .milliseconds(300))
+            KBodyLog.hit("FEEDHIT demo D: back up to the top (cards drop: expect nothing)")
+            await line(to: 0, speed: 1500)
+            KBodyLog.hit("FEEDHIT demo E: slow drag 300 pt/s through card 1 again (re-armed)")
+            await line(to: marks[0] + 20, speed: 300)
+            try? await Task.sleep(for: .milliseconds(200))
+            KBodyLog.hit("FEEDHIT demo F: cards 2 and 3 in one frame (expect one hit, x2)")
+            y = marks[2] + 10; set(y)
+            try? await Task.sleep(for: .milliseconds(300))
+            KBodyLog.hit("FEEDHIT demo G: jump past card 4 and 5 with no finger (expect silent)")
+            hits.phase(user: false, active: true)
+            y = marks[4] + 10; set(y)
+            try? await Task.sleep(for: .milliseconds(100))
+            hits.phase(user: false, active: false)
+            KBodyLog.hit("FEEDHIT demo end")
+        }
+        return v
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+
+    private static func find(in view: UIView) -> UIScrollView? {
+        if let s = view as? UIScrollView, s.contentSize.height > s.bounds.height { return s }
+        for sub in view.subviews { if let s = find(in: sub) { return s } }
+        return nil
+    }
+}
+#endif
 
 // MARK: - Stack
 

@@ -41,9 +41,11 @@ import { NewBacklogTrigger } from "./new-backlog-button";
  *    the fan does NOT open anything (founder): it only sits in the centre;
  *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Renombrar ·
  *    Privacidad · Borrar colección).
- *  - The order: the pinned one, the rest (server order), the empty ones,
- *    "no puedo esperar" PENULTIMATE (founder) and LAST the ghost fan "Nueva
- *    colección" — which is where creating a collection lives now.
+ *  - The order: FIRST the ghost fan "Nueva colección" (founder, 2026-09-27:
+ *    to the left of the first collection) — which is where creating a
+ *    collection lives now —, then the pinned one, the rest (server order),
+ *    the empty ones and "no puedo esperar" LAST. It OPENS on the first real
+ *    collection (index 1), never on the ghost, whose dimmed name peeks left.
  *  - The header's Compartir + Opciones (glass 44) act on the collection in
  *    the centre; over the ghost they fade out. "no puedo esperar" can't be
  *    shared, so it keeps only Opciones (Ver como lista).
@@ -53,7 +55,8 @@ import { NewBacklogTrigger } from "./new-backlog-button";
  *    in its bottom tone under the dock.
  *
  * The current collection is remembered by id (sessionStorage), so a pin —
- * which reorders the list on refresh — keeps you on the one you were on.
+ * which reorders the list on refresh — keeps you on the one you were on. A
+ * remembered ghost, or an id that no longer exists, starts on index 1.
  */
 
 type Entry =
@@ -123,13 +126,15 @@ export function CollectionCards({
     const pinned = shelves.filter((s) => s.pinned);
     const full = shelves.filter((s) => !s.pinned && s.itemCount > 0);
     const empties = shelves.filter((s) => !s.pinned && s.itemCount === 0);
-    const out: Entry[] = [...pinned, ...full, ...empties].map(shelf);
+    const out: Entry[] = [
+      { kind: "ghost", id: GHOST_ID, name: "nueva colección", fan: [], hexes: [] },
+      ...[...pinned, ...full, ...empties].map(shelf),
+    ];
     if (upcoming.length > 0) {
       // Soonest first; the fan leads with the soonest.
       const fan = upcoming.slice(0, 3);
       out.push({ kind: "auto", id: AUTO_ID, name: "no puedo esperar", items: upcoming, fan, hexes: fanHexes(fan, upcoming) });
     }
-    out.push({ kind: "ghost", id: GHOST_ID, name: "nueva colección", fan: [], hexes: [] });
     return out;
   }, [shelves, upcoming, live]);
 
@@ -145,11 +150,16 @@ export function CollectionCards({
   const [curId, setCurId] = useState<string | null>(null);
   useEffect(() => {
     const id = remembered();
+    // Opening Tus colecciones never lands on the ghost: a remembered "nueva
+    // colección" starts on the first collection like a fresh visit.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- restore once from sessionStorage after hydration
-    if (id) setCurId(id);
+    if (id && id !== GHOST_ID) setCurId(id);
   }, []);
+  // Nothing remembered (SSR, first visit) or it's gone → the first REAL
+  // collection, index 1 (the page only mounts this with ≥ 1 collection). The
+  // SSR frame is already there, and a restored id lands by `set` — no spring.
   const found = entries.findIndex((e) => e.id === curId);
-  const idx = found >= 0 ? found : 0;
+  const idx = found >= 0 ? found : Math.min(1, entries.length - 1);
   const cur = entries[idx];
 
   const ctl = useRef<CollectionControls>(null);
@@ -162,7 +172,7 @@ export function CollectionCards({
     try {
       window.sessionStorage.setItem(REMEMBER, next.id);
     } catch {
-      // private mode: the carousel just starts at the first one next time
+      // private mode: the carousel just starts at the first collection next time
     }
   });
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -461,7 +471,7 @@ function AutoMeta({ items, now }: { items: UpcomingItem[]; now: number }) {
 /* ---------------------------------------------------------------- ghost */
 
 /**
- * The last fan (10a): the ghost "Nueva colección" — its phrase and the glass
+ * The first fan (10a): the ghost "Nueva colección" — its phrase and the glass
  * button that opens the existing create flow (O2a).
  */
 function GhostBody() {

@@ -107,11 +107,21 @@ private struct TitleHeader: View {
                 }
                 Text(metaLine(t, unreleased: unreleased)).monoLabel()
 
-                if let c = t.counts {
-                    CountRibbon(items: ribbon(c))
-                        .padding(.top, 2)
-                        .accessibilityLabel(ribbonA11y(c))
+                // The counts only come with the full ficha (`loadTitle`); a title opened from a cell
+                // is the list's summary until then. The ribbon's row is held from the first frame (a
+                // hidden one-count ribbon sets its height at any text size) and the counts fade in
+                // over it, so the actions below never jump while the cover lands. A title with no
+                // counts keeps the gap rather than collapsing late — collapsing would be the same jump.
+                ZStack {
+                    CountRibbon(items: [(.check, "0")]).hidden().accessibilityHidden(true)
+                    if let c = t.counts {
+                        CountRibbon(items: ribbon(c))
+                            .accessibilityLabel(ribbonA11y(c))
+                            .transition(.opacity)
+                    }
                 }
+                .padding(.top, 2)
+                .kAnimation(KMotion.short, value: t.counts != nil)
 
                 HStack(spacing: 8) {
                     if !(unreleased && t.format == .album) {

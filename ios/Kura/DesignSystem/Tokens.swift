@@ -314,10 +314,21 @@ extension View {
     /// The dock floats over the page's own bottom tone, not over black: a fixed 150 band from
     /// transparent to the tail (at 75 %). Put it on the screen's ZStack, above the scroll view.
     func kFeedDockBand(_ hexes: [String]) -> some View {
+        kFeedDockBand(fill: Tint.feedTail(hexes))
+    }
+
+    /// The same band over any OPAQUE fill (e.g. a tail crossing between two collections): the
+    /// fill is masked by the band's alpha ramp. Crossing two semi-transparent bands instead
+    /// (`band(a)` + `band(b).opacity(t)`) is not a crossfade — where the ramp is partial the
+    /// stack gets more opaque and skews to `a`, and the band shows as a shadow mid-drag.
+    func kFeedDockBand<F: View>(fill: F) -> some View {
         overlay(alignment: .bottom) {
-            LinearGradient(stops: [.init(color: Tint.feedTail(hexes).opacity(0), location: 0),
-                                   .init(color: Tint.feedTail(hexes), location: 0.75)],
-                           startPoint: .top, endPoint: .bottom)
+            fill
+                .mask {
+                    LinearGradient(stops: [.init(color: .black.opacity(0), location: 0),
+                                           .init(color: .black, location: 0.75)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
                 .frame(height: 150)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)

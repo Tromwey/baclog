@@ -9,8 +9,9 @@ import { useHold } from "./use-hold";
 
 /**
  * "Títulos en columnas" (Colecciones formalizado): a collection's titles in
- * three independent columns — records 1:1 and posters 2:3 stack without gaps
- * (CSS columns, so the reading order runs down each column). Each tile: the
+ * three independent columns — records 1:1 and posters 2:3 stack without gaps,
+ * each title dealt in order to the shortest column (`dealColumns`) so the
+ * reading runs along the rows and no column is left empty. Each tile: the
  * cover at its native form with the state glyph or the wait pill top-left,
  * the title in Newsreader italic 14 and the year in mono 10.
  *
@@ -50,13 +51,45 @@ export function Masonry({
   onHold?: (key: string) => void;
   className?: string;
 }) {
+  const cols = dealColumns(items);
   return (
-    <div className={`columns-3 gap-x-3 px-5 ${className}`}>
-      {items.map((it) => (
-        <Tile key={it.key} it={it} onHold={onHold} />
+    <div className={`flex items-start gap-x-3 px-5 ${className}`}>
+      {cols.map((col, i) => (
+        <div key={i} className="flex min-w-0 flex-1 flex-col">
+          {col.map((it) => (
+            <Tile key={it.key} it={it} onHold={onHold} />
+          ))}
+        </div>
       ))}
     </div>
   );
+}
+
+/** A tile's height in column widths: the cover (1:1 record, 2:3 poster) plus
+ *  the title + mono lines and the 18 px gap (~61 px at a ~104 px column on a
+ *  375 phone). An estimate on purpose: measuring in the client would re-deal
+ *  after hydration and make the grid jump. */
+const TEXT_UNITS = 0.6;
+const tileUnits = (it: MasonryItem) => (it.mediaType === "album" ? 1 : 1.5) + TEXT_UNITS;
+
+/**
+ * Deal the titles, in order, to the currently shortest of three columns (a
+ * tie goes to the leftmost): 1→col 1, 2→col 2, 3→col 3, 4→the shortest…, so
+ * the manual order reads along the rows and ≥ 3 titles never leave a column
+ * empty (4 equal = 2·1·1). Founder, 2026-09-27 — replaced CSS `columns-3`,
+ * which filled 4 records 2·2·0. Twin of iOS `ColumnsLayout` (Masonry.swift),
+ * which uses the measured heights.
+ */
+export function dealColumns<T extends MasonryItem>(items: readonly T[], columns = 3): T[][] {
+  const cols: T[][] = Array.from({ length: columns }, () => []);
+  const tops = new Array<number>(columns).fill(0);
+  for (const it of items) {
+    let c = 0;
+    for (let i = 1; i < columns; i++) if (tops[i] < tops[c] - 1e-6) c = i;
+    cols[c].push(it);
+    tops[c] += tileUnits(it);
+  }
+  return cols;
 }
 
 function Tile({ it, onHold }: { it: MasonryItem; onHold?: (key: string) => void }) {
@@ -81,7 +114,7 @@ function Tile({ it, onHold }: { it: MasonryItem; onHold?: (key: string) => void 
           : undefined
       }
       {...(onHold ? handlers : {})}
-      className="mb-[18px] flex select-none flex-col gap-1.5 [break-inside:avoid] bl-press [-webkit-touch-callout:none]"
+      className="mb-[18px] flex select-none flex-col gap-1.5 bl-press [-webkit-touch-callout:none]"
     >
       <span
         data-cover-flight={it.flightKey}

@@ -16,7 +16,7 @@ import {
  * The motion of Tus colecciones' carousel (Colecciones · transiciones §1 —
  * "el carrusel sigue al dedo", design/kura/colecciones-transiciones.dc.html).
  *
- * ONE continuous position `pos` (0 = the first collection, 1 = the second…)
+ * ONE continuous position `pos` (0 = the ghost "nueva colección", 1 = the first collection…)
  * drives everything, so the fan, the strip of names and the page's gradient
  * move together and 1:1 with the finger:
  *  - fans sit 320 px apart, shrink 8 % and fade out by one step away;

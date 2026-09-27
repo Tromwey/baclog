@@ -18,6 +18,12 @@ import { KIcon } from "./icons";
  * all three empty with the dashed "+" in front (the empty states, 6a/6b/6c).
  * No art = the palette recipe (`posterFallbackStyle`).
  *
+ * A collection of one or two titles shows only the covers it has — the front
+ * cover alone at one, front + the left card at two — never an empty dark
+ * slot standing in for a title that doesn't exist. `ghost` (the empty
+ * collection / "Nueva colección" affordance) is unaffected: it always draws
+ * all three empty with the dashed "+" in front.
+ *
  * Server-safe (no hooks); the caller wraps it in a link or button.
  */
 
@@ -64,6 +70,11 @@ export function Fan({
         : "0 3px 6px -3px rgba(0,0,0,.9)";
   const floorW = 174 * s + 70 * (1 - s);
   const slots = [covers[1], covers[2], covers[0]] as const;
+  // Below three covers (and not the ghost/empty state), only draw the slots
+  // that have a real title: front alone at one, front + left at two.
+  const showLeft = ghost || covers.length >= 2;
+  const showRight = ghost || covers.length >= 3;
+  const showFront = ghost || covers.length >= 1;
 
   return (
     <span
@@ -86,6 +97,7 @@ export function Fan({
       )}
       {slots.map((c, i) => {
         const front = i === 2;
+        if (front ? !showFront : i === 0 ? !showLeft : !showRight) return null;
         const at = front ? G.lead : i === 0 ? G.left : G.right;
         const album = c ? c.mediaType === "album" : !front && i === 1;
         const [w, h] = front ? (album ? G.lead.album : G.lead.poster) : album ? G.back.album : G.back.poster;

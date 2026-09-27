@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// "Títulos en columnas" (Colecciones formalizado): a collection's titles in three independent
-/// columns — records 1:1 and posters 2:3 stack without gaps, and the reading order runs DOWN each
-/// column (the web's CSS `columns-3`, balanced). Each tile: the cover at its native form with the
+/// columns — records 1:1 and posters 2:3 stack without gaps, each title dealt in order to the
+/// shortest column so the reading runs along the rows (`ColumnsLayout`). Each tile: the cover at its native form with the
 /// state glyph (24) or the wait pill top-left, the title in Newsreader italic 14 and the year (or
 /// the format) in mono 10. Gap 12 between columns, 18 between tiles, 20 on the sides.
 ///
@@ -107,9 +107,12 @@ struct MasonryTile: View {
     }
 }
 
-/// Balanced columns read top to bottom: the shortest column height H at which filling the
-/// columns in order (next tile goes to the next column once it would pass H) fits every tile —
-/// what CSS `column-fill: balance` does.
+/// Titles dealt across the columns in order, each to the currently SHORTEST column (a tie goes to
+/// the leftmost), with the tiles' real heights (a 2:3 poster is taller than a 1:1 record). So the
+/// reading runs along the rows — 1→col 1, 2→col 2, 3→col 3, 4→the shortest… — and a column is
+/// never left empty while there are at least as many titles as columns (4 equal tiles = 2·1·1).
+/// Founder, 2026-09-27: this replaced the CSS `columns-3` fill (4 records came out 2·2·0). The
+/// web's `masonry.tsx` deals the same way with heights estimated from the aspect.
 struct ColumnsLayout: Layout {
     var columns = 3
     var spacingX: CGFloat = 12
@@ -122,31 +125,19 @@ struct ColumnsLayout: Layout {
     /// Column and y of each tile, plus the tallest column.
     private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (slots: [(col: Int, y: CGFloat)], height: CGFloat) {
         let w = columnWidth(width)
-        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: w, height: nil)).height }
-        guard !heights.isEmpty else { return ([], 0) }
-        let total = heights.reduce(0, +) + spacingY * CGFloat(heights.count)
-        var target = max(heights.max() ?? 0, (total / CGFloat(columns)).rounded(.up))
-        while true {
-            var slots: [(Int, CGFloat)] = []
+        var tops = Array(repeating: CGFloat(0), count: max(1, columns))
+        var slots: [(col: Int, y: CGFloat)] = []
+        var tallest: CGFloat = 0
+        for v in subviews {
+            let h = v.sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+            // Half-point tolerance: rounding in the measured heights must not break a visual tie.
             var col = 0
-            var y: CGFloat = 0
-            var fits = true
-            for h in heights {
-                if y > 0 && y + h > target {
-                    col += 1
-                    y = 0
-                    if col >= columns { fits = false; break }
-                }
-                slots.append((col, y))
-                y += h + spacingY
-            }
-            if fits {
-                var tallest: CGFloat = 0
-                for (i, s) in slots.enumerated() { tallest = max(tallest, s.1 + heights[i]) }
-                return (slots.map { (col: $0.0, y: $0.1) }, tallest)
-            }
-            target += 4
+            for c in 1..<tops.count where tops[c] < tops[col] - 0.5 { col = c }
+            slots.append((col: col, y: tops[col]))
+            tallest = max(tallest, tops[col] + h)
+            tops[col] += h + spacingY
         }
+        return (slots, tallest)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
