@@ -4,19 +4,20 @@ import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, useTransition } from "react";
 import {
+  deleteBacklogAction,
   renameBacklogAction,
   setBacklogVisibilityAction,
 } from "@/app/actions/backlog-actions";
-import { useSheetDismiss } from "@/components/ui";
+import { SheetClose, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, LOCK_FILL } from "@/components/kura/icons";
 import {
   ChoiceRow,
   MenuRow,
   SHEET_FIELD,
+  SHEET_QUIET,
   SHEET_SOLID,
   SheetTitle,
 } from "@/components/kura/sheet-parts";
-import type { MediaType } from "@/modules/catalog/types";
 
 /**
  * The sheet bodies a collection shares between the list's hold sheet (10 ·
@@ -329,16 +330,67 @@ export function ShareBody({
   );
 }
 
-/* ------------------------------------------------------------------ meta */
+/* -------------------------------------------------------------- borrar */
 
-/** "24 · álbum" / "31 · mixto" — the hold sheet's mono meta. */
-export function kindMeta(count: number, byKind: Record<MediaType, { total: number }>): string {
-  const kinds = (Object.keys(byKind) as MediaType[]).filter((k) => byKind[k].total > 0);
-  const word =
-    kinds.length === 1
-      ? { film: "cine", series: "series", album: "álbum" }[kinds[0]]
-      : kinds.length === 0
-        ? "vacía"
-        : "mixto";
-  return `${count} · ${word}`;
+/**
+ * 35a — the ONE confirmation in this flow (it's irreversible). The copy is
+ * the frame's, made exact: a title that lives in another collection keeps
+ * its state there; this collection is what goes.
+ */
+export function DeleteBody({ backlogId, name, count }: { backlogId: string; name: string; count: number }) {
+  const [pending, startTransition] = useTransition();
+  const [failed, setFailed] = useState(false);
+  return (
+    <div role="alertdialog" aria-label="Borrar colección" className="flex flex-col gap-1.5 px-0">
+      <h2 className="font-brand text-[26px] font-normal leading-[1.1] [text-wrap:balance]">
+        ¿borrar {name}?
+      </h2>
+      <p className="pb-3.5 pt-1 font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
+        {failed
+          ? "No se pudo borrar. Revisa tu conexión e inténtalo otra vez."
+          : count > 0
+            ? `Sus ${count} ${count === 1 ? "título conserva su estado" : "títulos conservan su estado"} en tus otras colecciones. Solo se borra esta. No se puede deshacer.`
+            : "Solo se borra esta. No se puede deshacer."}
+      </p>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            setFailed(false);
+            try {
+              await deleteBacklogAction(backlogId);
+            } catch (err) {
+              // redirect() can surface as a thrown NEXT_REDIRECT — that's success.
+              const digest =
+                err && typeof err === "object" && "digest" in err ? String(err.digest) : "";
+              if (digest.startsWith("NEXT_REDIRECT")) return;
+              setFailed(true);
+            }
+          })
+        }
+        className={SHEET_SOLID}
+      >
+        {pending ? "Borrando…" : "Borrar colección"}
+      </button>
+      <SheetClose className={SHEET_QUIET}>Cancelar</SheetClose>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ head */
+
+/**
+ * The head of a collection's Opciones (10b) and of its hold sheet (9a): the
+ * name in Newsreader 24 and "N títulos" in mono at the right.
+ */
+export function CollectionSheetHead({ name, count }: { name: string; count: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 px-2.5 pb-2.5">
+      <span className="min-w-0 truncate font-brand text-[24px] text-text">{name}</span>
+      <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+        {count} {count === 1 ? "título" : "títulos"}
+      </span>
+    </div>
+  );
 }

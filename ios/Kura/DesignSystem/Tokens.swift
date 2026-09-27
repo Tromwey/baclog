@@ -89,6 +89,8 @@ enum KColor {
     static let radioRing = Color(hex: textHex, opacity: 0.24)
     /// Selected glass (`rgba(255,255,255,.22)`) — pressed/selected state for glass controls.
     static let glassSelected = Color.white.opacity(0.22)
+    /// Hairline between groups of sheet rows `rgba(255,255,255,.08)` (a content divider: allowed).
+    static let sheetDivider = Color.white.opacity(0.08)
 
     /// Fixed art tiles that have no cover to tint from — the only gradients not born from a
     /// palette. The recap notification's 蔵 tile (warm) and "no puedo esperar"'s lead (pizarra).

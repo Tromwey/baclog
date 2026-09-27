@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Worktrees of parallel sessions live inside the repo (`.claude/worktrees/*`)
     // and carry their own `.next/` output; lint the main tree only.
     ".claude/worktrees/**",
+    // Copias exportadas de Claude Design (runtime ajeno, no es código de la app).
+    "design/**",
   ]),
 ]);
 

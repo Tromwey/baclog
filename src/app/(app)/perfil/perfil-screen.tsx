@@ -9,19 +9,18 @@ import {
   type GlyphKind,
   SectionTitle,
 } from "@/components/kura/components";
-import { CollectionsShowcase } from "@/components/kura/collections-showcase";
-import { Fan } from "@/components/kura/fan";
 import { feedSurface, feedTail, releaseLabel, tintCard } from "@/components/kura/tint";
 import type {
   ObsessionTile,
   ProfileCards,
   ReactionCounts,
 } from "@/modules/backlog/profile-stats";
-import type { Shelf } from "@/modules/backlog/shelves";
+import type { ShelfSummary } from "@/modules/backlog/shelves";
 import { plural } from "@/lib/plural";
 import { ShareChip } from "@/app/u/share-chip";
 import { monthName } from "@/modules/backlog/recap-format";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
+import { OwnCollections } from "./own-collections";
 
 /**
  * 20c Perfil propio (Kura, flujo 09) — the same anatomy as the public profile
@@ -78,7 +77,7 @@ export function PerfilScreen({
   upcoming: UpcomingItem[];
   obsessions: ObsessionTile[];
   cards: ProfileCards;
-  shelves: Shelf[];
+  shelves: ShelfSummary[];
   recapKey: string | null;
   now: number;
 }) {
@@ -161,24 +160,7 @@ export function PerfilScreen({
       <main className="flex flex-col gap-[30px] pt-2">
         <ObsessionStrip obsessions={obsessions} />
         <WaitStrip items={upcoming} now={now} />
-        <CollectionsShowcase
-          title="tus colecciones"
-          seeAllHref="/backlogs"
-          collections={shelves.map((b) => ({
-            id: b.id,
-            name: b.name,
-            vibe: b.vibe,
-            count: b.itemCount,
-            pinned: b.pinned,
-            fan: b.fan,
-            href: `/backlogs/${b.id}`,
-          }))}
-          empty={
-            <Link href="/backlogs" aria-label="Tu primera colección" className="flex justify-center bl-press-lg">
-              <Fan covers={[]} lead={186} ghost />
-            </Link>
-          }
-        />
+        <OwnCollections shelves={shelves} username={username} profilePublic={isPublic} />
         <CardsFan hexes={hexes} cards={cards} recapKey={recapKey} />
       </main>
 

@@ -9,14 +9,14 @@ import SwiftUI
 /// (your seal + "solo tú · 12 títulos"); and the format pills that filter (only with more than
 /// one format; tap again to clear).
 ///
-/// Body: "el orden" + Reordenar, then the titles in three columns (`Masonry`) in the MANUAL
-/// order — or Recientes · Título · Estado · Año (per device), or the list (16c). Holding a title:
-/// 18c (Tu reacción · Reseñar · Usar como portada · Mover · Quitar). Twin of the web's
-/// `collection-screen.tsx`.
+/// Everything under the name is `CollectionBody`, the SAME body Tus colecciones draws under its
+/// carousel (propuesta 10): "el orden" + Reordenar, then the titles in three columns (`Masonry`)
+/// in the MANUAL order — or Recientes · Título · Estado · Año (per device), or the list (16c).
+/// Holding a title: 18c (Tu reacción · Reseñar · Usar como portada · Mover · Quitar). Twin of the
+/// web's `collection-screen.tsx`.
 struct CollectionDetailView: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
-    @State private var filter: MediaFormat? = nil
 
     var body: some View {
         let c = store.collection(collectionID)
@@ -40,10 +40,6 @@ struct CollectionDetailView: View {
     }
 
     private func content(_ c: KCollection) -> some View {
-        let all = store.titles(in: c)
-        let formats = Self.formats(all)
-        let active = filter.flatMap { f in formats.contains(f) ? f : nil }
-        let visible = active.map { f in all.filter { $0.format == f } } ?? all
         let empty = c.titleIDs.isEmpty
         let tint = empty ? [] : store.hexes(of: c)
 
@@ -52,55 +48,21 @@ struct CollectionDetailView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     FanHeader(fan: store.fan(of: c), name: c.name, ghost: empty,
-                              onGhost: { store.present(.addTitles(c.id)) }) {
+                              onGhost: { store.present(.addTitles(c.id)) }, bottom: empty ? 26 : 0) {
                         if !empty {
                             Text(c.pinned ? "colección · fijada" : "colección").monoLabel(10).padding(.top, 4)
                         }
                     } below: {
-                        if !empty {
-                            if let vibe = c.shownVibe { VibeLine(text: vibe) }
-                            Credits(count: c.titleIDs.count)
-                            if formats.count > 1 {
-                                HStack(spacing: 6) {
-                                    ForEach(formats) { f in
-                                        FormatPill(format: f, count: all.filter { $0.format == f }.count, selected: active == f) {
-                                            withAnimation(KMotion.short) { filter = (active == f) ? nil : f }
-                                        }
-                                    }
-                                }
-                                .padding(.top, 6)
-                            }
-                        }
+                        EmptyView()
                     }
-                    if let e = loadError(c) {
-                        RetryStrip(error: e, text: e == .offline ? nil : "Faltan títulos de esta colección.") {
-                            Task { await store.loadCollection(c.id, force: true) }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
-                    }
-                    if empty {
-                        EmptyCollectionBody { store.present(.addTitles(c.id)) }
-                    } else {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(c.sort.heading).font(.kura.news(22)).foregroundStyle(KColor.text)
-                                .accessibilityAddTraits(.isHeader)
-                            Spacer()
-                            if c.titleIDs.count > 1 {
-                                Button { store.present(.reorder(c.id)) } label: {
-                                    Text("Reordenar").monoLabel(11).frame(minHeight: 44).contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
+                    // Everything under the name is the same body as Tus colecciones (propuesta 10).
+                    CollectionBody(collection: c) {
+                        if let e = loadError(c) {
+                            RetryStrip(error: e, text: e == .offline ? nil : "Faltan títulos de esta colección.") {
+                                Task { await store.loadCollection(c.id, force: true) }
                             }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 14)
-                        if c.layout == .list {
-                            TitleList(titles: visible, collectionID: c.id)
-                        } else {
-                            Masonry(titles: visible, onHold: { t in
-                                store.present(.titleActions(titleID: t.id, collectionID: c.id))
-                            })
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 12)
                         }
                     }
                 }
@@ -110,23 +72,30 @@ struct CollectionDetailView: View {
             .ignoresSafeArea(.container, edges: .top)
 
             TopChrome {
-                HStack(spacing: 8) {
-                    IconChip44(systemName: "square.and.arrow.up", label: "Compartir \(c.name)") {
-                        store.present(.share(c.id))
-                    }
-                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de la colección") {
-                        store.present(.more(c.id))
-                    }
-                }
+                CollectionChips(collection: c)
             }
         }
     }
 
     /// The formats in the order each first appears.
-    static func formats(_ titles: [Title]) -> [MediaFormat] {
-        var seen: [MediaFormat] = []
-        for t in titles where !seen.contains(t.format) { seen.append(t.format) }
-        return seen
+    static func formats(_ titles: [Title]) -> [MediaFormat] { CollectionBody<EmptyView>.formats(titles) }
+}
+
+/// Compartir + Opciones in glass (44, `kGlass`), over one collection — 10b's top right and 10a's
+/// header (the collection in the centre). Opciones opens the full sheet (18a).
+struct CollectionChips: View {
+    @Environment(AppStore.self) private var store
+    let collection: KCollection
+
+    var body: some View {
+        HStack(spacing: 8) {
+            IconChip44(systemName: "square.and.arrow.up", label: "Compartir \(collection.name)") {
+                store.present(.share(collection.id))
+            }
+            IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de \(collection.name)") {
+                store.present(.more(collection.id))
+            }
+        }
     }
 }
 
@@ -153,6 +122,8 @@ struct FanHeader<Label: View, Below: View>: View {
     let name: String
     var ghost = false
     var onGhost: (() -> Void)? = nil
+    /// The gap under the header (0 when `CollectionBody` follows: it brings its own).
+    var bottom: CGFloat = 26
     @ViewBuilder var label: Label
     @ViewBuilder var below: Below
 
@@ -179,7 +150,7 @@ struct FanHeader<Label: View, Below: View>: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 126)
         .padding(.horizontal, 24)
-        .padding(.bottom, 26)
+        .padding(.bottom, bottom)
     }
 }
 
@@ -353,7 +324,9 @@ struct WaitingCollectionView: View {
                         .padding(.horizontal, 32)
                         .padding(.top, 16)
                     } else {
-                        Masonry(titles: all, badge: { t in store.releaseLabel(t).map(MasonryBadge.wait) ?? .none })
+                        // 9b: holding a title opens the reduced 18c (Tu reacción · Reseñar).
+                        Masonry(titles: all, badge: { t in store.releaseLabel(t).map(MasonryBadge.wait) ?? .none },
+                                onHold: { t in store.present(.titleActions(titleID: t.id, collectionID: nil)) })
                     }
                 }
                 .padding(.bottom, 56)

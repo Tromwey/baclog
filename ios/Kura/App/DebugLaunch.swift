@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
 /// collections (`-kuraCarousel <id>` starts the carousel on that collection) · loading · empty ·
-/// offline · newcollection · collection · reorder · quick · publiccollection ·
+/// offline · newcollection · collection · reorder · quick · collectionsmore · profilequick · waitactions · publiccollection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
 /// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
 /// identities · unlinkidentity · lastwayin · lastwayintoast · mergechooser · mergecode · mergelimit · mergeconfirm
@@ -99,6 +99,14 @@ enum DebugLaunch {
             main(.collections, [.collection("hermana")], sheet: .reorder("hermana"))
         case "quick":
             main(sheet: .collectionQuick("hermana"))
+        // Propuesta 9/10: Opciones from Tus colecciones (with `-kuraCarousel hermana`), 9a from
+        // your own profile, and 9b's reduced 18c (with `-kuraCarousel no-puedo-esperar`).
+        case "collectionsmore":
+            main(sheet: .more("hermana"))
+        case "profilequick":
+            main(.profile, sheet: .collectionQuick("hermana"))
+        case "waitactions":
+            main(sheet: .titleActions(titleID: "ycse", collectionID: nil))
         case "publiccollection":
             main(.feed, [.person("luciarrr"), .publicCollection(handle: "luciarrr", id: "ghibli completo")])
         case "emptycollection":

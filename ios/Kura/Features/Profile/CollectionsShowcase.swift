@@ -17,6 +17,8 @@ struct ShowcaseItem: Identifiable {
     let fan: [Title]
     /// nil = not openable (a preview).
     let open: (() -> Void)?
+    /// Own profile only: holding the fan opens 9a (the collection's options).
+    var hold: (() -> Void)? = nil
     /// Visitor only: the featured one's public page.
     var shareLink: URL? = nil
 }
@@ -61,7 +63,7 @@ struct CollectionsShowcase<Empty: View>: View {
             if let featured {
                 VStack(spacing: 8) {
                     FanView(covers: featured.fan, lead: 186, ghost: featured.fan.isEmpty)
-                        .modifier(OpenOnTap(open: featured.open, label: "Abrir \(featured.name)"))
+                        .modifier(OpenOnTap(open: featured.open, hold: featured.hold, label: "Abrir \(featured.name)"))
                     Text("\(featured.pinned ? "fijada · " : "")\(featured.count) \(featured.count == 1 ? "título" : "títulos")")
                         .monoLabel(10)
                     Text(featured.name)
@@ -108,7 +110,7 @@ struct CollectionsShowcase<Empty: View>: View {
                                 }
                             }
                             .frame(maxWidth: .infinity)
-                            .modifier(OpenOnTap(open: c.open, label: "\(c.name), \(c.count) \(c.count == 1 ? "título" : "títulos")"))
+                            .modifier(OpenOnTap(open: c.open, hold: c.hold, label: "\(c.name), \(c.count) \(c.count == 1 ? "título" : "títulos")"))
                         }
                     }
                     .padding(.horizontal, 16)
@@ -127,21 +129,32 @@ extension CollectionsShowcase where Empty == EmptyView {
     }
 }
 
-/// Tap-to-open with the press feel, or nothing when there's nowhere to go (a preview).
+/// Tap-to-open with the press feel (+ hold for 9a on your own profile), or nothing when there's
+/// nowhere to go (a preview).
 private struct OpenOnTap: ViewModifier {
     let open: (() -> Void)?
+    var hold: (() -> Void)? = nil
     let label: String
 
     func body(content: Content) -> some View {
         if let open {
             content
                 .contentShape(Rectangle())
-                .kPressable(action: open)
+                .kPressable(longPress: hold, action: open)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(label)
                 .accessibilityAddTraits(.isButton)
+                .modifier(HoldAccessibility(hold: hold))
         } else {
             content.accessibilityElement(children: .combine)
         }
+    }
+}
+
+/// VoiceOver's way to the hold: an "Opciones" action.
+private struct HoldAccessibility: ViewModifier {
+    let hold: (() -> Void)?
+    func body(content: Content) -> some View {
+        if let hold { content.accessibilityAction(named: "Opciones", hold) } else { content }
     }
 }

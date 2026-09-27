@@ -3,7 +3,8 @@ import { Fan } from "@/components/kura/fan";
 
 /**
  * 6c Cargando (Colecciones formalizado): the real header ("tus colecciones"
- * + the 44 chip, so nothing jumps when the page lands), then the carousel's
+ * + the two 44 chips, Compartir and Opciones, so nothing jumps when the page
+ * lands), then the carousel's
  * shape — the ghost fan at 225 in the same 290 band, the name's bar, the
  * meta's bar, and a first row of three columns (póster · disco · póster) —
  * on `--s1`, with the system's one allowed pulse (opacity, 1.6 s).
@@ -16,7 +17,10 @@ export default function Loading() {
     <main className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text">
       <header className="flex items-end justify-between px-5 pb-[18px] pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
         <h1 className="font-brand text-[36px] font-normal leading-[1.02]">tus colecciones</h1>
-        <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
+        <span className="flex gap-2">
+          <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
+          <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
+        </span>
       </header>
       <div aria-busy="true" aria-label="Cargando colecciones" className={`flex flex-col items-center ${SKELETON_PULSE}`}>
         <div className="flex h-[290px] items-start pt-3.5">

@@ -314,6 +314,16 @@ struct SheetHeader: View {
     }
 }
 
+/// The hairline between groups of sheet rows (1 pt, margin 6 · 12).
+struct SheetDivider: View {
+    var body: some View {
+        Rectangle().fill(KColor.sheetDivider).frame(height: 1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .accessibilityHidden(true)
+    }
+}
+
 /// 54 pt sheet row: icon in a 24 slot, label 16/500, optional trailing.
 struct SheetRow<Trailing: View>: View {
     let systemImage: String

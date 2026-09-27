@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 import { getCollaboratorsForBacklogs } from "./collaborators";
+import type { CollectionItem } from "./collection-item";
 import { fanHexes, fanOf, type Collaborator, type FanCover } from "./fan";
 import { MANUAL_ORDER } from "./queries";
 
@@ -17,26 +18,15 @@ import { MANUAL_ORDER } from "./queries";
  * first, then newest first) and ALL of the user's memberships in
  * `MANUAL_ORDER`, joined to their per-title state (`user_item`) and the shared
  * cover facts (`catalog_item`) — AGENTS.md: state never lives on
- * `backlog_item`, palette never on `user_item`. Counts use every membership;
- * `covers` is capped (the carousel shows COVER_CAP and links to the rest),
- * the fan is resolved over the whole order so a chosen cover past the cap
- * still leads it.
+ * `backlog_item`, palette never on `user_item`. Every membership travels
+ * (Colecciones · una sola página, 2026-09-27): Tus colecciones mounts the
+ * collection's whole body under the carousel — every title, Mover a, the
+ * memberships a move checks — so there is no cap. The profile only needs the
+ * fans and counts: it passes `withoutItems(shelves)` to the client.
  */
 
-export interface ShelfCover {
-  backlogItemId: string;
-  catalogItemId: string;
-  title: string;
-  mediaType: MediaType;
-  year: number | null;
-  posterUrl: string | null;
-  paletteHex: string[] | null;
-  status: string;
-  verdict: "liked" | "disliked" | null;
-  obsessed: boolean;
-  /** ISO string, or null when the catalog has no date. */
-  releaseDate: string | null;
-}
+/** A title of a shelf — the body's `CollectionItem`. */
+export type ShelfCover = CollectionItem;
 
 export interface KindCount {
   total: number;
@@ -55,8 +45,8 @@ export interface Shelf {
   doneCount: number;
   /** Totals per kind (the hold sheet's "24 · mixto"). */
   byKind: Record<MediaType, KindCount>;
-  /** In the manual order, capped at COVER_CAP. */
-  covers: ShelfCover[];
+  /** Every title, in the manual order. */
+  items: ShelfCover[];
   /** The three covers it shows itself with (fan.ts `fanOf`). */
   fan: ShelfCover[];
   /** The two tones it tints with (fan.ts `fanHexes`); [] = no colour. */
@@ -64,8 +54,16 @@ export interface Shelf {
   collaborators: Collaborator[];
 }
 
-/** The carousel's grid shows this many titles, then "Ver los N". */
-export const COVER_CAP = 30;
+/** A shelf without its titles — what a screen that only draws fans needs. */
+export type ShelfSummary = Omit<Shelf, "items">;
+
+export function withoutItems(shelves: readonly Shelf[]): ShelfSummary[] {
+  return shelves.map((s) => {
+    const { items, ...summary } = s;
+    void items;
+    return summary;
+  });
+}
 
 const emptyByKind = (): Record<MediaType, KindCount> => ({
   film: { total: 0, done: 0 },
@@ -98,11 +96,13 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
         backlogItemId: backlogItems.id,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
+        byline: catalogItems.byline,
         mediaType: catalogItems.mediaType,
         year: catalogItems.year,
         posterUrl: catalogItems.posterUrl,
         paletteHex: catalogItems.paletteHex,
         releaseDate: catalogItems.releaseDate,
+        addedAt: backlogItems.addedAt,
         status: userItems.status,
         verdict: userItems.verdict,
         obsessed: userItems.obsessed,
@@ -123,7 +123,7 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
     getCollaboratorsForBacklogs(rows.map((r) => r.id)),
   ]);
 
-  const shelves = new Map<string, Shelf & { all: ShelfCover[] }>(
+  const shelves = new Map<string, Shelf>(
     rows.map(({ pinnedAt, ...r }) => [
       r.id,
       {
@@ -132,11 +132,10 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
         itemCount: 0,
         doneCount: 0,
         byKind: emptyByKind(),
-        covers: [],
+        items: [],
         fan: [],
         hexes: [],
         collaborators: credits.get(r.id) ?? [],
-        all: [],
       },
     ]),
   );
@@ -155,6 +154,7 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       backlogItemId: m.backlogItemId,
       catalogItemId: m.catalogItemId,
       title: m.title,
+      byline: m.byline,
       mediaType: m.mediaType,
       year: m.year,
       posterUrl: m.posterUrl,
@@ -163,15 +163,15 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       verdict: m.verdict,
       obsessed: m.obsessed,
       releaseDate: m.releaseDate ? m.releaseDate.toISOString() : null,
+      addedAt: m.addedAt.toISOString(),
     };
-    shelf.all.push(cover);
-    if (shelf.covers.length < COVER_CAP) shelf.covers.push(cover);
+    shelf.items.push(cover);
   }
 
   return rows.map((r) => {
-    const { all, ...shelf } = shelves.get(r.id)!;
-    shelf.fan = fanOf(all, shelf.coverCatalogItemId);
-    shelf.hexes = fanHexes(shelf.fan, all);
+    const shelf = shelves.get(r.id)!;
+    shelf.fan = fanOf(shelf.items, shelf.coverCatalogItemId);
+    shelf.hexes = fanHexes(shelf.fan, shelf.items);
     return shelf;
   });
 }

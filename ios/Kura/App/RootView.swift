@@ -208,8 +208,8 @@ struct SheetContent: View {
     var body: some View {
         switch route {
         case .newCollection(let adding, let from): NewCollectionSheet(addingTitleID: adding, movingFrom: from)
-        case .collectionQuick(let id): CollectionQuickSheet(collectionID: id)
-        case .more(let id): MoreSheet(collectionID: id)
+        case .collectionQuick(let id): CollectionOptionsSheet(collectionID: id, full: false)
+        case .more(let id): CollectionOptionsSheet(collectionID: id)
         case .sort(let id): SortSheet(collectionID: id)
         case .rename(let id): RenameSheet(collectionID: id)
         case .privacy(let id): PrivacySheet(collectionID: id)

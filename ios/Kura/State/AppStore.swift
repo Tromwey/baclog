@@ -25,7 +25,8 @@ enum SheetRoute: Identifiable, Hashable {
     case privacy(String)
     case share(String)
     case deleteCollection(String)
-    case titleActions(titleID: String, collectionID: String)
+    /// 18c. `collectionID` nil = 9b, a title of "no puedo esperar" (Tu reacción · Reseñar only).
+    case titleActions(titleID: String, collectionID: String?)
     case moveTo(titleID: String, fromID: String)
     case complete(titleID: String, focusReview: Bool)
     case saveTo(String)

@@ -1,36 +1,51 @@
 import SwiftUI
 
-// MARK: - 18a Más
+// MARK: - 18a Opciones · 9a Mantener el abanico
 
-/// Opciones de la colección: Agregar títulos · Compartir · Fijar · — · Ver como lista · Ordenar ·
-/// Renombrar · Privacidad · — · Borrar colección. (The cover is chosen by holding a title.)
-struct MoreSheet: View {
+/// ONE options sheet per collection, the same wherever you come from (propuesta 9: "una sola hoja
+/// de Opciones por rol"). The name 24 + "N títulos", then Agregar títulos · Compartir ·
+/// Fijar/Desfijar · — · [Ver como lista · Ordenar ·] Renombrar · Privacidad · — · Borrar colección.
+/// `full` (Opciones, the ⋯ chip in 10a/10b) carries the two VIEW rows; holding a fan (9a: Tus
+/// colecciones, your own profile) leaves them out — they change the view of a screen you're not on.
+struct CollectionOptionsSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
+    var full = true
 
     var body: some View {
         if let c = store.collection(collectionID) {
+            let n = c.titleIDs.count
             VStack(spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(c.name).font(.kura.news(24)).foregroundStyle(KColor.text).lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 0)
+                    Text("\(n) \(n == 1 ? "título" : "títulos")").monoLabel()
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
                 SheetRow(systemImage: "plus", label: "Agregar títulos") { store.present(.addTitles(c.id)) }
                 SheetRow(systemImage: "square.and.arrow.up", label: "Compartir") { store.present(.share(c.id)) }
                 SheetRow(systemImage: c.pinned ? "pin.slash" : "pin", label: c.pinned ? "Desfijar" : "Fijar",
                          action: { store.dismissSheet(); store.togglePin(c.id) }) {
-                    if c.pinned { Text("fijada").monoLabel() }
+                    if c.pinned { Text("fijada").monoLabel(color: KColor.text3) }
                 }
-                Color.clear.frame(height: 8)
-                SheetRow(systemImage: c.layout == .list ? "square.grid.3x2" : "list.bullet",
-                         label: c.layout == .list ? "Ver en columnas" : "Ver como lista") {
-                    store.dismissSheet()
-                    withAnimation(KMotion.short) { store.setLayout(c.id, c.layout == .list ? .covers : .list) }
-                }
-                SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
-                    Text(c.sort.label).monoLabel()
+                SheetDivider()
+                if full {
+                    SheetRow(systemImage: c.layout == .list ? "square.grid.3x2" : "list.bullet",
+                             label: c.layout == .list ? "Ver en columnas" : "Ver como lista") {
+                        store.dismissSheet()
+                        withAnimation(KMotion.short) { store.setLayout(c.id, c.layout == .list ? .covers : .list) }
+                    }
+                    SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
+                        Text(c.sort.label).monoLabel(color: KColor.text3)
+                    }
                 }
                 SheetRow(systemImage: "pencil", label: "Renombrar") { store.present(.rename(c.id)) }
                 SheetRow(systemImage: "lock", label: "Privacidad", action: { store.present(.privacy(c.id)) }) {
-                    Text(c.privacy.label).monoLabel()
+                    Text(c.privacy.label).monoLabel(color: KColor.text3)
                 }
-                Color.clear.frame(height: 8)
+                SheetDivider()
                 SheetRow(systemImage: "trash", label: "Borrar colección") { store.present(.deleteCollection(c.id)) }
             }
             .padding(.horizontal, 12)
@@ -390,13 +405,17 @@ struct DeleteCollectionSheet: View {
 
 // MARK: - 18c Mantener presionado un título
 
+/// 18c. `collectionID` nil = the reduced variant of 9b ("no puedo esperar", which is automatic:
+/// no membership, no cover) — only Tu reacción and Reseñar, which open the reaction sheet (it
+/// sends `preview` on its own for a title that hasn't come out).
 struct TitleActionsSheet: View {
     @Environment(AppStore.self) private var store
     let titleID: String
-    let collectionID: String
+    let collectionID: String?
 
     var body: some View {
-        if let t = store.title(titleID), let c = store.collection(collectionID) {
+        let c = collectionID.flatMap { store.collection($0) }
+        if let t = store.title(titleID), collectionID == nil || c != nil {
             VStack(alignment: .leading, spacing: 2) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(t.name).font(.kura.newsItalic(22)).foregroundStyle(KColor.text)
@@ -406,39 +425,47 @@ struct TitleActionsSheet: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 10)
 
-                if store.isUnreleased(t) {
-                    SheetRow(systemImage: "clock", label: "La vi en preestreno", glyph: .clock) {
-                        store.present(.complete(titleID: t.id, focusReview: false))
+                if let c {
+                    if store.isUnreleased(t) {
+                        SheetRow(systemImage: "clock", label: "La vi en preestreno", glyph: .clock) {
+                            store.present(.complete(titleID: t.id, focusReview: false))
+                        }
+                    } else {
+                        reactionRows(t)
+                    }
+                    // The CHOSEN cover (not just the first in the order) can go back to automatic.
+                    let isCover = c.chosenCoverTitleID == t.id
+                    SheetRow(systemImage: "photo", label: isCover ? "Portada automática" : "Usar como portada",
+                             action: {
+                                 store.dismissSheet()
+                                 store.setCover(c.id, titleID: isCover ? nil : t.id)
+                             }) {
+                        if isCover { Text("portada").monoLabel() }
+                    }
+                    SheetRow(systemImage: "arrow.right", label: "Mover a otra colección") {
+                        store.present(.moveTo(titleID: t.id, fromID: c.id))
+                    }
+                    SheetDivider()
+                    SheetRow(systemImage: "minus", label: "Quitar de la colección") {
+                        store.dismissSheet()
+                        store.remove(t.id, from: c.id)
                     }
                 } else {
-                    let m = store.mark(t.id)
-                    SheetRow(systemImage: "checkmark", label: "Tu reacción", glyph: m?.glyph ?? .check,
-                             action: { store.present(.complete(titleID: t.id, focusReview: false)) }) {
-                        Text(m?.myLabel ?? "Completar").monoLabel()
-                    }
-                    SheetRow(systemImage: "text.bubble", label: store.myReview(t.id) == nil ? "Reseñar" : "Editar reseña") {
-                        store.present(.complete(titleID: t.id, focusReview: true))
-                    }
-                }
-                // The CHOSEN cover (not just the first in the order) can go back to automatic.
-                let isCover = c.chosenCoverTitleID == t.id
-                SheetRow(systemImage: "photo", label: isCover ? "Portada automática" : "Usar como portada",
-                         action: {
-                             store.dismissSheet()
-                             store.setCover(c.id, titleID: isCover ? nil : t.id)
-                         }) {
-                    if isCover { Text("portada").monoLabel() }
-                }
-                SheetRow(systemImage: "arrow.right", label: "Mover a otra colección") {
-                    store.present(.moveTo(titleID: t.id, fromID: c.id))
-                }
-                Color.clear.frame(height: 8)
-                SheetRow(systemImage: "minus", label: "Quitar de la colección") {
-                    store.dismissSheet()
-                    store.remove(t.id, from: c.id)
+                    reactionRows(t)
                 }
             }
             .padding(.horizontal, 12)
+        }
+    }
+
+    @ViewBuilder private func reactionRows(_ t: Title) -> some View {
+        let m = store.mark(t.id)
+        SheetRow(systemImage: "checkmark", label: "Tu reacción", glyph: m?.glyph ?? .check,
+                 action: { store.present(.complete(titleID: t.id, focusReview: false)) }) {
+            Text(m?.myLabel ?? "Completar").monoLabel(color: KColor.text3)
+        }
+        SheetRow(systemImage: "text.bubble", label: store.myReview(t.id) == nil ? "Reseñar" : "Editar reseña") {
+            store.present(.complete(titleID: t.id, focusReview: true))
         }
     }
 }

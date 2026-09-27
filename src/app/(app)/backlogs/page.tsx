@@ -7,6 +7,7 @@ import { KIcon } from "@/components/kura/icons";
 import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { getShelvesForUser } from "@/modules/backlog/shelves";
 import { getLibraryUpcoming } from "@/modules/backlog/library";
+import { getUserPalette } from "@/modules/backlog/queries";
 import { getRenderInstant } from "@/modules/catalog/release";
 import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
@@ -19,8 +20,9 @@ import { CollectionCards } from "./collection-cards";
  * route keeps its product name; everything the user reads says "colección".
  *
  * The carousel of fans (collection-cards.tsx) owns the whole screen — its
- * header (Compartir + Nueva colección) and its background follow the
- * collection in the centre. Zero collections = 6a.
+ * header (Compartir + Opciones), its background and the body under it (the
+ * collection's own body, design 10a) follow the collection in the centre.
+ * Zero collections = 6a.
  */
 export default async function BacklogsPage() {
   const user = await requireUser();
@@ -36,10 +38,14 @@ export default async function BacklogsPage() {
   // F3.9: the sheet needs a title this reader already reacted to and hasn't
   // written about; no such title = no sheet (the announcement stays unspent).
   const announce = shouldAnnounce(user);
-  const [invitation, upcoming, counts] = await Promise.all([
+  const [invitation, upcoming, counts, palette] = await Promise.all([
     announce ? getReviewInvitation(user.id) : Promise.resolve(null),
-    getLibraryUpcoming(user.id, now),
+    // Every title of "no puedo esperar" (its whole body mounts here), with
+    // the same ceiling as its own page.
+    getLibraryUpcoming(user.id, now, 200),
     getFirstRunCounts(user.id),
+    // The owner's seal in the credits.
+    getUserPalette(user.id),
   ]);
   const coach = firstRunCoach(counts);
 
@@ -50,6 +56,7 @@ export default async function BacklogsPage() {
         shelves={shelves}
         upcoming={upcoming}
         now={now}
+        owner={{ name: user.name ?? user.username ?? "", image: user.image, hexes: palette }}
         username={user.username}
         profilePublic={user.isPublic}
         coach={

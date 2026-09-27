@@ -53,7 +53,8 @@ struct ProfileView: View {
         store.orderedCollections.map { c in
             ShowcaseItem(id: c.id, name: c.name, vibe: c.shownVibe, count: c.titleIDs.count, pinned: c.pinned,
                          fan: store.fan(of: c),
-                         open: { store.select(.collections); store.push(.collection(c.id)) })
+                         open: { store.select(.collections); store.push(.collection(c.id)) },
+                         hold: { store.present(.collectionQuick(c.id)) })
         }
     }
 

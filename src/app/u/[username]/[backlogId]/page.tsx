@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/auth";
+import { assertOwnsBacklog } from "@/authz";
 import { getPublicBacklog, getPublicProfile } from "@/modules/backlog/public";
 import { getRenderInstant, isUpcoming } from "@/modules/catalog/release";
 import { byManualOrder, fanHexes, fanOf, formatsLine, joinNames } from "@/modules/backlog/fan";
@@ -20,6 +21,8 @@ import { Fan } from "@/components/kura/fan";
 import { Masonry, type MasonryItem } from "@/components/kura/masonry";
 import { subFor } from "@/components/kura/masonry-data";
 import { feedSurface, feedTail, releaseLabel } from "@/components/kura/tint";
+import { visibilityOf } from "@/modules/backlog/visibility";
+import { OwnerOptions } from "./owner-options";
 import { SaveCopyButton } from "./save-copy-button";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
@@ -61,6 +64,11 @@ export async function generateMetadata({
  * "Guárdala en kura": anonymous → the account flow; signed in → a private
  * copy in their own library (SaveCopyButton); the owner → their own
  * collection, in glass (the honey is for the visitor).
+ *
+ * The owner also gets a glass Opciones next to Compartir (9c) that opens 9a
+ * — the same sheet as holding the fan in Tus colecciones. Its facts (pin,
+ * visibility) come from `assertOwnsBacklog`, the owner-scoped read the
+ * actions use; a visitor never triggers it.
  */
 export default async function PublicBacklogPage({
   params,
@@ -78,6 +86,9 @@ export default async function PublicBacklogPage({
 
   const now = await getRenderInstant();
   const isOwner = viewer?.username === username;
+  // 9c: the owner's own row (pin, visibility). Scoped to the session by the
+  // assert itself; anything but the owner gets null and no Opciones.
+  const own = isOwner ? await assertOwnsBacklog(backlogId).catch(() => null) : null;
 
   captureView({
     eventType: "public_backlog_view",
@@ -173,6 +184,20 @@ export default async function PublicBacklogPage({
             label={`Compartir ${data.backlogName}`}
             className="h-11! w-11!"
           />
+          {own && (
+            <OwnerOptions
+              collection={{
+                id: own.backlog.id,
+                name: own.backlog.name,
+                vibe: own.backlog.vibe,
+                count,
+                pinned: own.backlog.pinnedAt !== null,
+                visibility: visibilityOf(own.backlog),
+              }}
+              username={own.user.username}
+              profilePublic={own.user.isPublic}
+            />
+          )}
         </div>
       </header>
 

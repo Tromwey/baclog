@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { ShareChip } from "@/app/u/share-chip";
 import type { FanCover } from "@/modules/backlog/fan";
 import { Fan } from "./fan";
+import { useHold } from "./use-hold";
 
 /**
  * The collections on a profile (Colecciones formalizado · 3a/3b — 6d of the
@@ -17,6 +18,10 @@ import { Fan } from "./fan";
  * No boxes: the page's feed gradient is the only surface. On your own
  * profile "Ver las N" goes to Tus colecciones (`seeAllHref`); on someone
  * else's it unfolds the rest right here.
+ *
+ * `onHold` (own profile only): holding a fan opens that collection's 9a
+ * sheet (Colecciones · "Opciones según desde dónde entras") — the caller
+ * owns the sheet; a tap still opens the collection.
  */
 
 export interface ShowcaseCollection {
@@ -37,6 +42,7 @@ export function CollectionsShowcase({
   seeAllHref,
   sharePrefix,
   empty,
+  onHold,
 }: {
   title: string;
   collections: ShowcaseCollection[];
@@ -47,6 +53,8 @@ export function CollectionsShowcase({
   sharePrefix?: string;
   /** What an empty section shows (own profile); omitted = no section. */
   empty?: ReactNode;
+  /** Own profile: holding a fan (9a). */
+  onHold?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   if (collections.length === 0 && !empty) return null;
@@ -89,9 +97,14 @@ export function CollectionsShowcase({
       ) : (
         <>
           <div className="flex flex-col items-center gap-2 px-5 pb-2.5 pt-1.5 text-center">
-            <Link href={featured.href} aria-label={`Abrir ${featured.name}`} className="block bl-press-lg">
+            <HoldLink
+              href={featured.href}
+              aria-label={`Abrir ${featured.name}`}
+              onHold={onHold && (() => onHold(featured.id))}
+              className="block bl-press-lg"
+            >
               <Fan covers={featured.fan} lead={186} ghost={featured.fan.length === 0} />
-            </Link>
+            </HoldLink>
             <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
               {featured.pinned ? "fijada · " : ""}
               {featured.count} {featured.count === 1 ? "título" : "títulos"}
@@ -120,9 +133,10 @@ export function CollectionsShowcase({
           {shown.length > 0 && (
             <div className="grid grid-cols-2 gap-x-4 gap-y-[30px] px-4 pt-3.5">
               {shown.map((c) => (
-                <Link
+                <HoldLink
                   key={c.id}
                   href={c.href}
+                  onHold={onHold && (() => onHold(c.id))}
                   className="flex flex-col items-center gap-2 text-center bl-press-lg"
                 >
                   <Fan covers={c.fan} lead={99} ghost={c.fan.length === 0} />
@@ -134,12 +148,39 @@ export function CollectionsShowcase({
                       {c.count} {c.count === 1 ? "título" : "títulos"}
                     </span>
                   </span>
-                </Link>
+                </HoldLink>
               ))}
             </div>
           )}
         </>
       )}
     </section>
+  );
+}
+
+/** A Link that, when `onHold` is given, also answers "mantener presionado". */
+function HoldLink({
+  href,
+  onHold,
+  className,
+  children,
+  "aria-label": ariaLabel,
+}: {
+  href: string;
+  onHold?: () => void;
+  className: string;
+  children: ReactNode;
+  "aria-label"?: string;
+}) {
+  const { handlers } = useHold(onHold ?? (() => {}));
+  return (
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      {...(onHold ? handlers : {})}
+      className={onHold ? `${className} select-none [-webkit-touch-callout:none]` : className}
+    >
+      {children}
+    </Link>
   );
 }

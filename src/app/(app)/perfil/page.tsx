@@ -6,7 +6,7 @@ import {
   getProfileCards,
   getReactionCounts,
 } from "@/modules/backlog/profile-stats";
-import { getShelvesForUser } from "@/modules/backlog/shelves";
+import { getShelvesForUser, withoutItems } from "@/modules/backlog/shelves";
 import { getFollowCounts } from "@/modules/social/queries";
 import { getRenderInstant } from "@/modules/catalog/release";
 import { getLatestRecapKey } from "@/modules/backlog/recap";
@@ -46,7 +46,7 @@ export default async function PerfilPage() {
       upcoming={upcoming}
       obsessions={obsessions}
       cards={cards}
-      shelves={shelves}
+      shelves={withoutItems(shelves)}
       recapKey={recapKey}
       now={now}
     />
