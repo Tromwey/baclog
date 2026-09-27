@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
+import { CoverFlightLayer } from "@/components/kura/cover-flight";
 import { NavDock, NavDockVisibilityProvider } from "./nav-dock";
 
 /**
@@ -12,7 +13,11 @@ import { NavDock, NavDockVisibilityProvider } from "./nav-dock";
  *
  * There is no app-wide aura any more (founder call, 2026-09-21: the ADN aura
  * was removed from every screen). The `relative z-10` wrapper below stays:
- * it is load-bearing for the backlog-zoom overlay, not for the aura.
+ * it keeps page content (and the page slide) in one stacking context.
+ *
+ * `CoverFlightLayer` is the persistent layer a collection's cover flies in
+ * when it opens a ficha (Colecciones · transiciones §4): it has to outlive
+ * the navigation, so it lives here, next to the dock.
  */
 export default async function AppLayout({
   children,
@@ -27,11 +32,11 @@ export default async function AppLayout({
     <NavDockVisibilityProvider>
       {/* overflow-x-clip contains the page slide. This is a stacking context,
           so modals that must sit above the dock (fixed z-10) portal to <body>
-          to escape it (see NewBacklogButton). The intercepted backlog-zoom
-          overlay (backlogs/@modal) DEPENDS on this wrapper staying a stacking
-          context to render UNDER the dock — do not remove relative/z-10. */}
+          to escape it (see NewBacklogButton, and the profile's collection
+          overlay, backlogs/collection-overlay.tsx). */}
       <div className="relative z-10 overflow-x-clip">{children}</div>
       <NavDock />
+      <CoverFlightLayer />
     </NavDockVisibilityProvider>
   );
 }

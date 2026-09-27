@@ -26,7 +26,7 @@ export default function Loading() {
             <div className="h-11 w-11 rounded-full bg-surface-1" />
             <div className="h-11 w-11 rounded-full bg-surface-1" />
           </div>
-          <div className="h-[300px] w-[200px] rounded-[var(--r-cover-l)] bg-surface-1" />
+          <div className="h-[300px] w-[200px] rounded-[var(--r-surface)] bg-surface-1" />
           <div className="mt-2.5 h-[30px] w-3/5 rounded-full bg-surface-2" />
           <div className="-mt-0.5 h-3.5 w-2/5 rounded-full bg-surface-1" />
           <div className="h-2.5 w-1/4 rounded-full bg-surface-1" />

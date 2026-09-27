@@ -191,3 +191,66 @@ export class VelocityTracker {
     return ((last.v - first.v) / (last.t - first.t)) * 1000;
   }
 }
+
+export const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/**
+ * One animated number that springs can be handed from one to the next — the
+ * `anim(key, to)` of the Colecciones · transiciones mock. Every `to()` starts
+ * from the LIVE value with the LIVE velocity (unless the caller passes the
+ * finger's), so a transition grabbed mid-flight and re-targeted never jumps.
+ * `set()` writes a value directly (a finger dragging it): it halts the spring.
+ */
+export class SpringValue {
+  private handle: SpringHandle | null = null;
+  value: number;
+
+  constructor(
+    initial: number,
+    private readonly onChange: (value: number) => void,
+  ) {
+    this.value = initial;
+  }
+
+  to(
+    target: number,
+    opts: { response?: number; damping?: number; velocity?: number; precision?: number } = {},
+    onRest?: () => void,
+  ) {
+    const velocity = opts.velocity ?? this.handle?.velocity() ?? 0;
+    this.handle?.stop();
+    this.handle = spring({
+      from: this.value,
+      to: target,
+      velocity,
+      damping: opts.damping ?? 1,
+      response: opts.response ?? 0.42,
+      precision: opts.precision ?? 0.002,
+      onUpdate: (v) => {
+        this.value = v;
+        this.onChange(v);
+      },
+      onRest: () => {
+        this.handle = null;
+        onRest?.();
+      },
+    });
+  }
+
+  set(value: number) {
+    this.stop();
+    this.value = value;
+    this.onChange(value);
+  }
+
+  /** Halts where it is; the pending `onRest` never fires. */
+  stop() {
+    this.handle?.stop();
+    this.handle = null;
+  }
+
+  get animating(): boolean {
+    return this.handle !== null;
+  }
+}

@@ -68,6 +68,8 @@ export function useSheetMotion({
   enterScale = 0.97,
   draggable = true,
   enabled = true,
+  enterResponse = 0.35,
+  exitResponse = 0.25,
 }: {
   /** Fires AFTER the exit has played. The caller unmounts the sheet here. */
   onClose: () => void;
@@ -79,6 +81,10 @@ export function useSheetMotion({
   /** False while the panel isn't in the DOM yet (a portal waiting on
    *  hydration); the entrance plays when it flips to true. */
   enabled?: boolean;
+  /** The presence spring's `response` in and out (defaults .35 / .25). The
+   *  hold sheet of a title (18c) uses .4 / .3 (Colecciones · transiciones §4). */
+  enterResponse?: number;
+  exitResponse?: number;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const scrimRef = useRef<HTMLDivElement>(null);
@@ -144,7 +150,7 @@ export function useSheetMotion({
         to,
         velocity,
         damping: 1,
-        response: to === 1 ? 0.35 : 0.25,
+        response: to === 1 ? enterResponse : exitResponse,
         precision: 0.005,
         onUpdate: (v) => {
           s.p = v;
@@ -153,7 +159,7 @@ export function useSheetMotion({
         onRest,
       });
     },
-    [s, apply],
+    [s, apply, enterResponse, exitResponse],
   );
 
   /** Distance from the rest position to fully under the bottom edge. */

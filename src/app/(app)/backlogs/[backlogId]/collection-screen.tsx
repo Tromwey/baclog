@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { CHIP_ART, Glyph } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { DotsIcon, KIcon } from "@/components/kura/icons";
@@ -28,19 +29,31 @@ export type { CollectionItem, OtherCollection } from "./collection-body";
  *
  * `mode="auto"` is the automatic collection "no puedo esperar" (5a): the
  * "auto" pill, "se llena sola…" and the countdown on every cover.
+ *
+ * Staged entrance (Colecciones · transiciones §2/§3): inside the profile's
+ * overlay, `collection-overlay.tsx` drives CSS variables on its root —
+ * `--cx-bg` (the gradient and the chips), `--cx-hero` (the fan hides while
+ * its flying twin travels), `--cx-a`/`--cx-a-t` (the name block: opacity +
+ * `translate`) and `--cx-b`/`--cx-b-t` (everything below). Unset (the full
+ * page) they fall back to "at rest", and `translate` falls back to `none`
+ * so no containing block is left behind for fixed descendants.
  */
 
 /** Top offsets of the frames (64 from the edge), respecting a taller safe area. */
 const CHIP_TOP = "top-[max(64px,calc(20px+env(safe-area-inset-top)))]";
 const HEADER_PAD = "pt-[max(126px,calc(82px+env(safe-area-inset-top)))]";
 
+const STAGE_BG = { opacity: "var(--cx-bg, 1)" } as const;
+const STAGE_HERO = { visibility: "var(--cx-hero, visible)" } as unknown as CSSProperties;
+const STAGE_A = { opacity: "var(--cx-a, 1)", translate: "var(--cx-a-t, none)" } as const;
+const STAGE_B = { opacity: "var(--cx-b, 1)", translate: "var(--cx-b-t, none)" } as const;
+
 export function CollectionScreen({
-  zoom = false,
+  overlay = false,
   ...props
-}: CollectionBodyProps & { zoom?: boolean }) {
+}: CollectionBodyProps & { overlay?: boolean }) {
   const { mode, backlog, now } = props;
   const owned = mode === "owned";
-  const content = zoom ? "bl-zoom-content" : "";
 
   return (
     <CollectionBody {...props} introClassName="pt-2.5">
@@ -49,11 +62,20 @@ export function CollectionScreen({
         const nextWait =
           mode === "auto" && present[0]?.releaseDate ? releaseLabel(present[0].releaseDate, now) : null;
         return (
-          <div
-            className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-14 text-text"
-            style={{ background: empty ? undefined : feedSurface(hexes, 900), backgroundColor: tail }}
-          >
-            <div className={`absolute inset-x-6 ${CHIP_TOP} z-[2] flex items-center justify-between`}>
+          <div className="relative isolate mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-14 text-text">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{
+                background: empty ? undefined : feedSurface(hexes, 900),
+                backgroundColor: tail,
+                ...(overlay ? STAGE_BG : null),
+              }}
+            />
+            <div
+              className={`absolute inset-x-6 ${CHIP_TOP} z-[2] flex items-center justify-between`}
+              style={overlay ? STAGE_BG : undefined}
+            >
               <ZoomBackButton className={CHIP_ART} />
               <div className="flex gap-2">
                 {owned && (
@@ -78,53 +100,57 @@ export function CollectionScreen({
             </div>
 
             <header
-              className={`flex min-w-0 flex-col items-center gap-2.5 px-6 text-center ${HEADER_PAD} ${content} ${
+              className={`flex min-w-0 flex-col items-center gap-2.5 px-6 text-center ${HEADER_PAD} ${
                 empty || !owned ? "pb-[26px]" : ""
               }`}
             >
-              {empty && owned ? (
-                <Link href={addHref} aria-label={`Agregar a ${backlog.name}`} className="block bl-press-lg">
-                  <Fan covers={[]} lead={225} ghost />
-                </Link>
-              ) : (
-                <Fan covers={fan} lead={225} ghost={empty} label={`Portadas de ${backlog.name}`} />
-              )}
-
-              {mode === "auto" ? (
-                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-glass-art px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-text">
-                  <Glyph kind="waiting" size={12} />
-                  auto
-                </span>
-              ) : (
-                !empty && (
-                  <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
-                    {backlog.pinned ? "colección · fijada" : "colección"}
+              {/* The fan the profile's row flies into (collection-overlay). */}
+              <div data-overlay-hero style={overlay ? STAGE_HERO : undefined}>
+                {empty && owned ? (
+                  <Link href={addHref} aria-label={`Agregar a ${backlog.name}`} className="block bl-press-lg">
+                    <Fan covers={[]} lead={225} ghost />
+                  </Link>
+                ) : (
+                  <Fan covers={fan} lead={225} ghost={empty} label={`Portadas de ${backlog.name}`} />
+                )}
+              </div>
+              <div className="flex min-w-0 flex-col items-center gap-2.5" style={overlay ? STAGE_A : undefined}>
+                {mode === "auto" ? (
+                  <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-glass-art px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-text">
+                    <Glyph kind="waiting" size={12} />
+                    auto
                   </span>
-                )
-              )}
-              <h1
-                className={`font-brand font-normal leading-none [overflow-wrap:anywhere] [text-wrap:balance] ${
-                  empty ? "mt-1.5 text-[30px]" : "text-[36px]"
-                }`}
-              >
-                {backlog.name}
-              </h1>
-              {mode === "auto" && (
-                <>
-                  <span className="font-brand text-[16px] italic leading-[1.3] text-text-2">
-                    se llena sola con lo que aún no sale
-                  </span>
-                  {!empty && (
-                    <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-                      {present.length} {present.length === 1 ? "título" : "títulos"}
-                      {nextWait && ` · el próximo ${nextLabel(nextWait)}`}
+                ) : (
+                  !empty && (
+                    <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
+                      {backlog.pinned ? "colección · fijada" : "colección"}
                     </span>
-                  )}
-                </>
-              )}
+                  )
+                )}
+                <h1
+                  className={`font-brand font-normal leading-none [overflow-wrap:anywhere] [text-wrap:balance] ${
+                    empty ? "mt-1.5 text-[30px]" : "text-[36px]"
+                  }`}
+                >
+                  {backlog.name}
+                </h1>
+                {mode === "auto" && (
+                  <>
+                    <span className="font-brand text-[16px] italic leading-[1.3] text-text-2">
+                      se llena sola con lo que aún no sale
+                    </span>
+                    {!empty && (
+                      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+                        {present.length} {present.length === 1 ? "título" : "títulos"}
+                        {nextWait && ` · el próximo ${nextLabel(nextWait)}`}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
             </header>
 
-            <div className={content}>{body}</div>
+            <div style={overlay ? STAGE_B : undefined}>{body}</div>
           </div>
         );
       }}

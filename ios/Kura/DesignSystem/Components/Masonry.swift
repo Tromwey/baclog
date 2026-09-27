@@ -44,12 +44,17 @@ struct MasonryTile: View {
     let badge: MasonryBadge
     var onHold: (() -> Void)? = nil
     @Environment(AppStore.self) private var store
+    /// Under a `TitleHeroHost` (Tus colecciones, a collection opened from the profile) the cover
+    /// grows into the ficha in place; anywhere else it's a push (the system's cover zoom, 18+).
+    @Environment(\.heroHost) private var hero
+    @Environment(\.accessibilityReduceMotion) private var reduce
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             CoverView(title: title, badge: .none, fluid: true)
                 .overlay(alignment: .topLeading) { badgeView.padding(6) }
                 .zoomSource(ZoomID.title(title.id))
+                .heroSource(title.id)
             Text(title.name)
                 .font(.kura.newsItalic(14))
                 .foregroundStyle(KColor.text)
@@ -59,7 +64,9 @@ struct MasonryTile: View {
                 .lineLimit(1)
         }
         .contentShape(Rectangle())
-        .kPressable(longPress: onHold) { store.push(.title(title.id)) }
+        .kPressable(longPress: onHold) {
+            if let hero, hero.kind == .title { hero.open(title.id, reduce: reduce) } else { store.push(.title(title.id)) }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(.isButton)

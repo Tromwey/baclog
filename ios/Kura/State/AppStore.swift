@@ -60,6 +60,15 @@ enum SheetRoute: Identifiable, Hashable {
         if case .deleteCollection = self { return false }
         return true
     }
+
+    /// Opened by holding something (18c on a title, 9a on a fan): it rises 18 pt from .97 in
+    /// place instead of sliding up (colecciones-transiciones · 4, `use-sheet-motion`).
+    var isHold: Bool {
+        switch self {
+        case .titleActions, .collectionQuick: return true
+        default: return false
+        }
+    }
 }
 
 struct ToastModel: Identifiable, Equatable {
@@ -119,6 +128,11 @@ final class SessionData {
     var sheetLocked = false
     var loadState: LoadState = .loading
     var dockHidden = false
+    /// Tabs whose ROOT has a hero page open over it (a collection from the profile, a title from
+    /// Tus colecciones): the tab bar hides like on a push (`HeroHost`).
+    var heroCovers: Set<Tab> = []
+    /// Bumped when the active tab is tapped again: its root closes an open hero (pop to root).
+    var heroResets: [Tab: Int] = [:]
 
     // Account / entrance
     var me = Person(handle: "", name: "", initials: "k", hexes: [])
@@ -436,6 +450,8 @@ final class AppStore {
     var alerts: Set<String> { get { s.alerts } _modify { yield &s.alerts } set { s.alerts = newValue } }
     /// Discover's search mode hides the dock (the keyboard owns the bottom).
     var dockHidden: Bool { get { s.dockHidden } set { s.dockHidden = newValue } }
+    var heroCovers: Set<Tab> { get { s.heroCovers } _modify { yield &s.heroCovers } set { s.heroCovers = newValue } }
+    var heroResets: [Tab: Int] { get { s.heroResets } _modify { yield &s.heroResets } set { s.heroResets = newValue } }
     var recentlyViewed: [String] { get { s.recentlyViewed } _modify { yield &s.recentlyViewed } set { s.recentlyViewed = newValue } }
     @ObservationIgnored var debugEmptyRecap = false
     @ObservationIgnored var debugFailHydrate = false
@@ -1156,24 +1172,31 @@ final class AppStore {
     // MARK: Sheets & navigation
 
     func present(_ route: SheetRoute) {
-        withAnimation(KMotion.sheetIn) { sheet = route }
+        withAnimation(route.isHold ? KSpringSpec.holdSheetIn : KMotion.sheetIn) { sheet = route }
     }
 
-    func dismissSheet(animation: Animation = KMotion.sheetOut) {
-        withAnimation(animation) { sheet = nil }
+    func dismissSheet(animation: Animation? = nil) {
+        let a = animation ?? (sheet?.isHold == true ? KSpringSpec.holdSheetOut : KMotion.sheetOut)
+        withAnimation(a) { sheet = nil }
     }
 
     /// Scrim tap / grabber drag / VoiceOver escape: ignored while the sheet is mid-write
     /// (`sheetLocked`). `animation` lets a drag hand its velocity to the dismissal.
     /// Returns false when the sheet stays.
     @discardableResult
-    func dismissSheetInteractively(animation: Animation = KMotion.sheetOut) -> Bool {
+    func dismissSheetInteractively(animation: Animation? = nil) -> Bool {
         guard !sheetLocked else { return false }
         dismissSheet(animation: animation)
         return true
     }
 
     func path(_ tab: Tab) -> [Route] { paths[tab] ?? [] }
+
+    /// The dock / tab bar: only at a tab's root, not under a hero page, and not while Descubrir
+    /// is searching.
+    func dockVisible(_ tab: Tab) -> Bool {
+        path(tab).isEmpty && !heroCovers.contains(tab) && !(dockHidden && tab == .discover)
+    }
 
     func push(_ route: Route) {
         var p = paths[tab] ?? []
@@ -1190,6 +1213,7 @@ final class AppStore {
     func select(_ newTab: Tab) {
         if newTab == tab {
             paths[newTab] = [] // tapping the active tab pops to root
+            heroResets[newTab, default: 0] += 1 // …and closes a hero open over the root
         }
         tab = newTab
     }

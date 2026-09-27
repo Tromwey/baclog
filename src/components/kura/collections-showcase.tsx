@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { ShareChip } from "@/app/u/share-chip";
 import type { FanCover } from "@/modules/backlog/fan";
 import { Fan } from "./fan";
+import { recordFanFlight } from "./fan-flight";
 import { useHold } from "./use-hold";
 
 /**
@@ -22,6 +23,10 @@ import { useHold } from "./use-hold";
  * `onHold` (own profile only): holding a fan opens that collection's 9a
  * sheet (Colecciones · "Opciones según desde dónde entras") — the caller
  * owns the sheet; a tap still opens the collection.
+ *
+ * `flight` (own profile only): a tap records which fan was touched
+ * (`fan-flight.ts`), so the collection overlay the profile intercepts into
+ * flies THIS fan into its header — and back into this row on close.
  */
 
 export interface ShowcaseCollection {
@@ -43,6 +48,7 @@ export function CollectionsShowcase({
   sharePrefix,
   empty,
   onHold,
+  flight = false,
 }: {
   title: string;
   collections: ShowcaseCollection[];
@@ -55,6 +61,8 @@ export function CollectionsShowcase({
   empty?: ReactNode;
   /** Own profile: holding a fan (9a). */
   onHold?: (id: string) => void;
+  /** Own profile: the fan flies into the collection overlay. */
+  flight?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   if (collections.length === 0 && !empty) return null;
@@ -100,6 +108,7 @@ export function CollectionsShowcase({
             <HoldLink
               href={featured.href}
               aria-label={`Abrir ${featured.name}`}
+              flight={flight ? { id: featured.id, covers: featured.fan, lead: 186 } : undefined}
               onHold={onHold && (() => onHold(featured.id))}
               className="block bl-press-lg"
             >
@@ -136,6 +145,7 @@ export function CollectionsShowcase({
                 <HoldLink
                   key={c.id}
                   href={c.href}
+                  flight={flight ? { id: c.id, covers: c.fan, lead: 99 } : undefined}
                   onHold={onHold && (() => onHold(c.id))}
                   className="flex flex-col items-center gap-2 text-center bl-press-lg"
                 >
@@ -162,12 +172,15 @@ export function CollectionsShowcase({
 function HoldLink({
   href,
   onHold,
+  flight,
   className,
   children,
   "aria-label": ariaLabel,
 }: {
   href: string;
   onHold?: () => void;
+  /** Records the tap for the fan's flight (`fan-flight.ts`). */
+  flight?: { id: string; covers: readonly FanCover[]; lead: number };
   className: string;
   children: ReactNode;
   "aria-label"?: string;
@@ -177,6 +190,16 @@ function HoldLink({
     <Link
       href={href}
       aria-label={ariaLabel}
+      data-fan-source={flight?.id}
+      onClick={
+        flight
+          ? (e) => {
+              // A new tab / window is not a flight.
+              if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey))
+                recordFanFlight(flight.id, flight.covers, flight.lead);
+            }
+          : undefined
+      }
       {...(onHold ? handlers : {})}
       className={onHold ? `${className} select-none [-webkit-touch-callout:none]` : className}
     >

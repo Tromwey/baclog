@@ -17,6 +17,9 @@ import SwiftUI
 struct CollectionDetailView: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
+    /// Opened as a hero page (from the profile): its titles open in place too (`TitleHeroHost`,
+    /// the cover grows into the ficha). Pushed, it keeps the push + the system's cover zoom.
+    var hostsTitleHero = false
 
     var body: some View {
         let c = store.collection(collectionID)
@@ -39,12 +42,21 @@ struct CollectionDetailView: View {
         return missing ? store.loadError(.library) : nil
     }
 
+    @ViewBuilder
     private func content(_ c: KCollection) -> some View {
+        if hostsTitleHero {
+            TitleHeroHost { page(c) }
+        } else {
+            page(c)
+        }
+    }
+
+    private func page(_ c: KCollection) -> some View {
         let empty = c.titleIDs.isEmpty
         let tint = empty ? [] : store.hexes(of: c)
 
         return ZStack(alignment: .top) {
-            Tint.feedTail(tint).ignoresSafeArea()
+            Tint.feedTail(tint).ignoresSafeArea().heroBackdrop()
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     FanHeader(fan: store.fan(of: c), name: c.name, ghost: empty,
@@ -129,23 +141,28 @@ struct FanHeader<Label: View, Below: View>: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            // On a hero page the fan IS the one from the profile row: it flies here (`heroTarget`),
+            // then the name rises from 35 %.
             if ghost, let onGhost {
                 FanView(covers: [], lead: 225, ghost: true)
+                    .heroTarget()
                     .kPressable(action: onGhost)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Agregar a \(name)")
                     .accessibilityAddTraits(.isButton)
             } else {
                 FanView(covers: fan, lead: 225, ghost: ghost, label: "Portadas de \(name)")
+                    .heroTarget()
             }
-            label
+            label.heroLead()
             Text(name)
                 .font(.kura.news(ghost ? 30 : 36))
                 .foregroundStyle(KColor.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, ghost ? 6 : 0)
                 .accessibilityAddTraits(.isHeader)
-            below
+                .heroLead()
+            below.heroLead()
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 126)
@@ -236,6 +253,8 @@ struct EmptyCollectionBody: View {
 /// 16c · Lista: rows 80, cover in a 60 slot, italic 19, meta mono 11, glyph.
 struct TitleList: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.heroHost) private var hero
+    @Environment(\.accessibilityReduceMotion) private var reduce
     let titles: [Title]
     let collectionID: String
 
@@ -246,6 +265,7 @@ struct TitleList: View {
                     CoverView(title: t, width: t.format == .album ? 56 : 40, height: t.format == .album ? 56 : 60,
                               radius: KRadius.coverS)
                         .zoomSource(ZoomID.title(t.id))
+                        .heroSource(t.id)
                         .frame(width: 60)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t.name).font(.kura.newsItalic(19)).foregroundStyle(KColor.text).lineLimit(1)
@@ -262,13 +282,18 @@ struct TitleList: View {
                 .contentShape(Rectangle())
                 .kPressable(.row(inset: -10), longPress: {
                     store.present(.titleActions(titleID: t.id, collectionID: collectionID))
-                }) { store.push(.title(t.id)) }
+                }) { openTitle(t.id) }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+    }
+
+    /// In place when a hero hosts the list (the cover grows into the ficha), else a push.
+    private func openTitle(_ id: String) {
+        if let hero, hero.kind == .title { hero.open(id, reduce: reduce) } else { store.push(.title(id)) }
     }
 
     private func meta(_ t: Title) -> String {

@@ -3,9 +3,10 @@ import SwiftUI
 /// Tus colecciones (propuesta 10a — "Tus colecciones y Colección, una sola página"). One
 /// collection at a time:
 ///
-///  - its FAN in a carousel: swipe it (30 pt) or tap a neighbour's name. Only the current fan is
-///    drawn — the others slide 320 and fade — so nothing half-shows at the edges except the
-///    NAMES: the current one centred in Newsreader 30, the previous and next pinned 142 pt
+///  - its FAN in a carousel that follows the finger 1:1 (`CollectionsCarousel`: one continuous
+///    position, rubber band, projected release, spring 0.42) or a tap on a neighbour's name.
+///    Only the fans near the position are drawn — the others slide 320 and fade — so nothing
+///    half-shows at the edges except the NAMES: the current one centred in Newsreader 30, the previous and next pinned 142 pt
 ///    off-centre at 22, dimmed to .35, so it reads that there's more on either side. Tapping the
 ///    fan only centres it; holding one opens 9a (the options without the view rows);
 ///  - under the names, the SAME body as Colección (`CollectionBody`): credits, format pills that
@@ -32,7 +33,8 @@ struct CollectionsView: View {
             case (.loaded, true):
                 NoCollectionsView()
             case (.loaded, false):
-                CollectionsCarousel()
+                // A title opens in place from its cell (colecciones-transiciones · 4).
+                TitleHeroHost(rootTab: .collections) { CollectionsCarousel() }
             }
         }
     }
@@ -92,8 +94,12 @@ private enum CarouselEntry: Identifiable {
     }
 }
 
-/// The carousel's curve (web: 450 ms `cubic-bezier(.16, 1, .3, 1)`).
-private let carouselCurve = Animation.timingCurve(0.16, 1, 0.3, 1, duration: 0.45)
+/// A finger on the carousel: where it took the position from (RAW, before the rubber band —
+/// learning 2026-09-24) and whether the drag is ours (horizontal) or the page's scroll.
+private struct CarouselGrab {
+    var p0: CGFloat
+    var horizontal: Bool
+}
 
 private struct NameWidths: PreferenceKey {
     static let defaultValue: [String: CGFloat] = [:]
@@ -102,12 +108,31 @@ private struct NameWidths: PreferenceKey {
     }
 }
 
+/// "Entre colecciones" (colecciones-transiciones · 1): the fans, the strip of names and the
+/// background hang from ONE continuous position (`pos`, in collections), so they move together
+/// and 1:1 with the finger (320 pt = one collection). Past the ends it resists (rubber band, 390).
+/// Released, the velocity is projected (`pos − v·0.499/320`) to pick the neighbour — a short
+/// flick is enough — and it settles on `spring(0.42, damping 1)`, or 0.86 when it was thrown
+/// (|v| > 1.5 collections/s), starting at the finger's speed. The background crosses the two
+/// gradients by the position; the body (line, titles) leaves by the middle of the way and the new
+/// one comes in from the other side, 24 pt. Reduce Motion keeps the carousel 1:1 (it's the
+/// person's own movement) and only drops the body's slide. A selection tick every time the
+/// centre changes.
 private struct CollectionsCarousel: View {
     @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduce
-    /// The collection in the centre, by id (the web keeps it in sessionStorage).
+    /// The collection in the centre, by id (the web keeps it in sessionStorage). Follows the
+    /// position's rounding: the body and the chips switch at the middle of the way.
     @SceneStorage("kura.carousel") private var currentID = ""
     @State private var nameWidths: [String: CGFloat] = [:]
+    /// THE position.
+    @State private var pos = KSpring(0)
+    @State private var grab: CarouselGrab?
+    @GestureState private var dragging = false
+
+    /// One collection per 320 pt of finger; the rubber band's dimension.
+    private static let step: CGFloat = 320
+    private static let band: CGFloat = 390
 
     /// Pinned first, then the rest, the empty ones after (`orderedCollections`); "no puedo
     /// esperar" PENULTIMATE and the ghost "nueva colección" LAST (founder, propuesta 10).
@@ -139,54 +164,150 @@ private struct CollectionsCarousel: View {
         let list = entries
         let idx = list.firstIndex { $0.id == currentID } ?? 0
         let cur = list[idx]
-        let tint = hexes(cur)
+        let tints = list.map(hexes)
         ZStack(alignment: .top) {
-            Tint.feedTail(tint).ignoresSafeArea()
+            CarouselTail(pos: pos, tints: tints).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     header(cur)
                     strips
                     VStack(spacing: 0) {
-                        fans(list, idx)
-                        names(list, idx).padding(.top, 4)
+                        fans(list)
+                        names(list).padding(.top, 4)
                     }
                     .contentShape(Rectangle())
-                    .simultaneousGesture(swipe(list, idx))
+                    .simultaneousGesture(swipe(count: list.count))
                     .accessibilityElement(children: .contain)
-                    below(cur)
-                        .id(cur.id)
-                        .transition(.opacity)
+                    CarouselBodyShift(pos: pos, reduce: reduce) {
+                        below(cur)
+                    }
+                    .id(cur.id)
                 }
                 .padding(.bottom, 140)
-                .kFeedSurface(tint, span: 760)
+                .background(alignment: .top) { CarouselSurface(pos: pos, tints: tints) }
             }
             .ignoresSafeArea(.container, edges: .top)
         }
-        .kFeedDockBand(tint)
-        #if DEBUG
+        .overlay(alignment: .bottom) { CarouselDockBand(pos: pos, tints: tints) }
+        .background { CarouselIndexWatcher(pos: pos, count: list.count) { i in centre(on: i) } }
         .onAppear {
+            #if DEBUG
             // `-kuraCarousel <id>`: the captures open the carousel on a given collection
             // (`nueva-coleccion` = the ghost, `no-puedo-esperar` = the automatic one).
             if let id = UserDefaults.standard.string(forKey: "kuraCarousel") { currentID = id }
+            #endif
+            sync(list)
         }
+        .onChange(of: list.map(\.id)) { _, _ in sync(entries) }
+        #if DEBUG
+        .task { await demoDrag() }
         #endif
+        .onChange(of: dragging) { _, live in
+            guard !live else { return }
+            // A drag cancelled by the system never calls onEnded: settle on the nearest. (Next
+            // turn of the run loop, so a normal end — which clears `grab` — goes first.)
+            DispatchQueue.main.async {
+                guard let g = grab else { return }
+                grab = nil
+                if g.horizontal { go(Int(pos.value.rounded()), count: entries.count) }
+            }
+        }
     }
 
-    private func go(_ i: Int, in list: [CarouselEntry]) {
-        let next = list[max(0, min(list.count - 1, i))]
-        guard next.id != currentID || currentID.isEmpty else { return }
+    // MARK: Position
+
+    /// The position on the collection in `currentID` (first appearance, a pin or a new
+    /// collection reordering the list). Never while a finger holds it.
+    private func sync(_ list: [CarouselEntry]) {
+        let i = list.firstIndex { $0.id == currentID } ?? 0
+        if currentID != list[i].id { currentID = list[i].id }
+        guard grab == nil, pos.target != CGFloat(i) else { return }
+        pos.set(CGFloat(i))
+    }
+
+    /// The rounding of the position crossed into another collection (finger or spring).
+    private func centre(on i: Int) {
+        let list = entries
+        guard list.indices.contains(i), list[i].id != currentID else { return }
+        currentID = list[i].id
         KHaptic.select()
-        withAnimation(reduce ? KMotion.fade : carouselCurve) { currentID = next.id }
     }
 
-    private func swipe(_ list: [CarouselEntry], _ idx: Int) -> some Gesture {
-        DragGesture(minimumDistance: 12)
+    /// A tap on a neighbour's name, VoiceOver's adjustable: spring there (keeps any momentum).
+    private func go(_ i: Int, count: Int) {
+        let t = max(0, min(count - 1, i))
+        pos.animate(to: CGFloat(t), response: KSpringSpec.carousel.response, damping: KSpringSpec.carousel.damping)
+    }
+
+    /// Visible position ← raw: resistance past either end.
+    private func banded(_ raw: CGFloat, max m: CGFloat) -> CGFloat {
+        if raw < 0 { return -Rubber.band(-raw * Self.step, Self.band) / Self.step }
+        if raw > m { return m + Rubber.band((raw - m) * Self.step, Self.band) / Self.step }
+        return raw
+    }
+
+    /// Raw ← visible (grabbing it mid-bounce continues from the finger's real offset).
+    private func unbanded(_ v: CGFloat, max m: CGFloat) -> CGFloat {
+        if v < 0 { return -Rubber.unband(-v * Self.step, Self.band) / Self.step }
+        if v > m { return m + Rubber.unband((v - m) * Self.step, Self.band) / Self.step }
+        return v
+    }
+
+    private func swipe(count: Int) -> some Gesture {
+        let m = CGFloat(max(0, count - 1))
+        return DragGesture(minimumDistance: 8)
+            .updating($dragging) { _, live, _ in live = true }
+            .onChanged { v in
+                if grab == nil {
+                    // The first movement decides: sideways is the carousel, up/down the page.
+                    let horizontal = abs(v.translation.width) > abs(v.translation.height)
+                    if horizontal { pos.stop() }
+                    grab = CarouselGrab(p0: horizontal ? unbanded(pos.value, max: m) : 0, horizontal: horizontal)
+                }
+                guard let g = grab, g.horizontal else { return }
+                pos.set(banded(g.p0 - v.translation.width / Self.step, max: m))
+            }
             .onEnded { v in
-                let dx = v.translation.width
-                guard abs(dx) > 30, abs(dx) > abs(v.translation.height) else { return }
-                go(idx + (dx < 0 ? 1 : -1), in: list)
+                guard let g = grab else { return }
+                grab = nil
+                guard g.horizontal else { return }
+                release(g, vx: v.velocity.width, count: count)
             }
     }
+
+    /// Let go at `vx` pt/s: project, pick the neighbour (at most one away from where the finger
+    /// took it), spring there at the finger's speed.
+    private func release(_ g: CarouselGrab, vx: CGFloat, count: Int) {
+        let vi = -vx / Self.step
+        let b = Int(g.p0.rounded())
+        var tg = Int((pos.value - vx * 0.499 / Self.step).rounded())
+        tg = max(b - 1, min(b + 1, tg))
+        tg = max(0, min(count - 1, tg))
+        let spec = abs(vi) > 1.5 ? KSpringSpec.carouselFlung : KSpringSpec.carousel
+        pos.animate(to: CGFloat(tg), response: spec.response, damping: spec.damping, velocity: vi)
+    }
+
+    #if DEBUG
+    /// `-kuraCarouselDemo L140|R140`: the captures can't drive a finger, so this replays one
+    /// through the same path — a grab, 140 pt left/right over 0.3 s, then the release at the
+    /// drag's speed (`-kuraCarouselDemoHold 3`: hold 3 s mid-drag, then let go still).
+    private func demoDrag() async {
+        guard let arg = UserDefaults.standard.string(forKey: "kuraCarouselDemo"), let n = Double(arg.dropFirst()) else { return }
+        let dx = CGFloat(arg.hasPrefix("L") ? -n : n)
+        try? await Task.sleep(for: .milliseconds(1500))
+        let count = entries.count, m = CGFloat(max(0, count - 1))
+        pos.stop()
+        let g = CarouselGrab(p0: unbanded(pos.value, max: m), horizontal: true)
+        let steps = 18
+        for i in 1...steps {
+            pos.set(banded(g.p0 - dx * CGFloat(i) / CGFloat(steps) / Self.step, max: m))
+            try? await Task.sleep(for: .milliseconds(16))
+        }
+        let hold = UserDefaults.standard.double(forKey: "kuraCarouselDemoHold")
+        if hold > 0 { try? await Task.sleep(for: .seconds(hold)) }
+        release(g, vx: hold > 0 ? 0 : dx / 0.3, count: count)
+    }
+    #endif
 
     // MARK: Header
 
@@ -221,18 +342,9 @@ private struct CollectionsCarousel: View {
 
     // MARK: The fans (290 band)
 
-    private func fans(_ list: [CarouselEntry], _ idx: Int) -> some View {
-        let near = Array(list.enumerated()).filter { abs($0.offset - idx) <= 1 }
-        return ZStack(alignment: .top) {
-            ForEach(near, id: \.element.id) { i, e in
-                let d = i - idx
-                fanSlide(e, index: idx, list: list)
-                    .scaleEffect(d == 0 ? 1 : 0.92)
-                    .offset(x: CGFloat(d) * 320)
-                    .opacity(d == 0 ? 1 : 0)
-                    .allowsHitTesting(d == 0)
-                    .accessibilityHidden(d != 0)
-            }
+    private func fans(_ list: [CarouselEntry]) -> some View {
+        CarouselFans(pos: pos, ids: list.map(\.id)) { i in
+            fanSlide(list[i], index: i, list: list)
         }
         .padding(.top, 14)
         .frame(maxWidth: .infinity, minHeight: 290, maxHeight: 290, alignment: .top)
@@ -248,15 +360,14 @@ private struct CollectionsCarousel: View {
             .contentShape(Rectangle())
         let adjust: (AccessibilityAdjustmentDirection) -> Void = { dir in
             switch dir {
-            case .increment: go(index + 1, in: list)
-            case .decrement: go(index - 1, in: list)
+            case .increment: go(index + 1, count: list.count)
+            case .decrement: go(index - 1, count: list.count)
             @unknown default: break
             }
         }
         if let c = e.collection {
             art
                 .kPressable(longPress: { store.present(.collectionQuick(c.id)) }) {}
-                .zoomSource(ZoomID.collection(c.id))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(c.name), \(c.titleIDs.count) \(c.titleIDs.count == 1 ? "título" : "títulos")")
                 .accessibilityHint("Desliza hacia arriba o abajo para cambiar de colección.")
@@ -273,38 +384,13 @@ private struct CollectionsCarousel: View {
 
     // MARK: The names (44 row)
 
-    private func names(_ list: [CarouselEntry], _ idx: Int) -> some View {
-        GeometryReader { g in
-            let mid = g.size.width / 2
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(list.enumerated()), id: \.element.id) { i, e in
-                    let d = max(-2, min(2, i - idx))
-                    let scale: CGFloat = d == 0 ? 1 : 22.0 / 30.0
-                    let w = (nameWidths[e.id] ?? 0) * scale
-                    let x: CGFloat = d == 0 ? 0 : CGFloat(d.signum()) * ((abs(d) == 1 ? 142 : 420) + w / 2)
-                    let isNew = e.id == CarouselEntry.newID
-                    Text(e.name)
-                        .font(.kura.news(30))
-                        .foregroundStyle(KColor.text)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .background {
-                            GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
-                        }
-                        .scaleEffect(scale)
-                        // The ghost's name is a placeholder: .6 in the centre.
-                        .opacity(d == 0 ? (isNew ? 0.6 : 1) : abs(d) == 1 ? 0.35 : 0)
-                        .position(x: mid + x, y: 22)
-                        .onTapGesture { if abs(d) == 1 { go(i, in: list) } }
-                        .allowsHitTesting(abs(d) == 1)
-                        .accessibilityHidden(d != 0)
-                        .accessibilityAddTraits(d == 0 ? .isHeader : [])
-                }
-            }
-        }
-        .frame(height: 44)
-        .clipped()
-        .onPreferenceChange(NameWidths.self) { nameWidths.merge($0) { $1 } }
+    private func names(_ list: [CarouselEntry]) -> some View {
+        CarouselNames(pos: pos,
+                      names: list.map { CarouselName(id: $0.id, name: $0.name, ghost: $0.id == CarouselEntry.newID) },
+                      widths: nameWidths) { i in go(i, count: list.count) }
+            .frame(height: 44)
+            .clipped()
+            .onPreferenceChange(NameWidths.self) { nameWidths.merge($0) { $1 } }
     }
 
     // MARK: Under the names
@@ -362,6 +448,188 @@ private struct CollectionsCarousel: View {
         if label == "hoy" { return "hoy" }
         let countdown = label.range(of: #"^\d+ [hd]$"#, options: .regularExpression) != nil
         return countdown ? "en \(label)" : "el \(label)"
+    }
+}
+
+// MARK: - The carousel's per-frame readers
+//
+// Only these read `pos.value`, so only these re-render while the finger or the spring moves it;
+// the page around them (and the body's titles) re-renders when the centre changes, not per frame.
+
+/// The fans within one collection of the position: `translateX(d·320) scale(1 − .08·|d|)`,
+/// opacity `1 − 1.2·|d|` (so only the centre and what's sliding in show).
+private struct CarouselFans<Slide: View>: View {
+    let pos: KSpring
+    let ids: [String]
+    @ViewBuilder let slide: (Int) -> Slide
+
+    var body: some View {
+        let p = pos.value
+        let centre = Int(p.rounded())
+        let near = ids.indices.filter { abs(CGFloat($0) - p) < 1 }
+        ZStack(alignment: .top) {
+            ForEach(near, id: \.self) { i in
+                let d = CGFloat(i) - p, a = abs(d)
+                slide(i)
+                    .scaleEffect(1 - 0.08 * min(1, a))
+                    .offset(x: d * 320)
+                    .opacity(Double(clamp01(1 - a * 1.2)))
+                    .allowsHitTesting(i == centre)
+                    .accessibilityHidden(i != centre)
+                    .id(ids[i])
+            }
+        }
+    }
+}
+
+private struct CarouselName {
+    let id: String
+    let name: String
+    /// The ghost's name is a placeholder: .6 in the centre.
+    let ghost: Bool
+}
+
+/// The strip of names, all from the position: the centre in Newsreader 30; a neighbour pinned
+/// 142 pt off-centre (its near edge) at 22 and .35; past that it slides 278 pt more per
+/// collection and fades out. Tapping a neighbour goes there.
+private struct CarouselNames: View {
+    let pos: KSpring
+    let names: [CarouselName]
+    let widths: [String: CGFloat]
+    let tap: (Int) -> Void
+
+    var body: some View {
+        GeometryReader { g in
+            let mid = g.size.width / 2
+            let p = pos.value
+            let centre = Int(p.rounded())
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(names.enumerated()), id: \.element.id) { i, e in
+                    let d = CGFloat(i) - p, a = abs(d), cd = max(-1, min(1, d))
+                    if a < 2.2 {
+                        let scale = (30 - 8 * min(1, a)) / 30
+                        let w = (widths[e.id] ?? 0) * scale
+                        // CSS: left 50% + translateX((−50 + 50·cd)% + px) → the centre sits at
+                        // mid + px + cd·w/2.
+                        let px = 142 * cd + (a > 1 ? (d > 0 ? 1 : -1) * (a - 1) * 278 : 0)
+                        let op = a <= 1 ? 1 - 0.65 * a : max(0, 0.35 * (2 - a))
+                        let ghost: CGFloat = e.ghost ? 1 - 0.4 * max(0, 1 - a) : 1
+                        let neighbour = abs(i - centre) == 1
+                        Text(e.name)
+                            .font(.kura.news(30))
+                            .foregroundStyle(KColor.text)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .background {
+                                GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
+                            }
+                            .scaleEffect(scale)
+                            .opacity(Double(op * ghost))
+                            .position(x: mid + px + cd * w / 2, y: 22)
+                            .onTapGesture { if neighbour { tap(i) } }
+                            .allowsHitTesting(neighbour)
+                            .accessibilityHidden(i != centre)
+                            .accessibilityAddTraits(i == centre ? .isHeader : [])
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The body under the names: gone by the middle of the way (`1 − 2·|fr|`), sliding 48 pt per
+/// collection against the finger, so the new one enters 24 pt from the other side. Reduce
+/// Motion: the fade only.
+private struct CarouselBodyShift<C: View>: View {
+    let pos: KSpring
+    let reduce: Bool
+    let content: C
+
+    init(pos: KSpring, reduce: Bool, @ViewBuilder content: () -> C) {
+        self.pos = pos
+        self.reduce = reduce
+        self.content = content()
+    }
+
+    var body: some View {
+        let fr = pos.value - pos.value.rounded()
+        content
+            .opacity(Double(clamp01(1 - abs(fr) * 2)))
+            .offset(x: reduce ? 0 : -fr * 48)
+    }
+}
+
+/// The two collections the position is between, and how far.
+private func between(_ p: CGFloat, _ n: Int) -> (lo: Int, hi: Int, t: CGFloat) {
+    guard n > 0 else { return (0, 0, 0) }
+    let lo = max(0, min(n - 1, Int(p.rounded(.down))))
+    let hi = min(n - 1, lo + 1)
+    return (lo, hi, clamp01(p - CGFloat(lo)))
+}
+
+/// The page's feed gradient (760) crossing from one collection's to the next's by the position,
+/// its first tone stretching up past the top on a pull.
+private struct CarouselSurface: View {
+    let pos: KSpring
+    let tints: [[String]]
+
+    var body: some View {
+        let (lo, hi, t) = between(pos.value, tints.count)
+        ZStack(alignment: .top) {
+            FeedSurface(hexes: tints[lo], span: 760)
+            FeedSurface(hexes: tints[hi], span: 760).opacity(Double(t))
+        }
+        .background(alignment: .top) {
+            ZStack {
+                Tint.feedTop(tints[lo])
+                Tint.feedTop(tints[hi]).opacity(Double(t))
+            }
+            .frame(height: 1200).offset(y: -1200)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// The colour the page continues in (tone 2), crossing the same way.
+private struct CarouselTail: View {
+    let pos: KSpring
+    let tints: [[String]]
+
+    var body: some View {
+        let (lo, hi, t) = between(pos.value, tints.count)
+        ZStack {
+            Tint.feedTail(tints[lo])
+            Tint.feedTail(tints[hi]).opacity(Double(t))
+        }
+    }
+}
+
+/// The 150 band under the tab bar, crossing the same way.
+private struct CarouselDockBand: View {
+    let pos: KSpring
+    let tints: [[String]]
+
+    var body: some View {
+        let (lo, hi, t) = between(pos.value, tints.count)
+        ZStack {
+            Color.clear.kFeedDockBand(tints[lo])
+            Color.clear.kFeedDockBand(tints[hi]).opacity(Double(t))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Reports when the rounding of the position lands on another collection.
+private struct CarouselIndexWatcher: View {
+    let pos: KSpring
+    let count: Int
+    let onChange: (Int) -> Void
+
+    var body: some View {
+        let i = max(0, min(count - 1, Int(pos.value.rounded())))
+        Color.clear
+            .onChange(of: i) { _, n in onChange(n) }
+            .accessibilityHidden(true)
     }
 }
 

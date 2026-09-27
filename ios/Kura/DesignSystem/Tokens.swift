@@ -303,8 +303,12 @@ extension View {
     /// Scroll content wearing the feed gradient: the surface behind it, its first tone stretching
     /// up past the top when the page is pulled down.
     func kFeedSurface(_ hexes: [String], span: CGFloat) -> some View {
-        background(alignment: .top) { FeedSurface(hexes: hexes, span: span) }
-            .kOverscrollFill(Tint.feedTop(hexes))
+        // On a hero page (a collection opening from the profile) the gradient is the backdrop:
+        // it comes in over the first 60 % of the progress. Identity anywhere else.
+        background(alignment: .top) { FeedSurface(hexes: hexes, span: span).heroBackdrop() }
+            .background(alignment: .top) {
+                Tint.feedTop(hexes).frame(height: 1200).offset(y: -1200).allowsHitTesting(false).heroBackdrop()
+            }
     }
 
     /// The dock floats over the page's own bottom tone, not over black: a fixed 150 band from

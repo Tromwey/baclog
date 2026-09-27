@@ -19,21 +19,26 @@ struct TitleDetailView: View {
 
     private func detail(_ t: Title) -> some View {
             ZStack(alignment: .top) {
-                KColor.bg.ignoresSafeArea()
+                // Opened in place from a cell (`TitleHeroHost`): the page's ground and tint come in
+                // over the first 60 %, the cover flies in, the rest rises from 40 %.
+                KColor.bg.ignoresSafeArea().heroBackdrop()
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         TitleHeader(title: t)
-                        if let e = store.loadError(.title(t.id)) {
-                            RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar toda la ficha.") {
-                                Task { await store.loadTitle(t.id, force: true) }
+                        Group {
+                            if let e = store.loadError(.title(t.id)) {
+                                RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar toda la ficha.") {
+                                    Task { await store.loadTitle(t.id, force: true) }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.top, 4)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.top, 4)
+                            TitleSections(title: t)
+                                .padding(.top, 10)
+                                .padding(.horizontal, 24)
+                                .padding(.bottom, 56)
                         }
-                        TitleSections(title: t)
-                            .padding(.top, 10)
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 56)
+                        .heroRest()
                     }
                 }
                 .ignoresSafeArea(.container, edges: .top)
@@ -69,9 +74,11 @@ private struct TitleHeader: View {
         let saved = store.collectionsContaining(t.id).count
 
         VStack(spacing: 12) {
+            // Radius 18: where a Masonry cover (14) lands when it grows into the ficha.
             CoverView(title: t,
                       width: t.format == .album ? 240 : 200,
-                      height: t.format == .album ? 240 : 300)
+                      height: t.format == .album ? 240 : 300,
+                      radius: KRadius.surface)
                 .overlay(alignment: .topLeading) {
                     if today {
                         HStack(spacing: 6) {
@@ -86,51 +93,57 @@ private struct TitleHeader: View {
                         .accessibilityLabel("Sale hoy")
                     }
                 }
-            Text(t.name)
-                .font(.kura.workTitle)
-                .foregroundStyle(KColor.text)
-                .multilineTextAlignment(.center)
-                .padding(.top, 10)
-                .accessibilityAddTraits(.isHeader)
-            if let c = t.lowerCreator {
-                Text(c).font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
-            }
-            Text(metaLine(t, unreleased: unreleased)).monoLabel()
-
-            if let c = t.counts {
-                CountRibbon(items: ribbon(c))
-                    .padding(.top, 2)
-                    .accessibilityLabel(ribbonA11y(c))
-            }
-
-            HStack(spacing: 8) {
-                if !(unreleased && t.format == .album) {
-                    completeButton(t, mark: mark, solid: today)
+                .heroTarget()
+            VStack(spacing: 12) {
+                Text(t.name)
+                    .font(.kura.workTitle)
+                    .foregroundStyle(KColor.text)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 10)
+                    .accessibilityAddTraits(.isHeader)
+                if let c = t.lowerCreator {
+                    Text(c).font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
                 }
-                saveButton(t, saved: saved)
-                if !unreleased && !today && t.format != .series {
-                    IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, label: "Reseñar") {
-                        store.present(.complete(titleID: t.id, focusReview: true))
+                Text(metaLine(t, unreleased: unreleased)).monoLabel()
+
+                if let c = t.counts {
+                    CountRibbon(items: ribbon(c))
+                        .padding(.top, 2)
+                        .accessibilityLabel(ribbonA11y(c))
+                }
+
+                HStack(spacing: 8) {
+                    if !(unreleased && t.format == .album) {
+                        completeButton(t, mark: mark, solid: today)
+                    }
+                    saveButton(t, saved: saved)
+                    if !unreleased && !today && t.format != .series {
+                        IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, label: "Reseñar") {
+                            store.present(.complete(titleID: t.id, focusReview: true))
+                        }
                     }
                 }
-            }
-            .padding(.top, 8)
-            .padding(.horizontal, -10)
-            // A row of 44 pt pills: it holds up to xxxLarge, past that it would truncate.
-            .kFixedChrome()
+                .padding(.top, 8)
+                .padding(.horizontal, -10)
+                // A row of 44 pt pills: it holds up to xxxLarge, past that it would truncate.
+                .kFixedChrome()
 
-            if unreleased, let sentence = store.releaseSentence(t) {
-                Text(sentence.capitalizedFirst).monoLabel().padding(.top, 2)
-            } else if t.upcomingSeason != nil, let label = store.releaseLabel(t, withSeason: true) {
-                Text(label).monoLabel().padding(.top, 2)
+                if unreleased, let sentence = store.releaseSentence(t) {
+                    Text(sentence.capitalizedFirst).monoLabel().padding(.top, 2)
+                } else if t.upcomingSeason != nil, let label = store.releaseLabel(t, withSeason: true) {
+                    Text(label).monoLabel().padding(.top, 2)
+                }
             }
+            .heroLead()
         }
         .frame(maxWidth: .infinity)
         .padding(.top, KSize.pushedTitleTop)
         .padding(.horizontal, 24)
         .padding(.bottom, 30)
-        .background(Tint.header(t.palette))
-        .kOverscrollFill(Tint.headerTop(t.palette))
+        .background { Tint.header(t.palette).heroBackdrop() }
+        .background(alignment: .top) {
+            Tint.headerTop(t.palette).frame(height: 1200).offset(y: -1200).allowsHitTesting(false).heroBackdrop()
+        }
     }
 
     private func completeButton(_ t: Title, mark: Mark?, solid: Bool) -> some View {

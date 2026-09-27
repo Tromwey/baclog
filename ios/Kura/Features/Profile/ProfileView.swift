@@ -5,6 +5,11 @@ import PhotosUI
 
 struct ProfileView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    /// "Abrir desde el perfil" (colecciones-transiciones · 2 · 3): a collection opens IN PLACE
+    /// over your profile — its fan travels from the row to the header — and Volver lands it back
+    /// in its row.
+    @State private var hero = HeroController(kind: .collection)
 
     private var obsessions: [Title] {
         store.userTitles.filter { $0.value.mark == .obsessed }
@@ -30,7 +35,27 @@ struct ProfileView: View {
             // lives in your library with no collection, and the ribbon has to count it.
             EmptyOwnProfile()
         } else {
-            full
+            HeroHost(hero: hero, rootTab: .profile) {
+                full
+            } page: { id in
+                CollectionDetailView(collectionID: id, hostsTitleHero: true)
+            } flyer: { id in
+                if let c = store.collection(id) {
+                    FanView(covers: store.fan(of: c), lead: 225, ghost: c.titleIDs.isEmpty)
+                }
+            }
+            // Deleted while open (18a › Borrar): nothing to go back to.
+            .onChange(of: store.collections.map(\.id)) { _, ids in
+                if let id = hero.openID, !ids.contains(id) { hero.dismissNow() }
+            }
+            #if DEBUG
+            .task {
+                // `-kuraHeroCollection <id>`: open it from its row once the profile is up (captures).
+                guard let id = UserDefaults.standard.string(forKey: "kuraHeroCollection") else { return }
+                try? await Task.sleep(for: .milliseconds(1200))
+                if !hero.isOpen { hero.open(id, reduce: reduce) }
+            }
+            #endif
         }
     }
 
@@ -53,7 +78,7 @@ struct ProfileView: View {
         store.orderedCollections.map { c in
             ShowcaseItem(id: c.id, name: c.name, vibe: c.shownVibe, count: c.titleIDs.count, pinned: c.pinned,
                          fan: store.fan(of: c),
-                         open: { store.select(.collections); store.push(.collection(c.id)) },
+                         open: { hero.open(c.id, reduce: reduce) },
                          hold: { store.present(.collectionQuick(c.id)) })
         }
     }

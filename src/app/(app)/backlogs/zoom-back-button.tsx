@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CHIP_44 } from "@/components/kura/components";
 import { KIcon } from "@/components/kura/icons";
-import { useZoomExit } from "./zoom-exit";
+import { useOverlayExit } from "./overlay-exit";
 
 /**
  * Volver for the collection screens (Kura: 44 glass at 64/24, the frames'
@@ -11,12 +11,13 @@ import { useZoomExit } from "./zoom-exit";
  * (the modal opened by pushing the URL) and pops the full page; a deep link
  * with no history has nowhere to go back to, so it lands on the list.
  *
- * Inside the overlay the shell shrinks back into its card FIRST
- * (`useZoomExit`) and navigates once that spring lands.
+ * Inside the profile's collection overlay the shell runs its close FIRST
+ * (`useOverlayExit`: the fan flies back to its row) and navigates once that
+ * spring lands.
  */
 export function ZoomBackButton({ className = CHIP_44 }: { className?: string }) {
   const router = useRouter();
-  const exit = useZoomExit();
+  const exit = useOverlayExit();
   return (
     <button
       type="button"

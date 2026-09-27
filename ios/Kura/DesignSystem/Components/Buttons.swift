@@ -300,10 +300,12 @@ private struct ChromePress: ViewModifier {
 
 struct BackChip: View {
     @Environment(AppStore.self) private var store
+    /// A hero page (`HeroHost`) closes itself instead of popping.
+    @Environment(\.kBackAction) private var envBack
     var action: (() -> Void)? = nil
     var body: some View {
         IconChip44(systemName: "chevron.left", iconSize: 17, label: "Volver") {
-            if let action { action() } else { store.pop() }
+            if let action { action() } else if let envBack { envBack() } else { store.pop() }
         }
     }
 }

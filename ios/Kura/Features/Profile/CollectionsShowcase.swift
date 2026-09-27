@@ -63,6 +63,7 @@ struct CollectionsShowcase<Empty: View>: View {
             if let featured {
                 VStack(spacing: 8) {
                     FanView(covers: featured.fan, lead: 186, ghost: featured.fan.isEmpty)
+                        .heroSource(featured.id)
                         .modifier(OpenOnTap(open: featured.open, hold: featured.hold, label: "Abrir \(featured.name)"))
                     Text("\(featured.pinned ? "fijada · " : "")\(featured.count) \(featured.count == 1 ? "título" : "títulos")")
                         .monoLabel(10)
@@ -101,6 +102,7 @@ struct CollectionsShowcase<Empty: View>: View {
                         ForEach(shown) { c in
                             VStack(spacing: 8) {
                                 FanView(covers: c.fan, lead: 99, ghost: c.fan.isEmpty)
+                                    .heroSource(c.id)
                                 VStack(spacing: 5) {
                                     Text(c.name)
                                         .font(.kura.news(20))

@@ -4,10 +4,10 @@ import { BacklogZoomView, loadBacklogZoom } from "../backlog-zoom-view";
 
 /**
  * The collection (Kura · flujos-v2 03) as a full page — what a hard nav / refresh / shared URL
- * renders. Soft navs from /backlogs are intercepted into the overlay twin
- * (@modal/(.)[backlogId]) instead. No bl-zoom-* classes here: template.tsx
- * already animates page entry. A direct URL to a nonexistent backlog SHOULD
- * 404 (unlike the overlay twin, which redirects back to the list).
+ * renders, and every soft nav EXCEPT from the profile (which intercepts it
+ * into its overlay, perfil/@modal/(..)backlogs/[backlogId]). template.tsx
+ * animates the page entry. A direct URL to a nonexistent backlog SHOULD
+ * 404 (unlike the overlay twin, which redirects back to the profile).
  */
 export default async function BacklogDetailPage({
   params,

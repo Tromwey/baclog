@@ -4,6 +4,7 @@ import Link from "next/link";
 import { posterFallbackStyle } from "@/components/cover-tile";
 import type { MediaType } from "@/modules/catalog/types";
 import { Glyph, type GlyphKind } from "./components";
+import { launchCoverFlight } from "./cover-flight";
 import { useHold } from "./use-hold";
 
 /**
@@ -29,6 +30,9 @@ export interface MasonryItem {
   wait: string | null;
   /** The mono line under the title: the year, else the format. */
   sub: string;
+  /** The ficha this cover opens (its catalog id): tapping it flies the
+   *  cover into the ficha and Volver flies it back (`cover-flight.tsx`). */
+  flightKey?: string;
 }
 
 const GLYPH_LABEL: Partial<Record<GlyphKind, string>> = {
@@ -60,10 +64,27 @@ function Tile({ it, onHold }: { it: MasonryItem; onHold?: (key: string) => void 
   return (
     <Link
       href={it.href}
+      onClick={
+        it.flightKey
+          ? (e) => {
+              const el = e.currentTarget.querySelector<HTMLElement>("[data-cover-flight]");
+              // A new tab / window is not a flight.
+              if (el && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey))
+                launchCoverFlight({
+                  key: it.flightKey!,
+                  el,
+                  posterUrl: it.posterUrl,
+                  paletteHex: it.paletteHex,
+                  mediaType: it.mediaType,
+                });
+            }
+          : undefined
+      }
       {...(onHold ? handlers : {})}
       className="mb-[18px] flex select-none flex-col gap-1.5 [break-inside:avoid] bl-press [-webkit-touch-callout:none]"
     >
       <span
+        data-cover-flight={it.flightKey}
         className={`relative block w-full overflow-hidden rounded-[var(--r-cover-l)] bg-surface-2 shadow-cover ${
           it.mediaType === "album" ? "aspect-square" : "aspect-[2/3]"
         }`}

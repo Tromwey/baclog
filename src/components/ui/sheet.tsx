@@ -108,6 +108,8 @@ export function Sheet(props: {
   pad?: "form" | "menu";
   /** Accessible name for the dialog. */
   label: string;
+  /** The presence spring's response in / out (`useSheetMotion`). */
+  motion?: { enter: number; exit: number };
   children: ReactNode;
 }) {
   // The motion hook measures the panel on mount, so the panel has to exist
@@ -122,6 +124,7 @@ function SheetBody({
   variant = "bottom",
   pad: padKind = "form",
   label,
+  motion,
   children,
 }: {
   onClose: () => void;
@@ -129,6 +132,7 @@ function SheetBody({
   pad?: "form" | "menu";
   /** Accessible name for the dialog. */
   label: string;
+  motion?: { enter: number; exit: number };
   children: ReactNode;
 }) {
   // iOS keyboard: the sheet is fixed against the LAYOUT viewport, which the
@@ -144,6 +148,8 @@ function SheetBody({
   const { panelRef, scrimRef, dismiss, panelHandlers } = useSheetMotion({
     onClose,
     draggable: bottom,
+    enterResponse: motion?.enter,
+    exitResponse: motion?.exit,
   });
 
   useDialogFocus(panelRef);

@@ -32,6 +32,7 @@ export function OwnCollections({
         title="tus colecciones"
         seeAllHref="/backlogs"
         onHold={setHoldId}
+        flight
         collections={shelves.map((b) => ({
           id: b.id,
           name: b.name,

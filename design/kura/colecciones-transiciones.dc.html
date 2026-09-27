@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<script src="_ds/baclog-b377eb3a-aab8-4530-b912-fa356db1005f/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Hanken+Grotesk:wght@400;500;600&family=Red+Hat+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7e1;font-family:system-ui,sans-serif}a{color:#2a78d6;text-decoration:none}a:hover{opacity:.85}</style>
+</helmet>
+<section id="t1" style="padding:56px 44px 48px">
+<div style="display:flex;flex-direction:column;gap:12px;max-width:820px;margin-bottom:32px">
+  <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">Kura · colecciones · transiciones</span>
+  <h1 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:52px;line-height:1;color:#1a1a1a">cómo se mueve una colección</h1>
+  <p style="margin:0;font:15px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.65);max-width:680px;text-wrap:pretty">Sobre <a href="Colecciones Propuesta.dc.html#10a">10a</a> y <a href="Colecciones Propuesta.dc.html#10b">10b</a>. Todo corre con el resorte de lib/spring.ts (damping 1, sin rebote salvo cuando el dedo lanza), y cada salida es la misma trayectoria que la entrada, al revés. Usa Tweaks para verlo en cámara lenta o con movimiento reducido.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+<div ref="{{ phoneRef }}" style="flex:none;width:390px;height:844px;position:relative;overflow:hidden;border-radius:44px;background:#0b0b0d;color:#f4f3ee;font-family:'Hanken Grotesk',system-ui,sans-serif;box-shadow:0 30px 60px -20px rgba(0,0,0,.45);user-select:none;-webkit-user-select:none">
+  <div style="position:absolute;inset:0;transform:{{ base.tf }};transform-origin:50% 40%">
+    <div style="position:absolute;inset:0;opacity:{{ tab.op }};transform:{{ tab.tf }}">
+      <sc-if value="{{ isCar }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;inset:0;overflow-y:auto;scrollbar-width:none"><div style="position:relative;min-height:100%">
+        <div style="position:absolute;inset:0;background:{{ car.bgA }}"></div>
+        <div style="position:absolute;inset:0;background:{{ car.bgB }};opacity:{{ car.bgT }}"></div>
+        <div style="position:relative">
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px;padding:64px 20px 18px">
+            <h1 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:36px;line-height:1.02">tus colecciones</h1>
+            <div style="display:flex;gap:8px"><span style="flex:none;width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 002 2h10a2 2 0 002-2v-5"></path></svg></span><span style="flex:none;width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></span></div>
+          </div>
+          <div onPointerDown="{{ car.down }}" onPointerMove="{{ car.move }}" onPointerUp="{{ car.up }}" onPointerCancel="{{ car.up }}" onWheel="{{ car.wheel }}" style="position:relative;height:334px;touch-action:pan-y;cursor:grab">
+            <sc-for list="{{ car.cards }}" as="c" hint-placeholder-count="3">
+              <div style="position:absolute;left:45px;top:14px;width:300px;height:243px;transform:{{ c.tf }};opacity:{{ c.op }}">
+<span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span>
+<span style="position:absolute;left:11px;top:38px;width:117px;height:176px;border-radius:14px;background:{{ c.c1 }};transform:rotate(-10deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;right:1px;top:59px;width:135px;height:135px;border-radius:14px;background:{{ c.c2 }};transform:rotate(9deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;left:75px;top:0;width:150px;height:225px;border-radius:14px;background:{{ c.lead }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+              </div>
+            </sc-for>
+            <div style="position:absolute;left:0;right:0;top:290px;height:44px;overflow:hidden">
+              <sc-for list="{{ car.names }}" as="t" hint-placeholder-count="3"><span style="position:absolute;left:50%;top:0;white-space:nowrap;font-family:Newsreader,Georgia,serif;font-size:{{ t.fs }}px;line-height:44px;transform:{{ t.tf }};opacity:{{ t.op }}">{{ t.name }}</span></sc-for>
+            </div>
+          </div>
+          <div style="opacity:{{ car.bOp }};transform:{{ car.bTf }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 24px 26px;text-align:center">
+              <span style="font-family:Newsreader,Georgia,serif;font-style:italic;font-size:16px;line-height:1.3;color:#b9b8c2">{{ car.cur.vibe }}</span>
+              <span style="font-size:13px;color:#b9b8c2">{{ car.cur.who }} · {{ car.cur.count }} títulos</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 20px 14px"><span style="font-family:Newsreader,Georgia,serif;font-size:22px">el orden</span><span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">Reordenar</span></div>
+            <div style="column-count:3;column-gap:12px;padding:0 20px 150px">
+              <sc-for list="{{ car.items }}" as="it" hint-placeholder-count="9">
+                <div onPointerDown="{{ it.down }}" onPointerUp="{{ it.up }}" onPointerLeave="{{ it.up }}" onPointerCancel="{{ it.up }}" onContextMenu="{{ noCtx }}" onClick="{{ it.open }}" style="cursor:pointer;display:flex;flex-direction:column;gap:6px;break-inside:avoid;margin-bottom:18px;transform:{{ it.press }};transition:transform .2s">
+                  <span ref="{{ it.ref }}" style="display:block;width:100%;aspect-ratio:{{ it.ar }};border-radius:14px;background:{{ it.bg }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88);visibility:{{ it.vis }}"></span>
+                  <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Newsreader,Georgia,serif;font-style:italic;font-size:14px;line-height:1.15">{{ it.title }}</span>
+                  <span style="font-family:'Red Hat Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">{{ it.yr }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      </sc-if>
+      <sc-if value="{{ isProf }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;background:{{ prof.feed }};background-attachment:local">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:88px 24px 30px;text-align:center">
+          <span style="flex:none;width:76px;height:76px;border-radius:999px;background:{{ prof.sealBg }};color:{{ prof.sealFg }};display:flex;align-items:center;justify-content:center;font-family:Newsreader,Georgia,serif;font-style:italic;font-weight:500;letter-spacing:-.035em;font-size:30px">so</span>
+          <h1 style="margin:6px 0 0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:36px;line-height:1">sofía</h1>
+          <span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">@sofi · 6 colecciones</span>
+        </div>
+        <h2 style="margin:0;padding:0 20px 14px;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:24px">colecciones</h2>
+        <div style="display:grid;grid-template-columns:repeat(2,170px);gap:24px 10px;padding:0 20px 160px">
+          <sc-for list="{{ prof.cards }}" as="c" hint-placeholder-count="4">
+            <div onClick="{{ c.open }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+              <div ref="{{ c.ref }}" style="position:relative;width:170px;height:138px;visibility:{{ c.vis }}"><div style="position:absolute;left:0;top:0;width:300px;height:243px;transform:scale(.5667);transform-origin:0 0">
+<span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span>
+<span style="position:absolute;left:11px;top:38px;width:117px;height:176px;border-radius:14px;background:{{ c.c1 }};transform:rotate(-10deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;right:1px;top:59px;width:135px;height:135px;border-radius:14px;background:{{ c.c2 }};transform:rotate(9deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;left:75px;top:0;width:150px;height:225px;border-radius:14px;background:{{ c.lead }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+              </div></div>
+              <span style="max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Newsreader,Georgia,serif;font-size:18px;line-height:1.2">{{ c.name }}</span>
+              <span style="font-family:'Red Hat Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">{{ c.count }} títulos</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:150px;background:linear-gradient(transparent,{{ tail }} 75%);pointer-events:none"></div>
+    <div style="position:absolute;left:0;right:0;bottom:34px;display:flex;justify-content:center;pointer-events:none">
+      <div style="display:flex;gap:6px;padding:6px;border-radius:999px;background:rgba(20,20,26,.5);backdrop-filter:blur(26px) saturate(1.7);box-shadow:0 14px 44px rgba(0,0,0,.55);pointer-events:auto">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4"><span onClick="{{ n.go }}" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 22px;border-radius:999px;background:{{ n.bg }};color:{{ n.color }}"><svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="{{ n.d }}"></path></svg><span style="font-size:10px;font-weight:500">{{ n.label }}</span></span></sc-for>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ col.on }}" hint-placeholder-val="{{ false }}">
+  <div onPointerDown="{{ col.down }}" onPointerMove="{{ col.move }}" onPointerUp="{{ col.up }}" onPointerCancel="{{ col.up }}" style="position:absolute;inset:0;z-index:10;transform:{{ col.tf }};transform-origin:50% 40%;pointer-events:{{ col.pe }}">
+    <div ref="{{ col.scRef }}" style="position:absolute;inset:0;overflow-y:auto;scrollbar-width:none"><div style="position:relative;min-height:100%">
+      <div style="position:absolute;inset:0;background:{{ col.feed }};opacity:{{ col.bgOp }}"></div>
+      <div style="position:relative;height:126px;opacity:{{ col.bgOp }}">
+        <span onClick="{{ col.back }}" style="cursor:pointer;position:absolute;left:24px;top:64px;width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></span>
+        <div style="position:absolute;right:24px;top:64px;display:flex;gap:8px"><span style="width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 002 2h10a2 2 0 002-2v-5"></path></svg></span><span style="width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></span></div>
+      </div>
+      <div style="position:relative;margin:0 auto;width:300px;height:243px;visibility:{{ col.heroVis }}">
+<span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span>
+<span style="position:absolute;left:11px;top:38px;width:117px;height:176px;border-radius:14px;background:{{ col.c.c1 }};transform:rotate(-10deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;right:1px;top:59px;width:135px;height:135px;border-radius:14px;background:{{ col.c.c2 }};transform:rotate(9deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;left:75px;top:0;width:150px;height:225px;border-radius:14px;background:{{ col.c.lead }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+      </div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 24px 26px;text-align:center;opacity:{{ col.aOp }};transform:{{ col.aTf }}">
+        <span style="font-family:'Red Hat Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">colección</span>
+        <h1 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:36px;line-height:1;text-wrap:balance">{{ col.c.name }}</h1>
+        <span style="font-family:Newsreader,Georgia,serif;font-style:italic;font-size:16px;line-height:1.3;color:#b9b8c2">{{ col.c.vibe }}</span>
+        <span style="font-size:13px;color:#b9b8c2">{{ col.c.who }} · {{ col.c.count }} títulos</span>
+      </div>
+      <div style="position:relative;opacity:{{ col.bOp }};transform:{{ col.bTf }}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 20px 14px"><span style="font-family:Newsreader,Georgia,serif;font-size:22px">el orden</span><span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">Reordenar</span></div>
+        <div style="column-count:3;column-gap:12px;padding:0 20px 60px">
+          <sc-for list="{{ col.items }}" as="it" hint-placeholder-count="9">
+            <div onPointerDown="{{ it.down }}" onPointerUp="{{ it.up }}" onPointerLeave="{{ it.up }}" onPointerCancel="{{ it.up }}" onContextMenu="{{ noCtx }}" onClick="{{ it.open }}" style="cursor:pointer;display:flex;flex-direction:column;gap:6px;break-inside:avoid;margin-bottom:18px;transform:{{ it.press }};transition:transform .2s">
+              <span ref="{{ it.ref }}" style="display:block;width:100%;aspect-ratio:{{ it.ar }};border-radius:14px;background:{{ it.bg }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88);visibility:{{ it.vis }}"></span>
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Newsreader,Georgia,serif;font-style:italic;font-size:14px;line-height:1.15">{{ it.title }}</span>
+              <span style="font-family:'Red Hat Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">{{ it.yr }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  </sc-if>
+  <sc-if value="{{ col.fly }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;left:0;top:0;width:300px;height:243px;z-index:11;transform-origin:0 0;transform:{{ col.flyTf }};pointer-events:none">
+<span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span>
+<span style="position:absolute;left:11px;top:38px;width:117px;height:176px;border-radius:14px;background:{{ col.c.c1 }};transform:rotate(-10deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;right:1px;top:59px;width:135px;height:135px;border-radius:14px;background:{{ col.c.c2 }};transform:rotate(9deg);box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+<span style="position:absolute;left:75px;top:0;width:150px;height:225px;border-radius:14px;background:{{ col.c.lead }};box-shadow:0 18px 36px -16px rgba(0,0,0,.88)"></span>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ item.on }}" hint-placeholder-val="{{ false }}">
+  <div onPointerDown="{{ item.down }}" onPointerMove="{{ item.move }}" onPointerUp="{{ item.up }}" onPointerCancel="{{ item.up }}" style="position:absolute;inset:0;z-index:20;pointer-events:{{ item.pe }}">
+    <div style="position:absolute;inset:0;background:{{ item.feed }};opacity:{{ item.bgOp }}"></div>
+    <span onClick="{{ item.back }}" style="cursor:pointer;position:absolute;left:24px;top:64px;width:44px;height:44px;border-radius:999px;background:rgba(11,11,13,.5);backdrop-filter:blur(14px);display:flex;align-items:center;justify-content:center;opacity:{{ item.bgOp }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></span>
+    <span style="position:absolute;left:{{ item.hx }}px;top:118px;width:{{ item.hw }}px;height:{{ item.hh }}px;border-radius:18px;background:{{ item.it.bg }};box-shadow:0 30px 60px -24px rgba(0,0,0,.9);visibility:{{ item.heroVis }}"></span>
+    <div style="position:absolute;left:24px;right:24px;top:{{ item.ty }}px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;opacity:{{ item.aOp }};transform:{{ item.aTf }}">
+      <span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">{{ item.it.meta }}</span>
+      <h1 style="margin:0;font-family:Newsreader,Georgia,serif;font-style:italic;font-weight:400;font-size:34px;line-height:1.05;text-wrap:balance">{{ item.it.title }}</h1>
+      <sc-if value="{{ item.it.hasG }}" hint-placeholder-val="{{ false }}"><span style="margin-top:6px;height:40px;padding:0 16px 0 12px;border-radius:999px;background:rgba(255,255,255,.075);display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><svg width="16" height="16" viewBox="0 0 24 24" fill="{{ item.it.gc }}"><path d="{{ item.it.g }}"></path></svg>{{ item.it.reac }}</span></sc-if>
+    </div>
+  </div>
+  </sc-if>
+  <sc-if value="{{ item.fly }}" hint-placeholder-val="{{ false }}">
+  <span style="position:absolute;left:0;top:0;width:{{ item.hw }}px;height:{{ item.hh }}px;z-index:21;transform-origin:0 0;transform:{{ item.flyTf }};border-radius:{{ item.flyR }}px;background:{{ item.it.bg }};box-shadow:0 30px 60px -24px rgba(0,0,0,.9);pointer-events:none"></span>
+  </sc-if>
+
+  <sc-if value="{{ sheet.on }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ sheet.close }}" style="position:absolute;inset:0;z-index:30;background:rgba(0,0,0,.55);opacity:{{ sheet.scrim }}"></div>
+  <div style="position:absolute;left:8px;right:8px;bottom:8px;z-index:31;background:#1c1c21;border-radius:36px;padding:22px 12px 12px;box-shadow:0 14px 44px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.1);display:flex;flex-direction:column;gap:2px;opacity:{{ sheet.op }};transform:{{ sheet.tf }}">
+    <div style="display:flex;flex-direction:column;gap:5px;padding:0 10px 10px"><span style="font-family:Newsreader,Georgia,serif;font-style:italic;font-size:22px;line-height:1.1">{{ sheet.it.title }}</span><span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#b9b8c2">{{ sheet.it.meta }}</span></div>
+    <sc-for list="{{ sheet.rows }}" as="r" hint-placeholder-count="5"><sc-if value="{{ r.gap }}" hint-placeholder-val="{{ false }}"><span style="display:block;height:1px;margin:6px 12px;background:rgba(255,255,255,.08)"></span></sc-if><div onClick="{{ sheet.close }}" style="cursor:pointer;display:flex;align-items:center;gap:14px;min-height:56px;padding:0 12px;border-radius:18px" style-hover="background:rgba(255,255,255,.05)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ r.d }}"></path></svg><span style="flex:1;font-size:16px;font-weight:500">{{ r.label }}</span><span style="font-family:'Red Hat Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8f8e9b">{{ r.aside }}</span></div></sc-for>
+  </div>
+  </sc-if>
+</div>
+
+<div style="flex:1 1 420px;max-width:520px;display:flex;flex-direction:column;gap:28px;font:14px/1.55 system-ui,sans-serif;color:rgba(0,0,0,.7)">
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">1 · Entre colecciones</span>
+    <h3 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:26px;color:#1a1a1a">el carrusel sigue al dedo</h3>
+    <p style="margin:0;text-wrap:pretty">El abanico, la tira de nombres y el fondo dependen de una sola posición continua, así que se mueven juntos y 1:1 con el dedo. En los extremos hay resistencia (rubberband). Al soltar se proyecta la velocidad para elegir la vecina: un toque corto basta. El fondo cruza los dos degradados según la posición. El cuerpo (frase, títulos) sale a la mitad del recorrido y la nueva entra desde el lado contrario, 24 px.</p>
+    <span style="font:12px/1.5 ui-monospace,Menlo,monospace;color:rgba(0,0,0,.5)">response 0.42 · damping 1, o 0.86 si se lanzó · hoy: salto a los 450 ms</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">2 · Abrir desde el perfil</span>
+    <h3 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:26px;color:#1a1a1a">el abanico viaja al encabezado</h3>
+    <p style="margin:0;text-wrap:pretty">El abanico de la fila es el mismo objeto que el del encabezado: sale de su lugar y crece hasta el suyo. Detrás, el degradado de la colección aparece en el primer 60 % y el perfil se aleja un 4 %. El nombre sube 16 px a partir del 35 %; los títulos, a partir del 50 %. Sustituye el zoom de zoom-shell.tsx (escala 0.86 desde el punto del toque) y bl-zoom-content.</p>
+    <span style="font:12px/1.5 ui-monospace,Menlo,monospace;color:rgba(0,0,0,.5)">response 0.42 · damping 1</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">3 · Cerrar</span>
+    <h3 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:26px;color:#1a1a1a">el mismo camino, al revés</h3>
+    <p style="margin:0;text-wrap:pretty">Volver corre el mismo resorte hacia 0, desde donde esté: los títulos se van primero y el abanico aterriza en su fila, aunque hayas bajado por la colección. Arrastrar desde el borde izquierdo mueve la transición con el dedo; al soltar, si la proyección queda por debajo del 70 % cierra, si no, regresa.</p>
+    <span style="font:12px/1.5 ui-monospace,Menlo,monospace;color:rgba(0,0,0,.5)">response 0.3 · hereda la velocidad del dedo</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.45)">4 · Abrir y cerrar un título</span>
+    <h3 style="margin:0;font-family:Newsreader,Georgia,serif;font-weight:400;font-size:26px;color:#1a1a1a">la portada se vuelve la ficha</h3>
+    <p style="margin:0;text-wrap:pretty">Tocar un título: la portada sale de su celda y crece a la de la ficha; el radio se mantiene visualmente (14 → 18 px) y el fondo toma el tinte de la portada. Cerrar la devuelve a su celda. Mantener presionado abre la hoja 18c con el movimiento de use-sheet-motion (18 px, escala 0.97). La ficha aquí es solo un esbozo.</p>
+    <span style="font:12px/1.5 ui-monospace,Menlo,monospace;color:rgba(0,0,0,.5)">abrir 0.42 · cerrar 0.3 · hoja 0.4 / 0.3</span>
+  </div>
+  <p style="margin:0;padding-top:18px;border-top:1px solid rgba(0,0,0,.1);text-wrap:pretty">Movimiento reducido: sin viajes ni escalas. Cada pantalla aparece y desaparece con un cruce de opacidad; el carrusel sigue al dedo porque es el movimiento de la persona.</p>
+</div>
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;speed&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1×&quot;,&quot;0.5×&quot;,&quot;0.25×&quot;],&quot;default&quot;:&quot;1×&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Movimiento&quot;},&quot;reduced&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Movimiento&quot;}}">
+class Component extends DCLogic {
+  v = { pos: 0, col: 0, item: 0, sheet: 0, tab: 1 };
+  ov = { col: null, item: null, sheet: null };
+  h = {}; R = {}; tabI = 0; tdir = 1; pk = null;
+
+  data() {
+    if (this.D) return this.D;
+    const rgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+    const mix = (a, b, k) => { const A = rgb(a), B = rgb(b); return "#" + A.map((x, i) => Math.round(x * (1 - k) + B[i] * k).toString(16).padStart(2, "0")).join(""); };
+    const K = 1 - 0.45 * 0.78;
+    const ends = p => [mix(p[0], "#101013", K), mix(p[1] || p[0], "#0c0c10", Math.min(1, K + 0.08))];
+    const rgba = (h, a) => { const [r, g, b] = rgb(h); return `rgba(${r},${g},${b},${a})`; };
+    const fb = p => `radial-gradient(90% 70% at 30% 20%, ${rgba(p[0], .55)} 0%, ${rgba(p[0], 0)} 70%), linear-gradient(160deg, ${p[0]} 0%, ${p[1]} 100%)`;
+    const feed = (p, px = 760) => { const [a, b] = ends(p); return `linear-gradient(168deg, ${a} 0px, ${b} ${px}px, ${b} 100%)`; };
+    const inv = h => "#" + rgb(h).map(v => (255 - v).toString(16).padStart(2, "0")).join("");
+    const seal = p => ({ sealBg: mix(inv(p[1]), "#0b0b0d", .72), sealFg: mix(inv(p[0]), "#f4f3ee", .55) });
+    const P = {
+      flame: "M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 015.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133.998a5.99 5.99 0 011.925-3.546 3.75 3.75 0 013.255 3.72z",
+      like: "M7.5 10.5v9.5H4.2a1.2 1.2 0 01-1.2-1.2v-7.1a1.2 1.2 0 011.2-1.2h3.3zm2 9.5h7.6a2.2 2.2 0 002.16-1.78l1.24-6.2A2.2 2.2 0 0018.34 9.4H14.2l.7-3.3a2 2 0 00-3.6-1.5L9.5 8.6v11.4z",
+      check: "M20.5 6.3a1.1 1.1 0 010 1.6l-9.6 9.6a1.1 1.1 0 01-1.6 0L4.6 12.8a1.1 1.1 0 011.6-1.6l3.9 3.9 8.8-8.8a1.1 1.1 0 011.6 0z",
+    };
+    const ST = { o: [P.flame, "#ec8e76", "Me obsesiona"], l: [P.like, "#9cbae1", "Me gusta"], c: [P.check, "#a0cba0", "Completo"] };
+    const TY = { film: "Cine", series: "Serie", album: "Álbum" };
+    const mk = (title, type, yr, p, s) => ({ title, type, yr, p, bg: fb(p), ar: type === "album" ? "1 / 1" : "2 / 3", meta: TY[type] + " · " + yr,
+      hasG: !!s, g: s ? ST[s][0] : "", gc: s ? ST[s][1] : "transparent", reac: s ? ST[s][2] : "" });
+    const pool = [["#e8b23a", "#5a3a10"], ["#3a5a9b", "#141f3a"], ["#2a6e5a", "#0e2a22"], ["#9b4dca", "#2a1440"], ["#d98a6a", "#3a2016"], ["#7a8c55", "#22301a"], ["#c7462f", "#3a1a14"], ["#5a8ac0", "#1a2a40"], ["#b0a080", "#302a20"], ["#e07aa0", "#401a2a"]];
+    const PIN = [["Aftersun", "film", 2022, ["#d98a4a", "#2a4a6a"], "o"], ["Past Lives", "film", 2023, ["#c9a37a", "#3a2a3a"], "l"], ["Blonde", "album", 2016, ["#e6e1d6", "#6a7a5a"], "o"], ["The Leftovers", "series", 2014, ["#6a8a9a", "#1a2a30"], "c"], ["Carol", "film", 2015, ["#b04a3a", "#2a1a1a"], ""], ["Normal People", "series", 2020, ["#7a9a6a", "#2a3a2a"], "l"], ["Petite Maman", "film", 2021, ["#c96a3a", "#4a2a5a"], "c"], ["Punisher", "album", 2020, ["#5a7aa0", "#101a2a"], "l"], ["Manchester by the Sea", "film", 2016, ["#7a8aa0", "#1a2030"], ""], ["Carrie & Lowell", "album", 2015, ["#a09070", "#3a3020"], ""], ["All of Us Strangers", "film", 2023, ["#c05a8a", "#2a1030"], ""]];
+    const LISTS = [
+      ["domingo lento", "para cuando no hay prisa", "solo tú", 4, [["Paterson", "film", 2016], ["Perfect Days", "film", 2023], ["In the Mood for Love", "film", 2000], ["Before Sunrise", "film", 1995], ["Lost in Translation", "film", 2003], ["Frances Ha", "film", 2012], ["Columbus", "film", 2017], ["Drive My Car", "film", 2021], ["Chungking Express", "film", 1994]]],
+      ["discos de carretera", "ventanas abajo, volumen arriba", "tú y ja", 6, [["Rumours", "album", 1977], ["Currents", "album", 2015], ["Born to Run", "album", 1975], ["El Mal Querer", "album", 2018], ["Random Access Memories", "album", 2013], ["Ctrl", "album", 2017], ["Blue", "album", 1971], ["Un Verano Sin Ti", "album", 2022], ["Igor", "album", 2019], ["Hounds of Love", "album", 1985], ["Titanic Rising", "album", 2019], ["Melodrama", "album", 2017]]],
+      ["terror elevado", "miedo que se queda contigo", "solo tú", 3, [["Hereditary", "film", 2018], ["The Witch", "film", 2015], ["Midsommar", "film", 2019], ["It Follows", "film", 2014], ["Get Out", "film", 2017], ["The Babadook", "film", 2014], ["Talk to Me", "film", 2022], ["Longlegs", "film", 2024]]],
+      ["series cortas", "se ven en un fin de semana", "tú y mo", 5, [["Chernobyl", "series", 2019], ["Beef", "series", 2023], ["Baby Reindeer", "series", 2024], ["Mare of Easttown", "series", 2021], ["Adolescence", "series", 2025], ["Fleabag", "series", 2016]]],
+      ["verano 2026", "lo que suena este verano", "tú, mo y ja", 2, [["Brat", "album", 2024], ["Short n' Sweet", "album", 2024], ["Debí Tirar Más Fotos", "album", 2025], ["GNX", "album", 2024], ["Hit Me Hard and Soft", "album", 2024], ["Romance", "album", 2024], ["Mayhem", "album", 2025], ["Virgin", "album", 2025]]],
+    ];
+    const cyc = ["o", "l", "c", "l", "c", "o"];
+    const cards = [{ name: "para llorar a gusto", vibe: "lo que te rompe y lo agradeces", who: "sofi y mo", p: PIN[0][3], items: PIN.map(([t, ty, y, p, s]) => mk(t, ty, y, p, s)) }];
+    LISTS.forEach(([name, vibe, who, done, L], ci) => cards.push({ name, vibe, who, p: pool[(ci * 3) % pool.length], items: L.map(([t, ty, y], i) => mk(t, ty, y, pool[(ci * 3 + i) % pool.length], i < done ? cyc[i % cyc.length] : "")) }));
+    cards.forEach(c => { c.lead = c.items[0].bg; c.c1 = c.items[1].bg; c.c2 = c.items[2].bg; c.count = c.items.length; c.feed = feed(c.p); c.tail = ends(c.p)[1]; });
+    const pp = ["#c7462f", "#3a1a14"];
+    const I = { review: "M4 4h16v12H9l-5 4z", image: "M4 5h16v14H4zM4 15l5-5 5 5 2-2 4 4", arrow: "M5 12h14M13 6l6 6-6 6", minus: "M5 12h14" };
+    const rowsFor = it => [["review", "Tu reacción", it.reac], ["review", "Reseñar"], ["image", "Usar como portada"], ["arrow", "Mover a otra colección"], ["minus", "Quitar de la colección", "", true]].map(([k, label, aside, gap]) => ({ d: I[k], label, aside: aside || "", gap: !!gap }));
+    const NAVD = [["Colecciones", "M5.7 4h12.6A1.7 1.7 0 0120 5.7v3.2a1.7 1.7 0 01-1.7 1.7H5.7A1.7 1.7 0 014 8.9V5.7A1.7 1.7 0 015.7 4zm0 9.4h12.6a1.7 1.7 0 011.7 1.7v3.2a1.7 1.7 0 01-1.7 1.7H5.7A1.7 1.7 0 014 18.3v-3.2a1.7 1.7 0 011.7-1.7z"], ["Descubrir", "M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2z"], ["Feed", "M8 7.8a4.2 4.2 0 110 8.4 4.2 4.2 0 010-8.4zm8 -.2h2.4a1.6 1.6 0 010 3.2H16a1.6 1.6 0 010-3.2zm0 5.6h.6a1.6 1.6 0 010 3.2H16a1.6 1.6 0 010-3.2z"], ["Perfil", "M12 4.7a3.8 3.8 0 110 7.6 3.8 3.8 0 010-7.6zM5 20.5a7 7 0 0114 0z"]];
+    this.D = { cards, mix, feed, rowsFor, NAVD, prof: { feed: feed(pp, 900), tail: ends(pp)[1], ...seal(pp) } };
+    return this.D;
+  }
+
+  spr({ from, to, velocity = 0, damping = 1, response = .42, precision = .002, rate = 1, onUpdate, onRest }) {
+    const w = 2 * Math.PI / response, z = Math.min(damping, 1), x0 = from - to, v0 = velocity / rate, st = performance.now();
+    let val = from, vel = velocity, raf = 0, done = false;
+    const sample = t => {
+      if (z < 1) { const wd = w * Math.sqrt(1 - z * z), a = x0, b = (v0 + z * w * x0) / wd, d = Math.exp(-z * w * t), c = Math.cos(wd * t), s = Math.sin(wd * t); val = to + d * (a * c + b * s); vel = d * ((b * wd - z * w * a) * c - (a * wd + z * w * b) * s) * rate; }
+      else { const c = v0 + w * x0, d = Math.exp(-w * t); val = to + (x0 + c * t) * d; vel = (c - w * (x0 + c * t)) * d * rate; }
+    };
+    const tick = now => {
+      if (done) return;
+      sample(Math.max(0, now - st) / 1000 * rate);
+      if (Math.abs(val - to) < precision && Math.abs(vel) < precision * 10) { done = true; val = to; vel = 0; onUpdate(to); onRest && onRest(); return; }
+      onUpdate(val); raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return { stop: () => { done = true; cancelAnimationFrame(raf); }, vel: () => vel };
+  }
+  rate() { return parseFloat(this.props.speed ?? "1") || 1; }
+  anim(k, to, o = {}, done) {
+    const c = this.h[k]; const vel = o.velocity != null ? o.velocity : (c ? c.vel() : 0); c && c.stop();
+    this.h[k] = this.spr({ from: this.v[k], to, velocity: vel, damping: o.damping ?? 1, response: o.response ?? .42, rate: this.rate(),
+      onUpdate: x => { this.v[k] = x; this.forceUpdate(); }, onRest: () => { this.h[k] = null; done && done(); } });
+  }
+  halt(k) { const c = this.h[k]; if (c) { c.stop(); this.h[k] = null; } }
+  componentWillUnmount() { Object.values(this.h).forEach(c => c && c.stop()); clearTimeout(this.ht); }
+
+  ks() { const P = this.phoneEl; return P ? P.getBoundingClientRect().width / 390 : 1; }
+  rel(el) { const P = this.phoneEl.getBoundingClientRect(), r = el.getBoundingClientRect(), k = P.width / 390; return { x: (r.left - P.left) / k, y: (r.top - P.top) / k, w: r.width / k, h: r.height / k }; }
+  relX(cx) { const P = this.phoneEl.getBoundingClientRect(); return (cx - P.left) / (P.width / 390); }
+  velOf(s) { if (s.length < 2) return 0; const a = s[0], b = s[s.length - 1]; if (performance.now() - b.t > 80 || b.t - a.t < 1) return 0; return (b.x - a.x) / (b.t - a.t) * 1000; }
+  push(s, x) { const t = performance.now(); s.push({ t, x }); while (s.length > 2 && t - s[0].t > 100) s.shift(); }
+  rb(o, d, c = .55) { return o * d * c / (d + c * Math.abs(o)); }
+  cap(e) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} }
+
+  go(t) { const N = this.D.cards.length; this.anim("pos", Math.max(0, Math.min(N - 1, t)), { response: .42 }); }
+  setTab(t) { if (t === this.tabI || this.ov.col || this.ov.item) return; this.tdir = t > this.tabI ? 1 : -1; this.tabI = t; this.v.tab = 0; this.anim("tab", 1, { response: .35 }); }
+  openCol(k) {
+    if (this.ov.col) return; const el = this.R["m" + k];
+    this.ov.col = { k, src: el ? this.rel(el) : { x: 110, y: 400, w: 170, h: 138 }, dst: { x: 45, y: 126, w: 300, h: 243 } };
+    this.v.col = 0; this.anim("col", 1, { response: .42 });
+  }
+  colDst() { return { x: 45, y: 126 - (this.colSc ? this.colSc.scrollTop : 0), w: 300, h: 243 }; }
+  closeCol(vel) {
+    const o = this.ov.col; if (!o || o.closing) return; o.closing = true; o.dst = this.colDst();
+    this.anim("col", 0, { response: .3, velocity: vel }, () => { this.ov.col = null; this.forceUpdate(); });
+  }
+  openItem(L, n, it) {
+    if (this.ov.item) return; const el = this.R[L + n];
+    const w = it.type === "album" ? 260 : 220, h = it.type === "album" ? 260 : 330;
+    this.ov.item = { L, n, it, src: el ? this.rel(el) : { x: 150, y: 420, w: 100, h: 150 }, dst: { x: (390 - w) / 2, y: 118, w, h } };
+    this.v.item = 0; this.anim("item", 1, { response: .42 });
+  }
+  closeItem(vel) {
+    const o = this.ov.item; if (!o || o.closing) return; o.closing = true;
+    this.anim("item", 0, { response: .3, velocity: vel }, () => { this.ov.item = null; this.forceUpdate(); });
+  }
+  openSheet(it) { this.ov.sheet = { it }; this.v.sheet = 0; this.anim("sheet", 1, { response: .4 }); }
+  closeSheet() { if (!this.ov.sheet || this.ov.sheet.closing) return; this.ov.sheet.closing = true; this.anim("sheet", 0, { response: .3 }, () => { this.ov.sheet = null; this.forceUpdate(); }); }
+
+  edge(k) {
+    const cl = x => Math.max(0, Math.min(1, x));
+    return {
+      down: e => { const o = this.ov[k]; if (!o || o.closing || this.relX(e.clientX) > 32) return; this.halt(k); if (k === "col") o.dst = this.colDst(); this.ed = { k, x0: e.clientX, p0: this.v[k], s: [] }; this.push(this.ed.s, e.clientX); this.cap(e); },
+      move: e => { const g = this.ed; if (!g || g.k !== k) return; this.v[k] = cl(g.p0 - (e.clientX - g.x0) / this.ks() / 320); this.push(g.s, e.clientX); this.forceUpdate(); },
+      up: () => { const g = this.ed; if (!g || g.k !== k) return; this.ed = null; const vp = -this.velOf(g.s) / this.ks() / 320;
+        if (this.v[k] + vp * .2 < .7) (k === "col" ? this.closeCol(vp) : this.closeItem(vp)); else this.anim(k, 1, { velocity: vp, response: .42 }); },
+    };
+  }
+
+  itemsOf(L, list) {
+    const oi = this.ov.item;
+    return list.map((it, n) => ({ ...it, ref: el => { this.R[L + n] = el; }, vis: oi && oi.L === L && oi.n === n ? "hidden" : "visible", press: this.pk === L + n ? "scale(.96)" : "none",
+      down: () => { clearTimeout(this.ht); this.held = false; this.pk = L + n; this.forceUpdate(); this.ht = setTimeout(() => { this.held = true; this.pk = null; this.openSheet(it); }, 450); },
+      up: () => { clearTimeout(this.ht); if (this.pk) { this.pk = null; this.forceUpdate(); } },
+      open: () => { if (this.held) { this.held = false; return; } this.openItem(L, n, it); } }));
+  }
+
+  renderVals() {
+    const D = this.data(), v = this.v, rd = !!this.props.reduced, N = D.cards.length;
+    const cl = x => Math.max(0, Math.min(1, x)), lerp = (a, b, t) => a + (b - a) * t;
+    const pos = v.pos, bi = Math.max(0, Math.min(N - 1, Math.round(pos))), fr = pos - bi;
+    const lo = Math.max(0, Math.min(N - 1, Math.floor(pos))), hi = Math.min(N - 1, lo + 1), t = cl(pos - lo);
+    const cur = D.cards[bi];
+    const car = {
+      cards: D.cards.map((c, i) => { const d = i - pos, a = Math.abs(d); return { ...c, tf: `translateX(${(d * 320).toFixed(1)}px) scale(${(1 - .08 * Math.min(1, a)).toFixed(4)})`, op: cl(1 - a * 1.2) }; }),
+      names: D.cards.map((c, i) => { const d = i - pos, a = Math.abs(d), cd = Math.max(-1, Math.min(1, d)), px = 142 * cd + (a > 1 ? Math.sign(d) * (a - 1) * 278 : 0);
+        return { name: c.name, tf: `translateX(calc(${(-50 + 50 * cd).toFixed(2)}% + ${px.toFixed(1)}px))`, fs: (30 - 8 * Math.min(1, a)).toFixed(2), op: a <= 1 ? 1 - .65 * a : Math.max(0, .35 * (2 - a)) }; }),
+      bgA: D.cards[lo].feed, bgB: D.cards[hi].feed, bgT: t,
+      bOp: cl(1 - Math.abs(fr) * 2), bTf: rd ? "none" : `translateX(${(-fr * 48).toFixed(1)}px)`,
+      cur, items: this.itemsOf("car", cur.items),
+      down: e => { this.halt("pos"); this.cd = { x0: e.clientX, p0: this.v.pos, s: [], moved: false }; this.push(this.cd.s, e.clientX); this.cap(e); },
+      move: e => { const g = this.cd; if (!g) return; const dx = (e.clientX - g.x0) / this.ks(); if (Math.abs(dx) > 6) g.moved = true; if (!g.moved) return;
+        let raw = g.p0 - dx / 320; const max = N - 1; if (raw < 0) raw = -this.rb(-raw * 320, 390) / 320; else if (raw > max) raw = max + this.rb((raw - max) * 320, 390) / 320;
+        this.v.pos = raw; this.push(g.s, e.clientX); this.forceUpdate(); },
+      up: e => { const g = this.cd; if (!g) return; this.cd = null;
+        if (!g.moved) { const x = this.relX(e.clientX), c0 = Math.round(this.v.pos); this.go(x < 60 ? c0 - 1 : x > 330 ? c0 + 1 : c0); return; }
+        const vx = this.velOf(g.s) / this.ks(), vi = -vx / 320, b = Math.round(g.p0);
+        let tg = Math.round(this.v.pos - vx * .499 / 320); tg = Math.max(0, Math.min(N - 1, Math.max(b - 1, Math.min(b + 1, tg))));
+        this.anim("pos", tg, { velocity: vi, damping: Math.abs(vi) > 1.5 ? .86 : 1, response: .42 }); },
+      wheel: e => { if (Math.abs(e.deltaX) < Math.abs(e.deltaY) || Math.abs(e.deltaX) < 8) return; const now = Date.now(); if (now - (this.lw || 0) < 450) return; this.lw = now; this.go(Math.round(this.v.pos) + (e.deltaX > 0 ? 1 : -1)); },
+    };
+    const oc = this.ov.col;
+    const prof = { ...D.prof, cards: D.cards.map((c, k) => ({ ...c, ref: el => { this.R["m" + k] = el; }, vis: oc && oc.k === k ? "hidden" : "visible", open: () => this.openCol(k) })) };
+
+    const oi = this.ov.item, pi = oi ? v.item : 0;
+    const pc = oc ? v.col : 0, flyC = !!oc && !rd && pc < 1;
+    const ec = this.edge("col"), ei = this.edge("item");
+    const rise = (a, px) => rd ? "none" : `translateY(${((1 - a) * px).toFixed(2)}px)`;
+    const colA = rd ? pc : cl((pc - .35) / .65), colB = rd ? pc : cl((pc - .5) / .5);
+    let flyTf = "none";
+    if (oc) { const s = lerp(oc.src.w, oc.dst.w, pc) / 300; flyTf = `translate(${lerp(oc.src.x, oc.dst.x, pc).toFixed(2)}px,${lerp(oc.src.y, oc.dst.y, pc).toFixed(2)}px) scale(${s.toFixed(4)})`; }
+    const col = oc ? { on: true, c: D.cards[oc.k], feed: D.feed(D.cards[oc.k].p, 900), items: this.itemsOf("col", D.cards[oc.k].items),
+      bgOp: rd ? pc : cl(pc / .6), aOp: colA, aTf: rise(colA, 16), bOp: colB, bTf: rise(colB, 16),
+      fly: flyC, flyTf, heroVis: flyC ? "hidden" : "visible", pe: oc.closing ? "none" : "auto",
+      tf: oi && oi.L === "col" && !rd ? `scale(${(1 - .04 * pi).toFixed(4)})` : "none",
+      scRef: el => { this.colSc = el; }, back: () => this.closeCol(), down: ec.down, move: ec.move, up: ec.up }
+      : { on: false, fly: false, c: {} };
+
+    const flyI = !!oi && !rd && pi < 1;
+    const itA = rd ? pi : cl((pi - .4) / .6);
+    let item = { on: false, fly: false, it: {} };
+    if (oi) { const d = oi.dst, s = lerp(oi.src.w, d.w, pi) / d.w;
+      item = { on: true, it: oi.it, feed: D.feed(oi.it.p, 700), bgOp: rd ? pi : cl(pi / .6), aOp: itA, aTf: rise(itA, 16), hx: d.x, hw: d.w, hh: d.h, ty: d.y + d.h + 30,
+        fly: flyI, heroVis: flyI ? "hidden" : "visible", flyTf: `translate(${lerp(oi.src.x, d.x, pi).toFixed(2)}px,${lerp(oi.src.y, d.y, pi).toFixed(2)}px) scale(${s.toFixed(4)})`, flyR: (lerp(14, 18, pi) / s).toFixed(2),
+        pe: oi.closing ? "none" : "auto", back: () => this.closeItem(), down: ei.down, move: ei.move, up: ei.up }; }
+
+    const os = this.ov.sheet, ps = os ? v.sheet : 0;
+    const sheet = os ? { on: true, it: os.it, rows: D.rowsFor(os.it), scrim: cl(ps), op: cl(ps), tf: rd ? "none" : `translateY(${((1 - ps) * 18).toFixed(2)}px) scale(${(.97 + .03 * ps).toFixed(4)})`, close: () => this.closeSheet() } : { on: false, it: {}, rows: [] };
+
+    const baseP = Math.max(pc, oi && oi.L === "car" ? pi : 0);
+    const tp = v.tab;
+    return {
+      phoneRef: el => { this.phoneEl = el; },
+      isCar: this.tabI === 0, isProf: this.tabI === 3,
+      tab: { op: cl(tp), tf: rd ? "none" : `translateX(${(this.tdir * (1 - tp) * 31).toFixed(2)}px)` },
+      base: { tf: rd || !baseP ? "none" : `scale(${(1 - .04 * baseP).toFixed(4)})` },
+      tail: this.tabI === 0 ? D.mix(D.cards[lo].tail, D.cards[hi].tail, t) : D.prof.tail,
+      nav: D.NAVD.map(([label, d], i) => ({ label, d, bg: i === this.tabI ? "rgba(255,255,255,.1)" : "transparent", color: i === this.tabI ? "#f4f3ee" : "#8f8e9b", go: () => { if (i === 0 || i === 3) this.setTab(i); } })),
+      car, prof, col, item, sheet, noCtx: e => e.preventDefault(),
+    };
+  }
+}
+</script>
+</body>
+</html>

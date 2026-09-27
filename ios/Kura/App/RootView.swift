@@ -29,7 +29,7 @@ struct RootView: View {
             .accessibilityHidden(store.sheet != nil)
 
             SheetHost()
-            ToastHost(dockVisible: store.phase == .main && store.path(store.tab).isEmpty && !(store.dockHidden && store.tab == .discover))
+            ToastHost(dockVisible: store.phase == .main && store.dockVisible(store.tab))
             #if DEBUG
             if store.debugOverlay == .releaseNotification {
                 ReleaseNotificationPreview()
@@ -114,10 +114,9 @@ private struct SystemTabs: View {
         .tint(KColor.text)
     }
 
-    /// Same rule as the dock: only at a tab's root, and not while Descubrir is searching.
-    private func tabBarHidden(_ tab: Tab) -> Bool {
-        !store.path(tab).isEmpty || (store.dockHidden && tab == .discover)
-    }
+    /// Same rule as the dock: only at a tab's root, not under a hero page, and not while
+    /// Descubrir is searching.
+    private func tabBarHidden(_ tab: Tab) -> Bool { !store.dockVisible(tab) }
 }
 
 private struct KuraDockTabs: View {
@@ -131,13 +130,13 @@ private struct KuraDockTabs: View {
                     .allowsHitTesting(store.tab == tab)
                     .accessibilityHidden(store.tab != tab)
             }
-            if store.path(store.tab).isEmpty && !(store.dockHidden && store.tab == .discover) {
+            if store.dockVisible(store.tab) {
                 Dock()
                     .ignoresSafeArea(.keyboard)
                     .transition(.opacity)
             }
         }
-        .animation(KMotion.fade, value: store.path(store.tab).isEmpty)
+        .animation(KMotion.fade, value: store.dockVisible(store.tab))
     }
 }
 

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { SKELETON_PULSE } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { HideDock } from "../hide-dock";
@@ -13,16 +14,18 @@ import { HideDock } from "../hide-dock";
  * dock doesn't sit over the skeleton and then fade when the page lands.
  * `auto` is the automatic collection (the "auto" pill instead of the label,
  * no chips for Compartir). Shared by the full page's loading.tsx, the
- * intercepted overlay's and lentes/no-puedo-esperar's.
+ * profile's intercepted overlay (`overlay`: no HideDock — the overlay covers
+ * the dock — and its ghost fan hides while the real fan flies over it) and
+ * lentes/no-puedo-esperar's.
  */
-export function CollectionSkeleton({ auto = false }: { auto?: boolean }) {
+export function CollectionSkeleton({ auto = false, overlay = false }: { auto?: boolean; overlay?: boolean }) {
   return (
     <div
       aria-busy="true"
       aria-label="Cargando colección"
       className={`relative mx-auto min-h-dvh w-full max-w-md pb-14 ${SKELETON_PULSE}`}
     >
-      <HideDock />
+      {!overlay && <HideDock />}
       <div className="absolute inset-x-6 top-[max(64px,calc(20px+env(safe-area-inset-top)))] flex justify-between">
         <span className="h-11 w-11 rounded-full bg-glass-art" />
         <span className="flex gap-2">
@@ -31,7 +34,12 @@ export function CollectionSkeleton({ auto = false }: { auto?: boolean }) {
         </span>
       </div>
       <div className="flex flex-col items-center gap-2.5 px-6 pb-[26px] pt-[max(126px,calc(82px+env(safe-area-inset-top)))]">
-        <Fan covers={[]} lead={225} ghost />
+        <div
+          data-overlay-hero="skeleton"
+          style={overlay ? ({ visibility: "var(--cx-hero, visible)" } as unknown as CSSProperties) : undefined}
+        >
+          <Fan covers={[]} lead={225} ghost />
+        </div>
         <span className={`mt-1 rounded-full bg-surface-1 ${auto ? "h-[26px] w-16" : "h-2.5 w-24"}`} />
         <span className="h-9 w-48 rounded-lg bg-surface-1" />
         <span className="h-4 w-40 rounded-md bg-surface-1" />

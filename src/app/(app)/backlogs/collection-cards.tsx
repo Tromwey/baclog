@@ -5,7 +5,7 @@ import { CHIP_ART } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { DotsIcon, KIcon } from "@/components/kura/icons";
 import { useHold } from "@/components/kura/use-hold";
-import { feedSurface, feedTail, releaseLabel, tintEnds } from "@/components/kura/tint";
+import { releaseLabel, tintEnds } from "@/components/kura/tint";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { fanHexes, type FanCover } from "@/modules/backlog/fan";
 import type { CollectionItem, OtherCollection } from "@/modules/backlog/collection-item";
@@ -17,6 +17,13 @@ import {
   nextLabel,
   type CollectionControls,
 } from "./[backlogId]/collection-body";
+import {
+  backgroundAt,
+  bodyStyle,
+  fanStyle,
+  nameStyle,
+  useCarouselMotion,
+} from "./carousel-motion";
 import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
 
@@ -26,10 +33,11 @@ import { NewBacklogTrigger } from "./new-backlog-button";
  * (10b): credits, format pills that filter, "el orden" + Reordenar, every
  * title in columns, holding a title (18c), the same Opciones.
  *
- *  - The FANS in a carousel: swipe, scroll sideways with a trackpad, arrow
- *    keys or tap a neighbour's name. Only the current fan is drawn — the
- *    others slide and fade — so only the NAMES peek at the edges (the current
- *    centred at 30, the neighbours 142 px off-centre at 22, dimmed). Tapping
+ *  - The FANS in a carousel: drag (1:1, see `carousel-motion.ts`), scroll
+ *    sideways with a trackpad, arrow keys, tap an edge or a neighbour's name.
+ *    Only the current fan is drawn — the others slide and fade — so only the
+ *    NAMES peek at the edges (the current centred at 30, the neighbours
+ *    142 px off-centre at 22, dimmed). Tapping
  *    the fan does NOT open anything (founder): it only sits in the centre;
  *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Renombrar ·
  *    Privacidad · Borrar colección).
@@ -130,57 +138,43 @@ export function CollectionCards({
   const idx = found >= 0 ? found : 0;
   const cur = entries[idx];
 
-  const go = (i: number) => {
-    const next = entries[Math.max(0, Math.min(entries.length - 1, i))];
+  const ctl = useRef<CollectionControls>(null);
+  const [holding, setHolding] = useState<Shelf | null>(null);
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+
+  const { go, reduced, handlers, swiped, bindSurface, bindMain, bindBg, bindBody, bindTail } = useCarouselMotion(entries, idx, (i) => {
+    const next = entries[i];
     setCurId(next.id);
     try {
       window.sessionStorage.setItem(REMEMBER, next.id);
     } catch {
       // private mode: the carousel just starts at the first one next time
     }
-  };
-
-  const ctl = useRef<CollectionControls>(null);
-  const [holding, setHolding] = useState<Shelf | null>(null);
-  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
-
-  // Swipe: a horizontal drag of 30 px moves one.
-  const startX = useRef<number | null>(null);
-  const swiped = useRef(false);
-  const lastWheel = useRef(0);
-  const onPointerDown = (e: React.PointerEvent) => {
-    startX.current = e.clientX;
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (startX.current === null) return;
-    const dx = e.clientX - startX.current;
-    startX.current = null;
-    if (Math.abs(dx) > 30) {
-      swiped.current = true;
-      setTimeout(() => (swiped.current = false), 0);
-      go(idx + (dx < 0 ? 1 : -1));
-    }
-  };
-  const onWheel = (e: React.WheelEvent) => {
-    if (Math.abs(e.deltaX) < Math.abs(e.deltaY) || Math.abs(e.deltaX) < 8) return;
-    const t = e.timeStamp;
-    if (t - lastWheel.current < 450) return;
-    lastWheel.current = t;
-    go(idx + (e.deltaX > 0 ? 1 : -1));
-  };
+  });
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowRight") go(idx + 1);
     else if (e.key === "ArrowLeft") go(idx - 1);
   };
 
-  const tail = feedTail(cur.hexes);
   const ghost = cur.kind === "ghost";
+  // Render at the resting position; the carousel's layout effect writes the
+  // live one (mid-drag, mid-spring) over it before paint.
+  const p = idx;
+  const bg = backgroundAt(entries, p);
 
   return (
     <main
-      className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text"
-      style={{ background: feedSurface(cur.hexes, 760), backgroundColor: tail }}
+      ref={bindMain}
+      className="relative isolate mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text"
+      style={{ background: bg.a, backgroundColor: bg.tail }}
     >
+      {/* The neighbour's gradient, crossed in by the carousel's position. */}
+      <div
+        ref={bindBg}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{ background: bg.b, opacity: bg.t }}
+      />
       <ThemeColorSync color={cur.hexes.length ? tintEnds(cur.hexes)[0] : undefined} exact />
 
       <header className="flex items-end justify-between gap-3.5 px-5 pb-[18px] pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
@@ -235,128 +229,112 @@ export function CollectionCards({
         onKeyDown={onKeyDown}
         className="outline-none"
       >
+        {/* ONE drag surface for the fans and the names: both follow the same
+            continuous position, 1:1 with the finger. */}
         <div
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          onPointerCancel={() => (startX.current = null)}
-          onWheel={onWheel}
-          className="relative h-[290px] cursor-grab touch-pan-y select-none"
+          ref={bindSurface}
+          {...handlers}
+          className="relative h-[334px] cursor-grab touch-pan-y select-none active:cursor-grabbing"
         >
           {entries.map((e, i) => {
-            const d = i - idx;
-            if (Math.abs(d) > 1) return null;
+            if (Math.abs(i - idx) > 2) return null;
             return (
               <FanSlide
                 key={e.id}
                 entry={e}
-                current={d === 0}
-                style={{
-                  transform: `translateX(${d * 320}px) scale(${d === 0 ? 1 : 0.92})`,
-                  opacity: d === 0 ? 1 : 0,
-                }}
+                current={i === idx}
+                index={i}
+                style={fanStyle(i, p)}
                 onHold={e.kind === "shelf" ? () => setHolding(e.shelf) : undefined}
               />
             );
           })}
-        </div>
 
-        <div
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          className="relative mt-1 h-11 overflow-hidden touch-pan-y"
-        >
-          {entries.map((e, i) => {
-            const d = i - idx;
-            if (Math.abs(d) > 2) return null;
-            const transform =
-              d === 0
-                ? "translateX(-50%)"
-                : d === 1
-                  ? "translateX(142px)"
-                  : d === -1
-                    ? "translateX(calc(-100% - 142px))"
-                    : d > 1
-                      ? "translateX(420px)"
-                      : "translateX(calc(-100% - 420px))";
-            const style = {
-              transform,
-              fontSize: d === 0 ? 30 : 22,
-              opacity: d === 0 ? (e.kind === "ghost" ? 0.6 : 1) : Math.abs(d) === 1 ? 0.35 : 0,
-            };
-            const cls =
-              "absolute left-1/2 top-0 whitespace-nowrap font-brand leading-[44px] transition-[transform,opacity,font-size] duration-[450ms] ease-[cubic-bezier(.16,1,.3,1)] motion-reduce:transition-none";
-            return d === 0 ? (
-              <h2 key={e.id} aria-live="polite" className={`${cls} font-normal`} style={style}>
-                {e.name}
-              </h2>
-            ) : (
-              <button
-                key={e.id}
-                type="button"
-                tabIndex={Math.abs(d) === 1 ? 0 : -1}
-                aria-hidden={Math.abs(d) > 1}
-                aria-label={`Ir a ${e.name}`}
-                onClick={() => !swiped.current && go(i)}
-                className={cls}
-                style={style}
-              >
-                {e.name}
-              </button>
-            );
-          })}
+          <div className="absolute inset-x-0 top-[290px] h-11 overflow-hidden">
+            {entries.map((e, i) => {
+              const d = i - idx;
+              if (Math.abs(d) > 3) return null;
+              const cls = "absolute left-1/2 top-0 whitespace-nowrap font-brand leading-[44px]";
+              const style = nameStyle(i, p, e.kind === "ghost");
+              return d === 0 ? (
+                <h2 key={e.id} data-carousel-name={i} aria-live="polite" className={`${cls} font-normal`} style={style}>
+                  {e.name}
+                </h2>
+              ) : (
+                <button
+                  key={e.id}
+                  data-carousel-name={i}
+                  type="button"
+                  tabIndex={Math.abs(d) === 1 ? 0 : -1}
+                  aria-hidden={Math.abs(d) > 1}
+                  aria-label={`Ir a ${e.name}`}
+                  onClick={() => !swiped() && go(i)}
+                  className={cls}
+                  style={style}
+                >
+                  {e.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      {cur.kind === "shelf" && (
-        <CollectionBody
-          key={cur.id}
-          ref={ctl}
-          mode="owned"
-          backlog={{
-            id: cur.shelf.id,
-            name: cur.shelf.name,
-            vibe: cur.shelf.vibe,
-            visibility: visibilityOf(cur.shelf),
-            pinned: cur.shelf.pinned,
-            coverCatalogItemId: cur.shelf.coverCatalogItemId,
-          }}
-          items={cur.shelf.items}
-          now={now}
-          others={othersOf(shelves, cur.shelf.id)}
-          memberships={memberships}
-          owner={owner}
-          collaborators={cur.shelf.collaborators}
-          username={username}
-          profilePublic={profilePublic}
-          introClassName="pt-1"
-          toastBottom={TOAST_BOTTOM}
-        />
-      )}
-
-      {cur.kind === "auto" && (
-        <>
-          <AutoMeta items={cur.items} now={now} />
+      {/* The body leaves at half the travel and the next one comes in 24 px
+          from the other side (the wrapper follows the position too). */}
+      <div ref={bindBody} style={bodyStyle(p, entries.length, reduced)}>
+        {cur.kind === "shelf" && (
           <CollectionBody
             key={cur.id}
             ref={ctl}
-            mode="auto"
-            backlog={{ id: AUTO_ID, name: cur.name, vibe: null, visibility: "private" }}
-            items={cur.items.map((u) => autoItem(u))}
+            mode="owned"
+            backlog={{
+              id: cur.shelf.id,
+              name: cur.shelf.name,
+              vibe: cur.shelf.vibe,
+              visibility: visibilityOf(cur.shelf),
+              pinned: cur.shelf.pinned,
+              coverCatalogItemId: cur.shelf.coverCatalogItemId,
+            }}
+            items={cur.shelf.items}
             now={now}
+            others={othersOf(shelves, cur.shelf.id)}
+            memberships={memberships}
+            owner={owner}
+            collaborators={cur.shelf.collaborators}
+            username={username}
+            profilePublic={profilePublic}
+            introClassName="pt-1"
             toastBottom={TOAST_BOTTOM}
           />
-        </>
-      )}
+        )}
 
-      {cur.kind === "ghost" && <GhostBody />}
+        {cur.kind === "auto" && (
+          <>
+            <AutoMeta items={cur.items} now={now} />
+            <CollectionBody
+              key={cur.id}
+              ref={ctl}
+              mode="auto"
+              backlog={{ id: AUTO_ID, name: cur.name, vibe: null, visibility: "private" }}
+              items={cur.items.map((u) => autoItem(u))}
+              now={now}
+              toastBottom={TOAST_BOTTOM}
+            />
+          </>
+        )}
+
+        {cur.kind === "ghost" && <GhostBody />}
+      </div>
 
       {coach}
 
       {/* The dock floats over the page's own bottom tone, not over black. */}
       <div
+        ref={bindTail}
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
-        style={{ background: `linear-gradient(transparent, ${tail} 75%)` }}
+        style={{ background: `linear-gradient(transparent, ${bg.tail} 75%)` }}
       />
 
       {holding && (
@@ -414,19 +392,22 @@ function FanSlide({
   entry,
   current,
   style,
+  index,
   onHold,
 }: {
   entry: Entry;
   current: boolean;
   style: React.CSSProperties;
+  index: number;
   onHold?: () => void;
 }) {
   const { handlers } = useHold(onHold ?? (() => {}));
   return (
     <div
+      data-carousel-fan={index}
       aria-hidden={!current}
       {...(onHold && current ? handlers : {})}
-      className={`absolute left-1/2 top-3.5 -ml-[150px] flex w-[300px] select-none justify-center [-webkit-touch-callout:none] transition-[transform,opacity] duration-[450ms] ease-[cubic-bezier(.16,1,.3,1)] motion-reduce:transition-none ${
+      className={`absolute left-1/2 top-3.5 -ml-[150px] flex w-[300px] select-none justify-center [-webkit-touch-callout:none] ${
         current ? "" : "pointer-events-none"
       }`}
       style={style}

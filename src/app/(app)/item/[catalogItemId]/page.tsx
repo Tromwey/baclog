@@ -40,6 +40,7 @@ import { CLOCK_PATH } from "@/components/glyph-paths";
 import { plural } from "@/lib/plural";
 import { SaveSheetHost } from "./add-to-backlog";
 import { BackChip } from "./close-chip";
+import { CoverFlightTarget } from "@/components/kura/cover-flight";
 import { getCollectionsIndex } from "./collections-index";
 import { CompleteSheetHost } from "./complete-sheet";
 import { HideDock } from "./hide-dock";
@@ -193,16 +194,19 @@ export default async function ItemPage({
           style={{ background: tintSurfaceVertical(palette) }}
         >
           <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] z-[2] flex items-center justify-between">
-            <BackChip />
+            <BackChip flightKey={catalogItemId} />
             <OptionsButton />
           </div>
 
-          <span className="relative block">
+          {/* Where a collection's cover lands when it opens this ficha (and
+              where it leaves from on Volver) — Colecciones · transiciones §4. */}
+          <CoverFlightTarget flightKey={catalogItemId} paletteHex={palette} className="relative block">
             <Cover
               posterUrl={item.posterUrl}
               paletteHex={palette}
               mediaType={item.mediaType}
               alt={`Portada de ${item.title}`}
+              radius="rounded-[var(--r-surface)]"
               className={isAlbum ? "h-[240px] w-[240px]" : "h-[300px] w-[200px]"}
             />
             {/* C4 — the release day: the clock is out, "hoy" sits on the cover. */}
@@ -214,7 +218,7 @@ export default async function ItemPage({
                 hoy
               </span>
             )}
-          </span>
+          </CoverFlightTarget>
 
           <h1 className="mt-2.5 text-center font-brand text-[30px] italic leading-[1.05] text-text text-balance [overflow-wrap:anywhere]">
             {item.title}

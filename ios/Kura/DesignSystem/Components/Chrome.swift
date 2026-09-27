@@ -180,7 +180,8 @@ struct SheetHost: View {
                     .accessibilityAddTraits(.isModal)
                     .accessibilityAction(.escape) { store.dismissSheetInteractively() }
                     .accessibilityAction(named: "Cerrar") { store.dismissSheetInteractively() }
-                    .transition(KMotion.slide(.bottom, reduce: reduce))
+                    // A hold sheet (18c, 9a) rises 18 pt from .97 where it is; the rest slide up.
+                    .transition(reduce ? .opacity : route.isHold ? .kHoldSheet : KMotion.slide(.bottom, reduce: reduce))
                     .id(route.id)
             }
         }
@@ -273,6 +274,24 @@ struct SheetHost: View {
                 .padding(.bottom, 22)
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// `use-sheet-motion` (colecciones-transiciones · 4): opacity with the progress,
+/// `translateY((1 − p)·18) scale(.97 + .03·p)`.
+private struct HoldSheetEffect: ViewModifier {
+    let p: CGFloat
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(0.97 + 0.03 * p)
+            .offset(y: (1 - p) * 18)
+            .opacity(Double(p))
+    }
+}
+
+extension AnyTransition {
+    static var kHoldSheet: AnyTransition {
+        .modifier(active: HoldSheetEffect(p: 0), identity: HoldSheetEffect(p: 1))
     }
 }
 
@@ -460,6 +479,8 @@ struct TopChrome<Right: View>: View {
         .padding(.horizontal, KSize.chromeSide)
         .padding(.top, KSize.chromeTop)
         .kFixedChrome()
+        // On a hero page the chrome comes in with the backdrop (first 60 %).
+        .heroBackdrop()
         // chromeTop is measured from the screen's edge, never from the safe area: otherwise
         // a screen whose container respects the safe area drops its chips ~60 pt lower.
         .ignoresSafeArea(.container, edges: .top)

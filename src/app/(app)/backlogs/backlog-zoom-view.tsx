@@ -101,16 +101,17 @@ export type BacklogZoomData = Awaited<ReturnType<typeof loadBacklogZoom>>;
  * order (or as a list). Every action lives in Opciones. No dock (HideDock).
  * Server-safe wrapper; the screen itself is client.
  *
- * Shared by the real /backlogs/[id] page and the intercepted overlay (`zoom`
- * adds the bl-zoom-content stagger; the overlay route owns the spring bloom on its
- * fixed shell).
+ * Shared by the real /backlogs/[id] page and the profile's intercepted
+ * overlay (`overlay`: the shell — `collection-overlay.tsx` — drives the
+ * staged entrance through CSS variables, and the overlay covers the dock
+ * instead of hiding it, so it is there under the overlay as it closes).
  */
 export function BacklogZoomView({
   data,
-  zoom = false,
+  overlay = false,
 }: {
   data: BacklogZoomData;
-  zoom?: boolean;
+  overlay?: boolean;
 }) {
   const { backlog, items, now } = data;
 
@@ -137,7 +138,7 @@ export function BacklogZoomView({
       {/* In-browser Safari tints the status-bar band from theme-color — the
           top of the tinted header, so the header doesn't cut off in black. */}
       <ThemeColorSync color={lead.length ? tintEnds(lead)[0] : undefined} exact />
-      <HideDock />
+      {!overlay && <HideDock />}
       <CollectionScreen
         mode="owned"
         backlog={{
@@ -157,7 +158,7 @@ export function BacklogZoomView({
         username={data.viewer.username}
         profilePublic={data.viewer.profilePublic}
         coach={data.coach}
-        zoom={zoom}
+        overlay={overlay}
       />
     </>
   );

@@ -22,8 +22,8 @@ struct CollectionBody<Between: View>: View {
         let c = collection
         VStack(spacing: 0) {
             if c.titleIDs.isEmpty {
-                between
-                EmptyCollectionBody { store.present(.addTitles(c.id)) }
+                between.heroRest()
+                EmptyCollectionBody { store.present(.addTitles(c.id)) }.heroRest()
             } else {
                 let all = store.titles(in: c)
                 let formats = Self.formats(all)
@@ -48,30 +48,36 @@ struct CollectionBody<Between: View>: View {
                 .padding(.horizontal, 24)
                 .padding(.top, metaTop)
                 .padding(.bottom, 26)
+                // On a hero page (from the profile): the meta rises with the name from 35 %,
+                // the titles from 50 %. Identity anywhere else.
+                .heroLead()
 
-                between
+                VStack(spacing: 0) {
+                    between
 
-                HStack(alignment: .firstTextBaseline) {
-                    Text(c.sort.heading).font(.kura.news(22)).foregroundStyle(KColor.text)
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    if c.titleIDs.count > 1 {
-                        Button { store.present(.reorder(c.id)) } label: {
-                            Text("Reordenar").monoLabel(11).frame(minHeight: 44).contentShape(Rectangle())
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(c.sort.heading).font(.kura.news(22)).foregroundStyle(KColor.text)
+                            .accessibilityAddTraits(.isHeader)
+                        Spacer()
+                        if c.titleIDs.count > 1 {
+                            Button { store.present(.reorder(c.id)) } label: {
+                                Text("Reordenar").monoLabel(11).frame(minHeight: 44).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 14)
+
+                    if c.layout == .list {
+                        TitleList(titles: visible, collectionID: c.id)
+                    } else {
+                        Masonry(titles: visible, onHold: { t in
+                            store.present(.titleActions(titleID: t.id, collectionID: c.id))
+                        })
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 14)
-
-                if c.layout == .list {
-                    TitleList(titles: visible, collectionID: c.id)
-                } else {
-                    Masonry(titles: visible, onHold: { t in
-                        store.present(.titleActions(titleID: t.id, collectionID: c.id))
-                    })
-                }
+                .heroRest()
             }
         }
     }

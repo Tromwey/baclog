@@ -97,6 +97,10 @@ const FORMAT: Record<MediaType, { icon: KIconName; plural: string; one: string }
   album: { icon: "music", plural: "álbumes", one: "Álbum" },
 };
 
+/** Holding a title (18c) — Colecciones · transiciones §4: the sheet's
+ *  spring at .4 in / .3 out (18 px, scale .97 are the hook's defaults). */
+const HOLD_SHEET_MOTION = { enter: 0.4, exit: 0.3 } as const;
+
 const REACTION: Record<"obsessed" | "liked" | "completed", string> = {
   obsessed: "Me obsesiona",
   liked: "Me gusta",
@@ -368,6 +372,7 @@ export function CollectionBody({
     glyph: glyphOf(it),
     wait: waitOf(it, now),
     sub: it.year ? String(it.year) : FORMAT[it.mediaType].one,
+    flightKey: it.catalogItemId,
   }));
   const byKey = new Map(shown.map((it) => [it.backlogItemId, it]));
 
@@ -469,6 +474,7 @@ export function CollectionBody({
         <Sheet
           onClose={() => setSheet(null)}
           label={sheetLabel(sheet, backlog.name)}
+          motion={sheet.kind === "item" ? HOLD_SHEET_MOTION : undefined}
           pad={sheet.kind === "options" || sheet.kind === "item" || sheet.kind === "share" ? "menu" : "form"}
         >
           {sheet.kind === "options" && (
