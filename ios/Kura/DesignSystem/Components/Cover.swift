@@ -140,7 +140,12 @@ private struct CoverImageBody: View {
 
     var body: some View {
         let key = url.map { CoverImageStore.Key(url: $0, size: size, scale: scale) }
-        let img = key.flatMap { CoverImageStore.shared.cached($0) } ?? (loaded?.url == url ? loaded?.image : nil)
+        // Last resort before the palette: the same cover decoded at another size (a hero's copy
+        // drawn at the destination's size for the first time would otherwise flash its palette
+        // for the frames its exact size takes to decode — colecciones-transiciones).
+        let img = key.flatMap { CoverImageStore.shared.cached($0) }
+            ?? (loaded?.url == url ? loaded?.image : nil)
+            ?? url.flatMap { CoverImageStore.shared.anyCached($0) }
         ZStack {
             if let img {
                 Image(uiImage: img).resizable().scaledToFill()
@@ -194,14 +199,20 @@ final class CoverImageStore {
     }
 
     private let cache = NSCache<NSString, UIImage>()
+    /// The last size decoded of each URL (same objects as `cache`, no extra decode): a
+    /// stand-in while another size of that cover loads.
+    private let latest = NSCache<NSURL, UIImage>()
     private var inflight: [Key: (task: Task<UIImage?, Never>, waiters: Int)] = [:]
 
     private init() {
         // Cost = decoded bytes: a 300 pt cover at 3× is ~3 MB. iOS trims it under pressure.
         cache.totalCostLimit = 96 * 1024 * 1024
+        latest.countLimit = 400
     }
 
     func cached(_ key: Key) -> UIImage? { cache.object(forKey: key.nsKey) }
+
+    func anyCached(_ url: URL) -> UIImage? { latest.object(forKey: url as NSURL) }
 
     func image(for key: Key) async -> UIImage? {
         if let img = cached(key) { return img }
@@ -223,6 +234,7 @@ final class CoverImageStore {
         if let img, cached(key) == nil {
             cache.setObject(img, forKey: key.nsKey, cost: img.cgImage.map { $0.bytesPerRow * $0.height } ?? 0)
         }
+        if let img { latest.setObject(img, forKey: key.url as NSURL) }
         return img
     }
 

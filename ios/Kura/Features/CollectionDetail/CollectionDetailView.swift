@@ -80,6 +80,8 @@ struct CollectionDetailView: View {
                 }
                 .padding(.bottom, 56)
                 .kFeedSurface(tint, span: 900)
+                // Recedes 4 % while a title opens over it (`TitleHeroHost`).
+                .heroRecedes()
             }
             .ignoresSafeArea(.container, edges: .top)
 

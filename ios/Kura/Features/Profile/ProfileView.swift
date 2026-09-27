@@ -165,9 +165,12 @@ struct ProfileView: View {
                     .padding(.bottom, 150)
                 }
                 .kFeedSurface(tint, span: 900)
+                // Recedes 4 % while a collection opens over it.
+                .heroRecedes()
             }
             .ignoresSafeArea(.container, edges: .top)
             .kDebugScrollAnchor()
+            .kDebugScrollLog("profile")
         }
         .kFeedDockBand(tint)
         .task(id: store.loadState) { if store.loadState == .loaded { await store.loadRecapMonths() } }

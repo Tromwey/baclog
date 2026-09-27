@@ -193,6 +193,8 @@ final class HeroController {
     @ObservationIgnored var sources: [String: CGRect] = [:]
     /// Where the open page's hero sits, in the host's space (live: it scrolls).
     @ObservationIgnored var target: CGRect?
+    /// The host on screen (global), for the recession's anchor.
+    @ObservationIgnored var hostFrame: CGRect = .zero
 
     @ObservationIgnored let baseSpace = "kura.hero.base.\(UUID().uuidString)"
     @ObservationIgnored let hostSpace = "kura.hero.host.\(UUID().uuidString)"
@@ -222,6 +224,9 @@ final class HeroController {
     /// finger's); nil keeps whatever the spring carries.
     func close(velocity: CGFloat? = nil) {
         guard openID != nil, !closing else { return }
+        #if DEBUG
+        KBodyLog.hit("-- close")
+        #endif
         closing = true
         p.animate(to: 0, response: KSpringSpec.close.response, damping: KSpringSpec.close.damping, velocity: velocity) { [weak self] in
             self?.finish()
@@ -242,6 +247,9 @@ final class HeroController {
     }
 
     private func finish() {
+        #if DEBUG
+        KBodyLog.hit("-- finish")
+        #endif
         openID = nil
         closing = false
         target = nil
@@ -407,10 +415,23 @@ struct HeroHost<Base: View, Page: View, Flyer: View>: View {
     private struct EdgeGrab { var p0: CGFloat; var engaged: Bool }
 
     var body: some View {
+        #if DEBUG
+        let _ = KBodyLog.hit("HeroHost")
+        #endif
         ZStack {
-            HeroRecede(hero: hero, content: base
+            // The base's geometry must not change while a hero is open, or a scroll view resting at
+            // its end shifts its content and snaps back in ONE frame when the close ends, right
+            // where the copy lands (the close flicker). Two things changed it:
+            //  - hiding the tab bar (bottom safe area 83 → 34): the base ignores the bottom safe
+            //    area, so its scroll views never see the bar come and go (the pages carry their own
+            //    dock clearance: 150 / 140 bottom padding);
+            //  - the 4 % recession as a transform around the base: a non-identity transform cuts
+            //    the safe area off from everything under it. It's `.heroRecedes()` on the base's
+            //    scroll CONTENT instead (see `HeroRecedeContent`).
+            base
+                .ignoresSafeArea(.container, edges: .bottom)
                 .environment(\.heroHost, hero)
-                .coordinateSpace(.named(hero.baseSpace)))
+                .coordinateSpace(.named(hero.baseSpace))
                 .accessibilityHidden(hero.isOpen)
 
             if let id = hero.openID {
@@ -431,12 +452,16 @@ struct HeroHost<Base: View, Page: View, Flyer: View>: View {
             }
         }
         .coordinateSpace(.named(hero.hostSpace))
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { hero.hostFrame = $0 }
         #if DEBUG
         .task { await demo() }
         #endif
         .onChange(of: hero.openID) { _, id in
             guard let rootTab else { return }
             if id != nil { store.heroCovers.insert(rootTab) } else { store.heroCovers.remove(rootTab) }
+            #if DEBUG
+            KBodyLog.hit("heroCovers \(store.heroCovers)")
+            #endif
         }
         .onChange(of: rootTab.map { store.heroResets[$0, default: 0] }) { hero.dismissNow() }
         .onDisappear {
@@ -508,14 +533,43 @@ struct HeroHost<Base: View, Page: View, Flyer: View>: View {
     }
 }
 
-/// The base receding 4 % (`scale(1 − .04·p)`, origin 50 % 40 %); nothing under Reduce Motion.
-private struct HeroRecede<C: View>: View {
+/// The base receding 4 % (`scale(1 − .04·p)` about the SCREEN's 50 % / 40 %); nothing under
+/// Reduce Motion.
+///
+/// It goes on the base's SCROLL CONTENT (`.heroRecedes()`), never around the base: any transform
+/// that isn't the identity cuts the safe area off from everything under it, so a base scroll view
+/// stops extending under the bars (container 874 → 778 pt) and, resting at its end, jumps ~34–96
+/// pt when the hero opens — and back in ONE frame when the scale returns to 1 at the very end of
+/// the close, right where the copy lands: the close flicker (learning
+/// 2026-09-27-transformar-la-base-le-quita-el-safe-area). A transform on the content of a scroll
+/// view changes nothing about the scroll view's own geometry.
+private struct HeroRecedeContent<C: View>: View {
     let hero: HeroController
     let content: C
     var body: some View {
         let s = hero.isOpen && !hero.crossfade ? 1 - 0.04 * clamp01(hero.p.value) : 1
-        content.scaleEffect(s, anchor: UnitPoint(x: 0.5, y: 0.4))
+        let host = hero.hostFrame
+        content.visualEffect { c, g in
+            // Anchor on the host's point (50 %, 40 %), wherever the content sits (it scrolls).
+            let f = g.frame(in: .global)
+            let ax = f.width > 0 ? (host.midX - f.minX) / f.width : 0.5
+            let ay = f.height > 0 ? (host.minY + host.height * 0.4 - f.minY) / f.height : 0.4
+            return c.scaleEffect(s, anchor: UnitPoint(x: ax, y: ay))
+        }
     }
+}
+
+private struct HeroRecedeModifier: ViewModifier {
+    @Environment(\.heroHost) private var hero
+    func body(content: Content) -> some View {
+        if let hero { HeroRecedeContent(hero: hero, content: content) } else { content }
+    }
+}
+
+extension View {
+    /// A hero host's base: its scroll content recedes 4 % while a hero page is open over it.
+    /// Put it on the content INSIDE the base's scroll view. Identity anywhere else.
+    func heroRecedes() -> some View { modifier(HeroRecedeModifier()) }
 }
 
 /// The copy in flight: the target's size, scaled to the interpolated width and placed at the
@@ -565,9 +619,42 @@ struct HeroCoverFlyer: View {
     @Environment(\.heroFlyProgress) private var p
     let title: Title
     var body: some View {
+        // The cover's inputs stay constant (its body — image lookup, palette task — isn't
+        // re-run every frame); only the clip that wraps it changes with the progress.
         GeometryReader { g in
-            CoverView(title: title, width: g.size.width, height: g.size.height,
-                      radius: lerp(KRadius.coverL, KRadius.surface, p) / max(s, 0.01))
+            CoverView(title: title, width: g.size.width, height: g.size.height, radius: 0, shadow: false)
+                .clipShape(RoundedRectangle(cornerRadius: lerp(KRadius.coverL, KRadius.surface, p) / max(s, 0.01),
+                                            style: .continuous))
+                .kShadow(.cover)
         }
+    }
+}
+
+#if DEBUG
+/// `-kuraBodyLog YES`: logs the hero host's body, close/finish, the tab-bar cover and the base
+/// scroll views' geometry (`kDebugScrollLog`) — how the close flicker was found.
+enum KBodyLog {
+    static let on = UserDefaults.standard.bool(forKey: "kuraBodyLog")
+    static func hit(_ name: String) {
+        if on { print(String(format: "BODY %.3f ", CACurrentMediaTime()) + name) }
+    }
+}
+#endif
+
+extension View {
+    /// DEBUG `-kuraBodyLog YES`: prints a scroll view's offset / insets / size whenever they
+    /// change. A no-op otherwise, and in Release.
+    @ViewBuilder func kDebugScrollLog(_ name: String) -> some View {
+        #if DEBUG
+        if #available(iOS 18.0, *), KBodyLog.on {
+            onScrollGeometryChange(for: String.self) { g in
+                "off \(Int(g.contentOffset.y)) ins t\(Int(g.contentInsets.top)) b\(Int(g.contentInsets.bottom)) cont \(Int(g.contentSize.height)) box \(Int(g.containerSize.height))"
+            } action: { _, v in KBodyLog.hit("SCROLL \(name) " + v) }
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

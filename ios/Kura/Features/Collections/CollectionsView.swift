@@ -185,7 +185,11 @@ private struct CollectionsCarousel: View {
                 }
                 .padding(.bottom, 140)
                 .background(alignment: .top) { CarouselSurface(pos: pos, tints: tints) }
+                // Recedes 4 % while a title opens over it.
+                .heroRecedes()
             }
+            .kDebugScrollAnchor()
+            .kDebugScrollLog("carousel")
             .ignoresSafeArea(.container, edges: .top)
         }
         .overlay(alignment: .bottom) { CarouselDockBand(pos: pos, tints: tints) }
