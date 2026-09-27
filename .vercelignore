@@ -1,0 +1,2 @@
+# La app iOS (y sus builds de varios GB en ios/build) no forma parte del deploy web.
+ios/
