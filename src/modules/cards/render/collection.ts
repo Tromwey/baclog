@@ -106,21 +106,7 @@ function drawCover(
 }
 
 function drawFan(ctx: CanvasRenderingContext2D, items: CardItem[], left: number, top: number, s: number) {
-  // The floor shadow under the front cover.
-  const floorW = 174 * s;
-  const floorH = 24 * s;
-  const fx = left + (FAN.w * s) / 2;
-  const fy = top + 243 * s - floorH / 2;
-  ctx.save();
-  ctx.translate(fx, fy);
-  ctx.scale(floorW / 2, floorH / 2);
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-  g.addColorStop(0, "rgba(0,0,0,.55)");
-  g.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(-1, -1, 2, 2);
-  ctx.restore();
-
+  // No floor shadow: each cover carries its own (founder, 2026-09-27 — same as `Fan`).
   const radius = 14 * X;
   const slots = [
     { item: items[1], at: FAN.left, front: false, fallbackAlbum: false },
@@ -128,6 +114,8 @@ function drawFan(ctx: CanvasRenderingContext2D, items: CardItem[], left: number,
     { item: items[0], at: FAN.lead, front: true, fallbackAlbum: false },
   ];
   for (const { item, at, front, fallbackAlbum } of slots) {
+    // Abanico corto: with 1–2 titles only those are drawn — no empty back slots (same as `Fan`).
+    if (!item && !front && items.length > 0) continue;
     const album = item ? item.type === "album" : fallbackAlbum;
     const [w, h] = front
       ? album
