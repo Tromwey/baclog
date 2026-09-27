@@ -1118,6 +1118,42 @@ export async function getPeoplePage(
   mode: "following" | "followers",
   cursor: string | null = null,
 ): Promise<PeoplePage> {
+  return peoplePage(viewerId, viewerId, mode, cursor, false);
+}
+
+/**
+ * SOMEONE ELSE's followers / following list, as `viewerId` may see it
+ * (founder, 2026-09-27: the lists became an owner setting —
+ * follow-lists-policy.ts). The CALLER must have already resolved access with
+ * `getFollowListsAccess` (owner public + handle, no block either way, the
+ * visibility rule); `ownerId` is the id that access returned, never one from
+ * a client.
+ *
+ * Stricter than the own-list read, per listed person, INSIDE the query:
+ * `publicAuthor` (isPublic + username) AND `notBlockedWith(viewerId, …)` in
+ * BOTH modes — here the edges are not the viewer's, so a private account the
+ * owner follows is not "the viewer's own row to keep removable": it is
+ * someone else's identity. Everyone who fails the gate folds into
+ * `privateCount` (first page only; the API calls it `anonymousCount`) — a
+ * number, never an identity. `following` is whether the VIEWER follows each
+ * listed person; `isPrivate` is always false.
+ */
+export async function getOthersPeoplePage(
+  viewerId: string,
+  ownerId: string,
+  mode: "following" | "followers",
+  cursor: string | null = null,
+): Promise<PeoplePage> {
+  return peoplePage(viewerId, ownerId, mode, cursor, true);
+}
+
+async function peoplePage(
+  viewerId: string,
+  scopeId: string,
+  mode: "following" | "followers",
+  cursor: string | null,
+  foreign: boolean,
+): Promise<PeoplePage> {
   const after = decodeCursor(cursor);
   const edgeCol =
     mode === "following"
@@ -1128,10 +1164,15 @@ export async function getPeoplePage(
       ? userFollows.followerUserId
       : userFollows.followedUserId;
 
-  const identifiable = and(
-    isNotNull(users.username),
-    mode === "followers" ? eq(users.isPublic, true) : undefined,
-  );
+  const identifiable = foreign
+    ? publicAuthor
+    : and(
+        isNotNull(users.username),
+        mode === "followers" ? eq(users.isPublic, true) : undefined,
+      );
+  // Who may appear as an identity to THIS viewer — the complement is the
+  // anonymous aggregate below.
+  const listable = and(identifiable, notBlockedWith(viewerId, users.id));
 
   const rows = await db
     .select({
@@ -1146,7 +1187,7 @@ export async function getPeoplePage(
       // In "following" mode this is definitionally true (it IS the edge being
       // listed) — skip the correlated subquery instead of discarding it.
       following:
-        mode === "following"
+        mode === "following" && !foreign
           ? sql<boolean>`true`
           : sql<boolean>`exists (select 1 from ${userFollows} f2 where f2.follower_user_id = ${viewerId} and f2.followed_user_id = ${users.id})`,
     })
@@ -1154,11 +1195,12 @@ export async function getPeoplePage(
     .innerJoin(users, eq(users.id, edgeCol))
     .where(
       and(
-        eq(scopeCol, viewerId),
-        identifiable,
-        // Blocking deletes both edges, so this only matters for a follow that
-        // raced the block — belt and braces, same gate as every list.
-        notBlockedWith(viewerId, users.id),
+        eq(scopeCol, scopeId),
+        // publicAuthor rules + the block gate. On the viewer's own list,
+        // blocking deletes both edges, so the gate only matters for a follow
+        // that raced the block; on someone else's list it hides whoever has a
+        // block with the VIEWER (the owner's edges are not theirs to show).
+        listable,
         after
           ? or(
               sql`date_trunc('milliseconds', ${userFollows.createdAt}) < ${atParam(after.at)}`,
@@ -1197,8 +1239,16 @@ export async function getPeoplePage(
           .groupBy(backlogs.userId)
       : Promise.resolve([]),
     // Followers hidden from the list above (no handle / private) — first page
-    // only, as one aggregate count.
-    mode === "followers" && !after
+    // only, as one aggregate count. On someone else's list: EVERY edge in
+    // either mode whose person failed `listable` (private, no handle, or a
+    // block with the viewer) — counted, never named.
+    foreign && !after
+      ? db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(userFollows)
+          .innerJoin(users, eq(users.id, edgeCol))
+          .where(and(eq(scopeCol, scopeId), sql`not (${listable})`))
+      : mode === "followers" && !after
       ? db
           .select({ n: sql<number>`count(*)::int` })
           .from(userFollows)

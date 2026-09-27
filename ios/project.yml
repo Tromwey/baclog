@@ -81,11 +81,11 @@ targets:
         # Automatic signing: archive signs with Apple Development, the export (ExportOptions.plist,
         # method app-store-connect) re-signs with Apple Distribution. Do NOT pin CODE_SIGN_IDENTITY /
         # PROVISIONING_PROFILE_SPECIFIER here: with Automatic they conflict and the archive fails.
-        # Entitlements: Sign in with Apple + Push (aps-environment). One file per configuration
-        # because the APNs gateway differs: Debug = development (sandbox tokens), Release =
-        # production (TestFlight / App Store). Both capabilities must be on in the App ID
-        # com.tromwey.kura; automatic signing with -allowProvisioningUpdates usually turns them on.
-        # No keychain sharing, no associated domains.
+        # Entitlements: Sign in with Apple + Push (aps-environment) + Associated Domains
+        # (applinks:baclog.app, Universal Links). One file per configuration because the APNs
+        # gateway differs: Debug = development (sandbox tokens), Release = production (TestFlight /
+        # App Store). All three capabilities must be on in the App ID com.tromwey.kura; automatic
+        # signing with -allowProvisioningUpdates usually turns them on. No keychain sharing.
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: NO
       configs:

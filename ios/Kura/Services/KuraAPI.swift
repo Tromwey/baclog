@@ -167,6 +167,8 @@ struct MePatch: Encodable, Sendable {
     /// Push when someone new follows you.
     var notifyFollowers: Bool? = nil
     var isPublic: Bool? = nil
+    /// Who sees your followers / following lists: `public` | `mutuals` | `private`.
+    var followListsVisibility: String? = nil
 }
 
 /// What `ASAuthorizationAppleIDCredential` hands over, ready for `POST /auth/apple`. `rawNonce`

@@ -335,7 +335,7 @@ struct EditProfileView: View {
                                     let on = t.id == featured
                                     Button {
                                         featured = t.id
-                                        KHaptic.select()
+                                        KHaptic.play(.selection)
                                     } label: {
                                         CoverView(title: t, height: 96, radius: KRadius.coverS)
                                             .overlay(alignment: .topLeading) {

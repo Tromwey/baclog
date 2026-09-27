@@ -1,0 +1,2 @@
+ALTER TABLE "user" ADD COLUMN "follow_lists_visibility" text DEFAULT 'private' NOT NULL;--> statement-breakpoint
+ALTER TABLE "user" ADD CONSTRAINT "user_follow_lists_visibility_check" CHECK ("user"."follow_lists_visibility" in ('public', 'mutuals', 'private'));

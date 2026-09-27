@@ -89,6 +89,25 @@ enum MockData {
         "mariel.ok": ["tono_v", "luciarrr", "danpix", "mili.v"]
     ]
 
+    /// Each profile's `followListsVisibility` (the server's default is `private`): lucía and
+    /// ghibli.club show them to anyone; danpix to mutuals (mariel and dan follow each other → in);
+    /// toño to mutuals (he doesn't follow mariel back → out); the rest keep them.
+    static let listsVisibility: [String: FollowListsVisibility] = [
+        "luciarrr": .public, "ghibli.club": .public, "danpix": .mutuals, "tono_v": .mutuals
+    ]
+    static func followListsVisibility(of handle: String) -> FollowListsVisibility { listsVisibility[handle] ?? .private }
+
+    /// `canSeeFollowLists` for mariel, by the owner's setting (false whenever there's a block).
+    static func canSeeFollowLists(of handle: String) -> Bool {
+        if handle == me.id { return true }
+        if MockSafety.shared.contains(handle) { return false }
+        switch followListsVisibility(of: handle) {
+        case .public: return true
+        case .mutuals: return following.contains(handle) && (followersOf[me.id] ?? []).contains(handle)
+        case .private: return false
+        }
+    }
+
     /// What people you follow did with a title (ficha · "gente que sigues").
     static let peopleMarks: [String: [PeopleMark]] = [
         "chihiro": [PeopleMark(personID: "danpix", mark: .obsessed), PeopleMark(personID: "luciarrr", mark: .liked), PeopleMark(personID: "nico.ve", mark: .liked)],

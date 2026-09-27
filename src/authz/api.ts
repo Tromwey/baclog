@@ -112,6 +112,10 @@ export interface ApiErrorExtra {
    *  rides INSIDE the error envelope, next to `reason`. */
   mergeToken?: string;
   source?: unknown;
+  /** `forbidden` + reason `lists_private` only (2026-09-27): the owner's
+   *  follow-lists setting, so the app can say why ("solo seguidores
+   *  mutuos" vs "solo su dueño"). */
+  visibility?: "public" | "mutuals" | "private";
   /** HTTP status override — only 422, only for `invalid` + reason
    *  `invalid_proof` (phase 4g): a rejected ownership proof (provider token,
    *  merge code) on an AUTHENTICATED route. Not 401, which the app reads as
@@ -152,7 +156,7 @@ export function finalizeApiResponse(res: Response): Response {
 }
 
 /** `{ error: { code, message, reason?, fields?, retryAfterSeconds?,
- *  mergeToken?, source? } }`. */
+ *  mergeToken?, source?, visibility? } }`. */
 export function apiError(
   code: ApiErrorCode,
   message: string = API_MESSAGES[code],
@@ -169,6 +173,7 @@ export function apiError(
         : {}),
       ...(extra.mergeToken ? { mergeToken: extra.mergeToken } : {}),
       ...(extra.source !== undefined ? { source: extra.source } : {}),
+      ...(extra.visibility ? { visibility: extra.visibility } : {}),
     },
   };
   const headers = new Headers({

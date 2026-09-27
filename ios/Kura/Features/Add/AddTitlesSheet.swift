@@ -105,7 +105,7 @@ struct AddTitlesSheet: View {
         let on = format == f
         return Button {
             format = f
-            KHaptic.select()
+            KHaptic.play(.selection)
         } label: {
             Text(label)
                 .monoLabel(11, color: on ? KColor.text : KColor.text2)
@@ -159,7 +159,6 @@ struct AddTitlesSheet: View {
                     store.removeSilently(t.id, from: c.id)
                 } else {
                     store.add(t.id, to: c.id)
-                    KHaptic.impact(.light)
                 }
             } label: {
                 Image(systemName: added ? "checkmark" : "plus")

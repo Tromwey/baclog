@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -18,6 +19,10 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ---------- enums ----------
+/** `user.follow_lists_visibility` values (TEXT + CHECK, migration 0031). */
+export const FOLLOW_LISTS_VISIBILITY = ["public", "mutuals", "private"] as const;
+export type FollowListsVisibility = (typeof FOLLOW_LISTS_VISIBILITY)[number];
+
 export const mediaTypeEnum = pgEnum("media_type", ["film", "series", "album"]);
 export const itemStatusEnum = pgEnum("item_status", [
   "on_my_radar",
@@ -198,10 +203,34 @@ export const users = pgTable(
      * (src/auth/live-0029.ts), which is now true.
      */
     notifyFollowers: boolean("notify_followers").notNull().default(true),
+    /**
+     * Who may read this account's followers / following LISTS (founder,
+     * 2026-09-27; migration 0031): `public` = anyone signed in · `mutuals` =
+     * only people they follow who follow them back · `private` = only the
+     * owner. Default `private` = the pre-0031 posture ("the lists are the
+     * owner's") for every existing account. The COUNTS stay public whatever
+     * this says. The one decision is `canSeeFollowLists`
+     * (modules/social/follow-lists-policy.ts); the one reader that applies it
+     * is `getFollowListsAccess` (modules/social/follow-lists.ts). TEXT + CHECK,
+     * not a pg enum: a value can be dropped later without rebuilding a type.
+     *
+     * ⚠️ Declared here = named in every `insert(users)` and read by
+     * `USER_COLUMNS` on every request: 0031 MUST be applied before this code
+     * is deployed (state/data.md).
+     */
+    followListsVisibility: text("follow_lists_visibility", {
+      enum: FOLLOW_LISTS_VISIBILITY,
+    })
+      .notNull()
+      .default("private"),
   },
   (t) => [
     uniqueIndex("user_email_unique").on(t.email),
     uniqueIndex("user_username_unique").on(t.username),
+    check(
+      "user_follow_lists_visibility_check",
+      sql`${t.followListsVisibility} in ('public', 'mutuals', 'private')`,
+    ),
   ],
 );
 

@@ -581,9 +581,12 @@ struct PickThreeView: View {
     private func toggle(_ id: String) {
         if let i = store.onboardingPicks.firstIndex(of: id) {
             store.onboardingPicks.remove(at: i)
+            KHaptic.play(.selection)
         } else if store.onboardingPicks.count < 3 {
             store.onboardingPicks.append(id)
-            KHaptic.impact(.medium)
+            KHaptic.play(.selection)
+        } else {
+            KHaptic.play(.warning) // a 4th pick is refused: say so in the hand
         }
     }
 }

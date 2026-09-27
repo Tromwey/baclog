@@ -464,7 +464,7 @@ export function CollectionBody({
               {backlog.vibe}
             </span>
           )}
-          <Credits owner={owner} collaborators={collaborators} count={present.length} />
+          <Credits owner={owner} collaborators={collaborators} />
           {/* Always, when there are titles (founder, 2026-09-27): with one
               format it's a single pill that labels the type with its count
               (nothing to filter); with more, each one filters. */}
@@ -651,29 +651,22 @@ function sheetLabel(s: SheetState, name: string): string {
 
 /**
  * The credits (2a): the owner's seal and each collaborator's at 26,
- * overlapping by 7, then "tú y mo · 12 títulos". Collaborators have no
- * palette here — their seals sit on `--s2` (§marca: "sin obsesión, el sello va
- * sobre --s2").
+ * overlapping by 7, then "tú y mo". Collaborators have no palette here —
+ * their seals sit on `--s2` (§marca: "sin obsesión, el sello va sobre --s2").
+ *
+ * No count (founder, 2026-09-27): a collection nobody shares had no seals
+ * either, so its credits line was ONLY "N títulos" — now there's nothing
+ * left to say, and the whole line disappears (the intro's `gap` collapses on
+ * its own; nothing to pad). With collaborators it's just the seals + names.
  */
 function Credits({
   owner,
   collaborators,
-  count,
 }: {
   owner: { name: string; image: string | null; hexes: string[] } | null;
   collaborators: Collaborator[];
-  count: number;
 }) {
-  // A collection nobody shares says only its count: "solo tú" and the lone
-  // seal stated the obvious (founder, 2026-09-27). The seals and "tú y mo"
-  // come back by themselves once collaborators exist (collaborators.ts).
-  if (collaborators.length === 0) {
-    return (
-      <span className="mt-0.5 font-sans text-[13px] text-text-2">
-        {count} {count === 1 ? "título" : "títulos"}
-      </span>
-    );
-  }
+  if (collaborators.length === 0) return null;
   return (
     <div className="mt-0.5 flex items-center gap-2">
       <div className="flex">
@@ -684,9 +677,7 @@ function Credits({
           </span>
         ))}
       </div>
-      <span className="font-sans text-[13px] text-text-2">
-        {ownCreditLine(collaborators)} · {count} {count === 1 ? "título" : "títulos"}
-      </span>
+      <span className="font-sans text-[13px] text-text-2">{ownCreditLine(collaborators)}</span>
     </div>
   );
 }

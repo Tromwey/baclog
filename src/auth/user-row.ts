@@ -35,6 +35,10 @@ const USER_COLUMNS = {
   notifyFollowers: MIGRATION_0029_LIVE
     ? sql<boolean>`"user"."notify_followers"`
     : sql<boolean>`true`,
+  // 2026-09-27 (migration 0031) — who reads your followers/following lists:
+  // an own preference here (Ajustes, `Me`); others see it only on the full
+  // `Person` of a public profile. Needs 0031 applied BEFORE deploy.
+  followListsVisibility: users.followListsVisibility,
   preferredService: users.preferredService,
   isMinor: users.isMinor,
   isFounder: users.isFounder,

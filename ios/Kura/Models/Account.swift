@@ -21,6 +21,8 @@ struct Me: Hashable, Decodable {
     /// Push when someone new follows you (`notify_followers`). Absent → assumed on.
     var notifyFollowers: Bool
     var isPublic: Bool
+    /// Who sees your followers / following lists. Absent (older server) → `private`, its default.
+    var followListsVisibility: FollowListsVisibility = .private
     var avatarURL: URL?
     var isFounder: Bool
     /// `onboardingComplete` — `name` is set; the app skips the onboarding. Absent → assumed done.
@@ -46,7 +48,8 @@ struct Me: Hashable, Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case handle, username, name, displayName, initials, hexes, featuredTitleId, followers, followersCount, followingCount,
-             stats, email, preferredService, notifyReleases, notifyRecap, notifyFollowers, isPublic, avatarUrl, isFounder, onboardingComplete
+             stats, email, preferredService, notifyReleases, notifyRecap, notifyFollowers, isPublic, avatarUrl, isFounder, onboardingComplete,
+             followListsVisibility
     }
 
     init(from decoder: Decoder) throws {
@@ -67,6 +70,8 @@ struct Me: Hashable, Decodable {
         notifyRecap = try c.decodeIfPresent(Bool.self, forKey: .notifyRecap) ?? true
         notifyFollowers = try c.decodeIfPresent(Bool.self, forKey: .notifyFollowers) ?? true
         isPublic = try c.decodeIfPresent(Bool.self, forKey: .isPublic) ?? true
+        followListsVisibility = (try? c.decodeIfPresent(String.self, forKey: .followListsVisibility))
+            .flatMap(FollowListsVisibility.init(rawValue:)) ?? .private
         avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
         isFounder = try c.decodeIfPresent(Bool.self, forKey: .isFounder) ?? false
         onboarded = try c.decodeIfPresent(Bool.self, forKey: .onboardingComplete) ?? !n.isEmpty

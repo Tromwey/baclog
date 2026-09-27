@@ -33,7 +33,7 @@ extension AppStore {
             return false
         case .ok:
             if case .review(let id, _, _) = target { reportedReviews.insert(id) }
-            KHaptic.impact(.light)
+            KHaptic.play(.success)
             showToast(ToastModel(text: target.isReview ? "Gracias. La revisamos." : "Gracias. Lo revisamos.", kind: .info))
             return true
         case .failed(let e):
@@ -63,7 +63,7 @@ extension AppStore {
             return false
         case .ok:
             applyBlock(handle)
-            KHaptic.impact(.medium)
+            KHaptic.play(.success)
             showToast(ToastModel(text: "Bloqueaste a @\(handle).", kind: .info))
             return true
         case .failed(let e):
@@ -129,7 +129,7 @@ extension AppStore {
             blockedAccounts?.removeAll { $0.key == key || $0.id == key }
             feedDirty = true
             loadedTitles.removeAll() // fichas re-read their reviews on the next visit
-            KHaptic.impact(.light)
+            KHaptic.play(.success)
             showToast(ToastModel(text: "Desbloqueaste a \(shown).", kind: .info))
             if let handle, people[handle] != nil { await loadPerson(handle, force: true) }
             return true

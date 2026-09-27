@@ -2,9 +2,15 @@ import SwiftUI
 
 /// The fan (Colecciones formalizado · "El abanico es la colección"): three covers with no box —
 /// the front one upright and centred, the second tilted −10° behind on the left, the third +9°
-/// behind on the right — standing on a soft floor shadow. One geometry, drawn at lead = 225 on a
-/// 300 × 243 box and scaled by `s = lead / 225`: 225 a collection's header and the carousel ·
-/// 186 the pinned one on a profile · 99 the profile grid · 51 a picker row · 22 a pill.
+/// behind on the right. One geometry, drawn at lead = 225 on a 300 × 225 box and scaled by
+/// `s = lead / 225`: 225 a collection's header and the carousel · 186 the pinned one on a
+/// profile · 99 the profile grid · 51 a picker row · 22 a pill.
+///
+/// No floor (founder, 2026-09-27): the fan used to stand on a soft radial shadow at s ≥ .35 —
+/// removed, on web too. Each cover's own shadow (`FanShadow`) stays; only that shared puddle
+/// under the whole fan is gone. The box is just the front cover's own height now — no extra
+/// ~18 pt of clearance the shadow used to need, since the back covers always fit inside that
+/// span already.
 ///
 /// Each slot keeps its title's native form: a poster 2:3, a record 1:1 (front 150×225 / 180×180,
 /// behind 117×176 / 135×135, every slot on the same centre). A missing title (a collection of one
@@ -27,18 +33,16 @@ struct FanView: View {
     var label: String? = nil
     @Environment(AppStore.self) private var store: AppStore?
 
-    // The frames' geometry at lead = 225, on a 300 × 243 box.
+    // The frames' geometry at lead = 225, on a 300 × 225 box.
     private static let boxW: CGFloat = 300
-    private static let boxH: CGFloat = 243
     private static let front = (cx: CGFloat(150), cy: CGFloat(112.5))
     private static let left = (cx: CGFloat(69.5), cy: CGFloat(126), rot: -10.0)
     private static let right = (cx: CGFloat(231.5), cy: CGFloat(126.5), rot: 9.0)
 
-    /// The box a fan of this lead takes (the floor shadow sits on its bottom edge).
+    /// The box a fan of this lead takes — the front cover's own height, no floor to clear any more.
     static func box(_ lead: CGFloat) -> CGSize {
         let s = lead / 225
-        return CGSize(width: (boxW * s).rounded(),
-                      height: max(boxH * s, lead + 18 * min(1, s * 2.3)).rounded())
+        return CGSize(width: (boxW * s).rounded(), height: lead.rounded())
     }
 
     private var s: CGFloat { lead / 225 }
@@ -53,7 +57,6 @@ struct FanView: View {
     var body: some View {
         let size = Self.box(lead)
         ZStack(alignment: .topLeading) {
-            if s >= 0.35 { floor(size) }
             // Painted back to front: left, right, then the front one.
             if showLeft { slot(covers[safe: 1], index: 0) }
             if showRight { slot(covers[safe: 2], index: 1) }
@@ -63,18 +66,6 @@ struct FanView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? "")
         .accessibilityHidden(label == nil)
-    }
-
-    /// A soft radial shadow the fan stands on.
-    private func floor(_ size: CGSize) -> some View {
-        let w = 174 * s + 70 * (1 - s)
-        let h = max(10, 24 * s)
-        return Ellipse()
-            .fill(EllipticalGradient(colors: [Color.black.opacity(0.55), Color.black.opacity(0)],
-                                     center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
-            .frame(width: w, height: h)
-            .position(x: size.width / 2, y: size.height - h / 2)
-            .allowsHitTesting(false)
     }
 
     @ViewBuilder

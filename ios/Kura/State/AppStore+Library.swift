@@ -218,6 +218,7 @@ extension AppStore {
         guard let c = collection(id) else { return }
         let before = collections.first(where: \.pinned)?.id
         setPinned(c.id, !c.pinned)
+        KHaptic.play(.tap)
         let pinned = !c.pinned
         undoToast(pinned ? "Fijada" : "Ya no está fijada") { [weak self] in
             guard let self else { return }
@@ -440,6 +441,7 @@ extension AppStore {
         update(collectionID) { $0.titleIDs.insert(titleID, at: 0); $0.addedAt[titleID] = Date() }
         lastUsedCollectionID = collectionID
         if !cancelRemove(titleID, from: collectionID) { syncAdd(titleID, to: collectionID) }
+        KHaptic.play(.tap)
         if toast {
             undoToast("Agregado a \(c.name)") { [weak self] in
                 self?.update(collectionID) { $0.titleIDs.removeAll { $0 == titleID } }
@@ -487,6 +489,7 @@ extension AppStore {
         }
         deferRemove(titleID, from: fromID)
         lastUsedCollectionID = toID
+        KHaptic.play(.tap)
         undoToast("Movido a \(to.name)") { [weak self] in
             guard let self else { return }
             self.cancelRemove(titleID, from: fromID)
@@ -516,6 +519,7 @@ extension AppStore {
             deferRemove(titleID, from: id)
         }
         if let first = added.first { lastUsedCollectionID = first }
+        KHaptic.play(.tap)
         if before.isEmpty && !ids.isEmpty, notifyReleases, let t = titles[titleID], isUnreleased(t) {
             ReleaseNotifier.schedule(t)
         }

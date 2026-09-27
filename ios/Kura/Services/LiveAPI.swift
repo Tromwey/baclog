@@ -982,6 +982,9 @@ struct LiveAPI: KuraAPI {
         case .followers: return try await client.decode(.get("me/followers", q))
         case .suggestions: return try await client.decode(.get("people/suggestions", q))
         case .search(let s): return try await client.decode(.get("people/search", q + [URLQueryItem(name: "q", value: s)]))
+        // 404 = private / nonexistent / a block; 403 `lists_private` = their setting keeps you out.
+        case .followersOf(let h): return try await client.decode(.get("people/\(h)/followers", q))
+        case .followingOf(let h): return try await client.decode(.get("people/\(h)/following", q))
         }
     }
 

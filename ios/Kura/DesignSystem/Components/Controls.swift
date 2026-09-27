@@ -164,7 +164,7 @@ struct ReactionSlider: View {
         let s = force ?? stop
         guard s != lastStop else { return }
         lastStop = s
-        KHaptic.impact(s == 2 ? .medium : .light)
+        KHaptic.play(.reaction(Self.stops[s].mark))
     }
 }
 
@@ -174,19 +174,22 @@ struct ReactionSlider: View {
 struct FollowCounts: View {
     let followers: Int
     let following: Int
+    /// false = plain text (a preview, a blocked profile): nothing that looks tappable and isn't.
+    var interactive = true
     var onFollowers: () -> Void = {}
     var onFollowing: () -> Void = {}
     var body: some View {
         HStack(spacing: 16) {
-            Button(action: onFollowers) {
-                (Text("\(followers)").fontWeight(.semibold).foregroundColor(KColor.text) + Text(" seguidores").foregroundColor(KColor.text2))
-            }
-            Button(action: onFollowing) {
-                (Text("\(following)").fontWeight(.semibold).foregroundColor(KColor.text) + Text(" siguiendo").foregroundColor(KColor.text2))
-            }
+            count(followers, " seguidores", onFollowers)
+            count(following, " siguiendo", onFollowing)
         }
         .font(.kura.ui(14))
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private func count(_ n: Int, _ label: String, _ action: @escaping () -> Void) -> some View {
+        let text = Text("\(n)").fontWeight(.semibold).foregroundColor(KColor.text) + Text(label).foregroundColor(KColor.text2)
+        if interactive { Button(action: action) { text } } else { text }
     }
 }
 
@@ -216,7 +219,7 @@ struct ChipRow<T: Hashable>: View {
                     let on = opt.0 == selection
                     Button {
                         selection = opt.0
-                        KHaptic.select()
+                        KHaptic.play(.selection)
                     } label: {
                         Text(opt.1)
                             .monoLabel(11, tracking: 0.1, color: on ? KColor.text : KColor.text2)

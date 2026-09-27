@@ -95,9 +95,15 @@ struct PersonProfileView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(p.name).font(.kura.profile).foregroundStyle(KColor.text).accessibilityAddTraits(.isHeader)
                 Text("@\(p.handle)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
+                // The counts are public and always open their page, where the owner's setting
+                // decides between the list and a note (`FollowersView`) — never a tap that does
+                // nothing. Two exceptions draw them as plain text instead: "Así te ven" (a
+                // picture) and someone you blocked (the page could only say "not available":
+                // their lists are closed to you both ways, API.md §4).
                 FollowCounts(followers: p.followers, following: p.followingCount,
-                             onFollowers: { if !locked && !isPreview { store.push(.followers(p.id, showFollowing: false)) } },
-                             onFollowing: { if !locked && !isPreview { store.push(.followers(p.id, showFollowing: true)) } })
+                             interactive: !isPreview && !blocked,
+                             onFollowers: { store.push(.followers(p.id, showFollowing: false)) },
+                             onFollowing: { store.push(.followers(p.id, showFollowing: true)) })
             }
             if !locked && (p.stats.obsessed + p.stats.completed) > 0 {
                 FlowLayout(spacing: 7, lineSpacing: 7) {
@@ -390,6 +396,10 @@ struct FollowersView: View {
         let followingCount = isMe ? max(p?.followingCount ?? 0, store.following.count) : (p?.followingCount ?? 0)
         let key = AppStore.peopleListKey(of: personID, following: showFollowing)
         let loaded = store.peopleLists[key]
+        // Someone else's list: its next page, the anonymous rest, or why you can't see it.
+        let meta = isMe ? nil : store.peopleListMeta[key]
+        let denied = meta?.denied
+        let handle = p?.handle ?? personID
         let q = SearchIndex.fold(query)
         let list = (loaded ?? []).map { store.person($0.id) ?? $0 }.filter { $0.id != store.me.id }
             .filter { q.isEmpty || SearchIndex.fold($0.handle).contains(q) || SearchIndex.fold($0.name).contains(q) }
@@ -409,7 +419,9 @@ struct FollowersView: View {
                 }
                 .padding(5)
                 .background(KColor.glassBg, in: Capsule())
-                SearchPill(placeholder: "Buscar", text: $query)
+                if denied == nil {
+                    SearchPill(placeholder: "Buscar", text: $query)
+                }
                 VStack(alignment: .leading, spacing: 0) {
                     if loaded == nil, let e = store.loadError(.peopleList(key)) {
                         LoadErrorBlock(error: e, titleSize: 24) {
@@ -428,10 +440,16 @@ struct FollowersView: View {
                             }
                             .frame(minHeight: 68)
                         }
-                    } else if list.isEmpty && !isMe {
-                        // Only the owner sees their lists (§4); the counts are public.
-                        Text("Solo @\(p?.handle ?? personID) ve su lista.").font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
-                    } else if list.isEmpty {
+                    } else if let denied {
+                        // Their setting keeps you out (`followListsVisibility`); the counts above
+                        // are public either way. The server's words.
+                        Text(denied).font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                    } else if list.isEmpty && !q.isEmpty {
+                        Text("Nadie con ese nombre.").font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                    } else if list.isEmpty && !isMe && (meta?.anonymous ?? 0) == 0 {
+                        Text(showFollowing ? "@\(handle) todavía no sigue a nadie." : "Todavía nadie sigue a @\(handle).")
+                            .font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                    } else if list.isEmpty && isMe {
                         Text(showFollowing ? "Todavía no sigues a nadie." : "Todavía nadie te sigue.")
                             .font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
                     }
@@ -442,6 +460,21 @@ struct FollowersView: View {
                     if !rest.isEmpty {
                         Text("Todos").monoLabel(11, tracking: 0.1, color: KColor.text3).padding(.top, 16).padding(.bottom, 4)
                         ForEach(rest) { row($0) }
+                    }
+                    if let meta, meta.nextCursor != nil, q.isEmpty {
+                        // The end of the rows asks for the next page (one at a time).
+                        HStack(spacing: 14) {
+                            Skeleton(radius: 999).frame(width: 48, height: 48)
+                            Skeleton(radius: 6).frame(width: 140, height: 14)
+                            Spacer()
+                        }
+                        .frame(minHeight: 68)
+                        .onAppear { Task { await store.loadMorePeople(of: personID, following: showFollowing) } }
+                    } else if let n = meta?.anonymous, n > 0, q.isEmpty {
+                        // Private accounts, no handle, a block with you: a number, never who.
+                        Text(n == 1 ? "y 1 persona más" : "y \(n) personas más")
+                            .font(.kura.ui(14)).foregroundStyle(KColor.text3)
+                            .padding(.top, list.isEmpty ? 12 : 16)
                     }
                 }
             }

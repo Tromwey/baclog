@@ -168,36 +168,75 @@ extension AppStore {
         return out
     }
 
-    /// Followers / following of someone. Your own lists come whole (every page, `allPeople`).
-    ///
-    /// ⚠️ Solo mock / no-op en live para OTRA persona: la API solo expone las listas de su dueño
-    /// (§4 — "las listas solo las ve su dueño", F3.10), así que en live esto guarda `[]` y la
-    /// pantalla dice "Solo @… ve su lista." (los conteos sí son públicos). Para que sea real haría
-    /// falta en el servidor una ruta `GET /people/{handle}/followers|following` con el gate
-    /// `publicAuthor` + `notBlockedWith` por fila y una decisión de producto sobre exponerlas.
+    /// Followers / following of someone. YOUR lists come whole (every page of `me/followers|
+    /// following`, `allPeople`); someone else's come a page at a time from
+    /// `GET /people/{handle}/followers|following`, which answers by THEIR `followListsVisibility`
+    /// (2026-09-27). When the profile already said `canSeeFollowLists: false` nothing is asked:
+    /// the page says why with the counts (public) above it. A 403 `lists_private` (the setting
+    /// changed since the profile loaded) lands in the same place; a 404 (they went private, or a
+    /// block) says the list isn't available — identical for every cause, like the route.
     func loadPeopleList(of personID: String, following: Bool) async {
         let key = AppStore.peopleListKey(of: personID, following: following)
         guard peopleLists[key] == nil else { return }
         let session = s
+        let theirs = personID != me.id
+        if theirs, let p = person(personID), p.canSeeFollowLists == false || isBlocked(personID) {
+            peopleListMeta[key] = PeopleListMeta(denied: (p.followListsVisibility ?? .private).deniedNote)
+            peopleLists[key] = []
+            return
+        }
         do {
             let items: [Person]
-            if personID == me.id {
+            if theirs {
+                let page = try await api.people(kind: following ? .followingOf(personID) : .followersOf(personID), cursor: nil)
+                try check(session)
+                items = page.items
+                peopleListMeta[key] = PeopleListMeta(nextCursor: page.nextCursor, anonymous: page.anonymousCount)
+            } else {
                 items = try await allPeople(following ? .following : .followers)
                 try check(session)
                 if following { self.following.formUnion(items.map(\.id)) }
-            } else {
-                #if DEBUG
-                items = (api as? MockAPI)?.peopleOf(personID, following: following) ?? []
-                #else
-                items = []
-                #endif
             }
             loaded(.peopleList(key))
             for p in items { register(p) }
             peopleLists[key] = items
         } catch {
             guard s === session else { return }
-            fail(.peopleList(key), error)
+            switch (error as? KuraAPIError) {
+            case .forbidden(let code) where code == "lists_private":
+                loaded(.peopleList(key))
+                let v = person(personID)?.followListsVisibility ?? .private
+                peopleListMeta[key] = PeopleListMeta(denied: v.deniedNote)
+                peopleLists[key] = []
+            case .notFound:
+                loaded(.peopleList(key))
+                peopleListMeta[key] = PeopleListMeta(denied: "Esta lista no está disponible.")
+                peopleLists[key] = []
+            default:
+                fail(.peopleList(key), error)
+            }
+        }
+    }
+
+    /// The next page of someone else's list (the rows' end reached it). One at a time.
+    func loadMorePeople(of personID: String, following: Bool) async {
+        let key = AppStore.peopleListKey(of: personID, following: following)
+        guard let meta = peopleListMeta[key], let cursor = meta.nextCursor, !meta.loadingMore else { return }
+        let session = s
+        peopleListMeta[key]?.loadingMore = true
+        do {
+            let page = try await api.people(kind: following ? .followingOf(personID) : .followersOf(personID), cursor: cursor)
+            try check(session)
+            for p in page.items { register(p) }
+            let seen = Set((peopleLists[key] ?? []).map(\.id))
+            peopleLists[key, default: []] += page.items.filter { !seen.contains($0.id) }
+            // A server that hands back the same cursor would loop: stop there.
+            peopleListMeta[key]?.nextCursor = page.nextCursor == cursor ? nil : page.nextCursor
+            peopleListMeta[key]?.loadingMore = false
+        } catch {
+            guard s === session else { return }
+            peopleListMeta[key]?.loadingMore = false
+            noteError(error)
         }
     }
 
@@ -206,7 +245,7 @@ extension AppStore {
     func isFollowing(_ id: String) -> Bool { following.contains(id) }
 
     func toggleFollow(_ id: String) {
-        KHaptic.impact(.light)
+        KHaptic.play(.tap)
         setFollow(id, !following.contains(id))
     }
 
@@ -232,7 +271,7 @@ extension AppStore {
             // ⚠️ Solo mock / no-op en live: nunca llama a la API (el servidor solo deja seguir
             // perfiles públicos y no hay modelo de solicitudes). Ver `requested`.
             if requested.contains(id) { requested.remove(id) } else { requested.insert(id) }
-            KHaptic.impact(.light)
+            KHaptic.play(.tap)
         } else {
             toggleFollow(id)
         }
@@ -311,7 +350,7 @@ extension AppStore {
     /// llega aquí. Haría falta: el modelo de solicitudes y `PUT /me/follow-requests/{id}`.
     func setRequest(_ notificationID: String, _ state: RequestState) {
         requestStates[notificationID] = state
-        KHaptic.impact(.light)
+        KHaptic.play(.tap)
     }
 
     /// ⚠️ Solo mock / no-op en live: marca leídas las notificaciones locales; en live no hay
@@ -322,4 +361,13 @@ extension AppStore {
     }
 
     var hasUnread: Bool { notifications.contains(where: \.unread) }
+}
+
+/// Someone else's followers / following list, beyond its rows: the next page, how many more are
+/// only a number (`anonymousCount`), and — when their setting keeps you out — the note to show.
+struct PeopleListMeta: Equatable {
+    var nextCursor: String? = nil
+    var anonymous = 0
+    var denied: String? = nil
+    var loadingMore = false
 }

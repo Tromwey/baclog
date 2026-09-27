@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FOLLOW_LISTS_VISIBILITY } from "@/modules/social/follow-lists-policy";
 import {
   profileReportBodySchema,
   reviewReportBodySchema,
@@ -99,7 +100,7 @@ export const ErrorBodySchema = z.object({
     code: ErrorCodeSchema,
     /** Final Spanish copy — show as is. */
     message: z.string().min(1),
-    /** Sub-code the app branches on — `forbidden`: "underage" · `conflict`:
+    /** Sub-code the app branches on — `forbidden`: "underage", "lists_private" · `conflict`:
      *  "not_released", "reaction_required", "taken", "linked_elsewhere",
      *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
      *  422, phase 4g): "invalid_proof" = a rejected provider token / merge
@@ -113,6 +114,9 @@ export const ErrorBodySchema = z.object({
      *  `POST /me/identities/{provider}`): the proof to merge that account. */
     mergeToken: z.string().min(1).optional(),
     source: z.lazy(() => MergeSourceSchema).optional(),
+    /** `forbidden` + reason `lists_private` only
+     *  (`GET /people/{handle}/followers|following`): the owner's setting. */
+    visibility: z.enum(FOLLOW_LISTS_VISIBILITY).optional(),
   }),
 });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
@@ -255,6 +259,14 @@ export type TitleState = z.infer<typeof TitleStateSchema>;
 
 // ---------- People ----------
 
+/**
+ * Who may read someone's followers / following LISTS (2026-09-27, migration
+ * 0031): `public` = anyone signed in · `mutuals` = they follow each other ·
+ * `private` = only the owner (the default). Counts are public regardless.
+ */
+export const FollowListsVisibilitySchema = z.enum(FOLLOW_LISTS_VISIBILITY);
+export type FollowListsVisibilityWire = z.infer<typeof FollowListsVisibilitySchema>;
+
 export const PersonStatsSchema = z.object({
   obsessed: z.number().int().nonnegative(),
   liked: z.number().int().nonnegative(),
@@ -324,8 +336,30 @@ export const PersonSchema = z.object({
   isPrivate: z.boolean().optional(),
   /** The caller blocked them (only ever true on `GET /people/{handle}`). */
   isBlocked: z.boolean(),
+  /** `GET /people/{handle}` only (absent on list cards): the owner's
+   *  setting for their followers/following lists. */
+  followListsVisibility: FollowListsVisibilitySchema.optional(),
+  /** `GET /people/{handle}` only: whether the CALLER may open
+   *  `GET /people/{handle}/followers|following` right now (the owner always;
+   *  false whenever `isBlocked`). The app hides the tap when false. */
+  canSeeFollowLists: z.boolean().optional(),
 });
 export type Person = z.infer<typeof PersonSchema>;
+
+/**
+ * `GET /people/{handle}/followers` · `GET /people/{handle}/following` —
+ * someone else's list, when their `followListsVisibility` lets the caller in
+ * (else 403 `forbidden` + reason `lists_private`). `items` are LITE Persons,
+ * each a public profile with no block with the caller; everyone else on the
+ * list folds into `anonymousCount` (first page only, 0 on later pages) —
+ * never an identity. Keyset: pass `nextCursor` back as `?cursor=`.
+ */
+export const PeopleListPageSchema = z.object({
+  items: z.array(PersonSchema),
+  anonymousCount: z.number().int().nonnegative(),
+  nextCursor: z.string().nullable(),
+});
+export type PeopleListPage = z.infer<typeof PeopleListPageSchema>;
 
 /** The caller's own account. The ONLY payload with `email`. */
 export const MeSchema = z.object({
@@ -345,6 +379,9 @@ export const MeSchema = z.object({
   /** Phase 4e — the "@x te sigue" push opt-out (`PATCH /me`). Own
    *  preference: never on `Person`. `true` until migration 0029 is live. */
   notifyFollowers: z.boolean(),
+  /** 2026-09-27 — who reads the caller's followers/following lists
+   *  (`PATCH /me { followListsVisibility }`). Default `private`. */
+  followListsVisibility: FollowListsVisibilitySchema,
   isFounder: z.boolean(),
   /** `name` is set — the app skips onboarding. */
   onboardingComplete: z.boolean(),

@@ -321,7 +321,7 @@ private final class FeedHits {
 
     func phase(user: Bool, active: Bool) {
         userDriven = user
-        if active { KHaptic.prepare(.rigid) } else { samples.removeAll(keepingCapacity: true) }
+        if active { KHaptic.prepare(.hit(intensity: 0)) } else { samples.removeAll(keepingCapacity: true) }
         #if DEBUG
         KBodyLog.hit("FEEDHIT phase user=\(user) active=\(active) off \(Int(offset))")
         #endif
@@ -357,7 +357,7 @@ private final class FeedHits {
         let dt = now - first.t
         let speed = dt > 0.008 ? max(0, (y - first.y) / CGFloat(dt)) : 0
         let intensity = min(Self.cap, Self.floor + (Self.cap - Self.floor) * speed / Self.fullSpeed)
-        KHaptic.impact(.rigid, intensity: intensity)
+        KHaptic.play(.hit(intensity: intensity))
         lastHit = now
         #if DEBUG
         KBodyLog.hit(String(format: "FEEDHIT card %d x%d off %.1f mark %.1f speed %.0f intensity %.2f",

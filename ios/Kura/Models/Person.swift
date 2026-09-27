@@ -31,6 +31,11 @@ struct Person: Identifiable, Hashable, Decodable {
     /// `GET /people/{handle}` only: you blocked them (the profile still opens, to unblock).
     /// Absent on every other payload — the store keeps the truth in `AppStore.blocked`.
     var isBlocked = false
+    /// `GET /people/{handle}` only (absent on the LITE cards): the owner's setting for who sees
+    /// their followers / following lists, and whether YOU can open them right now (false
+    /// whenever there's a block). nil = unknown (a card from a list, an older server).
+    var followListsVisibility: FollowListsVisibility? = nil
+    var canSeeFollowLists: Bool? = nil
     /// Titles embedded in the payload (obsessions / common), registered by the store.
     var embeddedTitles: [Title] = []
 
@@ -50,7 +55,8 @@ struct Person: Identifiable, Hashable, Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case handle, username, name, displayName, initials, hexes, featuredTitleId, isPrivate, followers, followersCount,
-             followingCount, following, stats, obsessions, common, collections, why, reason, avatarUrl, isFollowing, isBlocked
+             followingCount, following, stats, obsessions, common, collections, why, reason, avatarUrl, isFollowing, isBlocked,
+             followListsVisibility, canSeeFollowLists
     }
 
     /// Lists of titles come either as ids or as embedded `Title` objects.
@@ -89,6 +95,34 @@ struct Person: Identifiable, Hashable, Decodable {
         avatarURL = KuraRuntime.resolve(try c.decodeIfPresent(String.self, forKey: .avatarUrl))
         isFollowing = try c.decodeIfPresent(Bool.self, forKey: .isFollowing)
         isBlocked = try c.decodeIfPresent(Bool.self, forKey: .isBlocked) ?? false
+        // An unknown value from a newer server reads as "unknown", never as a decode failure.
+        followListsVisibility = (try? c.decodeIfPresent(String.self, forKey: .followListsVisibility))
+            .flatMap(FollowListsVisibility.init(rawValue:))
+        canSeeFollowLists = try c.decodeIfPresent(Bool.self, forKey: .canSeeFollowLists)
+    }
+}
+
+/// Who sees your followers / following lists (`followListsVisibility`, `PATCH /me`). The counts
+/// are public whatever this says; only the LISTS follow it. The server's default is `private`.
+enum FollowListsVisibility: String, CaseIterable, Hashable, Sendable {
+    case `public`, mutuals, `private`
+
+    /// Ajustes › privacidad (same words as the web).
+    var label: String {
+        switch self {
+        case .public: return "Todos"
+        case .mutuals: return "Seguidores mutuos"
+        case .private: return "Solo yo"
+        }
+    }
+
+    /// What someone who can't see the list reads — the server's 403 copy, word for word
+    /// (`people/_lib/follow-lists.ts`).
+    var deniedNote: String {
+        switch self {
+        case .mutuals: return "Solo sus seguidores mutuos pueden ver esta lista."
+        case .public, .private: return "Esta persona mantiene privada esta lista."
+        }
     }
 }
 
@@ -301,8 +335,13 @@ struct BlockedAccount: Identifiable, Hashable, Decodable {
 struct PeoplePage: Decodable {
     var items: [Person]
     var nextCursor: String?
-    init(items: [Person], nextCursor: String? = nil) { self.items = items; self.nextCursor = nextCursor }
-    private enum CodingKeys: String, CodingKey { case items, nextCursor }
+    /// `GET /people/{handle}/followers|following`: the rest of the list (private, no handle, a
+    /// block with you) as a number, never as identities. Page 1 only (0 after). 0 elsewhere.
+    var anonymousCount = 0
+    init(items: [Person], nextCursor: String? = nil, anonymousCount: Int = 0) {
+        self.items = items; self.nextCursor = nextCursor; self.anonymousCount = anonymousCount
+    }
+    private enum CodingKeys: String, CodingKey { case items, nextCursor, anonymousCount }
     init(from decoder: Decoder) throws {
         // `GET /people/suggestions` and `/people/search` return a bare array; the
         // owner lists return `{ items, nextCursor }`. Accept both.
@@ -312,11 +351,15 @@ struct PeoplePage: Decodable {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             items = try c.decodeIfPresent([Person].self, forKey: .items) ?? []
             nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
+            anonymousCount = try c.decodeIfPresent(Int.self, forKey: .anonymousCount) ?? 0
         }
     }
 }
 
 enum PeopleKind: Hashable {
+    /// YOUR lists (`GET /me/following|followers`), whole.
     case following, followers, suggestions
     case search(String)
+    /// Someone else's lists (`GET /people/{handle}/followers|following`), by their setting.
+    case followersOf(String), followingOf(String)
 }

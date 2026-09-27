@@ -25,7 +25,14 @@ import {
 } from "../src/modules/catalog/release";
 import { decodeCursor, encodeCursor } from "../src/modules/reviews/cursor";
 import {
+  FOLLOW_LISTS_VISIBILITY,
+  canSeeFollowLists,
+} from "../src/modules/social/follow-lists-policy";
+import {
   CollectionSchema,
+  ErrorBodySchema,
+  FollowListsVisibilitySchema,
+  PeopleListPageSchema,
   PersonCollectionSchema,
   PersonSchema,
   ReleaseSchema,
@@ -531,6 +538,49 @@ check("releaseDayInstant: día TMDB → 06:00Z (medianoche CDMX), inválido → 
   for (const iso of ["2026-10-01T00:00:00Z", "2026-10-01T06:00:00Z", "2026-10-01T07:00:00Z", "2026-10-01T08:00:00Z", "2026-10-01T12:00:00Z"]) {
     assert.equal(releaseDayLong(iso), "1 de octubre", iso);
   }
+});
+
+check("canSeeFollowLists: tabla de verdad (dueño siempre · bloqueo nunca · mutuos = ambas aristas)", () => {
+  assert.deepEqual([...FOLLOW_LISTS_VISIBILITY], ["public", "mutuals", "private"]);
+  const base = { isOwner: false, blocked: false, viewerFollowsOwner: false, ownerFollowsViewer: false };
+  assert.equal(canSeeFollowLists({ ...base, visibility: "public" }), true, "public: cualquiera con sesión");
+  assert.equal(canSeeFollowLists({ ...base, visibility: "private" }), false);
+  assert.equal(canSeeFollowLists({ ...base, visibility: "private", isOwner: true }), true, "el dueño siempre");
+  for (const [v2o, o2v, want] of [
+    [false, false, false],
+    [true, false, false],
+    [false, true, false],
+    [true, true, true],
+  ] as const) {
+    assert.equal(
+      canSeeFollowLists({ ...base, visibility: "mutuals", viewerFollowsOwner: v2o, ownerFollowsViewer: o2v }),
+      want,
+      `mutuals v→o=${v2o} o→v=${o2v}`,
+    );
+  }
+  for (const visibility of FOLLOW_LISTS_VISIBILITY) {
+    assert.equal(
+      canSeeFollowLists({ visibility, isOwner: false, blocked: true, viewerFollowsOwner: true, ownerFollowsViewer: true }),
+      false,
+      `bloqueo gana sobre ${visibility}`,
+    );
+  }
+  assert.equal(FollowListsVisibilitySchema.safeParse("friends").success, false, "fuera del enum no valida");
+});
+
+check("Listas ajenas: PeopleListPage con anonymousCount; Person con followListsVisibility opcional; 403 lists_private", () => {
+  const card = toPersonLite({ username: "ana", name: "Ana", avatarUrl: null, following: true });
+  const page = PeopleListPageSchema.parse({ items: [card], anonymousCount: 2, nextCursor: null });
+  assert.equal(page.anonymousCount, 2);
+  assert.ok(!("followListsVisibility" in card) && !("canSeeFollowLists" in card), "la card LITE no lleva el ajuste");
+  assert.equal(PeopleListPageSchema.safeParse({ items: [], nextCursor: null }).success, false, "anonymousCount es obligatorio");
+  const full = PersonSchema.parse({ ...card, followListsVisibility: "mutuals", canSeeFollowLists: false });
+  assert.equal(full.followListsVisibility, "mutuals");
+  assert.equal(PersonSchema.safeParse({ ...card, followListsVisibility: "todos" }).success, false);
+  const err = ErrorBodySchema.parse({
+    error: { code: "forbidden", message: "Solo sus seguidores mutuos pueden ver esta lista.", reason: "lists_private", visibility: "mutuals" },
+  });
+  assert.equal(err.error.visibility, "mutuals");
 });
 
 console.log(failures === 0 ? "\ncheck-wire ok" : `\n${failures} fallos`);

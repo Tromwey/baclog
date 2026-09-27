@@ -218,6 +218,13 @@
       "when": 1790467819046,
       "tag": "0030_collection_curation",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790526242666,
+      "tag": "0031_follow_lists_visibility",
+      "breakpoints": true
     }
   ]
 }

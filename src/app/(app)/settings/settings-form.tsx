@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import type { FollowListsVisibility } from "@/modules/social/follow-lists-policy";
 import {
   deleteAccountAction,
+  setFollowListsVisibilityAction,
   setNotifyRecapAction,
   setNotifyReleasesAction,
   setPublicAction,
@@ -121,6 +123,79 @@ export function PrivacySwitch({ initialIsPublic }: { initialIsPublic: boolean })
       onChange={(priv) => setIsPublic(!priv)}
       error={error}
     />
+  );
+}
+
+const FOLLOW_LISTS_OPTIONS: { id: FollowListsVisibility; label: string }[] = [
+  { id: "public", label: "Todos" },
+  { id: "mutuals", label: "Seguidores mutuos" },
+  { id: "private", label: "Solo yo" },
+];
+
+/**
+ * "Quién ve tus seguidores y seguidos" (2026-09-27, `user.follow_lists_visibility`):
+ * a title row and the three choices as 52 radio rows inside the privacidad
+ * group — the 30b pattern (tap saves at once, the check marks the choice,
+ * fill-change press state, no borders). The counts stay public whatever this
+ * says, and the lists only exist while the profile is public — the note says
+ * both. A failure puts the previous choice back and says so.
+ */
+export function FollowListsChoice({ initial }: { initial: FollowListsVisibility }) {
+  const [value, setValue] = useState<FollowListsVisibility>(initial);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pick(id: FollowListsVisibility) {
+    if (id === value) return;
+    const prev = value;
+    setValue(id);
+    setError(null);
+    try {
+      const res = await setFollowListsVisibilityAction(id);
+      if ("error" in res) throw new Error(res.error);
+    } catch {
+      setValue(prev);
+      setError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
+    }
+  }
+
+  // Static on purpose: the Perfil privado switch above flips live, and a note
+  // keyed on the server's isPublic would lie until the next load.
+  const note =
+    "Cuántos te siguen y a cuántos sigues se ve en tu página; esto decide quién ve las listas. Con el perfil privado, nadie más.";
+
+  return (
+    <>
+      <div className="flex min-h-[52px] flex-col justify-center gap-[3px] py-2 pl-4 pr-3.5">
+        <span className="text-[16px] text-text">Quién ve tus seguidores y seguidos</span>
+        <span role={error ? "status" : undefined} className="text-[13px] leading-[1.4] text-text-2">
+          {error ?? note}
+        </span>
+      </div>
+      <div role="radiogroup" aria-label="Quién ve tus seguidores y seguidos" className="flex flex-col">
+        {FOLLOW_LISTS_OPTIONS.map((o) => {
+          const on = value === o.id;
+          return (
+            <Fragment key={o.id}>
+              <span aria-hidden className="ml-4 h-px bg-white/[0.06]" />
+              <button
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => pick(o.id)}
+                className="flex min-h-[52px] items-center gap-3 pl-8 pr-4 text-left transition-colors active:bg-white/[0.06]"
+              >
+                <span className={`flex-1 text-[16px] ${on ? "text-text" : "text-text-2"}`}>{o.label}</span>
+                {on && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="text-text" aria-hidden>
+                    <path d="M4.5 12.5l4.8 4.8L19.5 7" />
+                  </svg>
+                )}
+              </button>
+            </Fragment>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

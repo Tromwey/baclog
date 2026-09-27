@@ -35,6 +35,12 @@ enum DebugLaunch {
                 store.reorder(rid, to: [last] + c.titleIDs.dropLast())
             }
         }
+        // `-kuraOpenURL <https://baclog.app/…>`: delivered as a universal link right at launch (the
+        // simulator can't verify the AASA of an unsigned build, so `simctl openurl` goes to Safari).
+        // Arrives before the tabs are up → exercises the pending path too.
+        if let raw = UserDefaults.standard.string(forKey: "kuraOpenURL"), let url = URL(string: raw) {
+            DispatchQueue.main.async { store.openWebLink(url) }
+        }
         guard let screen = UserDefaults.standard.string(forKey: "kuraScreen") else { return }
         func main(_ tab: Tab = .collections, _ routes: [Route] = [], sheet: SheetRoute? = nil) {
             store.phase = .main
@@ -311,6 +317,10 @@ enum DebugLaunch {
         case "notifysettings":
             // Ajustes scrolled to "notificaciones" (Nuevos seguidores is server-owned now).
             store.debugSettingsAnchor = "notificaciones"
+            main(.profile, [.settings])
+        case "hapticsettings":
+            // Ajustes scrolled to "este iphone" (Vibraciones, the device's haptics switch).
+            store.debugSettingsAnchor = "este iphone"
             main(.profile, [.settings])
         default:
             break

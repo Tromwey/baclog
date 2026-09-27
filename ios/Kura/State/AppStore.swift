@@ -169,6 +169,8 @@ final class SessionData {
     var loadingPeople: Set<String> = []
     var missingPeople: Set<String> = []
     var peopleLists: [String: [Person]] = [:]
+    /// Paging, the anonymous rest and a "not for you" answer of someone else's lists, by the same key.
+    var peopleListMeta: [String: PeopleListMeta] = [:]
     var feedLoaded = false
     var feedLoading = false
     var feedCursor: String?
@@ -215,6 +217,7 @@ final class SessionData {
     var notifyReleases = true
     var notifyRecap = true
     var notifyFollowers = true
+    var followListsVisibility: FollowListsVisibility = .private
     var musicApp = "Apple Music"
 
     // Bookkeeping nobody draws
@@ -381,6 +384,7 @@ final class AppStore {
     var loadingPeople: Set<String> { get { s.loadingPeople } _modify { yield &s.loadingPeople } set { s.loadingPeople = newValue } }
     var missingPeople: Set<String> { get { s.missingPeople } _modify { yield &s.missingPeople } set { s.missingPeople = newValue } }
     var peopleLists: [String: [Person]] { get { s.peopleLists } _modify { yield &s.peopleLists } set { s.peopleLists = newValue } }
+    var peopleListMeta: [String: PeopleListMeta] { get { s.peopleListMeta } _modify { yield &s.peopleListMeta } set { s.peopleListMeta = newValue } }
     var feedLoaded: Bool { get { s.feedLoaded } set { s.feedLoaded = newValue } }
     var feedLoading: Bool { get { s.feedLoading } set { s.feedLoading = newValue } }
     var feedCursor: String? { get { s.feedCursor } set { s.feedCursor = newValue } }
@@ -464,6 +468,9 @@ final class AppStore {
     private var _notifyReleases: Bool { get { s.notifyReleases } set { s.notifyReleases = newValue } }
     private var _notifyRecap: Bool { get { s.notifyRecap } set { s.notifyRecap = newValue } }
     private var _notifyFollowers: Bool { get { s.notifyFollowers } set { s.notifyFollowers = newValue } }
+    private var _followListsVisibility: FollowListsVisibility {
+        get { s.followListsVisibility } set { s.followListsVisibility = newValue }
+    }
     private var _musicApp: String { get { s.musicApp } set { s.musicApp = newValue } }
 
     var profilePrivate: Bool {
@@ -494,6 +501,30 @@ final class AppStore {
             _notifyFollowers = newValue
             patchMe(MePatch(notifyFollowers: newValue))
             if newValue { askNotificationsIfNeeded() }
+        }
+    }
+
+    /// "Quién ve tus seguidores y seguidos" (`PATCH /me { followListsVisibility }`). Optimistic:
+    /// the choice shows at once; if the server refuses it, it goes back to what it was.
+    var followListsVisibility: FollowListsVisibility {
+        get { _followListsVisibility }
+        set {
+            let old = _followListsVisibility
+            guard old != newValue else { return }
+            _followListsVisibility = newValue
+            let session = s
+            sync(key: WriteKey.mePatch, onError: { [weak self] e in
+                guard let self, self.s === session else { return true }
+                // Only this write's own value goes back (a newer choice already replaced it).
+                if self._followListsVisibility == newValue { self._followListsVisibility = old }
+                if e == .cancelled || e == .unauthorized { return true }
+                self.showToast(ToastModel(text: e.toast, kind: .info))
+                return true
+            }) { [weak self] api in
+                let store = self
+                let m = try await api.updateMe(MePatch(followListsVisibility: newValue.rawValue))
+                await MainActor.run { store?.on(session) { store?.account = m } }
+            }
         }
     }
 
@@ -742,6 +773,9 @@ final class AppStore {
             if merged.obsessions.isEmpty { merged.obsessions = old.obsessions }
             if merged.common.isEmpty { merged.common = old.common }
             if merged.collections.isEmpty { merged.collections = old.collections }
+            // Only `GET /people/{handle}` knows these; a LITE card from a list says nothing.
+            if merged.followListsVisibility == nil { merged.followListsVisibility = old.followListsVisibility }
+            if merged.canSeeFollowLists == nil { merged.canSeeFollowLists = old.canSeeFollowLists }
         }
         for t in merged.embeddedTitles { registerPartial(t) }
         people[p.id] = merged
@@ -761,6 +795,7 @@ final class AppStore {
         _notifyReleases = m.notifyReleases
         _notifyRecap = m.notifyRecap
         _notifyFollowers = m.notifyFollowers
+        _followListsVisibility = m.followListsVisibility
         if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
@@ -1065,6 +1100,8 @@ final class AppStore {
 
     func showToast(_ t: ToastModel) {
         toastTask?.cancel()
+        // A failed write (every Reintentar toast) is the app's one `error` haptic: fired here, once.
+        if t.kind == .retry { KHaptic.play(.error) }
         withAnimation(KMotion.short) { toast = t }
         // VoiceOver doesn't see a view slide in: say it.
         var said = AttributedString(t.action == nil ? t.text : "\(t.text). \(t.kind == .retry ? "Reintentar" : "Deshacer") disponible")
@@ -1246,6 +1283,8 @@ final class AppStore {
             pendingPush = nil
             if path(tab).last != route { push(route) }
         }
+        // A universal link tapped before the tabs were up (cold start, or signed out → signed in).
+        openPendingLink()
         if debugEmptyFollowing { following = []; me.followingCount = 0 }
         if let id = pendingListCollection, let i = collections.firstIndex(where: { $0.id == id }) {
             collections[i].layout = .list

@@ -35,19 +35,17 @@ export async function generateMetadata({
   const { username, backlogId } = await params;
   const data = await getPublicBacklog(username, backlogId);
   if (!data) return {};
-  // The fan's front cover first (the owner's choice), else any cover.
-  const ordered = [...data.items].sort(byManualOrder);
-  const firstPoster =
-    fanOf(ordered, data.coverCatalogItemId).find((i) => i.posterUrl)?.posterUrl ??
-    ordered.find((i) => i.posterUrl)?.posterUrl;
+  // The preview IMAGE is `opengraph-image.tsx` next to this page (the fan on
+  // the collection's gradient, same gates) — file-based metadata, so no
+  // `images` here. X reads og:image as its fallback; ask for the large card.
   return {
     title: `${data.backlogName} · ${data.ownerName} · kura`,
     description: `${data.items.length} ${plural(data.items.length, "título", "títulos")} de ${data.ownerName}.`,
     openGraph: {
       title: data.backlogName,
       description: `Una colección de ${data.ownerName} en kura.`,
-      ...(firstPoster ? { images: [firstPoster] } : {}),
     },
+    twitter: { card: "summary_large_image" },
   };
 }
 

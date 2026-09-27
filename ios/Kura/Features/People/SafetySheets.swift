@@ -78,7 +78,7 @@ struct ReportSheet: View {
             ForEach(shown) { r in
                 Button {
                     reason = r.id
-                    KHaptic.select()
+                    KHaptic.play(.selection)
                 } label: {
                     HStack(spacing: 14) {
                         Text(r.label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)

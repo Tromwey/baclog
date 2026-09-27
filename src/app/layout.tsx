@@ -44,6 +44,12 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for every relative metadata URL (the collection OG image
+  // among them). Fixed to the public domain, like the share links in the app:
+  // without it Vercel falls back to its own production URL, and a beta deploy
+  // would advertise a *.vercel.app host. Beta shares the DB, so the image
+  // served from baclog.app is the same one.
+  metadataBase: new URL("https://baclog.app"),
   title: "Kura",
   description: "Guarda lo que más vale: películas, series y música, en colecciones.",
   // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest

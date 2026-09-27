@@ -207,10 +207,6 @@ function SaveSheetBody({
           </div>
         </div>
 
-        <span className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.1em] text-text-2">
-          Guardar en
-        </span>
-
         <div ref={listRef} className="bl-scroll flex max-h-[340px] min-h-0 flex-col overflow-y-auto overscroll-contain">
           {creating ? (
             <form onSubmit={create} className="flex min-h-14 items-center gap-2 px-2">

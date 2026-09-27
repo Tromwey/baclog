@@ -95,7 +95,7 @@ struct MonoSegmented<T: Hashable>: View {
                 let on = opt.0 == selection
                 Button {
                     selection = opt.0
-                    KHaptic.select()
+                    KHaptic.play(.selection)
                 } label: {
                     Text(opt.1)
                         .font(.kura.mono(11))

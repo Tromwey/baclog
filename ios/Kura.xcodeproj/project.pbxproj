@@ -86,6 +86,7 @@
 		E4AA7C26F76300F2D4FFCB22 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF8E4B94471C71E2BAEA91C3 /* MockData.swift */; };
 		E9D2FC13762EF31D032400F1 /* HeroMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 213430F9A189D95160252A49 /* HeroMotion.swift */; };
 		F088D7E5868F8A3A3D8156B2 /* AppStore+Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0471E499224BC7AEC528A72 /* AppStore+Onboarding.swift */; };
+		F2457FD05AB07602265612A9 /* DeepLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A17757FF97F774DB4F78D0F /* DeepLinks.swift */; };
 		F4EF91AA70E0F9D449E2AF05 /* AddTitlesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AB2940F55AB73DE28DAFCE /* AddTitlesSheet.swift */; };
 		F6B3DEEFE278F7BC224EDA22 /* SettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77548D94658292AE0E375FF4 /* SettingsViews.swift */; };
 		F952D5A7995C69E8936B2FE6 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75ABA011572A348B05170AA /* CollectionsView.swift */; };
@@ -98,6 +99,7 @@
 		0E9E7332F0D38DC678F7B409 /* AppStore+Reactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Reactions.swift"; sourceTree = "<group>"; };
 		0F08B00EC6CF7156CDD3888E /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		1694A7EFEE2726D12AA3DE75 /* Kura.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Kura.xcconfig; sourceTree = "<group>"; };
+		1A17757FF97F774DB4F78D0F /* DeepLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinks.swift; sourceTree = "<group>"; };
 		1B2FEB94141FE38ABD189601 /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		1C8A7F79873E6996ED471E88 /* TitleHeroHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleHeroHost.swift; sourceTree = "<group>"; };
 		1D6BAB853C099B59E3C0BB14 /* Newsreader-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Newsreader-Italic.ttf"; sourceTree = "<group>"; };
@@ -303,6 +305,7 @@
 			isa = PBXGroup;
 			children = (
 				51F9E780278E4FF272759D21 /* DebugLaunch.swift */,
+				1A17757FF97F774DB4F78D0F /* DeepLinks.swift */,
 				3DB6EFAAB0741C435C162CA3 /* KuraApp.swift */,
 				295CCB31CDF4DFC6597D3065 /* RootView.swift */,
 			);
@@ -579,6 +582,7 @@
 				C4DCA37762679311F26CBB44 /* Cover.swift in Sources */,
 				4D866A968ABBB5563233F6EE /* CoverPalette.swift in Sources */,
 				3628B8031D27DF81B082CE4A /* DebugLaunch.swift in Sources */,
+				F2457FD05AB07602265612A9 /* DeepLinks.swift in Sources */,
 				464B346D4C5EE6E0E06E44F4 /* DiscoverView.swift in Sources */,
 				20E4AEDDA630813FFA24CEA7 /* Fan.swift in Sources */,
 				000CF9A05AD1DBFAC1804AB7 /* Feed.swift in Sources */,

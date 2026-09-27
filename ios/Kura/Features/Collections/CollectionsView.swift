@@ -252,7 +252,7 @@ private struct CollectionsCarousel: View {
         let list = entries
         guard list.indices.contains(i), list[i].id != currentID else { return }
         currentID = list[i].id
-        KHaptic.select()
+        KHaptic.play(.selection)
     }
 
     /// A tap on a neighbour's name, VoiceOver's adjustable: spring there (keeps any momentum).

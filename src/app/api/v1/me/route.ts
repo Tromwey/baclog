@@ -22,11 +22,13 @@ export const GET = withApi(async () => {
 
 /**
  * PATCH /api/v1/me { name?, preferredService?, notifyReleases?, notifyRecap?,
- * notifyFollowers?, isPublic? } → Me. Same validation as the web actions
+ * notifyFollowers?, isPublic?, followListsVisibility? } → Me. Same validation as the web actions
  * (`modules/account/profile.ts` is the one write path); a field left out is
  * left alone, an empty body is a no-op that still returns the current `Me`.
  * `notifyFollowers` (phase 4e) needs migration 0029: until it is live the
  * field is 503 `unavailable` and NOTHING in the patch is written.
+ * `followListsVisibility` ('public' | 'mutuals' | 'private', migration 0031)
+ * is a zod enum: anything else is 400 `invalid` + `fields.followListsVisibility`.
  */
 export const PATCH = withApi(async (request, { user }) => {
   const patch = await readJson(request, profilePatchSchema);

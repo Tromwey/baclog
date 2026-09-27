@@ -176,7 +176,7 @@ struct ReorderSheet: View {
                 .gesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .global)
                         .onChanged { v in
-                            if drag == nil { KHaptic.impact(.light) }
+                            if drag == nil { KHaptic.play(.tap) }
                             drag = (i, v.translation.height)
                         }
                         .onEnded { _ in
@@ -212,7 +212,7 @@ struct ReorderSheet: View {
         guard from != to, order.indices.contains(from), order.indices.contains(to) else { return }
         let id = order.remove(at: from)
         order.insert(id, at: to)
-        KHaptic.select()
+        KHaptic.play(.selection)
     }
 }
 
@@ -294,27 +294,8 @@ struct ShareCollectionSheet: View {
             let url = store.myCollectionLink(c)
             VStack(alignment: .leading, spacing: 6) {
                 SheetHeader(title: "compartir")
-                HStack(spacing: 0) {
-                    SpineLabel(text: c.name, height: 150)
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
-                            ForEach(store.titles(in: c).prefix(3)) { t in
-                                CoverView(title: t, width: 72, height: 72, radius: 10)
-                            }
-                        }
-                        Text("de @\(store.me.handle) · \(c.titleIDs.count) \(c.titleIDs.count == 1 ? "título" : "títulos")")
-                            .font(.kura.ui(13))
-                            .foregroundStyle(KColor.text2)
-                        if let url {
-                            Text(PublicLinks.display(url)).font(.kura.mono(12)).foregroundStyle(KColor.text)
-                                .lineLimit(1).truncationMode(.middle)
-                        }
-                    }
-                    .padding(16)
-                    Spacer(minLength: 0)
-                }
-                .background(store.palette(of: c).map { AnyShapeStyle(Tint.card($0)) } ?? AnyShapeStyle(KColor.s1))
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                SharePreviewCard(name: c.name, fan: store.fan(of: c), handle: store.me.handle,
+                                 count: c.titleIDs.count, url: url, palette: store.palette(of: c))
 
                 if url == nil {
                     Text(unshareableNote(c))
@@ -364,6 +345,50 @@ struct ShareCollectionSheet: View {
             Text(label).font(.kura.ui(13, .medium)).foregroundStyle(KColor.text)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// What the link shows, in the fan's language (not the retired spine): the collection's mini fan
+/// at 99 (the profile grid's size; one or two titles draw only those), the name in Newsreader, "de
+/// @handle · N títulos" and the URL in mono, on the collection's tinted surface. No border.
+///
+/// This count is the "Guardar en"/"Mover a" family (it justifies which link you're sending) — the
+/// one dropped (founder, 2026-09-27) is only the credits line above 10a/10b's format pills.
+struct SharePreviewCard: View {
+    let name: String
+    let fan: [Title]
+    let handle: String
+    let count: Int
+    let url: URL?
+    let palette: [String]?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            FanView(covers: fan, lead: 99, ghost: fan.isEmpty)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(name)
+                    .font(.kura.news(22))
+                    .foregroundStyle(KColor.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("de @\(handle) · \(count) \(count == 1 ? "título" : "títulos")")
+                    .font(.kura.ui(13))
+                    .foregroundStyle(KColor.text2)
+                    .lineLimit(1)
+                if let url {
+                    Text(PublicLinks.display(url))
+                        .font(.kura.mono(12))
+                        .foregroundStyle(KColor.text)
+                        .lineLimit(1).truncationMode(.middle)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.leading, 10).padding(.trailing, 16).padding(.vertical, 16)
+        .background(palette.map { AnyShapeStyle(Tint.card($0)) } ?? AnyShapeStyle(KColor.s1))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -512,7 +537,7 @@ struct MoveToSheet: View {
                                        note: here ? "aquí está" : already ? "ya está" : nil,
                                        disabled: here) {
                                 target = c.id
-                                KHaptic.select()
+                                KHaptic.play(.selection)
                             }
                         }
                     }

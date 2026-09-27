@@ -5,6 +5,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @State private var showPrivacyNotice = false
+    /// Ajustes › Vibraciones: a device pref (not the account's), read by `KHaptic.play`.
+    @AppStorage(KHaptic.enabledKey) private var haptics = true
 
     /// The integral privacy notice (public, no session; text in the web's `(marketing)/privacidad`).
     /// Same URL App Store Connect carries as the Privacy Policy URL, so it never points at Debug's localhost.
@@ -76,6 +78,18 @@ struct SettingsView: View {
                         SettingsRow(title: "Abrir música en", action: { store.push(.musicApp) }) { RowValue(text: store.musicApp) }
                         ListDivider()
                         SettingsRow(title: "País para dónde ver") { RowValue(text: "México") }
+                    }
+
+                    // Device-local, like iOS's own haptics switch: it stays on this iPhone across sign-out.
+                    section("este iphone") {
+                        SettingsRow(title: "Vibraciones", note: "Respuesta háptica al tocar y deslizar.") {
+                            KuraSwitch(label: "Vibraciones", isOn: Binding(
+                                get: { haptics },
+                                set: { on in
+                                    haptics = on
+                                    KHaptic.play(on ? .tap : nil) // switching on answers in the hand
+                                }))
+                        }
                     }
 
                     section("notificaciones") {
@@ -388,13 +402,27 @@ struct PrivacySettingsView: View {
                     let all = Privacy.options
                     let i = all.firstIndex(of: store.defaultPrivacy) ?? 0
                     store.defaultPrivacy = all[(i + 1) % all.count]
-                    KHaptic.select()
+                    KHaptic.play(.selection)
                 } label: {
                     row("Colecciones nuevas", note: "Cada colección se puede cambiar en sus opciones.") {
                         RowValue(text: store.defaultPrivacy.label)
                     }
                 }
                 .buttonStyle(SheetRowStyle())
+                // `followListsVisibility`: the counts stay public; this is who opens the lists.
+                // A tap moves to the next option (like Colecciones nuevas), saved at once.
+                Button {
+                    let all = FollowListsVisibility.allCases
+                    let i = all.firstIndex(of: store.followListsVisibility) ?? 0
+                    store.followListsVisibility = all[(i + 1) % all.count]
+                    KHaptic.play(.selection)
+                } label: {
+                    row("Quién ve tus seguidores y seguidos", note: "Los números se ven siempre.") {
+                        RowValue(text: store.followListsVisibility.label)
+                    }
+                }
+                .buttonStyle(SheetRowStyle())
+                .accessibilityValue(store.followListsVisibility.label)
                 row("Mostrar En común contigo", note: "En tu perfil, a quien te visita.") {
                     KuraSwitch(label: "Mostrar En común contigo", isOn: $store.showCommon)
                 }
@@ -444,7 +472,7 @@ struct MusicAppView: View {
                         if i > 0 { ListDivider() }
                         Button {
                             store.musicApp = app
-                            KHaptic.select()
+                            KHaptic.play(.selection)
                         } label: {
                             HStack {
                                 Text(app).font(.kura.ui(16)).foregroundStyle(KColor.text)

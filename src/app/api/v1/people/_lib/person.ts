@@ -9,6 +9,7 @@ import {
 import { countPublicReviewsByAuthor } from "@/modules/reviews/counts";
 import { getAffinity } from "@/modules/social/affinity";
 import { blockStateWith } from "@/modules/social/block";
+import { getFollowListsAccess } from "@/modules/social/follow-lists";
 import { isFollowing } from "@/modules/social/queries";
 import type { Person } from "@/app/api/v1/_lib/schemas";
 
@@ -47,12 +48,13 @@ export async function buildPerson(
   viewer: CurrentUser,
   handle: string,
 ): Promise<Person> {
-  const [profile, counts, block] = await Promise.all([
+  const [profile, counts, block, lists] = await Promise.all([
     getPublicProfile(handle),
     getPublicReactionCounts(handle),
     blockStateWith(viewer.id, handle),
+    getFollowListsAccess(viewer.id, handle),
   ]);
-  if (!profile || !counts || block.blocksViewer) throw new ApiError("not_found");
+  if (!profile || !counts || !lists || block.blocksViewer) throw new ApiError("not_found");
   const isBlocked = block.blockedByViewer;
 
   // The owner looking at themselves: no follow state, no affinity (same as
@@ -99,5 +101,10 @@ export async function buildPerson(
         })),
     isFollowing: following,
     isBlocked,
+    // The lists' setting is part of the public profile; whether THIS caller
+    // may open them is the same decision `GET …/followers|following` makes
+    // (getFollowListsAccess → canSeeFollowLists; false whenever blocked).
+    followListsVisibility: lists.visibility,
+    canSeeFollowLists: lists.allowed,
   };
 }

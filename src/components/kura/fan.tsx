@@ -18,6 +18,13 @@ import { KIcon } from "./icons";
  * all three empty with the dashed "+" in front (the empty states, 6a/6b/6c).
  * No art = the palette recipe (`posterFallbackStyle`).
  *
+ * No floor (founder, 2026-09-27): the fan used to stand on a soft radial
+ * shadow at s ≥ .35 — removed everywhere (web + iOS). Each cover's own
+ * `boxShadow` stays untouched; only that shared puddle under the whole fan
+ * is gone. The box no longer reserves the ~18 px of clearance that shadow
+ * needed below the front cover — its height is just the front cover's own
+ * (`lead`), since the back covers always fit inside that span too.
+ *
  * A collection of one or two titles shows only the covers it has — the front
  * cover alone at one, front + the left card at two — never an empty dark
  * slot standing in for a title that doesn't exist. `ghost` (the empty
@@ -27,10 +34,10 @@ import { KIcon } from "./icons";
  * Server-safe (no hooks); the caller wraps it in a link or button.
  */
 
-/** The frames' geometry at lead = 225, on a 300 × 243 box. */
+/** The frames' geometry at lead = 225, on a 300 × 225 box (the front
+ *  cover's own height — no floor to leave clearance for any more). */
 const G = {
   w: 300,
-  h: 243,
   lead: { cx: 150, cy: 112.5, poster: [150, 225], album: [180, 180] },
   left: { cx: 69.5, cy: 126, rot: -10 },
   right: { cx: 231.5, cy: 126.5, rot: 9 },
@@ -39,7 +46,7 @@ const G = {
 
 export function fanBox(lead: number): { width: number; height: number } {
   const s = lead / 225;
-  return { width: Math.round(G.w * s), height: Math.round(Math.max(G.h * s, lead + 18 * Math.min(1, s * 2.3))) };
+  return { width: Math.round(G.w * s), height: Math.round(lead) };
 }
 
 export function Fan({
@@ -68,7 +75,6 @@ export function Fan({
       : s >= 0.18
         ? "0 10px 18px -8px rgba(0,0,0,.9)"
         : "0 3px 6px -3px rgba(0,0,0,.9)";
-  const floorW = 174 * s + 70 * (1 - s);
   const slots = [covers[1], covers[2], covers[0]] as const;
   // Below three covers (and not the ghost/empty state), only draw the slots
   // that have a real title: front alone at one, front + left at two.
@@ -84,17 +90,6 @@ export function Fan({
       className={`relative block flex-none ${className}`}
       style={{ width, height, ...style }}
     >
-      {s >= 0.35 && (
-        <span
-          className="absolute bottom-0 rounded-[50%]"
-          style={{
-            left: (width - floorW) / 2,
-            width: floorW,
-            height: Math.max(10, 24 * s),
-            background: "radial-gradient(closest-side, rgba(0,0,0,.55), rgba(0,0,0,0))",
-          }}
-        />
-      )}
       {slots.map((c, i) => {
         const front = i === 2;
         if (front ? !showFront : i === 0 ? !showLeft : !showRight) return null;

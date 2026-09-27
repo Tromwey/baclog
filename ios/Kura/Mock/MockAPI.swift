@@ -96,7 +96,11 @@ struct MockAPI: KuraAPI {
 
 
     // Account
-    func me() async throws -> Me { Me(person: MockData.me) }
+    func me() async throws -> Me {
+        var m = Me(person: MockData.me)
+        m.followListsVisibility = MockPrefs.shared.followLists
+        return m
+    }
     func updateMe(_ patch: MePatch) async throws -> Me {
         try await write()
         var m = Me(person: MockData.me)
@@ -104,6 +108,13 @@ struct MockAPI: KuraAPI {
         if let v = patch.notifyRecap { m.notifyRecap = v }
         if let v = patch.notifyFollowers { m.notifyFollowers = v }
         if let v = patch.isPublic { m.isPublic = v }
+        if let raw = patch.followListsVisibility {
+            guard let v = FollowListsVisibility(rawValue: raw) else {
+                throw KuraAPIError.invalid(fields: ["followListsVisibility": "Elige Todos, Seguidores mutuos o Solo yo."], message: "")
+            }
+            MockPrefs.shared.followLists = v
+        }
+        m.followListsVisibility = MockPrefs.shared.followLists
         return m
     }
     func checkUsername(_ username: String) async throws -> UsernameStatus {
@@ -249,6 +260,8 @@ struct MockAPI: KuraAPI {
         guard var p = MockData.people.first(where: { $0.id == handle }) else { throw KuraAPIError.notFound }
         p.isBlocked = MockSafety.shared.contains(handle)
         p.isFollowing = !p.isBlocked && MockData.following.contains(handle)
+        p.followListsVisibility = MockData.followListsVisibility(of: handle)
+        p.canSeeFollowLists = MockData.canSeeFollowLists(of: handle)
         return p
     }
     func personCollection(handle: String, id: String) async throws -> CollectionDetail {
@@ -275,6 +288,18 @@ struct MockAPI: KuraAPI {
             guard !f.isEmpty else { return PeoplePage(items: []) }
             return PeoplePage(items: MockData.people.filter { $0.id != MockData.me.id && (fold($0.handle).contains(f) || fold($0.name).contains(f)) }
                 .sorted { $0.common.count > $1.common.count })
+        case .followersOf(let h), .followingOf(let h):
+            // Same gates as the route: 404 for a private / unknown / blocked owner, then the setting.
+            guard let owner = MockData.people.first(where: { $0.id == h }), !owner.isPrivate,
+                  !MockSafety.shared.contains(h) else { throw KuraAPIError.notFound }
+            guard MockData.canSeeFollowLists(of: h) else { throw KuraAPIError.forbidden(code: "lists_private") }
+            var following = false
+            if case .followingOf = kind { following = true }
+            let ids = (following ? MockData.followingOf[h] : MockData.followersOf[h]) ?? []
+            // Everyone else on the list is a number (private, no handle, a block with you).
+            let listed = list(ids).filter { !$0.isPrivate && !MockSafety.shared.contains($0.id) }
+            let total = following ? owner.followingCount : owner.followers
+            return PeoplePage(items: listed, anonymousCount: cursor == nil ? min(3, max(0, total - listed.count)) : 0)
         }
     }
     func setFollowing(handle: String, following: Bool) async throws { try await write() }
@@ -317,13 +342,10 @@ struct MockAPI: KuraAPI {
     }
 }
 
-/// People / collections / titles shown on the mock's followers screen of
-/// someone else (20e). Live has no such route (lists are owner-only, §4).
-extension MockAPI {
-    func peopleOf(_ handle: String, following: Bool) -> [Person] {
-        let ids = (following ? MockData.followingOf[handle] : MockData.followersOf[handle]) ?? []
-        return ids.compactMap { id in MockData.people.first { $0.id == id } }
-    }
+/// The mock's own `followListsVisibility` (`MockAPI` is a value type): what `PATCH /me` set.
+final class MockPrefs: @unchecked Sendable {
+    static let shared = MockPrefs()
+    var followLists: FollowListsVisibility = .private
 }
 
 /// The mock's block list (`MockAPI` is a value type): shared, so a block from a profile shows up

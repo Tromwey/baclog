@@ -10,7 +10,7 @@ extension AppStore {
     func toggleAlert(_ titleID: String) {
         if alerts.contains(titleID) { alerts.remove(titleID) } else {
             alerts.insert(titleID)
-            KHaptic.impact(.light)
+            KHaptic.play(.tap)
         }
         saveLocal()
     }

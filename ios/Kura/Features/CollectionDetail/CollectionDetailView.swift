@@ -175,33 +175,29 @@ struct VibeLine: View {
     }
 }
 
-/// The credits (2a). A collection nobody shares says only "12 títulos": "solo tú" and your lone
-/// seal stated the obvious (founder, 2026-09-27). With collaborators (not on the app yet — no
-/// caller passes them) it's your seal + theirs at 26, overlapping 7, and "tú y mo · 12 títulos".
+/// The credits (2a). No count any more (founder, 2026-09-27): a collection nobody shares had no
+/// seals either, so its credits line was ONLY "N títulos" — now there's nothing left to say, and
+/// the caller doesn't render this view at all (no empty row sitting in the VStack's spacing).
+/// With collaborators (not on the app yet — no caller passes them) it's just your seal + theirs
+/// at 26, overlapping 7, and "tú y mo".
 struct Credits: View {
     @Environment(AppStore.self) private var store
-    let count: Int
     var collaborators: [Person] = []
 
     var body: some View {
-        let titles = "\(count) \(count == 1 ? "título" : "títulos")"
-        Group {
-            if collaborators.isEmpty {
-                Text(titles)
-            } else {
-                HStack(spacing: 8) {
-                    HStack(spacing: -7) {
-                        Seal(person: store.me, size: 26)
-                        ForEach(collaborators) { p in Seal(person: p, size: 26) }
-                    }
-                    Text("\(Self.names(collaborators)) · \(titles)")
+        if !collaborators.isEmpty {
+            HStack(spacing: 8) {
+                HStack(spacing: -7) {
+                    Seal(person: store.me, size: 26)
+                    ForEach(collaborators) { p in Seal(person: p, size: 26) }
                 }
+                Text(Self.names(collaborators))
             }
+            .font(.kura.ui(13))
+            .foregroundStyle(KColor.text2)
+            .padding(.top, 2)
+            .accessibilityElement(children: .combine)
         }
-        .font(.kura.ui(13))
-        .foregroundStyle(KColor.text2)
-        .padding(.top, 2)
-        .accessibilityElement(children: .combine)
     }
 
     /// "tú y mo", "tú, mo y ja" (first names, lowercase — the web's `ownCreditLine`).

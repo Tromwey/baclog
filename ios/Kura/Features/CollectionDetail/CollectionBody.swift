@@ -2,9 +2,10 @@ import SwiftUI
 
 /// Everything UNDER a collection's fan and name, shared by Tus colecciones (10a, the collection in
 /// the centre of the carousel) and Colección (10b) — propuesta 10, "una sola página": the line
-/// (italic 16), the credits ("N títulos"; seals only with collaborators), the format pills with
-/// their count — ALWAYS (one format = a label; several = they FILTER, tap again to clear) — then
-/// EVERY title — three
+/// (italic 16), the credits (seals + names, collaborators only — no count any more, founder
+/// 2026-09-27: nobody to credit means no `Credits` row at all, not an empty one), the format
+/// pills with their count — ALWAYS (one format = a label; several = they FILTER, tap again to
+/// clear) — then EVERY title — three
 /// columns (`Masonry`) or the list (16c), per the collection's own layout and sort — straight
 /// under the meta (26), with no heading: "el orden" and its Reordenar link were dropped (founder,
 /// 2026-09-27); Reordenar lives in Opciones (⋯). Holding a title opens 18c. Empty = 6b.
@@ -34,7 +35,8 @@ struct CollectionBody<Between: View>: View {
 
                 VStack(spacing: 10) {
                     if let vibe = c.shownVibe { VibeLine(text: vibe) }
-                    Credits(count: c.titleIDs.count)
+                    // No collaborators wired up yet, so no `Credits` row (an empty one would
+                    // still eat the VStack's spacing) — it comes back once a caller has them.
                     // Always, when there are titles (founder, 2026-09-27): one format = one pill
                     // that labels the type with its count; several = pills that filter.
                     if !formats.isEmpty {

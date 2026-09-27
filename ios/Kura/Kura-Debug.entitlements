@@ -9,5 +9,11 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Universal Links: shared https://baclog.app links open the app (AASA: src/app/.well-known/apple-app-site-association). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:baclog.app</string>
+		<string>applinks:baclog.app?mode=developer</string>
+	</array>
 </dict>
 </plist>

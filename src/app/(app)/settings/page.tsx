@@ -8,7 +8,13 @@ import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { InstallAppRow } from "@/app/(app)/perfil/install-app-row";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
-import { DeleteAccount, PrivacySwitch, RecapSwitch, ReleasesSwitch } from "./settings-form";
+import {
+  DeleteAccount,
+  FollowListsChoice,
+  PrivacySwitch,
+  RecapSwitch,
+  ReleasesSwitch,
+} from "./settings-form";
 import { SERVICE_LABEL } from "./services";
 
 /**
@@ -18,6 +24,9 @@ import { SERVICE_LABEL } from "./services";
  * (switch, tu página, aviso de privacidad → /privacidad) · apps ·
  * notificaciones · (founder only) torre de control; and at the foot
  * Cerrar sesión, Borrar cuenta and the version line.
+ *
+ * privacidad also holds "Quién ve tus seguidores y seguidos" (2026-09-27,
+ * three choices; only with an @, like the rest of the public surface).
  *
  * Only what the product has (§ "lo que el mock pide y el producto no tiene se
  * omite"): no "Quién ve lo que te obsesiona", no "País para dónde ver", no
@@ -73,6 +82,8 @@ export default async function SettingsPage() {
                   value={`baclog.app/${user.username}`}
                   href={user.isPublic ? `/u/${user.username}` : undefined}
                 />
+                <Divider />
+                <FollowListsChoice initial={user.followListsVisibility} />
               </>
             ) : (
               <Row

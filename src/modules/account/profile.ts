@@ -2,13 +2,14 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { preferredServiceEnum, users } from "@/db/schema";
+import { FOLLOW_LISTS_VISIBILITY, preferredServiceEnum, users } from "@/db/schema";
 import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
 
 /**
  * Editable account fields — the ONE write path behind the web's
  * `updateDisplayNameAction` / `setPreferredServiceAction` /
- * `setNotifyReleasesAction` / `setNotifyRecapAction` / `setPublicAction` and
+ * `setNotifyReleasesAction` / `setNotifyRecapAction` / `setPublicAction` /
+ * `setFollowListsVisibilityAction` and
  * the API's `PATCH /me`.
  *
  * Takes a `userId` on purpose, so it must NEVER live in a "use server" file
@@ -23,6 +24,10 @@ export const displayNameSchema = z.string().trim().min(1).max(50);
 export const preferredServiceSchema = z.enum(preferredServiceEnum.enumValues);
 export type PreferredService = z.infer<typeof preferredServiceSchema>;
 
+/** Who reads your followers / following lists (migration 0031). Validated
+ *  against the schema's constant, never a hand-typed list. */
+export const followListsVisibilitySchema = z.enum(FOLLOW_LISTS_VISIBILITY);
+
 export const profilePatchSchema = z.object({
   name: displayNameSchema.optional(),
   preferredService: preferredServiceSchema.optional(),
@@ -33,6 +38,8 @@ export const profilePatchSchema = z.object({
    *  0029 is live (`PATCH /me` answers 503 before; the web has no toggle). */
   notifyFollowers: z.boolean().optional(),
   isPublic: z.boolean().optional(),
+  /** 2026-09-27 — `public` · `mutuals` · `private` (follow-lists-policy.ts). */
+  followListsVisibility: followListsVisibilitySchema.optional(),
 });
 export type ProfilePatch = z.infer<typeof profilePatchSchema>;
 
@@ -52,6 +59,11 @@ export async function updateProfile(
   if (patch.notifyReleases !== undefined) set.notifyReleases = Boolean(patch.notifyReleases);
   if (patch.notifyRecap !== undefined) set.notifyRecap = Boolean(patch.notifyRecap);
   if (patch.isPublic !== undefined) set.isPublic = Boolean(patch.isPublic);
+  // Takes effect on the next read: every list read resolves access at query
+  // time (getFollowListsAccess) — nothing cached to invalidate.
+  if (patch.followListsVisibility !== undefined) {
+    set.followListsVisibility = patch.followListsVisibility;
+  }
   if (Object.keys(set).length > 0) {
     await db.update(users).set(set).where(eq(users.id, userId));
   }

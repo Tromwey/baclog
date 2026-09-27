@@ -177,7 +177,7 @@ struct CompleteSheet: View {
         let review = trimmedReview
         // Completo can't carry a new review (409 `reaction_required`): send nothing, the note says why.
         if reviewBlocked {
-            KHaptic.notify(.warning)
+            KHaptic.play(.warning)
             return
         }
         let done = { store.dismissSheet() }
@@ -256,7 +256,6 @@ struct SaveToSheet: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 12)
 
-                Text("Guardar en").monoLabel(11, tracking: 0.1).padding(.horizontal, 8).padding(.bottom, 4)
                 if store.isUnreleased(t) || t.upcomingSeason != nil {
                     HStack(spacing: 8) {
                         GlyphView(glyph: .clock, size: 13)
@@ -278,7 +277,7 @@ struct SaveToSheet: View {
                             FanPickRow(name: c.name, covers: store.fan(of: c), count: c.titleIDs.count, on: on,
                                        note: already.contains(c.id) ? "ya está" : nil) {
                                 if on { selected.remove(c.id) } else { selected.insert(c.id) }
-                                KHaptic.select()
+                                KHaptic.play(.selection)
                             }
                         }
                     }

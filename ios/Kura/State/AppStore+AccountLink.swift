@@ -152,7 +152,7 @@ extension AppStore {
         switch outcome {
         case .linked:
             setLinked(p, true)
-            KHaptic.impact(.light)
+            KHaptic.play(.success)
             showToast(ToastModel(text: fromMerge
                 ? "Ese \(p.label) no tenía otra cuenta en kura: quedó conectado a esta."
                 : "\(p.label) conectada. Ya puedes entrar con \(p.label).", kind: .info))
@@ -214,7 +214,7 @@ extension AppStore {
             return false
         case .ok:
             setLinked(p, false)
-            KHaptic.impact(.light)
+            KHaptic.play(.success)
             showToast(ToastModel(text: "Desconectaste \(p.label). Sigues entrando con tu correo.", kind: .info))
             return true
         case .failed(let e):
@@ -344,7 +344,7 @@ extension AppStore {
         mergeEmail = ""
         applyMe(m)
         popToSettings()
-        KHaptic.impact(.medium)
+        KHaptic.play(.success)
         showToast(ToastModel(text: "Listo. Todo lo de \(moved) ya está aquí.", kind: .info))
         await reloadAfterMerge()
     }
@@ -360,6 +360,7 @@ extension AppStore {
         loadedCollections = []
         loadedPeople = []
         peopleLists = [:]
+        peopleListMeta = [:]
         recapMonths = nil
         recaps = [:]
         blockedAccounts = nil
@@ -406,7 +407,7 @@ extension AppStore {
             return false
         case .ok:
             withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == device.id } }
-            KHaptic.impact(.light)
+            KHaptic.play(.success)
             showToast(ToastModel(text: "Cerraste la sesión en \(device.title).", kind: .info))
             return true
         case .failed(let e):

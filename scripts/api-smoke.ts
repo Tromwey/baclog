@@ -49,6 +49,7 @@ import {
   ErrorBodySchema,
   FeedEventSchema,
   MeSchema,
+  PeopleListPageSchema,
   PersonSchema,
   TitleSchema,
   TitleStateSchema,
@@ -1485,6 +1486,67 @@ const reads: Case[] = [
     },
   },
   {
+    name: "GET /people/{h}/followers · /following (2026-09-27) → el dueño siempre; 404 idéntico; cursor forjado 400",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me?.handle, "hace falta un token y un handle propio");
+      assert.ok(
+        ["public", "mutuals", "private"].includes(ctx.me.followListsVisibility),
+        "Me.followListsVisibility presente (migración 0031)",
+      );
+      const own = await call("GET", `/people/${ctx.me.handle}`, { token: ctx.token });
+      if (own.status === 404) skip("el perfil propio no es público: sus listas son el mismo 404");
+      const person = expectOk(own, 200, PersonSchema);
+      assert.equal(person.followListsVisibility, ctx.me.followListsVisibility, "Person y Me dicen el mismo ajuste");
+      assert.equal(person.canSeeFollowLists, true, "el dueño siempre puede ver sus listas");
+      for (const mode of ["followers", "following"] as const) {
+        const res = await call("GET", `/people/${ctx.me.handle}/${mode}`, { token: ctx.token });
+        const page = expectOk(res, 200, PeopleListPageSchema);
+        // No `isPrivate` here: someone else's list (even read by its owner through
+        // this route) lists public profiles only; the rest is anonymousCount.
+        assertNoPeopleLeak(res.body);
+        for (const p of page.items) {
+          assert.ok(!("isPrivate" in p), `${mode}: una lista ajena nunca lleva isPrivate`);
+          assert.ok(!("followListsVisibility" in p), `${mode}: la card LITE no lleva el ajuste`);
+        }
+        const total: number = mode === "followers" ? ctx.me.followers : ctx.me.followingCount;
+        if (!page.nextCursor) {
+          assert.equal(page.items.length + page.anonymousCount, total, `${mode}: listados + anónimos = el conteo`);
+        }
+        if (page.nextCursor) {
+          const p2: z.infer<typeof PeopleListPageSchema> = expectOk(
+            await call("GET", `/people/${ctx.me.handle}/${mode}?cursor=${encodeURIComponent(page.nextCursor)}`, { token: ctx.token }),
+            200,
+            PeopleListPageSchema,
+          );
+          assert.equal(p2.anonymousCount, 0, "anonymousCount solo en la página 1");
+          const seen = new Set(page.items.map((p) => p.handle));
+          for (const p of p2.items) assert.ok(!seen.has(p.handle), "página 2 sin repetidos");
+        }
+        const junk = expectError(
+          await call("GET", `/people/${ctx.me.handle}/${mode}?cursor=0000-01-01T00:00:00.000Z|x`, { token: ctx.token }),
+          400,
+          "invalid",
+        );
+        assert.ok(junk.fields && "cursor" in junk.fields, "fields.cursor presente");
+      }
+      const missing = await call("GET", "/people/zz_nadie_por_aqui_404", { token: ctx.token });
+      expectSameError(
+        await call("GET", "/people/zz_nadie_por_aqui_404/followers", { token: ctx.token }),
+        missing,
+        404,
+        "not_found",
+        "lista de un inexistente = el mismo 404 que su perfil",
+      );
+      expectSameError(
+        await call("GET", "/people/AB/following", { token: ctx.token }),
+        missing,
+        404,
+        "not_found",
+        "handle malformado = el mismo 404",
+      );
+    },
+  },
+  {
     name: "GET /me/onboarding/people → { items: [Person] }",
     run: async () => {
       assert.ok(ctx.token && ctx.me?.handle, "hace falta un token");
@@ -2328,6 +2390,57 @@ const writes: Case[] = [
       const back = expectOk(await call("GET", "/people/eric", { token: ctx.token }), 200, PersonSchema);
       assert.equal(back.isBlocked, false);
       assert.equal(back.isFollowing, false, "desbloquear no restaura el follow");
+    },
+  },
+  {
+    name: "E1 PATCH /me { followListsVisibility } + listas ajenas: 400 inválido · dueño siempre · 403 lists_private · bloqueo = 404 idéntico",
+    run: async () => {
+      assert.ok(ctx.token && ctx.me?.handle, "hace falta token y handle");
+      const bad = expectError(await qaCall("PATCH", "/me", { body: { followListsVisibility: "friends" } }), 400, "invalid");
+      assert.ok(bad.fields?.followListsVisibility, "fields.followListsVisibility");
+
+      for (const v of ["public", "mutuals", "private"] as const) {
+        const me = expectOk(await qaCall("PATCH", "/me", { body: { followListsVisibility: v } }), 200, MeSchema);
+        assert.equal(me.followListsVisibility, v);
+        const self: z.infer<typeof PersonSchema> = expectOk(await call("GET", `/people/${ctx.me.handle}`, { token: ctx.token }), 200, PersonSchema);
+        assert.equal(self.followListsVisibility, v);
+        assert.equal(self.canSeeFollowLists, true, `el dueño ve sus listas en ${v}`);
+        expectOk(await call("GET", `/people/${ctx.me.handle}/followers`, { token: ctx.token }), 200, PeopleListPageSchema);
+      }
+
+      // Someone else's lists: whatever @eric chose, the route agrees with
+      // `canSeeFollowLists` on his Person. The QA account follows him but he
+      // doesn't follow it back, so `mutuals` is a 403 too.
+      const eric = await call("GET", "/people/eric", { token: ctx.token });
+      if (eric.status === 404) skip("no existe @eric público en esta base");
+      const person = expectOk(eric, 200, PersonSchema);
+      assert.ok(person.followListsVisibility, "Person completo lleva followListsVisibility");
+      const list = await call("GET", "/people/eric/following", { token: ctx.token });
+      if (person.canSeeFollowLists) {
+        expectOk(list, 200, PeopleListPageSchema);
+        assertNoPeopleLeak(list.body);
+      } else {
+        const err = expectError(list, 403, "forbidden");
+        assert.equal(err.reason, "lists_private");
+        assert.equal(err.visibility, person.followListsVisibility, "el 403 dice el ajuste del dueño");
+      }
+
+      // A block (either way) = the same 404 as a nonexistent profile's list.
+      assert.equal((await qaCall("PUT", "/me/blocks/eric")).status, 204);
+      try {
+        const blocked = expectOk(await call("GET", "/people/eric", { token: ctx.token }), 200, PersonSchema);
+        assert.equal(blocked.canSeeFollowLists, false, "bloqueado → nunca ve las listas");
+        const nobody = await call("GET", "/people/nadieexiste12345/followers", { token: ctx.token });
+        expectSameError(
+          await call("GET", "/people/eric/followers", { token: ctx.token }),
+          nobody,
+          404,
+          "not_found",
+          "listas de alguien bloqueado = el 404 de un inexistente",
+        );
+      } finally {
+        assert.equal((await qaCall("DELETE", "/me/blocks/eric")).status, 204);
+      }
     },
   },
   {

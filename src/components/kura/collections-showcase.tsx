@@ -11,10 +11,10 @@ import { useHold } from "./use-hold";
 /**
  * The collections on a profile (Colecciones formalizado · 3a/3b — 6d of the
  * exploration): the PINNED collection (or the first) big and floating — its
- * fan at 186 standing on its floor shadow, "fijada · 12 títulos", the name in
- * Newsreader 28, the line in italic and, on someone else's profile, a glass
- * Compartir — then four more in two columns of fans at 99 with the name at
- * 20 and the count, and "Ver las N" at the section's right.
+ * fan at 186 (no floor shadow — founder, 2026-09-27), "fijada · 12 títulos",
+ * the name in Newsreader 28, the line in italic and, on someone else's
+ * profile, a glass Compartir — then four more in two columns of fans at 99
+ * with the name at 20 and the count, and "Ver las N" at the section's right.
  *
  * No boxes: the page's feed gradient is the only surface. On your own
  * profile "Ver las N" goes to Tus colecciones (`seeAllHref`); on someone

@@ -37,6 +37,11 @@ struct RootView: View {
             #endif
         }
         .animation(KMotion.fade, value: store.phase)
+        // Universal Links (`App/DeepLinks.swift`): a shared baclog.app link opens here, not the web.
+        .onOpenURL { store.openWebLink($0) }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { store.openWebLink(url) }
+        }
         .onChange(of: scenePhase, initial: true) { _, p in
             switch p {
             case .active:

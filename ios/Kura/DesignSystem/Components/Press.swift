@@ -61,58 +61,120 @@ private struct KPressable: ViewModifier {
             // A long press that never fires (no `longPress`) still reports touch-down.
             .onLongPressGesture(minimumDuration: longPress == nil ? 3600 : 0.4) {
                 guard let longPress else { return }
-                KHaptic.impact(.medium)
+                KHaptic.play(.firm)
                 longPress()
             } onPressingChanged: { down in
                 pressed = down
-                if down, longPress != nil { KHaptic.prepare(.medium) }
+                if down, longPress != nil { KHaptic.prepare(.firm) }
             }
     }
 }
 
 // MARK: - Haptics
 
-/// Kept, prepared generators: a fresh generator per tap wakes the Taptic Engine late and
-/// the bump lands a frame after the change. `impact` fires and re-prepares for the next one.
+/// The app's ONE haptic entry point and its whole vocabulary (founder, 2026-09-27: "estandarízalos y
+/// gobiérnalos en settings"). Nothing else in `ios/Kura` touches a `UIFeedbackGenerator` or
+/// `.sensoryFeedback` — `scripts/check-haptics.sh` fails the check if something does. Pick by what
+/// the moment MEANS, never by how strong it should feel; same event = same haptic everywhere:
+///
+/// - `selection`: the chosen thing changed (chips, pickers, carousel crossing a card, a reorder
+///   step, a multi-select row, an episode tick). The finest tick iOS has.
+/// - `tap`: a light, instant commit the user just made (follow, add / save to a collection, pin,
+///   an alert on, a reaction stop, the reorder handle lifting). Also the switch-on confirmation.
+/// - `firm`: a weighty commit (Me obsesiona, a long press firing).
+/// - `hit(intensity)`: a physical collision whose strength follows the gesture (the feed's card
+///   hitting the top, `FeedHits`). Rigid: a hard edge, not a soft bump.
+/// - `success`: an async action that finished on the server after the user confirmed it (report,
+///   block / unblock, link / unlink / merge an account, close a session).
+/// - `warning`: the action was refused on purpose (the 4th onboarding pick, a review Completo can't carry).
+/// - `error`: a write failed (every `.retry` toast, fired centrally in `AppStore.showToast`).
+///
+/// One central check: `play` does nothing when Ajustes › Vibraciones is off (`isEnabled`, a device
+/// pref in `UserDefaults`, default ON, kept across sign-out). iOS's own "Vibración del sistema"
+/// switch is honored by UIKit underneath. Generators are kept and prepared (a fresh one per tap wakes
+/// the Taptic Engine late and the bump lands a frame after the change), and the same event within
+/// 40 ms is one haptic: no bursts from a fling across the carousel or a double-fired callback.
 @MainActor
 enum KHaptic {
-    private static let light = UIImpactFeedbackGenerator(style: .light)
-    private static let medium = UIImpactFeedbackGenerator(style: .medium)
-    /// The feed's "card hits the top" (`FeedHits`): a hard edge, not a soft bump.
-    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
-    private static let selection = UISelectionFeedbackGenerator()
-    private static let notification = UINotificationFeedbackGenerator()
+    enum Event: Equatable {
+        case selection, tap, firm, success, warning, error
+        case hit(intensity: CGFloat)
 
-    private static func generator(_ style: UIImpactFeedbackGenerator.FeedbackStyle) -> UIImpactFeedbackGenerator {
-        switch style {
-        case .rigid: return rigid
-        case .medium, .heavy: return medium
-        default: return light
+        /// A reaction mark: Me obsesiona is weighty, Completo / Me gusta are light; clearing is silent.
+        static func reaction(_ mark: Mark?) -> Event? {
+            switch mark {
+            case .obsessed: return .firm
+            case .liked, .completed: return .tap
+            case nil: return nil
+            }
+        }
+
+        fileprivate var kind: Int {
+            switch self {
+            case .selection: return 0
+            case .tap: return 1
+            case .firm: return 2
+            case .success: return 3
+            case .warning: return 4
+            case .error: return 5
+            case .hit: return 6
+            }
         }
     }
 
-    static func prepare(_ style: UIImpactFeedbackGenerator.FeedbackStyle) { generator(style).prepare() }
-
-    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
-        let g = generator(style)
-        g.impactOccurred()
-        g.prepare()
+    /// Ajustes › Vibraciones (`@AppStorage` reads the same key). Absent = ON.
+    static let enabledKey = "kura.haptics"
+    /// `bool(forKey:)`, not `as? Bool`: a launch argument (`-kura.haptics NO`) arrives as a string.
+    static var isEnabled: Bool {
+        let d = UserDefaults.standard
+        return d.object(forKey: enabledKey) == nil || d.bool(forKey: enabledKey)
     }
 
-    /// An impact at a given strength (0…1), for feedback that scales with a gesture's speed.
-    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle, intensity: CGFloat) {
-        let g = generator(style)
-        g.impactOccurred(intensity: min(max(intensity, 0), 1))
-        g.prepare()
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+    private static let medium = UIImpactFeedbackGenerator(style: .medium)
+    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
+    private static let selector = UISelectionFeedbackGenerator()
+    private static let notification = UINotificationFeedbackGenerator()
+
+    private static let burst: CFTimeInterval = 0.04
+    private static var last: (kind: Int, t: CFTimeInterval) = (-1, 0)
+
+    /// Wakes the engine ahead of a haptic that's about to be likely (a press went down, a scroll
+    /// phase began), so it lands on the frame.
+    static func prepare(_ e: Event) {
+        guard isEnabled else { return }
+        switch e {
+        case .selection: selector.prepare()
+        case .tap: light.prepare()
+        case .firm: medium.prepare()
+        case .hit: rigid.prepare()
+        case .success, .warning, .error: notification.prepare()
+        }
     }
 
-    static func select() {
-        selection.selectionChanged()
-        selection.prepare()
-    }
-
-    static func notify(_ type: UINotificationFeedbackGenerator.FeedbackType) {
-        notification.notificationOccurred(type)
-        notification.prepare()
+    /// Plays one event (the only way the app vibrates). No-op when Vibraciones is off.
+    static func play(_ e: Event?) {
+        guard let e else { return }
+        guard isEnabled else {
+            #if DEBUG
+            KBodyLog.hit("HAPTIC muted \(e)")
+            #endif
+            return
+        }
+        let now = CACurrentMediaTime()
+        if last.kind == e.kind, now - last.t < burst { return }
+        last = (e.kind, now)
+        switch e {
+        case .selection: selector.selectionChanged(); selector.prepare()
+        case .tap: light.impactOccurred(); light.prepare()
+        case .firm: medium.impactOccurred(); medium.prepare()
+        case .hit(let intensity): rigid.impactOccurred(intensity: min(max(intensity, 0), 1)); rigid.prepare()
+        case .success: notification.notificationOccurred(.success); notification.prepare()
+        case .warning: notification.notificationOccurred(.warning); notification.prepare()
+        case .error: notification.notificationOccurred(.error); notification.prepare()
+        }
+        #if DEBUG
+        KBodyLog.hit("HAPTIC fired \(e)")
+        #endif
     }
 }

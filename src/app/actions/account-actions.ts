@@ -8,6 +8,7 @@ import { deleteAccount } from "@/modules/account/delete";
 import { completeOnboarding, onboardingSchema } from "@/modules/account/onboarding";
 import {
   displayNameSchema,
+  followListsVisibilitySchema,
   preferredServiceSchema,
   updateProfile,
   type PreferredService,
@@ -118,6 +119,22 @@ export async function setNotifyReleasesAction(notifyReleases: boolean) {
 export async function setNotifyRecapAction(notifyRecap: boolean) {
   const user = await assertUser();
   await updateProfile(user.id, { notifyRecap: Boolean(notifyRecap) });
+  return { ok: true as const };
+}
+
+/**
+ * 2026-09-27 — who reads your followers / following lists: 'public' ·
+ * 'mutuals' · 'private' (modules/social/follow-lists-policy.ts). Validated
+ * here too (a server action is an RPC: the client's value is untrusted). No
+ * revalidatePath: no cached page renders someone's lists — every list read
+ * (`GET /people/{h}/followers|following`) resolves access at query time, so
+ * the change is immediate.
+ */
+export async function setFollowListsVisibilityAction(visibility: string) {
+  const user = await assertUser();
+  const parsed = followListsVisibilitySchema.safeParse(visibility);
+  if (!parsed.success) return { error: "invalid" as const };
+  await updateProfile(user.id, { followListsVisibility: parsed.data });
   return { ok: true as const };
 }
 

@@ -15,13 +15,7 @@ extension AppStore {
         let hadState = userTitles[titleID] != nil
         ensureUserState(titleID)
         userTitles[titleID]?.mark = mark
-        if haptic {
-            switch mark {
-            case .obsessed: KHaptic.impact(.medium)
-            case .liked: KHaptic.impact(.light)
-            default: break
-            }
-        }
+        if haptic { KHaptic.play(.reaction(mark)) }
         let session = s
         sync(key: WriteKey.mark(titleID), titleID: titleID, onError: { [weak self] e in
             guard let self else { return true }
@@ -196,7 +190,7 @@ extension AppStore {
         let watched = !set.contains(key)
         if watched { set.insert(key) } else { set.remove(key) }
         userTitles[titleID]?.watchedEpisodes = set
-        KHaptic.select()
+        KHaptic.play(.selection)
         saveLocal()
     }
 }
