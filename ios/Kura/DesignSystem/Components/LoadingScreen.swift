@@ -33,6 +33,59 @@ struct LoadingScreen: View {
     }
 }
 
+/// What a `ResourceScreen` draws while its read is on the way.
+enum ResourceSkeleton { case cover, collection }
+
+/// A collection's silhouette (Colecciones formalizado · 2a): Volver and the two chips, the ghost
+/// fan at 225, the mono label, the name, the line and the credits, then "el orden" and a first
+/// run of three columns (cover · title · year) — on `s1`, with the one pulse the system allows.
+struct CollectionSkeleton: View {
+    var auto = false
+    var body: some View {
+        ZStack(alignment: .top) {
+            KColor.bg.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    VStack(spacing: 10) {
+                        FanView(covers: [], lead: 225, ghost: true)
+                        Capsule().fill(KColor.s1).frame(width: auto ? 64 : 96, height: auto ? 26 : 10).padding(.top, 4)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(KColor.s1).frame(width: 192, height: 36)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(KColor.s1).frame(width: 160, height: 16)
+                        HStack(spacing: 8) {
+                            Circle().fill(KColor.s1).frame(width: 26, height: 26)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous).fill(KColor.s1).frame(width: 112, height: 14)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 126)
+                    .padding(.bottom, 26)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(KColor.s1).frame(width: 96, height: 22)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 14)
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach([2.0 / 3.0, 1.0, 2.0 / 3.0], id: \.self) { a in
+                            VStack(alignment: .leading, spacing: 6) {
+                                RoundedRectangle(cornerRadius: KRadius.coverL, style: .continuous).fill(KColor.s1)
+                                    .aspectRatio(a, contentMode: .fit)
+                                Capsule().fill(KColor.s1).frame(height: 12).padding(.trailing, 20).frame(height: 16)
+                                Capsule().fill(KColor.s1).frame(width: 36, height: 8).frame(height: 15)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .kSkeletonPulse()
+            }
+            .scrollDisabled(true)
+            .ignoresSafeArea(.container, edges: .top)
+            TopChrome { EmptyView() }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Cargando colección")
+    }
+}
+
 /// The 404 shape: something that was here is gone (collection, title, person).
 struct GoneView: View {
     static let defaultTitle = "esta colección ya no existe."
@@ -68,17 +121,19 @@ struct ResourceScreen<Value, Content: View>: View {
     let retry: () -> Void
     let gone: (title: String, note: String)
     var square: Bool
+    var skeleton: ResourceSkeleton
     @ViewBuilder let content: (Value) -> Content
 
     init(value: Value?, missing: Bool, error: KuraAPIError?, retry: @escaping () -> Void,
          gone: (title: String, note: String) = (GoneView.defaultTitle, GoneView.defaultNote),
-         square: Bool = false, @ViewBuilder content: @escaping (Value) -> Content) {
+         square: Bool = false, skeleton: ResourceSkeleton = .cover, @ViewBuilder content: @escaping (Value) -> Content) {
         self.value = value
         self.missing = missing
         self.error = error
         self.retry = retry
         self.gone = gone
         self.square = square
+        self.skeleton = skeleton
         self.content = content
     }
 
@@ -89,6 +144,8 @@ struct ResourceScreen<Value, Content: View>: View {
             GoneView(title: gone.title, note: gone.note)
         } else if let error {
             LoadErrorScreen(error: error, retry: retry)
+        } else if skeleton == .collection {
+            CollectionSkeleton()
         } else {
             LoadingScreen(square: square)
         }

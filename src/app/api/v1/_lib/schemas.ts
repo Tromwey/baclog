@@ -220,12 +220,23 @@ export const CollectionSchema = z.object({
   vibe: z.string().nullable(),
   /** private = isPublic false · link = public, off the profile · profile = both. */
   visibility: VisibilitySchema,
-  /** `addedAt desc` — the collection's order. */
+  /** The owner's MANUAL order (`byManualOrder`, modules/backlog/fan.ts):
+   *  `backlog_item.position asc nulls first, addedAt desc` — never reordered
+   *  = newest first; a title added after a reorder sits on top until placed. */
   titleIds: z.array(z.string()),
   /** titleId → when it entered THIS collection. */
   addedAt: z.record(z.string(), IsoDateSchema),
-  /** Derived: the most recent title with a cover. Never persisted. */
+  /** The FRONT of the fan = `fanTitleIds[0]`: the chosen cover when it is
+   *  still a member, else the first title in the order. May have no cover
+   *  art (the fan paints its palette). Null only when empty. */
   coverTitleId: z.string().nullable(),
+  /** `backlog.cover_catalog_item_id` when it is still a member; null =
+   *  automatic cover (or the chosen one left the collection). */
+  chosenCoverTitleId: z.string().nullable(),
+  /** The fan: up to 3 titles, chosen cover first, then the order (`fanOf`). */
+  fanTitleIds: z.array(z.string()).max(3),
+  /** `backlog.pinned_at IS NOT NULL` — at most one per account. */
+  pinned: z.boolean(),
   createdAt: IsoDateSchema,
   updatedAt: IsoDateSchema,
 });
@@ -257,8 +268,15 @@ export type PersonStats = z.infer<typeof PersonStatsSchema>;
 export const PersonCollectionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  vibe: z.string().nullable(),
+  /** The owner's manual order (same rule as `Collection.titleIds`). */
   titleIds: z.array(z.string()),
+  /** Front of the fan = `fanTitleIds[0]` (same rule as `Collection`). */
   coverTitleId: z.string().nullable(),
+  /** Up to 3: the owner's chosen cover first, then the order. */
+  fanTitleIds: z.array(z.string()).max(3),
+  /** The one that leads the profile (the big fan). */
+  pinned: z.boolean(),
 });
 export type PersonCollection = z.infer<typeof PersonCollectionSchema>;
 

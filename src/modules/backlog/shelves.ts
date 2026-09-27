@@ -232,16 +232,19 @@ export async function getCollectionFans(userId: string): Promise<Record<string, 
 /**
  * API v1 `GET /collections` — every backlog of the user with ALL of its
  * memberships (no cover cap: the app hydrates `titleIds` itself and needs
- * the full order + `addedAt` map), in the same two round trips as
- * `getShelvesForUser`. Own-user only: the caller passes the bearer user's id.
- * Only membership facts and the shared cover URL travel — no per-title state
- * (that is `GET /collections/{id}` / `GET /me/titles`).
+ * the full order + `addedAt` map), in two round trips. Own-user only: the
+ * caller passes the bearer user's id. Only membership facts travel (the
+ * manual `position`, `addedAt`) plus the collection's own curation (pin,
+ * chosen cover) — no per-title state (that is `GET /collections/{id}` /
+ * `GET /me/titles`). The wire order and fan are resolved in
+ * `api/v1/_lib/wire/collection.ts` with the same `fan.ts` rules the web uses.
  */
 export interface CollectionMembership {
   catalogItemId: string;
   /** `backlog_item.addedAt` — when it entered THIS collection. */
   addedAt: Date;
-  posterUrl: string | null;
+  /** `backlog_item.position` — the manual order; null = unplaced. */
+  position: number | null;
 }
 
 export interface CollectionWithMemberships {
@@ -250,9 +253,11 @@ export interface CollectionWithMemberships {
   vibe: string | null;
   isPublic: boolean;
   showOnProfile: boolean;
+  pinnedAt: Date | null;
+  coverCatalogItemId: string | null;
   createdAt: Date;
   updatedAt: Date;
-  /** Newest first. */
+  /** `MANUAL_ORDER`. */
   memberships: CollectionMembership[];
 }
 
@@ -270,6 +275,8 @@ export async function getCollectionsWithMemberships(
       vibe: backlogs.vibe,
       isPublic: backlogs.isPublic,
       showOnProfile: backlogs.showOnProfile,
+      pinnedAt: backlogs.pinnedAt,
+      coverCatalogItemId: backlogs.coverCatalogItemId,
       createdAt: backlogs.createdAt,
       updatedAt: backlogs.updatedAt,
     })
@@ -284,14 +291,13 @@ export async function getCollectionsWithMemberships(
       backlogId: backlogItems.backlogId,
       catalogItemId: backlogItems.catalogItemId,
       addedAt: backlogItems.addedAt,
-      posterUrl: catalogItems.posterUrl,
+      position: backlogItems.position,
     })
     .from(backlogItems)
-    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
     .where(
       and(eq(backlogItems.userId, userId), one ? eq(backlogItems.backlogId, one) : undefined),
     )
-    .orderBy(desc(backlogItems.addedAt));
+    .orderBy(...MANUAL_ORDER);
 
   const byBacklog = new Map<string, CollectionWithMemberships>(
     rows.map((r) => [r.id, { ...r, memberships: [] }]),
@@ -300,7 +306,7 @@ export async function getCollectionsWithMemberships(
     byBacklog.get(m.backlogId)?.memberships.push({
       catalogItemId: m.catalogItemId,
       addedAt: m.addedAt,
-      posterUrl: m.posterUrl,
+      position: m.position,
     });
   }
   return rows.map((r) => byBacklog.get(r.id)!);

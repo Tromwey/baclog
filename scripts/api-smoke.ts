@@ -294,6 +294,18 @@ function assertNoPeopleLeak(body: unknown, path = "$", allow: ReadonlySet<string
 }
 
 /** Read-only state the `reads` cases hand to each other (ids seen so far). */
+/** `Collection`/`PersonCollection`: the fan is ≤ 3 distinct members, its
+ *  front is `coverTitleId`, and an empty collection has neither. */
+function assertFanShape(
+  c: { titleIds: string[]; fanTitleIds: string[]; coverTitleId: string | null },
+  label: string,
+) {
+  assert.equal(new Set(c.fanTitleIds).size, c.fanTitleIds.length, `${label}: abanico sin repetidos`);
+  assert.equal(c.fanTitleIds.length, Math.min(3, c.titleIds.length), `${label}: abanico = min(3, títulos)`);
+  for (const id of c.fanTitleIds) assert.ok(c.titleIds.includes(id), `${label}: el abanico son miembros`);
+  assert.equal(c.coverTitleId, c.fanTitleIds[0] ?? null, `${label}: coverTitleId = frente del abanico`);
+}
+
 const smoke: { collections: z.infer<typeof CollectionSchema>[]; titleIds: string[] } = {
   collections: [],
   titleIds: [],
@@ -864,15 +876,14 @@ const reads: Case[] = [
       const { items } = expectOk(res, 200, z.object({ items: z.array(CollectionSchema) }));
       for (const c of items) {
         assert.equal(Object.keys(c.addedAt).length, c.titleIds.length, "addedAt cubre cada titleId");
-        for (let i = 1; i < c.titleIds.length; i++) {
-          assert.ok(
-            c.addedAt[c.titleIds[i - 1]] >= c.addedAt[c.titleIds[i]],
-            `${c.name}: titleIds en addedAt desc`,
-          );
+        // titleIds = orden MANUAL (la cuenta puede haber reordenado en la web):
+        // no se puede afirmar addedAt desc; sí la forma del abanico.
+        assertFanShape(c, c.name);
+        if (c.chosenCoverTitleId) {
+          assert.equal(c.coverTitleId, c.chosenCoverTitleId, `${c.name}: la portada elegida encabeza el abanico`);
         }
-        if (c.coverTitleId) assert.ok(c.titleIds.includes(c.coverTitleId), "coverTitleId es un miembro");
-        if (c.titleIds.length === 0) assert.equal(c.coverTitleId, null);
       }
+      assert.ok(items.filter((c) => c.pinned).length <= 1, "a lo más una colección fijada por cuenta");
       smoke.collections = items;
     },
   },
@@ -1300,11 +1311,15 @@ const reads: Case[] = [
       assert.deepEqual(person.common, [], "afinidad nula para el dueño");
       assert.equal(person.followers, ctx.me.followers, "mismos seguidores que Me");
       assert.equal(person.stats.obsessed, ctx.me.stats.obsessed, "mismas obsesiones que Me");
+      for (const c of person.collections) assertFanShape(c, `@${person.handle}/${c.name}`);
+      assert.ok(person.collections.filter((c) => c.pinned).length <= 1, "a lo más una fijada");
       for (const c of person.collections) {
-        assert.ok(
-          c.coverTitleId === null || c.titleIds.includes(c.coverTitleId),
-          "coverTitleId pertenece a titleIds",
-        );
+        const own = smoke.collections.find((x) => x.id === c.id);
+        if (!own) continue;
+        assert.deepEqual(c.titleIds, own.titleIds, "mismo orden manual que GET /collections");
+        assert.deepEqual(c.fanTitleIds, own.fanTitleIds, "mismo abanico que GET /collections");
+        assert.equal(c.pinned, own.pinned);
+        assert.equal(c.vibe, own.vibe);
       }
       l3.ownPerson = person;
     },
@@ -2450,7 +2465,8 @@ const writes: Case[] = [
 
       const detail = await e2Detail(e2.collection);
       assert.deepEqual(detail.collection.titleIds, [e2.plain]);
-      assert.equal(detail.collection.coverTitleId, first.title.coverUrl ? e2.plain : null);
+      assert.equal(detail.collection.coverTitleId, e2.plain, "frente del abanico = el único título");
+      assert.deepEqual(detail.collection.fanTitleIds, [e2.plain]);
 
       // externalRef fallback: a bogus id + the search result's ref resolves.
       const viaRef = expectOk(
@@ -2478,6 +2494,118 @@ const writes: Case[] = [
         400,
         "invalid",
       );
+    },
+  },
+  {
+    name: "E2 PATCH pinned (una sola fijada) · coverTitleId (miembro / no-miembro → 400 / null) · PUT order ida y vuelta",
+    run: async () => {
+      // Pin: pinning B unpins A in the same transaction.
+      const a = expectOk(
+        await e2call("PATCH", `/collections/${e2.obsesiones}`, { body: { pinned: true } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(a.pinned, true);
+      const b = expectOk(
+        await e2call("PATCH", `/collections/${e2.collection}`, { body: { pinned: true } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(b.pinned, true);
+      const pinned = (await e2Collections()).filter((c) => c.pinned).map((c) => c.id);
+      assert.deepEqual(pinned, [e2.collection], "fijar otra desfija la anterior");
+      const unpinned = expectOk(
+        await e2call("PATCH", `/collections/${e2.collection}`, { body: { pinned: false } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(unpinned.pinned, false);
+      assert.equal((await e2Collections()).filter((c) => c.pinned).length, 0, "desfijar deja cero");
+      expectError(
+        await e2call("PATCH", "/collections/00000000-0000-0000-0000-000000000000", { body: { pinned: true } }),
+        404,
+        "not_found",
+      );
+      expectError(await e2call("PATCH", `/collections/${e2.collection}`, { body: { pinned: "sí" } }), 400, "invalid");
+
+      // Cover: a member leads the fan; a non-member is 400 fields.coverTitleId
+      // and writes NOTHING (not even the name in the same body); null = auto.
+      const base = await e2Detail(e2.obsesiones);
+      const ids = base.collection.titleIds;
+      assert.ok(ids.length >= 3, "Obsesiones tiene los 3 picks");
+      const last = ids[ids.length - 1];
+      const chosen = expectOk(
+        await e2call("PATCH", `/collections/${e2.obsesiones}`, { body: { coverTitleId: last } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(chosen.chosenCoverTitleId, last);
+      assert.equal(chosen.coverTitleId, last);
+      assert.equal(chosen.fanTitleIds[0], last);
+      assert.deepEqual(chosen.titleIds, ids, "elegir portada no mueve el orden");
+      const outsider = await e2call("PATCH", `/collections/${e2.obsesiones}`, {
+        body: { coverTitleId: e2.plain, name: "No debe escribirse" },
+      });
+      const err = expectError(outsider, 400, "invalid");
+      assert.ok(err.fields && "coverTitleId" in err.fields, "fields.coverTitleId presente");
+      const after = (await e2Detail(e2.obsesiones)).collection;
+      assert.equal(after.name, base.collection.name, "un 400 de portada no escribe el resto del body");
+      assert.equal(after.chosenCoverTitleId, last, "ni toca la portada vigente");
+      const auto = expectOk(
+        await e2call("PATCH", `/collections/${e2.obsesiones}`, { body: { coverTitleId: null } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(auto.chosenCoverTitleId, null);
+      assert.equal(auto.coverTitleId, ids[0], "automática = el primero del orden");
+
+      // Order: reverse, check every read agrees, then restore (round trip).
+      const reversed = [...ids].reverse();
+      const r = expectOk(
+        await e2call("PUT", `/collections/${e2.obsesiones}/order`, {
+          body: { titleIds: [...reversed, "00000000-0000-0000-0000-000000000000"] },
+        }),
+        200,
+        CollectionSchema,
+      );
+      assert.deepEqual(r.titleIds, reversed, "orden nuevo; ids ajenos ignorados");
+      assert.deepEqual(r.fanTitleIds, reversed.slice(0, 3));
+      assert.deepEqual((await e2Detail(e2.obsesiones)).titles.map((t) => t.id), reversed, "el detalle lee el mismo orden");
+      assert.deepEqual(
+        (await e2Collections()).find((c) => c.id === e2.obsesiones)?.titleIds,
+        reversed,
+        "GET /collections lee el mismo orden",
+      );
+      // Partial list: the omitted titles go back to unplaced = on top.
+      const partial = expectOk(
+        await e2call("PUT", `/collections/${e2.obsesiones}/order`, { body: { titleIds: [reversed[0]] } }),
+        200,
+        CollectionSchema,
+      );
+      assert.equal(partial.titleIds[partial.titleIds.length - 1], reversed[0], "el único colocado va al final");
+      const back = expectOk(
+        await e2call("PUT", `/collections/${e2.obsesiones}/order`, { body: { titleIds: ids } }),
+        200,
+        CollectionSchema,
+      );
+      assert.deepEqual(back.titleIds, ids, "ida y vuelta");
+
+      const bad = await e2call("PUT", `/collections/${e2.obsesiones}/order`, { body: { titleIds: "nope" } });
+      assert.ok(expectError(bad, 400, "invalid").fields?.titleIds, "fields.titleIds (no titleIds.N)");
+      const badItem = await e2call("PUT", `/collections/${e2.obsesiones}/order`, { body: { titleIds: [""] } });
+      assert.ok(expectError(badItem, 400, "invalid").fields?.titleIds, "fields.titleIds con un id vacío");
+      const tooMany = Array.from({ length: 2001 }, (_, i) => `t${i}`);
+      expectError(
+        await e2call("PUT", `/collections/${e2.obsesiones}/order`, { body: { titleIds: tooMany } }),
+        400,
+        "invalid",
+      );
+      expectError(
+        await e2call("PUT", "/collections/00000000-0000-0000-0000-000000000000/order", { body: { titleIds: ids } }),
+        404,
+        "not_found",
+      );
+      expectError(await e2call("PUT", "/collections/nope/order", { body: { titleIds: ids } }), 404, "not_found");
     },
   },
   {

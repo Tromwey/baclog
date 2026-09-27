@@ -88,11 +88,22 @@ enum CollectionLayout: String, Hashable, Codable {
 struct KCollection: Identifiable, Hashable, Decodable {
     let id: String
     var name: String
+    /// The collection's line (Newsreader italic under its name). `nil`/"" = none.
+    var vibe: String? = nil
+    /// The owner's MANUAL order (`backlog_item.position`, unplaced titles first, newest first).
+    /// Before the curation contract the server sent `addedAt desc`, which reads the same.
     var titleIDs: [String]
     var privacy: Privacy
-    /// Local (device) — the API has no model for these (§3).
+    /// One per account (`backlog.pinned_at`): pinning one unpins the rest.
     var pinned: Bool = false
-    var coverTitleID: String? = nil
+    /// The cover the owner CHOSE (`backlog.cover_catalog_item_id`); nil = automatic (the order's
+    /// first). A choice that left the collection is ignored, never shown (`AppStore.fan(of:)`).
+    var chosenCoverTitleID: String? = nil
+    /// The server's fan (≤ 3, `fanTitleIds`): the chosen cover, then the order. The app derives its
+    /// own from `titleIDs` + `chosenCoverTitleID` (optimistic writes); this is the fallback for a
+    /// collection whose titles haven't arrived, and the truth for someone else's.
+    var fanTitleIDs: [String] = []
+    /// Device-local (API.md §3): how THIS phone sorts and lays it out.
     var sort: SortMode = .manual
     var layout: CollectionLayout = .covers
     var createdAt: Date
@@ -101,10 +112,12 @@ struct KCollection: Identifiable, Hashable, Decodable {
     var embeddedTitles: [Title] = []
     var embeddedStates: [String: UserTitleState] = [:]
 
-    init(id: String, name: String, titleIDs: [String], privacy: Privacy, pinned: Bool = false, coverTitleID: String? = nil,
+    init(id: String, name: String, vibe: String? = nil, titleIDs: [String], privacy: Privacy, pinned: Bool = false,
+         chosenCoverTitleID: String? = nil, fanTitleIDs: [String] = [],
          sort: SortMode = .manual, layout: CollectionLayout = .covers, createdAt: Date, addedAt: [String: Date] = [:]) {
-        self.id = id; self.name = name; self.titleIDs = titleIDs; self.privacy = privacy; self.pinned = pinned
-        self.coverTitleID = coverTitleID; self.sort = sort; self.layout = layout; self.createdAt = createdAt; self.addedAt = addedAt
+        self.id = id; self.name = name; self.vibe = vibe; self.titleIDs = titleIDs; self.privacy = privacy; self.pinned = pinned
+        self.chosenCoverTitleID = chosenCoverTitleID; self.fanTitleIDs = fanTitleIDs
+        self.sort = sort; self.layout = layout; self.createdAt = createdAt; self.addedAt = addedAt
     }
 
     var slug: String {
@@ -112,22 +125,56 @@ struct KCollection: Identifiable, Hashable, Decodable {
         return folded.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: "-")
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case id, name, titleIds, visibility, coverTitleId, createdAt, addedAt, titles, states
+    /// The line to draw (a blank one is none).
+    var shownVibe: String? {
+        guard let v = vibe?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return nil }
+        return v
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id, name, vibe, titleIds, visibility, coverTitleId, chosenCoverTitleId, fanTitleIds, pinned
+        case createdAt, addedAt, titles, states
+    }
+
+    /// Everything the curation contract added (`pinned`, `chosenCoverTitleId`, `fanTitleIds`,
+    /// `vibe`) is `decodeIfPresent` with a default: the production server that doesn't send them
+    /// yet decodes as "not pinned, automatic cover, fan derived on the device".
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        vibe = try c.decodeIfPresent(String.self, forKey: .vibe)
         privacy = try c.decodeIfPresent(String.self, forKey: .visibility).map(Privacy.init(wire:)) ?? .onlyMe
-        coverTitleID = try c.decodeIfPresent(String.self, forKey: .coverTitleId)
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        chosenCoverTitleID = try c.decodeIfPresent(String.self, forKey: .chosenCoverTitleId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         addedAt = try c.decodeIfPresent([String: Date].self, forKey: .addedAt) ?? [:]
         embeddedTitles = try c.decodeIfPresent([Title].self, forKey: .titles) ?? []
         embeddedStates = try c.decodeIfPresent([String: UserTitleState].self, forKey: .states) ?? [:]
         let ids = try c.decodeIfPresent([String].self, forKey: .titleIds)
         titleIDs = ids ?? embeddedTitles.map(\.id)
+        // `coverTitleId` is the fan's front (before the contract: the newest with art). Without
+        // `fanTitleIds`, the fan is that front, then the order.
+        let front = try c.decodeIfPresent(String.self, forKey: .coverTitleId)
+        let fan = try c.decodeIfPresent([String].self, forKey: .fanTitleIds)
+        fanTitleIDs = fan.map { Array($0.prefix(3)) } ?? FanOrder.fan(titleIDs, cover: front)
+    }
+}
+
+/// Colecciones formalizado — "el abanico es la colección": up to three titles, the chosen cover
+/// first (when it's still a member), then the manual order. The twin of the web's `fanOf`
+/// (`src/modules/backlog/fan.ts`); keep both in step.
+enum FanOrder {
+    static func fan(_ ordered: [String], cover: String?) -> [String] {
+        var out: [String] = []
+        if let cover, ordered.contains(cover) { out.append(cover) }
+        for id in ordered where out.count < 3 && id != cover { out.append(id) }
+        return out
+    }
+
+    /// The Revamp's lima ADN fallback is not a Kura colour: it never tints.
+    static func kuraHexes(_ hexes: [String]) -> [String] {
+        hexes.filter { $0.lowercased() != "#d8ff3e" }
     }
 }
 

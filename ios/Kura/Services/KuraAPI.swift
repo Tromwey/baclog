@@ -90,6 +90,14 @@ protocol KuraAPI: Sendable {
     func createCollection(name: String, privacy: Privacy) async throws -> KCollection
     func updateCollection(id: String, name: String?, privacy: Privacy?) async throws -> KCollection
     func deleteCollection(id: String) async throws
+    /// `PATCH /collections/{id}` `{ pinned }` → Collection. One pinned per account: the server
+    /// unpins the rest (the store already did, optimistically).
+    func setCollectionPinned(id: String, pinned: Bool) async throws -> KCollection
+    /// `PATCH /collections/{id}` `{ coverTitleId }` → Collection. `nil` is sent as `null` = the
+    /// automatic cover; a title that isn't a member is `400 fields.coverTitleId`.
+    func setCollectionCover(id: String, titleID: String?) async throws -> KCollection
+    /// `PUT /collections/{id}/order` `{ titleIds }` → Collection: the whole manual order at once.
+    func reorderCollection(id: String, titleIDs: [String]) async throws -> KCollection
     /// `paletteHex`: a palette extracted on this device that the server hasn't confirmed (the
     /// server writes it only while `catalog_item.paletteHex` is still empty). For an `ext:` search
     /// result it's the only channel: it has no catalog id to `fillPalette` before it's saved.

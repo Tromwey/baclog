@@ -13,6 +13,8 @@ struct AddTitlesSheet: View {
         if let c = store.collection(collectionID) {
             VStack(spacing: 0) {
                 HStack(alignment: .center, spacing: 12) {
+                    // The destination as the pickers draw it (7a): its mini fan at 51.
+                    FanView(covers: store.fan(of: c), lead: 51, ghost: c.titleIDs.isEmpty)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Agregar a").monoLabel()
                         Text(c.name).font(.kura.news(28)).foregroundStyle(KColor.text).lineLimit(1)

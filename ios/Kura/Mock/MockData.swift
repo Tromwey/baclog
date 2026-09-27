@@ -43,7 +43,11 @@ enum MockData {
                common: ["ma", "chihiro", "eduardo", "pearl", "mindofmine"],
                collections: [
                 PersonCollection(name: "música 2026", titleIDs: ["mala", "ma", "eduardo", "mindofmine"]),
-                PersonCollection(name: "ghibli completo", titleIDs: ["chihiro", "mononoke", "totoro", "garza"]),
+                PersonCollection(name: "ghibli completo", titleIDs: ["chihiro", "mononoke", "totoro", "garza"],
+                                 vibe: "las que me criaron", pinned: true),
+                PersonCollection(name: "terror bonito", titleIDs: ["pearl", "spiderman3", "ycse"]),
+                PersonCollection(name: "domingo", titleIDs: ["severance", "odyssey", "showgirl"]),
+                PersonCollection(name: "ed maverick", titleIDs: ["eduardo", "nube"]),
                 PersonCollection(name: "para correr", titleIDs: ["nube", "ma", "mindofmine"], privacy: .followers)
                ],
                why: "le obsesiona Mala"),
@@ -229,17 +233,24 @@ enum MockData {
     // MARK: Collections
 
     static let collections: [KCollection] = [
-        KCollection(id: "musica-2026", name: "música 2026", titleIDs: ["ma", "mindofmine", "eduardo", "nube"],
-                    privacy: .followers, pinned: true, coverTitleID: "ma", createdAt: date(2026, 1, 3)),
-        KCollection(id: "ghibli", name: "ghibli completo", titleIDs: ["chihiro", "mononoke", "totoro"],
-                    privacy: .publicAccess, coverTitleID: "chihiro", createdAt: date(2025, 11, 12)),
+        KCollection(id: "musica-2026", name: "música 2026", vibe: "lo que sonó este año, sin saltarse ninguna",
+                    titleIDs: ["ma", "mindofmine", "eduardo", "nube"],
+                    privacy: .followers, pinned: true, chosenCoverTitleID: "ma", createdAt: date(2026, 1, 3)),
+        KCollection(id: "ghibli", name: "ghibli completo", vibe: "de chihiro a la garza, en orden",
+                    titleIDs: ["chihiro", "mononoke", "totoro"],
+                    privacy: .publicAccess, createdAt: date(2025, 11, 12)),
         KCollection(id: "pendientes", name: "pendientes", titleIDs: ["pearl", "spiderman3", "odyssey", "severance", "ycse", "doomsday"],
-                    privacy: .onlyMe, coverTitleID: "pearl", createdAt: date(2026, 2, 20)),
-        KCollection(id: "hermana", name: "con mi hermana", titleIDs: ["chihiro", "odyssey", "pearl", "mala", "showgirl"],
-                    privacy: .publicAccess, coverTitleID: "mala", createdAt: date(2026, 4, 2)),
+                    privacy: .onlyMe, createdAt: date(2026, 2, 20)),
+        KCollection(id: "hermana", name: "con mi hermana", vibe: "para ver los domingos, una cada quien",
+                    titleIDs: ["chihiro", "odyssey", "pearl", "mala", "showgirl"],
+                    privacy: .publicAccess, chosenCoverTitleID: "mala", createdAt: date(2026, 4, 2)),
         KCollection(id: "correr", name: "para correr", titleIDs: [],
                     privacy: .publicAccess, createdAt: date(2026, 9, 20))
-    ]
+    ].map { c in
+        var c = c
+        c.fanTitleIDs = FanOrder.fan(c.titleIDs, cover: c.chosenCoverTitleID)
+        return c
+    }
 
     /// mariel's state per title.
     static let userTitles: [String: UserTitleState] = {

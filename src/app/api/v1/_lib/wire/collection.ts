@@ -1,3 +1,4 @@
+import { byManualOrder, fanOf } from "@/modules/backlog/fan";
 import { visibilityOf } from "@/modules/backlog/visibility";
 import {
   isoDate,
@@ -11,16 +12,19 @@ import { toTitleSummary } from "./title";
 
 /**
  * `Collection` (§3) from a `backlog` row plus ALL of its memberships. The
- * order is `addedAt desc` (the collection's own order); `coverTitleId` is
- * DERIVED (most recent membership whose title has a cover) and never
- * persisted; `visibility` folds the two DB axes into the three wire states.
+ * order is the owner's MANUAL order (`byManualOrder` in modules/backlog/fan.ts
+ * — the same rule the web reads with; never reordered = `addedAt desc`). The
+ * fan (`fanOf`) is the chosen cover when it is still a member, then that
+ * order; `coverTitleId` is its front. `visibility` folds the two DB axes
+ * into the three wire states.
  */
 
 export interface CollectionMembershipInput {
   catalogItemId: string;
   /** `backlog_item.addedAt` — when it entered THIS collection. */
   addedAt: Date;
-  posterUrl: string | null;
+  /** `backlog_item.position` — the manual order; null = unplaced (on top). */
+  position: number | null;
 }
 
 export interface CollectionInput {
@@ -29,6 +33,10 @@ export interface CollectionInput {
   vibe: string | null;
   isPublic: boolean;
   showOnProfile: boolean;
+  /** `backlog.pinned_at` — one pinned collection per account. */
+  pinnedAt: Date | null;
+  /** `backlog.cover_catalog_item_id` — ignored when no longer a member. */
+  coverCatalogItemId: string | null;
   createdAt: Date;
   updatedAt: Date;
   memberships: CollectionMembershipInput[];
@@ -50,27 +58,31 @@ export function wireVisibilityOf(b: {
 }
 
 export function toCollection(row: CollectionInput): Collection {
-  const ordered = [...row.memberships].sort(
-    (a, b) => b.addedAt.getTime() - a.addedAt.getTime(),
-  );
   const addedAt: Record<string, string> = {};
-  const titleIds: string[] = [];
-  for (const m of ordered) {
+  const unique: CollectionMembershipInput[] = [];
+  for (const m of [...row.memberships].sort(byManualOrder)) {
     // A title can't be in the same backlog twice (unique index), but stay
     // idempotent if a caller ever hands over a merged list.
     if (m.catalogItemId in addedAt) continue;
-    titleIds.push(m.catalogItemId);
+    unique.push(m);
     addedAt[m.catalogItemId] = isoDate(m.addedAt);
   }
-  const cover = ordered.find((m) => m.posterUrl !== null && m.posterUrl !== "");
+  const chosen =
+    row.coverCatalogItemId !== null && row.coverCatalogItemId in addedAt
+      ? row.coverCatalogItemId
+      : null;
+  const fanTitleIds = fanOf(unique, chosen).map((m) => m.catalogItemId);
   return {
     id: row.id,
     name: row.name,
     vibe: row.vibe,
     visibility: wireVisibilityOf(row),
-    titleIds,
+    titleIds: unique.map((m) => m.catalogItemId),
     addedAt,
-    coverTitleId: cover?.catalogItemId ?? null,
+    coverTitleId: fanTitleIds[0] ?? null,
+    chosenCoverTitleId: chosen,
+    fanTitleIds,
+    pinned: row.pinnedAt !== null,
     createdAt: isoDate(row.createdAt),
     updatedAt: isoDate(row.updatedAt),
   };
@@ -83,6 +95,8 @@ export interface CollectionDetailItem {
   catalogItemId: string;
   /** `backlog_item.addedAt` — when it entered THIS collection. */
   addedAt: Date;
+  /** `backlog_item.position` — the manual order. */
+  position: number | null;
   title: string;
   mediaType: "film" | "series" | "album";
   year: number | null;
@@ -113,8 +127,8 @@ export interface CollectionDetail {
 
 /**
  * The shape `GET /collections/{id}` and `GET /people/{handle}/collections/{id}`
- * both answer, from one list of joined rows: the collection (order + cover
- * derived here), the title summaries in that order, one state per title.
+ * both answer, from one list of joined rows: the collection (manual order +
+ * fan derived here), the title summaries in that order, one state per title.
  * Dedupes on `catalogItemId` like `toCollection` does.
  */
 export function toCollectionDetail(

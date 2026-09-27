@@ -303,7 +303,7 @@ export async function getLovedSeeds(
  * owner's manual order (`position`, 0 first) with every unplaced title (null)
  * ahead of it, newest first. A never-reordered collection is exactly the old
  * newest-first. The JS twin is `byManualOrder` in fan.ts — keep both in step.
- * The API v1 readers keep their documented `addedAt desc` on purpose.
+ * The API v1 reads it too since 2026-09-27 (`Collection.titleIds`).
  */
 export const MANUAL_ORDER = [
   sql`${backlogItems.position} asc nulls first`,
@@ -371,6 +371,10 @@ export async function getBacklogItemsWithState(backlogId: string) {
   return db
     .select({
       ...backlogItemColumns,
+      // The manual order travels to the wire (`toCollection` sorts by it with
+      // `byManualOrder`); kept OUT of `backlogItemColumns` on purpose (see
+      // that constant's note).
+      position: backlogItems.position,
       userItemAddedAt: userItems.addedAt,
       reviewId: itemReviews.id,
     })
@@ -391,7 +395,7 @@ export async function getBacklogItemsWithState(backlogId: string) {
       ),
     )
     .where(eq(backlogItems.backlogId, backlogId))
-    .orderBy(desc(backlogItems.addedAt));
+    .orderBy(...MANUAL_ORDER);
 }
 
 /**

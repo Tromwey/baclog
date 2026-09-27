@@ -20,8 +20,6 @@ enum Tab: String, CaseIterable, Identifiable, Hashable {
 enum Route: Hashable {
     case collection(String)
     case title(String)
-    case reorder(String)
-    case changeCover(String)
     case automatic
     case person(String)
     /// Someone else's public collection (`GET /people/{handle}/collections/{id}`), read-only.

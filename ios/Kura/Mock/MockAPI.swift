@@ -161,6 +161,32 @@ struct MockAPI: KuraAPI {
         return c
     }
     func deleteCollection(id: String) async throws { try await write() }
+    private func mockCollection(_ id: String) -> KCollection {
+        MockData.collections.first { $0.id == id } ?? KCollection(id: id, name: "", titleIDs: [], privacy: .onlyMe, createdAt: Date())
+    }
+    func setCollectionPinned(id: String, pinned: Bool) async throws -> KCollection {
+        try await write()
+        var c = mockCollection(id)
+        c.pinned = pinned
+        return c
+    }
+    func setCollectionCover(id: String, titleID: String?) async throws -> KCollection {
+        try await write()
+        var c = mockCollection(id)
+        if let titleID, !c.titleIDs.contains(titleID) {
+            throw KuraAPIError.invalid(fields: ["coverTitleId": "not_member"], message: "Ese título no está en la colección.")
+        }
+        c.chosenCoverTitleID = titleID
+        c.fanTitleIDs = FanOrder.fan(c.titleIDs, cover: titleID)
+        return c
+    }
+    func reorderCollection(id: String, titleIDs: [String]) async throws -> KCollection {
+        try await write()
+        var c = mockCollection(id)
+        c.titleIDs = titleIDs
+        c.fanTitleIDs = FanOrder.fan(titleIDs, cover: c.chosenCoverTitleID)
+        return c
+    }
     func createTitleMembership(collectionID: String, ref: TitleRef, paletteHex: [String]?) async throws -> MembershipResult {
         try await write()
         guard case .id(let tid) = ref, let t = MockData.titles.first(where: { $0.id == tid }) else { throw KuraAPIError.notFound }
@@ -233,7 +259,8 @@ struct MockAPI: KuraAPI {
         let states = Dictionary(uniqueKeysWithValues: p.obsessions.filter(pc.titleIDs.contains).map {
             ($0, UserTitleState(mark: .obsessed, savedAt: MockData.now))
         })
-        return CollectionDetail(collection: KCollection(id: id, name: pc.name, titleIDs: pc.titleIDs, privacy: pc.privacy,
+        return CollectionDetail(collection: KCollection(id: id, name: pc.name, vibe: pc.vibe, titleIDs: pc.titleIDs,
+                                                        privacy: pc.privacy, pinned: pc.pinned, fanTitleIDs: pc.fanTitleIDs,
                                                         createdAt: MockData.now),
                                 titles: titles, states: states)
     }

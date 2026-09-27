@@ -35,11 +35,11 @@ extension AppStore {
             s.writeChains[k] = nil
             s.writeChains[String(k.dropLast(suffix.count)) + "|\(serverID)"] = c
         }
-        if s.reorderedCollections.remove(localID) != nil { s.reorderedCollections.insert(serverID) }
         if let i = collections.firstIndex(where: { $0.id == localID }) {
             let c = collections[i]
-            var moved = KCollection(id: serverID, name: c.name, titleIDs: c.titleIDs, privacy: c.privacy, pinned: c.pinned,
-                                    coverTitleID: c.coverTitleID, sort: c.sort, layout: c.layout, createdAt: c.createdAt, addedAt: c.addedAt)
+            var moved = KCollection(id: serverID, name: c.name, vibe: c.vibe, titleIDs: c.titleIDs, privacy: c.privacy,
+                                    pinned: c.pinned, chosenCoverTitleID: c.chosenCoverTitleID, fanTitleIDs: c.fanTitleIDs,
+                                    sort: c.sort, layout: c.layout, createdAt: c.createdAt, addedAt: c.addedAt)
             moved.embeddedTitles = c.embeddedTitles
             collections[i] = moved
         }
@@ -48,14 +48,13 @@ extension AppStore {
             paths[tab] = paths[tab]?.map { r in
                 switch r {
                 case .collection(localID): return .collection(serverID)
-                case .reorder(localID): return .reorder(serverID)
-                case .changeCover(localID): return .changeCover(serverID)
                 default: return r
                 }
             }
         }
         if case .more(localID) = sheet { sheet = .more(serverID) }
         if case .addTitles(localID) = sheet { sheet = .addTitles(serverID) }
+        if case .reorder(localID) = sheet { sheet = .reorder(serverID) }
         loadedCollections.insert(serverID)
     }
 
@@ -172,40 +171,126 @@ extension AppStore {
         }
     }
 
-    // Pinned, cover, sort, layout and manual order are device-local (§3: no model).
+    // MARK: Curation (pinned, cover, manual order) — on the server since the curation contract
 
-    func togglePin(_ id: String) {
-        guard let c = collection(id) else { return }
-        let pinned = !c.pinned
-        update(id) { $0.pinned = pinned }
-        saveLocal()
-        undoToast(pinned ? "Fijada arriba" : "Ya no está fijada") { [weak self] in
-            self?.update(id) { $0.pinned = !pinned }
-            self?.saveLocal()
+    /// A write to this collection (rename, privacy, cover, order) is queued or in flight: a read
+    /// that lands meanwhile is older than what's on screen.
+    func collectionWriteInFlight(_ id: String) -> Bool {
+        s.writeChains[s.canonicalWriteKey(WriteKey.collection(canonicalCollectionID(id)))] != nil
+    }
+
+    /// A pin write is queued or in flight (one per account: it moves the pin between collections).
+    var pinWriteInFlight: Bool { s.writeChains[WriteKey.pin] != nil }
+
+    /// The optimistic write pattern of the curation: on ANY failure the collection goes back to
+    /// what it was (only while it still shows what this write set); a rejected value (400) says
+    /// why; anything else offers Reintentar, which applies the change again and resends it.
+    private func syncCuration(_ id: String, key: String,
+                              stillOurs: @escaping (KCollection) -> Bool,
+                              revert: @escaping () -> Void,
+                              reapply: @escaping () -> Void,
+                              _ op: @escaping @Sendable (KuraAPI, String) async throws -> Void) {
+        sync(key: key, onError: { [weak self] e in
+            guard let self else { return true }
+            if let c = self.collection(id), stillOurs(c) { revert() }
+            switch e {
+            case .cancelled, .unauthorized, .notFound, .unsupported:
+                return true
+            case .invalid:
+                self.showToast(ToastModel(text: e.toast, kind: .info))
+            default:
+                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    guard let self, self.collection(id) != nil else { return }
+                    self.dismissToast()
+                    reapply()
+                })
+            }
+            return true
+        }) { [weak self] api in
+            let sid = try await self?.resolveCollectionID(id) ?? id
+            try await op(api, sid)
         }
     }
 
-    func setCover(_ id: String, titleID: String) {
-        let old = collection(id)?.coverTitleID
-        update(id) { $0.coverTitleID = titleID }
+    /// Fijar / Desfijar. One pinned per account: pinning this one unpins the rest, here and on the
+    /// server (`PATCH { pinned }`). Deshacer puts the pin back where it was.
+    func togglePin(_ id: String) {
+        guard let c = collection(id) else { return }
+        let before = collections.first(where: \.pinned)?.id
+        setPinned(c.id, !c.pinned)
+        let pinned = !c.pinned
+        undoToast(pinned ? "Fijada" : "Ya no está fijada") { [weak self] in
+            guard let self else { return }
+            if let before { self.setPinned(before, true) } else { self.setPinned(c.id, false) }
+        }
+    }
+
+    private func setPinned(_ id: String, _ pinned: Bool) {
+        let id = canonicalCollectionID(id)
+        let snapshot = Dictionary(uniqueKeysWithValues: collections.map { ($0.id, $0.pinned) })
+        for i in collections.indices {
+            if collections[i].id == id { collections[i].pinned = pinned } else if pinned { collections[i].pinned = false }
+        }
+        syncCuration(id, key: WriteKey.pin,
+                     stillOurs: { $0.pinned == pinned },
+                     revert: { [weak self] in
+                         guard let self else { return }
+                         for i in self.collections.indices { self.collections[i].pinned = snapshot[self.collections[i].id] ?? false }
+                     },
+                     reapply: { [weak self] in self?.setPinned(id, pinned) }) { api, sid in
+            _ = try await api.setCollectionPinned(id: sid, pinned: pinned)
+        }
+    }
+
+    /// "Usar como portada" (a member) / "Portada automática" (nil): `PATCH { coverTitleId }`.
+    func setCover(_ id: String, titleID: String?) {
+        guard let c = collection(id) else { return }
+        let old = c.chosenCoverTitleID
+        guard old != titleID else { return }
+        writeCover(c.id, titleID, was: old)
+        undoToast(titleID == nil ? "Portada automática" : "Nueva portada") { [weak self] in
+            self?.writeCover(c.id, old, was: titleID)
+        }
+    }
+
+    private func writeCover(_ id: String, _ titleID: String?, was old: String?) {
+        update(id) { $0.chosenCoverTitleID = titleID }
+        syncCuration(id, key: WriteKey.collection(canonicalCollectionID(id)),
+                     stillOurs: { $0.chosenCoverTitleID == titleID },
+                     revert: { [weak self] in self?.update(id) { $0.chosenCoverTitleID = old } },
+                     reapply: { [weak self] in self?.writeCover(id, titleID, was: old) }) { api, sid in
+            _ = try await api.setCollectionCover(id: sid, titleID: titleID)
+        }
+    }
+
+    /// Reordenar › Guardar orden: the WHOLE manual order at once (`PUT /collections/{id}/order`),
+    /// and the view goes back to Manual. Titles that came or went while the sheet was open keep
+    /// their place: new ones on top (unplaced first), gone ones dropped.
+    func reorder(_ id: String, to order: [String]) {
+        guard let c = collection(id) else { return }
+        let present = Set(c.titleIDs)
+        let kept = order.filter { present.contains($0) }
+        let placed = Set(kept)
+        let final = c.titleIDs.filter { !placed.contains($0) } + kept
+        let old = c.titleIDs
+        update(id) { $0.sort = .manual }
         saveLocal()
-        undoToast("Portada cambiada") { [weak self] in
-            self?.update(id) { $0.coverTitleID = old }
-            self?.saveLocal()
+        guard final != old else { return }
+        writeOrder(c.id, final, was: old)
+    }
+
+    private func writeOrder(_ id: String, _ order: [String], was old: [String]) {
+        update(id) { $0.titleIDs = order }
+        syncCuration(id, key: WriteKey.collection(canonicalCollectionID(id)),
+                     stillOurs: { $0.titleIDs == order },
+                     revert: { [weak self] in self?.update(id) { $0.titleIDs = old } },
+                     reapply: { [weak self] in self?.writeOrder(id, order, was: old) }) { api, sid in
+            _ = try await api.reorderCollection(id: sid, titleIDs: order)
         }
     }
 
     func setSort(_ id: String, _ s: SortMode) { update(id) { $0.sort = s }; saveLocal() }
     func setLayout(_ id: String, _ l: CollectionLayout) { update(id) { $0.layout = l }; saveLocal() }
-
-    func reorder(_ id: String, from: IndexSet, to: Int) {
-        s.reorderedCollections.insert(canonicalCollectionID(id))
-        update(id) { c in
-            c.titleIDs.move(fromOffsets: from, toOffset: to)
-            c.sort = .manual
-        }
-        saveLocal()
-    }
 
     func deleteCollection(_ id: String) {
         let id = canonicalCollectionID(id)
@@ -217,7 +302,6 @@ extension AppStore {
             }
         }
         for (key, task) in deferredWrites where key.hasSuffix("|\(id)") { task.cancel(); deferredWrites[key] = nil }
-        s.reorderedCollections.remove(id)
         sync(key: WriteKey.collection(id)) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
             try await api.deleteCollection(id: sid)
@@ -262,7 +346,8 @@ extension AppStore {
         for i in collections.indices {
             collections[i].titleIDs = collections[i].titleIDs.map { $0 == localID ? real.id : $0 }
             if let d = collections[i].addedAt.removeValue(forKey: localID) { collections[i].addedAt[real.id] = d }
-            if collections[i].coverTitleID == localID { collections[i].coverTitleID = real.id }
+            if collections[i].chosenCoverTitleID == localID { collections[i].chosenCoverTitleID = real.id }
+            collections[i].fanTitleIDs = collections[i].fanTitleIDs.map { $0 == localID ? real.id : $0 }
         }
         if let s = userTitles.removeValue(forKey: localID), userTitles[real.id] == nil { userTitles[real.id] = s }
         recentlyViewed = recentlyViewed.map { $0 == localID ? real.id : $0 }

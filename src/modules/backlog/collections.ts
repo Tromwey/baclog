@@ -173,14 +173,41 @@ export async function reorderBacklogItems(
   backlogId: string,
   orderedIds: string[],
 ): Promise<boolean> {
-  const ids = reorderSchema.parse(orderedIds);
+  return renumberBacklog(userId, backlogId, reorderSchema.parse(orderedIds), "membership");
+}
+
+/**
+ * The same manual order keyed by TITLE (`catalog_item` ids) — what the API v1
+ * speaks (`PUT /collections/{id}/order`: the app only knows `titleIds`). A
+ * title can be in a backlog once (unique index), so the key is as exact as
+ * the membership id. Same rules: foreign ids don't match, omitted members go
+ * back to null (on top). Returns false when the backlog isn't the user's.
+ */
+export async function reorderBacklogTitles(
+  userId: string,
+  backlogId: string,
+  catalogItemIds: string[],
+): Promise<boolean> {
+  return renumberBacklog(userId, backlogId, reorderSchema.parse(catalogItemIds), "title");
+}
+
+async function renumberBacklog(
+  userId: string,
+  backlogId: string,
+  ids: string[],
+  key: "membership" | "title",
+): Promise<boolean> {
   const [own] = await db
     .select({ id: backlogs.id })
     .from(backlogs)
     .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
     .limit(1);
   if (!own) return false;
-  const json = JSON.stringify(ids);
+  // A repeated id would join its row twice and leave a hole in 0…n−1 (and
+  // UPDATE … FROM would pick one of the two positions arbitrarily): keep the
+  // first occurrence.
+  const json = JSON.stringify([...new Set(ids)]);
+  const match = key === "membership" ? backlogItems.id : backlogItems.catalogItemId;
   await db.execute(sql`
     update ${backlogItems} as b
     set position = o.pos
@@ -191,7 +218,7 @@ export async function reorderBacklogItems(
         end as pos
       from ${backlogItems}
       left join jsonb_array_elements_text(${json}::jsonb) with ordinality as u(id, ord)
-        on u.id = ${backlogItems.id}
+        on u.id = ${match}
       where ${backlogItems.backlogId} = ${backlogId} and ${backlogItems.userId} = ${userId}
     ) as o
     where b.id = o.id and b.backlog_id = ${backlogId} and b.user_id = ${userId}

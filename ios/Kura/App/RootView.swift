@@ -176,8 +176,6 @@ struct RouteView: View {
             switch route {
             case .collection(let id): CollectionDetailView(collectionID: id).zoomDestination(ZoomID.collection(id))
             case .title(let id): TitleDetailView(titleID: id).zoomDestination(ZoomID.title(id))
-            case .reorder(let id): ReorderView(collectionID: id)
-            case .changeCover(let id): ChangeCoverView(collectionID: id)
             case .automatic: WaitingCollectionView()
             case .person(let id): PersonProfileView(personID: id)
             case .publicCollection(let handle, let id): PublicCollectionView(handle: handle, collectionID: id)
@@ -227,6 +225,7 @@ struct SheetContent: View {
         case .block(let handle): BlockSheet(handle: handle)
         case .deleteAccount: DeleteAccountSheet()
         case .addTitles(let c): AddTitlesSheet(collectionID: c)
+        case .reorder(let c): ReorderSheet(collectionID: c)
         case .revokeSession(let s): RevokeSessionSheet(session: s)
         case .unlinkIdentity(let p): UnlinkIdentitySheet(provider: p)
         case .notificationsAsk: NotificationsAskSheet()

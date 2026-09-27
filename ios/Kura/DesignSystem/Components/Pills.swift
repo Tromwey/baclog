@@ -188,3 +188,22 @@ struct Skeleton: View {
             .accessibilityHidden(true)
     }
 }
+
+/// The skeleton pulse (opacity 1 ↔ .45, 1.6 s) on a whole silhouette at once — the shapes inside
+/// are plain `s1` fills (the collection skeletons, 6c). Still with Reduce Motion.
+private struct SkeletonPulse: ViewModifier {
+    @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduce
+    func body(content: Content) -> some View {
+        content
+            .opacity(reduce ? 0.8 : (on ? 1 : 0.45))
+            .onAppear {
+                guard !reduce else { return }
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { on = true }
+            }
+    }
+}
+
+extension View {
+    func kSkeletonPulse() -> some View { modifier(SkeletonPulse()) }
+}

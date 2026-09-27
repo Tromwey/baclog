@@ -26,6 +26,7 @@ import {
 import { decodeCursor, encodeCursor } from "../src/modules/reviews/cursor";
 import {
   CollectionSchema,
+  PersonCollectionSchema,
   PersonSchema,
   ReleaseSchema,
   ReviewSchema,
@@ -215,51 +216,106 @@ check("wireVisibilityOf: private · link · profile", () => {
   assert.equal(wireVisibilityOf({ isPublic: true, showOnProfile: true }), "profile");
 });
 
-check("toCollection: orden addedAt desc, coverTitleId = más reciente con portada", () => {
+const COLL = {
+  id: "c1",
+  name: "Obsesiones",
+  vibe: null,
+  isPublic: true,
+  showOnProfile: true,
+  pinnedAt: null,
+  coverCatalogItemId: null,
+  createdAt: T0,
+  updatedAt: T1,
+};
+
+check("toCollection: sin reordenar = addedAt desc; coverTitleId = frente del abanico", () => {
   const c = CollectionSchema.parse(
     toCollection({
-      id: "c1",
-      name: "Obsesiones",
-      vibe: null,
-      isPublic: true,
-      showOnProfile: true,
-      createdAt: T0,
-      updatedAt: T1,
+      ...COLL,
       memberships: [
-        { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), posterUrl: "https://x/old.jpg" },
-        { catalogItemId: "newest", addedAt: T1, posterUrl: null },
-        { catalogItemId: "mid", addedAt: T0, posterUrl: "https://x/mid.jpg" },
+        { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), position: null },
+        { catalogItemId: "newest", addedAt: T1, position: null },
+        { catalogItemId: "mid", addedAt: T0, position: null },
+        { catalogItemId: "older", addedAt: new Date("2025-01-01T00:00:00Z"), position: null },
       ],
     }),
   );
-  assert.deepEqual(c.titleIds, ["newest", "mid", "old"]);
-  assert.equal(c.coverTitleId, "mid", "el más reciente SIN portada no es la portada");
+  assert.deepEqual(c.titleIds, ["newest", "mid", "old", "older"]);
+  assert.deepEqual(c.fanTitleIds, ["newest", "mid", "old"], "abanico = 3, en el orden");
+  assert.equal(c.coverTitleId, "newest", "el frente del abanico, tenga o no portada");
+  assert.equal(c.chosenCoverTitleId, null);
+  assert.equal(c.pinned, false);
   assert.equal(c.addedAt.newest, "2026-09-25T09:30:00Z");
   assert.equal(c.visibility, "profile");
   assert.equal(c.createdAt, "2026-09-24T15:00:00Z");
   const empty = CollectionSchema.parse(
     toCollection({
+      ...COLL,
       id: "c2",
       name: "Vacía",
       vibe: "noche",
       isPublic: false,
-      showOnProfile: true,
-      createdAt: T0,
+      pinnedAt: T0,
+      coverCatalogItemId: "gone",
       updatedAt: T0,
       memberships: [],
     }),
   );
   assert.deepEqual(empty.titleIds, []);
+  assert.deepEqual(empty.fanTitleIds, []);
   assert.equal(empty.coverTitleId, null);
+  assert.equal(empty.chosenCoverTitleId, null, "portada elegida que ya no es miembro → null");
+  assert.equal(empty.pinned, true);
   assert.equal(empty.visibility, "private");
 });
 
-check("toCollectionDetail: { collection, titles, states } coherentes y en orden", () => {
+check("toCollection: orden manual (position asc, sin colocar arriba y más nuevo primero)", () => {
+  const c = CollectionSchema.parse(
+    toCollection({
+      ...COLL,
+      memberships: [
+        { catalogItemId: "p1", addedAt: T1, position: 1 },
+        { catalogItemId: "p0", addedAt: new Date("2026-01-01T00:00:00Z"), position: 0 },
+        { catalogItemId: "loose-old", addedAt: T0, position: null },
+        { catalogItemId: "p2", addedAt: T0, position: 2 },
+        { catalogItemId: "loose-new", addedAt: T1, position: null },
+      ],
+    }),
+  );
+  assert.deepEqual(c.titleIds, ["loose-new", "loose-old", "p0", "p1", "p2"]);
+  assert.deepEqual(c.fanTitleIds, ["loose-new", "loose-old", "p0"]);
+  assert.equal(c.coverTitleId, "loose-new");
+});
+
+check("toCollection: portada elegida miembro va al frente; no-miembro se ignora", () => {
+  const memberships = [
+    { catalogItemId: "a", addedAt: T0, position: 0 },
+    { catalogItemId: "b", addedAt: T0, position: 1 },
+    { catalogItemId: "c", addedAt: T0, position: 2 },
+    { catalogItemId: "d", addedAt: T0, position: 3 },
+  ];
+  const chosen = CollectionSchema.parse(
+    toCollection({ ...COLL, coverCatalogItemId: "d", pinnedAt: T1, memberships }),
+  );
+  assert.deepEqual(chosen.titleIds, ["a", "b", "c", "d"], "elegir portada no mueve el orden");
+  assert.deepEqual(chosen.fanTitleIds, ["d", "a", "b"]);
+  assert.equal(chosen.coverTitleId, "d");
+  assert.equal(chosen.chosenCoverTitleId, "d");
+  assert.equal(chosen.pinned, true);
+  const stale = CollectionSchema.parse(
+    toCollection({ ...COLL, coverCatalogItemId: "left-the-collection", memberships }),
+  );
+  assert.equal(stale.chosenCoverTitleId, null, "una portada que salió de la colección no se reporta");
+  assert.deepEqual(stale.fanTitleIds, ["a", "b", "c"]);
+  assert.equal(stale.coverTitleId, "a");
+});
+
+check("toCollectionDetail: { collection, titles, states } coherentes y en orden manual", () => {
   const d = toCollectionDetail(
-    { id: "c1", name: "Noche", vibe: null, isPublic: true, showOnProfile: false, createdAt: T0, updatedAt: T1 },
+    { ...COLL, name: "Noche", showOnProfile: false, coverCatalogItemId: "old" },
     [
-      { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), title: "Old", mediaType: "film", year: 2001, byline: null, posterUrl: "https://x/old.jpg", paletteHex: null, releaseDate: null, status: "completed", verdict: "liked", obsessed: false, savedAt: new Date("2025-12-01T00:00:00Z"), reviewId: "r1" },
-      { catalogItemId: "new", addedAt: T1, title: "New", mediaType: "album", year: null, byline: "Someone", posterUrl: null, paletteHex: ["#112233"], releaseDate: T1, status: "on_my_radar", verdict: null, obsessed: true, savedAt: T1, reviewId: null },
+      { catalogItemId: "old", addedAt: new Date("2026-01-01T00:00:00Z"), position: null, title: "Old", mediaType: "film", year: 2001, byline: null, posterUrl: "https://x/old.jpg", paletteHex: null, releaseDate: null, status: "completed", verdict: "liked", obsessed: false, savedAt: new Date("2025-12-01T00:00:00Z"), reviewId: "r1" },
+      { catalogItemId: "new", addedAt: T1, position: null, title: "New", mediaType: "album", year: null, byline: "Someone", posterUrl: null, paletteHex: ["#112233"], releaseDate: T1, status: "on_my_radar", verdict: null, obsessed: true, savedAt: T1, reviewId: null },
     ],
   );
   CollectionSchema.parse(d.collection);
@@ -268,7 +324,8 @@ check("toCollectionDetail: { collection, titles, states } coherentes y en orden"
   assert.deepEqual(d.collection.titleIds, ["new", "old"]);
   assert.deepEqual(d.titles.map((t) => t.id), ["new", "old"], "titles en el orden de la colección");
   assert.equal(d.collection.visibility, "link");
-  assert.equal(d.collection.coverTitleId, "old", "el más reciente sin portada no es la portada");
+  assert.equal(d.collection.coverTitleId, "old", "la portada elegida encabeza el abanico");
+  assert.deepEqual(d.collection.fanTitleIds, ["old", "new"]);
   assert.equal(d.states.old.savedAt, "2025-12-01T00:00:00Z", "savedAt sale de savedAt, no del addedAt de la membresía");
   assert.equal(d.states.old.reviewId, "r1");
   assert.equal(d.states.old.mark, "liked");
@@ -276,6 +333,21 @@ check("toCollectionDetail: { collection, titles, states } coherentes y en orden"
   const [newT, oldT] = d.titles;
   assert.deepEqual(newT.release, { kind: "day", date: "2026-09-25T09:30:00Z" }, "la colección trae el día (relojes)");
   assert.deepEqual(oldT.release, { kind: "year", date: "2001-01-01T00:00:00Z" });
+});
+
+check("PersonCollectionSchema exige vibe, pinned y fanTitleIds (≤ 3)", () => {
+  const ok = { id: "c1", name: "Noche", vibe: null, titleIds: ["a"], coverTitleId: "a", fanTitleIds: ["a"], pinned: true };
+  PersonCollectionSchema.parse(ok);
+  for (const k of ["vibe", "pinned", "fanTitleIds"] as const) {
+    const rest: Partial<typeof ok> = { ...ok };
+    delete rest[k];
+    assert.equal(PersonCollectionSchema.safeParse(rest).success, false, `sin ${k} no valida`);
+  }
+  assert.equal(
+    PersonCollectionSchema.safeParse({ ...ok, fanTitleIds: ["a", "b", "c", "d"] }).success,
+    false,
+    "el abanico tiene tope 3",
+  );
 });
 
 check("profileTint: featuredTitleId = la obsesión que tiñe; null si tiñe la biblioteca", () => {

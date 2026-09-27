@@ -80,8 +80,9 @@ export async function getPublicProfile(username: string) {
             // aspect (disco 1:1, póster 2:3), so the fan carries the kind.
             // Catalog data, not user state — still inside the public list.
             mediaType: catalogItems.mediaType,
-            // The web fan reads the owner's manual order (fan.ts); the API's
-            // `titleIds` keep `addedAt desc` (rows arrive in that order).
+            // The owner's manual order (fan.ts `byManualOrder`) — the web fan
+            // AND the API's `titleIds`/`fanTitleIds` read it. Rows arrive
+            // `addedAt desc` for the legacy covers/fans/palettes below.
             position: backlogItems.position,
             addedAt: backlogItems.addedAt,
             title: catalogItems.title,
@@ -108,17 +109,7 @@ export async function getPublicProfile(username: string) {
     string,
     { posterUrl: string | null; paletteHex: string[] | null; mediaType: MediaType }[]
   >();
-  // API v1: every title id per collection (rows are already `addedAt desc`),
-  // and the newest one with a cover — the wire's derived `coverTitleId`.
-  const titleIds = new Map<string, string[]>();
-  const coverTitle = new Map<string, string>();
   for (const c of coverRows) {
-    const ids = titleIds.get(c.backlogId) ?? [];
-    ids.push(c.catalogItemId);
-    titleIds.set(c.backlogId, ids);
-    if (c.posterUrl && !coverTitle.has(c.backlogId)) {
-      coverTitle.set(c.backlogId, c.catalogItemId);
-    }
     if (c.posterUrl) {
       const list = covers.get(c.backlogId) ?? [];
       if (list.length < 4) {
@@ -214,7 +205,8 @@ export async function getPublicProfile(username: string) {
     palette: palette.length > 0 ? palette : ["#D8FF3E"],
     backlogs: lists.map(({ pinnedAt, coverCatalogItemId, ...l }) => {
       const all = ordered.get(l.id) ?? [];
-      const fan = fanOf(all, coverCatalogItemId).map((c) => ({
+      const fanRows = fanOf(all, coverCatalogItemId);
+      const fan = fanRows.map((c) => ({
         posterUrl: c.posterUrl,
         paletteHex: c.paletteHex ?? null,
         mediaType: c.mediaType,
@@ -228,8 +220,11 @@ export async function getPublicProfile(username: string) {
       collaborators: credits.get(l.id) ?? [],
       coverUrls: covers.get(l.id) ?? [],
       covers: fans.get(l.id) ?? [],
-      titleIds: titleIds.get(l.id) ?? [],
-      coverTitleId: coverTitle.get(l.id) ?? null,
+      // API v1 (`PersonCollection`): the manual order, the fan's titles and
+      // its front — the same `fan.ts` rules as the owner's own `Collection`.
+      titleIds: all.map((c) => c.catalogItemId),
+      fanTitleIds: fanRows.map((c) => c.catalogItemId),
+      coverTitleId: fanRows[0]?.catalogItemId ?? null,
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
       };
     }),
@@ -283,8 +278,11 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       showOnProfile: backlogs.showOnProfile,
       updatedAt: backlogs.updatedAt,
       // Colecciones formalizado: the front of the fan (the owner's choice for
-      // a public collection). The API wire doesn't carry it.
+      // a public collection) and whether it leads the profile — the owner's
+      // own presentation of a PUBLIC collection, public-safe like its name.
+      // The API wire resolves the chosen cover against the members.
       coverCatalogItemId: backlogs.coverCatalogItemId,
+      pinnedAt: backlogs.pinnedAt,
       ownerName: users.name,
       ownerUsername: users.username,
     })
@@ -310,8 +308,8 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       // user_item.addedAt — the first-save instant stays private). Public
       // already: the feed's "agregó" event is keyed on this same instant.
       addedAt: backlogItems.addedAt,
-      // The owner's manual order (web sorts by it, fan.ts `byManualOrder`;
-      // the query itself stays `addedAt desc` for the API).
+      // The owner's manual order (web and API sort by it, fan.ts
+      // `byManualOrder`; the query itself stays `addedAt desc` for the aura).
       position: backlogItems.position,
       status: userItems.status,
       // F3.7 — two independent axes with different public rules (handoff §1):

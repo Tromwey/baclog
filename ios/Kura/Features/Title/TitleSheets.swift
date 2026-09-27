@@ -269,46 +269,17 @@ struct SaveToSheet: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        Button {
-                            store.present(.newCollection(addingTitleID: t.id))
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 40, height: 40)
-                                    .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous))
-                                Text("Nueva colección").font(.kura.ui(16, .medium))
-                                Spacer()
-                            }
-                            .foregroundStyle(KColor.text)
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: 56)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                        NewCollectionRow { store.present(.newCollection(addingTitleID: t.id)) }
 
+                        // Colecciones formalizado · 7a: mini fan, name, count and whether it's there.
+                        let already = Set(store.collectionsContaining(t.id).map(\.id))
                         ForEach(store.orderedCollections) { c in
                             let on = selected.contains(c.id)
-                            Button {
+                            FanPickRow(name: c.name, covers: store.fan(of: c), count: c.titleIDs.count, on: on,
+                                       note: already.contains(c.id) ? "ya está" : nil) {
                                 if on { selected.remove(c.id) } else { selected.insert(c.id) }
                                 KHaptic.select()
-                            } label: {
-                                HStack(spacing: 14) {
-                                    CollectionThumb(collection: c)
-                                    Text(c.name).font(.kura.news(19)).foregroundStyle(KColor.text).lineLimit(1)
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundStyle(on ? KColor.text : .clear)
-                                        .frame(width: 26, height: 26)
-                                        .background(on ? KColor.glassSelected : KColor.glassBg, in: Circle())
-                                        .animation(KMotion.fade, value: on)
-                                }
-                                .padding(.horizontal, 8)
-                                .frame(minHeight: 56)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(on ? .isSelected : [])
                         }
                     }
                 }

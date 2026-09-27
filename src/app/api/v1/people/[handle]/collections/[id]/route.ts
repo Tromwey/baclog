@@ -39,6 +39,8 @@ export const GET = withApi<{ handle: string; id: string }>(
           // The query only returns public backlogs; showOnProfile picks link/profile.
           isPublic: true,
           showOnProfile: row.showOnProfile,
+          pinnedAt: row.pinnedAt,
+          coverCatalogItemId: row.coverCatalogItemId,
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         },

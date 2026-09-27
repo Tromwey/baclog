@@ -2,6 +2,8 @@ import SwiftUI
 
 // MARK: - 18a Más
 
+/// Opciones de la colección: Agregar títulos · Compartir · Fijar · — · Ver como lista · Ordenar ·
+/// Renombrar · Privacidad · — · Borrar colección. (The cover is chosen by holding a title.)
 struct MoreSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
@@ -10,24 +12,19 @@ struct MoreSheet: View {
         if let c = store.collection(collectionID) {
             VStack(spacing: 2) {
                 SheetRow(systemImage: "plus", label: "Agregar títulos") { store.present(.addTitles(c.id)) }
-                SheetRow(systemImage: c.pinned ? "pin.slash" : "pin", label: c.pinned ? "Desfijar" : "Fijar") {
-                    store.dismissSheet(); store.togglePin(c.id)
+                SheetRow(systemImage: "square.and.arrow.up", label: "Compartir") { store.present(.share(c.id)) }
+                SheetRow(systemImage: c.pinned ? "pin.slash" : "pin", label: c.pinned ? "Desfijar" : "Fijar",
+                         action: { store.dismissSheet(); store.togglePin(c.id) }) {
+                    if c.pinned { Text("fijada").monoLabel() }
                 }
                 Color.clear.frame(height: 8)
-                SheetRow(systemImage: c.layout == .list ? "square.grid.2x2" : "list.bullet",
-                         label: c.layout == .list ? "Ver como portadas" : "Ver como lista") {
+                SheetRow(systemImage: c.layout == .list ? "square.grid.3x2" : "list.bullet",
+                         label: c.layout == .list ? "Ver en columnas" : "Ver como lista") {
                     store.dismissSheet()
                     withAnimation(KMotion.short) { store.setLayout(c.id, c.layout == .list ? .covers : .list) }
                 }
                 SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
                     Text(c.sort.label).monoLabel()
-                }
-                SheetRow(systemImage: "photo", label: "Cambiar portada", action: {
-                    store.dismissSheet(); store.push(.changeCover(c.id))
-                }) {
-                    if let t = store.coverTitle(of: c) {
-                        CoverView(title: t, width: 32, height: 32, radius: KRadius.coverS, shadow: false)
-                    }
                 }
                 SheetRow(systemImage: "pencil", label: "Renombrar") { store.present(.rename(c.id)) }
                 SheetRow(systemImage: "lock", label: "Privacidad", action: { store.present(.privacy(c.id)) }) {
@@ -43,6 +40,8 @@ struct MoreSheet: View {
 
 // MARK: - O3a Ordenar
 
+/// Manual (the owner's order, set in Reordenar) first and default · Recientes · Título · Estado ·
+/// Año. Per device.
 struct SortSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
@@ -55,15 +54,9 @@ struct SortSheet: View {
                     Button {
                         store.setSort(c.id, mode)
                         store.dismissSheet()
-                        if mode == .manual { store.push(.reorder(c.id)) }
                     } label: {
                         HStack(spacing: 14) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(mode.label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
-                                if let note = mode.note {
-                                    Text(note).font(.kura.ui(13)).foregroundStyle(KColor.text2)
-                                }
-                            }
+                            Text(mode.label).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
                             Spacer()
                             RadioMark(on: c.sort == mode)
                         }
@@ -80,61 +73,133 @@ struct SortSheet: View {
     }
 }
 
-// MARK: - O3b Modo ordenar
+// MARK: - O3b Reordenar
 
-struct ReorderView: View {
+/// Every title of the collection in its manual order, each row with a grip: drag the grip (the
+/// row follows the finger and the others make room), or use the ↑/↓ actions (VoiceOver: swipe up
+/// or down on the row). "Guardar orden" writes the WHOLE order at once (`PUT …/order`) and puts
+/// the view back on Manual; closing the sheet discards it. Twin of the web's `ReorderBody`.
+struct ReorderSheet: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduce
     let collectionID: String
+    @State private var order: [String] = []
+    @State private var seeded = false
+    @State private var drag: (from: Int, dy: CGFloat)? = nil
+
+    private let rowH: CGFloat = 64
 
     var body: some View {
         if let c = store.collection(collectionID) {
-            VStack(spacing: 0) {
-                HStack {
-                    Text("ordenar · \(c.name)")
-                        .font(.kura.news(22))
-                        .foregroundStyle(KColor.text)
-                        .lineLimit(1)
-                    Spacer()
-                    Button { store.pop() } label: {
-                        Text("Listo")
-                            .font(.kura.ui(15, .semibold))
-                            .foregroundStyle(KColor.bg)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 16)
-                            .background(KColor.text, in: Capsule())
-                    }
-                    .kPress()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, KSize.chromeTop)
-                .padding(.bottom, 18)
-
-                List {
-                    ForEach(c.titleIDs, id: \.self) { id in
-                        if let t = store.title(id) {
-                            HStack(spacing: 14) {
-                                CoverView(title: t, width: 44, height: 66, radius: KRadius.coverS)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
-                                    if let c = t.lowerCreator { Text(c).font(.kura.ui(14)).foregroundStyle(KColor.text2) }
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .frame(minHeight: 84)
-                            .listRowBackground(KColor.bg)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 12))
+            VStack(alignment: .leading, spacing: 0) {
+                SheetHeader(title: "reordenar") { store.dismissSheet() }
+                    .padding(.horizontal, 20)
+                Text("Arrastra desde las rayas. Así se ve la colección para todos.")
+                    .font(.kura.ui(13))
+                    .foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(order.enumerated()), id: \.element) { i, id in
+                            if let t = store.title(id) { row(t, i) }
                         }
                     }
-                    .onMove { from, to in store.reorder(c.id, from: from, to: to) }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .environment(\.editMode, .constant(.active))
+                .scrollDisabled(drag != nil)
+                SolidButton(title: "Guardar orden") {
+                    store.reorder(c.id, to: order)
+                    store.dismissSheet()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 34)
             }
-            .background(KColor.bg)
-            .ignoresSafeArea(.container, edges: .top)
+            .onAppear {
+                guard !seeded else { return }
+                seeded = true
+                order = c.titleIDs
+            }
         }
+    }
+
+    /// Where the dragged row would land.
+    private var target: Int {
+        guard let drag else { return -1 }
+        return max(0, min(order.count - 1, drag.from + Int((drag.dy / rowH).rounded())))
+    }
+
+    private func row(_ t: Title, _ i: Int) -> some View {
+        let dragging = drag?.from == i
+        var shift: CGFloat = 0
+        if let drag, !dragging {
+            if drag.from < i && i <= target { shift = -rowH } else if target <= i && i < drag.from { shift = rowH }
+        }
+        let album = t.format == .album
+        return HStack(spacing: 14) {
+            CoverView(title: t, width: album ? 44 : 34, height: album ? 44 : 51, radius: KRadius.coverS, shadow: false)
+                .frame(width: 44)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t.name).font(.kura.newsItalic(17)).foregroundStyle(KColor.text).lineLimit(1)
+                Text("\(i + 1) · \(t.year.map(String.init) ?? t.format.metaLabel)").monoLabel(10)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(KColor.text2)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { v in
+                            if drag == nil { KHaptic.impact(.light) }
+                            drag = (i, v.translation.height)
+                        }
+                        .onEnded { _ in
+                            let to = target
+                            if let from = drag?.from { move(from, to) }
+                            drag = nil
+                        }
+                )
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 4)
+        .frame(height: rowH)
+        .background(dragging ? KColor.s2 : Color.clear, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+        .modifier(DragLift(on: dragging))
+        .offset(y: dragging ? (drag?.dy ?? 0) : shift)
+        .zIndex(dragging ? 1 : 0)
+        .animation(dragging || reduce ? nil : KMotion.snappy, value: shift)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(t.name). Posición \(i + 1) de \(order.count)")
+        .accessibilityHint("Desliza hacia arriba o abajo para moverlo.")
+        .accessibilityAdjustableAction { dir in
+            switch dir {
+            case .increment: if i < order.count - 1 { move(i, i + 1) }
+            case .decrement: if i > 0 { move(i, i - 1) }
+            @unknown default: break
+            }
+        }
+        .accessibilityAction(named: "Subir") { if i > 0 { move(i, i - 1) } }
+        .accessibilityAction(named: "Bajar") { if i < order.count - 1 { move(i, i + 1) } }
+    }
+
+    private func move(_ from: Int, _ to: Int) {
+        guard from != to, order.indices.contains(from), order.indices.contains(to) else { return }
+        let id = order.remove(at: from)
+        order.insert(id, at: to)
+        KHaptic.select()
+    }
+}
+
+/// The lifted row while it's dragged (dark depth shadow, allowed).
+private struct DragLift: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.kShadow(.float) } else { content }
     }
 }
 
@@ -192,85 +257,6 @@ struct PrivacySheet: View {
                 }
             }
             .padding(.horizontal, 20)
-        }
-    }
-}
-
-// MARK: - 18b Cambiar portada
-
-struct ChangeCoverView: View {
-    @Environment(AppStore.self) private var store
-    let collectionID: String
-    @State private var chosen: String?
-
-    var body: some View {
-        if let c = store.collection(collectionID) {
-            let titles = store.titles(in: c)
-            let current = chosen.flatMap { store.title($0) } ?? store.coverTitle(of: c)
-            ZStack(alignment: .top) {
-                KColor.bg.ignoresSafeArea()
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        VStack(spacing: 12) {
-                            if let current {
-                                CoverView(title: current, height: 240)
-                                    .animation(KMotion.spring, value: current.id)
-                            }
-                            Text(c.name).font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, KSize.pushedTitleTop)
-                        .padding(.bottom, 28)
-                        .background(Tint.header(current?.palette ?? []).animation(KMotion.tint, value: current?.id))
-
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("Elige la portada. Su color tiñe la cabecera y la card en tus colecciones.")
-                                .font(.kura.ui(14))
-                                .foregroundStyle(KColor.text2)
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .bottom), count: 3),
-                                      spacing: 16) {
-                                ForEach(titles) { t in
-                                    let on = t.id == current?.id
-                                    Button {
-                                        withAnimation(KMotion.tint) { chosen = t.id }
-                                        KHaptic.select()
-                                    } label: {
-                                        CoverView(title: t, radius: KRadius.coverS, badge: on ? .chosen : .none, fluid: true)
-                                            .opacity(on ? 1 : 0.55)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Usar \(t.name) como portada")
-                                    .accessibilityAddTraits(on ? .isSelected : [])
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 22)
-                        .padding(.bottom, 48)
-                    }
-                }
-                .ignoresSafeArea(.container, edges: .top)
-
-                HStack {
-                    IconChip44(systemName: "xmark", iconSize: 15, label: "Cancelar") { store.pop() }
-                    Spacer()
-                    Button {
-                        if let chosen, chosen != c.coverTitleID { store.setCover(c.id, titleID: chosen) }
-                        store.pop()
-                    } label: {
-                        Text("Listo")
-                            .font(.kura.ui(15, .semibold))
-                            .foregroundStyle(KColor.text)
-                            .padding(.horizontal, 18)
-                            .frame(height: 44)
-                            .background(KColor.glassBg, in: Capsule())
-                    }
-                    .kPress()
-                }
-                .padding(.horizontal, KSize.chromeSide)
-                .padding(.top, KSize.chromeTop)
-                .ignoresSafeArea(.container, edges: .top)
-            }
         }
     }
 }
@@ -434,11 +420,14 @@ struct TitleActionsSheet: View {
                         store.present(.complete(titleID: t.id, focusReview: true))
                     }
                 }
-                if c.coverTitleID != t.id {
-                    SheetRow(systemImage: "photo", label: "Usar como portada") {
-                        store.dismissSheet()
-                        store.setCover(c.id, titleID: t.id)
-                    }
+                // The CHOSEN cover (not just the first in the order) can go back to automatic.
+                let isCover = c.chosenCoverTitleID == t.id
+                SheetRow(systemImage: "photo", label: isCover ? "Portada automática" : "Usar como portada",
+                         action: {
+                             store.dismissSheet()
+                             store.setCover(c.id, titleID: isCover ? nil : t.id)
+                         }) {
+                    if isCover { Text("portada").monoLabel() }
                 }
                 SheetRow(systemImage: "arrow.right", label: "Mover a otra colección") {
                     store.present(.moveTo(titleID: t.id, fromID: c.id))
@@ -478,47 +467,24 @@ struct MoveToSheet: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        Button {
+                        NewCollectionRow {
                             store.present(.newCollection(addingTitleID: t.id, movingFrom: fromID))
-                        } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: "plus").font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 40, height: 40)
-                                    .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous))
-                                Text("Nueva colección").font(.kura.ui(16, .medium))
-                                Spacer()
-                            }
-                            .foregroundStyle(KColor.text)
-                            .frame(minHeight: 56)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
 
                         ForEach(store.orderedCollections) { c in
                             let here = c.id == fromID
                             let already = !here && c.titleIDs.contains(t.id)
-                            Button {
-                                guard !here else { return }
+                            FanPickRow(name: c.name, covers: store.fan(of: c), count: c.titleIDs.count,
+                                       on: here || target == c.id,
+                                       note: here ? "aquí está" : already ? "ya está" : nil,
+                                       disabled: here) {
                                 target = c.id
                                 KHaptic.select()
-                            } label: {
-                                HStack(spacing: 14) {
-                                    CollectionThumb(collection: c)
-                                    Text(c.name).font(.kura.news(19)).foregroundStyle(KColor.text).lineLimit(1)
-                                    Spacer()
-                                    if here { Text("aquí está").monoLabel(10) }
-                                    else if already { Text("ya está").monoLabel(10) }
-                                    RadioMark(on: here || target == c.id)
-                                }
-                                .frame(minHeight: 56)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .opacity(here ? 0.45 : 1)
                         }
                     }
                 }
-                .frame(maxHeight: 300)
+                .frame(maxHeight: 288)
 
                 SolidButton(title: "Mover", enabled: target != nil) {
                     guard let target else { return }
@@ -529,22 +495,5 @@ struct MoveToSheet: View {
             }
             .padding(.horizontal, 20)
         }
-    }
-}
-
-/// 40 pt thumbnail for a collection row (its cover, or an empty s2 tile).
-struct CollectionThumb: View {
-    @Environment(AppStore.self) private var store
-    let collection: KCollection
-    var body: some View {
-        Group {
-            if let t = store.coverTitle(of: collection) {
-                CoverImage(url: t.coverURL, palette: t.palette)
-            } else {
-                KColor.s1
-            }
-        }
-        .frame(width: 40, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous))
     }
 }

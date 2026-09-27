@@ -391,15 +391,22 @@ private struct TitleSections: View {
                 SectionTitle(text: "en tus colecciones")
                 FlowLayout(spacing: 8, lineSpacing: 8) {
                     ForEach(cols) { c in
+                        // Each pill led by its mini fan at 22 (Colecciones formalizado · 8).
                         Button { store.push(.collection(c.id)) } label: {
-                            Text(c.name)
-                                .font(.kura.news(17))
-                                .foregroundStyle(KColor.text)
-                                .padding(.horizontal, 16)
-                                .frame(height: 40)
-                                .background(KColor.glassBg, in: Capsule())
+                            HStack(spacing: 8) {
+                                FanView(covers: store.fan(of: c), lead: 22)
+                                Text(c.name)
+                                    .font(.kura.news(17))
+                                    .foregroundStyle(KColor.text)
+                                    .lineLimit(1)
+                            }
+                            .padding(.leading, 8)
+                            .padding(.trailing, 16)
+                            .frame(height: 40)
+                            .background(KColor.glassBg, in: Capsule())
                         }
                         .kPress()
+                        .accessibilityLabel(c.name)
                     }
                 }
             }

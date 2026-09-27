@@ -821,6 +821,30 @@ struct LiveAPI: KuraAPI {
         try await client.send(.delete("collections/\(id)"))
     }
 
+    private struct PinPatch: Encodable { let pinned: Bool }
+    /// `coverTitleId` always goes on the wire: `null` is "back to automatic", not "unchanged".
+    private struct CoverPatch: Encodable {
+        let coverTitleId: String?
+        private enum CodingKeys: String, CodingKey { case coverTitleId }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(coverTitleId, forKey: .coverTitleId)
+        }
+    }
+    private struct OrderBody: Encodable { let titleIds: [String] }
+
+    func setCollectionPinned(id: String, pinned: Bool) async throws -> KCollection {
+        try await client.decode(try .patch("collections/\(id)", PinPatch(pinned: pinned)))
+    }
+
+    func setCollectionCover(id: String, titleID: String?) async throws -> KCollection {
+        try await client.decode(try .patch("collections/\(id)", CoverPatch(coverTitleId: titleID)))
+    }
+
+    func reorderCollection(id: String, titleIDs: [String]) async throws -> KCollection {
+        try await client.decode(try .put("collections/\(id)/order", OrderBody(titleIds: titleIDs)))
+    }
+
     func createTitleMembership(collectionID: String, ref: TitleRef, paletteHex: [String]?) async throws -> MembershipResult {
         let palette = paletteHex.flatMap { $0.isEmpty ? nil : $0 }
         switch ref {

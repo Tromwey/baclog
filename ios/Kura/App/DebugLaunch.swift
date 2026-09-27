@@ -1,10 +1,11 @@
-import Foundation
+import SwiftUI
 
 /// DEBUG: `-kuraScreen <name>` opens the app directly on a screen so the
 /// simulator can be screenshotted without driving the UI.
 ///
 /// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
-/// collections · loading · empty · offline · newcollection · collection ·
+/// collections (`-kuraCarousel <id>` starts the carousel on that collection) · loading · empty ·
+/// offline · newcollection · collection · reorder · quick · publiccollection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
 /// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
 /// identities · unlinkidentity · lastwayin · lastwayintoast · mergechooser · mergecode · mergelimit · mergeconfirm
@@ -94,6 +95,12 @@ enum DebugLaunch {
             main(.collections, [.collection("hermana")], sheet: .titleActions(titleID: "chihiro", collectionID: "hermana"))
         case "add":
             main(.collections, [.collection("pendientes")], sheet: .addTitles("pendientes"))
+        case "reorder":
+            main(.collections, [.collection("hermana")], sheet: .reorder("hermana"))
+        case "quick":
+            main(sheet: .collectionQuick("hermana"))
+        case "publiccollection":
+            main(.feed, [.person("luciarrr"), .publicCollection(handle: "luciarrr", id: "ghibli completo")])
         case "emptycollection":
             main(.collections, [.collection("correr")])
         case "title":
@@ -308,4 +315,16 @@ enum MockPrefill {
     static let name = ""
     static let birthYear = ""
     #endif
+}
+
+extension View {
+    /// DEBUG: `-kuraScrollBottom YES` opens a long screen scrolled to its end (captures of what's
+    /// below the fold: the profile's collections). A no-op otherwise, and in Release.
+    @ViewBuilder func kDebugScrollAnchor() -> some View {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "kuraScrollBottom") { defaultScrollAnchor(.bottom) } else { self }
+        #else
+        self
+        #endif
+    }
 }

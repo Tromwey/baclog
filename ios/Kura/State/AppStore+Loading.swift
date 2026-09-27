@@ -36,6 +36,7 @@ extension AppStore {
                 lastUsedCollectionID = collections.first(where: \.pinned)?.id
             }
             s.libraryLoaded = true
+            if !emptyLibrary { migrateLegacyCuration() }
             applyMe(account)
             // Still AWAITED before `.loaded`: the collection cards and "no puedo esperar" draw only
             // the titles they know (`titles(in:)` drops the missing ones), so flipping to `.loaded`
@@ -81,10 +82,23 @@ extension AppStore {
             }
             if let i = collections.firstIndex(where: { $0.id == id }) {
                 var c = applyLocal(d.collection)
-                c.pinned = collections[i].pinned
+                // A pin / cover / order / rename still on its way wins over this (older) read.
+                if collectionWriteInFlight(id) {
+                    c.pinned = collections[i].pinned
+                    c.chosenCoverTitleID = collections[i].chosenCoverTitleID
+                    c.titleIDs = collections[i].titleIDs
+                    c.name = collections[i].name
+                    c.vibe = collections[i].vibe
+                    c.privacy = collections[i].privacy
+                } else if collections[i].pinned != c.pinned, pinWriteInFlight {
+                    c.pinned = collections[i].pinned
+                }
                 if pendingRemovals(in: id).isEmpty { collections[i] = c } else {
                     collections[i].name = c.name
+                    collections[i].vibe = c.vibe
                     collections[i].privacy = c.privacy
+                    collections[i].pinned = c.pinned
+                    collections[i].chosenCoverTitleID = c.chosenCoverTitleID
                 }
             } else {
                 collections.append(applyLocal(d.collection))

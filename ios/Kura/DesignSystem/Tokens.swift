@@ -253,6 +253,73 @@ enum Tint {
     }
 }
 
+// MARK: - Feed gradient (Colecciones formalizado · "Degradado del feed")
+
+extension Tint {
+    /// The two ends of the feed gradient, or nil without a palette ("sin portada no hay color").
+    /// Same ends as `card`/`header` (`tintEnds` on the web); the lima ADN fallback never counts.
+    static func feedEnds(_ hexes: [String]) -> (top: Color, bottom: Color)? {
+        let h = FanOrder.kuraHexes(hexes)
+        guard !h.isEmpty else { return nil }
+        let (a, b) = ends(h)
+        return (a.color, b.color)
+    }
+
+    /// The colour a feed-gradient page continues in (under the dock's band): tone 2, or `bg`.
+    static func feedTail(_ hexes: [String]) -> Color { feedEnds(hexes)?.bottom ?? KColor.bg }
+
+    /// Its first tone (what the rubber band shows above the top), or `bg`.
+    static func feedTop(_ hexes: [String]) -> Color { feedEnds(hexes)?.top ?? KColor.bg }
+}
+
+/// The feed gradient over a whole page: 168°, tone 1 at the top-left corner and tone 2 by `span`
+/// points along the gradient line, then the page CONTINUES in tone 2 instead of fading to black.
+/// Anchored in points (CSS `linear-gradient(168deg, a 0px, b {span}px, b 100%)`): at 168° the 0
+/// line passes through the top-left corner, so the colour of a point only depends on its offset
+/// from that corner — a long page never stretches it. Put it BEHIND the scroll content (it scrolls
+/// with it). 760 on Tus colecciones, 900 on a collection and the profiles.
+struct FeedSurface: View {
+    let hexes: [String]
+    var span: CGFloat = 900
+
+    var body: some View {
+        GeometryReader { g in
+            if let e = Tint.feedEnds(hexes) {
+                let rad = 168.0 * Double.pi / 180
+                let dx = CGFloat(sin(rad)) * span, dy = CGFloat(-cos(rad)) * span
+                LinearGradient(colors: [e.top, e.bottom], startPoint: .topLeading,
+                               endPoint: UnitPoint(x: dx / max(g.size.width, 1), y: dy / max(g.size.height, 1)))
+            } else {
+                KColor.bg
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+extension View {
+    /// Scroll content wearing the feed gradient: the surface behind it, its first tone stretching
+    /// up past the top when the page is pulled down.
+    func kFeedSurface(_ hexes: [String], span: CGFloat) -> some View {
+        background(alignment: .top) { FeedSurface(hexes: hexes, span: span) }
+            .kOverscrollFill(Tint.feedTop(hexes))
+    }
+
+    /// The dock floats over the page's own bottom tone, not over black: a fixed 150 band from
+    /// transparent to the tail (at 75 %). Put it on the screen's ZStack, above the scroll view.
+    func kFeedDockBand(_ hexes: [String]) -> some View {
+        overlay(alignment: .bottom) {
+            LinearGradient(stops: [.init(color: Tint.feedTail(hexes).opacity(0), location: 0),
+                                   .init(color: Tint.feedTail(hexes), location: 0.75)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 150)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+}
+
 // MARK: - Motion
 
 /// Every curve in the app comes from here (DS "movimiento"). Rules:

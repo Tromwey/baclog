@@ -120,14 +120,31 @@ struct PersonCollection: Hashable, Identifiable, Decodable {
     var privacy: Privacy = .publicAccess
     /// The backend id (for `GET /people/{handle}/collections/{id}`).
     var remoteID: String? = nil
+    /// The fan's front (`coverTitleId`).
     var coverTitleID: String? = nil
+    var vibe: String? = nil
+    var pinned = false
+    /// Up to three (`fanTitleIds`); without it, the front then the order (`FanOrder.fan`).
+    var fanTitleIDs: [String] = []
 
-    init(name: String, titleIDs: [String], privacy: Privacy = .publicAccess, remoteID: String? = nil) {
+    init(name: String, titleIDs: [String], privacy: Privacy = .publicAccess, remoteID: String? = nil,
+         vibe: String? = nil, pinned: Bool = false, fanTitleIDs: [String]? = nil) {
         self.name = name; self.titleIDs = titleIDs; self.privacy = privacy; self.remoteID = remoteID
+        self.vibe = vibe; self.pinned = pinned
+        self.fanTitleIDs = fanTitleIDs ?? FanOrder.fan(titleIDs, cover: nil)
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, titleIds, visibility, coverTitleId }
+    /// The id its public page answers to (the mock's people have no backend id: their name).
+    var routeID: String { remoteID ?? name }
 
+    var shownVibe: String? {
+        guard let v = vibe?.trimmingCharacters(in: .whitespacesAndNewlines), !v.isEmpty else { return nil }
+        return v
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, titleIds, visibility, coverTitleId, vibe, pinned, fanTitleIds }
+
+    /// `vibe`, `pinned`, `fanTitleIds` are new (curation contract): absent = none / false / derived.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         remoteID = try c.decodeIfPresent(String.self, forKey: .id)
@@ -135,6 +152,10 @@ struct PersonCollection: Hashable, Identifiable, Decodable {
         titleIDs = try c.decodeIfPresent([String].self, forKey: .titleIds) ?? []
         privacy = try c.decodeIfPresent(String.self, forKey: .visibility).map(Privacy.init(wire:)) ?? .publicAccess
         coverTitleID = try c.decodeIfPresent(String.self, forKey: .coverTitleId)
+        vibe = try c.decodeIfPresent(String.self, forKey: .vibe)
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        let fan = try c.decodeIfPresent([String].self, forKey: .fanTitleIds)
+        fanTitleIDs = fan.map { Array($0.prefix(3)) } ?? FanOrder.fan(titleIDs, cover: coverTitleID)
     }
 }
 

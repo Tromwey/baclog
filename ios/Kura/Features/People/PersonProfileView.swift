@@ -28,17 +28,22 @@ struct PersonProfileView: View {
 
     private var isPreview: Bool { preview != nil }
 
-    private func palette(_ p: Person) -> [String]? {
-        if let id = p.featuredTitleID, let t = store.title(id) { return t.palette }
-        return p.hexes.count >= 2 ? p.hexes : nil
+    /// What tints their page (the feed gradient): the featured obsession's palette, else their
+    /// `hexes` (the server's newest obsession → dominant hexes). Empty = `bg`.
+    private func palette(_ p: Person) -> [String] {
+        if let id = p.featuredTitleID, let t = store.title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        return FanOrder.kuraHexes(p.hexes)
     }
 
     private func content(_ p: Person) -> some View {
         let following = !isPreview && store.isFollowing(p.id)
         let blocked = !isPreview && store.isBlocked(p.id)
         let locked = blocked || (p.isPrivate && !following)
+        let tint = locked ? [] : palette(p)
         return ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
+            Tint.feedTail(tint).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     header(p, following: following, locked: locked, blocked: blocked)
@@ -62,9 +67,12 @@ struct PersonProfileView: View {
                     }
                 }
                 .padding(.bottom, 150)
+                .kFeedSurface(tint, span: 900)
             }
             .ignoresSafeArea(.container, edges: .top)
+            .kDebugScrollAnchor()
         }
+        .kFeedDockBand(tint)
     }
 
     private func firstName(_ p: Person) -> String { p.name.split(separator: " ").first.map(String.init) ?? p.handle }
@@ -111,11 +119,6 @@ struct PersonProfileView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 34)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            // No cover to tint from (or locked): the same neutral s1 → bg as every other hero.
-            if let pal = palette(p), !locked { Tint.header(pal) } else { Tint.neutralHeader }
-        }
-        .kOverscrollFill(Tint.headerTop(locked ? nil : palette(p)))
     }
 
     @ViewBuilder private func followButton(_ p: Person, following: Bool) -> some View {
@@ -179,54 +182,29 @@ struct PersonProfileView: View {
             }
 
             if !p.collections.isEmpty {
+                let visible = p.collections.filter { $0.privacy == .publicAccess || following }
+                let hidden = p.collections.count - visible.count
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("colecciones").font(.kura.section).foregroundStyle(KColor.text)
-                        Spacer()
-                        Text("\(p.collections.count)").font(.kura.ui(14, .medium)).foregroundStyle(KColor.text2)
+                    if !visible.isEmpty {
+                        CollectionsShowcase(title: "colecciones", items: visible.map { pc in showcaseItem(pc, owner: p) })
+                    } else {
+                        SectionTitle(text: "colecciones").padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
-                    let visible = p.collections.filter { $0.privacy == .publicAccess || following }
-                    let hidden = p.collections.count - visible.count
-                    LazyVStack(spacing: 12) {
-                        ForEach(visible) { pc in PersonCollectionCard(collection: pc, ownerHandle: p.handle, coverHeight: 104) }
-                        if hidden > 0 {
-                            FollowersOnlyCard(count: hidden, note: "Síguela para verla.").padding(.horizontal, 12)
-                        }
+                    if hidden > 0 {
+                        FollowersOnlyCard(count: hidden, note: "Síguela para verla.").padding(.horizontal, 12)
                     }
                 }
             }
         }
     }
-}
 
-/// Someone else's collection as a card (spine + covers), 104 covers on profiles.
-struct PersonCollectionCard: View {
-    @Environment(AppStore.self) private var store
-    let collection: PersonCollection
-    var ownerHandle: String = ""
-    var coverHeight: CGFloat = 104
-
-    var body: some View {
-        let titles = collection.titleIDs.compactMap { store.title($0) }
-        let c = KCollection(id: "p-\(collection.name)", name: collection.name, titleIDs: collection.titleIDs,
-                            privacy: collection.privacy, createdAt: .distantPast)
-        let cover = collection.coverTitleID.flatMap { store.title($0) } ?? titles.first
-        // With a backend id the whole card opens the collection (like your own cards);
-        // without one (mock people) the covers open each ficha.
-        if let id = collection.remoteID, !ownerHandle.isEmpty {
-            CollectionCard(collection: c, titles: titles, marks: [:], palette: cover?.palette,
-                           coverHeight: coverHeight, spineSize: 11,
-                           onTap: { store.push(.publicCollection(handle: ownerHandle, id: id)) })
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(collection.name), \(titles.count) títulos")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { store.push(.publicCollection(handle: ownerHandle, id: id)) }
-        } else {
-            CollectionCard(collection: c, titles: titles, marks: [:], palette: cover?.palette,
-                           coverHeight: coverHeight, spineSize: 11,
-                           onTap: {}, onTitleTap: { store.push(.title($0.id)) }, coversOpenTitles: true)
-        }
+    /// Someone else's collection in the showcase: its server fan, and (not in a preview) its public
+    /// page to open and to share.
+    private func showcaseItem(_ pc: PersonCollection, owner p: Person) -> ShowcaseItem {
+        let open: (() -> Void)? = isPreview ? nil : { store.push(.publicCollection(handle: p.handle, id: pc.routeID)) }
+        return ShowcaseItem(id: pc.routeID, name: pc.name, vibe: pc.shownVibe, count: pc.titleIDs.count, pinned: pc.pinned,
+                            fan: store.fan(of: pc), open: open,
+                            shareLink: isPreview ? nil : pc.remoteID.flatMap { PublicLinks.collection(p.handle, id: $0) })
     }
 }
 
@@ -679,14 +657,13 @@ struct ProfileAsStrangerView: View {
             .sorted { $0.value.savedAt < $1.value.savedAt }
             .map(\.key)
         p.common = []
-        // Public ones as cards; followers-only ones only as "N colecciones para seguidores".
-        // No backend id: in the preview the covers open their ficha, not your own public page.
+        // Public ones in the showcase; followers-only ones only as "N colecciones para seguidores".
+        // A preview opens nothing (no backend id: it would be your own public page).
         p.collections = store.orderedCollections.compactMap { c in
             switch c.privacy {
             case .publicAccess where !c.titleIDs.isEmpty, .followers:
-                var pc = PersonCollection(name: c.name, titleIDs: c.titleIDs, privacy: c.privacy)
-                pc.coverTitleID = store.coverTitle(of: c)?.id
-                return pc
+                return PersonCollection(name: c.name, titleIDs: c.titleIDs, privacy: c.privacy, vibe: c.vibe,
+                                        pinned: c.pinned, fanTitleIDs: store.fan(of: c).map(\.id))
             default:
                 return nil
             }

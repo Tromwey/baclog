@@ -34,26 +34,34 @@ struct ProfileView: View {
         }
     }
 
-    /// "tus colecciones" on the profile: a collection whose every title is already an obsession
-    /// repeats "me obsesiona" (the onboarding's "Obsesiones" is exactly that), so it's left out
-    /// here — only here: it's still a normal collection in the Colecciones tab. It comes back the
-    /// moment it holds something that isn't an obsession. Nothing left = no section.
-    private var profileCollections: [KCollection] {
-        let obsessed = Set(obsessions.map(\.id))
-        return Array(store.orderedCollections
-            .filter { !$0.titleIDs.isEmpty && !Set($0.titleIDs).isSubset(of: obsessed) }
-            .prefix(4))
+    /// The palette that tints your profile (the feed gradient over the whole page): the obsession
+    /// you featured, else the newest obsession with a cover palette, else your library's dominant
+    /// hexes (`me.hexes`), else none — `bg` ("sin portada no hay color"). The lima never counts.
+    private var profileHexes: [String] {
+        if let id = store.me.featuredTitleID, let t = store.title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        if let t = obsessions.reversed().first(where: { !FanOrder.kuraHexes($0.palette).isEmpty }) {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        return FanOrder.kuraHexes(store.me.hexes)
     }
 
-    private var headerPalette: [String]? {
-        if let id = store.me.featuredTitleID, let t = store.title(id) { return t.palette }
-        return obsessions.first?.palette
+    /// Your collections as the showcase draws them (pinned first; every one, the empty ones as a
+    /// ghost fan).
+    private var showcase: [ShowcaseItem] {
+        store.orderedCollections.map { c in
+            ShowcaseItem(id: c.id, name: c.name, vibe: c.shownVibe, count: c.titleIDs.count, pinned: c.pinned,
+                         fan: store.fan(of: c),
+                         open: { store.select(.collections); store.push(.collection(c.id)) })
+        }
     }
 
     private var full: some View {
         let me = store.me
+        let tint = profileHexes
         return ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
+            Tint.feedTail(tint).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 18) {
@@ -100,9 +108,6 @@ struct ProfileView: View {
                     .padding(.top, KSize.chromeTop)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 34)
-                    .background(headerPalette.map { Tint.header($0) } ?? Tint.neutralHeader)
-                    .kOverscrollFill(Tint.headerTop(headerPalette))
-                    .animation(KMotion.tint, value: headerPalette)
 
                     VStack(alignment: .leading, spacing: 30) {
                         if !obsessions.isEmpty {
@@ -121,34 +126,24 @@ struct ProfileView: View {
                                 .scrollClipDisabled()
                             }
                         }
-                        if !profileCollections.isEmpty {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text("tus colecciones").font(.kura.section).foregroundStyle(KColor.text)
-                                Spacer()
-                                Button("Ver las \(store.collections.count)") { store.select(.collections) }
-                                    .font(.kura.ui(14, .medium))
-                                    .foregroundStyle(KColor.text2)
-                            }
-                            .padding(.horizontal, 20)
-                            VStack(spacing: 12) {
-                                ForEach(profileCollections) { c in
-                                    CollectionCard(collection: c, titles: store.titles(in: c), marks: [:],
-                                                   palette: store.palette(of: c), coverHeight: 104, spineSize: 11,
-                                                   waitingLabel: { store.isUnreleased($0) ? store.releaseLabel($0) : nil },
-                                                   onTap: { store.select(.collections); store.push(.collection(c.id)) },
-                                                   onLongPress: { store.present(.collectionQuick(c.id)) })
-                                }
-                            }
-                        }
+                        CollectionsShowcase(title: "tus colecciones", items: showcase,
+                                            onSeeAll: { store.select(.collections) }) {
+                            FanView(covers: [], lead: 186, ghost: true)
+                                .kPressable { store.present(.newCollection(addingTitleID: nil)) }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Tu primera colección")
+                                .accessibilityAddTraits(.isButton)
                         }
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 150)
                 }
+                .kFeedSurface(tint, span: 900)
             }
             .ignoresSafeArea(.container, edges: .top)
+            .kDebugScrollAnchor()
         }
+        .kFeedDockBand(tint)
         .task(id: store.loadState) { if store.loadState == .loaded { await store.loadRecapMonths() } }
     }
 }
@@ -191,27 +186,15 @@ private struct EmptyOwnProfile: View {
                         .padding(.horizontal, 20)
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("tus colecciones").font(.kura.section).foregroundStyle(KColor.text).padding(.horizontal, 8)
-                        HStack(spacing: 0) {
-                            SpineLabel(text: "tu primera", height: 186)
-                            HStack(alignment: .bottom, spacing: 10) {
-                                Button { store.present(.newCollection(addingTitleID: nil)) } label: {
-                                    RoundedRectangle(cornerRadius: KRadius.coverL, style: .continuous).fill(KColor.s2)
-                                        .frame(width: 100, height: 150)
-                                        .overlay(Image(systemName: "plus").font(.system(size: 17, weight: .semibold)).foregroundStyle(KColor.text2))
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Nueva colección")
-                                RoundedRectangle(cornerRadius: KRadius.coverL, style: .continuous).fill(KColor.s2).frame(width: 100, height: 150)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.vertical, 18)
-                            .padding(.horizontal, 16)
-                        }
-                        .background(KColor.s1)
-                        .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
+                        Text("tus colecciones").font(.kura.section).foregroundStyle(KColor.text).padding(.horizontal, 20)
+                        // 6a on the profile: the ghost fan is the way in.
+                        FanView(covers: [], lead: 186, ghost: true)
+                            .kPressable { store.present(.newCollection(addingTitleID: nil)) }
+                            .frame(maxWidth: .infinity)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Nueva colección")
+                            .accessibilityAddTraits(.isButton)
                     }
-                    .padding(.horizontal, 12)
                 }
                 .padding(.top, 24)
             }

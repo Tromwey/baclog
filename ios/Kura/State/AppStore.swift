@@ -37,6 +37,9 @@ enum SheetRoute: Identifiable, Hashable {
     case block(String)
     case deleteAccount
     case addTitles(String)
+    /// O3b · Reordenar: the whole manual order with drag handles; "Guardar orden" writes it all,
+    /// closing discards.
+    case reorder(String)
     /// Ajustes › Sesiones activas › "Cerrar sesión" on another device (`DELETE /me/sessions/{id}`).
     case revokeSession(DeviceSession)
     /// Ajustes › Inicio de sesión › Apple/Google conectada › "¿desconectar…?" (`DELETE /me/identities/{p}`).
@@ -48,6 +51,7 @@ enum SheetRoute: Identifiable, Hashable {
 
     var style: SheetStyle {
         if case .addTitles = self { return .tall }
+        if case .reorder = self { return .tall }
         return .compact
     }
 
@@ -216,11 +220,9 @@ final class SessionData {
     /// What `LocalPrefs` holds for THIS account; `localDirty` = memory is ahead of it.
     @ObservationIgnored var local = LocalPrefs.Payload()
     @ObservationIgnored var localDirty = false
-    /// `bootstrap` put the server's collections and states in memory. Until then the pins, covers,
-    /// orders and watched episodes on disk are the truth (memory has nothing to rebuild them from).
+    /// `bootstrap` put the server's collections and states in memory. Until then the sorts,
+    /// layouts and watched episodes on disk are the truth (memory has nothing to rebuild them from).
     @ObservationIgnored var libraryLoaded = false
-    /// Collections whose manual order the user set on this device (only those persist an order).
-    @ObservationIgnored var reorderedCollections: Set<String> = []
     @ObservationIgnored var reviewTitleIndex: [String: String] = [:]
     @ObservationIgnored var derived = DerivedCache()
 
@@ -947,12 +949,40 @@ final class AppStore {
         c.addedAt[titleID] ?? userTitles[titleID]?.savedAt ?? .distantPast
     }
 
-    func coverTitle(of c: KCollection) -> Title? {
-        if let id = c.coverTitleID, c.titleIDs.contains(id), let t = titles[id] { return t }
-        return c.titleIDs.first.flatMap { titles[$0] }
+    /// The collection's fan (≤ 3, front first): the chosen cover when it's still a member, then
+    /// the MANUAL order (`titleIDs`, never the view's sort). Derived here so a pin, a cover or a
+    /// reorder shows at once; the server's `fanTitleIDs` only stand in while the titles are unknown.
+    func fan(of c: KCollection) -> [Title] {
+        let known = c.titleIDs.filter { titles[$0] != nil }
+        let ids = known.isEmpty ? c.fanTitleIDs : FanOrder.fan(known, cover: c.chosenCoverTitleID)
+        return ids.compactMap { titles[$0] }
     }
 
-    func palette(of c: KCollection) -> [String]? { coverTitle(of: c)?.palette }
+    /// Someone else's collection: the server's fan is the truth (no chosen cover travels).
+    func fan(of pc: PersonCollection) -> [Title] {
+        let ids = pc.fanTitleIDs.isEmpty ? FanOrder.fan(pc.titleIDs, cover: pc.coverTitleID) : pc.fanTitleIDs
+        return ids.compactMap { titles[$0] }
+    }
+
+    /// The fan's front.
+    func coverTitle(of c: KCollection) -> Title? { fan(of: c).first }
+
+    /// The two tones a collection tints with (the feed gradient): its fan's front cover when it
+    /// has a palette, else the first title in the order that does. Empty = no colour. (`fanHexes`.)
+    func hexes(of c: KCollection) -> [String] {
+        Self.fanHexes(fan(of: c), ordered: c.titleIDs.compactMap { titles[$0] })
+    }
+
+    static func fanHexes(_ fan: [Title], ordered: [Title] = []) -> [String] {
+        let lead = fan.first { !$0.palette.isEmpty } ?? ordered.first { !$0.palette.isEmpty }
+        return FanOrder.kuraHexes(lead?.palette ?? [])
+    }
+
+    /// `hexes(of:)`, nil without colour — for the surfaces that still take an optional palette.
+    func palette(of c: KCollection) -> [String]? {
+        let h = hexes(of: c)
+        return h.isEmpty ? nil : h
+    }
 
     /// The collections a title is in, in `orderedCollections` order. One index (title → positions)
     /// built once per change of `collections`, instead of a sort + scan on every call.
@@ -1104,6 +1134,8 @@ final class AppStore {
     enum WriteKey {
         static func membership(_ titleID: String, _ collectionID: String) -> String { "m|\(titleID)|\(collectionID)" }
         static func collection(_ id: String) -> String { "c|\(id)" }
+        /// Every pin write: one pinned per account, so a pin on A and one on B contradict each other.
+        static let pin = "pin"
         static func mark(_ titleID: String) -> String { "mark|\(titleID)" }
         static func review(_ titleID: String) -> String { "review|\(titleID)" }
         static func follow(_ handle: String) -> String { "follow|\(handle)" }

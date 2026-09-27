@@ -91,8 +91,11 @@ export async function buildPerson(
       : profile.backlogs.map((b) => ({
           id: b.id,
           name: b.name,
+          vibe: b.vibe,
           titleIds: b.titleIds,
           coverTitleId: b.coverTitleId,
+          fanTitleIds: b.fanTitleIds,
+          pinned: b.pinned,
         })),
     isFollowing: following,
     isBlocked,
