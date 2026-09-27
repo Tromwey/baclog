@@ -554,6 +554,8 @@ private struct FeedCard: View, Equatable {
         a.event == b.event && a.height == b.height && a.topInset == b.topInset
     }
 
+    static let space = "feed.card"
+
     private var title: Title? { event.titleID.flatMap { store.title($0) } }
     private var author: Person? { store.person(event.authorID) }
     private var isMe: Bool { event.authorID == store.me.id }
@@ -566,7 +568,7 @@ private struct FeedCard: View, Equatable {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: FeedCardInset.gap) {
             if isSuggestion {
                 SuggestionPill()
             } else if let author {
@@ -584,14 +586,23 @@ private struct FeedCard: View, Equatable {
             }
             art
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            textBlock
-                .frame(maxHeight: textMax, alignment: .top)
-                .clipped()
+                .feedGeo("art", event.id)
+            // The block hugs its text (up to its tier's cap) and the art takes the rest, so every
+            // variant ends `FeedCardInset.bottom` above the card's edge. A `.frame(maxHeight:)`
+            // here stretched the block to its cap and left 36–71 pt of empty band under short
+            // text (founder, 2026-09-27: "la separación inferior es irregular").
+            CappedHeight(max: textMax) {
+                textBlock.feedGeo("text", event.id)
+            }
+            .clipped()
+            .feedGeo("block", event.id)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 18 + topInset)
-        .padding(.bottom, 22)
+        .padding(.top, FeedCardInset.top + topInset)
+        .padding(.bottom, FeedCardInset.bottom)
         .frame(height: height + topInset, alignment: .top)
+        .feedGeo("card", event.id)
+        .coordinateSpace(name: FeedCard.space)
         .contentShape(Rectangle())
         // A plain tap, no press fill: `.row`'s rounded fill is a list-row affordance and on a
         // full-bleed feed card it drew a stray card-shaped box under the finger. Bursts and
@@ -641,6 +652,7 @@ private struct FeedCard: View, Equatable {
                 .scrollTargetBehavior(BurstSnap(widths: ts.map { h * $0.format.aspect }))
                 .scrollClipDisabled()
                 .frame(height: h + BurstCaption.height)
+                .feedGeo("cover", event.id)
                 .padding(.horizontal, -20)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
@@ -660,6 +672,7 @@ private struct FeedCard: View, Equatable {
                             .zIndex(i == front ? 3 : 1)
                     }
                 }
+                .feedGeo("cover", event.id)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
         default:
@@ -667,6 +680,7 @@ private struct FeedCard: View, Equatable {
                 GeometryReader { geo in
                     let w = min(geo.size.width, geo.size.height * t.format.aspect)
                     CoverView(title: t, width: w, height: w / t.format.aspect).zoomSource(ZoomID.title(t.id))
+                        .feedGeo("cover", event.id)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
@@ -777,6 +791,50 @@ private struct FeedCard: View, Equatable {
         if months < 12 { return months == 1 ? "hace 1 mes" : "hace \(months) meses" }
         let years = months / 12
         return years == 1 ? "hace 1 año" : "hace \(years) años"
+    }
+}
+
+/// The card's inner rhythm — one source for every variant. Cards abut in the stack (each starts
+/// where the one above ends), so the space between the last line of a card and the first chip of
+/// the next is always `bottom + top`.
+enum FeedCardInset {
+    static let top: CGFloat = 18
+    static let bottom: CGFloat = 22
+    /// Chip → art → text.
+    static let gap: CGFloat = 14
+}
+
+/// Its content at its natural height, capped at `max` (nil: uncapped) — and never taller: a
+/// flexible `.frame(maxHeight:)` grows to whatever the stack offers up to the cap.
+private struct CappedHeight: Layout {
+    let max: CGFloat?
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let natural = child.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? natural.width, height: Swift.min(natural.height, max ?? .infinity))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let child = subviews.first else { return }
+        let natural = child.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        child.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: natural.height))
+    }
+}
+
+private extension View {
+    /// DEBUG `-kuraBodyLog YES`: `FEEDGEO <part> <event> minY maxY h` in the card's own space
+    /// (top = 0, bottom = the tier height + the first card's inset) — the spacing audit's ruler.
+    @ViewBuilder func feedGeo(_ part: String, _ id: String) -> some View {
+        #if DEBUG
+        if KBodyLog.on {
+            onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FeedCard.space)) } action: { r in
+                KBodyLog.hit(String(format: "FEEDGEO %@ %@ minY %.1f maxY %.1f h %.1f", part, id, r.minY, r.maxY, r.height))
+            }
+        } else { self }
+        #else
+        self
+        #endif
     }
 }
 

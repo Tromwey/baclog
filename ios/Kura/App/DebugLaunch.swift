@@ -164,6 +164,8 @@ enum DebugLaunch {
             main(.collections, [.title("pearl")], sheet: .complete(titleID: "pearl", focusReview: false))
         case "feed":
             main(.feed)
+            // `-kuraFeedAnchor <event id>`: any card of the mock stack, pinned under the header.
+            if let a = UserDefaults.standard.string(forKey: "kuraFeedAnchor") { store.debugFeedAnchor = a }
         case "feedreview":
             main(.feed)
             store.debugFeedAnchor = "f3"
