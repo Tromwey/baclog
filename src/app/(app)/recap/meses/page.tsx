@@ -4,11 +4,12 @@ import { requireUser } from "@/auth";
 import { BackButton } from "@/components/ui";
 import { tintSurfaceVertical } from "@/components/kura/tint";
 import { getRecapMonths } from "@/modules/backlog/recap";
-import { monthName, monthYear } from "@/modules/backlog/recap-format";
+import { monthName, monthYear, shortYear } from "@/modules/backlog/recap-format";
 
 /**
  * O8 Meses anteriores (Kura, flujo 10 — a branch of Recap): the newest
- * month on top in Newsreader 40 with its three tiles (`--s1`, radius 18,
+ * month on top in Newsreader 40 with its short year ("agosto ’26", no mono
+ * "recap · …" over it — founder 2026-09-27), with its three tiles (`--s1`, radius 18,
  * number in Newsreader 28 + mono label), then "meses anteriores" as one
  * collection-shaped card (spine "tus recaps") of 108×192 miniatures, each
  * tinted by its own "lo más tuyo" and leading to that month's recap.
@@ -33,12 +34,10 @@ export default async function RecapMonthsPage() {
       <div className="px-6 pt-[calc(16px+env(safe-area-inset-top))]">
         <BackButton href="/recap" className="h-11! w-11!" />
       </div>
-      <div className="flex flex-col gap-1.5 px-5 pt-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-          recap · {monthYear(latest.key)}
-        </span>
-        <h1 className="font-brand text-[40px] leading-none text-text">{monthName(latest.key)}</h1>
-      </div>
+      <h1 className="whitespace-nowrap px-5 pt-4 font-brand text-[40px] leading-none text-text">
+        {monthName(latest.key)}
+        <span className="text-[0.56em] text-text-2">{` ${shortYear(latest.key)}`}</span>
+      </h1>
       <Link href={`/recap?mes=${latest.key}`} className="mx-5 mt-[18px] flex gap-2.5 bl-press-lg">
         {tiles.map((t) => (
           <span key={t.l} className="flex flex-1 flex-col gap-1 rounded-[var(--r-surface)] bg-surface-1 p-4">

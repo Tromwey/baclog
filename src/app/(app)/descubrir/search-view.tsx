@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { CatalogSearchResult } from "@/modules/catalog/types";
 import { Cover, GLASS_BUTTON, SectionTitle } from "@/components/kura/components";
+import { SaveChip } from "@/components/kura/save-chip";
 import type { LibraryIndex } from "./library";
 import {
   clearRecentQueries,
@@ -26,11 +27,9 @@ import {
   CloseGlyph,
   Highlight,
   KindPills,
-  PlusGlyph,
   RecentGlyph,
   RowCover,
   SKELETON_PULSE,
-  SavedCount,
   SearchGlyph,
   TriangleGlyph,
   workMeta,
@@ -367,25 +366,7 @@ export function SearchView({
                       </span>
                     </span>
                   </button>
-                  {saved > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => onSave(r)}
-                      aria-label={`${r.title}: guardado en ${saved}, cambiar colecciones`}
-                      className="flex h-11 min-w-11 flex-none items-center justify-center rounded-full px-2 bl-press-sm"
-                    >
-                      <SavedCount n={saved} />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onSave(r)}
-                      aria-label={`Guardar ${r.title}`}
-                      className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]"
-                    >
-                      <PlusGlyph />
-                    </button>
-                  )}
+                  <SaveChip saved={saved} title={r.title} onClick={() => onSave(r)} />
                 </li>
               );
             })}

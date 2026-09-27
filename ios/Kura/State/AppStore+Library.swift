@@ -114,16 +114,20 @@ extension AppStore {
         change(&collections[i])
     }
 
-    /// `PATCH /collections/{id}` for a rename or a privacy change. On ANY failure the collection
-    /// goes back to what it was (the server kept it) — only if it still shows what this write set,
-    /// so a later edit isn't undone. A rejected value (400) says why; anything else offers
-    /// Reintentar, which applies the change again and resends it.
-    private func syncCollection(_ id: String, name: String? = nil, privacy: Privacy? = nil,
-                                was old: (name: String?, privacy: Privacy?)) {
+    /// `PATCH /collections/{id}` for a name / frase (vibe) edit or a privacy change. On ANY failure
+    /// the collection goes back to what it was (the server kept it) — only if it still shows what
+    /// this write set, so a later edit isn't undone. A rejected value (400) says why; anything else
+    /// offers Reintentar, which applies the change again and resends it.
+    ///
+    /// `vibe` is `nil` = untouched, `""` = cleared (the server stores an empty frase as `null`),
+    /// so the wire never needs an explicit `null`. `old.vibe` uses the same convention.
+    private func syncCollection(_ id: String, name: String? = nil, vibe: String? = nil, privacy: Privacy? = nil,
+                                was old: (name: String?, vibe: String?, privacy: Privacy?)) {
         sync(key: WriteKey.collection(canonicalCollectionID(id)), onError: { [weak self] e in
             guard let self else { return true }
             self.update(id) { c in
                 if let name, c.name == name, let o = old.name { c.name = o }
+                if let vibe, (c.vibe ?? "") == vibe, let o = old.vibe { c.vibe = o.isEmpty ? nil : o }
                 if let privacy, c.privacy == privacy, let o = old.privacy { c.privacy = o }
             }
             switch e {
@@ -137,37 +141,57 @@ extension AppStore {
                     self.dismissToast()
                     self.update(id) { c in
                         if let name { c.name = name }
+                        if let vibe { c.vibe = vibe.isEmpty ? nil : vibe }
                         if let privacy { c.privacy = privacy }
                     }
-                    self.syncCollection(id, name: name, privacy: privacy, was: old)
+                    self.syncCollection(id, name: name, vibe: vibe, privacy: privacy, was: old)
                 })
             }
             return true
         }) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
-            _ = try await api.updateCollection(id: sid, name: name, privacy: privacy)
+            _ = try await api.updateCollection(id: sid, name: name, vibe: vibe, privacy: privacy)
         }
     }
 
-    func rename(_ id: String, to name: String) {
+    /// Límites del servidor (`backlogNameSchema` / `backlogVibeSchema` en
+    /// `src/modules/backlog/collections.ts`): nombre 1–60, frase ≤ 80, ambos recortados.
+    static let collectionNameLimit = 60
+    static let collectionVibeLimit = 80
+
+    /// Editar (O2b, nombre + frase): one optimistic write for whatever changed, one Deshacer that
+    /// puts both back. An empty frase clears it. The name keeps the lowercase rule of creation.
+    func editCollection(_ id: String, name: String, vibe: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let old = collection(id)?.name else { return }
-        let new = trimmed.lowercased()
-        update(id) { $0.name = new }
-        syncCollection(id, name: new, was: (old, nil))
-        undoToast("Renombrada") { [weak self] in
-            self?.update(id) { $0.name = old }
-            self?.syncCollection(id, name: old, was: (new, nil))
+        guard !trimmed.isEmpty, let c = collection(id) else { return }
+        let newName = String(trimmed.lowercased().prefix(Self.collectionNameLimit))
+        let newVibe = String(vibe.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.collectionVibeLimit))
+        let oldName = c.name, oldVibe = c.vibe ?? ""
+        let nameChanged = newName != oldName, vibeChanged = newVibe != oldVibe
+        guard nameChanged || vibeChanged else { return }
+        let n = nameChanged ? newName : nil, v = vibeChanged ? newVibe : nil
+        update(id) { c in
+            if let n { c.name = n }
+            if let v { c.vibe = v.isEmpty ? nil : v }
+        }
+        syncCollection(id, name: n, vibe: v, was: (oldName, oldVibe, nil))
+        undoToast(vibeChanged ? "Guardada" : "Renombrada") { [weak self] in
+            self?.update(id) { c in
+                if nameChanged { c.name = oldName }
+                if vibeChanged { c.vibe = oldVibe.isEmpty ? nil : oldVibe }
+            }
+            self?.syncCollection(id, name: nameChanged ? oldName : nil, vibe: vibeChanged ? oldVibe : nil,
+                                 was: (n, v, nil))
         }
     }
 
     func setPrivacy(_ id: String, _ p: Privacy) {
         guard let old = collection(id)?.privacy, old != p else { return }
         update(id) { $0.privacy = p }
-        syncCollection(id, privacy: p, was: (nil, old))
+        syncCollection(id, privacy: p, was: (nil, nil, old))
         undoToast("Ahora la ve: \(p.label.lowercased())") { [weak self] in
             self?.update(id) { $0.privacy = old }
-            self?.syncCollection(id, privacy: old, was: (nil, p))
+            self?.syncCollection(id, privacy: old, was: (nil, nil, p))
         }
     }
 
@@ -301,6 +325,14 @@ extension AppStore {
 
     func setSort(_ id: String, _ s: SortMode) { update(id) { $0.sort = s }; saveLocal() }
     func setLayout(_ id: String, _ l: CollectionLayout) { update(id) { $0.layout = l }; saveLocal() }
+    /// Opciones' "Ver como lista / Ver en columnas": flips the layout the collection has NOW, read
+    /// from the store at tap time. The row used to compute it from the `c` its sheet captured when
+    /// it last rendered; a stale copy writes the value already on screen and every later tap lands
+    /// one step behind (founder, 2026-09-27). One source of truth: `collections[i].layout`.
+    func toggleLayout(_ id: String) {
+        guard let c = collection(id) else { return }
+        setLayout(id, c.layout == .list ? .covers : .list)
+    }
 
     func deleteCollection(_ id: String) {
         let id = canonicalCollectionID(id)

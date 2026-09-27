@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Cover, SectionTitle } from "@/components/kura/components";
+import { SaveChip } from "@/components/kura/save-chip";
 import { releaseLabel, tintCard } from "@/components/kura/tint";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
 import type { MediaType } from "@/modules/catalog/types";
@@ -18,8 +19,6 @@ import {
   KIND_NOUN,
   KIND_SHORT,
   KindTrack,
-  PlusGlyph,
-  SavedCount,
   SearchGlyph,
   inKind,
   type KindTab,
@@ -212,40 +211,6 @@ const seenOf = (w: {
   posterUrl: w.posterUrl,
 });
 
-/** Glass "Guardar" (19a) — or "Guardado" with the bookmark once it's in. */
-function SaveButton({
-  saved,
-  title,
-  onClick,
-}: {
-  saved: number;
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={saved > 0 ? `${title}: guardado, cambiar colecciones` : `Guardar ${title}`}
-      className="inline-flex h-11 items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] pl-3 pr-4 text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
-    >
-      {saved > 0 ? (
-        <>
-          <svg width={18} height={18} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="flex-none">
-            <path d="M7 2.6h10a2.2 2.2 0 012.2 2.2v16.6L12 17.6l-7.2 3.8V4.8A2.2 2.2 0 017 2.6z" />
-          </svg>
-          Guardado
-        </>
-      ) : (
-        <>
-          <PlusGlyph />
-          Guardar
-        </>
-      )}
-    </button>
-  );
-}
-
 function RecCardView({
   card,
   single,
@@ -292,7 +257,7 @@ function RecCardView({
           )}
         </Link>
         <span className="mt-1">
-          <SaveButton saved={saved} title={w.title} onClick={() => onSave(w)} />
+          <SaveChip variant="pill" saved={saved} title={w.title} onClick={() => onSave(w)} />
         </span>
       </div>
     </div>
@@ -346,25 +311,7 @@ function TrendRow({
           </span>
         </span>
       </Link>
-      {saved > 0 ? (
-        <button
-          type="button"
-          onClick={() => onSave(row)}
-          aria-label={`${row.title}: guardado en ${saved}, cambiar colecciones`}
-          className="flex h-11 min-w-11 flex-none items-center justify-center rounded-full px-2 bl-press-sm"
-        >
-          <SavedCount n={saved} />
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onSave(row)}
-          aria-label={`Guardar ${row.title}`}
-          className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]"
-        >
-          <PlusGlyph />
-        </button>
-      )}
+      <SaveChip saved={saved} title={row.title} onClick={() => onSave(row)} />
     </li>
   );
 }

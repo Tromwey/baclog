@@ -632,7 +632,7 @@ function sheetLabel(s: SheetState, name: string): string {
     case "reorder":
       return "Reordenar";
     case "rename":
-      return "Renombrar";
+      return "Editar colección";
     case "privacy":
       return `Quién ve ${name}`;
     case "share":
@@ -854,7 +854,7 @@ function OptionsBody({
           of the modes), Reordenar edits that manual order — the one everyone
           sees. It left the body (founder, 2026-09-27). */}
       {count > 1 && <MenuRow icon="grip" label="Reordenar" onClick={() => go("reorder")} />}
-      <MenuRow icon="pencil" label="Renombrar" onClick={() => go("rename")} />
+      <MenuRow icon="pencil" label="Editar" onClick={() => go("rename")} />
       <MenuRow icon="lock" label="Privacidad" aside={visibilityLabel} onClick={() => go("privacy")} />
       <MenuGap />
       <MenuRow icon="trash" label="Borrar colección" onClick={() => go("delete")} />

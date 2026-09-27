@@ -77,6 +77,11 @@ export function monthName(key: string): string {
   return ES_MONTHS[Number(key.slice(5)) - 1] ?? "este mes";
 }
 
+/** "2026-08" → "’26": the year the recap titles carry after the month. */
+export function shortYear(key: string): string {
+  return `\u2019${key.slice(2, 4)}`;
+}
+
 /** "2026-08" → "agosto 2026". */
 export function monthYear(key: string): string {
   return `${monthName(key)} ${key.slice(0, 4)}`;

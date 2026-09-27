@@ -87,6 +87,9 @@ export function cardTailHex(hexes: readonly string[]): string {
 /** Kura's forms: disco 1:1, póster 2:3. */
 const aspectOf = (m: MediaType) => (m === "album" ? "1 / 1" : "2 / 3");
 
+/** A burst cover's caption: 8 gap + Newsreader 16 × 1.2 + 4 + mono 10 × 1.2. */
+const BURST_CAPTION = 44;
+
 /** The cover's hexes, else the author's ADN (minus the lima fallback pair). */
 const cardHexes = (e: FeedEvent): readonly string[] =>
   e.paletteHex.length > 0 ? e.paletteHex : sealHexesOf(e.author.avatarHexes);
@@ -362,28 +365,45 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         trailing={burst.when}
       />
       <Art>
-        <div
-          className="bl-scroll -mx-5 flex h-full w-auto items-stretch gap-3.5 self-center overflow-x-auto overflow-y-hidden px-5 [mask-image:linear-gradient(90deg,transparent_0,#000_20px,#000_calc(100%-46px),transparent_100%)] [scroll-padding-left:20px] [scroll-snap-type:x_mandatory]"
-          style={{ maxHeight: `calc(100cqw / ${maxRatio})` }}
-        >
-          {items.map((e) => (
-            <Link
-              key={e.id}
-              href={`/item/${e.catalogItemId}`}
-              aria-label={e.title}
-              className="block h-full flex-none [scroll-snap-align:start] bl-press-lg"
-              style={{ aspectRatio: aspectOf(e.mediaType) }}
-            >
-              <span
-                role="img"
-                aria-label={e.title}
-                className="block h-full w-full overflow-hidden rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
-                style={{
-                  backgroundImage: e.posterUrl ? `url(${e.posterUrl})` : posterFill(e.paletteHex),
-                }}
-              />
-            </Link>
-          ))}
+        {/* A size container: the covers take the art's height minus their caption
+            (`BURST_CAPTION`), capped so the widest one still fits the width. */}
+        <div className="flex h-full w-full items-center [container-type:size]">
+          <div
+            className="bl-scroll -mx-5 flex w-auto flex-none items-start gap-3.5 overflow-x-auto overflow-y-hidden px-5 [mask-image:linear-gradient(90deg,transparent_0,#000_20px,#000_calc(100%-46px),transparent_100%)] [scroll-padding-left:20px] [scroll-snap-type:x_mandatory]"
+            style={{ ["--burst-h" as string]: `min(100cqh - ${BURST_CAPTION}px, 100cqw / ${maxRatio})` }}
+          >
+            {items.map((e) => {
+              const ratio = e.mediaType === "album" ? 1 : 2 / 3;
+              // Artist for music, studio/network for video; the format when there's none.
+              const sub = e.byline ?? e.mediaTypeLabel;
+              return (
+                <Link
+                  key={e.id}
+                  href={`/item/${e.catalogItemId}`}
+                  aria-label={sub ? `${e.title}, ${sub}` : e.title}
+                  className="flex flex-none flex-col gap-1 [scroll-snap-align:start] bl-press-lg"
+                  style={{ width: `calc(var(--burst-h) * ${ratio})` }}
+                >
+                  <span
+                    aria-hidden
+                    className="block w-full flex-none overflow-hidden rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
+                    style={{
+                      height: "var(--burst-h)",
+                      backgroundImage: e.posterUrl ? `url(${e.posterUrl})` : posterFill(e.paletteHex),
+                    }}
+                  />
+                  <span className="mt-1 truncate font-brand text-[16px] italic leading-[1.2] text-text">
+                    {e.title}
+                  </span>
+                  {sub && (
+                    <span className="truncate font-mono text-[10px] uppercase leading-[1.2] tracking-[0.08em] text-text-2">
+                      {sub}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </Art>
       <TextBlock size="M">

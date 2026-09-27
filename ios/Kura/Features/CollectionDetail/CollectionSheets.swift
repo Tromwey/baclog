@@ -4,7 +4,7 @@ import SwiftUI
 
 /// ONE options sheet per collection, the same wherever you come from (propuesta 9: "una sola hoja
 /// de Opciones por rol"). The name 24 + "N títulos", then Agregar títulos · Compartir ·
-/// Fijar/Desfijar · — · [Ver como lista · Ordenar · Reordenar ·] Renombrar · Privacidad · — ·
+/// Fijar/Desfijar · — · [Ver como lista · Ordenar · Reordenar ·] Editar (nombre y frase) · Privacidad · — ·
 /// Borrar colección. `full` (Opciones, the ⋯ chip in 10a/10b) carries the VIEW rows (Reordenar
 /// only with 2+ titles; it left the body, founder 2026-09-27); holding a fan (9a: Tus
 /// colecciones, your own profile) leaves them out — they change the view of a screen you're not on.
@@ -36,7 +36,9 @@ struct CollectionOptionsSheet: View {
                     SheetRow(systemImage: c.layout == .list ? "square.grid.3x2" : "list.bullet",
                              label: c.layout == .list ? "Ver en columnas" : "Ver como lista") {
                         store.dismissSheet()
-                        withAnimation(KMotion.short) { store.setLayout(c.id, c.layout == .list ? .covers : .list) }
+                        // The store flips what the collection has NOW — never the `c` this row
+                        // captured when the sheet last rendered (a stale copy = one step behind).
+                        withAnimation(KMotion.short) { store.toggleLayout(c.id) }
                     }
                     SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
                         Text(c.sort.label).monoLabel(color: KColor.text3)
@@ -47,7 +49,7 @@ struct CollectionOptionsSheet: View {
                         SheetRow(systemImage: "line.3.horizontal", label: "Reordenar") { store.present(.reorder(c.id)) }
                     }
                 }
-                SheetRow(systemImage: "pencil", label: "Renombrar") { store.present(.rename(c.id)) }
+                SheetRow(systemImage: "pencil", label: "Editar") { store.present(.rename(c.id)) }
                 SheetRow(systemImage: "lock", label: "Privacidad", action: { store.present(.privacy(c.id)) }) {
                     Text(c.privacy.label).monoLabel(color: KColor.text3)
                 }
@@ -224,21 +226,40 @@ private struct DragLift: ViewModifier {
     }
 }
 
-// MARK: - O2b Renombrar
+// MARK: - O2b Editar (nombre + frase)
 
-struct RenameSheet: View {
+/// The frame's O2b "renombrar" plus the collection's frase — the italic line under the name in
+/// 10a/10b, the profile's vitrina, the public page and the OG card (`vibe` on the wire). The name
+/// is required (1–60, lowercased like at creation); the frase is optional (≤ 80) and saving it
+/// empty clears it. Both limits are the server's (`backlogNameSchema` / `backlogVibeSchema`).
+struct EditCollectionSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
     @State private var name = ""
-    @FocusState private var focused: Bool
+    @State private var vibe = ""
+    @FocusState private var nameFocused: Bool
+    @FocusState private var vibeFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SheetHeader(title: "renombrar") { store.dismissSheet() }
+            SheetHeader(title: "editar") { store.dismissSheet() }
             VStack(alignment: .leading, spacing: 14) {
-                GlassField(placeholder: "nombre", text: $name, serif: true, clearable: true, focus: $focused)
+                GlassField(placeholder: "nombre", text: $name, serif: true, clearable: true,
+                           focus: $nameFocused)
+                    .submitLabel(.next)
+                    .onSubmit { vibeFocused = true }
+                    .accessibilityLabel("Nombre de la colección")
+                    .onChange(of: name) { _, v in
+                        if v.count > AppStore.collectionNameLimit { name = String(v.prefix(AppStore.collectionNameLimit)) }
+                    }
+                GlassField(placeholder: "una frase para esta colección (opcional)", text: $vibe, clearable: true,
+                           focus: $vibeFocused)
                     .submitLabel(.done)
                     .onSubmit(save)
+                    .accessibilityLabel("Frase de la colección, opcional")
+                    .onChange(of: vibe) { _, v in
+                        if v.count > AppStore.collectionVibeLimit { vibe = String(v.prefix(AppStore.collectionVibeLimit)) }
+                    }
                 Text("Los links que ya compartiste siguen funcionando.")
                     .font(.kura.ui(13))
                     .foregroundStyle(KColor.text2)
@@ -249,13 +270,16 @@ struct RenameSheet: View {
         }
         .padding(.horizontal, 20)
         .onAppear {
-            name = store.collection(collectionID)?.name ?? ""
-            focused = true
+            let c = store.collection(collectionID)
+            name = c?.name ?? ""
+            vibe = c?.vibe ?? ""
+            nameFocused = true
         }
     }
 
     private func save() {
-        store.rename(collectionID, to: name)
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        store.editCollection(collectionID, name: name, vibe: vibe)
         store.dismissSheet()
     }
 }

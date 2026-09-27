@@ -240,6 +240,9 @@ struct IconChip44: View {
     var iconSize: CGFloat = 16
     var weight: Font.Weight = .semibold
     var fill: Color = KColor.glassBg
+    /// Content, not floating chrome (e.g. the ficha's action row): the same fill, but flat on
+    /// every OS — never the iOS 26 Liquid Glass, so it matches the pills next to it.
+    var flat = false
     var label: String
     let action: () -> Void
 
@@ -249,12 +252,12 @@ struct IconChip44: View {
                 .font(.system(size: iconSize, weight: weight))
                 .foregroundStyle(KColor.text)
                 .frame(width: size, height: size)
-                .modifier(ChromeFill(fill: fill, shape: Circle()))
+                .modifier(ChromeFill(fill: fill, shape: Circle(), flat: flat))
                 .contentShape(Circle())
                 // Smaller chips (the 36 sheet close) still take a 44 pt touch.
                 .kHitArea(horizontal: max(0, (44 - size) / 2), vertical: max(0, (44 - size) / 2))
         }
-        .modifier(ChromePress(glass: fill == KColor.glassBg))
+        .modifier(ChromePress(glass: !flat && fill == KColor.glassBg))
         .accessibilityLabel(label)
     }
 }
@@ -282,8 +285,9 @@ struct ShareChip44: View {
 private struct ChromeFill<S: Shape>: ViewModifier {
     let fill: Color
     let shape: S
+    var flat = false
     func body(content: Content) -> some View {
-        if fill == KColor.glassBg {
+        if fill == KColor.glassBg && !flat {
             content.kGlass(shape, fill: fill, interactive: true)
         } else {
             content.background(fill, in: shape)
@@ -325,5 +329,71 @@ struct RadioMark: View {
         .frame(width: 26, height: 26)
         .animation(KMotion.fade, value: on)
         .accessibilityHidden(true)
+    }
+}
+
+/// The one "guardar un título" affordance (Kura §patrones · guardar: "Guardar abre siempre la hoja
+/// 'guardar en'… Guardado muestra el marcador lleno con el número de colecciones"). One icon —
+/// the bookmark, outlined until the title is in ≥ 1 collection, then filled with the count — and
+/// one surface: the flat glass fill. It's CONTENT (a ficha's action row, a card, a list row), never
+/// floating chrome, so it never takes the iOS 26 Liquid Glass. "+" is not "guardar": it stays for
+/// "Nueva colección" / "Agregar títulos" to THIS collection. No haptic here: opening the sheet is
+/// silent, the write haptic lives in the store.
+struct SaveChip: View {
+    enum Style {
+        /// 44 pt capsule with the label — "Guardar" / "En N colecciones" (ficha 24a–d, the rec card 19a).
+        case pill
+        /// 44 pt round chip in a list row (19a tendencias, 19f resultados, O7 obra). Saved, it drops
+        /// its fill and reads as an indicator: the filled bookmark + the count in mono.
+        case icon
+    }
+
+    @Environment(AppStore.self) private var store
+    let titleID: String
+    var style: Style = .icon
+    @ScaledMetric(relativeTo: .subheadline) private var k: CGFloat = 1
+
+    var body: some View {
+        let n = store.collectionsContaining(titleID).count
+        Button { store.present(.saveTo(titleID)) } label: { face(n) }
+            .kPress()
+            .accessibilityLabel(n == 0 ? "Guardar" : (n == 1 ? "Guardado en 1 colección" : "Guardado en \(n) colecciones"))
+            .accessibilityHint(n == 0 ? "" : "Cambiar colecciones")
+    }
+
+    @ViewBuilder private func face(_ n: Int) -> some View {
+        let symbol = n > 0 ? "bookmark.fill" : "bookmark"
+        switch style {
+        case .pill:
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 15 * k, weight: .semibold))
+                Text(n == 0 ? "Guardar" : (n == 1 ? "En 1 colección" : "En \(n) colecciones"))
+                    .font(.kura.ui(15, .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(KColor.text)
+            .padding(.leading, 14).padding(.trailing, 16)
+            .frame(height: 44)
+            .background(KColor.glassBg, in: Capsule())
+            .contentShape(Capsule())
+        case .icon:
+            Group {
+                if n > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+                        Text("\(n)").font(.kura.mono(11))
+                    }
+                    .foregroundStyle(KColor.text2)
+                    .frame(minWidth: 44, minHeight: 44)
+                } else {
+                    Image(systemName: symbol).font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(KColor.text)
+                        .frame(width: 44, height: 44)
+                        .background(KColor.glassBg, in: Circle())
+                }
+            }
+            .contentShape(Rectangle())
+        }
     }
 }

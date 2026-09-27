@@ -3,35 +3,20 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SOLID_BUTTON } from "@/components/kura/components";
 import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
-import { BOOKMARK_PATH } from "@/components/glyph-paths";
-import { plural } from "@/lib/plural";
+import { SaveChip } from "@/components/kura/save-chip";
 import { KuraSheet, useKuraSheetDismiss } from "./kura-sheet";
 import { SheetTitleBlock, type SheetWork } from "./sheet-title";
 import { TriangleGlyph } from "./toast";
 import { useItemReaction } from "./reaction-state";
 
 /**
- * "Guardar" / "En N colecciones" (Kura 24a–d · §patrones · guardar): the glass
- * action of the ficha's row. The bookmark is outlined until the title lives in
- * a collection, then filled with the count ("Guardado muestra el marcador
- * lleno con el número de colecciones"). Reads the live membership off the
- * provider, so it updates the instant a sheet writes.
+ * "Guardar" / "En N colecciones" (Kura 24a–d · §patrones · guardar): the
+ * ficha's row wears the shared `SaveChip` pill. Reads the live membership off
+ * the provider, so it updates the instant a sheet writes.
  */
 export function SaveButton() {
   const { memberIds, openSave } = useItemReaction();
-  const n = memberIds.length;
-  return (
-    <button
-      type="button"
-      onClick={openSave}
-      className="inline-flex h-11 flex-none items-center gap-2 rounded-full bg-[var(--glass-bg)] pl-3.5 pr-4 text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill={n > 0 ? "var(--text)" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden className="flex-none">
-        <path d={BOOKMARK_PATH} />
-      </svg>
-      {n === 0 ? "Guardar" : `En ${n} ${plural(n, "colección", "colecciones")}`}
-    </button>
-  );
+  return <SaveChip variant="pill" saved={memberIds.length} onClick={openSave} />;
 }
 
 /**

@@ -5,9 +5,9 @@ import SwiftUI
 ///
 /// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
 /// collections (`-kuraCarousel <id>` starts the carousel on that collection) · loading · empty ·
-/// offline · newcollection · collection · reorder · recapmonth · quick · collectionsmore · profilequick · waitactions · publiccollection ·
+/// offline · newcollection · collection · editcollection · reorder · recapmonth · quick · collectionsmore · profilequick · waitactions · publiccollection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
-/// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
+/// complete · feed · feedburst · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
 /// identities · unlinkidentity · lastwayin · lastwayintoast · mergechooser · mergecode · mergelimit · mergeconfirm
 enum DebugLaunch {
     /// `-kuraScreen <name>` or `-kuraMock` → the app runs on `MockAPI` (DEBUG only).
@@ -40,6 +40,31 @@ enum DebugLaunch {
         // Arrives before the tabs are up → exercises the pending path too.
         if let raw = UserDefaults.standard.string(forKey: "kuraOpenURL"), let url = URL(string: raw) {
             DispatchQueue.main.async { store.openWebLink(url) }
+        }
+        // `-kuraLayoutDemo <collectionID>`: 4 × (Opciones → Ver como lista / en columnas), every 3 s
+        // from 2.5 s — the captures can't tap. The row is hit through accessibility (`DebugTap`),
+        // so its OWN Button closure runs; the simulator needs accessibility on first:
+        // `xcrun simctl spawn <udid> defaults write com.apple.Accessibility ApplicationAccessibilityEnabled -bool true`.
+        if let lid = UserDefaults.standard.string(forKey: "kuraLayoutDemo") {
+            // `-kuraLayoutDemoStep 1.2`: a faster rhythm (sheet up 40 % of the step).
+            let raw = UserDefaults.standard.double(forKey: "kuraLayoutDemoStep")
+            let step = raw > 0 ? max(0.6, raw) : 3
+            for k in 0..<4 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5 + Double(k) * step) { store.present(.more(lid)) }
+                // The row's REAL Button, activated through accessibility (what a tap runs).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5 + step * 0.4 + Double(k) * step) {
+                    let hit = DebugTap.activate(anyOf: ["Ver como lista", "Ver en columnas"])
+                    print("[layout] tapped row: \(hit ?? "none")")
+                }
+            }
+        }
+        // `-kuraEditVibe <frase>`: 2.5 s in, Editar on "hermana" with that frase (through
+        // `editCollection`, like the sheet's Guardar) — 10a/10b and the vitrina must repaint it.
+        if let v = UserDefaults.standard.string(forKey: "kuraEditVibe") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                guard let c = store.collection("hermana") else { return }
+                store.editCollection(c.id, name: c.name, vibe: v)
+            }
         }
         guard let screen = UserDefaults.standard.string(forKey: "kuraScreen") else { return }
         func main(_ tab: Tab = .collections, _ routes: [Route] = [], sheet: SheetRoute? = nil) {
@@ -99,6 +124,8 @@ enum DebugLaunch {
             store.pendingListCollection = "pendientes"
         case "auto":
             main(.collections, [.automatic])
+        case "editcollection":
+            main(.collections, [.collection("hermana")], sheet: .rename("hermana"))
         case "more":
             main(.collections, [.collection("hermana")], sheet: .more("hermana"))
         case "share":
@@ -143,6 +170,9 @@ enum DebugLaunch {
         case "feedsuggest":
             main(.feed)
             store.debugFeedAnchor = "f5"
+        case "feedburst":
+            main(.feed)
+            store.debugFeedAnchor = "f4"
         case "toast":
             main(.collections, [.collection("hermana")])
             store.pendingAction = { [weak store] in store?.remove("pearl", from: "hermana") }
@@ -358,3 +388,35 @@ extension View {
         #endif
     }
 }
+
+#if DEBUG
+/// Finds an accessibility element by label in the key window and activates it — the captures'
+/// stand-in for a finger on a SwiftUI Button (it runs the Button's own action closure).
+@MainActor
+enum DebugTap {
+    static func activate(anyOf labels: [String]) -> String? {
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        for w in windows {
+            if let (el, l) = find(in: w, labels: labels, depth: 0) {
+                _ = el.accessibilityActivate()
+                return l
+            }
+        }
+        return nil
+    }
+
+    private static func find(in obj: NSObject, labels: [String], depth: Int) -> (NSObject, String)? {
+        guard depth < 60 else { return nil }
+        if let l = obj.accessibilityLabel, labels.contains(l), !(obj is UIView && (obj as! UIView).isHidden) {
+            return (obj, l)
+        }
+        var kids: [NSObject] = []
+        if let els = obj.accessibilityElements as? [NSObject] { kids += els }
+        let n = obj.accessibilityElementCount()
+        if n != NSNotFound, n > 0 { for i in 0..<n { if let e = obj.accessibilityElement(at: i) as? NSObject { kids.append(e) } } }
+        if let v = obj as? UIView { kids += v.subviews }
+        for k in kids { if let r = find(in: k, labels: labels, depth: depth + 1) { return r } }
+        return nil
+    }
+}
+#endif

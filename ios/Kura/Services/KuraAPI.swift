@@ -88,7 +88,8 @@ protocol KuraAPI: Sendable {
     func collections() async throws -> [KCollection]
     func collection(id: String) async throws -> CollectionDetail
     func createCollection(name: String, privacy: Privacy) async throws -> KCollection
-    func updateCollection(id: String, name: String?, privacy: Privacy?) async throws -> KCollection
+    /// `PATCH /collections/{id}` — each field `nil` = untouched; `vibe: ""` clears the frase.
+    func updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?) async throws -> KCollection
     func deleteCollection(id: String) async throws
     /// `PATCH /collections/{id}` `{ pinned }` → Collection. One pinned per account: the server
     /// unpins the rest (the store already did, optimistically).

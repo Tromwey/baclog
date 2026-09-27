@@ -23,7 +23,7 @@ import {
  * Opciones, 9c). Same rows and order as Opciones in 10b minus the ones that
  * change that screen's view (Ver como lista, Ordenar):
  *
- *   Agregar títulos · Compartir · Fijar/Desfijar · — · Renombrar ·
+ *   Agregar títulos · Compartir · Fijar/Desfijar · — · Editar ·
  *   Privacidad · — · Borrar colección
  *
  * The steps swap the SAME sheet's content — never two sheets at once. Every
@@ -62,7 +62,7 @@ export function CollectionHoldSheet({
       : step === "privacy"
         ? `Quién ve ${c.name}`
         : step === "rename"
-          ? "Renombrar"
+          ? "Editar colección"
           : step === "delete"
             ? "Borrar colección"
             : `Opciones de ${c.name}`;
@@ -130,7 +130,7 @@ function HoldMenu({
         disabled={pending}
       />
       <MenuGap />
-      <MenuRow icon="pencil" label="Renombrar" onClick={() => onStep("rename")} />
+      <MenuRow icon="pencil" label="Editar" onClick={() => onStep("rename")} />
       <MenuRow
         icon="lock"
         label="Privacidad"

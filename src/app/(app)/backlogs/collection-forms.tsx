@@ -21,7 +21,7 @@ import {
 
 /**
  * The sheet bodies a collection shares between the list's hold sheet (10 ·
- * mantener presionado) and the detail's Opciones (18a): renombrar (O2b),
+ * mantener presionado) and the detail's Opciones (18a): editar (O2b),
  * quién la ve (K1a) and compartir (O5). Bodies, not sheets — "nunca dos
  * hojas a la vez": the caller swaps its one sheet's content to these.
  */
@@ -142,9 +142,13 @@ export function PrivacyBody({
   );
 }
 
-/* ------------------------------------------------------------- renombrar */
+/* ---------------------------------------------------------------- editar */
 
-/** O2b — the name (and the product's optional vibe line, which the frame doesn't draw). */
+/**
+ * O2b "Editar" — the name (required, 1–60) and the frase: the collection's
+ * optional italic line (`vibe`, ≤ 80; saved empty = cleared). The frame's O2b
+ * only draws the name ("renombrar"); the row is "Editar" because it edits both.
+ */
 export function RenameBody({
   backlogId,
   name: currentName,
@@ -182,7 +186,7 @@ export function RenameBody({
       }}
       className="flex flex-col gap-1.5"
     >
-      <SheetTitle>renombrar</SheetTitle>
+      <SheetTitle>editar</SheetTitle>
       <div className="mt-1.5 flex flex-col gap-3.5">
         <div className="relative">
           <input
@@ -210,8 +214,8 @@ export function RenameBody({
           maxLength={80}
           value={vibe}
           onChange={(e) => setVibe(e.target.value)}
-          aria-label="Descripción (opcional)"
-          placeholder="Una línea que la describa (opcional)"
+          aria-label="Frase de la colección (opcional)"
+          placeholder="Una frase para esta colección (opcional)"
           className="h-[52px] w-full rounded-[16px] bg-[var(--glass-bg)] px-[18px] font-sans text-[16px] text-text outline-none transition-colors placeholder:text-text-3 focus:bg-white/[0.11]"
         />
         <span className="px-1 font-sans text-[13px] leading-[1.5] text-text-2">

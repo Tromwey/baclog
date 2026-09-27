@@ -146,11 +146,8 @@ struct DiscoverView: View {
                         Text(t.name).font(.kura.newsItalic(24)).foregroundStyle(KColor.text)
                             .lineLimit(2).minimumScaleFactor(0.85)
                         Text(recSubtitle(t)).font(.kura.ui(14)).foregroundStyle(KColor.text2).lineLimit(1)
-                        GlassButton(title: store.isSaved(t.id) ? "Guardado" : "Guardar",
-                                    systemImage: store.isSaved(t.id) ? "checkmark" : "plus") {
-                            store.present(.saveTo(t.id))
-                        }
-                        .padding(.top, 4)
+                        SaveChip(titleID: t.id, style: .pill)
+                            .padding(.top, 4)
                     }
                     Spacer(minLength: 0)
                 }
@@ -238,29 +235,6 @@ struct DiscoverView: View {
     private func metaShort(_ t: Title) -> String {
         [t.format.metaLabel, t.year.map(String.init), t.format == .album ? t.creator : t.creatorShort]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-}
-
-/// + (save) / bookmark-count chip used in discover rows.
-struct SaveChip: View {
-    @Environment(AppStore.self) private var store
-    let titleID: String
-    var body: some View {
-        let n = store.collectionsContaining(titleID).count
-        if n > 0 {
-            Button { store.present(.saveTo(titleID)) } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "bookmark.fill").font(.system(size: 12))
-                    Text("\(n)").font(.kura.mono(11))
-                }
-                .foregroundStyle(KColor.text2)
-                .frame(minWidth: 44, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Guardado en \(n). Cambiar")
-        } else {
-            IconChip44(systemName: "plus", iconSize: 16, label: "Guardar") { store.present(.saveTo(titleID)) }
-        }
     }
 }
 

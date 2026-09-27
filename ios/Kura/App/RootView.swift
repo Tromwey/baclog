@@ -215,7 +215,7 @@ struct SheetContent: View {
         case .collectionQuick(let id): CollectionOptionsSheet(collectionID: id, full: false)
         case .more(let id): CollectionOptionsSheet(collectionID: id)
         case .sort(let id): SortSheet(collectionID: id)
-        case .rename(let id): RenameSheet(collectionID: id)
+        case .rename(let id): EditCollectionSheet(collectionID: id)
         case .privacy(let id): PrivacySheet(collectionID: id)
         case .share(let id): ShareCollectionSheet(collectionID: id)
         case .deleteCollection(let id): DeleteCollectionSheet(collectionID: id)

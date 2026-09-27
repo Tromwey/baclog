@@ -21,6 +21,7 @@ enum SheetRoute: Identifiable, Hashable {
     case collectionQuick(String)
     case more(String)
     case sort(String)
+    /// O2b Editar: nombre + frase (`EditCollectionSheet`). The case keeps its old name.
     case rename(String)
     case privacy(String)
     case share(String)
@@ -620,7 +621,13 @@ final class AppStore {
         self.api = api
         self.clock = now
         let mock = KuraRuntime.usesMock
+        #if DEBUG
+        // `-kuraMockPrefs YES`: the mock with LocalPrefs ON (the live path of sort/layout: debounced
+        // disk write + `applyLocal`), to reproduce device-local bugs without an account.
+        prefs = LocalPrefs(enabled: !mock || UserDefaults.standard.bool(forKey: "kuraMockPrefs"))
+        #else
         prefs = LocalPrefs(enabled: !mock)
+        #endif
         #if DEBUG
         if mock { seedMock() } else { loadLocal() }
         #else

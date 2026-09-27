@@ -39,7 +39,7 @@ import { NewBacklogTrigger } from "./new-backlog-button";
  *    NAMES peek at the edges (the current centred at 30, the neighbours
  *    142 px off-centre at 22, dimmed). Tapping
  *    the fan does NOT open anything (founder): it only sits in the centre;
- *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Renombrar ·
+ *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Editar ·
  *    Privacidad · Borrar colección).
  *  - The order: FIRST the ghost fan "Nueva colección" (founder, 2026-09-27:
  *    to the left of the first collection) — which is where creating a

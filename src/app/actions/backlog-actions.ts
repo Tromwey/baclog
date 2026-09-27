@@ -63,8 +63,9 @@ export async function renameBacklogAction(
   });
   // Deleted between the assert and the write: say so, never a silent "ok".
   if (!ok) throw new NotFoundError();
-  revalidatePath(`/backlogs/${backlog.id}`);
-  revalidatePath("/backlogs");
+  // Name and frase show in the carousel, the detail, the profile's vitrina
+  // and the public page (its OG card renders dynamic) — all of them.
+  revalidateCollection(backlog.id, user.username);
   return { ok: true as const };
 }
 

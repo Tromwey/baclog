@@ -43,15 +43,10 @@ struct RecapView: View {
     private func content(_ r: RecapPayload, top: Title) -> some View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
-                    HStack {
-                        BackChip()
-                        Spacer()
-                        Text("Recap · \(r.month) \(String(r.year))").monoLabel(11, tracking: 0.1)
-                        Spacer()
-                        Color.clear.frame(width: 44, height: 44)
-                    }
-                    Text(r.month).font(.kura.newsItalic(52)).foregroundStyle(KColor.text)
-                        .accessibilityAddTraits(.isHeader)
+                    BackChip()
+                    // The month with its short year ("agosto ’26"); the mono "Recap · agosto 2026"
+                    // above it said the month twice (founder, 2026-09-27).
+                    RecapMonthTitle(month: r.month, year: r.year, size: 52, italic: true)
                     HStack(alignment: .bottom, spacing: 16) {
                         Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170).zoomSource(ZoomID.title(top.id)) }
                             .buttonStyle(.plain)
@@ -116,13 +111,7 @@ struct EmptyRecapView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                BackChip()
-                Spacer()
-                Text("Recap · septiembre 2026").monoLabel(11, tracking: 0.1, color: KColor.text3)
-                Spacer()
-                Color.clear.frame(width: 44, height: 44)
-            }
+            BackChip()
             Spacer()
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
@@ -130,10 +119,10 @@ struct EmptyRecapView: View {
                     RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126)
                     RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126).opacity(0.5)
                 }
-                Text("tu recap de septiembre todavía se está escribiendo.")
+                Text("tu recap de \(monthName(0)) todavía se está escribiendo.")
                     .font(.kura.newsItalic(44)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("El recap llega el 1 de octubre con lo que completes, califiques o reseñes este mes.")
+                Text("El recap llega el 1 de \(monthName(1)) con lo que completes, califiques o reseñes este mes.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Faltan \(daysLeft) días").font(.kura.mono(12)).foregroundStyle(KColor.text2)
@@ -147,6 +136,14 @@ struct EmptyRecapView: View {
         .ignoresSafeArea(.container, edges: .top)
     }
 
+    /// The month `offset` months from now in Kura's calendar (es-MX, lowercase): "septiembre".
+    private func monthName(_ offset: Int) -> String {
+        let cal = store.cal
+        let date = cal.date(byAdding: .month, value: offset, to: store.now) ?? store.now
+        let symbols = cal.standaloneMonthSymbols
+        return symbols[(cal.component(.month, from: date) - 1) % symbols.count].lowercased(with: cal.locale)
+    }
+
     private var daysLeft: Int {
         let cal = store.cal
         var comps = cal.dateComponents([.year, .month], from: store.now)
@@ -154,6 +151,26 @@ struct EmptyRecapView: View {
         comps.day = 1
         let end = cal.date(from: comps) ?? store.now
         return max(0, cal.dateComponents([.day], from: cal.startOfDay(for: store.now), to: end).day ?? 0) + 1
+    }
+}
+
+/// "agosto ’26": the month in Newsreader with its two-digit year a size down in `text2`, on one
+/// line (it shrinks a little before it would wrap, e.g. "septiembre" on a 375 pt screen).
+struct RecapMonthTitle: View {
+    let month: String
+    let year: Int
+    let size: CGFloat
+    let italic: Bool
+
+    private func face(_ s: CGFloat) -> Font { italic ? .kura.newsItalic(s) : .kura.news(s) }
+
+    var body: some View {
+        (Text(month).font(face(size)).foregroundColor(KColor.text)
+         + Text(" \u{2019}\(String(format: "%02d", year % 100))").font(face(size * 0.56)).foregroundColor(KColor.text2))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityLabel("\(month) \(String(year))")
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -169,8 +186,14 @@ struct RecapHistoryView: View {
                 HStack { BackChip(); Spacer() }
                     .padding(.horizontal, KSize.chromeSide)
                     .padding(.bottom, 14)
-                Text("recap · \(current?.month ?? "") \(current.map { String($0.year) } ?? "")").monoLabel().padding(.horizontal, 20)
-                Text(current?.month ?? "recap").font(.kura.news(40)).foregroundStyle(KColor.text).padding(.horizontal, 20).padding(.top, 6)
+                Group {
+                    if let current {
+                        RecapMonthTitle(month: current.month, year: current.year, size: 40, italic: false)
+                    } else {
+                        Text("recap").font(.kura.news(40)).foregroundStyle(KColor.text)
+                    }
+                }
+                .padding(.horizontal, 20)
                 HStack(spacing: 10) {
                     tile(String(current?.stats.completed ?? 0), "completos")
                     tile(String(current?.stats.obsessed ?? 0), "obsesiones")

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { MediaType } from "@/modules/catalog/types";
 import { Cover } from "@/components/kura/components";
-import { BOOKMARK_PATH } from "@/components/glyph-paths";
 
 /**
  * Descubrir's local Kura pieces (flujos-v2 · 19a–19h, 27a/27b). Things the
@@ -233,18 +232,6 @@ export function Highlight({ text, query }: { text: string; query: string }): Rea
       {text.slice(0, at)}
       <b className="font-semibold text-text">{text.slice(at, at + q.length)}</b>
       {text.slice(at + q.length)}
-    </span>
-  );
-}
-
-/** "guardado en N": the bookmark + count a saved result wears (19f). */
-export function SavedCount({ n }: { n: number }) {
-  return (
-    <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-text-2">
-      <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden className="flex-none">
-        <path d={BOOKMARK_PATH} />
-      </svg>
-      {n}
     </span>
   );
 }

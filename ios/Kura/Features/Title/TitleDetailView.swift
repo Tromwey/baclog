@@ -72,7 +72,6 @@ private struct TitleHeader: View {
         let unreleased = store.isUnreleased(t)
         let today = store.releaseLabel(t) == "hoy"
         let mark = store.mark(t.id)
-        let saved = store.collectionsContaining(t.id).count
 
         VStack(spacing: 12) {
             // Radius 18: where a Masonry cover (14) lands when it grows into the ficha.
@@ -127,9 +126,9 @@ private struct TitleHeader: View {
                     if !(unreleased && t.format == .album) {
                         completeButton(t, mark: mark, solid: today)
                     }
-                    saveButton(t, saved: saved)
+                    SaveChip(titleID: t.id, style: .pill)
                     if !unreleased && !today && t.format != .series {
-                        IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, label: "Reseñar") {
+                        IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, flat: true, label: "Reseñar") {
                             store.present(.complete(titleID: t.id, focusReview: true))
                         }
                     }
@@ -178,27 +177,6 @@ private struct TitleHeader: View {
         .kPress()
         .kAnimation(KMotion.spring, value: mark)
         .accessibilityLabel(mark.map { "Tu reacción: \($0.myLabel). Cambiar" } ?? "Completar")
-    }
-
-    private func saveButton(_ t: Title, saved: Int) -> some View {
-        Button {
-            store.present(.saveTo(t.id))
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: saved > 0 ? "bookmark.fill" : "bookmark")
-                    .font(.system(size: 14, weight: .semibold))
-                Text(saved == 0 ? "Guardar" : (saved == 1 ? "En 1 colección" : "En \(saved) colecciones"))
-                    .font(.kura.ui(15, .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(KColor.text)
-            .padding(.leading, 14).padding(.trailing, 16)
-            .frame(height: 44)
-            .background(KColor.glassBg, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .kPress()
     }
 
     private func metaLine(_ t: Title, unreleased: Bool) -> String {

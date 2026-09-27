@@ -1,8 +1,8 @@
 import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
- * /recap/meses skeleton — Volver 44, the mono "recap · mes año" over the
- * month in Newsreader 40, its three `--s1` tiles, then "meses anteriores"
+ * /recap/meses skeleton — Volver 44, the month in Newsreader 40 (with its
+ * short year), its three `--s1` tiles, then "meses anteriores"
  * and the collection-shaped card (spine + 108×192 miniatures). Needed
  * because loading.tsx boundaries nest: without one here the Recap skeleton
  * would paint.
@@ -14,9 +14,8 @@ export default function Loading() {
         <div className="px-6 pt-[calc(16px+env(safe-area-inset-top))]">
           <div className="h-11 w-11 rounded-full bg-surface-1" />
         </div>
-        <div className="flex flex-col gap-2.5 px-5 pt-4">
-          <div className="h-3 w-32 rounded-full bg-surface-1" />
-          <div className="h-10 w-40 rounded-full bg-surface-1" />
+        <div className="px-5 pt-4">
+          <div className="h-10 w-48 rounded-full bg-surface-1" />
         </div>
         <div className="mx-5 mt-[18px] flex gap-2.5">
           {[0, 1, 2].map((i) => (

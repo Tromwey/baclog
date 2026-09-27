@@ -164,10 +164,11 @@ struct MockAPI: KuraAPI {
         try await write()
         return KCollection(id: "c-\(UUID().uuidString.prefix(8))", name: name, titleIDs: [], privacy: privacy, createdAt: Date())
     }
-    func updateCollection(id: String, name: String?, privacy: Privacy?) async throws -> KCollection {
+    func updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?) async throws -> KCollection {
         try await write()
         var c = MockData.collections.first { $0.id == id } ?? KCollection(id: id, name: name ?? "", titleIDs: [], privacy: privacy ?? .onlyMe, createdAt: Date())
         if let name { c.name = name }
+        if let vibe { c.vibe = vibe.isEmpty ? nil : vibe }
         if let privacy { c.privacy = privacy }
         return c
     }

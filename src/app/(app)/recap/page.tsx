@@ -6,12 +6,13 @@ import { BOOKMARK_PATH, CHECK_FILL_PATH, FLAME_PATH, REVIEW_PATH } from "@/compo
 import { Cover, GLASS_BUTTON } from "@/components/kura/components";
 import { tintCard } from "@/components/kura/tint";
 import { getRecapMonths, type RecapMonth } from "@/modules/backlog/recap";
-import { alsoInMonth, monthName, monthYear } from "@/modules/backlog/recap-format";
+import { alsoInMonth, monthName, shortYear } from "@/modules/backlog/recap-format";
 
 /**
  * 65 Recap (Kura, flujo 10) — the month on a surface tinted by "lo más
- * tuyo": "RECAP · AGOSTO 2026" in mono between Volver and nothing, the month
- * in Newsreader italic 64, the title that was most yours, the 2×2 of the
+ * tuyo": Volver, then the month in Newsreader italic 64 with its short year
+ * ("agosto ’26", the year smaller and in `text-2`; founder 2026-09-27: the mono
+ * "RECAP · AGOSTO 2026" over it said the month twice), the title that was most yours, the 2×2 of the
  * month (number in Newsreader 48, glyph + mono label), "también en tu mes",
  * and Compartir tarjeta (glass) + Meses anteriores.
  *
@@ -44,15 +45,14 @@ export default async function RecapPage({
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md text-text" style={{ background: surface }}>
       <div className="flex flex-col gap-[22px] px-6 pb-dock-clearance pt-[calc(16px+env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between">
-          <BackButton className="h-11! w-11!" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-text-2">
-            recap · {monthYear(month.key)}
-          </span>
-          <span className="w-11" aria-hidden />
-        </div>
+        <BackButton className="h-11! w-11! self-start" />
 
-        <h1 className="font-brand text-[64px] italic leading-[0.96] text-text">{monthName(month.key)}</h1>
+        {/* 64 caps it; "septiembre ’26" at 64 is ~335px and a 375 screen leaves 327, so
+            narrow screens scale it by width instead of wrapping the year. */}
+        <h1 className="whitespace-nowrap font-brand text-[min(64px,16vw)] italic leading-[0.96] text-text">
+          {monthName(month.key)}
+          <span className="text-[0.56em] text-text-2">{` ${shortYear(month.key)}`}</span>
+        </h1>
 
         {top && (
           <Link href={`/item/${top.catalogItemId}`} className="flex items-end gap-4 bl-press-lg">
@@ -152,11 +152,7 @@ function EmptyRecap({ now }: { now: number }) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-[22px] bg-bg px-6 pb-dock-clearance pt-[calc(16px+env(safe-area-inset-top))] text-text">
-      <div className="flex items-center justify-between">
-        <BackButton className="h-11! w-11!" />
-        <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-text-3">recap · {monthYear(key)}</span>
-        <span className="w-11" aria-hidden />
-      </div>
+      <BackButton className="h-11! w-11! self-start" />
       <div className="flex flex-1 flex-col justify-center gap-4">
         <div className="flex gap-2.5" aria-hidden>
           <span className="aspect-[2/3] w-[84px] rounded-[var(--r-cover-s)] bg-surface-2" />

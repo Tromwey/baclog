@@ -612,22 +612,35 @@ private struct FeedCard: View, Equatable {
             // A strip of the burst's covers, each at its format's ratio; it drops in height
             // until the widest cover fits the card whole. The snap centers a cover — except the
             // first, which snaps to the start, and the last, to the end (`BurstSnap`).
+            // Each cover carries its title and artist/format underneath (`BurstCaption`); the
+            // caption's height comes out of the art, so the card — and `FeedHits`' marks — keep
+            // their tier height.
             let ts = ids.compactMap { store.title($0) }
             let widest = ts.map(\.format.aspect).max() ?? 1
             GeometryReader { geo in
-                let h = min(geo.size.height, (geo.size.width + 40) / widest)
+                let h = max(min(geo.size.height - BurstCaption.height, (geo.size.width + 40) / widest), 0)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: BurstSnap.spacing) {
+                    HStack(alignment: .top, spacing: BurstSnap.spacing) {
                         ForEach(ts) { t in
-                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: h).zoomSource(ZoomID.title(t.id)) }
-                                .buttonStyle(.plain)
+                            Button { store.push(.title(t.id)) } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    CoverView(title: t, height: h).zoomSource(ZoomID.title(t.id))
+                                    BurstCaption(title: t)
+                                }
+                                .frame(width: h * t.format.aspect, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(BurstCaption.label(t))
+                            .accessibilityAddTraits(.isButton)
                         }
                     }
                     .padding(.horizontal, BurstSnap.margin)
                 }
                 .scrollTargetBehavior(BurstSnap(widths: ts.map { h * $0.format.aspect }))
                 .scrollClipDisabled()
-                .frame(height: h)
+                .frame(height: h + BurstCaption.height)
                 .padding(.horizontal, -20)
                 .frame(width: geo.size.width, height: geo.size.height)
             }
@@ -760,7 +773,10 @@ private struct FeedCard: View, Equatable {
         if h < 24 { return "hace \(Int(h)) h" }
         if h < 7 * 24 { return "hace \(Int(h / 24)) d" }
         if h < 35 * 24 { return "hace \(Int(h / (7 * 24))) sem" }
-        return "hace \(Int(h / (30 * 24))) meses"
+        let months = Int(h / (30 * 24))
+        if months < 12 { return months == 1 ? "hace 1 mes" : "hace \(months) meses" }
+        let years = months / 12
+        return years == 1 ? "hace 1 año" : "hace \(years) años"
     }
 }
 
@@ -778,6 +794,35 @@ private struct AuthorChip: View {
         .padding(.vertical, 4)
         .background(KColor.glassBg, in: Capsule())
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Under each cover of a burst strip: the title in Newsreader italic and, in small mono, the
+/// artist (music) or studio/network (video) — the format when there's none. No year: the detail
+/// lives in the ficha. Fixed sizes, so its height is exact and the art can make room for it.
+private struct BurstCaption: View {
+    let title: Title
+    static let height: CGFloat = 46
+
+    static func sub(_ t: Title) -> String { t.creator ?? t.format.metaLabel }
+    static func label(_ t: Title) -> String { "\(t.name), \(sub(t))" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.name)
+                .font(.kura.newsItalic(16, fixed: true))
+                .foregroundStyle(KColor.text)
+                .lineLimit(1)
+            Text(Self.sub(title))
+                .font(.kura.mono(10))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(KColor.text2)
+                .lineLimit(1)
+        }
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.height, alignment: .top)
     }
 }
 

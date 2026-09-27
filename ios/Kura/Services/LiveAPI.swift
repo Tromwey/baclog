@@ -796,7 +796,8 @@ struct LiveAPI: KuraAPI {
         private enum CodingKeys: String, CodingKey { case items }
     }
     private struct NewCollection: Encodable { let name: String; let visibility: String }
-    private struct CollectionPatch: Encodable { let name: String?; let visibility: String? }
+    /// `vibe`: absent = untouched, `""` = clear (the server stores it as `null`).
+    private struct CollectionPatch: Encodable { let name: String?; let vibe: String?; let visibility: String? }
     private struct MembershipBody: Encodable { let externalRef: ExternalRef?; let paletteHex: [String]? }
     private struct PaletteBody: Encodable { let paletteHex: [String] }
 
@@ -813,8 +814,8 @@ struct LiveAPI: KuraAPI {
         try await client.decode(try .post("collections", NewCollection(name: name, visibility: privacy.wire)))
     }
 
-    func updateCollection(id: String, name: String?, privacy: Privacy?) async throws -> KCollection {
-        try await client.decode(try .patch("collections/\(id)", CollectionPatch(name: name, visibility: privacy?.wire)))
+    func updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?) async throws -> KCollection {
+        try await client.decode(try .patch("collections/\(id)", CollectionPatch(name: name, vibe: vibe, visibility: privacy?.wire)))
     }
 
     func deleteCollection(id: String) async throws {
