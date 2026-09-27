@@ -13,7 +13,7 @@ enum KFontName {
     static let hankSemiBold = "HankenGrotesk-SemiBold"
     static let monoRegular = "RedHatMono-Regular"
     static let monoMedium = "RedHatMono-Medium"
-    /// Kanji 蔵 — only on onboarding, never in the interface.
+    /// Kanji 蔵 of §marca · C — only the entrance (brand material), never the interface.
     static let kanji = "HiraMinProN-W6"
 
     static let all = [newsRegular, newsMedium, newsItalic, newsMediumItalic,
@@ -106,26 +106,54 @@ extension View {
     }
 }
 
-/// The wordmark — ALWAYS with its kanji (founder, 2026-09-27: "el wordmark SIEMPRE con el kanji
-/// 蔵"), like the web's `Wordmark` (src/components/kura/components.tsx): 蔵 in the serif JP a step
-/// larger (×1.1) so both read the same height, a gap of 0.3×, then *kura* in Newsreader
-/// MediumItalic, tracking −3.5 %. `size` is the kura's size; `kanjiSize`/`spacing` only for a
-/// screen whose design draws the kanji bigger (the entrance). VoiceOver reads one word.
+/// The three versions of the mark (design/kura/sistema-de-diseno.dc.html §marca · logo), the
+/// twin of the web's `Wordmark` (src/components/kura/components.tsx). One recipe each; pick by
+/// WHERE it appears:
+/// - `.a` principal (default): *kura* in Newsreader MediumItalic, tracking −3.5 %. Splash and any
+///   wordmark inside the app. At least 24 pt tall — the k is 0.714 em, so never under 34
+///   (`Wordmark.minimum`); smaller than that, use `.b`.
+/// - `.b` sello: KURA in Red Hat Mono Medium, tracking +24 %. Spines, card feet, small signatures.
+/// - `.c` con kanji: 蔵 in the serif JP (W6 ≈ 700) at TWICE the kura, a 20/48 gap, *kura* at
+///   −3 %. Brand material only — in the app that's the entrance before the account, NEVER the
+///   interface. The kura keeps A's minimum.
+/// `size` is the latin part's point size. Never A and B together; VoiceOver reads one word.
 struct Wordmark: View {
-    var size: CGFloat
-    var kanjiSize: CGFloat? = nil
-    var spacing: CGFloat? = nil
+    enum Variant { case a, b, c }
+    static let minimum: CGFloat = 34
+
+    var variant: Variant = .a
+    var size: CGFloat? = nil
+    var color: Color = KColor.text
+
     var body: some View {
-        HStack(alignment: .center, spacing: spacing ?? (size * 0.3).rounded()) {
-            Text("蔵")
-                .font(.custom(KFontName.kanji, fixedSize: kanjiSize ?? (size * 1.1).rounded()))
+        mark
+            .foregroundStyle(color)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("kura")
+    }
+
+    @ViewBuilder private var mark: some View {
+        switch variant {
+        case .b:
+            let s = size ?? 11
+            Text("KURA")
+                .font(.kura.mono(s, medium: true))
+                .tracking(s * 0.24)
+                .padding(.leading, s * 0.24) // balances the tracking after the A, as §marca centres it
+        case .c:
+            let s = max(Self.minimum, size ?? Self.minimum)
+            HStack(alignment: .center, spacing: s * 20 / 48) {
+                Text("蔵").font(.custom(KFontName.kanji, fixedSize: s * 2))
+                Text("kura")
+                    .font(.kura.newsMediumItalic(s, fixed: true))
+                    .tracking(-s * 0.03)
+            }
+        case .a:
+            let s = max(Self.minimum, size ?? Self.minimum)
             Text("kura")
-                .font(.kura.newsMediumItalic(size, fixed: true))
-                .tracking(-size * 0.035)
+                .font(.kura.newsMediumItalic(s, fixed: true))
+                .tracking(-s * 0.035)
         }
-        .foregroundStyle(KColor.text)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("kura")
     }
 }
 

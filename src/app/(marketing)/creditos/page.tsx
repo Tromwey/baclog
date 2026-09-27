@@ -20,7 +20,7 @@ export default function CreditosPage() {
   return (
     <main className="kura relative mx-auto flex min-h-lvh w-full max-w-md flex-col bg-bg px-6 pb-16 text-text">
       <header className="flex items-center pt-[calc(64px+env(safe-area-inset-top))]">
-        <Wordmark size={30} />
+        <Wordmark />
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text">créditos.</h1>

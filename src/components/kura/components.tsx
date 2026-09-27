@@ -27,40 +27,81 @@ import { sealColors, tintCard } from "./tint";
 /* ---------------------------------------------------------------- marca */
 
 /**
- * The wordmark — always with its kanji (founder 2026-09-27: "el wordmark
- * SIEMPRE con el kanji 蔵"), drawn as §marca · C: 蔵 in a serif JP at 700
- * beside *kura* in Newsreader italic 500. `size` is the kura's font size in
- * px; the kanji rides a step larger so both read the same height, as in the
- * system's lockup. The caller places it. `aria-label` keeps it one word.
+ * The three versions of the mark (sistema-de-diseno §marca · logo). One
+ * recipe each; pick by WHERE it appears, never by taste:
+ *
+ * - **A · principal** (default): *kura* in Newsreader italic 500, tracking
+ *   −3.5 %. App, web, splash, any appearance of the brand on its own —
+ *   i.e. every wordmark INSIDE the interface. Minimum 24 px tall; the k
+ *   stands 0.714 em over the baseline, so the body never goes under 34 px
+ *   (`WORDMARK_MIN`). Under that, use B.
+ * - **B · sello**: KURA in Red Hat Mono 500, tracking +24 %. Only spines,
+ *   card feet and small signatures, where A loses its shape.
+ * - **C · con kanji**: 蔵 in a serif JP at 700 and TWICE the wordmark, a
+ *   20/48 gap, *kura* at −3 %. Brand material only (onboarding, press,
+ *   merch): NEVER inside the interface. The kura keeps A's minimum.
+ *
+ * `size` is the font size of the latin part in px. The system's "no": no
+ * serif uppercase, no roman, no glow/outline/gradient, never A and B in the
+ * same piece. Colour is inherited: --text on dark/tinted, --bg on --accent.
+ * `aria-label` keeps it one word.
  */
-export function Wordmark({ size = 30, className = "" }: { size?: number; className?: string }) {
+export type WordmarkVariant = "A" | "B" | "C";
+
+/** A's minimum body: 24 px of k height (0.714 em) → 34 px. */
+export const WORDMARK_MIN = 34;
+
+export function Wordmark({
+  variant = "A",
+  size,
+  className = "",
+}: {
+  variant?: WordmarkVariant;
+  size?: number;
+  className?: string;
+}) {
+  if (variant === "B") {
+    return (
+      <span role="img" aria-label="kura" className={`kura-seal ${className}`} style={{ fontSize: size ?? 11 }}>
+        <span aria-hidden>KURA</span>
+      </span>
+    );
+  }
+  const px = Math.max(WORDMARK_MIN, size ?? WORDMARK_MIN);
+  if (variant === "C") {
+    return (
+      <span
+        role="img"
+        aria-label="kura"
+        className={`inline-flex items-center ${className}`}
+        style={{ gap: (px * 20) / 48 }}
+      >
+        <span className="kura-kanji" style={{ fontSize: px * 2 }} aria-hidden>
+          蔵
+        </span>
+        <span className="kura-wordmark kura-wordmark-c" style={{ fontSize: px }} aria-hidden>
+          kura
+        </span>
+      </span>
+    );
+  }
   return (
-    <span
-      role="img"
-      aria-label="kura"
-      className={`inline-flex items-center text-text ${className}`}
-      style={{ gap: Math.round(size * 0.3) }}
-    >
-      <span className="kura-kanji" style={{ fontSize: Math.round(size * 1.1) }} aria-hidden>
-        蔵
-      </span>
-      <span className="kura-wordmark" style={{ fontSize: size }} aria-hidden>
-        kura
-      </span>
+    <span role="img" aria-label="kura" className={`kura-wordmark ${className}`} style={{ fontSize: px }}>
+      <span aria-hidden>kura</span>
     </span>
   );
 }
 
 /**
- * The web header of every public page (flujos-v2 · 12 web): the kanji beside
- * the wordmark at 22, left, and a glass "Abrir app" pill at the right. There
- * is no store listing yet, so the pill leads into the account flow and says
- * so honestly ("Entrar"); swap the label and href when the app ships.
+ * The web header of every public page (flujos-v2 · 12 web): the wordmark at
+ * the left. It's interface, so §marca · A without the kanji (flujos-v2 draws
+ * 蔵 + kura at 22, which §marca forbids twice: C never inside the interface,
+ * A never under 24 px tall) — at A's minimum, which fits the 44 px row.
  */
 export function BrandLockup() {
   return (
     <Link href="/" aria-label="kura" className="flex h-11 items-center text-text">
-      <Wordmark size={22} />
+      <Wordmark />
     </Link>
   );
 }

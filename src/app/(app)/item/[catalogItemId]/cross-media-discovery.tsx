@@ -156,6 +156,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         year: reco.year ?? undefined,
       },
       palette: palette.length >= 3 ? palette : ["#C7462F", "#E8B23A", "#3A5A9B", "#7A2F5A", "#241C1A"],
+      // Each cover paints with its own palette (the card's no-art covers).
+      ...(seedPalette.length && recoPalette.length ? { palettes: { seed: seedPalette, reco: recoPalette } } : {}),
       narrative,
       username,
       linkKind,

@@ -3,8 +3,14 @@ import { env } from "@/lib/env";
 import type { mediaTypeEnum } from "@/db/schema";
 import { monthName } from "@/modules/backlog/recap-format";
 
-/** Every email closes with the brand as the system draws it: 蔵 + kura. */
-const SIGNATURE = "\n\n— 蔵 kura";
+/**
+ * Every email closes with a small signature, so §marca · B "sello": KURA.
+ * The emails are plain text — no Red Hat Mono and no +24 % tracking to carry
+ * it — so the most faithful form is the seal's own letters, uppercase. Never
+ * the kanji (C is for onboarding/press/merch) and never letter-spaced by hand
+ * ("K U R A" reads as four letters to a screen reader).
+ */
+const SIGNATURE = "\n\n— KURA";
 
 /**
  * Email transport seam (launch dep: founder provides RESEND_API_KEY).

@@ -94,20 +94,26 @@ export interface DoubleFeatureData {
    */
   palette: string[];
   /**
+   * Each cover's own palette, when the caller has them apart (the share in
+   * cross-media-discovery.tsx does). The card paints each work as the no-art
+   * recipe of ITS palette; without this it splits `palette` in halves.
+   */
+  palettes?: { seed: string[]; reco: string[] };
+  /**
    * The hero narrative — the "why this pairing" line, LLM-authored and
    * grounded. Optional overrides let the caller localize each fragment.
    */
   narrative: {
-    /** Small lima eyebrow over the hook, e.g. "viste F1 hasta la última vuelta · ★★★★★". */
+    /** Mono eyebrow over the hook, e.g. "viste F1 hasta la última vuelta · ★★★★★". */
     hookEyebrow: string;
-    /** The hook headline (Bricolage), e.g. "Así que fuimos a buscar quién le puso voz…". */
+    /** The hook headline (Newsreader), e.g. "Así que fuimos a buscar quién le puso voz…". */
     hookTitle: string;
-    /** Lima eyebrow over the result, e.g. "y dimos con tu próxima obsesión". */
+    /** Mono eyebrow over the result, e.g. "y dimos con tu próxima obsesión". */
     resultEyebrow: string;
     /** Optional closing serif line, e.g. "No la vas a soltar — lo sabemos.". */
     closer?: string;
   };
-  /** Watermark handle — renders as baclog.app/{username}. */
+  /** The sharer's handle — printed as @handle on the card's foot. */
   username: string;
   /** Sequential edition number for the header, e.g. 14 → "Nº 014". */
   edition?: number;

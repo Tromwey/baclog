@@ -858,7 +858,7 @@ function OptionsBody({
         <MenuRow icon="grip" label="Editar el orden" aside="el que ven todos" onClick={() => go("reorder")} />
       )}
       <MenuRow icon="pencil" label="Editar" onClick={() => go("rename")} />
-      <MenuRow icon="lock" label="Privacidad" aside={visibilityLabel} onClick={() => go("privacy")} />
+      <MenuRow icon="lock" label="Quién la ve" aside={visibilityLabel} onClick={() => go("privacy")} />
       <MenuGap />
       <MenuRow icon="trash" label="Borrar colección" onClick={() => go("delete")} />
     </div>

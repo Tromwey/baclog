@@ -11,7 +11,7 @@ import { CollectionHoldSheet } from "../backlogs/collection-hold-sheet";
 /**
  * "tus colecciones" on your own profile (3b) — the showcase plus 9a: holding
  * any fan opens the collection's hold sheet (Agregar · Compartir · Fijar ·
- * Renombrar · Privacidad · Borrar colección), the same one Tus colecciones
+ * Renombrar · Quién la ve · Borrar colección), the same one Tus colecciones
  * opens. A tap still opens the collection.
  */
 export function OwnCollections({

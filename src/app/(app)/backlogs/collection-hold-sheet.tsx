@@ -24,7 +24,7 @@ import {
  * change that screen's view (Ver como lista, Ordenar):
  *
  *   Agregar títulos · Compartir · Fijar/Desfijar · — · Editar ·
- *   Privacidad · — · Borrar colección
+ *   Quién la ve · — · Borrar colección
  *
  * The steps swap the SAME sheet's content — never two sheets at once. Every
  * write is a server action that re-derives ownership (assertOwnsBacklog);
@@ -133,7 +133,7 @@ function HoldMenu({
       <MenuRow icon="pencil" label="Editar" onClick={() => onStep("rename")} />
       <MenuRow
         icon="lock"
-        label="Privacidad"
+        label="Quién la ve"
         aside={VISIBILITY_LABEL[visibility]}
         onClick={() => onStep("privacy")}
       />

@@ -160,11 +160,12 @@ struct SettingsView: View {
                         .accessibilityLabel("Cerrar sesión en todos tus dispositivos")
                         Button("Borrar cuenta") { store.present(.deleteAccount) }
                             .font(.kura.ui(15)).foregroundStyle(KColor.text2).frame(minHeight: 44)
+                        // A small signature → §marca · B (the kanji never goes inside the interface).
                         HStack(spacing: 6) {
-                            Text("蔵").font(.custom(KFontName.kanji, fixedSize: 11))
-                            Text("kura 1.0").font(.kura.mono(11)).tracking(0.88)
+                            Wordmark(variant: .b, size: 11, color: KColor.text3)
+                            Text("1.0").font(.kura.mono(11)).tracking(0.88).foregroundStyle(KColor.text3)
                         }
-                        .foregroundStyle(KColor.text3)
+                        .accessibilityElement(children: .combine)
                         .padding(.top, 8)
                     }
                     .frame(maxWidth: .infinity)

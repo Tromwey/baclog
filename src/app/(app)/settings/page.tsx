@@ -16,6 +16,7 @@ import {
   ReleasesSwitch,
 } from "./settings-form";
 import { SERVICE_LABEL } from "./services";
+import { Wordmark } from "@/components/kura/components";
 
 /**
  * 30a Ajustes (Kura, flujo 11) — behind /perfil's gear. Volver 44, "ajustes"
@@ -142,7 +143,8 @@ export default async function SettingsPage() {
           >
             Créditos
           </Link>
-          <span className="mt-2 font-mono text-[11px] tracking-[0.08em] text-text-3">蔵 kura</span>
+          {/* A small signature → §marca · B (the kanji never goes inside the interface). */}
+          <Wordmark variant="B" size={11} className="mt-2 text-text-3" />
         </div>
       </div>
     </main>

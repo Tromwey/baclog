@@ -11,6 +11,11 @@ export function track(ctx: CanvasRenderingContext2D, px: number) {
  * the wordmark's size, a 20/48 gap, then "kura" in Newsreader italic 500 at
  * −0.03 em, the two centred on one line. Always lowercase (voz · regla 12).
  *
+ * Images are brand material that leaves the app, so their mark is C — never
+ * A or B beside it ("no combinar A y B en la misma pieza"). The kura keeps
+ * A's minimum of 24 px tall: `size` ≥ 34 at export scale (the k is 0.714 em).
+ * Today: title/collection/conexión 50.4, recap 42.
+ *
  * `size` is the wordmark's; `x` the anchor for `align`; `cy` the line's
  * vertical centre. The kanji font ships as a single Regular glyph
  * (kanji-font.ts), so the 700 is a stroke of 0.03 em in the same ink.

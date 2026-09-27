@@ -30,6 +30,7 @@ export const SAMPLE_DOUBLE_FEATURE: DoubleFeatureData = {
     ],
   },
   palette: ["#C7462F", "#E8B23A", "#3A5A9B", "#7A2F5A", "#241C1A"],
+  palettes: { seed: ["#C7462F", "#E8B23A"], reco: ["#7A2F5A", "#3A5A9B"] },
   narrative: {
     hookEyebrow: "viste F1 hasta la última vuelta · ★★★★★",
     hookTitle: "Así que fuimos a buscar quién le puso voz a esa última vuelta.",

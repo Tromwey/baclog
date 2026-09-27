@@ -53,7 +53,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
  */
 export function drawCover(
   ctx: CanvasRenderingContext2D,
-  item: CardItem | undefined,
+  item: Pick<CardItem, "palette"> | undefined,
   cx: number,
   cy: number,
   w: number,

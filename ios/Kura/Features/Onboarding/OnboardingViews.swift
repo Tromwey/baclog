@@ -9,7 +9,7 @@ struct SplashView: View {
     var body: some View {
         ZStack {
             KColor.bg.ignoresSafeArea()
-            Wordmark(size: 76)
+            Wordmark(size: 76) // §marca · A: the splash is the brand on its own, never the kanji
         }
         .task {
             guard !store.holdSplash else { return }
@@ -97,7 +97,9 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            Wordmark(size: 30, kanjiSize: 44, spacing: 14)
+            // §marca · C: the entrance is the first contact, before the account — brand material.
+            // The §marca recipe (蔵 ×2, gap 20/48) at A's minimum; flujos-v2 13 draws 44/30/14.
+            Wordmark(variant: .c)
 
             GeometryReader { geo in
                 let h = min(geo.size.height * 0.72, geo.size.width * 0.58)
