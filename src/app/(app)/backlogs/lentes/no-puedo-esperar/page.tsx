@@ -3,7 +3,6 @@ import { ThemeColorSync } from "@/components/theme-color-sync";
 import { tintEnds } from "@/components/kura/tint";
 import { getLibraryUpcoming } from "@/modules/backlog/library";
 import { getRenderInstant } from "@/modules/catalog/release";
-import { HideDock } from "../../hide-dock";
 import {
   CollectionScreen,
   type CollectionItem,
@@ -43,7 +42,6 @@ export default async function WaitingCollectionPage() {
   return (
     <main>
       <ThemeColorSync color={lead.length ? tintEnds(lead)[0] : undefined} exact />
-      <HideDock />
       <CollectionScreen
         mode="auto"
         backlog={{ id: "no-puedo-esperar", name: "no puedo esperar", vibe: null, visibility: "private" }}

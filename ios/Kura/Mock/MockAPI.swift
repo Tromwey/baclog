@@ -313,7 +313,7 @@ struct MockAPI: KuraAPI {
         guard let (month, top) = tops[era] else { throw KuraAPIError.notFound }
         return RecapPayload(era: era, month: month, year: 2026,
                             stats: RecapPayload.Stats(completed: 14, obsessed: 6, reviews: 3, saved: 9, hours: 31),
-                            top: t(top), also: ["chihiro", "mala", "pearl", "eduardo"].compactMap(t))
+                            top: t(top), also: ["chihiro", "mala", "pearl", "eduardo", "nube", "totoro"].compactMap(t))
     }
 }
 

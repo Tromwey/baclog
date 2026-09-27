@@ -37,6 +37,7 @@ struct TitleDetailView: View {
                                 .padding(.top, 10)
                                 .padding(.horizontal, 24)
                                 .padding(.bottom, 56)
+                                .kDockClearance()
                         }
                         .heroRest()
                     }

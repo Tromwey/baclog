@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { GLASS_BUTTON } from "@/components/kura/components";
 import { BackChip } from "./close-chip";
-import { HideDock } from "./hide-dock";
 
 /**
  * E4 · la ficha no cargó (Kura §patrones · error: "Sin guiño: es un fallo
@@ -25,7 +24,6 @@ export default function ItemError({
 
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col bg-bg px-6 text-text">
-      <HideDock />
       <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))]">
         <BackChip />
       </div>

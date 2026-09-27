@@ -27,9 +27,11 @@ enum Route: Hashable {
     case followers(String, showFollowing: Bool)
     case creator(String)
     case notifications
-    case recap
+    /// A month's recap; nil = the newest. (Meses anteriores used to just pop back to the newest
+    /// whatever month you tapped — the route carried no month.)
+    case recap(era: String? = nil)
     case recapHistory
-    case recapShare
+    case recapShare(era: String? = nil)
     case settings
     case settingsPrivacy
     case musicApp
@@ -46,6 +48,14 @@ enum Route: Hashable {
     case mergeCode
     /// What moves and what disappears, then `POST /me/merge` (the proof lives in `AppStore.mergeProof`).
     case mergeConfirm
+
+    /// The dock stays on these (a title, a collection — yours, automatic or someone else's).
+    var keepsDock: Bool {
+        switch self {
+        case .collection, .title, .automatic, .publicCollection: return true
+        default: return false
+        }
+    }
 }
 
 enum OnboardingStep: Hashable {

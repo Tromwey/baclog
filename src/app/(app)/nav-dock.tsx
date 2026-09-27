@@ -29,10 +29,24 @@ interface HideApi {
 
 const HideApiCtx = createContext<HideApi | null>(null);
 const HiddenCtx = createContext(false);
+const LiftApiCtx = createContext<HideApi | null>(null);
+const LiftedCtx = createContext(false);
 
 export function NavDockVisibilityProvider({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState(false);
   const countRef = useRef(0);
+  const [lifted, setLifted] = useState(false);
+  const liftRef = useRef(0);
+  const [lift] = useState<HideApi>(() => ({
+    acquire: () => {
+      liftRef.current += 1;
+      setLifted(liftRef.current > 0);
+    },
+    release: () => {
+      liftRef.current = Math.max(0, liftRef.current - 1);
+      setLifted(liftRef.current > 0);
+    },
+  }));
   // Stable API (never re-created) so descendants' effects don't loop when the
   // hidden boolean flips.
   const [api] = useState<HideApi>(() => ({
@@ -48,7 +62,11 @@ export function NavDockVisibilityProvider({ children }: { children: ReactNode })
 
   return (
     <HideApiCtx.Provider value={api}>
-      <HiddenCtx.Provider value={hidden}>{children}</HiddenCtx.Provider>
+      <LiftApiCtx.Provider value={lift}>
+        <HiddenCtx.Provider value={hidden}>
+          <LiftedCtx.Provider value={lifted}>{children}</LiftedCtx.Provider>
+        </HiddenCtx.Provider>
+      </LiftApiCtx.Provider>
     </HideApiCtx.Provider>
   );
 }
@@ -57,6 +75,22 @@ export function NavDockVisibilityProvider({ children }: { children: ReactNode })
  * so overlapping callers don't fight over one boolean. */
 export function useHideNavDock(active: boolean) {
   const api = useContext(HideApiCtx);
+  useEffect(() => {
+    if (!active || !api) return;
+    api.acquire();
+    return () => api.release();
+  }, [active, api]);
+}
+
+/**
+ * A full-screen surface portaled OVER the page (z-40: the profile's
+ * collection overlay) that still keeps the dock: while `active`, the dock
+ * sits at z-41 — over that surface, under the cover flight (z-45), the
+ * sheets (z-50) and the toast (z-60). Founder, 2026-09-27: "la barra no se
+ * debería esconder al entrar a los ítems ni a las colecciones". Ref-counted.
+ */
+export function useLiftNavDock(active: boolean) {
+  const api = useContext(LiftApiCtx);
   useEffect(() => {
     if (!active || !api) return;
     api.acquire();
@@ -124,6 +158,7 @@ function destinationIndex(pathname: string): number {
 export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
   const pathname = usePathname();
   const hidden = useContext(HiddenCtx);
+  const lifted = useContext(LiftedCtx);
 
   const [pending, setPending] = useState<{ from: string; index: number } | null>(
     null,
@@ -140,7 +175,9 @@ export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
   return (
     <nav
       aria-label="Navegación principal"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] z-10 flex justify-center"
+      className={`pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] flex justify-center ${
+        lifted ? "z-[41]" : "z-10"
+      }`}
     >
       <div
         className={`bl-dock-glass flex gap-1.5 rounded-full p-1.5 shadow-float transition-[opacity,transform] duration-300 ease-out ${

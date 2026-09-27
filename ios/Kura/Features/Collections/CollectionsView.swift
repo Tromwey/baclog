@@ -10,7 +10,7 @@ import SwiftUI
 ///    off-centre at 22, dimmed to .35, so it reads that there's more on either side. Tapping the
 ///    fan only centres it; holding one opens 9a (the options without the view rows);
 ///  - under the names, the SAME body as Colección (`CollectionBody`): credits, format pills that
-///    filter, "el orden" + Reordenar and every title (holding one = 18c); 6b when it's empty;
+///    filter and every title (holding one = 18c); 6b when it's empty;
 ///  - Compartir + Opciones up top (as in 10b), acting on the collection in the centre;
 ///  - the whole page in the feed gradient of its front cover (760), continuing in its bottom tone
 ///    under the dock.

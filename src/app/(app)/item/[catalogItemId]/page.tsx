@@ -43,7 +43,6 @@ import { BackChip } from "./close-chip";
 import { CoverFlightTarget } from "@/components/kura/cover-flight";
 import { getCollectionsIndex } from "./collections-index";
 import { CompleteSheetHost } from "./complete-sheet";
-import { HideDock } from "./hide-dock";
 import { ItemActions, type ReleasePhase } from "./item-actions";
 import { CollectionPills, ReleaseNote } from "./item-sections";
 import { SERVICE_LABEL } from "./labels";
@@ -184,8 +183,7 @@ export default async function ItemPage({
       initialCompleted={entry?.status === "completed"}
       initialOwnReview={reviews.own}
     >
-      <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-14 text-text">
-        <HideDock />
+      <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-dock-clearance text-text">
         {/* Safari's status-bar band tints from theme-color — match the cover. */}
         <ThemeColorSync color={palette[0]} />
 

@@ -245,29 +245,36 @@ extension AppStore {
         searchLoading = false
     }
 
-    /// `GET /recap/months` then `GET /recap/{era}` (the newest by default).
+    /// `GET /recap/months` then `GET /recap/{era}` (the newest by default). Each month loads on
+    /// its own: Meses anteriores asks for several at once, and one global "loading" flag used to
+    /// drop every request but the first (their skeletons never filled).
     func loadRecap(era: String? = nil) async {
-        guard !recapLoading else { return }
         if let era, recaps[era] != nil { return }
-        recapLoading = true
         let session = s
-        defer { session.recapLoading = false }
         do {
             if recapMonths == nil {
+                guard !recapLoading else { return }
+                recapLoading = true
+                defer { session.recapLoading = false }
                 let months = try await api.recapMonths()
                 try check(session)
                 recapMonths = months
             }
             loaded(.recap)
             guard let target = era ?? recapMonths?.first?.era else { return }
-            if recaps[target] == nil {
-                let r = try await api.recap(era: target)
-                try check(session)
-                loaded(.recap)
-                if let t = r.top { register(t) }
-                for t in r.also { register(t) }
-                recaps[target] = r
+            guard recaps[target] == nil, !s.recapEraLoads.contains(target) else { return }
+            s.recapEraLoads.insert(target)
+            recapLoading = true
+            defer {
+                session.recapEraLoads.remove(target)
+                session.recapLoading = !session.recapEraLoads.isEmpty
             }
+            let r = try await api.recap(era: target)
+            try check(session)
+            loaded(.recap)
+            if let t = r.top { register(t) }
+            for t in r.also { register(t) }
+            recaps[target] = r
         } catch {
             guard s === session else { return }
             fail(.recap, error)
@@ -275,6 +282,27 @@ extension AppStore {
     }
 
     var currentRecap: RecapPayload? { recapMonths?.first.flatMap { recaps[$0.era] } }
+
+    /// Meses anteriores › a month: back to the recap under it, showing THAT month. The history and
+    /// any month recaps it was opened over go; the newest recap (`.recap()`) stays as the base, and
+    /// another month goes on top of it.
+    func openRecapMonth(_ era: String) {
+        var p = path(tab)
+        while let last = p.last {
+            if case .recapHistory = last { p.removeLast(); continue }
+            if case .recap(let e) = last, e != nil { p.removeLast(); continue }
+            break
+        }
+        if case .recap(nil)? = p.last {} else { p.append(.recap()) }
+        if era != recapMonths?.first?.era { p.append(.recap(era: era)) }
+        paths[tab] = p
+    }
+
+    /// A month's recap (nil = the newest).
+    func recap(_ era: String?) -> RecapPayload? {
+        guard let era else { return currentRecap }
+        return recaps[era]
+    }
 
     /// "recap de agosto" — the newest month, or the previous calendar month before it loads.
     /// "recap de septiembre" once the months arrive; "tu recap" before; nil (no button)

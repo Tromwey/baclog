@@ -3,7 +3,7 @@
 import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useImperativeHandle, useMemo, useRef, useState, useTransition, type ReactNode, type Ref } from "react";
+import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   createBacklogAction,
   reorderBacklogItemsAction,
@@ -53,11 +53,19 @@ export type { CollectionItem, OtherCollection };
  * differs — the carousel in 10a, Volver in 10b.
  *
  *  - the intro: the line in italic, the credits (owner's seal 26 + the
- *    collaborators', "solo tú · N títulos" in Hanken 13) and the format pills
- *    with their count, which FILTER (tap again to clear);
- *  - "el orden" + Reordenar, then EVERY title in three columns (Masonry) in
- *    the owner's manual order, or as a list ("Ver como lista" and Ordenar are
- *    per collection, per device — `usePref`);
+ *    collaborators' + "tú y mo · N títulos" in Hanken 13 — with nobody to
+ *    credit, just "N títulos") and the format pills with their count, ALWAYS
+ *    when there are titles: one format = one pill labelling it; several =
+ *    pills that FILTER (tap again to clear);
+ *  - EVERY title in three columns (Masonry) in the owner's manual order, or
+ *    as a list ("Ver como lista" and Ordenar are per collection, per device —
+ *    `usePref`), straight under the intro: no "el orden" heading and no
+ *    Reordenar link (founder, 2026-09-27) — Reordenar lives in Opciones;
+ *  - Guardar orden is OPTIMISTIC and the new #1 leads the fan: a new order
+ *    whose #1 isn't the chosen cover sends the cover back to automatic
+ *    (setBacklogCoverAction null), so the fan and the page's gradient repaint
+ *    with the new #1 at once (`onFanChange` tells 10a, whose fans come from
+ *    the server's shelves);
  *  - holding a title opens 18c (Tu reacción · Reseñar · Usar como portada ·
  *    Mover a otra colección · Quitar de la colección); on the automatic
  *    "no puedo esperar" only Tu reacción and Reseñar (9b);
@@ -81,20 +89,20 @@ export type { CollectionItem, OtherCollection };
  */
 
 type Sort = "manual" | "recent" | "title" | "state" | "year";
-const SORTS: { id: Sort; label: string; heading: string }[] = [
-  { id: "manual", label: "Manual", heading: "el orden" },
-  { id: "recent", label: "Recientes", heading: "recientes" },
-  { id: "title", label: "Título", heading: "por título" },
-  { id: "state", label: "Estado", heading: "por estado" },
-  { id: "year", label: "Año", heading: "por año" },
+const SORTS: { id: Sort; label: string }[] = [
+  { id: "manual", label: "Manual" },
+  { id: "recent", label: "Recientes" },
+  { id: "title", label: "Título" },
+  { id: "state", label: "Estado" },
+  { id: "year", label: "Año" },
 ];
 const SORT_IDS = SORTS.map((s) => s.id);
 const VIEWS = ["shelf", "list"] as const;
 
-const FORMAT: Record<MediaType, { icon: KIconName; plural: string; one: string }> = {
-  film: { icon: "film", plural: "películas", one: "Cine" },
-  series: { icon: "series", plural: "series", one: "Serie" },
-  album: { icon: "music", plural: "álbumes", one: "Álbum" },
+const FORMAT: Record<MediaType, { icon: KIconName; singular: string; plural: string; one: string }> = {
+  film: { icon: "film", singular: "película", plural: "películas", one: "Cine" },
+  series: { icon: "series", singular: "serie", plural: "series", one: "Serie" },
+  album: { icon: "music", singular: "álbum", plural: "álbumes", one: "Álbum" },
 };
 
 /** Holding a title (18c) — Colecciones · transiciones §4: the sheet's
@@ -138,6 +146,20 @@ function sortItems(items: CollectionItem[], sort: Sort): CollectionItem[] {
     default:
       return out; // the loader's order: the owner's manual order
   }
+}
+
+/**
+ * The titles still present in the manual order a Guardar orden just wrote
+ * (backlogItemIds): titles that arrived meanwhile stay on top (unplaced
+ * first, as `byManualOrder` reads them), gone ones drop out.
+ */
+function arrange(items: CollectionItem[], order: readonly string[]): CollectionItem[] {
+  const at = new Map(order.map((id, i) => [id, i]));
+  const unplaced = items.filter((it) => !at.has(it.backlogItemId));
+  const placed = items
+    .filter((it) => at.has(it.backlogItemId))
+    .sort((a, b) => at.get(a.backlogItemId)! - at.get(b.backlogItemId)!);
+  return [...unplaced, ...placed];
 }
 
 /** "4 d" → "en 4 d" · "17 oct" → "el 17 oct" · "hoy" stays. */
@@ -195,8 +217,15 @@ export interface CollectionBodyProps {
   coach?: boolean;
   /** Extra classes on the intro block (its top spacing differs per screen). */
   introClassName?: string;
-  /** Where the toast floats (10a has the dock under it). */
+  /** Where the toast floats (default: over the dock, which every screen
+   *  that mounts this body keeps since 2026-09-27). */
   toastBottom?: number | string;
+  /**
+   * A Guardar orden repainted the fan before the server answered (10a paints
+   * its fans from the server's shelves, so it needs telling); null = it
+   * failed, go back to the server's.
+   */
+  onFanChange?: (next: { fan: CollectionItem[]; hexes: string[] } | null) => void;
 }
 
 export function CollectionBody({
@@ -212,7 +241,8 @@ export function CollectionBody({
   profilePublic = false,
   coach = false,
   introClassName = "",
-  toastBottom,
+  toastBottom = "calc(var(--dock-clearance) - 22px)",
+  onFanChange,
   ref,
   children,
 }: CollectionBodyProps & {
@@ -233,11 +263,21 @@ export function CollectionBody({
   const open = (kind: "options" | "share") => setSheet({ kind });
   useImperativeHandle(ref, () => ({ open: (kind) => setSheet({ kind }) }), []);
 
-  const present = useMemo(
-    () => items.filter((it) => !hidden.has(it.backlogItemId)),
-    [items, hidden],
-  );
-  const coverId = backlog.coverCatalogItemId ?? null;
+  // Guardar orden, painted before the server answers. It holds only while
+  // `items` is the array it was made against: the refresh that follows the
+  // write brings the server's (identical) order and drops it.
+  const [curated, setCurated] = useState<{
+    base: CollectionItem[];
+    order: string[];
+    cover: string | null;
+  } | null>(null);
+  const live = curated && curated.base === items ? curated : null;
+
+  const present = useMemo(() => {
+    const kept = items.filter((it) => !hidden.has(it.backlogItemId));
+    return live ? arrange(kept, live.order) : kept;
+  }, [items, hidden, live]);
+  const coverId = live ? live.cover : (backlog.coverCatalogItemId ?? null);
   const fan = fanOf(present, coverId);
   const hexes = fanHexes(fan, present);
 
@@ -348,6 +388,45 @@ export function CollectionBody({
     show({ message: it ? "Nueva portada" : "Portada automática" });
   }
 
+  /**
+   * Reordenar › Guardar orden. The new #1 leads the fan (founder,
+   * 2026-09-27): the fan puts a chosen cover in front of the order, so a new
+   * order whose #1 isn't that cover also sends the cover back to automatic.
+   * Both paint at once; a failed write goes back to the server's and offers
+   * Reintentar.
+   */
+  function saveOrder(order: string[]) {
+    setSort("manual");
+    setFormat(null);
+    const next = arrange(present, order);
+    if (next.every((it, i) => it.backlogItemId === present[i]?.backlogItemId)) return;
+    const clearCover = coverId !== null && coverId !== next[0]?.catalogItemId;
+    const cover = clearCover ? null : coverId;
+    setCurated({ base: items, order, cover });
+    const fan = fanOf(next, cover);
+    onFanChange?.({ fan, hexes: fanHexes(fan, next) });
+
+    void (async () => {
+      const res = await reorderBacklogItemsAction(backlog.id, order).catch(() => null);
+      if (!res || !("ok" in res)) {
+        setCurated(null);
+        onFanChange?.(null);
+        show({
+          kind: "error",
+          message: "No se pudo guardar el orden",
+          actionLabel: "Reintentar",
+          onAction: () => saveOrder(order),
+        });
+        return;
+      }
+      if (clearCover) {
+        const c = await setBacklogCoverAction(backlog.id, null).catch(() => null);
+        if (!c || !("ok" in c)) show({ kind: "error", message: "No se pudo cambiar la portada" });
+      }
+      router.refresh();
+    })();
+  }
+
   async function togglePin() {
     const pinned = !backlog.pinned;
     const res = await setBacklogPinnedAction(backlog.id, pinned).catch(() => null);
@@ -386,10 +465,25 @@ export function CollectionBody({
             </span>
           )}
           <Credits owner={owner} collaborators={collaborators} count={present.length} />
-          {formats.length > 1 && (
+          {/* Always, when there are titles (founder, 2026-09-27): with one
+              format it's a single pill that labels the type with its count
+              (nothing to filter); with more, each one filters. */}
+          {formats.length > 0 && (
             <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
               {formats.map((k) => {
                 const sel = activeFormat === k;
+                if (formats.length === 1) {
+                  return (
+                    <span
+                      key={k}
+                      aria-label={`${counts[k]} ${counts[k] === 1 ? FORMAT[k].singular : FORMAT[k].plural}`}
+                      className="inline-flex h-10 items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 font-mono text-[12px] text-text"
+                    >
+                      <KIcon name={FORMAT[k].icon} size={15} />
+                      {counts[k]}
+                    </span>
+                  );
+                }
                 return (
                   <button
                     key={k}
@@ -415,22 +509,6 @@ export function CollectionBody({
         <EmptyCollection addHref={addHref} auto={!owned} />
       ) : (
         <>
-          {owned && (
-            <div className="flex items-baseline justify-between px-5 pb-3.5">
-              <h2 className="font-brand text-[22px] font-normal">
-                {SORTS.find((s) => s.id === sort)?.heading ?? "el orden"}
-              </h2>
-              {present.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setSheet({ kind: "reorder" })}
-                  className="flex min-h-11 items-center font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-colors hover:text-text"
-                >
-                  Reordenar
-                </button>
-              )}
-            </div>
-          )}
           {view === "list" ? (
             <ListBody items={shown} now={now} hold={hold} />
           ) : (
@@ -494,15 +572,7 @@ export function CollectionBody({
           )}
           {sheet.kind === "sort" && <SortBody value={sort} onPick={setSort} />}
           {sheet.kind === "reorder" && (
-            <ReorderBody
-              backlogId={backlog.id}
-              items={present}
-              onSaved={() => {
-                setSort("manual");
-                setFormat(null);
-                router.refresh();
-              }}
-            />
+            <ReorderBody items={present} onSave={saveOrder} />
           )}
           {sheet.kind === "rename" && (
             <RenameBody backlogId={backlog.id} name={backlog.name} vibe={backlog.vibe} />
@@ -594,6 +664,16 @@ function Credits({
   collaborators: Collaborator[];
   count: number;
 }) {
+  // A collection nobody shares says only its count: "solo tú" and the lone
+  // seal stated the obvious (founder, 2026-09-27). The seals and "tú y mo"
+  // come back by themselves once collaborators exist (collaborators.ts).
+  if (collaborators.length === 0) {
+    return (
+      <span className="mt-0.5 font-sans text-[13px] text-text-2">
+        {count} {count === 1 ? "título" : "títulos"}
+      </span>
+    );
+  }
   return (
     <div className="mt-0.5 flex items-center gap-2">
       <div className="flex">
@@ -740,7 +820,7 @@ function OptionsBody({
   addHref: string;
   onView: () => void;
   onPin: () => void;
-  go: (kind: "sort" | "rename" | "privacy" | "share" | "delete") => void;
+  go: (kind: "sort" | "reorder" | "rename" | "privacy" | "share" | "delete") => void;
 }) {
   const dismiss = useSheetDismiss();
   const viewRow = (
@@ -779,6 +859,10 @@ function OptionsBody({
       <MenuGap />
       {viewRow}
       <MenuRow icon="sort" label="Ordenar" aside={sortLabel} onClick={() => go("sort")} />
+      {/* Right after Ordenar: Ordenar picks how you LOOK at it (Manual is one
+          of the modes), Reordenar edits that manual order — the one everyone
+          sees. It left the body (founder, 2026-09-27). */}
+      {count > 1 && <MenuRow icon="grip" label="Reordenar" onClick={() => go("reorder")} />}
       <MenuRow icon="pencil" label="Renombrar" onClick={() => go("rename")} />
       <MenuRow icon="lock" label="Privacidad" aside={visibilityLabel} onClick={() => go("privacy")} />
       <MenuGap />
@@ -815,24 +899,21 @@ const ROW_H = 64;
 /**
  * O3b — Reordenar: every title of the collection in its manual order, each
  * row with a grip. Drag the grip (the row follows the finger and the others
- * make room) or focus it and use ↑/↓. "Guardar orden" writes the whole order
- * at once (reorderBacklogItemsAction); closing the sheet discards it.
+ * make room) or focus it and use ↑/↓. "Guardar orden" hands the whole order
+ * to the body (`saveOrder`: optimistic, one write, Reintentar in the toast)
+ * and closes; closing the sheet any other way discards it.
  */
 function ReorderBody({
-  backlogId,
   items,
-  onSaved,
+  onSave,
 }: {
-  backlogId: string;
   items: CollectionItem[];
-  onSaved: () => void;
+  onSave: (order: string[]) => void;
 }) {
   const dismiss = useSheetDismiss();
   const [order, setOrder] = useState(items);
   const [drag, setDrag] = useState<{ from: number; dy: number } | null>(null);
   const startY = useRef(0);
-  const [pending, startTransition] = useTransition();
-  const [failed, setFailed] = useState(false);
 
   const to = drag
     ? Math.max(0, Math.min(order.length - 1, drag.from + Math.round(drag.dy / ROW_H)))
@@ -849,19 +930,8 @@ function ReorderBody({
   }
 
   function save() {
-    setFailed(false);
-    startTransition(async () => {
-      const res = await reorderBacklogItemsAction(
-        backlogId,
-        order.map((it) => it.backlogItemId),
-      ).catch(() => null);
-      if (!res || !("ok" in res)) {
-        setFailed(true);
-        return;
-      }
-      onSaved();
-      dismiss?.();
-    });
+    onSave(order.map((it) => it.backlogItemId));
+    dismiss?.();
   }
 
   return (
@@ -945,13 +1015,8 @@ function ReorderBody({
           );
         })}
       </ol>
-      {failed && (
-        <p className="px-1 pt-1 font-sans text-[13px] text-text-2">
-          No se pudo guardar. Revisa tu conexión e inténtalo otra vez.
-        </p>
-      )}
-      <button type="button" onClick={save} disabled={pending} className={`${SHEET_SOLID} mt-2.5`}>
-        {pending ? "Guardando…" : "Guardar orden"}
+      <button type="button" onClick={save} className={`${SHEET_SOLID} mt-2.5`}>
+        Guardar orden
       </button>
     </div>
   );

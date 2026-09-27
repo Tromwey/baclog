@@ -80,6 +80,7 @@ struct PublicCollectionView: View {
                     }
                 }
                 .padding(.bottom, 56)
+                .kDockClearance()
                 .kFeedSurface(tint, span: 900)
             }
             .ignoresSafeArea(.container, edges: .top)

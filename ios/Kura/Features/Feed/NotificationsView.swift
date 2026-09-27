@@ -82,7 +82,7 @@ struct NotificationsView: View {
         switch n.kind {
         case .followRequest(let id), .newFollower(let id): store.push(.person(id))
         case .release(let tid, _): store.push(.title(tid))
-        case .recap: store.push(.recap)
+        case .recap: store.push(.recap())
         case .followers: store.push(.followers(store.me.id, showFollowing: false))
         }
     }

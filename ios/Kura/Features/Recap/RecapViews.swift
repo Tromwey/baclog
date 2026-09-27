@@ -20,12 +20,14 @@ extension RecapPayload {
 
 struct RecapView: View {
     @Environment(AppStore.self) private var store
+    /// The month (`YYYY-MM`); nil = the newest.
+    var era: String? = nil
 
     var body: some View {
         Group {
             if store.debugEmptyRecap {
                 EmptyRecapView()
-            } else if let r = store.currentRecap, let top = r.top {
+            } else if let r = store.recap(era), let top = r.top {
                 content(r, top: top)
             } else if !store.recapLoading, let e = store.loadError(.recap) {
                 LoadErrorScreen(error: e) { Task { await store.loadRecap() } }
@@ -35,7 +37,7 @@ struct RecapView: View {
                 LoadingScreen(square: true)
             }
         }
-        .task { await store.loadRecap() }
+        .task(id: era) { await store.loadRecap(era: era) }
     }
 
     private func content(_ r: RecapPayload, top: Title) -> some View {
@@ -74,15 +76,25 @@ struct RecapView: View {
                     .padding(.vertical, 6)
                     VStack(alignment: .leading, spacing: 12) {
                         Text("También en tu mes").monoLabel(11, tracking: 0.1)
-                        HStack(alignment: .bottom, spacing: 10) {
-                            ForEach(r.also) { t in
-                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id)) }
-                                    .buttonStyle(.plain)
+                        // A strip that SCROLLS, bled to the screen's edges. It was a bare HStack:
+                        // with enough titles (five albums = 5 × 96 + 4 × 10 = 520 pt) it asked for
+                        // more than the screen, the page's VStack took that width, and the whole
+                        // recap came out wider than the screen and centred — cut on both sides.
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .bottom, spacing: 10) {
+                                ForEach(r.also) { t in
+                                    Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 96, radius: KRadius.coverS).zoomSource(ZoomID.title(t.id)) }
+                                        .buttonStyle(.plain)
+                                }
                             }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 20) // room for the covers' shadow (a scroll view clips)
                         }
+                        .padding(.horizontal, -24)
+                        .padding(.vertical, -20)
                     }
                     HStack(spacing: 8) {
-                        GlassButton(title: "Compartir tarjeta", height: 46) { store.push(.recapShare) }
+                        GlassButton(title: "Compartir tarjeta", height: 46) { store.push(.recapShare(era: r.era)) }
                         Button("Meses anteriores") { store.push(.recapHistory) }
                             .font(.kura.ui(15, .semibold))
                             .foregroundStyle(KColor.text2)
@@ -175,7 +187,9 @@ struct RecapHistoryView: View {
                             ForEach(months) { m in
                                 let month = m.label.split(separator: " ").first.map(String.init) ?? m.era
                                 if let t = store.recaps[m.era]?.top {
-                                    Button { store.pop() } label: {
+                                    // Opens THAT month (it used to pop back to the newest,
+                                    // whichever you tapped).
+                                    Button { store.openRecapMonth(m.era) } label: {
                                         VStack {
                                             Text("KURA").font(.kura.mono(10)).tracking(1).foregroundStyle(KColor.text2)
                                             Spacer()
@@ -234,13 +248,15 @@ func recapGradient(_ palette: [String]) -> LinearGradient {
 
 struct RecapShareView: View {
     @Environment(AppStore.self) private var store
+    /// The month the card is for; nil = the newest.
+    var era: String? = nil
     @State private var opening = false
     @State private var webCard: WebCardURL?
 
     private func openWebCard() {
         guard !opening else { return }
         opening = true
-        let era = store.currentRecap?.era
+        let era = store.recap(self.era)?.era
         let to = era.map { "/recap/tarjeta?mes=\($0)" } ?? "/recap/tarjeta"
         Task {
             defer { opening = false }
@@ -268,7 +284,7 @@ struct RecapShareView: View {
             VStack(spacing: 22) {
                 // Preview only: what gets exported is the web's card (no "Firmar con tu @" here —
                 // the web decides the signature, so a local switch would promise what it can't change).
-                RecapCard()
+                RecapCard(era: era)
                 // The exportable card lives on the web (`/recap/tarjeta`, the card exporter):
                 // `POST auth/web-session` gives a one-shot signed-in URL, opened in-app.
                 Button { openWebCard() } label: {
@@ -287,7 +303,7 @@ struct RecapShareView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         // Opened straight (deep link / `-kuraScreen recapcard`) the recap isn't loaded yet.
-        .task { if store.currentRecap == nil { await store.loadRecap() } }
+        .task { if store.recap(era) == nil { await store.loadRecap(era: era) } }
         .fullScreenCover(item: $webCard) { card in
             SafariView(url: card.url).ignoresSafeArea()
         }
@@ -315,8 +331,9 @@ struct SafariView: UIViewControllerRepresentable {
 /// 360×640 exportable card (scaled to fit).
 struct RecapCard: View {
     @Environment(AppStore.self) private var store
+    var era: String? = nil
     var body: some View {
-        let r = store.currentRecap
+        let r = store.recap(era)
         let top = r?.top
         HStack(spacing: 0) {
             SpineLabel(text: "KURA · recap \(r.map { String(format: "%02d.%d", ($0.era.split(separator: "-").last.flatMap { Int($0) } ?? 0), $0.year) } ?? "")", height: 540)

@@ -38,6 +38,20 @@ struct Dock: View {
     }
 }
 
+extension View {
+    /// The room a pushed collection / title (or one opened as a hero) leaves at its end for the
+    /// dock, which stays there now (founder, 2026-09-27). On iOS 26+ the dock is the system tab
+    /// bar, which already sits in the safe area; the iOS 17–25 `Dock` floats over the content
+    /// (it's an overlay, not a bar), so the page adds it. On top of the page's own 56.
+    func kDockClearance() -> some View { modifier(DockClearance()) }
+}
+
+private struct DockClearance: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) { content } else { content.padding(.bottom, 44) }
+    }
+}
+
 private struct DockSurface: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {

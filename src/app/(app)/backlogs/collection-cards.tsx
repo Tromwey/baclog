@@ -30,8 +30,8 @@ import { NewBacklogTrigger } from "./new-backlog-button";
 /**
  * Tus colecciones (Colecciones · una sola página, 2026-09-27 — design 10a).
  * One collection at a time, and under it the SAME body as the collection
- * (10b): credits, format pills that filter, "el orden" + Reordenar, every
- * title in columns, holding a title (18c), the same Opciones.
+ * (10b): credits, format pills that filter, every title in columns, holding
+ * a title (18c), the same Opciones (Reordenar lives there).
  *
  *  - The FANS in a carousel: drag (1:1, see `carousel-motion.ts`), scroll
  *    sideways with a trackpad, arrow keys, tap an edge or a neighbour's name.
@@ -104,8 +104,22 @@ export function CollectionCards({
   /** First-run note under the titles (page.tsx decides). */
   coach?: React.ReactNode;
 }) {
+  // A Guardar orden in the body repaints its collection's fan and gradient
+  // before the server answers (the new #1 leads). Holds only while `shelves`
+  // is the array it was made against: the refresh after the write replaces it.
+  const [curated, setCurated] = useState<{
+    base: Shelf[];
+    id: string;
+    fan: FanCover[];
+    hexes: string[];
+  } | null>(null);
+  const live = curated && curated.base === shelves ? curated : null;
+
   const entries = useMemo(() => {
-    const shelf = (s: Shelf): Entry => ({ kind: "shelf", id: s.id, name: s.name, shelf: s, fan: s.fan, hexes: s.hexes });
+    const shelf = (s: Shelf): Entry =>
+      live && live.id === s.id
+        ? { kind: "shelf", id: s.id, name: s.name, shelf: s, fan: live.fan, hexes: live.hexes }
+        : { kind: "shelf", id: s.id, name: s.name, shelf: s, fan: s.fan, hexes: s.hexes };
     const pinned = shelves.filter((s) => s.pinned);
     const full = shelves.filter((s) => !s.pinned && s.itemCount > 0);
     const empties = shelves.filter((s) => !s.pinned && s.itemCount === 0);
@@ -117,7 +131,7 @@ export function CollectionCards({
     }
     out.push({ kind: "ghost", id: GHOST_ID, name: "nueva colección", fan: [], hexes: [] });
     return out;
-  }, [shelves, upcoming]);
+  }, [shelves, upcoming, live]);
 
   // Mover a (7a): the other collections with their fan, and where every
   // title already lives (a move never duplicates; its undo never removes a
@@ -306,6 +320,10 @@ export function CollectionCards({
             profilePublic={profilePublic}
             introClassName="pt-1"
             toastBottom={TOAST_BOTTOM}
+            onFanChange={(next) => {
+              const id = cur.shelf.id;
+              setCurated(next ? { base: shelves, id, ...next } : null);
+            }}
           />
         )}
 

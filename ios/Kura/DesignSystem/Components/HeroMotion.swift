@@ -396,8 +396,8 @@ private struct HeroSourceModifier: ViewModifier {
 ///    it); released, the projection `p + v·0.2` under 70 % closes at the finger's speed, over
 ///    it goes back.
 ///
-/// At a tab's root (`rootTab`) the tab bar hides while it's open (like a push), and tapping the
-/// tab again closes it (pop to root). Everything else — sheets, pushes from inside the page —
+/// At a tab's root (`rootTab`) the tab bar STAYS while it's open (founder, 2026-09-27; the page
+/// scrolls clear of it), and tapping the tab again closes it (pop to root). Everything else — sheets, pushes from inside the page —
 /// works as on any screen: a push covers base + page, and coming back finds the page open.
 struct HeroHost<Base: View, Page: View, Flyer: View>: View {
     @Environment(AppStore.self) private var store
@@ -422,9 +422,10 @@ struct HeroHost<Base: View, Page: View, Flyer: View>: View {
             // The base's geometry must not change while a hero is open, or a scroll view resting at
             // its end shifts its content and snaps back in ONE frame when the close ends, right
             // where the copy lands (the close flicker). Two things changed it:
-            //  - hiding the tab bar (bottom safe area 83 → 34): the base ignores the bottom safe
-            //    area, so its scroll views never see the bar come and go (the pages carry their own
-            //    dock clearance: 150 / 140 bottom padding);
+            //  - hiding the tab bar (bottom safe area 83 → 34). The bar no longer hides under a hero
+            //    (founder, 2026-09-27), and the base still ignores the bottom safe area, so its
+            //    scroll views could never see a bar come and go (the pages carry their own dock
+            //    clearance: 150 / 140 bottom padding);
             //  - the 4 % recession as a transform around the base: a non-identity transform cuts
             //    the safe area off from everything under it. It's `.heroRecedes()` on the base's
             //    scroll CONTENT instead (see `HeroRecedeContent`).
@@ -456,18 +457,7 @@ struct HeroHost<Base: View, Page: View, Flyer: View>: View {
         #if DEBUG
         .task { await demo() }
         #endif
-        .onChange(of: hero.openID) { _, id in
-            guard let rootTab else { return }
-            if id != nil { store.heroCovers.insert(rootTab) } else { store.heroCovers.remove(rootTab) }
-            #if DEBUG
-            KBodyLog.hit("heroCovers \(store.heroCovers)")
-            #endif
-        }
         .onChange(of: rootTab.map { store.heroResets[$0, default: 0] }) { hero.dismissNow() }
-        .onDisappear {
-            // Torn down (sign-out, the tab's content replaced): never leave the tab bar hidden.
-            if let rootTab, !hero.isOpen { store.heroCovers.remove(rootTab) }
-        }
         .onChange(of: dragging) { _, live in
             // A cancelled drag (a system gesture took over) never calls onEnded: settle back open.
             guard !live else { return }

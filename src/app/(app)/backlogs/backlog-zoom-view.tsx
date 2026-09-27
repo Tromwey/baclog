@@ -11,7 +11,6 @@ import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { getCollaboratorsForBacklogs } from "@/modules/backlog/collaborators";
 import { fanHexes, fanOf } from "@/modules/backlog/fan";
 import { getCollectionFans } from "@/modules/backlog/shelves";
-import { HideDock } from "./hide-dock";
 import {
   CollectionScreen,
   type CollectionItem,
@@ -98,7 +97,9 @@ export type BacklogZoomData = Awaited<ReturnType<typeof loadBacklogZoom>>;
  * Colección (Colecciones formalizado · 2a, 2026-09-27): the page in the feed
  * gradient of its fan, the fan at 225 as the header, the name, the line, the
  * credits and the format pills, then the titles in columns in the manual
- * order (or as a list). Every action lives in Opciones. No dock (HideDock).
+ * order (or as a list). Every action lives in Opciones. The dock stays
+ * (founder, 2026-09-27: "la barra no se debería esconder al entrar a los
+ * ítems ni a las colecciones").
  * Server-safe wrapper; the screen itself is client.
  *
  * Shared by the real /backlogs/[id] page and the profile's intercepted
@@ -138,7 +139,6 @@ export function BacklogZoomView({
       {/* In-browser Safari tints the status-bar band from theme-color — the
           top of the tinted header, so the header doesn't cut off in black. */}
       <ThemeColorSync color={lead.length ? tintEnds(lead)[0] : undefined} exact />
-      {!overlay && <HideDock />}
       <CollectionScreen
         mode="owned"
         backlog={{

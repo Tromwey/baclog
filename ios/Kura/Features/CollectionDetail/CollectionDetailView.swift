@@ -6,11 +6,11 @@ import SwiftUI
 /// The whole page wears the FEED gradient of the fan's front cover (168°, anchored at 900,
 /// continuing in its bottom tone). Header: Volver · Compartir + Opciones; the fan at 225;
 /// "colección · fijada" in mono; the name in Newsreader 36; the line in italic 16; the credits
-/// (your seal + "solo tú · 12 títulos"); and the format pills that filter (only with more than
-/// one format; tap again to clear).
+/// ("12 títulos"; seals + names only once collaborators exist); and the format pills (always:
+/// one format = a label, several = they filter; tap again to clear).
 ///
 /// Everything under the name is `CollectionBody`, the SAME body Tus colecciones draws under its
-/// carousel (propuesta 10): "el orden" + Reordenar, then the titles in three columns (`Masonry`)
+/// carousel (propuesta 10): the titles in three columns (`Masonry`)
 /// in the MANUAL order — or Recientes · Título · Estado · Año (per device), or the list (16c).
 /// Holding a title: 18c (Tu reacción · Reseñar · Usar como portada · Mover · Quitar). Twin of the
 /// web's `collection-screen.tsx`.
@@ -79,6 +79,7 @@ struct CollectionDetailView: View {
                     }
                 }
                 .padding(.bottom, 56)
+                .kDockClearance()
                 .kFeedSurface(tint, span: 900)
                 // Recedes 4 % while a title opens over it (`TitleHeroHost`).
                 .heroRecedes()
@@ -109,19 +110,6 @@ struct CollectionChips: View {
             IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de \(collection.name)") {
                 store.present(.more(collection.id))
             }
-        }
-    }
-}
-
-extension SortMode {
-    /// The body's heading under the header ("el orden" is the owner's manual order).
-    var heading: String {
-        switch self {
-        case .manual: return "el orden"
-        case .recent: return "recientes"
-        case .title: return "por título"
-        case .status: return "por estado"
-        case .year: return "por año"
         }
     }
 }
@@ -187,44 +175,73 @@ struct VibeLine: View {
     }
 }
 
-/// The credits (2a): your seal at 26 and "solo tú · 12 títulos" (collaborators don't exist on
-/// the app yet: the credit is always yours alone).
+/// The credits (2a). A collection nobody shares says only "12 títulos": "solo tú" and your lone
+/// seal stated the obvious (founder, 2026-09-27). With collaborators (not on the app yet — no
+/// caller passes them) it's your seal + theirs at 26, overlapping 7, and "tú y mo · 12 títulos".
 struct Credits: View {
     @Environment(AppStore.self) private var store
     let count: Int
+    var collaborators: [Person] = []
+
     var body: some View {
-        HStack(spacing: 8) {
-            Seal(person: store.me, size: 26)
-            Text("solo tú · \(count) \(count == 1 ? "título" : "títulos")")
-                .font(.kura.ui(13))
-                .foregroundStyle(KColor.text2)
+        let titles = "\(count) \(count == 1 ? "título" : "títulos")"
+        Group {
+            if collaborators.isEmpty {
+                Text(titles)
+            } else {
+                HStack(spacing: 8) {
+                    HStack(spacing: -7) {
+                        Seal(person: store.me, size: 26)
+                        ForEach(collaborators) { p in Seal(person: p, size: 26) }
+                    }
+                    Text("\(Self.names(collaborators)) · \(titles)")
+                }
+            }
         }
+        .font(.kura.ui(13))
+        .foregroundStyle(KColor.text2)
         .padding(.top, 2)
         .accessibilityElement(children: .combine)
     }
+
+    /// "tú y mo", "tú, mo y ja" (first names, lowercase — the web's `ownCreditLine`).
+    static func names(_ people: [Person]) -> String {
+        let all = ["tú"] + people.map { ($0.name.split(separator: " ").first.map(String.init) ?? $0.handle).lowercased() }
+        return all.count <= 1 ? (all.first ?? "") : all.dropLast().joined(separator: ", ") + " y " + all.last!
+    }
 }
 
+/// A format and its count. With an `action` it filters (several formats); without one it's a
+/// label — the collection's only format (founder, 2026-09-27: the pills always show).
 struct FormatPill: View {
     let format: MediaFormat
     let count: Int
-    let selected: Bool
-    let action: () -> Void
+    var selected = false
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: format.symbol).font(.system(size: 13, weight: .medium))
-                Text("\(count)").font(.kura.mono(12))
-            }
-            .foregroundStyle(KColor.text)
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .background(selected ? KColor.glassSelected : KColor.glassBg, in: Capsule())
-            .contentShape(Capsule())
+        if let action {
+            Button(action: action) { face }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(format.label), \(count)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+        } else {
+            face
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(format.label), \(count)")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(format.label), \(count)")
-        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var face: some View {
+        HStack(spacing: 7) {
+            Image(systemName: format.symbol).font(.system(size: 13, weight: .medium))
+            Text("\(count)").font(.kura.mono(12))
+        }
+        .foregroundStyle(KColor.text)
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .background(selected ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+        .contentShape(Capsule())
     }
 }
 
@@ -357,6 +374,7 @@ struct WaitingCollectionView: View {
                     }
                 }
                 .padding(.bottom, 56)
+                .kDockClearance()
                 .kFeedSurface(tint, span: 900)
             }
             .ignoresSafeArea(.container, edges: .top)

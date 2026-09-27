@@ -14,11 +14,12 @@ export function TriangleGlyph({ size = 16 }: { size?: number }) {
 
 /**
  * The ficha's one aviso (§patrones · avisos): the shared `kura/toast` pill
- * where the dock would be (the ficha hides the dock), one at a time — a new
+ * just over the dock (it stays on the ficha since 2026-09-27), one at a
+ * time — a new
  * one replaces the old. "Deshacer" for the reversible, the triangle +
  * "Reintentar" for a failure. The state lives in `reaction-state.tsx`.
  */
 export function ToastHost() {
   const { toastHost } = useItemReaction();
-  return <Toast host={toastHost} bottom={34} />;
+  return <Toast host={toastHost} bottom="calc(var(--dock-clearance) - 22px)" />;
 }

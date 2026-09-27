@@ -62,7 +62,7 @@ export function CollectionScreen({
         const nextWait =
           mode === "auto" && present[0]?.releaseDate ? releaseLabel(present[0].releaseDate, now) : null;
         return (
-          <div className="relative isolate mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-14 text-text">
+          <div className="relative isolate mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text">
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 -z-10"

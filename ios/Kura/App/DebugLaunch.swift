@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// splash · onboarding · signup · signupapple · signupemail · username · pick · people · login · loginemail ·
 /// collections (`-kuraCarousel <id>` starts the carousel on that collection) · loading · empty ·
-/// offline · newcollection · collection · reorder · quick · collectionsmore · profilequick · waitactions · publiccollection ·
+/// offline · newcollection · collection · reorder · recapmonth · quick · collectionsmore · profilequick · waitactions · publiccollection ·
 /// list · auto · more · share · shareprivate · actions · add · title · series · album · waiting ·
 /// complete · feed · discover · profile · sessions · revokesession · sessionsone · notifysettings ·
 /// identities · unlinkidentity · lastwayin · lastwayintoast · mergechooser · mergecode · mergelimit · mergeconfirm
@@ -27,6 +27,14 @@ enum DebugLaunch {
         // (Read directly by `LiveAPI`: `-kuraDelete401 YES` makes `DELETE /me` answer 401 with a
         // live account; `-kuraFailLogout YES` makes `POST auth/logout` fail as offline.)
         store.debugFailHydrate = UserDefaults.standard.bool(forKey: "kuraFailHydrate")
+        // `-kuraReorderDemo <collectionID>`: 2.5 s in, Guardar orden with the LAST title first
+        // (through `reorder`, like the sheet) — the fan and the gradient must repaint with it.
+        if let rid = UserDefaults.standard.string(forKey: "kuraReorderDemo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                guard let c = store.collection(rid), let last = c.titleIDs.last else { return }
+                store.reorder(rid, to: [last] + c.titleIDs.dropLast())
+            }
+        }
         guard let screen = UserDefaults.standard.string(forKey: "kuraScreen") else { return }
         func main(_ tab: Tab = .collections, _ routes: [Route] = [], sheet: SheetRoute? = nil) {
             store.phase = .main
@@ -231,14 +239,18 @@ enum DebugLaunch {
             main(.profile)
         // Flujo 10 · recap
         case "recap":
-            main(.profile, [.recap])
+            main(.profile, [.recap()])
         case "recapcard":
-            main(.profile, [.recap, .recapShare])
+            main(.profile, [.recap(), .recapShare()])
         case "recaphistory":
-            main(.profile, [.recap, .recapHistory])
+            main(.profile, [.recap(), .recapHistory])
+        // Meses anteriores › junio, through the same call its card makes (`openRecapMonth`).
+        case "recapmonth":
+            main(.profile, [.recap(), .recapHistory])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { store.openRecapMonth("2026-06") }
         case "recapempty":
             store.debugEmptyRecap = true
-            main(.profile, [.recap])
+            main(.profile, [.recap()])
         // Flujo 11 · ajustes
         case "settings":
             main(.profile, [.settings])

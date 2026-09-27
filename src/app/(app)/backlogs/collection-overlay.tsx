@@ -17,6 +17,7 @@ import { fanSource, takeFanFlight } from "@/components/kura/fan-flight";
 import { prefersReducedMotion } from "@/hooks/use-reduced-motion";
 import type { FanCover } from "@/modules/backlog/fan";
 import { SpringValue, VelocityTracker, clamp01, lerp } from "@/lib/spring";
+import { useLiftNavDock } from "../nav-dock";
 import { OverlayExitCtx } from "./overlay-exit";
 
 /**
@@ -44,8 +45,9 @@ import { OverlayExitCtx } from "./overlay-exit";
  * rise, no recede — one cross-fade on the same spring.
  *
  * Portaled to <body> (AGENTS.md: the (app) wrapper is a stacking context):
- * z-40 covers the dock — which stays mounted and shows through as the
- * overlay closes — and stays under the sheets (z-50) and the toast (z-60).
+ * z-40 covers the page and stays under the sheets (z-50) and the toast
+ * (z-60). The dock stays OVER it (`useLiftNavDock`: z-41 while this is
+ * mounted — founder, 2026-09-27); the screen clears it (pb-dock-clearance).
  * An open that didn't come from a recorded tap (a back-nav restoring the
  * overlay) appears at rest.
  */
@@ -71,6 +73,7 @@ export function CollectionOverlay({ backlogId, children }: { backlogId: string; 
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const flyRef = useRef<FlyHandle>(null);
+  useLiftNavDock(true);
 
   const st = useRef({
     p: null as SpringValue | null,

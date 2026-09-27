@@ -1,5 +1,4 @@
 import { SKELETON_PULSE } from "@/components/kura/components";
-import { HideDock } from "./hide-dock";
 
 /**
  * Ficha skeleton (Kura §patrones · cargando: "Esqueleto con la forma real.
@@ -12,14 +11,12 @@ import { HideDock } from "./hide-dock";
  * yet. Drawn for film/series (the common case); an album's square lands
  * with the real page.
  *
- * HideDock: the page is a pushed view without the nav dock; mounting it here
- * too keeps the dock from floating over the skeleton and then fading out
- * when the page lands (the hook is ref-counted, so the hand-off is seamless).
+ * The dock stays over the ficha (founder, 2026-09-27), so the skeleton
+ * clears it like the page does (pb-dock-clearance).
  */
 export default function Loading() {
   return (
-    <main aria-busy="true" className="relative mx-auto min-h-dvh w-full max-w-md bg-bg pb-14">
-      <HideDock />
+    <main aria-busy="true" className="relative mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance">
       <div className={SKELETON_PULSE}>
         <div className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]">
           <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex justify-between">

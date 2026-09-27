@@ -118,7 +118,7 @@ struct ProfileView: View {
                             RibbonPill(glyph: .review, value: store.reviewCount)
                         }
                         if let recapLabel = store.recapButtonLabel {
-                            Button { store.push(.recap) } label: {
+                            Button { store.push(.recap()) } label: {
                                 HStack(spacing: 8) {
                                     Text(recapLabel).font(.kura.news(17))
                                     Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))

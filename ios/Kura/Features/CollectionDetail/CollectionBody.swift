@@ -2,10 +2,12 @@ import SwiftUI
 
 /// Everything UNDER a collection's fan and name, shared by Tus colecciones (10a, the collection in
 /// the centre of the carousel) and Colección (10b) — propuesta 10, "una sola página": the line
-/// (italic 16), the credits (seal 26 + "solo tú · N títulos"), the format pills with their count
-/// that FILTER (only with more than one format; tap again to clear), then "el orden" (or the
-/// sort's heading) + Reordenar and EVERY title — three columns (`Masonry`) or the list (16c), per
-/// the collection's own layout and sort. Holding a title opens 18c. An empty collection draws 6b.
+/// (italic 16), the credits ("N títulos"; seals only with collaborators), the format pills with
+/// their count — ALWAYS (one format = a label; several = they FILTER, tap again to clear) — then
+/// EVERY title — three
+/// columns (`Masonry`) or the list (16c), per the collection's own layout and sort — straight
+/// under the meta (26), with no heading: "el orden" and its Reordenar link were dropped (founder,
+/// 2026-09-27); Reordenar lives in Opciones (⋯). Holding a title opens 18c. Empty = 6b.
 ///
 /// The only differences between the two screens live outside it: the arrival (carousel vs.
 /// Volver) and where the name sits. `metaTop` is the gap above the line (10 under 10b's name,
@@ -33,11 +35,18 @@ struct CollectionBody<Between: View>: View {
                 VStack(spacing: 10) {
                     if let vibe = c.shownVibe { VibeLine(text: vibe) }
                     Credits(count: c.titleIDs.count)
-                    if formats.count > 1 {
+                    // Always, when there are titles (founder, 2026-09-27): one format = one pill
+                    // that labels the type with its count; several = pills that filter.
+                    if !formats.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(formats) { f in
-                                FormatPill(format: f, count: all.filter { $0.format == f }.count, selected: active == f) {
-                                    withAnimation(KMotion.short) { filter = (active == f) ? nil : f }
+                                let n = all.filter { $0.format == f }.count
+                                if formats.count == 1 {
+                                    FormatPill(format: f, count: n)
+                                } else {
+                                    FormatPill(format: f, count: n, selected: active == f) {
+                                        withAnimation(KMotion.short) { filter = (active == f) ? nil : f }
+                                    }
                                 }
                             }
                         }
@@ -54,20 +63,6 @@ struct CollectionBody<Between: View>: View {
 
                 VStack(spacing: 0) {
                     between
-
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(c.sort.heading).font(.kura.news(22)).foregroundStyle(KColor.text)
-                            .accessibilityAddTraits(.isHeader)
-                        Spacer()
-                        if c.titleIDs.count > 1 {
-                            Button { store.present(.reorder(c.id)) } label: {
-                                Text("Reordenar").monoLabel(11).frame(minHeight: 44).contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
 
                     if c.layout == .list {
                         TitleList(titles: visible, collectionID: c.id)

@@ -266,6 +266,12 @@ extension AppStore {
     /// Reordenar › Guardar orden: the WHOLE manual order at once (`PUT /collections/{id}/order`),
     /// and the view goes back to Manual. Titles that came or went while the sheet was open keep
     /// their place: new ones on top (unplaced first), gone ones dropped.
+    ///
+    /// The new #1 LEADS the fan (founder, 2026-09-27: "el nuevo ítem 1 debería estar en el lugar
+    /// central del abanico y repintarlo"). The fan puts a chosen cover in front of the order, so
+    /// a new order whose #1 isn't the chosen cover also sends the cover back to automatic — in the
+    /// same optimistic beat, so the fan and the gradient repaint at once. Same write key as the
+    /// order: the two PATCH/PUT go out in sequence, each with its own rollback.
     func reorder(_ id: String, to order: [String]) {
         guard let c = collection(id) else { return }
         let present = Set(c.titleIDs)
@@ -276,6 +282,9 @@ extension AppStore {
         update(id) { $0.sort = .manual }
         saveLocal()
         guard final != old else { return }
+        if let cover = c.chosenCoverTitleID, cover != final.first {
+            writeCover(c.id, nil, was: cover)
+        }
         writeOrder(c.id, final, was: old)
     }
 

@@ -4,8 +4,9 @@ import SwiftUI
 
 /// ONE options sheet per collection, the same wherever you come from (propuesta 9: "una sola hoja
 /// de Opciones por rol"). The name 24 + "N títulos", then Agregar títulos · Compartir ·
-/// Fijar/Desfijar · — · [Ver como lista · Ordenar ·] Renombrar · Privacidad · — · Borrar colección.
-/// `full` (Opciones, the ⋯ chip in 10a/10b) carries the two VIEW rows; holding a fan (9a: Tus
+/// Fijar/Desfijar · — · [Ver como lista · Ordenar · Reordenar ·] Renombrar · Privacidad · — ·
+/// Borrar colección. `full` (Opciones, the ⋯ chip in 10a/10b) carries the VIEW rows (Reordenar
+/// only with 2+ titles; it left the body, founder 2026-09-27); holding a fan (9a: Tus
 /// colecciones, your own profile) leaves them out — they change the view of a screen you're not on.
 struct CollectionOptionsSheet: View {
     @Environment(AppStore.self) private var store
@@ -39,6 +40,11 @@ struct CollectionOptionsSheet: View {
                     }
                     SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
                         Text(c.sort.label).monoLabel(color: KColor.text3)
+                    }
+                    // Right after Ordenar: Ordenar picks how you LOOK at it (Manual is one of
+                    // the modes), Reordenar edits that manual order — the one everyone sees.
+                    if n > 1 {
+                        SheetRow(systemImage: "line.3.horizontal", label: "Reordenar") { store.present(.reorder(c.id)) }
                     }
                 }
                 SheetRow(systemImage: "pencil", label: "Renombrar") { store.present(.rename(c.id)) }

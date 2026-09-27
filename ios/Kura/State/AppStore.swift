@@ -128,9 +128,6 @@ final class SessionData {
     var sheetLocked = false
     var loadState: LoadState = .loading
     var dockHidden = false
-    /// Tabs whose ROOT has a hero page open over it (a collection from the profile, a title from
-    /// Tus colecciones): the tab bar hides like on a push (`HeroHost`).
-    var heroCovers: Set<Tab> = []
     /// Bumped when the active tab is tapped again: its root closes an open hero (pop to root).
     var heroResets: [Tab: Int] = [:]
 
@@ -189,6 +186,8 @@ final class SessionData {
     var recapMonths: [RecapMonth]?
     var recaps: [String: RecapPayload] = [:]
     var recapLoading = false
+    /// Months whose `GET /recap/{era}` is in flight (Meses anteriores loads several at once).
+    var recapEraLoads: Set<String> = []
 
     // Social / settings
     var requested: Set<String> = []
@@ -450,7 +449,6 @@ final class AppStore {
     var alerts: Set<String> { get { s.alerts } _modify { yield &s.alerts } set { s.alerts = newValue } }
     /// Discover's search mode hides the dock (the keyboard owns the bottom).
     var dockHidden: Bool { get { s.dockHidden } set { s.dockHidden = newValue } }
-    var heroCovers: Set<Tab> { get { s.heroCovers } _modify { yield &s.heroCovers } set { s.heroCovers = newValue } }
     var heroResets: [Tab: Int] { get { s.heroResets } _modify { yield &s.heroResets } set { s.heroResets = newValue } }
     var recentlyViewed: [String] { get { s.recentlyViewed } _modify { yield &s.recentlyViewed } set { s.recentlyViewed = newValue } }
     @ObservationIgnored var debugEmptyRecap = false
@@ -1192,10 +1190,14 @@ final class AppStore {
 
     func path(_ tab: Tab) -> [Route] { paths[tab] ?? [] }
 
-    /// The dock / tab bar: only at a tab's root, not under a hero page, and not while Descubrir
-    /// is searching.
+    /// The dock / tab bar. It STAYS on a collection or a title (founder, 2026-09-27: "la barra
+    /// no se debería esconder al entrar a los ítems ni a las colecciones") — pushed or opened as a
+    /// hero over a root, which never touches it (so the base's bottom safe area never changes
+    /// under a hero: learning 2026-09-27-transformar-la-base-le-quita-el-safe-area). It hides on
+    /// the other pushes (ajustes, seguidores, una persona…) and while Descubrir is searching.
     func dockVisible(_ tab: Tab) -> Bool {
-        path(tab).isEmpty && !heroCovers.contains(tab) && !(dockHidden && tab == .discover)
+        guard let top = path(tab).last else { return !(dockHidden && tab == .discover) }
+        return top.keepsDock
     }
 
     func push(_ route: Route) {
