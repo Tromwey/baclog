@@ -141,6 +141,8 @@ function pillsFor(e: FeedEvent): Pill[] {
   return out;
 }
 
+/** The design's Card pill (sistema-de-diseno · pillVariants: glifo 13 · mono 12 · 9/14, 30 high)
+ *  — iOS `KPill.card`. It had the profile Ribbon's 7/12 (26 high). */
 function PillRow({ pills }: { pills: Pill[] }) {
   if (pills.length === 0) return null;
   return (
@@ -148,7 +150,7 @@ function PillRow({ pills }: { pills: Pill[] }) {
       {pills.map((p) => (
         <span
           key={p.label}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-3 py-[7px] font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-[14px] py-[9px] font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text"
         >
           <svg
             width="13"

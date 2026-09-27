@@ -570,7 +570,8 @@ private struct FeedCard: View, Equatable {
     var body: some View {
         VStack(alignment: .leading, spacing: FeedCardInset.gap) {
             if isSuggestion {
-                SuggestionPill()
+                // The suggestion's header, where the author chip goes on every other card: the card pill.
+                StatusPill(glyph: .users, label: "Sugerencia para ti")
             } else if let author {
                 HStack(spacing: 8) {
                     Button { if author.id != store.me.id { store.push(.person(author.id)) } } label: {
@@ -881,25 +882,6 @@ private struct BurstCaption: View {
         .padding(.top, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Self.height, alignment: .top)
-    }
-}
-
-/// The suggestion's header, where the author chip goes on every other card.
-private struct SuggestionPill: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            GlyphView(glyph: .users, size: 13)
-            Text("Sugerencia para ti")
-                .font(.kura.mono(12))
-                .tracking(0.72)
-                .textCase(.uppercase)
-                .foregroundStyle(KColor.text)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(KColor.glassBg, in: Capsule())
-        .fixedSize()
-        .accessibilityElement(children: .combine)
     }
 }
 

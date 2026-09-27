@@ -110,11 +110,12 @@ enum FollowState: Equatable {
 /// where the caller spends it; Siguiendo / Solicitado go quiet per size.
 struct FollowButton: View {
     enum Size {
-        /// 36 pt pill in a list row (Descubrir, Avisos, onboarding). Siguiendo loses its fill.
+        /// 36 pt pill in a list row (Descubrir, Avisos, onboarding) — 16 aside, like the web's row. Siguiendo loses its fill.
         case row
         /// 40 pt pill in Seguidores / Siguiendo. Siguiendo loses its fill.
         case list
-        /// The feed's suggestion card: 16 pt label. Siguiendo keeps a flat glass fill.
+        /// The feed's suggestion card: the design's honey button (44 · 0 20 · 15 semibold, same as
+        /// the web card). Siguiendo keeps a flat glass fill.
         case card
         /// A profile's hero, 48 pt. Siguiendo / Solicitado sit next to the share chip, so they
         /// take the chrome's glass (Liquid Glass on iOS 26).
@@ -148,9 +149,9 @@ struct FollowButton: View {
 
     private var metrics: (font: CGFloat, hPad: CGFloat, hit: CGFloat) {
         switch size {
-        case .row: return (14, 14, 4)
+        case .row: return (14, 16, 4)
         case .list: return (14, 16, 2)
-        case .card: return (16, 24, 0)
+        case .card: return (15, 20, 0)
         case .hero: return (16, 28, 0)
         }
     }
@@ -182,7 +183,7 @@ struct FollowButton: View {
             switch size {
             case .row: label.frame(minHeight: 36)
             case .list: label.frame(height: 40)
-            case .card: label.padding(.vertical, 14)
+            case .card: label.frame(height: 44)
             case .hero: label.frame(height: 48)
             }
         }

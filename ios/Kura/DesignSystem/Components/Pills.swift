@@ -1,22 +1,47 @@
 import SwiftUI
 
-/// Card pill: glyph 13 · mono 12 · 9/14 · glass. Max two per object.
+/// The design's glass mono pills (sistema-de-diseno · pillVariants, flujos 12 perfil). One spec
+/// per variant, shared by every screen that draws it.
+enum KPill {
+    struct Spec {
+        let glyph: CGFloat
+        let font: CGFloat
+        /// The design's `padding: v h` — around a `line-height: 1` label.
+        let v: CGFloat
+        let h: CGFloat
+        let gap: CGFloat
+        /// The box the design draws. Red Hat Mono carries ~4 pt of leading on iOS (a 12 pt label
+        /// lays out 16 high), so `padding(.vertical, v)` drew every pill 4 pt taller than the
+        /// design and the web: the height is set from the font size instead. Mono is fixed-size
+        /// (no Dynamic Type), so a fixed box never clips.
+        var height: CGFloat { font + 2 * v }
+    }
+    /// Card: glifo 13 · mono 12 · 9/14 — feed, cabecera de obra, hoja de completar. 30 high.
+    static let card = Spec(glyph: 13, font: 12, v: 9, h: 14, gap: 8)
+    /// Ribbon: glifo 12 · conteo mono · 7/12 — the profile's one count per state. 26 high.
+    static let ribbon = Spec(glyph: 12, font: 12, v: 7, h: 12, gap: 7)
+}
+
+/// Card pill (`KPill.card`). Max two per object.
 struct StatusPill: View {
     let glyph: Glyph
     let label: String
     var body: some View {
-        HStack(spacing: 8) {
-            GlyphView(glyph: glyph, size: 13)
+        let s = KPill.card
+        HStack(spacing: s.gap) {
+            GlyphView(glyph: glyph, size: s.glyph).kMeasure("StatusPill:\(label)", "glyph")
             Text(label)
-                .font(.kura.mono(12))
+                .font(.kura.mono(s.font))
                 .tracking(0.72)
                 .textCase(.uppercase)
                 .foregroundStyle(KColor.text)
                 .lineLimit(1)
+                .kMeasure("StatusPill:\(label)", "label")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, s.h)
+        .frame(height: s.height)
         .background(KColor.glassBg, in: Capsule())
+        .kMeasure("StatusPill:\(label)", "box")
         .fixedSize()
         .accessibilityElement(children: .combine)
     }
@@ -206,4 +231,20 @@ private struct SkeletonPulse: ViewModifier {
 
 extension View {
     func kSkeletonPulse() -> some View { modifier(SkeletonPulse()) }
+}
+
+extension View {
+    /// DEBUG `-kuraBodyLog YES`: `MEASURE <tag> <part> x y w h` in global space — the component
+    /// audit's ruler (container vs. its glyph/label, so paddings and gaps come out of real layout).
+    @ViewBuilder func kMeasure(_ tag: String, _ part: String) -> some View {
+        #if DEBUG
+        if KBodyLog.on {
+            onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { r in
+                KBodyLog.hit(String(format: "MEASURE %@ %@ %.2f %.2f %.2f %.2f", tag.replacingOccurrences(of: " ", with: "_"), part, r.minX, r.minY, r.width, r.height))
+            }
+        } else { self }
+        #else
+        self
+        #endif
+    }
 }

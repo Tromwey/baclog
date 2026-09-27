@@ -193,18 +193,20 @@ struct FollowCounts: View {
     }
 }
 
-/// Glass ribbon pill: glyph + mono 12 (perfil).
+/// Glass ribbon pill (`KPill.ribbon`, perfil).
 struct RibbonPill: View {
     let glyph: Glyph
     let value: Int
     var body: some View {
-        HStack(spacing: 7) {
-            GlyphView(glyph: glyph, size: 13)
-            Text("\(value)").font(.kura.mono(12)).foregroundStyle(KColor.text)
+        let s = KPill.ribbon
+        HStack(spacing: s.gap) {
+            GlyphView(glyph: glyph, size: s.glyph).kMeasure("RibbonPill:\(value)", "glyph")
+            Text("\(value)").font(.kura.mono(s.font)).foregroundStyle(KColor.text).kMeasure("RibbonPill:\(value)", "label")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, s.h)
+        .frame(height: s.height)
         .background(KColor.glassBg, in: Capsule())
+        .kMeasure("RibbonPill:\(value)", "box")
     }
 }
 
