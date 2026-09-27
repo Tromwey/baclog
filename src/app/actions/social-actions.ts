@@ -27,7 +27,10 @@ import type {
  * `assertUser()` and the revalidation the web pages need.
  */
 
-export type { FollowResult };
+// No `export type { … }` re-exports in a "use server" file: Turbopack emits them as runtime
+// bindings and every action here dies with `ReferenceError: FollowResult is not defined`
+// (learnings/2026-09-27-export-type-en-use-server-rompe-turbopack.md). Import the type from
+// `@/modules/social/follow` instead.
 
 /** Follow the public profile at `username` (see modules/social/follow.ts). */
 export async function followUserAction(

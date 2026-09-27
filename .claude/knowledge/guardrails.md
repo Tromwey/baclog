@@ -105,3 +105,8 @@ check, la entrada se mueve a la tabla de arriba.
   haptic así vibraría con el switch apagado. Manual (no está en CI; el repo no corre checks de iOS en PRs):
   correrlo al tocar haptics. Lo que NO cubre: que el EVENTO elegido sea el correcto (tabla en
   `state/frontend.md` › "iOS · haptics").
+- **`"use server"` sin re-exports de tipos** (`scripts/check-use-server.sh`, 2026-09-27): falla si un
+  módulo `"use server"` tiene `export type { X }` / `export { type X }`. Turbopack lo emite como binding
+  en runtime y TODAS las acciones del archivo mueren con `ReferenceError: X is not defined` — pasó dos
+  veces (backlog-actions, y `social-actions.ts` → Seguir roto en producción web). Manual: correrlo al
+  tocar `src/app/actions/**` o antes de desplegar. `tsc`/lint/`next build` NO lo detectan.
