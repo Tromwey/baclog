@@ -6,7 +6,7 @@ import { submitReportAction } from "@/app/actions/report-actions";
 
 const REASONS = [
   { id: "spam", label: "Spam" },
-  { id: "impersonation", label: "Se hace pasar por alguien" },
+  { id: "impersonation", label: "Se hace pasar por otra persona" },
   { id: "harassment", label: "Acoso" },
   { id: "illegal_content", label: "Contenido ilegal" },
   { id: "other", label: "Otro" },
@@ -43,7 +43,7 @@ export function ReportButton({ username }: { username: string }) {
         <Sheet onClose={() => setOpen(false)} label="Reportar perfil">
           {sent ? (
             <p className="py-4 text-center text-sm text-text">
-              Gracias. Lo revisaremos.
+              Gracias. Lo revisamos.
             </p>
           ) : (
             <>

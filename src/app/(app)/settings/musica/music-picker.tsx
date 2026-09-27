@@ -53,7 +53,7 @@ export function MusicPicker({ initial }: { initial: ServiceId | null }) {
         })}
       </div>
       <p className="px-2 text-[13px] leading-[1.5] text-pretty text-text-2">
-        {error ?? "“Abrir en”, en cada álbum, usa esta app. Si no la tienes instalada, abre la web."}
+        {error ?? "El botón “Abrir en” de cada álbum usa esta app. Si no la tienes, se abre la web."}
       </p>
     </div>
   );

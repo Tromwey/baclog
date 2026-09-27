@@ -100,7 +100,7 @@ extension AppStore {
                 self.collections.removeAll { $0.id == localID }
                 if let titleID { self.gcUserState(titleID) }
                 guard e != .cancelled, e != .unauthorized else { return }
-                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo crear la colección."), kind: .retry) { [weak self] in
                     self?.createCollection(name: finalName, privacy: privacy, adding: titleID)
                 })
             }
@@ -136,7 +136,7 @@ extension AppStore {
             case .invalid:
                 self.showToast(ToastModel(text: e.toast, kind: .info))
             default:
-                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se guardaron los cambios de la colección."), kind: .retry) { [weak self] in
                     guard let self, self.collection(id) != nil else { return }
                     self.dismissToast()
                     self.update(id) { c in
@@ -175,7 +175,7 @@ extension AppStore {
             if let v { c.vibe = v.isEmpty ? nil : v }
         }
         syncCollection(id, name: n, vibe: v, was: (oldName, oldVibe, nil))
-        undoToast(vibeChanged ? "Guardada" : "Renombrada") { [weak self] in
+        undoToast(nameChanged && vibeChanged ? "Cambios guardados" : nameChanged ? "Nombre cambiado" : "Frase guardada") { [weak self] in
             self?.update(id) { c in
                 if nameChanged { c.name = oldName }
                 if vibeChanged { c.vibe = oldVibe.isEmpty ? nil : oldVibe }
@@ -189,7 +189,7 @@ extension AppStore {
         guard let old = collection(id)?.privacy, old != p else { return }
         update(id) { $0.privacy = p }
         syncCollection(id, privacy: p, was: (nil, nil, old))
-        undoToast("Ahora la ve: \(p.label.lowercased())") { [weak self] in
+        undoToast(p.changedToast) { [weak self] in
             self?.update(id) { $0.privacy = old }
             self?.syncCollection(id, privacy: old, was: (nil, nil, p))
         }

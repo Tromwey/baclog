@@ -1,5 +1,6 @@
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog } from "../types";
-import { DISPLAY, MONO } from "./fonts";
+import { drawLockup, track } from "./brand";
+import { MONO, NEWS, RHMONO } from "./fonts";
 import {
   CARD_TOKENS,
   drawGrain,
@@ -81,28 +82,27 @@ export function drawPattern(
   ctx.fillStyle = "rgba(10, 8, 14, 0.78)";
   ctx.fillRect(0, panelY, CARD_WIDTH, panelH);
 
+  // The panel: the 蔵 kura lockup, the recap's name in Newsreader (the
+  // caller passes "recap de agosto" — lowercase, never "Era"), the count in
+  // mono. No date line: the old one printed TODAY's month in English, which
+  // lied on a card shared after its month ended; the name already says it.
+  drawLockup(ctx, CARD_WIDTH / 2, panelY + 100, 42, "center", CARD_TOKENS.text);
+
   ctx.textAlign = "center";
   ctx.fillStyle = CARD_TOKENS.text;
-  ctx.font = MONO(40, true);
-  ctx.fillText("*  B A C L O G  *", CARD_WIDTH / 2, panelY + 110);
-
-  ctx.font = DISPLAY(92, 800);
+  ctx.font = NEWS(104);
   ctx.fillText(
     truncateToWidth(ctx, backlog.name, CARD_WIDTH - 160),
     CARD_WIDTH / 2,
-    panelY + 260,
+    panelY + 285,
   );
 
-  const date = new Date()
-    .toLocaleDateString("en-US", { month: "short", year: "numeric" })
-    .toUpperCase();
-  ctx.font = MONO(38);
+  const n = backlog.items.length;
+  ctx.font = RHMONO(34);
+  track(ctx, 34 * 0.08);
   ctx.fillStyle = "rgba(244, 241, 234, 0.75)";
-  ctx.fillText(
-    `${backlog.items.length} ITEMS · ${date}`,
-    CARD_WIDTH / 2,
-    panelY + 350,
-  );
+  ctx.fillText(`${n} ${n === 1 ? "TÍTULO" : "TÍTULOS"}`, CARD_WIDTH / 2, panelY + 370);
+  track(ctx, 0);
 
   // Footer band + watermark — always bottom-center (sistema-diseno §5)
   ctx.fillStyle = "rgba(10, 8, 14, 0.85)";

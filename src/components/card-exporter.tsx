@@ -26,7 +26,7 @@ export function CardExporter({
   publicUrl,
   eyebrow,
   subtitle,
-  noLinkNote = "Reclama tu username en Ajustes para que tu link viaje con la tarjeta.",
+  noLinkNote = "Elige tu @usuario en Ajustes para que tu link viaje con la tarjeta.",
 }: {
   backlog: CardBacklog;
   style: CardStyle;

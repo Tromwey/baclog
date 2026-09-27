@@ -210,9 +210,9 @@ struct MergeAccountView: View {
                         .submitLabel(.send)
                         .onSubmit(send)
                     if providers.isEmpty {
-                        SolidButton(title: store.mergeBusy ? "Enviando…" : "Mandarme un código", enabled: !busy, action: send)
+                        SolidButton(title: store.mergeBusy ? "Enviando…" : "Enviarme un código", enabled: !busy, action: send)
                     } else {
-                        GlassButton(title: store.mergeBusy ? "Enviando…" : "Mandarme un código", height: 52, fontSize: 16, fullWidth: true, flat: true, action: send)
+                        GlassButton(title: store.mergeBusy ? "Enviando…" : "Enviarme un código", height: 52, fontSize: 16, fullWidth: true, flat: true, action: send)
                             .disabled(busy)
                     }
                     InlineError(text: store.mergeError).padding(.horizontal, 8)
@@ -288,7 +288,7 @@ struct MergeCodeView: View {
                     Button {
                         Task { _ = await store.requestMergeCode(email: store.mergeEmail); code = "" }
                     } label: {
-                        Text(wait > 0 ? "Mandar otro código en \(Self.waitLabel(wait))" : "Mandar otro código")
+                        Text(wait > 0 ? "Enviar otro código en \(Self.waitLabel(wait))" : "Enviar otro código")
                             .font(.kura.ui(15, .medium))
                             .foregroundStyle(wait > 0 ? KColor.text3 : KColor.text2)
                             .monospacedDigit()

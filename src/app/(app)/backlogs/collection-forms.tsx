@@ -300,7 +300,7 @@ export function ShareBody({
   const path = username ? `/u/${username}/${backlogId}` : null;
   const blocked =
     visibility === "private"
-      ? "Es solo tuya. Cámbiala en Privacidad para compartir el link."
+      ? "Es solo tuya. Cambia quién la ve para compartir el link."
       : !username
         ? "Elige tu usuario en Ajustes para tener un link."
         : !profilePublic

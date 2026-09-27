@@ -1,5 +1,3 @@
-export { DoubleFeatureCard } from "./double-feature-card";
-export { DoubleFeaturePreview } from "./double-feature-preview";
 export { SAMPLE_DOUBLE_FEATURE } from "./sample";
 export {
   normalizePalette,

@@ -103,13 +103,12 @@ function posterFill(hexes: readonly string[]): string | undefined {
 
 // ---------- the pill vocabulary ----------
 
-type Pill = { label: string; d: string; color: string; flip?: boolean };
+type Pill = { label: string; d: string; color: string };
 
 /** One glyph, one meaning; the colour is the state's (§glifos). */
 const P = {
   flame: (label: string): Pill => ({ label, d: FLAME_PATH, color: "var(--st-obsessed)" }),
   up: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--st-liked)" }),
-  down: (label: string): Pill => ({ label, d: LIKE_PATH, color: "var(--text-2)", flip: true }),
   check: (label: string): Pill => ({ label, d: CHECK_FILL_PATH, color: "var(--st-completed)" }),
   bookmark: (label: string): Pill => ({ label, d: BOOKMARK_PATH, color: "var(--text)" }),
   clock: (label: string): Pill => ({ label, d: CLOCK_PATH, color: "var(--st-waiting)" }),
@@ -117,26 +116,30 @@ const P = {
   users: (label: string): Pill => ({ label, d: USERS_PATH, color: "var(--text)" }),
 };
 
+/**
+ * "No le gusta" doesn't exist in kura (founder 2026-09-27): three states
+ * (Me obsesiona · Me gusta · Completo) plus the clock. An old `disliked`
+ * verdict gets no reaction pill — the event still reads as Completo.
+ */
 const MARK_PILL = {
   liked: () => P.up("Le gusta"),
-  disliked: () => P.down("No le gusta"),
   obsessed: () => P.flame("Le obsesiona"),
 } as const;
 
 /**
- * The mock's pill rules. A waiting add REPLACES the "agregó a" pill instead of
+ * The mock's pill rules. A waiting add REPLACES the "guardó en" pill instead of
  * adding to it: two long pills wrap the row and eat the artwork's height.
  */
 function pillsFor(e: FeedEvent): Pill[] {
   const out: Pill[] = [];
   if (e.waiting) out.push(P.clock(`No puede esperar · ${e.waiting}`));
   else if (e.kind === "added")
-    out.push(P.bookmark(e.backlogName ? `Agregó a ${e.backlogName}` : "Agregó"));
+    out.push(P.bookmark(e.backlogName ? `Guardó en ${e.backlogName}` : "Guardó"));
   else if (e.kind === "completed") out.push(P.check("Completo"));
   else if (e.kind === "obsessed") out.push(P.flame("Le obsesiona"));
   else if (e.kind === "reviewed") out.push(P.review("Reseñó"));
 
-  if (e.mark && e.mark !== "obsessed") out.push(MARK_PILL[e.mark]());
+  if (e.mark === "liked") out.push(MARK_PILL.liked());
   else if (e.mark === "obsessed" && e.kind !== "obsessed") out.push(MARK_PILL.obsessed());
   return out;
 }
@@ -159,7 +162,6 @@ function PillRow({ pills }: { pills: Pill[] }) {
             fill={p.color}
             aria-hidden
             className="flex-none"
-            style={p.flip ? { transform: "scaleY(-1)" } : undefined}
           >
             <path d={p.d} />
           </svg>
@@ -409,7 +411,7 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         </div>
       </Art>
       <TextBlock size="M">
-        <PillRow pills={[P.bookmark(`Agregó ${items.length} títulos a ${burst.backlogName}`)]} />
+        <PillRow pills={[P.bookmark(`Guardó ${items.length} títulos en ${burst.backlogName}`)]} />
       </TextBlock>
     </StackCard>
   );

@@ -530,8 +530,11 @@ export function CollectionBody({
             <span className="inline-flex items-center gap-1.5">
               <Glyph kind="completed" size={11} /> completo
             </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Glyph kind="waiting" size={11} /> no puedes esperar
+            </span>
           </span>
-          Abre una portada para marcarla · mantenla presionada para moverla o quitarla.
+          Toca una portada para completarla o decir si te obsesiona. Mantenla presionada para moverla o quitarla.
         </CoachNote>
       )}
     </>

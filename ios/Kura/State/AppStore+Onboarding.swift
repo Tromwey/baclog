@@ -55,7 +55,7 @@ extension AppStore {
             }
             if case .conflict = e { authError = "Ese usuario ya está tomado."; return false }
             if case .invalid(let fields, let msg) = e {
-                authError = fields["username"] ?? fields["name"] ?? fields["birthYear"] ?? (msg.isEmpty ? "Revisa los datos." : msg)
+                authError = fields["username"] ?? fields["name"] ?? fields["birthYear"] ?? (msg.isEmpty ? "No se creó tu cuenta. Revisa el usuario y el año." : msg)
                 return false
             }
             authError = e.authText

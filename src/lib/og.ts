@@ -1,6 +1,7 @@
 import "server-only";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { KANJI_FAMILY, kanjiFontBytes } from "@/modules/cards/render/kanji-font";
 
 /**
  * Shared plumbing for the link-preview images (`opengraph-image.tsx`, rendered
@@ -40,14 +41,20 @@ const FILES: { file: string; name: string; weight: OgFont["weight"]; style: OgFo
 
 let fontsPromise: Promise<OgFont[]> | null = null;
 
-/** The Kura cuts the previews use, read once per server instance. */
+/** The family name the previews use for 蔵 (see kanji-font.ts). */
+export const OG_KANJI = KANJI_FAMILY;
+
+/** The Kura cuts the previews use (+ the lockup's kanji), read once per server instance. */
 export function loadOgFonts(): Promise<OgFont[]> {
   fontsPromise ??= Promise.all(
     FILES.map(async ({ file, ...meta }) => {
       const buf = await readFile(join(FONT_DIR, file));
       return { ...meta, data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer };
     }),
-  ).catch((err) => {
+  ).then((fonts): OgFont[] => [
+    ...fonts,
+    { name: KANJI_FAMILY, data: kanjiFontBytes(), weight: 400, style: "normal" },
+  ]).catch((err) => {
     fontsPromise = null; // don't pin a transient failure for the instance's life
     throw err;
   });

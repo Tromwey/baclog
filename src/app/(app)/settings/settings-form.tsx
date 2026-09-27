@@ -116,8 +116,8 @@ export function PrivacySwitch({ initialIsPublic }: { initialIsPublic: boolean })
       title="Perfil privado"
       note={
         isPublic
-          ? "Tu página es pública y tu gente ve lo que guardas y completas."
-          : "Tu página no existe para nadie y tu actividad no sale en el feed de tu gente."
+          ? "Tu perfil es público y tu actividad sale en el feed de quien te sigue."
+          : "Nadie más ve tu perfil y tu actividad no sale en ningún feed."
       }
       checked={!isPublic}
       onChange={(priv) => setIsPublic(!priv)}
@@ -161,7 +161,7 @@ export function FollowListsChoice({ initial }: { initial: FollowListsVisibility 
   // Static on purpose: the Perfil privado switch above flips live, and a note
   // keyed on the server's isPublic would lie until the next load.
   const note =
-    "Cuántos te siguen y a cuántos sigues se ve en tu página; esto decide quién ve las listas. Con el perfil privado, nadie más.";
+    "Los números se ven en tu perfil. Esto decide quién ve las listas. Con el perfil privado, nadie más.";
 
   return (
     <>
@@ -204,8 +204,8 @@ export function ReleasesSwitch({ initial }: { initial: boolean }) {
   const [on, setOn, error] = useSetting(initial, setNotifyReleasesAction);
   return (
     <SwitchRow
-      title="Estrenos que esperas"
-      note="Un correo el día que sale un álbum, una película o una serie que guardaste antes de su estreno."
+      title="Estrenos de no puedo esperar"
+      note="Un correo el día que sale lo que guardaste antes de su estreno."
       checked={on}
       onChange={setOn}
       error={error}
@@ -219,7 +219,7 @@ export function RecapSwitch({ initial }: { initial: boolean }) {
   return (
     <SwitchRow
       title="Correo del recap mensual"
-      note="Un correo al empezar el mes con lo que hiciste en el anterior."
+      note="Un correo el día 1 con lo que guardaste, completaste y reseñaste el mes anterior."
       checked={on}
       onChange={setOn}
       error={error}

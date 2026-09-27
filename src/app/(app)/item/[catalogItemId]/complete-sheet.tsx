@@ -214,7 +214,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           res.error === "link"
             ? "Los enlaces no van en una reseña. Quítalo y vuelve a intentarlo."
             : res.error === "locked"
-              ? "Para publicar tu reseña, elige Me gusta o Me obsesiona."
+              ? "Para reseñar, elige Me gusta o Me obsesiona."
               : "No se pudo guardar. Tu texto sigue aquí: inténtalo otra vez.",
         );
         return;
@@ -423,7 +423,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           {error ??
             (over
               ? `Tu reseña pasa de ${REVIEW_MAX_LENGTH} caracteres. Recórtala para guardarla.`
-              : "Para publicar tu reseña, elige Me gusta o Me obsesiona.")}
+              : "Para reseñar, elige Me gusta o Me obsesiona.")}
         </p>
       )}
 

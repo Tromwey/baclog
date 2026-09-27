@@ -32,10 +32,19 @@ enum Privacy: String, CaseIterable, Identifiable, Hashable {
 
     var note: String {
         switch self {
-        case .publicAccess: return "En tu perfil y con el link, con o sin cuenta."
+        case .publicAccess: return "Sale en tu perfil y la abre cualquiera con el link, con o sin cuenta."
         case .followers: return "Solo quien te sigue."
-        case .onlyMe: return "No aparece en tu perfil."
-        case .link: return "Quien tenga el link la ve; no aparece en tu perfil."
+        case .onlyMe: return "Solo tú la ves. El link no abre para nadie más."
+        case .link: return "La abre quien tenga el link. No sale en tu perfil."
+        }
+    }
+
+    /// The undo toast after a visibility change: it says who sees it now, without ambiguity.
+    var changedToast: String {
+        switch self {
+        case .publicAccess: return "Ahora está en tu perfil."
+        case .onlyMe: return "Ahora solo tú la ves."
+        case .link, .followers: return "Ahora la abre quien tenga el link."
         }
     }
 

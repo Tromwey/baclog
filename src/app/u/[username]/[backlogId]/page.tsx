@@ -54,11 +54,11 @@ export async function generateMetadata({
  * collection's fan; the brand lockup and the way in at 64; the fan at 225;
  * the owner's seal and "una colección de @sofi"; the name in Newsreader 36,
  * the line in italic, "12 títulos · cine, series, música"; then the ONE honey
- * of the screen — "Guárdala en kura" — beside a glass Compartir; the titles
+ * of the screen — "Guardar una copia" — beside a glass Compartir; the titles
  * in columns in the owner's manual order; and, for someone without an
  * account, the "arma la tuya." card.
  *
- * "Guárdala en kura": anonymous → the account flow; signed in → a private
+ * "Guardar una copia": anonymous → the account flow; signed in → a private
  * copy in their own library (SaveCopyButton); the owner → their own
  * collection, in glass (the honey is for the visitor).
  *
@@ -128,7 +128,7 @@ export default async function PublicBacklogPage({
             href="/backlogs"
             className="inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
           >
-            Mis colecciones
+            Tus colecciones
           </Link>
         ) : (
           <EnterPill />
@@ -172,7 +172,7 @@ export default async function PublicBacklogPage({
               href="/login"
               className="inline-flex h-12 items-center rounded-full bg-honey px-6 font-sans text-[16px] font-semibold text-bg bl-press active:bg-honey-press"
             >
-              Guárdala en kura
+              Guardar una copia
             </Link>
           )}
           <ShareChip
@@ -212,7 +212,7 @@ export default async function PublicBacklogPage({
 
         {!viewer && (
           // The card says what to do (critique 2026-09-27): a glass "Crear
-          // mi colección" — not honey, "Guárdala en kura" already is.
+          // cuenta" — not honey, "Guardar una copia" already is.
           <div className="mx-5 flex flex-col items-start gap-2 rounded-[var(--r-screen)] bg-white/[0.05] p-[22px]">
             <span className="font-brand text-[24px] leading-[1.1] text-text">arma la tuya.</span>
             <span className="text-[14px] leading-[1.5] text-text-2">
@@ -222,7 +222,7 @@ export default async function PublicBacklogPage({
               href="/login"
               className="mt-2 inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
             >
-              Crear mi colección
+              Crear cuenta
             </Link>
           </div>
         )}

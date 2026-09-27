@@ -67,7 +67,7 @@ extension AppStore {
 
     /// An `ext:` result has no catalog id to mark yet: save it first (the membership PUT materializes it).
     private func askToSaveFirst(_ titleID: String) {
-        showToast(ToastModel(text: "Guárdala en una colección para marcarla", kind: .info))
+        showToast(ToastModel(text: "Primero guarda este título en una colección.", kind: .info))
         // After the caller's own dismiss (the complete sheet closes right after calling setMark).
         Task { @MainActor [weak self] in self?.present(.saveTo(titleID)) }
     }

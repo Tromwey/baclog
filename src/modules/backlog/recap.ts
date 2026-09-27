@@ -7,7 +7,7 @@ import type { CardBacklog } from "@/modules/cards/types";
 import { deriveEras } from "./era";
 import { getUserLibrary } from "./library";
 import type { BacklogItemWithCatalog } from "./queries";
-import { monthOf, pickTop, type RecapMonth, type RecapTitle } from "./recap-format";
+import { monthName, monthOf, pickTop, type RecapMonth, type RecapTitle } from "./recap-format";
 
 export type { RecapMonth, RecapTitle } from "./recap-format";
 
@@ -20,11 +20,6 @@ export type { RecapMonth, RecapTitle } from "./recap-format";
  * month). Own-user only — every caller passes the session's id.
  */
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /** Previous full month as an era key ("2026-07" when run on 2026-08-01). */
 export function previousMonthKey(now = new Date()): string {
   const y = now.getUTCFullYear();
@@ -33,8 +28,10 @@ export function previousMonthKey(now = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+/** The Kura name of the month ("recap de agosto") — the email subject and
+ *  the card title read it; never the old English "August Era". */
 function labelFor(eraKey: string): string {
-  return `${MONTHS[Number(eraKey.slice(5)) - 1]} Era`;
+  return `recap de ${monthName(eraKey)}`;
 }
 
 // ---------- F3.3 card (cron + /recap/tarjeta) ----------

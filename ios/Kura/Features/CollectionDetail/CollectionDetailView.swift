@@ -73,7 +73,7 @@ struct CollectionDetailView: View {
                     // Everything under the name is the same body as Tus colecciones (propuesta 10).
                     CollectionBody(collection: c) {
                         if let e = loadError(c) {
-                            RetryStrip(error: e, text: e == .offline ? nil : "Faltan títulos de esta colección.") {
+                            RetryStrip(error: e, text: e == .offline ? nil : "No cargaron todos los títulos.") {
                                 Task { await store.loadCollection(c.id, force: true) }
                             }
                             .padding(.horizontal, 12)

@@ -110,16 +110,3 @@ export function wrapText(
 export function footerUrl(username: string): string {
   return username ? `baclog.app/${username}` : "baclog.app";
 }
-
-/**
- * Reaction glyph for the ticket/receipt — no me gusta renders nothing (no
- * negative signal on a shareable card), me gusta/me obsesiona get a single
- * vs. doubled mark (F3.6, replaces the old 1-5★ rating row).
- */
-export function reactionGlyph(
-  reaction: "disliked" | "liked" | "obsessed" | undefined,
-): string {
-  if (reaction === "obsessed") return "★ ★";
-  if (reaction === "liked") return "★";
-  return "";
-}

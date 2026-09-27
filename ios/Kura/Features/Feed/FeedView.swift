@@ -51,7 +51,7 @@ struct FeedView: View {
         VStack(spacing: 0) {
             header
             VStack(alignment: .leading, spacing: 14) {
-                Text("tu gente todavía no hace nada.").font(.kura.news(32)).foregroundStyle(KColor.text)
+                Text("tu gente anda tranquila.").font(.kura.news(32)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Cuando completen, se obsesionen o reseñen algo, aparece aquí.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
@@ -696,7 +696,7 @@ private struct FeedCard: View, Equatable {
             if !pills.isEmpty {
                 FlowLayout(spacing: 7, lineSpacing: 7) {
                     ForEach(Array(pills.enumerated()), id: \.offset) { _, p in StatusPill(glyph: p.0, label: p.1) }
-                    // "agregó … a" + the collection's own name: Newsreader roman lowercase, its
+                    // "guardó … en" + the collection's own name: Newsreader roman lowercase, its
                     // identity everywhere else (crítica #22), not mono caps inside the pill.
                     if let c = addedCollection { collectionName(c) }
                 }
@@ -836,11 +836,11 @@ private struct FeedCard: View, Equatable {
             return [(.review, isMe ? "Reseñaste" : "Reseñó")] + [react(store.review(event.reviewID)?.mark)].compactMap { $0 }
         case .added(let c):
             // The name follows the pill (`collectionName`); without one, the verb stands alone.
-            return [(.bookmark, (isMe ? "Agregaste" : "Agregó") + (c.isEmpty ? "" : " a"))]
+            return [(.bookmark, (isMe ? "Guardaste" : "Guardó") + (c.isEmpty ? "" : " en"))]
         case .waitingAdd(_, let label):
-            return [(.clock, "No puede esperar · \(label)")]
+            return [(.clock, (isMe ? "No puedo esperar · " : "No puede esperar · ") + label)]
         case .burst(_, let ids):
-            return [(.bookmark, isMe ? "Agregaste \(ids.count) títulos a" : "Agregó \(ids.count) títulos a")]
+            return [(.bookmark, isMe ? "Guardaste \(ids.count) títulos en" : "Guardó \(ids.count) títulos en")]
         case .suggestion:
             return []
         }

@@ -1,3 +1,5 @@
+import { KANJI_FAMILY, kanjiFontBytes } from "./kanji-font";
+
 /**
  * Single source of truth for the families/weights the card renderers draw
  * with. CARD_FONTS must list every family+weight any renderer uses:
@@ -35,6 +37,24 @@ export const NEWS = (size: number, italic = false, weight: 400 | 500 = 400) =>
 /** Red Hat Mono — Kura's data voice (the collection card's labels). */
 export const RHMONO = (size: number) => `400 ${size}px "Red Hat Mono", monospace`;
 
+/** 蔵 — the lockup's kanji (kanji-font.ts), registered below as a FontFace. */
+export const KANJI = (size: number) => `400 ${size}px "${KANJI_FAMILY}", serif`;
+
+/**
+ * The kanji isn't on Google Fonts' stylesheet in layout.tsx, so it's added to
+ * `document.fonts` here, at module load, before any exporter's
+ * `document.fonts.load(CARD_FONTS)` asks for it. Browser-only, once.
+ */
+if (typeof document !== "undefined" && typeof FontFace !== "undefined") {
+  const w = window as Window & { __kuraKanji?: boolean };
+  if (!w.__kuraKanji) {
+    w.__kuraKanji = true;
+    const face = new FontFace(KANJI_FAMILY, kanjiFontBytes(), { weight: "400", style: "normal" });
+    document.fonts.add(face);
+    face.load().catch(() => {});
+  }
+}
+
 export const CARD_FONTS = [
   MONO(16),
   MONO(16, true),
@@ -49,4 +69,5 @@ export const CARD_FONTS = [
   NEWS(16, true),
   NEWS(16, true, 500),
   RHMONO(16),
+  KANJI(16),
 ];

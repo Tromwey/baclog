@@ -1,12 +1,14 @@
 import { CARD_HEIGHT, CARD_WIDTH, type DoubleFeatureData } from "../types";
 import { normalizePalette } from "../double-feature/palette-utils";
+import { drawLockup } from "./brand";
 import { DISPLAY, MONO, SERIF } from "./fonts";
 import { drawGrain, footerUrl, hashString, mulberry32, wrapText } from "./util";
 
 /**
- * ⭐ Double Feature SHARE card — canvas renderer (FRAME A of
- * double-feature-final.reference.html). Reuses the exact rasterization path as
- * receipt/ticket/pattern (drawCard → canvas.toBlob → Web Share), so the F3.5.5
+ * ⭐ The conexión SHARE card ("double feature" internally; the user reads
+ * "una conexión") — canvas renderer (FRAME A of
+ * double-feature-final.reference.html). Same rasterization path as the other
+ * cards (canvas → toBlob → Web Share), so the F3.5.5
  * export needs no new dependency and no DOM screenshotting.
  *
  * ADR-008: the exported PNG contains ZERO copyrighted artwork — the two discs
@@ -22,16 +24,17 @@ const C = {
   accent: "#D8FF3E",
 };
 
+/** Same kind words as the ficha ("Cine · 2001"), in the mono caps of a card. */
 const TYPE_LABEL: Record<string, string> = {
-  film: "PELÍCULA",
+  film: "CINE",
   series: "SERIE",
   album: "ÁLBUM",
 };
-/** Side label under each disc, by media type (album → vinyl "MUSIC"). */
+/** Side label under each disc, by media type (album → vinyl "MÚSICA"). */
 const SIDE_LABEL: Record<string, string> = {
-  film: "FILM",
-  series: "SERIES",
-  album: "MUSIC",
+  film: "CINE",
+  series: "SERIE",
+  album: "MÚSICA",
 };
 
 export function drawDoubleFeature(
@@ -49,11 +52,13 @@ export function drawDoubleFeature(
   radialAura(ctx, p[0], 0.2, 0, 900, false);
   radialAura(ctx, p[3] ?? p[1], 0.82, 1, 860, true);
 
-  // Header
+  // Header: the 蔵 kura lockup, then what this is — "una conexión", never
+  // "double feature" (voz · reglas 6 y 12).
+  const markW = drawLockup(ctx, 64, 120, 28, "left", C.text);
   ctx.textAlign = "left";
   ctx.fillStyle = C.text2;
   ctx.font = MONO(30, true);
-  ctx.fillText("BACLOG · UNA CONEXIÓN", 64, 130);
+  ctx.fillText("· UNA CONEXIÓN", 64 + markW + 22, 130);
   if (edition != null) {
     ctx.textAlign = "right";
     ctx.fillText(`Nº ${String(edition).padStart(3, "0")}`, CARD_WIDTH - 64, 130);
@@ -93,7 +98,7 @@ export function drawDoubleFeature(
     kind: seed.type === "album" ? "vinyl" : "reel",
     title: seed.title,
     sub: seed.type === "album" ? seed.creator : seed.year != null ? String(seed.year) : undefined,
-    sideLabel: `A · ${SIDE_LABEL[seed.type] ?? "FILM"}`,
+    sideLabel: `A · ${SIDE_LABEL[seed.type] ?? "CINE"}`,
     sideColor: "#9DB06E",
   });
   // Side B (reco) — the opposite family
@@ -107,7 +112,7 @@ export function drawDoubleFeature(
     kind: reco.type === "album" ? "vinyl" : "reel",
     title: reco.title,
     sub: reco.type === "album" ? reco.creator : reco.year != null ? String(reco.year) : undefined,
-    sideLabel: `B · ${SIDE_LABEL[reco.type] ?? "MUSIC"}`,
+    sideLabel: `B · ${SIDE_LABEL[reco.type] ?? "MÚSICA"}`,
     sideColor: C.accent,
   });
 

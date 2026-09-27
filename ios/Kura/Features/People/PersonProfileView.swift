@@ -135,7 +135,7 @@ struct PersonProfileView: View {
             if !common.isEmpty && store.showCommon {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("En común contigo · \(common.count + 9) títulos").monoLabel(11, tracking: 0.1)
+                        Text("En común contigo · \(p.common.count) \(p.common.count == 1 ? "título" : "títulos")").monoLabel(11, tracking: 0.1)
                         if let shared = p.obsessions.first(where: { store.mark($0) == .obsessed }).flatMap({ store.title($0) }) {
                             (Text("Comparten la obsesión por ").font(.kura.ui(15))
                              + Text(shared.name).font(.kura.newsItalic(17)) + Text(".").font(.kura.ui(15)))
@@ -180,19 +180,11 @@ struct PersonProfileView: View {
                 }
             }
 
-            if !p.collections.isEmpty {
-                let visible = p.collections.filter { $0.privacy == .publicAccess || following }
-                let hidden = p.collections.count - visible.count
-                VStack(alignment: .leading, spacing: 14) {
-                    if !visible.isEmpty {
-                        CollectionsShowcase(title: "colecciones", items: visible.map { pc in showcaseItem(pc, owner: p) })
-                    } else {
-                        SectionTitle(text: "colecciones").padding(.horizontal, 20)
-                    }
-                    if hidden > 0 {
-                        FollowersOnlyCard(count: hidden, note: "Síguela para verla.").padding(.horizontal, 12)
-                    }
-                }
+            // Only the collections the owner put on their profile. There is no followers-only
+            // visibility (founder, 2026-09-27): no "N colecciones para seguidores" card.
+            let visible = p.collections.filter { $0.privacy == .publicAccess }
+            if !visible.isEmpty {
+                CollectionsShowcase(title: "colecciones", items: visible.map { pc in showcaseItem(pc, owner: p) })
             }
         }
     }
@@ -204,28 +196,6 @@ struct PersonProfileView: View {
         return ShowcaseItem(id: pc.routeID, name: pc.name, vibe: pc.shownVibe, count: pc.titleIDs.count, pinned: pc.pinned,
                             fan: store.fan(of: pc), open: open,
                             shareLink: isPreview ? nil : pc.remoteID.flatMap { PublicLinks.collection(p.handle, id: $0) })
-    }
-}
-
-/// K1d · "1 colección para seguidores".
-struct FollowersOnlyCard: View {
-    let count: Int
-    let note: String
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "lock.fill").font(.system(size: 18))
-                .foregroundStyle(KColor.text)
-                .frame(width: 52, height: 52)
-                .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(count == 1 ? "1 colección para seguidores" : "\(count) colecciones para seguidores")
-                    .font(.kura.news(20)).foregroundStyle(KColor.text)
-                Text(note).font(.kura.ui(14)).foregroundStyle(KColor.text2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(22)
-        .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
     }
 }
 
@@ -268,7 +238,7 @@ private struct BlockedNote: View {
                 .font(.kura.news(24)).foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            Text("No ves su actividad ni sus reseñas, y no ve las tuyas. Si la desbloqueas, no vuelven a seguirse solos.")
+            Text("No ves su actividad ni sus reseñas, y @\(handle) no ve las tuyas. Si desbloqueas a @\(handle), no vuelven a seguirse solos.")
                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -334,7 +304,7 @@ struct PersonOptionsSheet: View {
                     } label: {
                         optionRow(store.muted.contains(p.id) ? "speaker.wave.2" : "speaker.slash",
                                   store.muted.contains(p.id) ? "Volver a mostrar en el feed" : "Silenciar en el feed",
-                                  note: "La quita del feed sin dejar de seguirla; no se entera.")
+                                  note: "Deja de salir en tu feed sin dejar de seguir. No se le avisa.")
                     }
                     .buttonStyle(SheetRowStyle())
                     Button { store.present(.block(p.id)) } label: {
@@ -728,7 +698,7 @@ struct ProfileAsStrangerView: View {
     }
 
     /// The very screen a stranger opens (`PersonProfileView`), fed with what they'd get:
-    /// your public collections, the followers-only ones as a count, nothing in common.
+    /// your public collections, nothing in common.
     private var publicPreview: some View {
         PersonProfileView(personID: store.me.id, preview: meAsStranger)
     }
@@ -744,11 +714,11 @@ struct ProfileAsStrangerView: View {
             .sorted { $0.value.savedAt < $1.value.savedAt }
             .map(\.key)
         p.common = []
-        // Public ones in the showcase; followers-only ones only as "N colecciones para seguidores".
+        // Only the public ones (there is no followers-only visibility).
         // A preview opens nothing (no backend id: it would be your own public page).
         p.collections = store.orderedCollections.compactMap { c in
             switch c.privacy {
-            case .publicAccess where !c.titleIDs.isEmpty, .followers:
+            case .publicAccess where !c.titleIDs.isEmpty:
                 return PersonCollection(name: c.name, titleIDs: c.titleIDs, privacy: c.privacy, vibe: c.vibe,
                                         pinned: c.pinned, fanTitleIDs: store.fan(of: c).map(\.id))
             default:

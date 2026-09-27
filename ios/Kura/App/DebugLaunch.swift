@@ -339,7 +339,7 @@ enum DebugLaunch {
             main(.profile, [.settings])
             store.pendingAction = { [weak store] in Task { await store?.disconnect(.apple) } }
         case "mergelimit":
-            // 429 on "Mandar otro código": the 3-per-hour cap, in minutes, button disabled.
+            // 429 on "Enviar otro código": the 3-per-hour cap, in minutes, button disabled.
             UserDefaults.standard.register(defaults: ["kuraMergeLimit": true])
             store.mergeEmail = "mariel.ortega@icloud.com"
             main(.profile, [.settings, .mergeAccount, .mergeCode])

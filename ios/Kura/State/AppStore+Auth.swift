@@ -47,7 +47,7 @@ extension AppStore {
     /// `POST auth/otp/request` — true when the code went out.
     func requestCode(email: String) async -> Bool {
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard e.contains("@"), e.contains(".") else { authError = "Revisa el correo."; return false }
+        guard e.contains("@"), e.contains(".") else { authError = "Ese correo no parece válido. Revísalo."; return false }
         authBusy = true
         authError = nil
         defer { authBusy = false }

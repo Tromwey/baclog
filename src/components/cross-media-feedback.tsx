@@ -67,12 +67,12 @@ export function CrossMediaFeedback({
       submitCrossMediaFeedbackAction(catalogItemId, selectedReasons)
         .then((res) => {
           if ("error" in res) {
-            setError("No se pudo enviar tu feedback.");
+            setError("No se pudo enviar. Inténtalo otra vez.");
             return;
           }
           setOpen(false);
         })
-        .catch(() => setError("No se pudo enviar tu feedback.")),
+        .catch(() => setError("No se pudo enviar. Inténtalo otra vez.")),
     );
   }
 

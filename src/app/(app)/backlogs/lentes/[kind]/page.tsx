@@ -14,15 +14,16 @@ import { ZoomBackButton } from "../../zoom-back-button";
  *
  * Kura pass (2026-09-24): no identity colour (the portada is the only source
  * of colour — a lens has none), the title in Newsreader 36 lowercase, the
- * state glyph of the system where one exists (llama, check) and none where
- * the system has no glyph for it (en progreso, en el radar).
+ * state glyph of the system (llama, check).
+ *
+ * "en progreso" / "en el radar" were Baclog states with no place in kura's
+ * vocabulary (copy audit 2026-09-27): those slugs now 404 like any other
+ * unknown lens.
  */
 
 const LENSES: Record<string, { kind: LensKind; title: string; glyph: GlyphKind | null }> = {
   obsesiones: { kind: "obsessed", title: "me obsesiona", glyph: "obsessed" },
-  "en-progreso": { kind: "in_progress", title: "en progreso", glyph: null },
   completados: { kind: "completed", title: "completos", glyph: "completed" },
-  "en-el-radar": { kind: "on_my_radar", title: "en el radar", glyph: null },
 };
 
 export default async function LensPage({

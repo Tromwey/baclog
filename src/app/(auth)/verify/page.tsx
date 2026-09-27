@@ -87,7 +87,7 @@ function VerifyForm() {
                 onClick={() => router.push("/login")}
                 className={GLASS_BUTTON}
               >
-                Pedir otro código
+                Enviar otro código
               </button>
             </div>
           )}

@@ -43,7 +43,8 @@ export function relativeWhen(at: Date | string, now: number): string {
 export function markLabel(mark: ReviewMark): string | null {
   if (mark === "obsessed") return "le obsesiona";
   if (mark === "liked") return "le gustó";
-  if (mark === "disliked") return "no le gustó";
+  // "No le gusta" doesn't exist in kura (founder 2026-09-27): an old
+  // `disliked` review carries no reaction label.
   return null;
 }
 
@@ -51,7 +52,6 @@ export function markLabel(mark: ReviewMark): string | null {
 export function ownMarkLabel(mark: ReviewMark): string | null {
   if (mark === "obsessed") return "te obsesiona";
   if (mark === "liked") return "te gustó";
-  if (mark === "disliked") return "no te gustó";
   return null;
 }
 

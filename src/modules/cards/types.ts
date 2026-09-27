@@ -13,15 +13,21 @@ export interface CardItem {
   genre: string;
   mood: string;
   status: ItemStatus;
-  /** Single card glyph derived from the two axes (F3.7): obsessed → ★★, liked → ★. */
+  /** The reaction axis (F3.7). The title card prints obsessed/liked; "disliked" prints nothing. */
   reaction?: ItemReaction;
   /**
    * Cover-derived dominant hexes (catalog_item.paletteHex, vividness-ranked).
-   * The ticket tints its face with palette[0], clamped for legibility; absent →
-   * the renderer keeps its per-media-type color. Color is not artwork (ADR-008:
-   * the one sanctioned bridge from cover to card).
+   * The cards tint their surface and paint each cover as this palette's no-art
+   * recipe; absent → the neutral surface. Color is not artwork (ADR-008: the
+   * one sanctioned bridge from cover to card).
    */
   palette?: string[];
+  /**
+   * `catalog_item.releaseDate` as ISO, when known. A date still in the future
+   * is the derived "no puedo esperar" state (same rule as F3.8: never
+   * persisted, it expires by itself) and the title card prints it as a date.
+   */
+  releaseDate?: string;
 }
 
 export interface CardBacklog {
@@ -33,8 +39,12 @@ export interface CardBacklog {
   items: CardItem[];
 }
 
-/** `collection` = the 9:16 fan card (Colecciones formalizado · 4b). */
-export type CardStyle = "receipt" | "ticket" | "pattern" | "collection";
+/**
+ * `title` = one title from the ficha (render/title.ts), `collection` = the
+ * 9:16 fan card (Colecciones formalizado · 4b), `pattern` = the monthly recap.
+ * The style also names the downloaded file (`kura-{style}.png`).
+ */
+export type CardStyle = "title" | "pattern" | "collection";
 
 export const CARD_WIDTH = 1080;
 export const CARD_HEIGHT = 1920;
@@ -108,15 +118,3 @@ export interface DoubleFeatureData {
    */
   linkKind?: "factual" | "thematic";
 }
-
-export const STATUS_LABEL: Record<ItemStatus, string> = {
-  "on-my-radar": "ON MY RADAR",
-  "in-progress": "IN PROGRESS",
-  completed: "COMPLETED",
-};
-
-export const TYPE_LABEL: Record<MediaType, string> = {
-  film: "FILM",
-  series: "SERIES",
-  album: "ALBUM",
-};

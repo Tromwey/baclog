@@ -95,7 +95,7 @@ export function ItemActions({
           <button
             type="button"
             onClick={review}
-            aria-label={ownReview ? "Editar tu reseña" : "Reseñar"}
+            aria-label={ownReview ? "Editar reseña" : "Reseñar"}
             className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill={ownReview ? "var(--text)" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden>

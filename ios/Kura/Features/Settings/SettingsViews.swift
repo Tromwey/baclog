@@ -83,7 +83,7 @@ struct SettingsView: View {
                     // Device-local, like iOS's own haptics switch: it stays on this device across sign-out.
                     // "este dispositivo", not "este iphone": the mono header uppercases (IPHONE).
                     section("este dispositivo") {
-                        SettingsRow(title: "Vibraciones", note: "Respuesta háptica al tocar y deslizar.") {
+                        SettingsRow(title: "Vibraciones", note: "Una vibración suave al tocar y al deslizar.") {
                             KuraSwitch(label: "Vibraciones", isOn: Binding(
                                 get: { haptics },
                                 set: { on in
@@ -97,7 +97,7 @@ struct SettingsView: View {
                         // iOS has the last word on push: say so when it's "not yet" or "no".
                         switch store.notificationStatus {
                         case .undetermined:
-                            SettingsRow(title: "Activar avisos", note: "Kura todavía no tiene permiso para avisarte.",
+                            SettingsRow(title: "Activar avisos", note: "kura todavía no tiene permiso para avisarte.",
                                         action: { Task { await store.enableNotifications() } }) {
                                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(KColor.text2)
@@ -127,7 +127,7 @@ struct SettingsView: View {
                         }
                         ListDivider()
                         // Server-owned (`PATCH /me { notifyRecap }`), like the releases switch: off = no monthly email.
-                        SettingsRow(title: "Correo del recap mensual", note: "Una vez al mes, con lo que viste.") {
+                        SettingsRow(title: "Correo del recap mensual", note: "Un correo el día 1 con lo que guardaste, completaste y reseñaste el mes anterior.") {
                             KuraSwitch(label: "Correo del recap mensual", isOn: $store.notifyRecap)
                         }
                     }
@@ -476,7 +476,7 @@ struct MusicAppView: View {
                         .accessibilityAddTraits(store.musicApp == app ? .isSelected : [])
                     }
                 }
-                Text("Abrir en, en cada álbum, usa esta app. Si no la tienes instalada, abre la web.")
+                Text("El botón Abrir de cada álbum usa esta app. Si no la tienes, se abre la web.")
                     .font(.kura.ui(13)).foregroundStyle(KColor.text2).padding(.horizontal, 8)
                 Spacer()
             }

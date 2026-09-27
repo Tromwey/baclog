@@ -97,13 +97,7 @@ struct WelcomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            HStack(alignment: .center, spacing: 14) {
-                Text("蔵")
-                    .font(.custom(KFontName.kanji, fixedSize: 44))
-                    .foregroundStyle(KColor.text)
-                    .accessibilityHidden(true)
-                Wordmark(size: 30)
-            }
+            Wordmark(size: 30, kanjiSize: 44, spacing: 14)
 
             GeometryReader { geo in
                 let h = min(geo.size.height * 0.72, geo.size.width * 0.58)
@@ -372,6 +366,13 @@ struct UsernameView: View {
                         }
                     }
                     .padding(.top, 14)
+                    // "no válido" is short on purpose (a mono tag in the field): the rule goes here.
+                    if status == .invalid {
+                        Text("Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados.")
+                            .font(.kura.ui(13))
+                            .foregroundStyle(KColor.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. El año solo confirma que tienes 13 o más. No se muestra a nadie."
                                    : "Tu nombre se puede cambiar después en Editar perfil.")
                         .font(.kura.ui(13))
@@ -418,7 +419,7 @@ struct UsernameView: View {
         } else if clean.count >= 3, let status {
             HStack(spacing: 6) {
                 if status == .free { GlyphView(glyph: .check, size: 13) }
-                Text(status == .free ? "libre" : (status == .taken ? "ocupado" : "no vale"))
+                Text(status == .free ? "libre" : (status == .taken ? "ocupado" : "no válido"))
                     .monoLabel(11, color: status == .free ? KColor.completed : KColor.text2)
             }
         }
@@ -801,7 +802,7 @@ struct CodeView: View {
                 Button {
                     Task { _ = await store.requestCode(email: store.authEmail); code = "" }
                 } label: {
-                    Text("Mandar otro código")
+                    Text("Enviar otro código")
                         .font(.kura.ui(15, .medium))
                         .foregroundStyle(KColor.text2)
                         .frame(minHeight: 44)
@@ -831,12 +832,12 @@ struct UnderageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer()
-            Text("kura es para mayores de 13.")
+            Text("kura es para personas de 13 años o más.")
                 .font(.kura.news(36))
                 .foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            Text("No podemos abrirte una cuenta todavía. Guarda el link y vuelve cuando cumplas 13.")
+            Text("Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13.")
                 .font(.kura.ui(15))
                 .lineSpacing(4)
                 .foregroundStyle(KColor.text2)

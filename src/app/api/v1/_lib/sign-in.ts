@@ -6,7 +6,7 @@ import { buildMe } from "./me";
 import type { AuthSession, Device } from "./schemas";
 
 /** The one message of a minor's refused sign-in (OTP, Apple, Google). */
-export const UNDERAGE_MESSAGE = "Kura es para mayores de 13 años. Esta cuenta no puede entrar.";
+export const UNDERAGE_MESSAGE = "kura es para personas de 13 años o más. Esta cuenta no puede entrar.";
 
 /**
  * The shared tail of every app sign-in (`auth/otp/verify`, `auth/apple`,

@@ -106,15 +106,26 @@ extension View {
     }
 }
 
-/// The wordmark "kura": Newsreader MediumItalic, tracking −3.5 %.
+/// The wordmark — ALWAYS with its kanji (founder, 2026-09-27: "el wordmark SIEMPRE con el kanji
+/// 蔵"), like the web's `Wordmark` (src/components/kura/components.tsx): 蔵 in the serif JP a step
+/// larger (×1.1) so both read the same height, a gap of 0.3×, then *kura* in Newsreader
+/// MediumItalic, tracking −3.5 %. `size` is the kura's size; `kanjiSize`/`spacing` only for a
+/// screen whose design draws the kanji bigger (the entrance). VoiceOver reads one word.
 struct Wordmark: View {
     var size: CGFloat
+    var kanjiSize: CGFloat? = nil
+    var spacing: CGFloat? = nil
     var body: some View {
-        Text("kura")
-            .font(.kura.newsMediumItalic(size, fixed: true))
-            .tracking(-size * 0.035)
-            .foregroundStyle(KColor.text)
-            .accessibilityLabel("kura")
+        HStack(alignment: .center, spacing: spacing ?? (size * 0.3).rounded()) {
+            Text("蔵")
+                .font(.custom(KFontName.kanji, fixedSize: kanjiSize ?? (size * 1.1).rounded()))
+            Text("kura")
+                .font(.kura.newsMediumItalic(size, fixed: true))
+                .tracking(-size * 0.035)
+        }
+        .foregroundStyle(KColor.text)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("kura")
     }
 }
 

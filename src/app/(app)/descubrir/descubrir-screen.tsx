@@ -45,6 +45,15 @@ import { FirstItemSheet, type FirstItemCelebration } from "./first-item-sheet";
 import { pushSeen, type SeenWork } from "./recents";
 import { withMemberships, type LibraryIndex, type Membership } from "./library";
 import { TriangleGlyph } from "./kura-bits";
+import { monthName } from "@/modules/backlog/recap-format";
+
+/** The month the conexiones come back in ("octubre"): the monthly cap
+ *  resets on the 1st, so the empty state names the date, not "el mes que
+ *  viene". */
+function nextMonthName(now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return monthName(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+}
 
 type Mode = "home" | "search" | "loading" | "ai";
 
@@ -234,7 +243,7 @@ export function DescubrirScreen({
           ? removed.length === 1
             ? `Quitado de ${nameOf(removed[0].backlogId)}`
             : `Quitado de ${removed.length} colecciones`
-          : "Colecciones actualizadas";
+          : `Guardado en ${added.length === 1 ? nameOf(added[0].backlogId) : `${added.length} colecciones`}, quitado de ${removed.length === 1 ? nameOf(removed[0].backlogId) : `${removed.length} colecciones`}`;
 
     say(text, async () => {
       // Reverse, in the same safe order: put back what left, then take out
@@ -464,7 +473,7 @@ function Loading() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center px-8 text-center">
       <span className="absolute top-[max(64px,calc(20px+env(safe-area-inset-top)))] font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-        Double feature
+        una conexión
       </span>
       <p role="status" className="font-display text-[28px] leading-[1.15] text-text text-balance">
         {LOADING_MESSAGES[i]}
@@ -495,7 +504,7 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         title="las conexiones no están listas."
-        body="El motor de recomendaciones no respondió. Vuelve en un rato."
+        body="No pudimos pensar una ahora. Vuelve en un rato."
       />
     );
   }
@@ -513,8 +522,8 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         failure
-        title="no pudimos generar tu conexión."
-        body="Falló el motor en este intento. No se gastó ningún descubrimiento: vuelve a intentarlo."
+        title="no pudimos armar tu conexión."
+        body="Este intento no cuenta. Vuelve a intentarlo."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
@@ -524,8 +533,8 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         failure
-        title="la conexión no existe en el catálogo."
-        body="Propusimos una obra que no encontramos, y ese intento sí contó. Vuelve a intentarlo."
+        title="la conexión que pensamos no está en el catálogo."
+        body="Este intento sí contó. Prueba otra vez."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
     );
@@ -535,10 +544,10 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title={out ? "se acabaron los descubrimientos del mes." : "todavía no hay una conexión para ti."}
+        title={out ? "ya usaste tus conexiones del mes." : "todavía no hay una conexión para ti."}
         body={
           out
-            ? "Vuelven el mes que viene."
+            ? `Vuelven el 1 de ${nextMonthName()}.`
             : "Buscamos la pareja de algo que te gusta: una película para un disco, un disco para una serie."
         }
         action={
@@ -569,7 +578,7 @@ function AiResults({
       <div className="relative z-30 flex items-center justify-between px-2">
         <BackButton onClick={onBack} />
         <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-          Double feature
+          una conexión
         </span>
         <span className="w-11 text-right font-mono text-[12px] text-text-2">
           {feed.remaining}/{feed.cap}

@@ -211,7 +211,7 @@ function ObsessionStrip({ obsessions }: { obsessions: ObsessionTile[] }) {
       </div>
       <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-6">
         {obsessions.length === 0
-          ? [0, 1, 2].map((i) => <EmptySlot key={i} href="/backlogs" label="Marca lo que te obsesiona" />)
+          ? [0, 1, 2].map((i) => <EmptySlot key={i} href="/descubrir" label="Buscar algo que te obsesione" />)
           : obsessions.map((o) => (
               <Link key={o.catalogItemId} href={`/item/${o.catalogItemId}`} className="block flex-none bl-press-lg">
                 <Cover
@@ -301,22 +301,22 @@ function CardsFan({
         </Link>
         <Link
           href="/descubrir"
-          aria-label="Tu double feature"
+          aria-label="Tu conexión"
           className={`${CARD} left-[112px] top-1 rotate-[4deg] bg-surface-2`}
         >
-          <span className={CARD_LABEL}>double feature</span>
+          <span className={CARD_LABEL}>conexión</span>
           <span className={CARD_TITLE}>
             {cards.doubleFeature
               ? `${cards.doubleFeature.seedTitle} × ${cards.doubleFeature.targetTitle}`
-              : "tu double feature"}
+              : "tu primera conexión"}
           </span>
         </Link>
         <Link
           href={ticketHref}
-          aria-label="Tu último ticket"
+          aria-label="Tu último completo"
           className={`${CARD} left-[216px] top-5 rotate-[11deg] bg-surface-1`}
         >
-          <span className={CARD_LABEL}>ticket</span>
+          <span className={CARD_LABEL}>completo</span>
           <span className={CARD_TITLE}>
             {cards.latestCompleted?.title ?? "tu primer completo"}
           </span>

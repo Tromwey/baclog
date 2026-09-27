@@ -14,8 +14,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Kura",
-    short_name: "Kura",
+    name: "kura",
+    short_name: "kura",
     description: "Guarda lo que más vale: películas, series y música, en colecciones.",
     start_url: "/",
     display: "standalone",

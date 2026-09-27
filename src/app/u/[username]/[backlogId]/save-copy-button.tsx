@@ -8,7 +8,7 @@ const HONEY =
   "inline-flex h-12 items-center rounded-full bg-honey px-6 font-sans text-[16px] font-semibold text-bg bl-press active:bg-honey-press disabled:opacity-60";
 
 /**
- * "Guárdala en kura" for a signed-in visitor (Colecciones formalizado · 4a):
+ * "Guardar una copia" for a signed-in visitor (Colecciones formalizado · 4a):
  * keeps a private copy of this shared collection in their own library
  * (saveSharedCollectionAction) and opens it. The screen's one honey.
  */
@@ -35,7 +35,7 @@ export function SaveCopyButton({ username, backlogId }: { username: string; back
         }
         className={HONEY}
       >
-        {pending ? "Guardando…" : "Guárdala en kura"}
+        {pending ? "Guardando…" : "Guardar una copia"}
       </button>
       {failed && (
         <span role="status" className="text-[13px] text-text-2">

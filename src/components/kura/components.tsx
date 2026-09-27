@@ -26,11 +26,27 @@ import { sealColors, tintCard } from "./tint";
 
 /* ---------------------------------------------------------------- marca */
 
-/** The wordmark (§marca · A). `size` in px; the caller places it. */
+/**
+ * The wordmark — always with its kanji (founder 2026-09-27: "el wordmark
+ * SIEMPRE con el kanji 蔵"), drawn as §marca · C: 蔵 in a serif JP at 700
+ * beside *kura* in Newsreader italic 500. `size` is the kura's font size in
+ * px; the kanji rides a step larger so both read the same height, as in the
+ * system's lockup. The caller places it. `aria-label` keeps it one word.
+ */
 export function Wordmark({ size = 30, className = "" }: { size?: number; className?: string }) {
   return (
-    <span className={`kura-wordmark text-text ${className}`} style={{ fontSize: size }}>
-      kura
+    <span
+      role="img"
+      aria-label="kura"
+      className={`inline-flex items-center text-text ${className}`}
+      style={{ gap: Math.round(size * 0.3) }}
+    >
+      <span className="kura-kanji" style={{ fontSize: Math.round(size * 1.1) }} aria-hidden>
+        蔵
+      </span>
+      <span className="kura-wordmark" style={{ fontSize: size }} aria-hidden>
+        kura
+      </span>
     </span>
   );
 }
@@ -43,11 +59,8 @@ export function Wordmark({ size = 30, className = "" }: { size?: number; classNa
  */
 export function BrandLockup() {
   return (
-    <Link href="/" aria-label="kura" className="flex h-11 items-center gap-1.5 text-text">
-      <span className="font-brand text-[22px] leading-none">蔵</span>
-      <span className="kura-wordmark" style={{ fontSize: 22, lineHeight: 1 }}>
-        kura
-      </span>
+    <Link href="/" aria-label="kura" className="flex h-11 items-center text-text">
+      <Wordmark size={22} />
     </Link>
   );
 }

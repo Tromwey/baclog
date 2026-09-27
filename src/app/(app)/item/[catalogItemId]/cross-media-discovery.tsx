@@ -166,7 +166,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
     canvas.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], "baclog-double-feature.png", { type: "image/png" });
+      const file = new File([blob], "kura-una-conexion.png", { type: "image/png" });
       const shareUrl = username ? `https://baclog.app/${username}` : undefined;
       try {
         if (navigator.canShare?.({ files: [file] })) {
@@ -353,7 +353,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             accepted ? "bg-accent/90 text-bg" : "bg-accent text-bg active:bg-accent-press"
           }`}
         >
-          {accepted ? "✓ Añadido" : "＋ Añadir"}
+          {accepted ? "Guardado" : "Guardar"}
         </button>
         <button
           aria-label="Compartir"
@@ -386,7 +386,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-bg">
               ✓
             </span>
-            Añadido a <b className="font-semibold">{addedTo}</b>
+            Guardado en <b className="font-semibold">{addedTo}</b>
           </span>
           <button
             onClick={openSheet}
@@ -424,7 +424,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         aria-hidden
       />
 
-      {/* Bottom-sheet "Añadir a backlog" (Nuevo / Recientes, MIXTO) */}
+      {/* Bottom-sheet "guardar en" (Nuevo / Recientes, MIXTO) */}
       {sheetOpen && (
         <div
           className="fixed inset-0 z-30 flex items-end justify-center bg-black/60"
@@ -437,7 +437,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-line" />
             <div className="flex items-baseline justify-between">
               <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
-                Añadir a backlog
+                guardar en
               </h2>
               <span className="font-mono text-[10px] tracking-[0.1em] text-text-3">
                 MIXTO · CUALQUIER MEDIO
@@ -478,7 +478,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
             <div className="space-y-2">
               {backlogs.length === 0 && (
                 <p className="text-sm text-text-3">
-                  Aún no tienes backlogs — crea uno arriba.
+                  Todavía no tienes colecciones. Crea la primera arriba.
                 </p>
               )}
               {backlogs.map((b) => (
@@ -492,8 +492,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
                   <span>
                     <span className="block font-semibold text-text">{b.name}</span>
                     <span className="block font-mono text-[9.5px] uppercase tracking-[0.06em] text-text-3">
-                      {b.isSeedHome ? "donde vive el seed · " : ""}
-                      {b.itemCount} items
+                      {b.isSeedHome ? `aquí está ${seed.title} · ` : ""}
+                      {b.itemCount} {b.itemCount === 1 ? "título" : "títulos"}
                     </span>
                   </span>
                   <span
@@ -510,7 +510,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
               disabled={busy || !sel}
               className="mt-5 w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
             >
-              Listo — añadir
+              Guardar
             </button>
           </div>
         </div>

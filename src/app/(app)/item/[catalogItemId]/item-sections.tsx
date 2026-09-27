@@ -45,8 +45,11 @@ export function ReleaseNote({
   day,
   pendingTracks,
   arrives,
+  album = false,
 }: {
   phase: "waiting" | "today";
+  /** The pronoun of the note: an album is "lo", a film or series "la". */
+  album?: boolean;
   /** "16 oct" — the storefront day. */
   day: string;
   /** Album before release: how many songs are still to come (0 = none). */
@@ -61,9 +64,14 @@ export function ReleaseNote({
       pendingTracks === 1 ? "La canción que falta llega" : `Las ${pendingTracks} canciones que faltan llegan`
     } ${arrives}.`;
   } else if (phase === "today") {
-    text = inLibrary ? "Pediste que te avisáramos: sale hoy." : "Sale hoy.";
+    text = inLibrary ? "Sale hoy. Estaba en tu no puedo esperar." : "Sale hoy.";
   } else {
-    text = inLibrary ? `Te avisamos el ${day}.` : `Sale el ${day}. Guárdala y te avisamos ese día.`;
+    // Saving an unreleased title puts it in "no puedo esperar" (derived:
+    // saved + releaseDate ahead); the note names it, and keeps the literal
+    // "te avisamos" for the consequence (founder: the ficha keeps Avísame).
+    text = inLibrary
+      ? `Está en tu no puedo esperar. Te avisamos el ${day}.`
+      : `Sale el ${day}. ${album ? "Guárdalo" : "Guárdala"} y te avisamos ese día.`;
   }
   return <p className="text-[13px] leading-[1.5] text-text-2">{text}</p>;
 }

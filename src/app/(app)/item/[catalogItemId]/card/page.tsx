@@ -6,10 +6,11 @@ import { toCardBacklog } from "@/modules/cards/adapter";
 import { CardExporter } from "@/components/card-exporter";
 
 /**
- * F3.5.7 — sharing an ITEM exports the TICKET (a single-title admission stub),
- * directly. Built from the user's own entry for the item, so the ticket stamps
- * the real status + rating. You can only ticket a title you've logged (there's
- * a status to stamp); otherwise this 404s and the item page shows "add first".
+ * F3.5.7 — sharing an ITEM exports the TITLE CARD (modules/cards/render/
+ * title.ts), directly. Built from the user's own entry for the item, so it
+ * prints the real state (Completo, Me obsesiona, Me gusta, No puedo esperar).
+ * You can only share a title you've saved; otherwise this 404s and the item
+ * page shows "add first".
  */
 export default async function ItemCardPage({
   params,
@@ -26,8 +27,8 @@ export default async function ItemCardPage({
   if (!item) notFound();
   if (!entry) notFound();
 
-  // The ticket needs exactly one item; reuse the M2 adapter (its home backlog
-  // name becomes the ticket's "ROW"). Adapter shape can't carry artwork (ADR-008).
+  // The card needs exactly one item; reuse the M2 adapter (its home backlog
+  // name prints in the foot). Adapter shape can't carry artwork (ADR-008).
   const cardBacklog = toCardBacklog(entry.backlogName, null, user.username, [
     entry,
   ]);
@@ -35,7 +36,7 @@ export default async function ItemCardPage({
   return (
     <CardExporter
       backlog={cardBacklog}
-      style="ticket"
+      style="title"
       publicUrl={
         user.username && user.isPublic
           ? `https://baclog.app/${user.username}/item/${catalogItemId}`

@@ -519,7 +519,7 @@ final class AppStore {
                 // Only this write's own value goes back (a newer choice already replaced it).
                 if self._followListsVisibility == newValue { self._followListsVisibility = old }
                 if e == .cancelled || e == .unauthorized { return true }
-                self.showToast(ToastModel(text: e.toast, kind: .info))
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar quién ve tus listas."), kind: .info))
                 return true
             }) { [weak self] api in
                 let store = self
@@ -1409,7 +1409,7 @@ extension KuraAPIError {
         case .invalid(let fields, let m):
             return fields["code"] ?? fields["email"] ?? (m.isEmpty ? "Revisa el código." : m)
         case .unauthorized, .notFound: return "El código no coincide o ya caducó."
-        case .conflict(_, let m): return m.isEmpty ? "No se pudo completar." : m
+        case .conflict(_, let m): return m.isEmpty ? "No se pudo entrar. Inténtalo de nuevo." : m
         default: return "No se pudo entrar. Inténtalo de nuevo."
         }
     }

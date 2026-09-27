@@ -268,9 +268,9 @@ private struct TitleHeader: View {
         var rows: [(Glyph, String, String)] = []
         if c.obsessed != "—" { rows.append((.flame, c.obsessed, "les obsesiona")) }
         if c.liked != "—" { rows.append((.thumb, c.liked, "les gusta")) }
-        if c.completed != "—" { rows.append((.check, c.completed, "lo completaron")) }
+        if c.completed != "—" { rows.append((.check, c.completed, "completos")) }
         if let w = c.waiting { rows.append((.clock, w, "no pueden esperar")) }
-        if c.saved != "—" { rows.append((.bookmark, c.saved, "lo guardaron")) }
+        if c.saved != "—" { rows.append((.bookmark, c.saved, "guardados")) }
         return VStack(alignment: .leading, spacing: 10) {
             ForEach(rows.indices, id: \.self) { i in
                 HStack(spacing: 10) {
@@ -287,10 +287,10 @@ private struct TitleHeader: View {
     private func ribbonA11y(_ c: TitleCounts) -> String {
         var s: [String] = []
         // Only what the ribbon shows: a missing count ("—") is never read aloud.
-        if c.obsessed != "—" { s.append("\(c.obsessed) obsesionados") }
-        if c.liked != "—" { s.append("\(c.liked) les gusta") }
+        if c.obsessed != "—" { s.append("a \(c.obsessed) les obsesiona") }
+        if c.liked != "—" { s.append("a \(c.liked) les gusta") }
         if c.completed != "—" { s.append("\(c.completed) completos") }
-        if let w = c.waiting { s.append("\(w) esperando") }
+        if let w = c.waiting { s.append("\(w) no pueden esperar") }
         if c.saved != "—" { s.append("\(c.saved) guardados") }
         return s.joined(separator: ", ")
     }

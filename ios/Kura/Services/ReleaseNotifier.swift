@@ -20,11 +20,12 @@ enum ReleaseNotifier {
             guard !PushRegistration.isRegistered else { return }
             let content = UNMutableNotificationContent()
             content.title = "Ya salió \(t.name)"
-            content.body = "La guardaste en no puedo esperar. " + {
+            // Neutral in gender for every format (un álbum es "lo"); a film may premiere on
+            // streaming, so no "en cines".
+            content.body = "No podías esperar. " + {
                 switch t.format {
-                case .album: return "Ya puedes escucharla."
-                case .series: return "Ya puedes verla."
-                case .film: return "Está en cines desde hoy."
+                case .album: return "Ya puedes escucharlo."
+                case .series, .film: return "Ya puedes verla."
                 }
             }()
             // Same payload as the remote push: a tap opens the ficha.

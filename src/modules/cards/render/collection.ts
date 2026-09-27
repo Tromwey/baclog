@@ -1,5 +1,6 @@
 import { tintEnds } from "@/components/kura/tint";
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog, type CardItem } from "../types";
+import { drawLockup, track } from "./brand";
 import { NEWS, RHMONO } from "./fonts";
 import { truncateToWidth, wrapText } from "./util";
 
@@ -7,7 +8,7 @@ import { truncateToWidth, wrapText } from "./util";
  * The collection's 9:16 card (Colecciones formalizado · 4b, replaces the
  * receipt at /backlogs/[id]/card): the collection's fan on its feed
  * gradient, the name in Newsreader, the line in italic, and a dashed foot
- * with the count and the @handle, signed "kura". Drawn at 1080×1920 from the
+ * with the count and the @handle, signed with the 蔵 kura lockup. Drawn at 1080×1920 from the
  * 300×533 frame (× 3.6).
  *
  * ADR-008: the PNG can't carry artwork — `CardItem` has no image field — so
@@ -46,8 +47,11 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** One cover of the fan: its palette as the no-art recipe, rotated on its centre. */
-function drawCover(
+/**
+ * One cover: its palette as the no-art recipe, rotated on its centre, with
+ * the system's cover shadow. Shared with the title card (title.ts).
+ */
+export function drawCover(
   ctx: CanvasRenderingContext2D,
   item: CardItem | undefined,
   cx: number,
@@ -133,11 +137,6 @@ function drawCentered(ctx: CanvasRenderingContext2D, text: string, y: number) {
   ctx.fillText(text, CARD_WIDTH / 2, y);
 }
 
-/** Letter-spacing for the mono voice (+8%), where the canvas supports it. */
-function track(ctx: CanvasRenderingContext2D, px: number) {
-  (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = `${px}px`;
-}
-
 export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBacklog) {
   const lead = backlog.items.find((i) => i.palette?.length)?.palette ?? [];
   const [top, bottom] = tintEnds(lead);
@@ -165,11 +164,12 @@ export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBackl
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
 
-  // Eyebrow.
+  // Eyebrow — the brand signs the foot, so the top only names the object
+  // (and "KURA" in caps broke the lowercase mark — voz · regla 12).
   ctx.fillStyle = TEXT_2;
   ctx.font = RHMONO(9 * X);
   track(ctx, 9 * X * 0.08);
-  drawCentered(ctx, "KURA · COLECCIÓN", padY);
+  drawCentered(ctx, "COLECCIÓN", padY);
   track(ctx, 0);
 
   // The fan: lead 177 on the 300 frame (250 × 195 box, 26 below the eyebrow).
@@ -203,10 +203,11 @@ export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBackl
     }
   }
 
-  // Foot: the dashed rule, "12 títulos" · "@sofi", and the wordmark.
-  const wordSize = 18 * X;
-  const wordY = CARD_HEIGHT - padY - wordSize;
-  const rowY = wordY - 10 * X - 9 * X * 1.2;
+  // Foot: the dashed rule, "12 títulos" · "@sofi", and the 蔵 kura lockup
+  // (§marca · C: the kanji is twice the wordmark, so the lockup is 2 × markSize tall).
+  const markSize = 14 * X;
+  const markCy = CARD_HEIGHT - padY - markSize;
+  const rowY = markCy - markSize - 10 * X - 9 * X * 1.2;
   const ruleY = rowY - 12 * X;
   ctx.save();
   ctx.strokeStyle = "rgba(255,255,255,.18)";
@@ -230,8 +231,5 @@ export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBackl
   }
   track(ctx, 0);
 
-  ctx.textAlign = "center";
-  ctx.fillStyle = TEXT;
-  ctx.font = NEWS(wordSize, true, 500);
-  drawCentered(ctx, "kura", wordY);
+  drawLockup(ctx, CARD_WIDTH / 2, markCy, markSize, "center", TEXT);
 }

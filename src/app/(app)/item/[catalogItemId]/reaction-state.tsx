@@ -326,7 +326,8 @@ export function ItemReactionProvider({
     clearLocalState();
     const entry = { commit };
     pendingRemoval.current = entry;
-    showToast("Ya no está en tus colecciones.", {
+    // With a review, say it goes too — Deshacer brings both back.
+    showToast(snapshot.ownReview ? "Quitado de tus colecciones, con tu reseña." : "Ya no está en tus colecciones.", {
       label: "Deshacer",
       run: () => {
         // Already flushed by another membership write: nothing to take back.

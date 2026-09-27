@@ -64,7 +64,7 @@ extension AppStore {
             case .notFound, .unsupported:
                 text = e.toast
             default:
-                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar tu @."), kind: .retry) { [weak self] in
                     guard let self, self.me.handle == oldHandle else { return }
                     self.dismissToast()
                     self.applyHandle(newHandle, from: oldHandle)
@@ -155,7 +155,7 @@ extension AppStore {
             showToast(ToastModel(text: "Foto quitada", kind: .info))
         case .failed(let e):
             guard e != .unauthorized, e != .cancelled else { return }
-            showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
+            showToast(ToastModel(text: e.toast(or: "No se pudo quitar la foto."), kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
         }
     }
 

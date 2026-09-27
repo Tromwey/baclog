@@ -1,6 +1,10 @@
 import "server-only";
 import { env } from "@/lib/env";
 import type { mediaTypeEnum } from "@/db/schema";
+import { monthName } from "@/modules/backlog/recap-format";
+
+/** Every email closes with the brand as the system draws it: 蔵 + kura. */
+const SIGNATURE = "\n\n— 蔵 kura";
 
 /**
  * Email transport seam (launch dep: founder provides RESEND_API_KEY).
@@ -10,9 +14,10 @@ import type { mediaTypeEnum } from "@/db/schema";
 async function send(
   to: string,
   subject: string,
-  text: string,
+  body: string,
   devLabel: string,
 ): Promise<void> {
+  const text = body + SIGNATURE;
   if (env.RESEND_API_KEY) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -22,7 +27,7 @@ async function send(
       },
       body: JSON.stringify({
         // Display name entre comillas: los paréntesis son sintaxis de comentario en RFC 5322.
-        from: `"Kura (anteriormente Baclog)" <auth@baclog.app>`,
+        from: `"kura (anteriormente Baclog)" <auth@baclog.app>`,
         to: [to],
         subject,
         text,
@@ -55,7 +60,7 @@ export function sendMergeOtpEmail(email: string, code: string): Promise<void> {
   return send(
     email,
     `${code} es tu código para fusionar cuentas de kura`,
-    `Desde otra cuenta de Kura pidieron fusionar la cuenta de este correo con la suya. ` +
+    `Desde otra cuenta de kura pidieron fusionar la cuenta de este correo con la suya. ` +
       `Si fuiste tú, tu código es ${code}. Expira en 10 minutos. No compartas este código con nadie.\n\n` +
       `Al fusionar, tus colecciones, títulos, reseñas y seguidores pasan a la otra cuenta ` +
       `y esta cuenta deja de existir. Si no fuiste tú, ignora este correo: sin el código ` +
@@ -101,7 +106,7 @@ export function sendReleaseEmail(
     `${releaseFirstLine(title)}\n\n` +
     waited +
     `${cta}: ${title.itemUrl}\n\n` +
-    `—\nTe avisamos porque está en tus colecciones. Si no quieres estos avisos, ` +
+    `Te avisamos porque estaba en tu no puedo esperar. Si no quieres estos avisos, ` +
     `apágalos en https://baclog.app/settings`;
   return send(email, releaseSubject(title.title), body, "RELEASE");
 }
@@ -122,7 +127,7 @@ export function releaseFirstLine(title: {
 
 /** The release email's subject, also the release push's title. */
 export function releaseSubject(title: string): string {
-  return `${title} ya salió ✦`;
+  return `Ya salió ${title}`;
 }
 
 type ReleaseFormat = (typeof mediaTypeEnum.enumValues)[number];
@@ -157,13 +162,21 @@ function releaseCopyFor(
   }
 }
 
-/** F3.3 — monthly recap notification. */
+/**
+ * F3.3 — monthly recap notification. The numbers are the card's own
+ * (`totalItems` = every title with activity that month, `completedCount` =
+ * the completed ones), named as the card names them: "títulos" and
+ * "completos" — never "obsesiones", which is a different, smaller count.
+ */
 export function sendRecapEmail(
   email: string,
-  recap: { label: string; totalItems: number; completedCount: number },
+  recap: { eraKey: string; label: string; totalItems: number; completedCount: number },
 ): Promise<void> {
+  const month = monthName(recap.eraKey);
+  const titles = `${recap.totalItems} ${recap.totalItems === 1 ? "título" : "títulos"}`;
+  const done = `${recap.completedCount} ${recap.completedCount === 1 ? "completo" : "completos"}`;
   // Recap has no permanent nav tab (it's a monthly moment) — this link is its
   // in-app entry point, so the ritual stays reachable without a constant tab.
-  const body = `Tu ${recap.label} en Kura: ${recap.totalItems} obsesiones, ${recap.completedCount} completadas. Ve y comparte tu tarjeta del mes: https://baclog.app/recap`;
-  return send(email, `Tu ${recap.label} está lista ✦`, body, "RECAP");
+  const body = `Tu ${month}: ${titles}, ${done}. Tu tarjeta del mes: https://baclog.app/recap`;
+  return send(email, `tu ${recap.label} está listo.`, body, "RECAP");
 }

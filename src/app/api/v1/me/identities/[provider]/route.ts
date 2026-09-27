@@ -32,7 +32,7 @@ const LAST_WAY_IN_MESSAGE =
   "Tu correo es de «Ocultar mi correo» de Apple: si desconectas Apple, puede que no te lleguen los códigos. Conecta Google antes de desconectar Apple.";
 
 const LINKED_ELSEWHERE_MESSAGE =
-  "Esa cuenta ya está unida a otra cuenta de Kura. Si también es tuya, puedes fusionarlas.";
+  "Esa cuenta ya está unida a otra cuenta de kura. Si también es tuya, puedes fusionarlas.";
 const ALREADY_LINKED_MESSAGE =
   "Esta cuenta ya tiene otra cuenta de ese proveedor conectada. Desconéctala primero.";
 

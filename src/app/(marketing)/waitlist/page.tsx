@@ -4,7 +4,7 @@ import { Wordmark } from "@/components/kura/components";
 import { WaitlistForm } from "./waitlist-form";
 
 export const metadata = {
-  title: "Kura · lista de espera",
+  title: "lista de espera · kura",
   description: "Guarda lo que más vale: películas, series y música, en colecciones. Apártate un lugar.",
 };
 

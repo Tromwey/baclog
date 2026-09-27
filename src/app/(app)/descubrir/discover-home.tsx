@@ -183,7 +183,7 @@ export function DiscoverHome({
         {tab === "all" && (
           <section className="flex flex-col gap-3.5">
             <div className="px-5">
-              <SectionTitle>double feature</SectionTitle>
+              <SectionTitle>una conexión</SectionTitle>
             </div>
             <DoubleFeatureCard
               pairing={doubleFeature}
@@ -430,7 +430,7 @@ function DoubleFeatureCard({
       <span className="flex min-w-0 flex-col gap-2">
         <span className={kicker}>La película y el disco que se sienten igual</span>
         <span className={title}>
-          {a && b ? `${a.title} × ${b.title}` : "tu double feature"}
+          {a && b ? `${a.title} × ${b.title}` : "tu primera conexión"}
         </span>
         <span className={line}>{a && b ? "Ver la conexión" : "Encontrar una conexión"}</span>
       </span>

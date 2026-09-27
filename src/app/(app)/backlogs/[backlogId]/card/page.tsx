@@ -49,7 +49,7 @@ export default async function CardPage({
       }
       noLinkNote={
         accountPublic && !backlog.isPublic
-          ? "Esta colección es privada: la tarjeta viaja sin link. Cámbialo en Opciones · Privacidad."
+          ? "Esta colección es solo tuya: la tarjeta viaja sin link. Cámbialo en Opciones › Privacidad."
           : undefined
       }
     />

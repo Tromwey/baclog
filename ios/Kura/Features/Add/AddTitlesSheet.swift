@@ -76,8 +76,8 @@ struct AddTitlesSheet: View {
                                 }
                             } else if res.isEmpty {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("no encontramos «\(query)».").font(.kura.news(22)).foregroundStyle(KColor.text)
-                                    Text("Revisa cómo se escribe o busca por autor.").font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                                    Text("nada con “\(query)”.").font(.kura.news(22)).foregroundStyle(KColor.text)
+                                    Text("Revisa cómo se escribe o busca por persona o año.").font(.kura.ui(14)).foregroundStyle(KColor.text2)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(20)

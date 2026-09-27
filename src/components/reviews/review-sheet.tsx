@@ -66,7 +66,7 @@ export function ReviewSheet({
   }, [body]);
 
   return (
-    <KuraSheet onClose={onCancel} label="Edita tu reseña" className="px-5">
+    <KuraSheet onClose={onCancel} label="Editar reseña" className="px-5">
       <EditBody
         itemTitle={itemTitle}
         body={body}
@@ -121,7 +121,7 @@ function EditBody({
 
   return (
     <>
-      <h2 className="pt-1 font-brand text-[22px] leading-[1.1] text-text">edita tu reseña</h2>
+      <h2 className="pt-1 font-brand text-[22px] leading-[1.1] text-text">editar reseña</h2>
       <p className="mt-1.5 truncate font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
         Sobre {itemTitle}
       </p>

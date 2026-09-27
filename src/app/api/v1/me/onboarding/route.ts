@@ -17,7 +17,7 @@ export const POST = withApi(async (request, { user }) => {
   if (!result.ok) {
     throw new ApiError(
       "forbidden",
-      "Kura es para mayores de 13 años. Esta cuenta no puede entrar.",
+      "kura es para personas de 13 años o más. Esta cuenta no puede entrar.",
       { reason: "underage" },
     );
   }

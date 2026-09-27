@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Sheet, useSheetDismiss } from "@/components/ui/sheet";
 
 /**
- * "Instalar Kura" — a 52 row of Ajustes (Kura 30a, group "apps"), the
+ * "Instalar kura" — a 52 row of Ajustes (Kura 30a, group "apps"), the
  * accessible install entry point.
  * Platform-aware because PWA install differs wildly:
  *  - Android/desktop Chromium fires `beforeinstallprompt`; we stash it and a tap
@@ -79,7 +79,7 @@ export function InstallAppRow({ dividerTop = false }: { dividerTop?: boolean }) 
         onClick={onClick}
         className="flex min-h-[52px] w-full items-center gap-3 pl-4 pr-3.5 text-left transition-colors active:bg-white/[0.06]"
       >
-        <span className="flex-1 font-sans text-[16px] text-text">Instalar Kura</span>
+        <span className="flex-1 font-sans text-[16px] text-text">Instalar kura</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-text-2" aria-hidden>
           <path d={CHEVRON_RIGHT_PATH} />
         </svg>
@@ -113,7 +113,7 @@ function InstructionSheet({
             Elige <b className="font-semibold text-text">«Agregar a Inicio»</b>.
           </>,
           <>
-            Toca <b className="font-semibold text-text">Agregar</b>: Kura vive
+            Toca <b className="font-semibold text-text">Agregar</b>: kura vive
             en tu inicio, a pantalla completa.
           </>,
         ]
@@ -131,7 +131,7 @@ function InstructionSheet({
   // The app's one sheet (it had drifted into a hand-rolled twin): same glass,
   // same motion, same drag-to-dismiss as every other.
   return (
-    <Sheet onClose={onClose} label="Instalar Kura">
+    <Sheet onClose={onClose} label="Instalar kura">
       <div className="flex items-start justify-between">
         <h2 className="font-brand text-[22px] leading-[1.1] text-text">
           instalar kura

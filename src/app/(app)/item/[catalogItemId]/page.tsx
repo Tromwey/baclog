@@ -254,6 +254,7 @@ export default async function ItemPage({
                   <ServiceRow href={linkHref} mark={<MusicMark />} label={`Abrir en ${service}`} />
                   <ReleaseNote
                     phase="waiting"
+                    album
                     day={releaseDayShort(releaseDate)}
                     pendingTracks={Math.max(0, trackCount - tracks.length)}
                     arrives={restArrivesLabel(releaseDate, now)}

@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   // would advertise a *.vercel.app host. Beta shares the DB, so the image
   // served from baclog.app is the same one.
   metadataBase: new URL("https://baclog.app"),
-  title: "Kura",
+  title: "kura",
   description: "Guarda lo que más vale: películas, series y música, en colecciones.",
   // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest
   // icons. Placeholder spark (scripts/generate-icons.mjs); the app/favicon.ico
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Kura",
+    title: "kura",
   },
 };
 
@@ -143,7 +143,7 @@ export default function RootLayout({
           </svg>
           <p className="font-brand text-2xl text-text">gira tu teléfono.</p>
           <p className="max-w-[30ch] text-sm leading-[1.55] text-text-2">
-            Kura está hecha para usarse en vertical.
+            kura está hecha para usarse en vertical.
           </p>
         </div>
       </body>

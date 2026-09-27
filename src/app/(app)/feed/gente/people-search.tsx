@@ -119,8 +119,7 @@ export function PeopleSearch({
         <div className="mt-8 flex flex-col gap-2">
           <p className="font-brand text-[28px] leading-[1.1] text-text">nadie con ese nombre.</p>
           <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
-            Los perfiles privados no aparecen aquí: pídele su link a quien
-            quieras seguir.
+            Los perfiles privados no aparecen aquí y no se pueden seguir.
           </p>
         </div>
       ) : (

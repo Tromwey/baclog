@@ -240,7 +240,7 @@ extension AppStore {
     /// Fusionar › correo: `POST /me/merge/otp/request` (204 whether or not the account exists).
     func requestMergeCode(email: String) async -> Bool {
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard e.contains("@"), e.contains(".") else { mergeError = "Revisa el correo."; return false }
+        guard e.contains("@"), e.contains(".") else { mergeError = "Ese correo no parece válido. Revísalo."; return false }
         let own = (identities?.email ?? account?.email ?? "").lowercased()
         guard e != own else { mergeError = "Ese es el correo de esta cuenta. Escribe el de la otra."; return false }
         guard !mergeBusy else { return false }
@@ -295,7 +295,7 @@ extension AppStore {
             let min = Int((Double(s) / 60).rounded(.up))
             return "Ya pediste varios códigos para ese correo. Intenta en \(min) min."
         case .invalid(_, let m) where !m.isEmpty: return m
-        case .invalid: return "Revisa el correo."
+        case .invalid: return "Ese correo no parece válido. Revísalo."
         default: return "Algo falló de nuestro lado. Inténtalo de nuevo."
         }
     }

@@ -278,13 +278,13 @@ export default async function PublicItemPage({
             <SectionTitle>en kura</SectionTitle>
             <div className="flex flex-wrap gap-2">
               {stats.obsessed > 0 && (
-                <span aria-label={`${stats.obsessed} les obsesiona`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
+                <span aria-label={`a ${stats.obsessed} ${stats.obsessed === 1 ? "le obsesiona" : "les obsesiona"}`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
                   <Glyph kind="obsessed" size={13} />
                   {formatMil(stats.obsessed)}
                 </span>
               )}
               {stats.completed > 0 && (
-                <span aria-label={`${stats.completed} la completaron`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
+                <span aria-label={`${stats.completed} ${stats.completed === 1 ? "completo" : "completos"}`} className="inline-flex items-center gap-[7px] rounded-full bg-[var(--glass-bg)] px-3.5 py-[9px] font-mono text-[13px] leading-none text-text">
                   <Glyph kind="completed" size={13} />
                   {formatMil(stats.completed)}
                 </span>

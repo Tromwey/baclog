@@ -294,7 +294,9 @@ extension AppStore {
             case .notFound:
                 self.showToast(ToastModel(text: "Ese perfil ya no está disponible.", kind: .info))
             default:
-                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                let who = self.person(id).map { "@\($0.handle)" } ?? "este perfil"
+                let text = e.toast(or: on ? "No se pudo seguir a \(who)." : "No se pudo dejar de seguir a \(who).")
+                self.showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     self?.setFollow(id, on)
                 })

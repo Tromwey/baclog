@@ -17,7 +17,9 @@ export function toCardBacklog(
   backlogName: string,
   vibe: string | null,
   username: string | null,
-  items: BacklogItemWithCatalog[],
+  // The ficha's entry also carries `releaseDate` (the "no puedo esperar"
+  // pill); collection rows don't need it.
+  items: (BacklogItemWithCatalog & { releaseDate?: Date | null })[],
 ): CardBacklog {
   return {
     name: backlogName,
@@ -32,12 +34,13 @@ export function toCardBacklog(
         genre: i.genre ?? "misc",
         mood: vibe ?? i.genre ?? "vibe",
         status: STATUS_MAP[i.status] ?? "on-my-radar",
-        // Two independent axes → one card glyph (F3.7): obsession (★★) outranks
-        // a verdict (★ liked / nothing for disliked, via reactionGlyph).
+        // Two independent axes → one reaction (F3.7): obsession outranks a
+        // verdict; "disliked" rides along but no card prints it (voz · 11).
         reaction: i.obsessed ? "obsessed" : (i.verdict ?? undefined),
-        // Cover palette (shared catalog_item) tints the ticket; null when
-        // unextracted → the renderer keeps its per-type fallback color.
+        // Cover palette (shared catalog_item) tints the card; null when
+        // unextracted → the neutral surface.
         palette: i.paletteHex ?? undefined,
+        ...(i.releaseDate ? { releaseDate: i.releaseDate.toISOString() } : {}),
       }),
     ),
   };

@@ -638,7 +638,7 @@ private struct NoResults: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("nada con “\(query)”.").font(.kura.news(32)).foregroundStyle(KColor.text)
-            Text("Revisa cómo se escribe, o busca por persona o año.")
+            Text("Revisa cómo se escribe o busca por persona o año.")
                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
             if let c = SearchIndex.correction(for: query, store) {
                 GlassButton(title: "Buscar “\(c)”", systemImage: "magnifyingglass", flat: true) { fix(c) }
