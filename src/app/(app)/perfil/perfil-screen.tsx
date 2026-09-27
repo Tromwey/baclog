@@ -4,14 +4,14 @@ import { ProfileAvatar } from "@/components/profile-avatar";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
 import {
   CHIP_44,
-  CollectionCard,
   Cover,
   Glyph,
   type GlyphKind,
   SectionTitle,
 } from "@/components/kura/components";
-import { releaseLabel, tintCard, tintSurfaceVertical } from "@/components/kura/tint";
-import { dominantHexes } from "@/modules/backlog/palette";
+import { CollectionsShowcase } from "@/components/kura/collections-showcase";
+import { Fan } from "@/components/kura/fan";
+import { feedSurface, feedTail, releaseLabel, tintCard } from "@/components/kura/tint";
 import type {
   ObsessionTile,
   ProfileCards,
@@ -23,16 +23,14 @@ import { ShareChip } from "@/app/u/share-chip";
 import { monthName } from "@/modules/backlog/recap-format";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
 
-/** The lima of the Revamp's ADN fallback is not a Kura colour. */
-const notLima = (h: string) => h.toLowerCase() !== "#d8ff3e";
-
 /**
  * 20c Perfil propio (Kura, flujo 09) — the same anatomy as the public profile
  * (/u/[username], 33a), seen from the inside:
  *
- *  - the header TINTED by what obsesses you (the newest obsession's cover
- *    palette; without one, your library's dominant hexes; without any, --bg:
- *    "sin portada no hay color"), 180°, fused into the page in its last third;
+ *  - the whole page in the FEED gradient of what obsesses you (the newest
+ *    obsession's cover palette; without one, your library's dominant hexes;
+ *    without any, --bg: "sin portada no hay color"), 168°, continuing in its
+ *    bottom tone under the dock (Colecciones formalizado · 3b);
  *  - Compartir + Ajustes (gear) 44 glass on the 64 row, at the right — every
  *    secondary action lives behind the gear, the header has no button row;
  *  - the photo or the SEAL at 128, the name in Newsreader 40 lowercase, the
@@ -41,7 +39,8 @@ const notLima = (h: string) => h.toLowerCase() !== "#d8ff3e";
  *    chip;
  *  - "me obsesiona" as a strip of 150 covers, "no puedo esperar" (the F3.8
  *    wait, kept from the product in Kura's wait pill), "tus colecciones" as
- *    compact cards with "Ver las N", and "tus tarjetas".
+ *    the pinned fan big + four more fans and "Ver las N"
+ *    (CollectionsShowcase), and "tus tarjetas".
  *
  * E2 (perfil propio vacío) is the same screen with nothing in it: the header
  * stays --bg, and each section shows its empty shape (s1 placeholders that
@@ -88,11 +87,11 @@ export function PerfilScreen({
   const displayName = (name || username || "").toLowerCase();
 
   return (
-    <div className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-dock-clearance text-text">
-      <header
-        className="flex flex-col gap-[18px] px-6 pb-[34px] pt-[calc(16px+env(safe-area-inset-top))]"
-        style={{ background: tintSurfaceVertical(hexes) }}
-      >
+    <div
+      className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text"
+      style={{ background: feedSurface(hexes, 900), backgroundColor: feedTail(hexes) }}
+    >
+      <header className="flex flex-col gap-[18px] px-6 pb-[34px] pt-[calc(16px+env(safe-area-inset-top))]">
         <div className="flex items-center justify-end gap-2">
           {publicUrl && (
             <ShareChip path={publicUrl} label="Compartir tu perfil" className="h-11! w-11!" />
@@ -162,9 +161,33 @@ export function PerfilScreen({
       <main className="flex flex-col gap-[30px] pt-2">
         <ObsessionStrip obsessions={obsessions} />
         <WaitStrip items={upcoming} now={now} />
-        <Collections shelves={shelves} />
+        <CollectionsShowcase
+          title="tus colecciones"
+          seeAllHref="/backlogs"
+          collections={shelves.map((b) => ({
+            id: b.id,
+            name: b.name,
+            vibe: b.vibe,
+            count: b.itemCount,
+            pinned: b.pinned,
+            fan: b.fan,
+            href: `/backlogs/${b.id}`,
+          }))}
+          empty={
+            <Link href="/backlogs" aria-label="Tu primera colección" className="flex justify-center bl-press-lg">
+              <Fan covers={[]} lead={186} ghost />
+            </Link>
+          }
+        />
         <CardsFan hexes={hexes} cards={cards} recapKey={recapKey} />
       </main>
+
+      {/* The dock floats over the page's own bottom tone, not over black. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
+        style={{ background: `linear-gradient(transparent, ${feedTail(hexes)} 75%)` }}
+      />
     </div>
   );
 }
@@ -248,65 +271,6 @@ function WaitStrip({ items, now }: { items: UpcomingItem[]; now: number }) {
             />
           </Link>
         ))}
-      </div>
-    </section>
-  );
-}
-
-/** "tus colecciones" — the first three as compact cards (spine + 104 covers). */
-function Collections({ shelves }: { shelves: Shelf[] }) {
-  const shown = shelves.slice(0, 3);
-  return (
-    <section className="flex flex-col gap-3.5">
-      <div className="flex items-baseline justify-between gap-3 px-5">
-        <h2 className="font-brand text-[24px] leading-[1.1] text-text">tus colecciones</h2>
-        {shelves.length > 0 && (
-          <Link
-            href="/backlogs"
-            className="text-[14px] font-medium text-text-2 transition-[color,opacity] hover:text-text active:opacity-60"
-          >
-            {shelves.length === 1 ? "Ver la colección" : `Ver las ${shelves.length}`}
-          </Link>
-        )}
-      </div>
-      <div className="flex flex-col gap-3 px-3">
-        {shown.length === 0 ? (
-          <Link href="/backlogs" className="flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1 bl-press-lg">
-            <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
-              <span
-                className="whitespace-nowrap font-mono text-[13px] tracking-[0.14em] text-text"
-                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-              >
-                tu primera
-              </span>
-            </span>
-            <span className="flex flex-1 items-end gap-2.5 px-4 py-[18px]">
-              <span className="flex h-[150px] w-[100px] items-center justify-center rounded-[var(--r-cover-l)] bg-surface-2 text-text-2">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                  <path d={PLUS_PATH} />
-                </svg>
-              </span>
-              <span className="h-[150px] w-[100px] rounded-[var(--r-cover-l)] bg-surface-2" />
-            </span>
-          </Link>
-        ) : (
-          shown.map((b) => (
-            <CollectionCard
-              key={b.id}
-              name={b.name}
-              href={`/backlogs/${b.id}`}
-              height={104}
-              paletteHex={dominantHexes(b.covers, 2).filter(notLima)}
-              emptyLabel={`${b.itemCount} ${plural(b.itemCount, "título", "títulos")}`}
-              covers={b.covers.slice(0, 8).map((c) => ({
-                posterUrl: c.posterUrl,
-                paletteHex: c.paletteHex,
-                mediaType: c.mediaType,
-                title: c.title,
-              }))}
-            />
-          ))
-        )}
       </div>
     </section>
   );

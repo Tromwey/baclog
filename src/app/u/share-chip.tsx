@@ -13,11 +13,15 @@ import { CHECK_PATH, SHARE_PATH } from "@/components/glyph-paths";
 export function ShareChip({
   path,
   label,
+  text,
   className = "",
 }: {
   /** Absolute path ("/u/dan") or a full URL. */
   path: string;
   label: string;
+  /** A visible label beside the glyph ("Compartir"): the pill variant — the
+   *  caller's `className` then draws the whole pill instead of the chip. */
+  text?: string;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -42,6 +46,15 @@ export function ShareChip({
     } catch {
       // Clipboard denied: nothing sensible to do silently.
     }
+  }
+
+  if (text) {
+    return (
+      <button type="button" onClick={share} aria-label={label} className={className}>
+        <StrokeIcon d={copied ? CHECK_PATH : SHARE_PATH} size={15} strokeWidth={2} />
+        {copied ? "Copiado" : text}
+      </button>
+    );
   }
 
   return (

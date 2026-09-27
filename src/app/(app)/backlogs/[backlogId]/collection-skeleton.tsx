@@ -1,21 +1,21 @@
 import { SKELETON_PULSE } from "@/components/kura/components";
+import { Fan } from "@/components/kura/fan";
 import { HideDock } from "../hide-dock";
 
 /**
- * The collection's silhouette (Kura · flujos-v2 03): Volver and Opciones at
- * 64/24, the 240 cover, the name, three format pills, then a shelf of 132
- * tiles (cover · Newsreader 14 title · mono 10 year line, the real Tile's
- * rows) — on `--s1`, with the one pulse the system allows (opacity, 1.6 s).
- * It always draws the SHELF body: whether the real one groups by format
- * (GroupedBody, 150) depends on the items, which aren't here yet.
+ * The collection's silhouette (Colecciones formalizado · 2a): Volver and the
+ * two chips at 64/24, the ghost fan at 225, the mono label, the name, the
+ * line and the credits, then "el orden" and a first run of three columns
+ * (the real Masonry's tiles: cover · Newsreader 14 title · mono 10 year) —
+ * on `--s1`, with the one pulse the system allows (opacity, 1.6 s).
  *
  * Mounts HideDock like the real view does (backlog-zoom-view.tsx), so the
  * dock doesn't sit over the skeleton and then fade when the page lands.
- * `lead="square"` is the automatic collection's 240×240 AutoCover.
- * Shared by the full page's loading.tsx, the intercepted overlay's and
- * lentes/no-puedo-esperar's.
+ * `auto` is the automatic collection (the "auto" pill instead of the label,
+ * no chips for Compartir). Shared by the full page's loading.tsx, the
+ * intercepted overlay's and lentes/no-puedo-esperar's.
  */
-export function CollectionSkeleton({ lead = "portrait" }: { lead?: "portrait" | "square" }) {
+export function CollectionSkeleton({ auto = false }: { auto?: boolean }) {
   return (
     <div
       aria-busy="true"
@@ -24,33 +24,36 @@ export function CollectionSkeleton({ lead = "portrait" }: { lead?: "portrait" | 
     >
       <HideDock />
       <div className="absolute inset-x-6 top-[max(64px,calc(20px+env(safe-area-inset-top)))] flex justify-between">
-        <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
-        <span className="h-11 w-11 rounded-full bg-[var(--glass-bg)]" />
+        <span className="h-11 w-11 rounded-full bg-glass-art" />
+        <span className="flex gap-2">
+          {!auto && <span className="h-11 w-11 rounded-full bg-glass-art" />}
+          <span className="h-11 w-11 rounded-full bg-glass-art" />
+        </span>
       </div>
-      <div className="flex flex-col items-center gap-3 px-6 pb-7 pt-[max(124px,calc(80px+env(safe-area-inset-top)))]">
-        <span
-          className={`h-[240px] rounded-[var(--r-cover-l)] bg-surface-1 ${
-            lead === "square" ? "w-[240px]" : "w-[160px]"
-          }`}
-        />
-        <span className="mt-2 h-6 w-40 rounded-lg bg-surface-1" />
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map((i) => (
-            <span key={i} className="h-10 w-[62px] rounded-full bg-[var(--glass-bg)]" />
-          ))}
-        </div>
+      <div className="flex flex-col items-center gap-2.5 px-6 pb-[26px] pt-[max(126px,calc(82px+env(safe-area-inset-top)))]">
+        <Fan covers={[]} lead={225} ghost />
+        <span className={`mt-1 rounded-full bg-surface-1 ${auto ? "h-[26px] w-16" : "h-2.5 w-24"}`} />
+        <span className="h-9 w-48 rounded-lg bg-surface-1" />
+        <span className="h-4 w-40 rounded-md bg-surface-1" />
+        <span className="flex items-center gap-2">
+          <span className="h-[26px] w-[26px] rounded-full bg-surface-1" />
+          <span className="h-3.5 w-28 rounded-md bg-surface-1" />
+        </span>
       </div>
-      <div className="flex flex-wrap items-end gap-x-3 gap-y-5 px-5 pt-6">
-        {[88, 88, 132, 88, 132, 88].map((w, i) => (
-          <div key={i} className="flex flex-col gap-[7px]" style={{ width: w }}>
-            <span className="h-[132px] rounded-[var(--r-cover-l)] bg-surface-1" />
+      <div className="px-5 pb-3.5">
+        <span className="block h-[22px] w-24 rounded-md bg-surface-1" />
+      </div>
+      <div className="grid grid-cols-3 gap-x-3 px-5">
+        {["aspect-[2/3]", "aspect-square", "aspect-[2/3]"].map((a, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <span className={`${a} rounded-[var(--r-cover-l)] bg-surface-1`} />
             {/* Title line: Newsreader 14 × 1.15 ≈ 16 px. */}
             <span className="flex h-4 items-center">
-              <span className="h-3 rounded-full bg-surface-1" style={{ width: w * 0.8 }} />
+              <span className="h-3 w-4/5 rounded-full bg-surface-1" />
             </span>
-            {/* Year / format line: mono 10 × 1.5 = 15 px. */}
+            {/* Year line: mono 10 × 1.5 = 15 px. */}
             <span className="flex h-[15px] items-center">
-              <span className="h-2 rounded-full bg-surface-1" style={{ width: w * 0.4 }} />
+              <span className="h-2 w-2/5 rounded-full bg-surface-1" />
             </span>
           </div>
         ))}

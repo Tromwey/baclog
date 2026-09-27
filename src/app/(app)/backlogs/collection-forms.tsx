@@ -1,18 +1,17 @@
 "use client";
 
-import Link from "next/link";
+import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore, useTransition } from "react";
 import {
   renameBacklogAction,
   setBacklogVisibilityAction,
-  type BacklogVisibility,
 } from "@/app/actions/backlog-actions";
 import { useSheetDismiss } from "@/components/ui";
-import { tintCard } from "@/components/kura/tint";
-import { FillIcon, KIcon, LOCK_FILL, DotsIcon } from "@/components/kura/icons";
+import { FillIcon, KIcon, LOCK_FILL } from "@/components/kura/icons";
 import {
   ChoiceRow,
+  MenuRow,
   SHEET_FIELD,
   SHEET_SOLID,
   SheetTitle,
@@ -229,42 +228,31 @@ export function RenameBody({
 
 /* -------------------------------------------------------------- compartir */
 
-export interface ShareCover {
-  posterUrl: string | null;
-  paletteHex: readonly string[] | null;
-  mediaType: MediaType;
-}
-
 function subscribeNothing() {
   return () => {};
 }
 
 /**
- * O5 — the preview card (spine, three covers, "de @handle · N títulos", the
- * link in mono) and three round actions: Copiar link, Historia (the
- * exportable card at /backlogs/[id]/card) and Más (the system share sheet,
- * only where it exists).
+ * Compartir (Colecciones formalizado · 1a): the collection's name in
+ * Newsreader 24 with "compartir" in mono, then three rows — Historia (the
+ * 9:16 card, /backlogs/[id]/card), Copiar link (the public page, its domain
+ * as the row's meta) and Más opciones (the system sheet, only where it
+ * exists). The card needs no link, so Historia always works.
  *
  * The link is the public page (/u/{handle}/{id}). It only opens for others
  * when the collection isn't private, the account has a handle and the
- * profile is public — otherwise the sheet says which of those is missing
- * instead of handing out a link that 404s.
+ * profile is public — otherwise the sheet says which of those is missing and
+ * the link rows are off, instead of handing out a link that 404s.
  */
 export function ShareBody({
   backlogId,
   name,
-  count,
-  covers,
-  paletteHex,
   username,
   profilePublic,
   visibility,
 }: {
   backlogId: string;
   name: string;
-  count: number;
-  covers: ShareCover[];
-  paletteHex: readonly string[];
   username: string | null;
   profilePublic: boolean;
   visibility: BacklogVisibility;
@@ -291,7 +279,7 @@ export function ShareBody({
           ? "Tu perfil es privado: el link no abre para nadie más."
           : null;
   const url = path && origin ? `${origin}${path}` : null;
-  const shown = path ? `${origin.replace(/^https?:\/\//, "")}${path}` : "";
+  const host = origin.replace(/^https?:\/\//, "");
 
   async function copy() {
     if (!url) return;
@@ -313,76 +301,30 @@ export function ShareBody({
     }
   }
 
-  const ACTION =
-    "flex flex-1 flex-col items-center gap-2 font-sans text-[13px] font-medium text-text disabled:opacity-40";
-  const DISC =
-    "flex h-[60px] w-[60px] items-center justify-center rounded-full bg-[var(--glass-bg)] bl-press";
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <SheetTitle close={false}>compartir</SheetTitle>
-      <div
-        className="flex overflow-hidden rounded-[22px]"
-        style={{ background: covers.length ? tintCard(paletteHex) : "var(--surface-1)" }}
-      >
-        <span className="flex w-10 flex-none items-center justify-center bg-black/[0.24]">
-          <span
-            className="max-h-[150px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[13px] tracking-[0.14em] text-text"
-            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-          >
-            {name}
-          </span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-3 px-2.5 pb-2.5">
+        <span className="min-w-0 truncate font-brand text-[24px] text-text">{name}</span>
+        <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          compartir
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
-          <div className="flex gap-2">
-            {covers.slice(0, 3).map((c, i) => (
-              <span
-                key={i}
-                className="relative block h-[72px] w-[72px] flex-none overflow-hidden rounded-[10px] bg-surface-2 shadow-cover"
-              >
-                {c.posterUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- hotlinked CDN (ADR-007)
-                  <img src={c.posterUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                )}
-              </span>
-            ))}
-            {covers.length === 0 && (
-              <span className="h-[72px] w-[72px] rounded-[10px] bg-[var(--glass-bg)]" />
-            )}
-          </div>
-          <span className="font-sans text-[13px] text-text-2">
-            {username ? `de @${username} · ` : ""}
-            {count} {count === 1 ? "título" : "títulos"}
-          </span>
-          {blocked ? (
-            <span className="font-sans text-[13px] leading-[1.45] text-text">{blocked}</span>
-          ) : (
-            <span className="truncate font-mono text-[12px] text-text">{shown}</span>
-          )}
-        </div>
       </div>
-      <div className="mt-[18px] flex gap-2">
-        <button type="button" onClick={copy} disabled={!!blocked || !url} className={ACTION}>
-          <span className={DISC}>
-            <KIcon name="link" size={20} />
-          </span>
-          {copied ? "Copiado" : "Copiar link"}
-        </button>
-        <Link href={`/backlogs/${backlogId}/card`} className={ACTION}>
-          <span className={DISC}>
-            <KIcon name="story" size={20} />
-          </span>
-          Historia
-        </Link>
-        {canNativeShare && (
-          <button type="button" onClick={more} disabled={!!blocked || !url} className={ACTION}>
-            <span className={DISC}>
-              <DotsIcon size={20} />
-            </span>
-            Más
-          </button>
-        )}
-      </div>
+      {blocked && (
+        <p className="px-2.5 pb-2 font-sans text-[13px] leading-[1.45] text-text-2 [text-wrap:pretty]">
+          {blocked}
+        </p>
+      )}
+      <MenuRow icon="story" label="Historia" aside="9:16" href={`/backlogs/${backlogId}/card`} />
+      <MenuRow
+        icon="link"
+        label={copied ? "Copiado" : "Copiar link"}
+        aside={host || undefined}
+        onClick={copy}
+        disabled={!!blocked || !url}
+      />
+      {canNativeShare && (
+        <MenuRow icon="share" label="Más opciones" onClick={more} disabled={!!blocked || !url} />
+      )}
     </div>
   );
 }

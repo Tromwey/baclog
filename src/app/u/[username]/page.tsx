@@ -16,9 +16,9 @@ import { captureView } from "@/modules/analytics/capture";
 import { plural } from "@/lib/plural";
 import { ShareChip } from "@/app/u/share-chip";
 import { BackButton } from "@/components/ui";
+import { CollectionsShowcase } from "@/components/kura/collections-showcase";
 import {
   BrandLockup,
-  CollectionCard,
   Cover,
   CreditsLink,
   CtaCard,
@@ -28,7 +28,7 @@ import {
   Seal,
   SectionTitle,
 } from "@/components/kura/components";
-import { tintSurfaceVertical } from "@/components/kura/tint";
+import { feedSurface, feedTail } from "@/components/kura/tint";
 import { ReportButton } from "./report-button";
 
 // Dynamic (not ISR) on purpose: F3.4 captures viewer geo/device server-side
@@ -73,13 +73,14 @@ function StatPill({ kind, n, label }: { kind: GlyphKind; n: number; label: strin
 }
 
 /**
- * Kura · 33a perfil público web (design/kura/flujos-v2.dc.html, flujo 12):
- * the header tinted by the owner's palette (180°, fused into the page), the
+ * Kura · 33a perfil público web (design/kura/flujos-v2.dc.html, flujo 12;
+ * Colecciones formalizado · 3a): the whole page in the feed gradient of the
+ * owner's palette (168°, continuing in its bottom tone), the
  * brand lockup and the way into the app at 64, the photo or seal at 128, the
  * name in Newsreader 40, the handle, followers · following, the ribbon of
  * glass pills (one count per state), and Seguir in honey beside Compartir.
- * Then "le obsesiona" as a strip of covers, the collections as compact cards
- * (spine + covers at 104), what they wrote, and the CTA card.
+ * Then "le obsesiona" as a strip of covers, the collections as fans (the
+ * pinned one big, four more, "Ver las N"), what they wrote, and the CTA card.
  */
 export default async function PublicProfilePage({
   params,
@@ -118,14 +119,13 @@ export default async function PublicProfilePage({
   // the dominant hexes); the lima fallback of the old aura is not a Kura
   // colour, so a paletteless profile is simply `--bg`.
   const palette = profile.palette.filter((h) => h.toLowerCase() !== "#d8ff3e");
-  const collectionCount = profile.backlogs.length;
 
   return (
-    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg text-text">
-      <header
-        className="flex flex-col gap-[18px] px-6 pb-[34px] pt-[calc(64px+env(safe-area-inset-top))]"
-        style={{ background: tintSurfaceVertical(palette) }}
-      >
+    <div
+      className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip text-text"
+      style={{ background: feedSurface(palette, 900), backgroundColor: feedTail(palette) }}
+    >
+      <header className="flex flex-col gap-[18px] px-6 pb-[34px] pt-[calc(64px+env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
           {/* A signed-in viewer came from inside the app (a feed card, a row
               of people): Volver takes them back. Anonymous: the brand and
@@ -220,33 +220,22 @@ export default async function PublicProfilePage({
           </section>
         )}
 
-        {/* colecciones — the escaparate (F3.10.1: public AND on the profile),
-            each the compact collection card: spine + covers at 104. */}
-        {collectionCount > 0 && (
-          <section className="flex flex-col gap-3.5">
-            <div className="flex items-baseline justify-between gap-3 px-5">
-              <h2 className="font-brand text-[24px] leading-[1.1] text-text">colecciones</h2>
-              <span className="text-[14px] font-medium text-text-2">{collectionCount}</span>
-            </div>
-            <div className="flex flex-col gap-3 px-3">
-              {profile.backlogs.map((b) => (
-                <CollectionCard
-                  key={b.id}
-                  name={b.name}
-                  href={`/u/${profile.username}/${b.id}`}
-                  height={104}
-                  paletteHex={b.paletteHex.filter((h) => h.toLowerCase() !== "#d8ff3e")}
-                  emptyLabel={`${b.itemCount} ${plural(b.itemCount, "título", "títulos")}`}
-                  covers={b.covers.map((c) => ({
-                    posterUrl: c.posterUrl,
-                    paletteHex: c.paletteHex,
-                    mediaType: c.mediaType,
-                  }))}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* colecciones — the escaparate (F3.10.1: public AND on the profile):
+            the pinned one big, four more as fans, "Ver las N" unfolds the
+            rest (Colecciones formalizado · 3a). */}
+        <CollectionsShowcase
+          title="colecciones"
+          sharePrefix={`/u/${profile.username}`}
+          collections={profile.backlogs.map((b) => ({
+            id: b.id,
+            name: b.name,
+            vibe: b.vibe,
+            count: b.itemCount,
+            pinned: b.pinned,
+            fan: b.fan,
+            href: `/u/${profile.username}/${b.id}`,
+          }))}
+        />
 
         {/* F3.9 — "lo que dice X". Renders nothing until they've written one. */}
         <ProfileReviews username={profile.username} displayName={profile.displayName} reviews={reviews} />

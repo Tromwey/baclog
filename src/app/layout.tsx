@@ -109,7 +109,7 @@ export default function RootLayout({
         {/* eslint-disable-next-line @next/next/no-page-custom-font -- app-router root layout loads fonts app-wide; rule targets pages/_document */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400;1,6..72,500&family=Red+Hat+Mono:wght@400&display=swap"
         />
       </head>
       <body className="min-h-full flex flex-col bg-bg text-text">

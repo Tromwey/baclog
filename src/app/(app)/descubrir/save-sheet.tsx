@@ -10,7 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import type { MediaType } from "@/modules/catalog/types";
 import { SOLID_BUTTON } from "@/components/kura/components";
-import { tintCard } from "@/components/kura/tint";
+import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -18,12 +18,7 @@ import {
 } from "@/hooks/use-sheet-motion";
 import type { SearchBacklog } from "./descubrir-screen";
 import type { LibraryIndex } from "./library";
-import {
-  PlusGlyph,
-  RowCover,
-  TriangleGlyph,
-  workMeta,
-} from "./kura-bits";
+import { RowCover, TriangleGlyph, workMeta } from "./kura-bits";
 
 /** Whatever Descubrir can offer to save: a result, a reco, a trend. */
 export interface SaveWork {
@@ -48,7 +43,8 @@ function useHydrated(): boolean {
  * 19h — "guardar en": the one way a title gets into collections from
  * Descubrir (§patrones · guardar: "guardar abre siempre la hoja"). A floating
  * `--s2` sheet inset 8, radius 36: the title on top, then "Nueva colección"
- * and every collection with its cover and a check disc, and the solid action
+ * and every collection with its mini fan (Colecciones formalizado · 7a) and a
+ * check disc, and the solid action
  * at the end — "Guardar en N colecciones".
  *
  * Pre-checked with where the title already lives; a title that isn't saved
@@ -237,50 +233,20 @@ function SaveSheetBody({
               </button>
             </form>
           ) : (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="flex min-h-14 items-center gap-3.5 px-2 text-left transition-opacity active:opacity-70"
-            >
-              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--r-cover-s)] bg-[var(--glass-bg)]">
-                <PlusGlyph />
-              </span>
-              <span className="flex-1 text-[16px] font-medium">Nueva colección</span>
-            </button>
+            <NewCollectionRow onClick={() => setCreating(true)} />
           )}
 
           {collections.map((c) => {
-            const on = checked.has(c.id);
-            const thumb = library.thumbs[c.id];
+            const fan = library.fans[c.id];
             return (
-              <button
+              <FanPickRow
                 key={c.id}
-                type="button"
-                aria-pressed={on}
+                name={c.name}
+                covers={fan?.covers ?? []}
+                count={fan?.count ?? c.itemCount}
+                on={checked.has(c.id)}
                 onClick={() => toggle(c.id)}
-                className="flex min-h-14 items-center gap-3.5 px-2 text-left transition-opacity active:opacity-70"
-              >
-                <span
-                  aria-hidden
-                  className="relative h-10 w-10 flex-none overflow-hidden rounded-[var(--r-cover-s)] bg-[var(--glass-bg)]"
-                  style={thumb && !thumb.posterUrl ? { background: tintCard(thumb.paletteHex) } : undefined}
-                >
-                  {thumb?.posterUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-                    <img src={thumb.posterUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-serif text-[19px]">{c.name}</span>
-                <span
-                  className={`flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full transition-colors ${
-                    on ? "bg-white/[0.2]" : "bg-[var(--glass-bg)]"
-                  }`}
-                >
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill={on ? "var(--text)" : "transparent"} aria-hidden>
-                    <path d="M20.5 6.3a1.1 1.1 0 010 1.6l-9.6 9.6a1.1 1.1 0 01-1.6 0L4.6 12.8a1.1 1.1 0 011.6-1.6l3.9 3.9 8.8-8.8a1.1 1.1 0 011.6 0z" />
-                  </svg>
-                </span>
-              </button>
+              />
             );
           })}
         </div>

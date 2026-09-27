@@ -1,21 +1,26 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
+import { getCollaboratorsForBacklogs } from "./collaborators";
+import { fanHexes, fanOf, type Collaborator, type FanCover } from "./fan";
+import { MANUAL_ORDER } from "./queries";
 
 /**
- * The /backlogs list (Revamp UI screen 02, 2026-09-03): every backlog of the
- * user as a strip of covers wearing their state, plus the progress line under
- * it. Own-user only — the caller passes the session's id.
+ * The /backlogs carousel and the profile's collections (Colecciones
+ * formalizado, 2026-09-27): every backlog of the user with its fan, its
+ * titles in the manual order, its counts and its credit line. Own-user only —
+ * the caller passes the session's id.
  *
- * Two round trips, grouped in JS: the backlogs (newest first, same order as
- * getBacklogsForUser so the picker and the list agree) and ALL of the user's
- * memberships joined to their per-title state (`user_item`) and the shared
+ * Two round trips + the credits, grouped in JS: the backlogs (the PINNED one
+ * first, then newest first) and ALL of the user's memberships in
+ * `MANUAL_ORDER`, joined to their per-title state (`user_item`) and the shared
  * cover facts (`catalog_item`) — AGENTS.md: state never lives on
- * `backlog_item`, palette never on `user_item`. Counts are computed from every
- * membership; only the covers themselves are capped (newest first), because
- * the strip shows a dozen at most and the client filters them by kind.
+ * `backlog_item`, palette never on `user_item`. Counts use every membership;
+ * `covers` is capped (the carousel shows COVER_CAP and links to the rest),
+ * the fan is resolved over the whole order so a chosen cover past the cap
+ * still leads it.
  */
 
 export interface ShelfCover {
@@ -23,6 +28,7 @@ export interface ShelfCover {
   catalogItemId: string;
   title: string;
   mediaType: MediaType;
+  year: number | null;
   posterUrl: string | null;
   paletteHex: string[] | null;
   status: string;
@@ -43,17 +49,23 @@ export interface Shelf {
   vibe: string | null;
   isPublic: boolean;
   showOnProfile: boolean;
+  pinned: boolean;
+  coverCatalogItemId: string | null;
   itemCount: number;
   doneCount: number;
-  /** Totals per kind, so the client's Cine/Series/Música filter can keep the
-   *  progress line honest without shipping every membership. */
+  /** Totals per kind (the hold sheet's "24 · mixto"). */
   byKind: Record<MediaType, KindCount>;
-  /** Newest first, capped at COVER_CAP. */
+  /** In the manual order, capped at COVER_CAP. */
   covers: ShelfCover[];
+  /** The three covers it shows itself with (fan.ts `fanOf`). */
+  fan: ShelfCover[];
+  /** The two tones it tints with (fan.ts `fanHexes`); [] = no colour. */
+  hexes: string[];
+  collaborators: Collaborator[];
 }
 
-/** More than the strip shows (12) so a kind filter still finds a full row. */
-const COVER_CAP = 24;
+/** The carousel's grid shows this many titles, then "Ver los N". */
+export const COVER_CAP = 30;
 
 const emptyByKind = (): Record<MediaType, KindCount> => ({
   film: { total: 0, done: 0 },
@@ -69,50 +81,62 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       vibe: backlogs.vibe,
       isPublic: backlogs.isPublic,
       showOnProfile: backlogs.showOnProfile,
+      pinnedAt: backlogs.pinnedAt,
+      coverCatalogItemId: backlogs.coverCatalogItemId,
     })
     .from(backlogs)
     .where(eq(backlogs.userId, userId))
-    .orderBy(desc(backlogs.createdAt));
+    // The pinned collection leads; the rest newest first (same as the pickers).
+    .orderBy(sql`${backlogs.pinnedAt} desc nulls last`, desc(backlogs.createdAt));
 
   if (rows.length === 0) return [];
 
-  const memberships = await db
-    .select({
-      backlogId: backlogItems.backlogId,
-      backlogItemId: backlogItems.id,
-      catalogItemId: catalogItems.id,
-      title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
-      posterUrl: catalogItems.posterUrl,
-      paletteHex: catalogItems.paletteHex,
-      releaseDate: catalogItems.releaseDate,
-      status: userItems.status,
-      verdict: userItems.verdict,
-      obsessed: userItems.obsessed,
-    })
-    .from(backlogItems)
-    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-    .innerJoin(
-      userItems,
-      // Composite join on (userId, catalogItemId): the per-title row is one
-      // per user, shared by every backlog the title is filed under.
-      and(
-        eq(userItems.userId, backlogItems.userId),
-        eq(userItems.catalogItemId, backlogItems.catalogItemId),
-      ),
-    )
-    .where(eq(backlogItems.userId, userId))
-    .orderBy(desc(backlogItems.addedAt));
+  const [memberships, credits] = await Promise.all([
+    db
+      .select({
+        backlogId: backlogItems.backlogId,
+        backlogItemId: backlogItems.id,
+        catalogItemId: catalogItems.id,
+        title: catalogItems.title,
+        mediaType: catalogItems.mediaType,
+        year: catalogItems.year,
+        posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
+        releaseDate: catalogItems.releaseDate,
+        status: userItems.status,
+        verdict: userItems.verdict,
+        obsessed: userItems.obsessed,
+      })
+      .from(backlogItems)
+      .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+      .innerJoin(
+        userItems,
+        // Composite join on (userId, catalogItemId): the per-title row is one
+        // per user, shared by every backlog the title is filed under.
+        and(
+          eq(userItems.userId, backlogItems.userId),
+          eq(userItems.catalogItemId, backlogItems.catalogItemId),
+        ),
+      )
+      .where(eq(backlogItems.userId, userId))
+      .orderBy(...MANUAL_ORDER),
+    getCollaboratorsForBacklogs(rows.map((r) => r.id)),
+  ]);
 
-  const shelves = new Map<string, Shelf>(
-    rows.map((r) => [
+  const shelves = new Map<string, Shelf & { all: ShelfCover[] }>(
+    rows.map(({ pinnedAt, ...r }) => [
       r.id,
       {
         ...r,
+        pinned: pinnedAt !== null,
         itemCount: 0,
         doneCount: 0,
         byKind: emptyByKind(),
         covers: [],
+        fan: [],
+        hexes: [],
+        collaborators: credits.get(r.id) ?? [],
+        all: [],
       },
     ]),
   );
@@ -127,23 +151,82 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       shelf.doneCount += 1;
       shelf.byKind[m.mediaType].done += 1;
     }
-    if (shelf.covers.length < COVER_CAP) {
-      shelf.covers.push({
-        backlogItemId: m.backlogItemId,
-        catalogItemId: m.catalogItemId,
-        title: m.title,
-        mediaType: m.mediaType,
-        posterUrl: m.posterUrl,
-        paletteHex: m.paletteHex ?? null,
-        status: m.status,
-        verdict: m.verdict,
-        obsessed: m.obsessed,
-        releaseDate: m.releaseDate ? m.releaseDate.toISOString() : null,
-      });
-    }
+    const cover: ShelfCover = {
+      backlogItemId: m.backlogItemId,
+      catalogItemId: m.catalogItemId,
+      title: m.title,
+      mediaType: m.mediaType,
+      year: m.year,
+      posterUrl: m.posterUrl,
+      paletteHex: m.paletteHex ?? null,
+      status: m.status,
+      verdict: m.verdict,
+      obsessed: m.obsessed,
+      releaseDate: m.releaseDate ? m.releaseDate.toISOString() : null,
+    };
+    shelf.all.push(cover);
+    if (shelf.covers.length < COVER_CAP) shelf.covers.push(cover);
   }
 
-  return rows.map((r) => shelves.get(r.id)!);
+  return rows.map((r) => {
+    const { all, ...shelf } = shelves.get(r.id)!;
+    shelf.fan = fanOf(all, shelf.coverCatalogItemId);
+    shelf.hexes = fanHexes(shelf.fan, all);
+    return shelf;
+  });
+}
+
+/**
+ * Every collection's fan and count, for the pickers ("guardar en", "mover a",
+ * search's destination): a mini fan per row instead of a thumbnail
+ * (Colecciones formalizado · 7a). Own-user only, same two reads as the
+ * carousel minus the per-title state.
+ */
+export interface CollectionFan {
+  covers: FanCover[];
+  count: number;
+}
+
+export async function getCollectionFans(userId: string): Promise<Record<string, CollectionFan>> {
+  const [rows, memberships] = await Promise.all([
+    db
+      .select({ id: backlogs.id, coverCatalogItemId: backlogs.coverCatalogItemId })
+      .from(backlogs)
+      .where(eq(backlogs.userId, userId)),
+    db
+      .select({
+        backlogId: backlogItems.backlogId,
+        catalogItemId: backlogItems.catalogItemId,
+        posterUrl: catalogItems.posterUrl,
+        paletteHex: catalogItems.paletteHex,
+        mediaType: catalogItems.mediaType,
+        title: catalogItems.title,
+      })
+      .from(backlogItems)
+      .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+      .where(eq(backlogItems.userId, userId))
+      .orderBy(...MANUAL_ORDER),
+  ]);
+  const byBacklog = new Map<string, typeof memberships>();
+  for (const m of memberships) {
+    const list = byBacklog.get(m.backlogId) ?? [];
+    list.push(m);
+    byBacklog.set(m.backlogId, list);
+  }
+  const out: Record<string, CollectionFan> = {};
+  for (const r of rows) {
+    const all = byBacklog.get(r.id) ?? [];
+    out[r.id] = {
+      count: all.length,
+      covers: fanOf(all, r.coverCatalogItemId).map((c) => ({
+        posterUrl: c.posterUrl,
+        paletteHex: c.paletteHex ?? null,
+        mediaType: c.mediaType,
+        title: c.title,
+      })),
+    };
+  }
+  return out;
 }
 
 /**

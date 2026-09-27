@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SOLID_BUTTON } from "@/components/kura/components";
-import { tintCard } from "@/components/kura/tint";
-import { BOOKMARK_PATH, CHECK_FILL_PATH, PLUS_PATH } from "@/components/glyph-paths";
+import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
+import { BOOKMARK_PATH } from "@/components/glyph-paths";
 import { plural } from "@/lib/plural";
 import { KuraSheet, useKuraSheetDismiss } from "./kura-sheet";
 import { SheetTitleBlock, type SheetWork } from "./sheet-title";
@@ -37,7 +37,8 @@ export function SaveButton() {
 /**
  * 19h "guardar en" — the one way a title enters or leaves collections from the
  * ficha. Floating `--s2` sheet: the title on top, "Nueva colección", every
- * collection with its newest cover and a check disc, and the solid action.
+ * collection with its mini fan and count (Colecciones formalizado · 7a) and a
+ * check disc, and the solid action.
  *
  * STAGED: checks are local until "Guardar en N colecciones" writes the diff
  * (provider `commitMemberships`). Pre-checked with where the title lives; a
@@ -165,52 +166,20 @@ function SaveSheetBody({ work }: { work: SheetWork }) {
             </button>
           </form>
         ) : (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex min-h-14 items-center gap-3.5 px-2 text-left transition-opacity active:opacity-70"
-          >
-            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-[var(--r-cover-s)] bg-[var(--glass-bg)]">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                <path d={PLUS_PATH} />
-              </svg>
-            </span>
-            <span className="flex-1 text-[16px] font-medium">Nueva colección</span>
-          </button>
+          <NewCollectionRow onClick={() => setCreating(true)} />
         )}
 
         {backlogs.map((b) => {
-          const on = checked.has(b.id);
-          const thumb = collections.thumbs[b.id];
+          const fan = collections.fans[b.id];
           return (
-            <button
+            <FanPickRow
               key={b.id}
-              type="button"
-              aria-pressed={on}
+              name={b.name}
+              covers={fan?.covers ?? []}
+              count={fan?.count ?? 0}
+              on={checked.has(b.id)}
               onClick={() => toggle(b.id)}
-              className="flex min-h-14 items-center gap-3.5 px-2 text-left transition-opacity active:opacity-70"
-            >
-              <span
-                aria-hidden
-                className="relative h-10 w-10 flex-none overflow-hidden rounded-[var(--r-cover-s)] bg-[var(--glass-bg)]"
-                style={thumb && !thumb.posterUrl ? { background: tintCard(thumb.paletteHex ?? []) } : undefined}
-              >
-                {thumb?.posterUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)
-                  <img src={thumb.posterUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
-                )}
-              </span>
-              <span className="min-w-0 flex-1 truncate font-serif text-[19px]">{b.name}</span>
-              <span
-                className={`flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full transition-colors ${
-                  on ? "bg-white/[0.2]" : "bg-[var(--glass-bg)]"
-                }`}
-              >
-                <svg width={14} height={14} viewBox="0 0 24 24" fill={on ? "var(--text)" : "transparent"} aria-hidden>
-                  <path d={CHECK_FILL_PATH} />
-                </svg>
-              </span>
-            </button>
+            />
           );
         })}
       </div>

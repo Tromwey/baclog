@@ -9,6 +9,10 @@ import {
   backlogVibeSchema,
   createBacklog,
   deleteBacklog,
+  reorderBacklogItems,
+  reorderSchema,
+  setBacklogCover,
+  setBacklogPinned,
   updateBacklog,
 } from "@/modules/backlog/collections";
 import type { BacklogVisibility } from "@/modules/backlog/visibility";
@@ -18,8 +22,6 @@ import type { BacklogVisibility } from "@/modules/backlog/visibility";
  * API v1 handlers share): assert* → module → revalidate/redirect. Same public
  * signatures and return shapes as before the extraction.
  */
-
-export type { BacklogVisibility };
 
 const nameSchema = backlogNameSchema;
 const vibeSchema = backlogVibeSchema.optional();
@@ -97,4 +99,49 @@ export async function deleteBacklogAction(backlogId: string) {
   await deleteBacklog(user.id, backlog.id);
   revalidatePath("/backlogs");
   redirect("/backlogs");
+}
+
+/* ------------------------------------------- Colecciones formalizado */
+
+/** Everything that draws a collection's fan, order or pin. */
+function revalidateCollection(backlogId: string, username: string | null) {
+  revalidatePath("/backlogs", "layout");
+  revalidatePath(`/backlogs/${backlogId}`);
+  revalidatePath("/perfil");
+  if (username) revalidatePath(`/u/${username}`, "layout");
+}
+
+/** Fijar / Desfijar — one pinned collection per account (see setBacklogPinned). */
+export async function setBacklogPinnedAction(backlogId: string, pinned: boolean) {
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  if (typeof pinned !== "boolean") return { error: "invalid" as const };
+  const ok = await setBacklogPinned(user.id, backlog.id, pinned);
+  if (!ok) throw new NotFoundError();
+  revalidateCollection(backlog.id, user.username);
+  return { ok: true as const };
+}
+
+/**
+ * Usar como portada (`catalogItemId`) / Portada automática (`null`). The
+ * module refuses a title that isn't a member of this collection.
+ */
+export async function setBacklogCoverAction(backlogId: string, catalogItemId: string | null) {
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  const parsed = z.string().min(1).max(64).nullable().safeParse(catalogItemId);
+  if (!parsed.success) return { error: "invalid" as const };
+  const ok = await setBacklogCover(user.id, backlog.id, parsed.data);
+  if (!ok) return { error: "not_member" as const };
+  revalidateCollection(backlog.id, user.username);
+  return { ok: true as const };
+}
+
+/** Reordenar — the membership ids first to last (see reorderBacklogItems). */
+export async function reorderBacklogItemsAction(backlogId: string, orderedIds: string[]) {
+  const { user, backlog } = await assertOwnsBacklog(backlogId);
+  const parsed = reorderSchema.safeParse(orderedIds);
+  if (!parsed.success) return { error: "invalid" as const };
+  const ok = await reorderBacklogItems(user.id, backlog.id, parsed.data);
+  if (!ok) throw new NotFoundError();
+  revalidateCollection(backlog.id, user.username);
+  return { ok: true as const };
 }

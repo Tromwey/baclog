@@ -1,8 +1,8 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { backlogs } from "@/db/schema";
+import { backlogItems, backlogs } from "@/db/schema";
 import {
   getCollectionsWithMemberships,
   type CollectionWithMemberships,
@@ -96,6 +96,111 @@ export async function updateBacklog(
     .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
     .returning({ id: backlogs.id });
   return updated.length > 0;
+}
+
+/**
+ * Colecciones formalizado — pin ONE collection (or unpin it). The partial
+ * unique index `backlog_one_pinned_per_user` allows a single pinned row per
+ * user, so pinning clears the old pin FIRST, in the same batch (Neon HTTP
+ * batch = one transaction): never two pins, never a unique violation.
+ * Returns false when the (backlogId, userId) pair matched nothing.
+ */
+export async function setBacklogPinned(
+  userId: string,
+  backlogId: string,
+  pinned: boolean,
+): Promise<boolean> {
+  if (!pinned) {
+    const updated = await db
+      .update(backlogs)
+      .set({ pinnedAt: null })
+      .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
+      .returning({ id: backlogs.id });
+    return updated.length > 0;
+  }
+  const [, updated] = await db.batch([
+    db
+      .update(backlogs)
+      .set({ pinnedAt: null })
+      .where(
+        and(eq(backlogs.userId, userId), isNotNull(backlogs.pinnedAt), ne(backlogs.id, backlogId)),
+      ),
+    db
+      .update(backlogs)
+      .set({ pinnedAt: new Date() })
+      .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
+      .returning({ id: backlogs.id }),
+  ]);
+  return updated.length > 0;
+}
+
+/**
+ * The collection's chosen cover (the front of its fan), or `null` for "the
+ * first title in the order". The title must be a member of THIS collection:
+ * the update only matches when the membership exists, in the same statement,
+ * so a stale id from the client writes nothing. Returns false otherwise.
+ */
+export async function setBacklogCover(
+  userId: string,
+  backlogId: string,
+  catalogItemId: string | null,
+): Promise<boolean> {
+  const member =
+    catalogItemId === null
+      ? sql`true`
+      : sql`exists (select 1 from ${backlogItems} where ${backlogItems.backlogId} = ${backlogId} and ${backlogItems.catalogItemId} = ${catalogItemId})`;
+  const updated = await db
+    .update(backlogs)
+    .set({ coverCatalogItemId: catalogItemId })
+    .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId), member))
+    .returning({ id: backlogs.id });
+  return updated.length > 0;
+}
+
+/**
+ * The manual order (Reordenar): `orderedIds` are membership (`backlog_item`)
+ * ids, first to last. Renumbers the collection in ONE statement — positions
+ * 0…n−1 from the array's ordinality — scoped by backlog AND user inside the
+ * statement, so an id from another collection or account simply doesn't
+ * match. Ids of this collection that the array left out (a title added while
+ * the sheet was open) go back to null = on top, newest first. Returns false
+ * when the backlog isn't the user's.
+ */
+export const reorderSchema = z.array(z.string().min(1).max(64)).max(2000);
+
+export async function reorderBacklogItems(
+  userId: string,
+  backlogId: string,
+  orderedIds: string[],
+): Promise<boolean> {
+  const ids = reorderSchema.parse(orderedIds);
+  const [own] = await db
+    .select({ id: backlogs.id })
+    .from(backlogs)
+    .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
+    .limit(1);
+  if (!own) return false;
+  const json = JSON.stringify(ids);
+  await db.execute(sql`
+    update ${backlogItems} as b
+    set position = o.pos
+    from (
+      select ${backlogItems.id} as id,
+        case when u.ord is null then null
+          else (row_number() over (partition by u.ord is null order by u.ord) - 1)::int
+        end as pos
+      from ${backlogItems}
+      left join jsonb_array_elements_text(${json}::jsonb) with ordinality as u(id, ord)
+        on u.id = ${backlogItems.id}
+      where ${backlogItems.backlogId} = ${backlogId} and ${backlogItems.userId} = ${userId}
+    ) as o
+    where b.id = o.id and b.backlog_id = ${backlogId} and b.user_id = ${userId}
+  `);
+  await db
+    .update(backlogs)
+    .set({ updatedAt: new Date() })
+    .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)));
+  return true;
 }
 
 /**

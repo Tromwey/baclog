@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   customType,
@@ -356,10 +356,33 @@ export const backlogs = pgTable(
      */
     isPublic: boolean("is_public").notNull().default(true),
     showOnProfile: boolean("show_on_profile").notNull().default(true),
+    /**
+     * Colecciones formalizado (migration 0030) — the ONE collection the owner
+     * pinned ("fijada"): first in the Tus colecciones carousel and the big fan
+     * on the profile. At most one per user, enforced by the partial unique
+     * index below; `setBacklogPinned` clears the old pin and sets the new one
+     * in the same batch. Null = not pinned.
+     */
+    pinnedAt: timestamp("pinned_at"),
+    /**
+     * The title the owner chose as the collection's cover (the front of its
+     * fan). Only meaningful while that title is still a member: every reader
+     * resolves it against the memberships and falls back to the first title
+     * in the collection's order when it isn't (see `fanCovers`). SET NULL so a
+     * catalog purge never blocks on it.
+     */
+    coverCatalogItemId: text("cover_catalog_item_id").references(() => catalogItems.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("backlog_user_id_idx").on(t.userId)],
+  (t) => [
+    index("backlog_user_id_idx").on(t.userId),
+    uniqueIndex("backlog_one_pinned_per_user")
+      .on(t.userId)
+      .where(sql`${t.pinnedAt} is not null`),
+  ],
 );
 
 export const backlogItems = pgTable(
@@ -389,6 +412,15 @@ export const backlogItems = pgTable(
      * off this table (→ user_item and catalog_item) in migration 0011→0012.
      */
     addedAt: timestamp("added_at").notNull().defaultNow(),
+    /**
+     * Colecciones formalizado (0030) — the owner's MANUAL order inside this
+     * collection (0 = first). Null until the owner reorders; readers sort
+     * `position asc nulls first, added_at desc`, so a never-reordered
+     * collection keeps its newest-first order and a title added after a
+     * reorder shows up on top until it's placed. Written only by
+     * `reorderBacklogItems`, which renumbers the whole collection at once.
+     */
+    position: integer("position"),
   },
   (t) => [
     index("backlog_item_backlog_id_idx").on(t.backlogId),
@@ -397,6 +429,35 @@ export const backlogItems = pgTable(
       t.backlogId,
       t.catalogItemId,
     ),
+  ],
+);
+
+/**
+ * Colecciones formalizado (0030) — who else a collection is credited to
+ * ("sofi y mo"). A CREDIT, not a permission: the owner stays `backlog.userId`,
+ * every write still goes through `assertOwnsBacklog`, and nothing here lets a
+ * collaborator read a private collection or touch its titles.
+ *
+ * NO WRITER YET, on purpose: inviting someone needs their consent (their name
+ * would show on a public page) and that flow has no design — the table exists
+ * so the readers are built and the credit line renders. Reads that leave the
+ * owner's session (`public.ts`) gate each collaborator on `users.isPublic AND
+ * username IS NOT NULL`, like any other public identity.
+ */
+export const backlogCollaborators = pgTable(
+  "backlog_collaborator",
+  {
+    backlogId: text("backlog_id")
+      .notNull()
+      .references(() => backlogs.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.backlogId, t.userId] }),
+    index("backlog_collaborator_user_idx").on(t.userId),
   ],
 );
 

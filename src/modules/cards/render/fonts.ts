@@ -28,6 +28,13 @@ export const SERIF = (size: number, italic = true) =>
 export const SANS = (size: number, weight: 400 | 500 | 600 | 700 = 500) =>
   `${weight} ${size}px "Hanken Grotesk", sans-serif`;
 
+/** Newsreader — Kura's brand voice (the collection card, 4b). */
+export const NEWS = (size: number, italic = false, weight: 400 | 500 = 400) =>
+  `${italic ? "italic " : ""}${weight} ${size}px "Newsreader", serif`;
+
+/** Red Hat Mono — Kura's data voice (the collection card's labels). */
+export const RHMONO = (size: number) => `400 ${size}px "Red Hat Mono", monospace`;
+
 export const CARD_FONTS = [
   MONO(16),
   MONO(16, true),
@@ -38,4 +45,8 @@ export const CARD_FONTS = [
   SERIF(16, false),
   SANS(16, 500),
   SANS(16, 600),
+  NEWS(16),
+  NEWS(16, true),
+  NEWS(16, true, 500),
+  RHMONO(16),
 ];

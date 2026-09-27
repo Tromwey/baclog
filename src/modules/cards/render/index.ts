@@ -1,4 +1,5 @@
 import type { CardBacklog, CardItem, CardStyle } from "../types";
+import { drawCollection } from "./collection";
 import { drawPattern } from "./pattern";
 import { drawReceipt } from "./receipt";
 import { drawTicket } from "./ticket";
@@ -26,6 +27,9 @@ export function drawCard(
       break;
     case "pattern":
       drawPattern(ctx, backlog);
+      break;
+    case "collection":
+      drawCollection(ctx, backlog);
       break;
   }
 }

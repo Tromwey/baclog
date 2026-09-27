@@ -26,11 +26,15 @@ export interface CardItem {
 
 export interface CardBacklog {
   name: string;
+  /** The collection's line ("lo que te rompe y lo agradeces"); the
+   *  collection card prints it under the name. */
+  vibe?: string;
   username: string;
   items: CardItem[];
 }
 
-export type CardStyle = "receipt" | "ticket" | "pattern";
+/** `collection` = the 9:16 fan card (Colecciones formalizado · 4b). */
+export type CardStyle = "receipt" | "ticket" | "pattern" | "collection";
 
 export const CARD_WIDTH = 1080;
 export const CARD_HEIGHT = 1920;

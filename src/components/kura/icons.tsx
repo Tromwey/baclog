@@ -30,6 +30,10 @@ export const K = {
   warning:
     "M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.8a2 2 0 00-3.4 0z",
   search: "M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4",
+  /** Colecciones formalizado: Fijar, Usar como portada, Reordenar (asa). */
+  pin: "M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6",
+  image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 8.5h.01",
+  grip: "M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01",
   /** Format pills (x.label · `FI`). */
   film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9.5h4M4 14.5h4M16 9.5h4M16 14.5h4",
   series: "M3 7h18v12H3zM8 3l4 4 4-4",

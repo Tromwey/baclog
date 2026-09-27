@@ -130,6 +130,11 @@ export const SKELETON_PULSE = "animate-pulse motion-reduce:animate-none [animati
 export const CHIP_44 =
   "flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]";
 
+/** The same 44 chip OVER ART (a collection's header, Colecciones formalizado
+ *  2a/5a): `--glass-art` with a 14 px blur instead of the flat glass fill. */
+export const CHIP_ART =
+  "flex h-11 w-11 flex-none items-center justify-center rounded-full bg-glass-art text-text backdrop-blur-[14px] bl-press-sm";
+
 export function BackChip({ href, label = "Volver" }: { href: string; label?: string }) {
   return (
     <Link href={href} aria-label={label} className={CHIP_44}>

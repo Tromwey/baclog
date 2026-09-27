@@ -1,14 +1,16 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { assertOwnsBacklog } from "@/authz";
 import { db } from "@/db";
-import { backlogItems, catalogItems } from "@/db/schema";
+import { backlogItems } from "@/db/schema";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { tintEnds } from "@/components/kura/tint";
 import { visibilityOf } from "@/modules/backlog/visibility";
 import { getRenderInstant } from "@/modules/catalog/release";
-import { getBacklogItems, getBacklogNames } from "@/modules/backlog/queries";
+import { getBacklogItems, getBacklogNames, getUserPalette } from "@/modules/backlog/queries";
 import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
-import type { MediaType } from "@/modules/catalog/types";
+import { getCollaboratorsForBacklogs } from "@/modules/backlog/collaborators";
+import { fanHexes, fanOf } from "@/modules/backlog/fan";
+import { getCollectionFans } from "@/modules/backlog/shelves";
 import { HideDock } from "./hide-dock";
 import {
   CollectionScreen,
@@ -24,11 +26,13 @@ import {
  * Throws assertOwnsBacklog's NotFoundError/UnauthorizedError — each twin maps
  * them to its own recovery (404 vs. redirect back to the list).
  *
- * Kura adds two owner-only reads for "Mover a" (O4a): the user's other
- * collections with their newest cover, and which collections each title here
+ * Kura adds owner-only reads for "Mover a" (O4a): the user's other
+ * collections with their fan (7a), and which collections each title here
  * already lives in (so a move never duplicates and its undo never removes a
- * membership that existed before). Both are scoped by the session user id
- * derived from the assert above — never by anything the client sent.
+ * membership that existed before); and for the header (Colecciones
+ * formalizado · 2a): the credits and the owner's palette for their seal. All
+ * scoped by the session user id derived from the assert above — never by
+ * anything the client sent.
  */
 export async function loadBacklogZoom(backlogId: string) {
   const itemsP = getBacklogItems(backlogId);
@@ -37,21 +41,11 @@ export async function loadBacklogZoom(backlogId: string) {
   const items = await itemsP;
   const catalogIds = items.map((it) => it.catalogItemId);
 
-  const [counts, now, names, thumbs, memberRows] = await Promise.all([
+  const [counts, now, names, fans, memberRows, credits, palette] = await Promise.all([
     getFirstRunCounts(user.id),
     getRenderInstant(),
     getBacklogNames(user.id),
-    db
-      .selectDistinctOn([backlogItems.backlogId], {
-        backlogId: backlogItems.backlogId,
-        posterUrl: catalogItems.posterUrl,
-        paletteHex: catalogItems.paletteHex,
-        mediaType: catalogItems.mediaType,
-      })
-      .from(backlogItems)
-      .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-      .where(eq(backlogItems.userId, user.id))
-      .orderBy(backlogItems.backlogId, desc(backlogItems.addedAt)),
+    getCollectionFans(user.id),
     catalogIds.length
       ? db
           .select({
@@ -66,21 +60,19 @@ export async function loadBacklogZoom(backlogId: string) {
             ),
           )
       : Promise.resolve([] as { backlogId: string; catalogItemId: string }[]),
+    // Scoped: `backlog.id` came out of assertOwnsBacklog above.
+    getCollaboratorsForBacklogs([backlog.id]),
+    getUserPalette(user.id),
   ]);
 
-  const thumbOf = new Map(thumbs.map((t) => [t.backlogId, t]));
   const others: OtherCollection[] = names
     .filter((n) => n.id !== backlog.id)
-    .map((n) => {
-      const t = thumbOf.get(n.id);
-      return {
-        id: n.id,
-        name: n.name,
-        posterUrl: t?.posterUrl ?? null,
-        paletteHex: t?.paletteHex ?? null,
-        mediaType: (t?.mediaType ?? "film") as MediaType,
-      };
-    });
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      fan: fans[n.id]?.covers ?? [],
+      count: fans[n.id]?.count ?? 0,
+    }));
 
   const memberships: Record<string, string[]> = {};
   for (const r of memberRows) {
@@ -94,6 +86,8 @@ export async function loadBacklogZoom(backlogId: string) {
     now,
     others,
     memberships,
+    collaborators: credits.get(backlog.id) ?? [],
+    owner: { name: user.name ?? user.username ?? "", image: user.image, hexes: palette },
     viewer: { username: user.username, profilePublic: user.isPublic },
   };
 }
@@ -101,11 +95,11 @@ export async function loadBacklogZoom(backlogId: string) {
 export type BacklogZoomData = Awaited<ReturnType<typeof loadBacklogZoom>>;
 
 /**
- * Colección (flujos-v2 03, 2026-09-24): the tinted header (Volver · Opciones
- * at 64/24, the chosen cover at 240 centered, the name in Newsreader 24, the
- * format pills that filter), then the body grouped by format or as a shelf
- * (the frames' `adapt()` rule), or as a list. Every action lives in Opciones.
- * No dock (HideDock). Server-safe wrapper; the screen itself is client.
+ * Colección (Colecciones formalizado · 2a, 2026-09-27): the page in the feed
+ * gradient of its fan, the fan at 225 as the header, the name, the line, the
+ * credits and the format pills, then the titles in columns in the manual
+ * order (or as a list). Every action lives in Opciones. No dock (HideDock).
+ * Server-safe wrapper; the screen itself is client.
  *
  * Shared by the real /backlogs/[id] page and the intercepted overlay (`zoom`
  * adds the bl-zoom-content stagger; the overlay route owns the spring bloom on its
@@ -136,7 +130,7 @@ export function BacklogZoomView({
     addedAt: it.addedAt.toISOString(),
   }));
 
-  const lead = list.find((it) => it.paletteHex?.length)?.paletteHex ?? [];
+  const lead = fanHexes(fanOf(list, backlog.coverCatalogItemId), list);
 
   return (
     <>
@@ -151,11 +145,15 @@ export function BacklogZoomView({
           name: backlog.name,
           vibe: backlog.vibe,
           visibility: visibilityOf(backlog),
+          pinned: backlog.pinnedAt !== null,
+          coverCatalogItemId: backlog.coverCatalogItemId,
         }}
         items={list}
         now={now}
         others={data.others}
         memberships={data.memberships}
+        owner={data.owner}
+        collaborators={data.collaborators}
         username={data.viewer.username}
         profilePublic={data.viewer.profilePublic}
         coach={data.coach}

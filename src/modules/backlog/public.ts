@@ -10,6 +10,8 @@ import {
   users,
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
+import { getPublicCollaborators } from "./collaborators";
+import { byManualOrder, fanHexes, fanOf } from "./fan";
 import { dominantHexes, groupDominantHexes } from "./palette";
 
 /**
@@ -45,6 +47,11 @@ export async function getPublicProfile(username: string) {
       id: backlogs.id,
       name: backlogs.name,
       vibe: backlogs.vibe,
+      // Colecciones formalizado: which one leads the profile (the big fan) and
+      // the front of each fan. The owner's own presentation of a PUBLIC
+      // collection — public-safe like its name.
+      pinnedAt: backlogs.pinnedAt,
+      coverCatalogItemId: backlogs.coverCatalogItemId,
       itemCount: sql<number>`count(${backlogItems.id})::int`,
     })
     .from(backlogs)
@@ -73,6 +80,11 @@ export async function getPublicProfile(username: string) {
             // aspect (disco 1:1, póster 2:3), so the fan carries the kind.
             // Catalog data, not user state — still inside the public list.
             mediaType: catalogItems.mediaType,
+            // The web fan reads the owner's manual order (fan.ts); the API's
+            // `titleIds` keep `addedAt desc` (rows arrive in that order).
+            position: backlogItems.position,
+            addedAt: backlogItems.addedAt,
+            title: catalogItems.title,
           })
           .from(backlogItems)
           .innerJoin(
@@ -122,6 +134,16 @@ export async function getPublicProfile(username: string) {
       }
     }
   }
+  // Colecciones formalizado — each collection's fan (chosen cover first, then
+  // the manual order) and the colour it tints with, plus its credit line.
+  const ordered = new Map<string, typeof coverRows>();
+  for (const c of [...coverRows].sort(byManualOrder)) {
+    const list = ordered.get(c.backlogId) ?? [];
+    list.push(c);
+    ordered.set(c.backlogId, list);
+  }
+  const credits = await getPublicCollaborators(lists.map((l) => l.id));
+
   // Per-backlog ADN (each shelf's aura) + the owner aggregate (hero aura).
   const backlogPalettes = groupDominantHexes(coverRows, (c) => c.backlogId, 6);
   const palette = dominantHexes(coverRows, 6);
@@ -190,14 +212,27 @@ export async function getPublicProfile(username: string) {
     obsessions: obsessions.map((o) => ({ ...o, paletteHex: o.paletteHex ?? null })),
     // Lima fallback so an owner with no extracted palette still auras.
     palette: palette.length > 0 ? palette : ["#D8FF3E"],
-    backlogs: lists.map((l) => ({
+    backlogs: lists.map(({ pinnedAt, coverCatalogItemId, ...l }) => {
+      const all = ordered.get(l.id) ?? [];
+      const fan = fanOf(all, coverCatalogItemId).map((c) => ({
+        posterUrl: c.posterUrl,
+        paletteHex: c.paletteHex ?? null,
+        mediaType: c.mediaType,
+        title: c.title,
+      }));
+      return {
       ...l,
+      pinned: pinnedAt !== null,
+      fan,
+      hexes: fanHexes(fan, all),
+      collaborators: credits.get(l.id) ?? [],
       coverUrls: covers.get(l.id) ?? [],
       covers: fans.get(l.id) ?? [],
       titleIds: titleIds.get(l.id) ?? [],
       coverTitleId: coverTitle.get(l.id) ?? null,
       paletteHex: backlogPalettes.get(l.id) ?? ["#D8FF3E"],
-    })),
+      };
+    }),
     upcoming: upcoming.map((u) => ({
       catalogItemId: u.catalogItemId,
       title: u.title,
@@ -247,6 +282,9 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       // "link" vs "profile" — never reveals a private shelf.
       showOnProfile: backlogs.showOnProfile,
       updatedAt: backlogs.updatedAt,
+      // Colecciones formalizado: the front of the fan (the owner's choice for
+      // a public collection). The API wire doesn't carry it.
+      coverCatalogItemId: backlogs.coverCatalogItemId,
       ownerName: users.name,
       ownerUsername: users.username,
     })
@@ -272,6 +310,9 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       // user_item.addedAt — the first-save instant stays private). Public
       // already: the feed's "agregó" event is keyed on this same instant.
       addedAt: backlogItems.addedAt,
+      // The owner's manual order (web sorts by it, fan.ts `byManualOrder`;
+      // the query itself stays `addedAt desc` for the API).
+      position: backlogItems.position,
       status: userItems.status,
       // F3.7 — two independent axes with different public rules (handoff §1):
       // `obsessed` IS the public real-time "obsessing over" signal, so it always
@@ -309,7 +350,8 @@ export async function getPublicBacklog(username: string, backlogId: string) {
     .orderBy(desc(backlogItems.addedAt));
 
   // Rows are newest-first, matching the in-app aura's aggregation order.
-  return { ...row, items, palette: dominantHexes(items, 6) };
+  const collaborators = (await getPublicCollaborators([row.backlogId])).get(row.backlogId) ?? [];
+  return { ...row, items, collaborators, palette: dominantHexes(items, 6) };
 }
 
 /** Item info for the public per-item page (shared catalog, not user data). */

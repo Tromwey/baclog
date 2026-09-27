@@ -28,6 +28,7 @@ import {
 } from "@/hooks/use-sheet-motion";
 import { useHideNavDock } from "@/app/(app)/nav-dock";
 import type { SearchBacklog } from "./descubrir-screen";
+import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
 import type { LibraryIndex } from "./library";
 import {
   CheckStroke,
@@ -166,6 +167,8 @@ export function SearchSheet({
     return pinned ? { id: pinned.id, name: pinned.name } : null;
   });
   const [pickerOpen, setPickerOpen] = useState(backlogs.length === 0);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useScrollerTouchAction(pickerRef, hydrated && pickerOpen);
   const [newOpen, setNewOpen] = useState(backlogs.length === 0);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -450,36 +453,33 @@ export function SearchSheet({
 
         {pickerOpen && (
           <div className="flex flex-none flex-col gap-2.5 pb-3.5">
-            <div role="listbox" aria-label="Colección destino" className="bl-scroll flex gap-2 overflow-x-auto px-5">
+            {/* Colecciones formalizado · 7a: the destination is picked from the
+                same rows as "guardar en" — mini fan, name, count. */}
+            <div
+              ref={pickerRef}
+              role="listbox"
+              aria-label="Colección destino"
+              className="bl-scroll flex max-h-[288px] flex-col overflow-y-auto overscroll-contain px-3"
+            >
+              <NewCollectionRow onClick={() => setNewOpen((o) => !o)} />
               {options.map((b) => {
-                const on = b.id === target?.id;
+                const fan = library?.fans[b.id];
                 return (
-                  <button
+                  <FanPickRow
                     key={b.id}
-                    type="button"
                     role="option"
-                    aria-selected={on}
+                    name={b.name}
+                    covers={fan?.covers ?? []}
+                    count={fan?.count ?? b.itemCount}
+                    on={b.id === target?.id}
                     onClick={() => {
                       setTarget({ id: b.id, name: b.name });
                       setPickerOpen(false);
                       setNewOpen(false);
                     }}
-                    className={`min-h-9 flex-none rounded-full px-3.5 text-[15px] font-medium transition-colors ${
-                      on ? "bg-text text-bg" : "bg-white/[0.08] text-text hover:bg-white/[0.12]"
-                    }`}
-                  >
-                    {b.name}
-                  </button>
+                  />
                 );
               })}
-              <button
-                type="button"
-                onClick={() => setNewOpen((o) => !o)}
-                className="flex min-h-9 flex-none items-center gap-1.5 rounded-full bg-white/[0.08] pl-2.5 pr-3.5 text-[15px] font-medium text-text hover:bg-white/[0.12]"
-              >
-                <PlusGlyph size={16} />
-                Nueva colección
-              </button>
             </div>
             {newOpen && (
               <form onSubmit={createAndSelect} className="bl-rise-soft flex gap-2 px-5">

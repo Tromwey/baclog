@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { SectionTitle } from "@/components/kura/components";
+import { Fan } from "@/components/kura/fan";
 import { useItemReaction } from "./reaction-state";
 
 /**
  * "en tus colecciones" (24a / 24c): the collections this title lives in, as
- * glass pills in Newsreader 17, 40 tall, each one a way into its collection.
+ * glass pills in Newsreader 17, 40 tall, each one a way into its collection
+ * and led by its mini fan at 22 (Colecciones formalizado · 8).
  * Live off the provider, so "guardar en" and Quitar redraw it at once; with no
  * membership the section isn't there at all.
  */
 export function CollectionPills() {
-  const { memberIds, backlogs } = useItemReaction();
+  const { memberIds, backlogs, collections } = useItemReaction();
   const names = backlogs.filter((b) => memberIds.includes(b.id));
   if (names.length === 0) return null;
   return (
@@ -22,9 +24,10 @@ export function CollectionPills() {
           <Link
             key={b.id}
             href={`/backlogs/${b.id}`}
-            className="inline-flex h-10 max-w-full items-center truncate rounded-full bg-[var(--glass-bg)] px-4 font-serif text-[17px] text-text bl-press hover:bg-white/[0.12]"
+            className="inline-flex h-10 max-w-full items-center gap-2 rounded-full bg-[var(--glass-bg)] pl-2 pr-4 font-serif text-[17px] text-text bl-press hover:bg-white/[0.12]"
           >
-            {b.name}
+            <Fan covers={collections.fans[b.id]?.covers ?? []} lead={22} />
+            <span className="min-w-0 truncate">{b.name}</span>
           </Link>
         ))}
       </div>

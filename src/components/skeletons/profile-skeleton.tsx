@@ -1,4 +1,5 @@
 import { SKELETON_PULSE } from "@/components/kura/components";
+import { Fan } from "@/components/kura/fan";
 
 /**
  * A profile's silhouette (Kura §patrones · cargando: the real shape, the one
@@ -14,8 +15,8 @@ import { SKELETON_PULSE } from "@/components/kura/components";
  *    lockup and its 48 pill differ by a few px and land with the page.
  *
  * Body for both: two cover strips (a section title, covers at 150 tall) and
- * one compact collection card (spine + 104 covers). No tint: the header's
- * colour comes from the covers, which aren't here yet.
+ * the collections' featured fan, empty (Colecciones formalizado). No tint:
+ * the page's colour comes from the covers, which aren't here yet.
  */
 export function ProfileSkeleton({ variant }: { variant: "own" | "public" }) {
   const own = variant === "own";
@@ -89,16 +90,10 @@ export function ProfileSkeleton({ variant }: { variant: "own" | "public" }) {
             <div className="px-5">
               <div className="h-[26px] w-40 rounded-full bg-surface-2" />
             </div>
-            <div className="px-3">
-              <div className="flex overflow-hidden rounded-[var(--r-screen)] bg-surface-1">
-                {/* The spine. */}
-                <div className="w-10 flex-none bg-black/[0.24]" />
-                <div className="flex flex-1 items-end gap-2.5 overflow-hidden px-3.5 py-4">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="h-[104px] w-[69px] flex-none rounded-[var(--r-cover-l)] bg-surface-2" />
-                  ))}
-                </div>
-              </div>
+            {/* The featured collection's fan (CollectionsShowcase), empty. */}
+            <div className="flex flex-col items-center gap-2 pt-1.5">
+              <Fan covers={[]} lead={186} ghost />
+              <div className="mt-1 h-[26px] w-44 rounded-full bg-surface-2" />
             </div>
           </div>
         </div>

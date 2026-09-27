@@ -1,11 +1,11 @@
 "use client";
 
+import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   createBacklogAction,
   setBacklogVisibilityAction,
-  type BacklogVisibility,
 } from "@/app/actions/backlog-actions";
 import { Sheet, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, PEOPLE_FILL } from "@/components/kura/icons";

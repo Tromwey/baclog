@@ -21,6 +21,7 @@ export function toCardBacklog(
 ): CardBacklog {
   return {
     name: backlogName,
+    ...(vibe ? { vibe } : {}),
     username: username ?? "",
     items: items.map(
       (i): CardItem => ({

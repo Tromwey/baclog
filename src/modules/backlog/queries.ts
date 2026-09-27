@@ -298,6 +298,18 @@ export async function getLovedSeeds(
   return seeds;
 }
 
+/**
+ * Colecciones formalizado — THE order a collection's titles are read in: the
+ * owner's manual order (`position`, 0 first) with every unplaced title (null)
+ * ahead of it, newest first. A never-reordered collection is exactly the old
+ * newest-first. The JS twin is `byManualOrder` in fan.ts — keep both in step.
+ * The API v1 readers keep their documented `addedAt desc` on purpose.
+ */
+export const MANUAL_ORDER = [
+  sql`${backlogItems.position} asc nulls first`,
+  desc(backlogItems.addedAt),
+] as const;
+
 /** The shared field list of a backlog's item rows: membership id + per-title
  *  state (user_item) + the shared catalog facts. One constant so the two
  *  readers below can't drift, and so `getBacklogItems`' inferred type
@@ -341,7 +353,7 @@ export async function getBacklogItems(backlogId: string) {
       ),
     )
     .where(eq(backlogItems.backlogId, backlogId))
-    .orderBy(desc(backlogItems.addedAt));
+    .orderBy(...MANUAL_ORDER);
 }
 
 /**

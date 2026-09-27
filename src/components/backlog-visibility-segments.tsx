@@ -1,9 +1,9 @@
 "use client";
 
+import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useState, useTransition } from "react";
 import {
   setBacklogVisibilityAction,
-  type BacklogVisibility,
 } from "@/app/actions/backlog-actions";
 import { VISIBILITY_STATES, visibilityOf } from "@/modules/backlog/visibility";
 

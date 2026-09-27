@@ -14,7 +14,7 @@ import { useZoomExit } from "./zoom-exit";
  * Inside the overlay the shell shrinks back into its card FIRST
  * (`useZoomExit`) and navigates once that spring lands.
  */
-export function ZoomBackButton() {
+export function ZoomBackButton({ className = CHIP_44 }: { className?: string }) {
   const router = useRouter();
   const exit = useZoomExit();
   return (
@@ -29,7 +29,7 @@ export function ZoomBackButton() {
         else leave();
       }}
       aria-label="Volver"
-      className={CHIP_44}
+      className={className}
     >
       <KIcon name="back" size={18} strokeWidth={2.2} />
     </button>

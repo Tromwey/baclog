@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
 import { toCardBacklog } from "@/modules/cards/adapter";
 import { getBacklogItems } from "@/modules/backlog/queries";
+import { fanOf } from "@/modules/backlog/fan";
 import { CardExporter } from "@/components/card-exporter";
 
 export default async function CardPage({
@@ -21,26 +22,26 @@ export default async function CardPage({
   }
 
   const items = await getBacklogItems(backlog.id);
-  if (items.length === 0) notFound(); // ticket style needs at least one item
+  if (items.length === 0) notFound(); // the card draws at least one cover
 
-  const cardBacklog = toCardBacklog(
-    backlog.name,
-    backlog.vibe,
-    user.username,
-    items,
-  );
+  // The fan leads: the chosen cover, then the manual order (fan.ts) — the
+  // renderer draws `items[0..2]` as the fan and counts them all.
+  const fan = fanOf(items, backlog.coverCatalogItemId);
+  const ordered = [...fan, ...items.filter((it) => !fan.includes(it))];
+  const cardBacklog = toCardBacklog(backlog.name, backlog.vibe, user.username, ordered);
 
-  // F3.5.7 — sharing a BACKLOG exports the RECEIPT (the typographic list of its
-  // items), directly, with no generic style picker. F3.10.1: a PRIVATE
-  // backlog's URL 404s, so the link doesn't travel and the note says why —
-  // never a dead link on the viral surface.
+  // Colecciones formalizado · 4b — sharing a collection exports its FAN card
+  // (9:16, the fan on its feed gradient; palettes, never art — ADR-008),
+  // directly, with no style picker. F3.10.1: a PRIVATE collection's URL
+  // 404s, so the link doesn't travel and the note says why — never a dead
+  // link on the viral surface.
   const accountPublic = Boolean(user.username && user.isPublic);
   return (
     <CardExporter
       backlog={cardBacklog}
-      style="receipt"
+      style="collection"
       eyebrow={cardBacklog.name}
-      subtitle="tu colección, como recibo"
+      subtitle="tu colección, como tarjeta"
       publicUrl={
         accountPublic && backlog.isPublic
           ? `https://baclog.app/${user.username}/${backlog.id}`

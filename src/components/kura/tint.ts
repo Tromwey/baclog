@@ -55,6 +55,24 @@ export function tintSurfaceVertical(hexes: readonly string[]): string {
   return `linear-gradient(180deg, ${top} 0%, ${bottom} 66%, ${BG} 100%)`;
 }
 
+/**
+ * The FEED gradient over a whole page (Colecciones formalizado · "Degradado
+ * del feed"): the same 168° ends as a feed card, but anchored in pixels so a
+ * long page doesn't stretch it — tone 1 at the top, tone 2 by `span` px, and
+ * the page CONTINUES in tone 2 (its `feedTail`) instead of fading to black,
+ * like the feed does under its last card. No palette = `--bg`.
+ */
+export function feedSurface(hexes: readonly string[], span = 900): string {
+  if (!hexes[0]) return BG;
+  const [top, bottom] = tintEnds(hexes);
+  return `linear-gradient(168deg, ${top} 0px, ${bottom} ${span}px, ${bottom} 100%)`;
+}
+
+/** The colour a feed-gradient page continues in (under the dock's fade). */
+export function feedTail(hexes: readonly string[]): string {
+  return hexes[0] ? tintEnds(hexes)[1] : BG;
+}
+
 /** A collection card's own surface (no fade — the card IS the object). */
 export function tintCard(hexes: readonly string[]): string {
   if (!hexes[0]) return "var(--surface-1)";

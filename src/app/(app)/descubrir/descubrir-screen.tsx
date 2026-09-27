@@ -199,18 +199,28 @@ export function DescubrirScreen({
     }
 
     const landed = current;
+    const dropped = toRemove.filter((m) => !landed.some((x) => x.backlogItemId === m.backlogItemId));
     setLibrary((lib) => {
       const next = withMemberships(lib, id, landed);
-      if (added.length === 0) return next;
-      const thumbs = { ...next.thumbs };
+      if (added.length === 0 && dropped.length === 0) return next;
+      // Patch the pickers' fans until the next load: a new title lands on
+      // top of an unordered collection, so it leads the fan (a chosen cover
+      // reasserts itself on the next read).
+      const fans = { ...next.fans };
+      const cover = { posterUrl: work.posterUrl, paletteHex: work.paletteHex ?? [], mediaType: work.mediaType, title: work.title };
       for (const m of added) {
-        thumbs[m.backlogId] = {
-          posterUrl: work.posterUrl,
-          paletteHex: work.paletteHex ?? [],
-          mediaType: work.mediaType,
-        };
+        const f = fans[m.backlogId] ?? { covers: [], count: 0 };
+        fans[m.backlogId] = { count: f.count + 1, covers: [cover, ...f.covers].slice(0, 3) };
       }
-      return { ...next, thumbs, lastUsedBacklogId: added[added.length - 1].backlogId };
+      for (const m of dropped) {
+        const f = fans[m.backlogId];
+        if (f) fans[m.backlogId] = { ...f, count: Math.max(0, f.count - 1) };
+      }
+      return {
+        ...next,
+        fans,
+        lastUsedBacklogId: added.length > 0 ? added[added.length - 1].backlogId : next.lastUsedBacklogId,
+      };
     });
     if (!ok) return false;
 
