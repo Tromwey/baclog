@@ -123,7 +123,9 @@ extension AppStore {
         }
         func key(_ t: Title) -> (Int, Date) {
             guard let r = t.release else { return (9, .distantFuture) }
-            if !isUnreleased(t) && t.upcomingSeason == nil { return (0, .distantPast) }
+            // Already out ("ya salió") goes LAST, after "sin fecha": the list (and its fan, and
+            // "el próximo …") leads with what's still coming (critica 2026-09-27 #0).
+            if !isUnreleased(t) && t.upcomingSeason == nil { return (5, .distantPast) }
             switch r {
             case .day(let d): return (1, d)
             case .month(let y, let m): return (2, cal.date(from: DateComponents(year: y, month: m)) ?? .distantFuture)

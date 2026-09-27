@@ -55,7 +55,11 @@ const FAN = {
   right: { cx: 231.5, cy: 126.5, rot: 9 },
   back: { poster: [117, 176], album: [135, 135] },
 } as const;
-const LEAD = 420;
+/** Front cover 380 px tall: the whole fan (≈ 507 × 410, the rotated right
+ *  slot included) sits inside the right half with ≥ 72 px to the edge — the
+ *  same margin as the text — so a preview that crops the sides (WhatsApp)
+ *  doesn't clip it (critique 2026-09-27: at 420 the right cover touched). */
+const LEAD = 380;
 const S = LEAD / 225;
 const RADIUS = 22;
 
@@ -187,7 +191,10 @@ export default async function Image({
     src: srcs[i] ?? null,
   }));
 
-  const nameSize = data.backlogName.length > 28 ? 60 : 76;
+  // Sized for the THUMBNAIL (critique 2026-09-27): iMessage/WhatsApp show
+  // this at ~300 px wide (÷ 4), so the name stays ≥ 68 px and every meta line
+  // ≥ 30 px — at 20–26 px they came out 6 px tall and unreadable.
+  const nameSize = data.backlogName.length > 28 ? 68 : 84;
 
   return new ImageResponse(
     <div
@@ -216,7 +223,7 @@ export default async function Image({
             fontFamily: "Newsreader",
             fontStyle: "italic",
             fontWeight: 500,
-            fontSize: 40,
+            fontSize: 56,
             letterSpacing: "-0.035em",
             lineHeight: 1,
           }}
@@ -224,7 +231,7 @@ export default async function Image({
           kura
         </span>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <span style={{ display: "flex", fontSize: 26, color: TEXT_2 }}>
+          <span style={{ display: "flex", flexWrap: "wrap", fontSize: 32, color: TEXT_2 }}>
             una colección de&nbsp;
             <span style={{ fontWeight: 600, color: TEXT }}>{by}</span>
           </span>
@@ -244,8 +251,8 @@ export default async function Image({
               style={{
                 fontFamily: "Newsreader",
                 fontStyle: "italic",
-                fontSize: 30,
-                lineHeight: 1.25,
+                fontSize: 34,
+                lineHeight: 1.2,
                 color: TEXT_2,
                 lineClamp: 2,
                 overflow: "hidden",
@@ -258,8 +265,8 @@ export default async function Image({
             <span
               style={{
                 fontFamily: "RedHatMono",
-                fontSize: 20,
-                letterSpacing: "0.08em",
+                fontSize: 30,
+                letterSpacing: "0.06em",
                 textTransform: "uppercase",
                 color: TEXT_2,
               }}
@@ -275,7 +282,7 @@ export default async function Image({
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          paddingRight: 24,
+          paddingRight: 72,
         }}
       >
         <FanImage covers={covers} ghost={count === 0} />

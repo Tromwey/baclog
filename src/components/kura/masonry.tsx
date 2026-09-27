@@ -152,7 +152,12 @@ function Tile({ it, onHold }: { it: MasonryItem; onHold?: (key: string) => void 
           </span>
         ) : null}
       </span>
-      <span className="truncate font-brand text-[14px] italic leading-[1.15] text-text">{it.title}</span>
+      {/* Two lines, then the ellipsis (critique 2026-09-27): with the year gone
+          the title is the only word under the cover — one line cut
+          "DeBÍ TiRAR M…". Twin of iOS `lineLimit(2)`. */}
+      <span className="line-clamp-2 font-brand text-[14px] italic leading-[1.15] text-text [overflow-wrap:anywhere]">
+        {it.title}
+      </span>
     </Link>
   );
 }

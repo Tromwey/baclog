@@ -8,6 +8,8 @@ struct PersonProfileView: View {
     /// "Así te ven": draw this person (you, as a stranger sees you) without loading anything,
     /// with the chips and Seguir as pictures (nothing to act on).
     var preview: Person? = nil
+    /// Where the page's content sits, for the veil under the clock (read only by `TopVeil`).
+    @State private var veil = VeilScroll()
 
     var body: some View {
         if let preview {
@@ -28,20 +30,12 @@ struct PersonProfileView: View {
 
     private var isPreview: Bool { preview != nil }
 
-    /// What tints their page (the feed gradient): the featured obsession's palette, else their
-    /// `hexes` (the server's newest obsession → dominant hexes). Empty = `bg`.
-    private func palette(_ p: Person) -> [String] {
-        if let id = p.featuredTitleID, let t = store.title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
-            return FanOrder.kuraHexes(t.palette)
-        }
-        return FanOrder.kuraHexes(p.hexes)
-    }
 
     private func content(_ p: Person) -> some View {
         let following = !isPreview && store.isFollowing(p.id)
         let blocked = !isPreview && store.isBlocked(p.id)
         let locked = blocked || (p.isPrivate && !following)
-        let tint = locked ? [] : palette(p)
+        let tint = locked ? [] : store.profileHexes(of: p)
         return ZStack(alignment: .top) {
             Tint.feedTail(tint).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
@@ -68,9 +62,12 @@ struct PersonProfileView: View {
                 }
                 .padding(.bottom, 150)
                 .kFeedSurface(tint, span: 900)
+                .kVeilTracking(veil)
             }
             .ignoresSafeArea(.container, edges: .top)
             .kDebugScrollAnchor()
+            // Nothing runs under the clock once the chips have scrolled away (crítica #1).
+            TopVeil(hexes: tint, span: 900, scroll: veil, reach: .statusBar)
         }
         .kFeedDockBand(tint)
     }
@@ -105,13 +102,9 @@ struct PersonProfileView: View {
                              onFollowers: { store.push(.followers(p.id, showFollowing: false)) },
                              onFollowing: { store.push(.followers(p.id, showFollowing: true)) })
             }
-            if !locked && (p.stats.obsessed + p.stats.completed) > 0 {
-                FlowLayout(spacing: 7, lineSpacing: 7) {
-                    RibbonPill(glyph: .flame, value: p.stats.obsessed)
-                    RibbonPill(glyph: .check, value: p.stats.completed)
-                    RibbonPill(glyph: .thumb, value: p.stats.liked)
-                    RibbonPill(glyph: .review, value: p.stats.reviews)
-                }
+            if !locked {
+                StatRibbon(obsessed: p.stats.obsessed, completed: p.stats.completed,
+                           liked: p.stats.liked, reviews: p.stats.reviews)
             }
             HStack(spacing: 8) {
                 if blocked {
@@ -296,7 +289,7 @@ private struct UnblockButton: View {
     @State private var busy = false
 
     var body: some View {
-        GlassButton(title: busy ? "Desbloqueando…" : "Desbloquear", height: 48, fontSize: 16) {
+        GlassButton(title: busy ? "Desbloqueando…" : "Desbloquear", height: 48, fontSize: 16, flat: true) {
             guard !busy else { return }
             busy = true
             Task {
@@ -388,6 +381,7 @@ struct FollowersView: View {
     let personID: String
     @State var showFollowing: Bool
     @State private var query = ""
+    @State private var veil = VeilScroll()
 
     var body: some View {
         let p = store.person(personID)
@@ -406,13 +400,29 @@ struct FollowersView: View {
         let mutual = list.filter { store.isFollowing($0.id) }
         let rest = list.filter { !store.isFollowing($0.id) }
 
-        ScrollView(showsIndicators: false) {
+        // The person's surface carries over from their profile (crítica #17: it went to flat
+        // black on the way in); a locked or blocked profile stays `bg`, like the profile.
+        let locked = p.map { store.isBlocked($0.id) || ($0.isPrivate && !store.isFollowing($0.id)) } ?? true
+        let tint = isMe ? store.myProfileHexes : (locked ? [] : p.map { store.profileHexes(of: $0) } ?? [])
+        let first = isMe ? "" : (p?.name.split(separator: " ").first.map { String($0).lowercased() } ?? "@\(handle)")
+        let title = isMe ? (showFollowing ? "a quién sigues" : "tus seguidores")
+                         : (showFollowing ? "a quién sigue \(first)" : "seguidores de \(first)")
+
+        ZStack(alignment: .top) {
+            Tint.feedTail(tint).ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    BackChip()
-                    Spacer()
-                    Text("@\(p?.handle ?? personID)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
-                }
+                BackChip()
+                // The page says whose people these are (crítica #17: a mono @handle in the corner was
+                // the only orientation). Newsreader lowercase, like every screen title.
+                Text(title)
+                    .font(.kura.screenTitle)
+                    .foregroundStyle(KColor.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, 2)
+                    .animation(nil, value: showFollowing)
                 HStack(spacing: 4) {
                     tab("\(followersCount) seguidores", on: !showFollowing) { showFollowing = false }
                     tab("\(followingCount) siguiendo", on: showFollowing) { showFollowing = true }
@@ -442,8 +452,9 @@ struct FollowersView: View {
                         }
                     } else if let denied {
                         // Their setting keeps you out (`followListsVisibility`); the counts above
-                        // are public either way. The server's words.
-                        Text(denied).font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
+                        // are public either way. The server's words, in the private profile's shape.
+                        PrivateListNote(note: denied, following: showFollowing)
+                            .padding(.top, 12)
                     } else if list.isEmpty && !q.isEmpty {
                         Text("Nadie con ese nombre.").font(.kura.ui(15)).foregroundStyle(KColor.text2).padding(.top, 12)
                     } else if list.isEmpty && !isMe && (meta?.anonymous ?? 0) == 0 {
@@ -481,8 +492,16 @@ struct FollowersView: View {
             .padding(.top, KSize.chromeTop)
             .padding(.horizontal, 24)
             .padding(.bottom, 150)
+            // At least the gradient's span: a short list (a note, two rows) would otherwise end the
+            // gradient mid-screen, over the darker tail.
+            .frame(maxWidth: .infinity, minHeight: 900, alignment: .topLeading)
+            .kFeedSurface(tint, span: 900)
+            .kVeilTracking(veil)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+            TopVeil(hexes: tint, span: 900, scroll: veil, reach: .statusBar)
         }
-        .ignoresSafeArea(.container, edges: .top)
+        .kFeedDockBand(tint)
         .task(id: key) { await store.loadPeopleList(of: personID, following: showFollowing) }
     }
 
@@ -520,6 +539,47 @@ struct FollowersView: View {
         .contentShape(Rectangle())
         .opacity(dimmed ? 0.5 : 1)
         .kPressable(.row(inset: -10)) { if !dimmed { store.push(.person(p.id)) } }
+    }
+}
+
+/// A list its owner keeps closed to you (crítica #34): the private profile's shape — lock, a
+/// Newsreader line, the server's words under it — not a loose line over an empty page.
+private struct PrivateListNote: View {
+    let note: String
+    let following: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "lock.fill").font(.system(size: 17))
+                .foregroundStyle(KColor.text2)
+                .frame(width: 52, height: 52)
+                .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
+                .padding(.bottom, 6)
+            Text(following ? "a quién sigue es privado." : "sus seguidores son privados.")
+                .font(.kura.news(24)).foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(note)
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Los números de arriba se ven siempre.")
+                .font(.kura.ui(13)).foregroundStyle(KColor.text3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension AppStore {
+    /// What tints someone's page (the feed gradient) — their profile and their seguidores: the
+    /// featured obsession's palette, else their `hexes` (the server's newest obsession → dominant
+    /// hexes). Empty = `bg`.
+    func profileHexes(of p: Person) -> [String] {
+        if let id = p.featuredTitleID, let t = title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        return FanOrder.kuraHexes(p.hexes)
     }
 }
 

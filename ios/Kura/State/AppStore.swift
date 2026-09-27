@@ -53,7 +53,7 @@ enum SheetRoute: Identifiable, Hashable {
 
     var style: SheetStyle {
         if case .addTitles = self { return .tall }
-        if case .reorder = self { return .tall }
+        // Reordenar ("editar el orden") is compact: it hugs its rows (critica 2026-09-27 #28).
         return .compact
     }
 
@@ -649,7 +649,7 @@ final class AppStore {
         recentlyViewed = ["chihiro", "ma", "severance", "mala", "pearl"]
         for t in MockData.titles { register(t) }
         for p in MockData.people { people[p.id] = p }
-        defaultPrivacy = .followers
+        defaultPrivacy = .onlyMe
     }
     #endif
 
@@ -1238,7 +1238,8 @@ final class AppStore {
     /// no se debería esconder al entrar a los ítems ni a las colecciones") — pushed or opened as a
     /// hero over a root, which never touches it (so the base's bottom safe area never changes
     /// under a hero: learning 2026-09-27-transformar-la-base-le-quita-el-safe-area). It hides on
-    /// the other pushes (ajustes, seguidores, una persona…) and while Descubrir is searching.
+    /// the other pushes (ajustes, recap, avisos…) and while Descubrir is searching. A person and
+    /// their seguidores keep it too (`Route.keepsDock`).
     func dockVisible(_ tab: Tab) -> Bool {
         guard let top = path(tab).last else { return !(dockHidden && tab == .discover) }
         return top.keepsDock

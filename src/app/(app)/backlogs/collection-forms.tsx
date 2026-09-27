@@ -29,17 +29,16 @@ import {
 /* ------------------------------------------------------------ privacidad */
 
 /**
- * K1a mapped onto the product (F3.10.1). The frame draws Pública /
- * Seguidores / Solo yo; the product has `is_public` + `show_on_profile`, so:
- * Pública = public AND on the profile (the default), "Seguidores" does not
- * exist (omitted — K1b was never built), Solo yo = private. The third state
- * the product DOES have — public by link but off the profile — keeps its row
- * as "Con el link".
+ * K1a mapped onto the product (F3.10.1): `is_public` + `show_on_profile` give
+ * three states, and they have ONE vocabulary everywhere — web, iOS, Ajustes,
+ * the privacy page (critique 2026-09-27, twin of iOS `Privacy.label`):
+ * Solo yo · Con el link · En tu perfil, in that order (the narrowest first).
+ * "Seguidores" (K1b) was never built and isn't offered.
  */
 export const VISIBILITY_LABEL: Record<BacklogVisibility, string> = {
-  featured: "Pública",
-  public: "Con el link",
   private: "Solo yo",
+  public: "Con el link",
+  featured: "En tu perfil",
 };
 
 const CHOICES: {
@@ -48,9 +47,9 @@ const CHOICES: {
   description: string;
 }[] = [
   {
-    id: "featured",
-    icon: <KIcon name="globe" size={18} strokeWidth={1.8} />,
-    description: "En tu perfil y con el link, con o sin cuenta.",
+    id: "private",
+    icon: <FillIcon d={LOCK_FILL} size={18} />,
+    description: "Solo tú. No aparece en tu perfil y el link no abre.",
   },
   {
     id: "public",
@@ -58,9 +57,9 @@ const CHOICES: {
     description: "Fuera de tu perfil. La abre quien tenga el link.",
   },
   {
-    id: "private",
-    icon: <FillIcon d={LOCK_FILL} size={18} />,
-    description: "Solo tú. No aparece en tu perfil y el link no abre.",
+    id: "featured",
+    icon: <KIcon name="globe" size={18} strokeWidth={1.8} />,
+    description: "En tu perfil y con el link, con o sin cuenta.",
   },
 ];
 
@@ -149,6 +148,9 @@ export function PrivacyBody({
  * optional italic line (`vibe`, ≤ 80; saved empty = cleared). The frame's O2b
  * only draws the name ("renombrar"); the row is "Editar" because it edits both.
  */
+const VIBE_MAX = 80;
+const FIELD_LABEL = "px-1 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2";
+
 export function RenameBody({
   backlogId,
   name: currentName,
@@ -188,36 +190,57 @@ export function RenameBody({
     >
       <SheetTitle>editar</SheetTitle>
       <div className="mt-1.5 flex flex-col gap-3.5">
-        <div className="relative">
-          <input
-            autoFocus
-            required
-            maxLength={60}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Nombre de la colección"
-            placeholder="Nombre"
-            className={`${SHEET_FIELD} pr-12`}
+        {/* Persistent labels (critique 2026-09-27): once both fields are
+            filled, the placeholders are gone and nothing said which was which. */}
+        <label className="flex flex-col gap-1.5">
+          <span className={FIELD_LABEL}>nombre</span>
+          <span className="relative block">
+            <input
+              autoFocus
+              required
+              maxLength={60}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nombre"
+              className={`${SHEET_FIELD} pr-12`}
+            />
+            {name && (
+              <button
+                type="button"
+                aria-label="Borrar el nombre"
+                onClick={() => setName("")}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-text-2"
+              >
+                <KIcon name="close" size={14} />
+              </button>
+            )}
+          </span>
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="flex items-baseline justify-between gap-3">
+            <span className={FIELD_LABEL}>frase</span>
+            <span className={FIELD_LABEL} aria-hidden>
+              {vibe.length}/{VIBE_MAX}
+            </span>
+          </span>
+          {/* The whole phrase stays visible: up to three lines, growing with
+              it (`field-sizing: content`), never cut to one. Enter saves — a
+              phrase has no line breaks. */}
+          <textarea
+            maxLength={VIBE_MAX}
+            rows={1}
+            value={vibe}
+            onChange={(e) => setVibe(e.target.value.replace(/\s*\n\s*/g, " "))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Una frase para esta colección (opcional)"
+            className="min-h-[52px] max-h-[106px] w-full resize-none rounded-[16px] bg-[var(--glass-bg)] px-[18px] py-[14px] font-sans text-[16px] leading-[1.5] text-text outline-none transition-colors [field-sizing:content] placeholder:text-text-3 focus:bg-white/[0.11]"
           />
-          {name && (
-            <button
-              type="button"
-              aria-label="Borrar el nombre"
-              onClick={() => setName("")}
-              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-text-2"
-            >
-              <KIcon name="close" size={14} />
-            </button>
-          )}
-        </div>
-        <input
-          maxLength={80}
-          value={vibe}
-          onChange={(e) => setVibe(e.target.value)}
-          aria-label="Frase de la colección (opcional)"
-          placeholder="Una frase para esta colección (opcional)"
-          className="h-[52px] w-full rounded-[16px] bg-[var(--glass-bg)] px-[18px] font-sans text-[16px] text-text outline-none transition-colors placeholder:text-text-3 focus:bg-white/[0.11]"
-        />
+        </label>
         <span className="px-1 font-sans text-[13px] leading-[1.5] text-text-2">
           {failed
             ? "No se pudo guardar. Revisa tu conexión e inténtalo otra vez."

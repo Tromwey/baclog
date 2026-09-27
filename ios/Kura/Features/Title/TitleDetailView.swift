@@ -66,6 +66,7 @@ private struct TitleHeader: View {
     @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduce
     let title: Title
+    @State private var showLegend = false
 
     var body: some View {
         let t = title
@@ -114,7 +115,15 @@ private struct TitleHeader: View {
                 ZStack {
                     CountRibbon(items: [(.check, "0")]).hidden().accessibilityHidden(true)
                     if let c = t.counts {
+                        // 🔥 vs 👍 isn't self-evident: a tap opens the legend (VoiceOver already reads
+                        // every count with its name).
                         CountRibbon(items: ribbon(c))
+                            .contentShape(Rectangle())
+                            .onTapGesture { showLegend = true }
+                            .popover(isPresented: $showLegend, arrowEdge: .top) {
+                                ribbonLegend(c).presentationCompactAdaptation(.popover)
+                            }
+                            .accessibilityElement(children: .ignore)
                             .accessibilityLabel(ribbonA11y(c))
                             .transition(.opacity)
                     }
@@ -122,19 +131,16 @@ private struct TitleHeader: View {
                 .padding(.top, 2)
                 .kAnimation(KMotion.short, value: t.counts != nil)
 
-                HStack(spacing: 8) {
-                    if !(unreleased && t.format == .album) {
-                        completeButton(t, mark: mark, solid: today)
-                    }
-                    SaveChip(titleID: t.id, style: .pill)
-                    if !unreleased && !today && t.format != .series {
-                        IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, flat: true, label: "Reseñar") {
-                            store.present(.complete(titleID: t.id, focusReview: true))
-                        }
-                    }
+                // Always centered inside the page's 24 pt gutter, whatever the state: when the three
+                // pills don't fit at 15 (a long reaction + "En N colecciones" on a 402 pt screen) the
+                // row tightens to 14; only past that does the first pill drop to its glyph.
+                ViewThatFits(in: .horizontal) {
+                    actionRow(t, unreleased: unreleased, today: today, mark: mark, size: .regular)
+                    actionRow(t, unreleased: unreleased, today: today, mark: mark, size: .compact)
+                    actionRow(t, unreleased: unreleased, today: today, mark: mark, size: .glyph)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.top, 8)
-                .padding(.horizontal, -10)
                 // A row of 44 pt pills: it holds up to xxxLarge, past that it would truncate.
                 .kFixedChrome()
 
@@ -156,22 +162,80 @@ private struct TitleHeader: View {
         }
     }
 
-    private func completeButton(_ t: Title, mark: Mark?, solid: Bool) -> some View {
-        Button {
+    private enum RowSize { case regular, compact, glyph }
+
+    @ViewBuilder
+    private func actionRow(_ t: Title, unreleased: Bool, today: Bool, mark: Mark?, size: RowSize) -> some View {
+        HStack(spacing: size == .regular ? 8 : 6) {
+            // Not out yet: nothing to complete — the release alert takes the first slot (the
+            // same toggle as "Avísame cuando llegue" in dónde ver).
+            if unreleased {
+                alertButton(t, size: size)
+            } else {
+                completeButton(t, mark: mark, solid: today, size: size)
+            }
+            SaveChip(titleID: t.id, style: .pill, compact: size != .regular)
+            if !unreleased && !today && t.format != .series {
+                IconChip44(systemName: "bubble", iconSize: 16, weight: .regular, flat: true, label: "Reseñar") {
+                    store.present(.complete(titleID: t.id, focusReview: true))
+                }
+            }
+        }
+        .fixedSize()
+    }
+
+    private func alertButton(_ t: Title, size: RowSize) -> some View {
+        let on = store.alerts.contains(t.id)
+        return Button { store.toggleAlert(t.id) } label: {
+            HStack(spacing: 8) {
+                GlyphView(glyph: on ? .check : .clock, size: 16, color: on ? KColor.text2 : KColor.waiting)
+                if size != .glyph {
+                    Text(on ? "Te avisamos" : "Avísame")
+                        .font(.kura.ui(size == .regular ? 15 : 14, .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .contentTransition(.interpolate)
+                }
+            }
+            .foregroundStyle(KColor.text)
+            .padding(.leading, size == .glyph ? 0 : (size == .regular ? 14 : 12))
+            .padding(.trailing, size == .glyph ? 0 : (size == .regular ? 16 : 14))
+            .frame(minWidth: 44, minHeight: 44)
+            .background(KColor.glassBg, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .kPress()
+        .kAnimation(KMotion.short, value: on)
+        .accessibilityLabel(on ? "Te avisamos del estreno" : "Avísame del estreno")
+        .accessibilityHint(on ? "Quitar el aviso" : "")
+    }
+
+    private func completeButton(_ t: Title, mark: Mark?, solid: Bool, size: RowSize) -> some View {
+        let fillSolid = solid && mark == nil
+        return Button {
             store.present(.complete(titleID: t.id, focusReview: false))
         } label: {
             HStack(spacing: 8) {
-                if let mark { GlyphView(glyph: mark.glyph, size: 16).transition(reduce ? .opacity : .scale.combined(with: .opacity)) }
-                Text(mark?.myLabel ?? "Completar")
-                    .font(.kura.ui(15, .semibold))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .contentTransition(.interpolate)
+                // "Completar" carries its check like the pills next to it (neutral until you react).
+                if let mark {
+                    GlyphView(glyph: mark.glyph, size: 16).transition(reduce ? .opacity : .scale.combined(with: .opacity))
+                } else {
+                    Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(fillSolid ? KColor.bg : KColor.text2)
+                }
+                if size != .glyph {
+                    Text(mark?.myLabel ?? "Completar")
+                        .font(.kura.ui(size == .regular ? 15 : 14, .semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .contentTransition(.interpolate)
+                }
             }
-            .foregroundStyle(solid && mark == nil ? KColor.bg : KColor.text)
-            .padding(.leading, mark == nil ? (solid ? 18 : 16) : 14).padding(.trailing, solid ? 18 : 16)
-            .frame(height: 44)
-            .background(solid && mark == nil ? KColor.text : KColor.glassBg, in: Capsule())
+            .foregroundStyle(fillSolid ? KColor.bg : KColor.text)
+            .padding(.leading, size == .glyph ? 0 : (size == .regular ? 14 : 12))
+            .padding(.trailing, size == .glyph ? 0 : (size == .regular ? (solid ? 18 : 16) : 14))
+            .frame(minWidth: 44, minHeight: 44)
+            .background(fillSolid ? KColor.text : KColor.glassBg, in: Capsule())
             .contentShape(Capsule())
         }
         .kPress()
@@ -198,6 +262,26 @@ private struct TitleHeader: View {
         if let w = c.waiting { items.append((.clock, w)) }
         if c.saved != "—" { items.append((.bookmark, c.saved)) }
         return items
+    }
+
+    private func ribbonLegend(_ c: TitleCounts) -> some View {
+        var rows: [(Glyph, String, String)] = []
+        if c.obsessed != "—" { rows.append((.flame, c.obsessed, "les obsesiona")) }
+        if c.liked != "—" { rows.append((.thumb, c.liked, "les gusta")) }
+        if c.completed != "—" { rows.append((.check, c.completed, "lo completaron")) }
+        if let w = c.waiting { rows.append((.clock, w, "no pueden esperar")) }
+        if c.saved != "—" { rows.append((.bookmark, c.saved, "lo guardaron")) }
+        return VStack(alignment: .leading, spacing: 10) {
+            ForEach(rows.indices, id: \.self) { i in
+                HStack(spacing: 10) {
+                    GlyphView(glyph: rows[i].0, size: 14).frame(width: 18)
+                    Text(rows[i].1).font(.kura.mono(12)).foregroundStyle(KColor.text)
+                    Text(rows[i].2).font(.kura.ui(14)).foregroundStyle(KColor.text2)
+                }
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 16)
+        .fixedSize()
     }
 
     private func ribbonA11y(_ c: TitleCounts) -> String {
@@ -372,7 +456,7 @@ private struct TitleSections: View {
         if store.reviewCursors[t.id] != nil {
             let busy = store.reviewsPaging.contains(t.id)
             VStack(alignment: .leading, spacing: 8) {
-                GlassButton(title: busy ? "Cargando…" : "Más reseñas", systemImage: busy ? nil : "chevron.down") {
+                GlassButton(title: busy ? "Cargando…" : "Más reseñas", systemImage: busy ? nil : "chevron.down", flat: true) {
                     Task { await store.loadMoreReviews(t.id) }
                 }
                 .disabled(busy)
@@ -666,7 +750,7 @@ private struct SeriesSections: View {
                 }
                 .kPress()
             } else if store.mark(t.id) == nil {
-                GlassButton(title: "Completar", height: 44, fullWidth: true) {
+                GlassButton(title: "Completar", height: 44, fullWidth: true, flat: true) {
                     store.present(.complete(titleID: t.id, focusReview: false))
                 }
             }

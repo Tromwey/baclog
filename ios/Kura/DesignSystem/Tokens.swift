@@ -32,6 +32,15 @@ struct RGB: Hashable {
                    b: (b * (1 - k) + other.b * k).rounded())
     }
 
+    /// WCAG relative luminance (0 = black, 1 = white) — the web's `relativeLuminance`.
+    var relativeLuminance: Double {
+        func lin(_ v: Double) -> Double {
+            let x = v / 255
+            return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    }
+
     /// `0xffffff ^ hex` — used by the seal.
     var inverted: RGB { RGB(r: 255 - r, g: 255 - g, b: 255 - b) }
 
@@ -191,10 +200,33 @@ enum Tint {
     static let topTarget = RGB(hex: "#101013")
     static let bottomTarget = RGB(hex: "#0c0c10")
 
+    /// The two ends — each capped at `maxLuminance` so text on it keeps AA. Twin of the web's
+    /// `tintEnds` (src/components/kura/tint.ts); change both or neither.
     static func ends(_ palette: [String]) -> (RGB, RGB) {
         let a = RGB(hex: palette.first ?? "#6c6b76")
         let b = RGB(hex: palette.count > 1 ? palette[1] : (palette.first ?? "#6c6b76"))
-        return (a.mix(topTarget, k), b.mix(bottomTarget, min(1, k + 0.08)))
+        return (capLuminance(a.mix(topTarget, k), toward: topTarget),
+                capLuminance(b.mix(bottomTarget, min(1, k + 0.08)), toward: bottomTarget))
+    }
+
+    /// The brightest a tint end may be (critica 2026-09-27, WCAG 1.4.3 — the web's
+    /// `TINT_MAX_LUMINANCE`). A pale, desaturated cover (white sleeve, grey poster) mixed at
+    /// k = 0.65 lands on a mid grey (L ≈ 0.07) where text-2 fell to 4.4:1; at L ≤ 0.04 text-2
+    /// reads ≥ 5.8:1 on the bare end and ≥ 4.9:1 under a 5 % white card. Dark or saturated
+    /// palettes sit far below the cap and are untouched — only the pale ones get pulled further
+    /// toward their ink, hue kept.
+    static let maxLuminance = 0.04
+
+    /// Pull `c` toward `ink` just enough that its luminance is ≤ `maxLuminance` (the web's
+    /// `capLuminance`: 16 bisection steps, then the mix at the upper bound).
+    static func capLuminance(_ c: RGB, toward ink: RGB) -> RGB {
+        guard c.relativeLuminance > maxLuminance else { return c }
+        var lo = 0.0, hi = 1.0
+        for _ in 0..<16 {
+            let mid = (lo + hi) / 2
+            if c.mix(ink, mid).relativeLuminance > maxLuminance { lo = mid } else { hi = mid }
+        }
+        return c.mix(ink, hi)
     }
 
     /// Card surface: 168° gradient between the two ends (feed, collection cards).

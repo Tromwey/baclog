@@ -12,9 +12,9 @@ import type { CollectionItem, OtherCollection } from "@/modules/backlog/collecti
 import { visibilityOf } from "@/modules/backlog/visibility";
 import type { Shelf } from "@/modules/backlog/shelves";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
+import { waitMeta } from "@/modules/backlog/wait-meta";
 import {
   CollectionBody,
-  nextLabel,
   type CollectionControls,
 } from "./[backlogId]/collection-body";
 import {
@@ -454,10 +454,10 @@ function FanSlide({
 
 /** "no puedo esperar" keeps its own line: it has no credits and no order. */
 function AutoMeta({ items, now }: { items: UpcomingItem[]; now: number }) {
-  const next = items[0];
-  const meta = `${items.length} ${items.length === 1 ? "título" : "títulos"}${
-    next ? ` · el próximo ${nextLabel(releaseLabel(next.releaseDate, now))}` : ""
-  }`;
+  const meta = waitMeta(
+    items.length,
+    items.map((i) => releaseLabel(i.releaseDate, now)),
+  );
   return (
     <div className="flex flex-col items-center gap-2.5 px-6 pb-[26px] pt-1 text-center">
       <span className="font-brand text-[16px] italic leading-[1.3] text-text-2 [text-wrap:balance]">

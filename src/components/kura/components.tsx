@@ -481,7 +481,7 @@ export function CtaCard({ className = "" }: { className?: string }) {
 export function CreditsLink({ className = "" }: { className?: string }) {
   return (
     <p className={`text-center ${className}`}>
-      <Link href="/creditos" className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-3 transition-colors hover:text-text-2">
+      <Link href="/creditos" className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-colors hover:text-text">
         créditos
       </Link>
     </p>

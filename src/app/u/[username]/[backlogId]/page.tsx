@@ -201,20 +201,29 @@ export default async function PublicBacklogPage({
         {count > 0 ? (
           <Masonry items={items} />
         ) : (
-          // The read-only twin of 6b (colección vacía): the visitor isn't
-          // the owner, so no "Agregar títulos".
+          // The read-only empty state, word for word the iOS twin
+          // (PublicCollectionView): the visitor isn't the owner, so no
+          // "Agregar títulos" and no "colección nueva" — it's someone else's.
           <div className="flex flex-col items-center gap-3 px-8 text-center">
-            <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">colección nueva, repisa vacía.</p>
-            <p className="max-w-[30ch] text-[15px] leading-[1.5] text-text-2">Todavía no hay títulos aquí.</p>
+            <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">todavía está vacía.</p>
+            <p className="max-w-[30ch] text-[15px] leading-[1.5] text-text-2">@{username} no ha guardado nada aquí.</p>
           </div>
         )}
 
         {!viewer && (
-          <div className="mx-5 flex flex-col gap-2 rounded-[var(--r-screen)] bg-white/[0.05] p-[22px]">
+          // The card says what to do (critique 2026-09-27): a glass "Crear
+          // mi colección" — not honey, "Guárdala en kura" already is.
+          <div className="mx-5 flex flex-col items-start gap-2 rounded-[var(--r-screen)] bg-white/[0.05] p-[22px]">
             <span className="font-brand text-[24px] leading-[1.1] text-text">arma la tuya.</span>
             <span className="text-[14px] leading-[1.5] text-text-2">
               Películas, series y música en colecciones que se comparten como tarjeta.
             </span>
+            <Link
+              href="/login"
+              className="mt-2 inline-flex h-11 items-center rounded-full bg-[var(--glass-bg)] px-[18px] font-sans text-[15px] font-semibold text-text bl-press hover:bg-white/[0.12]"
+            >
+              Crear mi colección
+            </Link>
           </div>
         )}
         <CreditsLink />

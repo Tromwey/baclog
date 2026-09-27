@@ -481,22 +481,119 @@ struct OfflineStrip: View {
 // MARK: - Scroll helpers
 
 /// Top chrome for pushed screens: Volver (left) and Opciones (right) at 64/24.
+/// `veil: true` lays `TopVeil` (the page's own `bg`) behind the chips, so what scrolls up never
+/// runs under the clock or Volver. Only for a `bg` page; a tinted page puts its own
+/// `TopVeil(hexes:scroll:)` instead.
 struct TopChrome<Right: View>: View {
     var onBack: (() -> Void)? = nil
+    var veil = false
     @ViewBuilder var right: Right
     var body: some View {
-        HStack {
-            BackChip(action: onBack)
-            Spacer()
-            right
+        ZStack(alignment: .top) {
+            if veil { TopVeil() }
+            HStack {
+                BackChip(action: onBack)
+                Spacer()
+                right
+            }
+            .padding(.horizontal, KSize.chromeSide)
+            .padding(.top, KSize.chromeTop)
+            .kFixedChrome()
         }
-        .padding(.horizontal, KSize.chromeSide)
-        .padding(.top, KSize.chromeTop)
-        .kFixedChrome()
         // On a hero page the chrome comes in with the backdrop (first 60 %).
         .heroBackdrop()
         // chromeTop is measured from the screen's edge, never from the safe area: otherwise
         // a screen whose container respects the safe area drops its chips ~60 pt lower.
         .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+// MARK: - Top veil (crítica 2026-09-27 #1)
+
+/// Where a scrolling page's content top sits on screen, written each frame by `kVeilTracking`
+/// and read ONLY by `TopVeil` — the page itself never re-renders for a scroll frame.
+@Observable final class VeilScroll {
+    var y: CGFloat = 0
+}
+
+extension View {
+    /// Put on a tinted page's scroll CONTENT (the view that wears `kFeedSurface`): the veil then
+    /// draws the very gradient that is scrolling under it.
+    func kVeilTracking(_ scroll: VeilScroll) -> some View {
+        background(alignment: .top) {
+            GeometryReader { g in
+                Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in
+                    if scroll.y != y { scroll.y = y }
+                }
+            }
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// The band under the clock (and under Volver on a fixed-chrome page) where scrolled content
+/// fades out: the page's OWN surface, solid at the top and clear by `reach` — so at rest it's
+/// invisible (it paints what's already there) and scrolled it separates the chrome from the
+/// content. Not a glow and not glass: it's the background, drawn again over what scrolls.
+/// Flat on every OS (iOS 26's scroll edge effect needs a system bar; Kura's chrome floats).
+///
+/// - `bg` page (Ajustes, seguidores sin tinte…): `TopVeil()`.
+/// - Tinted page (`kFeedSurface`, which scrolls WITH the content): pass its `hexes`/`span` and
+///   the `VeilScroll` its content reports, so the veil shows the gradient at the same offset.
+/// - `reach`: `.chrome` when Volver/Opciones stay fixed (the veil runs behind them to the title
+///   line, 124), `.statusBar` when the chips scroll away with the page (clear by the chips' 64).
+struct TopVeil: View {
+    enum Reach {
+        case chrome, statusBar
+        var solid: CGFloat { self == .chrome ? KSize.chromeTop : 46 }
+        var end: CGFloat { self == .chrome ? KSize.pushedTitleTop : KSize.chromeTop }
+    }
+
+    var hexes: [String] = []
+    var span: CGFloat = 900
+    var scroll: VeilScroll? = nil
+    var reach: Reach = .chrome
+
+    var body: some View {
+        let r = reach
+        Group {
+            if Tint.feedEnds(hexes) == nil {
+                KColor.bg
+            } else {
+                VeilSurface(hexes: hexes, span: span, scroll: scroll, height: r.end)
+            }
+        }
+        .frame(height: r.end)
+        .mask {
+            LinearGradient(stops: [.init(color: .black, location: 0),
+                                   .init(color: .black, location: r.solid / r.end),
+                                   .init(color: .black.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The page's feed gradient as it sits under the veil right now: `FeedSurface` placed where the
+/// content's top is (`scroll.y`), its first tone above it (a pull-down), like `kFeedSurface`.
+private struct VeilSurface: View {
+    let hexes: [String]
+    let span: CGFloat
+    let scroll: VeilScroll?
+    let height: CGFloat
+
+    var body: some View {
+        let top = scroll?.y ?? 0
+        ZStack(alignment: .top) {
+            Tint.feedTop(hexes)
+            FeedSurface(hexes: hexes, span: span)
+                .frame(height: height + abs(top) + 1)
+                .offset(y: top)
+        }
+        .frame(height: height, alignment: .top)
+        .clipped()
     }
 }

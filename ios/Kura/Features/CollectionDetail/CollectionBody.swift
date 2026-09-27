@@ -92,3 +92,53 @@ extension CollectionBody where Between == EmptyView {
         self.init(collection: collection, metaTop: metaTop) { EmptyView() }
     }
 }
+
+/// The mono line under "no puedo esperar" (10a's carousel and the automatic collection's own
+/// page): "5 títulos · 1 ya salió · el próximo en 14 h". "El próximo" is the first title that is still NOT
+/// out — `waitingTitles` puts the ones that already came out last — and a label that isn't a
+/// date ("ya salió", "sin fecha") never follows "el próximo" (critica 2026-09-27 #0: it read
+/// "el próximo el ya salió").
+enum WaitingMeta {
+    @MainActor
+    static func line(_ titles: [Title], store: AppStore) -> String {
+        #if DEBUG
+        _ = selfCheck
+        #endif
+        var parts = ["\(titles.count) \(titles.count == 1 ? "título" : "títulos")"]
+        // Same line as the web's `waitMeta`: the ones already out are counted apart.
+        let out = titles.filter { !store.isUnreleased($0) && $0.upcomingSeason == nil }.count
+        if out > 0 { parts.append(out == 1 ? "1 ya salió" : "\(out) ya salieron") }
+        let next = titles.first { store.isUnreleased($0) || $0.upcomingSeason != nil }
+            .flatMap { store.releaseLabel($0) }
+            .flatMap(nextLabel)
+        if let next { parts.append("el próximo \(next)") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "14 h" → "en 14 h" · "16 oct" → "el 16 oct" · "oct 2026" / "2027" → "en …" · "hoy" stays ·
+    /// "ya salió" / "sin fecha" → nil (nothing to announce).
+    static func nextLabel(_ label: String) -> String? {
+        switch label {
+        case "ya salió", "sin fecha": return nil
+        case "hoy": return "hoy"
+        default: break
+        }
+        if label.range(of: #"^\d+ [hd]$"#, options: .regularExpression) != nil { return "en \(label)" }
+        if label.range(of: #"^\d+ \p{L}{3}( \d{4})?$"#, options: .regularExpression) != nil { return "el \(label)" }
+        return "en \(label)"
+    }
+
+    #if DEBUG
+    /// The guard (no unit-test target in the app): every DEBUG launch that draws the line checks
+    /// the table once, so a regression trips an assertion in the simulator.
+    private static let selfCheck: Void = {
+        let table: [(String, String?)] = [
+            ("ya salió", nil), ("sin fecha", nil), ("hoy", "hoy"), ("14 h", "en 14 h"), ("3 d", "en 3 d"),
+            ("16 oct", "el 16 oct"), ("16 oct 2027", "el 16 oct 2027"), ("oct 2026", "en oct 2026"), ("2027", "en 2027"),
+        ]
+        for (label, want) in table {
+            assert(nextLabel(label) == want, "WaitingMeta.nextLabel(\(label)) = \(String(describing: nextLabel(label))), want \(String(describing: want))")
+        }
+    }()
+    #endif
+}

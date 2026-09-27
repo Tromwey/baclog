@@ -15,8 +15,10 @@ import { CHIP_44, GLASS_BUTTON } from "./components";
  *   card, a list row), never chrome over art — so never `CHIP_ART`.
  * - `pill`: 44 capsule with "Guardar" / "En N colecciones" (ficha 24a–d, the
  *   rec card 19a). `icon`: 44 round chip in a list row (19a tendencias, 19f
- *   resultados); once saved it drops its fill and reads as an indicator — the
- *   filled bookmark + the count in mono — on the same 44 hit area.
+ *   resultados); once saved it KEEPS its flat fill as a 44 capsule — the
+ *   filled bookmark + the count in mono (critique 2026-09-27: without the
+ *   fill, "🔖 2" in a trending list read as a popularity metric, not as your
+ *   button). Twin of the iOS change the same day.
  */
 export function SaveChip({
   saved,
@@ -67,9 +69,9 @@ export function SaveChip({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className="flex h-11 min-w-11 flex-none items-center justify-center gap-1.5 rounded-full px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-text-2 bl-press-sm"
+        className="flex h-11 min-w-11 flex-none items-center justify-center gap-[5px] rounded-full bg-[var(--glass-bg)] pl-[11px] pr-[13px] font-mono text-[12px] uppercase tracking-[0.06em] text-text-2 bl-press-sm hover:bg-white/[0.12]"
       >
-        {glyph(14)}
+        <span className="flex text-text">{glyph(15)}</span>
         {saved}
       </button>
     );

@@ -59,7 +59,7 @@ struct SettingsView: View {
                         }
                         ListDivider()
                         SettingsRow(title: "Quién ve lo que te obsesiona", action: { store.push(.settingsPrivacy) }) {
-                            RowValue(text: store.profilePrivate ? "Solo tú" : "Todos")
+                            RowValue(text: store.profilePrivate ? "Solo yo" : "Todos")
                         }
                         ListDivider()
                         SettingsRow(title: "Cuentas bloqueadas", action: { store.push(.blockedAccounts) }) {
@@ -80,8 +80,9 @@ struct SettingsView: View {
                         SettingsRow(title: "País para dónde ver") { RowValue(text: "México") }
                     }
 
-                    // Device-local, like iOS's own haptics switch: it stays on this iPhone across sign-out.
-                    section("este iphone") {
+                    // Device-local, like iOS's own haptics switch: it stays on this device across sign-out.
+                    // "este dispositivo", not "este iphone": the mono header uppercases (IPHONE).
+                    section("este dispositivo") {
                         SettingsRow(title: "Vibraciones", note: "Respuesta háptica al tocar y deslizar.") {
                             KuraSwitch(label: "Vibraciones", isOn: Binding(
                                 get: { haptics },
@@ -182,7 +183,7 @@ struct SettingsView: View {
                 #endif
             }
             }
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .task { await store.loadIdentities() }
@@ -228,7 +229,7 @@ struct SessionsView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .task { await store.loadSessions() }
@@ -295,7 +296,7 @@ struct SessionsView: View {
             .accessibilityElement(children: .combine)
             Spacer(minLength: 8)
             if !s.current {
-                GlassButton(title: "Cerrar sesión", height: 36, fontSize: 14) {
+                GlassButton(title: "Cerrar sesión", height: 36, fontSize: 14, flat: true) {
                     store.present(.revokeSession(s))
                 }
                 .kHitArea(vertical: 4)
@@ -384,6 +385,10 @@ struct RevokeSessionSheet: View {
 
 // MARK: - K1c Ajustes · privacidad
 
+/// Same grammar as Ajustes (crítica #19): grouped `SettingsRow`s on s1 under mono headers, not
+/// loose rows. The two multi-option values open a menu with every option (`SettingsChoiceRow`).
+/// Words: a collection is Solo yo · Con el link · En tu perfil (`Privacy.label`); the lists are
+/// Solo yo · Seguidores mutuos · Todos (`FollowListsVisibility.label`) — the same everywhere.
 struct PrivacySettingsView: View {
     @Environment(AppStore.self) private var store
 
@@ -391,67 +396,49 @@ struct PrivacySettingsView: View {
         @Bindable var store = store
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("privacidad").font(.kura.screenTitle).foregroundStyle(KColor.text)
-                    .padding(.horizontal, 24).padding(.bottom, 18)
-                    .accessibilityAddTraits(.isHeader)
-                row("Perfil privado", note: "Nadie más ve tu perfil ni tus colecciones.") {
-                    KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
-                }
-                Button {
-                    let all = Privacy.options
-                    let i = all.firstIndex(of: store.defaultPrivacy) ?? 0
-                    store.defaultPrivacy = all[(i + 1) % all.count]
-                    KHaptic.play(.selection)
-                } label: {
-                    row("Colecciones nuevas", note: "Cada colección se puede cambiar en sus opciones.") {
-                        RowValue(text: store.defaultPrivacy.label)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 28) {
+                    Text("privacidad").font(.kura.screenTitle).foregroundStyle(KColor.text).padding(.horizontal, 8)
+                        .accessibilityAddTraits(.isHeader)
+                    GroupedList {
+                        SettingsRow(title: "Perfil privado", note: "Nadie más ve tu perfil ni tus colecciones.") {
+                            KuraSwitch(label: "Perfil privado", isOn: $store.profilePrivate)
+                        }
+                        ListDivider()
+                        SettingsRow(title: "Mostrar En común contigo", note: "En tu perfil, a quien te visita.") {
+                            KuraSwitch(label: "Mostrar En común contigo", isOn: $store.showCommon)
+                        }
+                    }
+                    section("quién ve") {
+                        SettingsChoiceRow(title: "Colecciones nuevas", note: "Cada colección se puede cambiar en sus opciones.",
+                                          options: Privacy.options, label: \.label, selection: $store.defaultPrivacy)
+                        ListDivider()
+                        // `followListsVisibility`: the counts stay public; this is who opens the lists.
+                        SettingsChoiceRow(title: "Tus seguidores y seguidos", note: "Los números se ven siempre.",
+                                          options: [.private, .mutuals, .public], label: \.label,
+                                          selection: $store.followListsVisibility)
+                    }
+                    GroupedList {
+                        SettingsRow(title: "Ver tu perfil como alguien que no te sigue", action: { store.push(.profileAsStranger) }) {
+                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
-                .buttonStyle(SheetRowStyle())
-                // `followListsVisibility`: the counts stay public; this is who opens the lists.
-                // A tap moves to the next option (like Colecciones nuevas), saved at once.
-                Button {
-                    let all = FollowListsVisibility.allCases
-                    let i = all.firstIndex(of: store.followListsVisibility) ?? 0
-                    store.followListsVisibility = all[(i + 1) % all.count]
-                    KHaptic.play(.selection)
-                } label: {
-                    row("Quién ve tus seguidores y seguidos", note: "Los números se ven siempre.") {
-                        RowValue(text: store.followListsVisibility.label)
-                    }
-                }
-                .buttonStyle(SheetRowStyle())
-                .accessibilityValue(store.followListsVisibility.label)
-                row("Mostrar En común contigo", note: "En tu perfil, a quien te visita.") {
-                    KuraSwitch(label: "Mostrar En común contigo", isOn: $store.showCommon)
-                }
-                Button { store.push(.profileAsStranger) } label: {
-                    row("Ver tu perfil como alguien que no te sigue", note: nil) {
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
-                    }
-                }
-                .buttonStyle(SheetRowStyle())
-                Spacer()
+                .padding(.top, KSize.pushedTitleTop)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 56)
             }
-            .padding(.top, KSize.pushedTitleTop)
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
     }
 
-    private func row<T: View>(_ title: String, note: String?, @ViewBuilder trailing: () -> T) -> some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.kura.ui(16, .medium)).foregroundStyle(KColor.text)
-                if let note { Text(note).font(.kura.ui(13)).foregroundStyle(KColor.text2) }
-            }
-            Spacer(minLength: 8)
-            trailing()
+    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).monoLabel().padding(.horizontal, 8)
+            GroupedList { content() }
         }
-        .padding(.horizontal, 20)
-        .frame(minHeight: 60)
-        .contentShape(Rectangle())
     }
 }
 
@@ -495,7 +482,7 @@ struct MusicAppView: View {
             }
             .padding(.top, KSize.pushedTitleTop)
             .padding(.horizontal, 16)
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
     }
@@ -523,7 +510,7 @@ struct DeleteAccountSheet: View {
                     store.dismissSheet()
                     store.deleteAccount()
                 }
-                GlassButton(title: "Cancelar", height: 52, fontSize: 16, fullWidth: true) { store.dismissSheet() }
+                GlassButton(title: "Cancelar", height: 52, fontSize: 16, fullWidth: true, flat: true) { store.dismissSheet() }
             }
             .padding(.top, 10)
         }

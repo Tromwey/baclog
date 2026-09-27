@@ -265,7 +265,7 @@ struct BlockedAccountsView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 56)
             }
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .task { await store.loadBlocks() }
@@ -328,7 +328,7 @@ struct BlockedAccountsView: View {
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 8)
-            GlassButton(title: working ? "…" : "Desbloquear", height: 36, fontSize: 14) {
+            GlassButton(title: working ? "…" : "Desbloquear", height: 36, fontSize: 14, flat: true) {
                 guard !working else { return }
                 busy.insert(a.id)
                 Task {

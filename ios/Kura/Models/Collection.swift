@@ -16,17 +16,17 @@ enum Privacy: String, CaseIterable, Identifiable, Hashable {
     case publicAccess, followers, onlyMe, link
     var id: String { rawValue }
 
-    /// The choices the current backend can persist.
-    static var options: [Privacy] {
-        KuraRuntime.usesMock ? [.publicAccess, .followers, .onlyMe] : [.publicAccess, .link, .onlyMe]
-    }
+    /// The choices the backend persists, in the one visibility vocabulary (founder, 2026-09-27):
+    /// Solo yo · Con el link · En tu perfil — the same words in every sheet, in Ajustes and on the
+    /// web. `.followers` is no longer offered (it was mock-only and saved as `link`).
+    static var options: [Privacy] { [.onlyMe, .link, .publicAccess] }
 
     var label: String {
         switch self {
-        case .publicAccess: return "Pública"
+        case .publicAccess: return "En tu perfil"
         case .followers: return "Seguidores"
         case .onlyMe: return "Solo yo"
-        case .link: return "Con link"
+        case .link: return "Con el link"
         }
     }
 

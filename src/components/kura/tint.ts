@@ -29,12 +29,52 @@ export function mixHex(a: string, b: string, k: number): string {
   return `#${ch(A.r, B.r)}${ch(A.g, B.g)}${ch(A.b, B.b)}`;
 }
 
-/** The two ends of a tinted surface: tone 1 pulled toward black, tone 2 further. */
+/** WCAG relative luminance of `#rrggbb` (0 = black, 1 = white). */
+export function relativeLuminance(hex: string): number {
+  const c = parseHex(hex) ?? parseHex(BG)!;
+  const lin = (v: number) => {
+    const x = v / 255;
+    return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+}
+
+/**
+ * The brightest a tint end may be (critique 2026-09-27, WCAG 1.4.3). A pale,
+ * desaturated cover (white sleeve, grey poster) mixed at k = 0.65 lands on a
+ * mid grey (#504a46, L ≈ 0.07) where `--text-2` fell to 4.4:1 and the mono
+ * meta and "arma la tuya." body under AA. At L ≤ 0.04 `--text-2` (#b9b8c2)
+ * reads ≥ 5.8:1 on the bare end and ≥ 4.9:1 under a 5 % white card. Saturated
+ * or dark palettes sit far below the cap and are untouched — only the pale
+ * ones get pulled further toward their ink, hue kept.
+ */
+export const TINT_MAX_LUMINANCE = 0.04;
+
+/** Pull `hex` toward `ink` just enough that its luminance is ≤ `max`. */
+function capLuminance(hex: string, ink: string, max = TINT_MAX_LUMINANCE): string {
+  if (relativeLuminance(hex) <= max) return hex;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 16; i++) {
+    const mid = (lo + hi) / 2;
+    if (relativeLuminance(mixHex(hex, ink, mid)) > max) lo = mid;
+    else hi = mid;
+  }
+  return mixHex(hex, ink, hi);
+}
+
+/**
+ * The two ends of a tinted surface: tone 1 pulled toward black, tone 2
+ * further — each capped at `TINT_MAX_LUMINANCE` so text on it keeps AA.
+ */
 export function tintEnds(hexes: readonly string[]): [string, string] {
   const a = hexes[0];
   const b = hexes[1] ?? hexes[0];
   if (!a) return [BG, BG];
-  return [mixHex(a, TOP_INK, K), mixHex(b, BOTTOM_INK, Math.min(1, K + 0.08))];
+  return [
+    capLuminance(mixHex(a, TOP_INK, K), TOP_INK),
+    capLuminance(mixHex(b, BOTTOM_INK, Math.min(1, K + 0.08)), BOTTOM_INK),
+  ];
 }
 
 /**

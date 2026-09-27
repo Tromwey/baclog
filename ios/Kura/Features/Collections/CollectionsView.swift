@@ -7,7 +7,7 @@ import SwiftUI
 ///    position, rubber band, projected release, spring 0.42) or a tap on a neighbour's name.
 ///    Only the fans near the position are drawn — the others slide 320 and fade — so nothing
 ///    half-shows at the edges except the NAMES: the current one centred in Newsreader 30, the previous and next pinned 142 pt
-///    off-centre at 22, dimmed to .35, so it reads that there's more on either side. Tapping the
+///    off-centre at 22, dimmed to .45, so it reads that there's more on either side. Tapping the
 ///    fan only centres it; holding one opens 9a (the options without the view rows);
 ///  - under the names, the SAME body as Colección (`CollectionBody`): credits, format pills that
 ///    filter and every title (holding one = 18c); 6b when it's empty;
@@ -377,7 +377,12 @@ private struct CollectionsCarousel: View {
     /// only the ghost wears the dashed "+".
     @ViewBuilder
     private func fanSlide(_ e: CarouselEntry, index: Int, list: [CarouselEntry]) -> some View {
-        let art = FanView(covers: fan(e), lead: 225, ghost: { if case .new = e { return true }; return false }())
+        // The ghost wears the dashed "+"; an EMPTY collection draws the same ghost without the
+        // "+" (critica 2026-09-27 #13: 6b used to leave ~250 pt of nothing where the fan goes —
+        // the profile's vitrina already drew it). Its one way in is "Agregar títulos" below.
+        let isNew: Bool = { if case .new = e { return true }; return false }()
+        let emptyShelf = e.collection?.titleIDs.isEmpty ?? false
+        let art = FanView(covers: fan(e), lead: 225, ghost: isNew || emptyShelf, plus: isNew)
             .frame(width: 300)
             .contentShape(Rectangle())
         let adjust: (AccessibilityAdjustmentDirection) -> Void = { dir in
@@ -438,7 +443,8 @@ private struct CollectionsCarousel: View {
                     .foregroundStyle(KColor.text2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                GlassButton(title: "Nueva colección", systemImage: "plus") {
+                // Content, not floating chrome: flat on every OS (never Liquid Glass).
+                GlassButton(title: "Nueva colección", systemImage: "plus", flat: true) {
                     store.present(.newCollection(addingTitleID: nil))
                 }
                 .padding(.top, 6)
@@ -450,26 +456,18 @@ private struct CollectionsCarousel: View {
     }
 
     private func autoMeta(_ ts: [Title]) -> some View {
-        let next = ts.first.flatMap { store.releaseLabel($0) }.map { " · el próximo \(Self.nextLabel($0))" } ?? ""
-        return VStack(spacing: 8) {
+        VStack(spacing: 8) {
             Text("se llena sola con lo que aún no sale")
                 .font(.kura.newsItalic(15))
                 .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("\(ts.count) \(ts.count == 1 ? "título" : "títulos")\(next)").monoLabel(11).multilineTextAlignment(.center)
+            Text(WaitingMeta.line(ts, store: store)).monoLabel(11).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 32)
         .padding(.top, 4)
         .padding(.bottom, 22)
-    }
-
-    /// "4 d" → "en 4 d" · "17 oct" → "el 17 oct" · "hoy" stays.
-    static func nextLabel(_ label: String) -> String {
-        if label == "hoy" { return "hoy" }
-        let countdown = label.range(of: #"^\d+ [hd]$"#, options: .regularExpression) != nil
-        return countdown ? "en \(label)" : "el \(label)"
     }
 }
 
@@ -507,12 +505,13 @@ private struct CarouselFans<Slide: View>: View {
 private struct CarouselName {
     let id: String
     let name: String
-    /// The ghost's name is a placeholder: .6 in the centre.
+    /// The ghost's name. Drawn in `text` like any other (critica 2026-09-27 #30: dimmed to .6 it
+    /// read as disabled).
     let ghost: Bool
 }
 
 /// The strip of names, all from the position: the centre in Newsreader 30; a neighbour pinned
-/// 142 pt off-centre (its near edge) at 22 and .35; past that it slides 278 pt more per
+/// 142 pt off-centre (its near edge) at 22 and .45; past that it slides 278 pt more per
 /// collection and fades out. Tapping a neighbour goes there.
 private struct CarouselNames: View {
     let pos: KSpring
@@ -534,8 +533,9 @@ private struct CarouselNames: View {
                         // CSS: left 50% + translateX((−50 + 50·cd)% + px) → the centre sits at
                         // mid + px + cd·w/2.
                         let px = 142 * cd + (a > 1 ? (d > 0 ? 1 : -1) * (a - 1) * 278 : 0)
-                        let op = a <= 1 ? 1 - 0.65 * a : max(0, 0.35 * (2 - a))
-                        let ghost: CGFloat = e.ghost ? 1 - 0.4 * max(0, 1 - a) : 1
+                        // Neighbours at .45 (≈3.6:1 on the darkest tint): they're tappable, so
+                        // they clear WCAG 1.4.11's 3:1 (critica 2026-09-27 #32; was .35 ≈ 2.9:1).
+                        let op = a <= 1 ? 1 - 0.55 * a : max(0, 0.45 * (2 - a))
                         let neighbour = abs(i - centre) == 1
                         Text(e.name)
                             .font(.kura.news(30))
@@ -546,7 +546,7 @@ private struct CarouselNames: View {
                                 GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
                             }
                             .scaleEffect(scale)
-                            .opacity(Double(op * ghost))
+                            .opacity(Double(op))
                             .position(x: mid + px + cd * w / 2, y: 22)
                             .onTapGesture { if neighbour { tap(i) } }
                             .allowsHitTesting(neighbour)
@@ -737,7 +737,7 @@ struct NoCollectionsView: View {
                         .foregroundStyle(KColor.text2)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                    GlassButton(title: "Nueva colección", systemImage: "plus") {
+                    GlassButton(title: "Nueva colección", systemImage: "plus", flat: true) {
                         store.present(.newCollection(addingTitleID: nil))
                     }
                     .padding(.top, 6)
@@ -758,7 +758,7 @@ struct NewCollectionSheet: View {
     let addingTitleID: String?
     var movingFrom: String? = nil
     @State private var name = ""
-    @State private var privacy: Privacy = .followers
+    @State private var privacy: Privacy = .onlyMe
     @State private var privacySeeded = false
     @State private var choosingPrivacy = false
     @FocusState private var focused: Bool

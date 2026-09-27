@@ -46,7 +46,7 @@ struct RecapView: View {
                     BackChip()
                     // The month with its short year ("agosto ’26"); the mono "Recap · agosto 2026"
                     // above it said the month twice (founder, 2026-09-27).
-                    RecapMonthTitle(month: r.month, year: r.year, size: 52, italic: true)
+                    RecapMonthTitle(month: r.month, year: r.year, size: 52)
                     HStack(alignment: .bottom, spacing: 16) {
                         Button { store.push(.title(top.id)) } label: { CoverView(title: top, width: 170, height: 170).zoomSource(ZoomID.title(top.id)) }
                             .buttonStyle(.plain)
@@ -56,19 +56,7 @@ struct RecapView: View {
                             if let c = top.lowerCreator { Text(c).font(.kura.ui(14)).foregroundStyle(KColor.text2) }
                         }
                     }
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 18) {
-                        ForEach(r.tiles, id: \.1) { v, l, g in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(v).font(.kura.mono(34)).foregroundStyle(KColor.text)
-                                HStack(spacing: 7) {
-                                    GlyphView(glyph: g, size: 13, color: g == .bookmark ? KColor.text2 : nil)
-                                    Text(l).monoLabel()
-                                }
-                            }
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                    .padding(.vertical, 6)
+                    RecapStatsGrid(recap: r)
                     VStack(alignment: .leading, spacing: 12) {
                         Text("También en tu mes").monoLabel(11, tracking: 0.1)
                         // A strip that SCROLLS, bled to the screen's edges. It was a bare HStack:
@@ -89,7 +77,7 @@ struct RecapView: View {
                         .padding(.vertical, -20)
                     }
                     HStack(spacing: 8) {
-                        GlassButton(title: "Compartir tarjeta", height: 46) { store.push(.recapShare(era: r.era)) }
+                        GlassButton(title: "Compartir tarjeta", height: 46, flat: true) { store.push(.recapShare(era: r.era)) }
                         Button("Meses anteriores") { store.push(.recapHistory) }
                             .font(.kura.ui(15, .semibold))
                             .foregroundStyle(KColor.text2)
@@ -107,6 +95,30 @@ struct RecapView: View {
     }
 }
 
+/// The month's four numbers (completos · obsesiones · reseñas · guardados) in a 2×2 — ONE set of
+/// metrics for the recap and for "este mes" in Meses anteriores (critique 2026-09-27: the two
+/// screens counted different things). Twin of the web's `recap/recap-stats.tsx`.
+struct RecapStatsGrid: View {
+    let recap: RecapPayload
+    var size: CGFloat = 34
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 18) {
+            ForEach(recap.tiles, id: \.1) { v, l, g in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(v).font(.kura.mono(size)).foregroundStyle(KColor.text)
+                    HStack(spacing: 7) {
+                        GlyphView(glyph: g, size: 13, color: g == .bookmark ? KColor.text2 : nil)
+                        Text(l).monoLabel()
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
 struct EmptyRecapView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
@@ -114,21 +126,22 @@ struct EmptyRecapView: View {
             BackChip()
             Spacer()
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s2).frame(width: 84, height: 126)
-                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126)
-                    RoundedRectangle(cornerRadius: KRadius.coverS).fill(KColor.s1).frame(width: 84, height: 126).opacity(0.5)
-                }
+                // The ghost fan (dashed front, no "+"): a month still being filled. Three flat grey
+                // blocks in a row read as a loading skeleton.
+                FanView(covers: [], lead: 150, ghost: true, plus: false)
+                    .padding(.bottom, 6)
+                // Roman: italic is for works, and this is a sentence.
                 Text("tu recap de \(monthName(0)) todavía se está escribiendo.")
-                    .font(.kura.newsItalic(44)).foregroundStyle(KColor.text)
+                    .font(.kura.news(44)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("El recap llega el 1 de \(monthName(1)) con lo que completes, califiques o reseñes este mes.")
+                // Same words as the web (and as the recap's own tiles: guardados · completos · reseñas).
+                Text("El recap llega el 1 de \(monthName(1)) con lo que guardes, completes o reseñes este mes.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Faltan \(daysLeft) días").font(.kura.mono(12)).foregroundStyle(KColor.text2)
+                Text(daysLeft == 1 ? "Falta 1 día" : "Faltan \(daysLeft) días").font(.kura.mono(12)).foregroundStyle(KColor.text2)
             }
             Spacer()
-            GlassButton(title: "Ir a tus colecciones", height: 46) { store.pop(); store.select(.collections) }
+            GlassButton(title: "Ir a tus colecciones", height: 46, flat: true) { store.pop(); store.select(.collections) }
         }
         .padding(.top, KSize.chromeTop)
         .padding(.horizontal, 24)
@@ -154,15 +167,15 @@ struct EmptyRecapView: View {
     }
 }
 
-/// "agosto ’26": the month in Newsreader with its two-digit year a size down in `text2`, on one
-/// line (it shrinks a little before it would wrap, e.g. "septiembre" on a 375 pt screen).
+/// "agosto ’26": the month in Newsreader ROMAN (italic is for works, never a screen's title — the
+/// recap drew it italic and Meses anteriores roman) with its two-digit year a size down in `text2`,
+/// on one line (it shrinks a little before it would wrap, e.g. "septiembre" on a 375 pt screen).
 struct RecapMonthTitle: View {
     let month: String
     let year: Int
     let size: CGFloat
-    let italic: Bool
 
-    private func face(_ s: CGFloat) -> Font { italic ? .kura.newsItalic(s) : .kura.news(s) }
+    private func face(_ s: CGFloat) -> Font { .kura.news(s) }
 
     var body: some View {
         (Text(month).font(face(size)).foregroundColor(KColor.text)
@@ -176,72 +189,61 @@ struct RecapMonthTitle: View {
 
 // MARK: - O8 Meses anteriores
 
+/// The screen says what it is (critique 2026-09-27, same as the web's `recap/meses/page.tsx`): the
+/// h1 is "meses anteriores" (Newsreader roman 40); then the newest month as a labelled block —
+/// "este mes" when it is the month in progress, else "tu último mes" — with the SAME four numbers
+/// as the recap (`RecapStatsGrid`), opening its recap; then every OLDER month as a miniature
+/// (108×192, tinted by its "lo más tuyo", cover + month + short year). No rotated "tus recaps"
+/// spine and no "KURA" on each miniature: those belong to the exportable card.
+/// ("agosto ’26" as the big title is the RECAP's — founder — not this screen's.)
 struct RecapHistoryView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         let current = store.currentRecap
         let months = store.recapMonths ?? []
+        let older = Array(months.dropFirst())
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack { BackChip(); Spacer() }
                     .padding(.horizontal, KSize.chromeSide)
                     .padding(.bottom, 14)
-                Group {
-                    if let current {
-                        RecapMonthTitle(month: current.month, year: current.year, size: 40, italic: false)
-                    } else {
-                        Text("recap").font(.kura.news(40)).foregroundStyle(KColor.text)
-                    }
-                }
-                .padding(.horizontal, 20)
-                HStack(spacing: 10) {
-                    tile(String(current?.stats.completed ?? 0), "completos")
-                    tile(String(current?.stats.obsessed ?? 0), "obsesiones")
-                    if let h = current?.stats.hours { tile("\(h) h", "de cine") } else { tile(String(current?.stats.reviews ?? 0), "reseñas") }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                Text("meses anteriores").font(.kura.section).foregroundStyle(KColor.text)
-                    .padding(.horizontal, 20).padding(.top, 40).padding(.bottom, 12)
-                HStack(spacing: 0) {
-                    SpineLabel(text: "tus recaps", height: 228)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(months) { m in
-                                let month = m.label.split(separator: " ").first.map(String.init) ?? m.era
-                                if let t = store.recaps[m.era]?.top {
-                                    // Opens THAT month (it used to pop back to the newest,
-                                    // whichever you tapped).
-                                    Button { store.openRecapMonth(m.era) } label: {
-                                        VStack {
-                                            Text("KURA").font(.kura.mono(10)).tracking(1).foregroundStyle(KColor.text2)
-                                            Spacer()
-                                            CoverImage(url: t.coverURL, palette: t.palette)
-                                                .frame(width: 64, height: 64)
-                                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                            Spacer()
-                                            Text(month).font(.kura.news(18)).foregroundStyle(KColor.text)
-                                        }
-                                        .padding(.vertical, 14).padding(.horizontal, 10)
-                                        .frame(width: 108, height: 192)
-                                        .background(recapGradient(t.palette), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                        .kShadow(.cover)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Recap de \(month)")
-                                } else {
-                                    Skeleton(radius: 14).frame(width: 108, height: 192)
-                                        .task { await store.loadRecap(era: m.era) }
-                                }
-                            }
+                Text("meses anteriores").font(.kura.news(40)).foregroundStyle(KColor.text)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 20)
+                if let current {
+                    Button { store.openRecapMonth(current.era) } label: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("\(isInProgress(current.era) ? "este mes" : "tu último mes") · \(current.month) \u{2019}\(String(format: "%02d", current.year % 100))")
+                                .monoLabel(11, tracking: 0.1)
+                            RecapStatsGrid(recap: current, size: 30)
                         }
-                        .padding(.vertical, 18)
-                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .kPress()
+                    .padding(.horizontal, 20)
+                    .padding(.top, 22)
+                }
+                Group {
+                    if older.isEmpty {
+                        Text("Este es tu primer mes. Los anteriores se guardan aquí.")
+                            .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                            .padding(.horizontal, 20)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(older) { m in miniature(m) }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 18) // room for the covers' shadow (a scroll view clips)
+                        }
+                        .padding(.vertical, -18)
                     }
                 }
-                .background(KColor.s1)
-                .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
-                .padding(.horizontal, 12)
+                .padding(.top, 32)
             }
             .padding(.top, KSize.chromeTop)
             .padding(.bottom, 60)
@@ -250,14 +252,39 @@ struct RecapHistoryView: View {
         .task { await store.loadRecap() }
     }
 
-    private func tile(_ v: String, _ l: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(v).font(.kura.news(28)).foregroundStyle(KColor.text)
-            Text(l).monoLabel()
+    @ViewBuilder
+    private func miniature(_ m: RecapMonth) -> some View {
+        let month = m.label.split(separator: " ").first.map(String.init) ?? m.era
+        let yy = m.era.split(separator: "-").first.map { "\u{2019}" + String($0.suffix(2)) } ?? ""
+        if let t = store.recaps[m.era]?.top {
+            // Opens THAT month (it used to pop back to the newest, whichever you tapped).
+            Button { store.openRecapMonth(m.era) } label: {
+                VStack(spacing: 12) {
+                    Spacer(minLength: 0)
+                    CoverImage(url: t.coverURL, palette: t.palette)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: KRadius.coverS, style: .continuous))
+                    VStack(spacing: 4) {
+                        Text(month).font(.kura.news(18)).foregroundStyle(KColor.text)
+                        Text(yy).font(.kura.mono(10)).tracking(0.8).foregroundStyle(KColor.text2)
+                    }
+                }
+                .padding(.vertical, 14).padding(.horizontal, 10)
+                .frame(width: 108, height: 192)
+                .background(recapGradient(t.palette), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .kShadow(.cover)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Recap de \(m.label)")
+        } else {
+            Skeleton(radius: 14).frame(width: 108, height: 192)
+                .task { await store.loadRecap(era: m.era) }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+    }
+
+    private func isInProgress(_ era: String) -> Bool {
+        let c = store.cal.dateComponents([.year, .month], from: store.now)
+        return era == String(format: "%04d-%02d", c.year ?? 0, c.month ?? 0)
     }
 }
 

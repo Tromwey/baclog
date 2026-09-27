@@ -463,7 +463,7 @@ private struct SearchMode: View {
                 Text(e == .offline ? "sin conexión." : "el catálogo no responde.").font(.kura.news(32)).foregroundStyle(KColor.text)
                 Text(e == .offline ? "Revisa tu red y vuelve a buscar." : "Inténtalo de nuevo en un momento.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
-                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { submit(q) }
+                GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", flat: true) { submit(q) }
                 Spacer()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -641,7 +641,7 @@ private struct NoResults: View {
             Text("Revisa cómo se escribe, o busca por persona o año.")
                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
             if let c = SearchIndex.correction(for: query, store) {
-                GlassButton(title: "Buscar “\(c)”", systemImage: "magnifyingglass") { fix(c) }
+                GlassButton(title: "Buscar “\(c)”", systemImage: "magnifyingglass", flat: true) { fix(c) }
             }
             Spacer()
         }

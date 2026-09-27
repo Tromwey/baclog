@@ -65,15 +65,47 @@ struct SettingsRow<Trailing: View>: View {
     }
 }
 
-/// Value + chevron for a settings row.
+/// Value + chevron for a settings row. `chevron.right` = the row pushes a page; a row that opens
+/// a menu of choices in place passes `chevron.up.chevron.down` (`SettingsChoiceRow`).
 struct RowValue: View {
     let text: String
+    var symbol = "chevron.right"
     @ScaledMetric(relativeTo: .subheadline) private var chevron: CGFloat = 13
     var body: some View {
         HStack(spacing: 6) {
             Text(text).font(.kura.ui(15)).foregroundStyle(KColor.text2)
-            Image(systemName: "chevron.right").font(.system(size: chevron, weight: .semibold)).foregroundStyle(KColor.text2)
+            Image(systemName: symbol).font(.system(size: chevron, weight: .semibold)).foregroundStyle(KColor.text2)
         }
+    }
+}
+
+/// A settings row whose value is one of a few options: the system menu shows them all before you
+/// pick (crítica 2026-09-27 #18 — a chevron row that rotated values on each tap promised a page and
+/// hid the options). Selecting answers with the selection haptic.
+struct SettingsChoiceRow<Value: Hashable>: View {
+    let title: String
+    var note: String? = nil
+    let options: [Value]
+    let label: (Value) -> String
+    @Binding var selection: Value
+
+    var body: some View {
+        Menu {
+            Picker(title, selection: Binding(get: { selection }, set: { v in
+                guard v != selection else { return }
+                selection = v
+                KHaptic.play(.selection)
+            })) {
+                ForEach(options, id: \.self) { Text(label($0)).tag($0) }
+            }
+        } label: {
+            SettingsRow(title: title, note: note) {
+                RowValue(text: label(selection), symbol: "chevron.up.chevron.down")
+            }
+            .multilineTextAlignment(.leading)
+        }
+        .buttonStyle(SheetRowStyle())
+        .accessibilityValue(label(selection))
     }
 }
 
@@ -190,6 +222,32 @@ struct FollowCounts: View {
     @ViewBuilder private func count(_ n: Int, _ label: String, _ action: @escaping () -> Void) -> some View {
         let text = Text("\(n)").fontWeight(.semibold).foregroundColor(KColor.text) + Text(label).foregroundColor(KColor.text2)
         if interactive { Button(action: action) { text } } else { text }
+    }
+}
+
+/// A profile's stat ribbon: obsesiones · completos · me gusta · reseñas. A zero says nothing, so it
+/// isn't drawn (crítica #26), and VoiceOver reads the nouns the glyphs stand for.
+struct StatRibbon: View {
+    let obsessed: Int
+    let completed: Int
+    let liked: Int
+    let reviews: Int
+
+    private var items: [(glyph: Glyph, n: Int, one: String, many: String)] {
+        [(.flame, obsessed, "obsesión", "obsesiones"), (.check, completed, "completo", "completos"),
+         (.thumb, liked, "me gusta", "me gusta"), (.review, reviews, "reseña", "reseñas")]
+            .filter { $0.1 > 0 }
+    }
+
+    var body: some View {
+        let items = self.items
+        if !items.isEmpty {
+            FlowLayout(spacing: 7, lineSpacing: 7) {
+                ForEach(items.indices, id: \.self) { i in RibbonPill(glyph: items[i].glyph, value: items[i].n) }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(items.map { "\($0.n) \($0.n == 1 ? $0.one : $0.many)" }.joined(separator: ", "))
+        }
     }
 }
 

@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// The whole page wears the FEED gradient of the fan's front cover (168°, anchored at 900,
 /// continuing in its bottom tone). Header: Volver · Compartir + Opciones; the fan at 225;
-/// "colección · fijada" in mono; the name in Newsreader 36; the line in italic 16; the credits
-/// ("12 títulos"; seals + names only once collaborators exist); and the format pills (always:
+/// "fijada · solo yo" (pinned + who sees it) in mono; the name in Newsreader 36; the line in italic 16; the credits
+/// (seals + names only once collaborators exist); and the format pills (always:
 /// one format = a label, several = they filter; tap again to clear).
 ///
 /// Everything under the name is `CollectionBody`, the SAME body Tus colecciones draws under its
@@ -62,7 +62,12 @@ struct CollectionDetailView: View {
                     FanHeader(fan: store.fan(of: c), name: c.name, ghost: empty,
                               onGhost: { store.present(.addTitles(c.id)) }, bottom: empty ? 26 : 0) {
                         if !empty {
-                            Text(c.pinned ? "colección · fijada" : "colección").monoLabel(10).padding(.top, 4)
+                            // Who sees it (the one visibility vocabulary, `Privacy.label`) and
+                            // whether it's pinned — not "colección", which the screen already
+                            // says (critica 2026-09-27 #39).
+                            Text([c.pinned ? "fijada" : nil, c.privacy.label.lowercased()]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .monoLabel(10).padding(.top, 4)
                         }
                     } below: {
                         EmptyView()
@@ -219,12 +224,23 @@ struct FormatPill: View {
         if let action {
             Button(action: action) { face }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(format.label), \(count)")
+                .accessibilityLabel(spoken)
                 .accessibilityAddTraits(selected ? .isSelected : [])
         } else {
             face
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(format.label), \(count)")
+                .accessibilityLabel(spoken)
+        }
+    }
+
+    /// "3 películas", "1 serie", "2 álbumes" — the glyph alone says nothing to VoiceOver
+    /// (critica 2026-09-27 #31).
+    private var spoken: String {
+        let one = count == 1
+        switch format {
+        case .film: return "\(count) \(one ? "película" : "películas")"
+        case .series: return "\(count) \(one ? "serie" : "series")"
+        case .album: return "\(count) \(one ? "álbum" : "álbumes")"
         }
     }
 
@@ -241,21 +257,23 @@ struct FormatPill: View {
     }
 }
 
-/// 6b — "colección nueva, repisa vacía." + the glass Agregar títulos.
+/// 6b — "colección nueva, repisa vacía." (22, text2: under the collection's own name it's the
+/// second voice, not a rival headline — critica 2026-09-27 #13) + the flat Agregar títulos.
 struct EmptyCollectionBody: View {
     let add: () -> Void
     var body: some View {
         VStack(spacing: 12) {
             Text("colección nueva, repisa vacía.")
-                .font(.kura.news(28))
-                .foregroundStyle(KColor.text)
+                .font(.kura.news(22))
+                .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)
             Text("Empieza por lo que no puedes dejar de recomendar.")
                 .font(.kura.ui(15))
                 .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            GlassButton(title: "Agregar títulos", systemImage: "plus", height: 48, fontSize: 16, action: add)
+            // Content, not floating chrome: flat on every OS.
+            GlassButton(title: "Agregar títulos", systemImage: "plus", height: 48, fontSize: 16, flat: true, action: add)
                 .padding(.top, 14)
         }
         .padding(.horizontal, 28)
@@ -265,7 +283,9 @@ struct EmptyCollectionBody: View {
 
 // MARK: - Bodies
 
-/// 16c · Lista: rows 80, cover in a 60 slot, italic 19, meta mono 11, glyph.
+/// 16c · Lista: rows 72, cover in a 56 slot, italic 19, meta mono 11 led by your reaction's glyph
+/// (every row reads the same — no icon floating at the right edge of some rows only). Straight
+/// under the pills with the same 26 as the columns (critica 2026-09-27 #27).
 struct TitleList: View {
     @Environment(AppStore.self) private var store
     @Environment(\.heroHost) private var hero
@@ -281,19 +301,21 @@ struct TitleList: View {
                               radius: KRadius.coverS)
                         .zoomSource(ZoomID.title(t.id))
                         .heroSource(t.id)
-                        .frame(width: 60)
+                        .frame(width: 56)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(t.name).font(.kura.newsItalic(19)).foregroundStyle(KColor.text).lineLimit(1)
-                        Text(meta(t)).monoLabel(11).lineLimit(1)
+                        HStack(spacing: 6) {
+                            if let m = store.mark(t.id) {
+                                GlyphView(glyph: m.glyph, size: 12)
+                            } else if store.isUnreleased(t) {
+                                GlyphView(glyph: .clock, size: 12)
+                            }
+                            Text(meta(t)).monoLabel(11).lineLimit(1)
+                        }
                     }
-                    Spacer(minLength: 8)
-                    if let m = store.mark(t.id) {
-                        GlyphView(glyph: m.glyph, size: 16)
-                    } else if store.isUnreleased(t) {
-                        GlyphView(glyph: .clock, size: 16)
-                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(minHeight: 80)
+                .frame(minHeight: 72)
                 .contentShape(Rectangle())
                 .kPressable(.row(inset: -10), longPress: {
                     store.present(.titleActions(titleID: t.id, collectionID: collectionID))
@@ -303,7 +325,9 @@ struct TitleList: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 8)
+        // The first row's cover sits 6 into its 72: pull up so cover-to-pills matches the
+        // columns' 26.
+        .padding(.top, -6)
     }
 
     /// In place when a hero hosts the list (the cover grows into the ficha), else a push.
@@ -331,7 +355,6 @@ struct WaitingCollectionView: View {
         let all = store.waitingTitles
         let fan = Array(all.prefix(3))
         let tint = AppStore.fanHexes(fan, ordered: all)
-        let next = all.first.flatMap { store.releaseLabel($0) }
 
         ZStack(alignment: .top) {
             Tint.feedTail(tint).ignoresSafeArea()
@@ -349,8 +372,7 @@ struct WaitingCollectionView: View {
                     } below: {
                         VibeLine(text: "se llena sola con lo que aún no sale")
                         if !all.isEmpty {
-                            Text("\(all.count) \(all.count == 1 ? "título" : "títulos")\(next.map { " · el próximo \(Self.nextLabel($0))" } ?? "")")
-                                .monoLabel(11)
+                            Text(WaitingMeta.line(all, store: store)).monoLabel(11)
                         }
                     }
                     if all.isEmpty {
@@ -376,12 +398,5 @@ struct WaitingCollectionView: View {
             .ignoresSafeArea(.container, edges: .top)
             TopChrome { EmptyView() }
         }
-    }
-
-    /// "4 d" → "en 4 d" · "17 oct" → "el 17 oct" · "hoy" stays.
-    static func nextLabel(_ label: String) -> String {
-        if label == "hoy" { return "hoy" }
-        let countdown = label.range(of: #"^\d+ [hd]$"#, options: .regularExpression) != nil
-        return countdown ? "en \(label)" : "el \(label)"
     }
 }

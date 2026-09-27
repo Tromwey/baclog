@@ -56,7 +56,7 @@ struct FeedView: View {
                 Text("Cuando completen, se obsesionen o reseñen algo, aparece aquí.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                     .fixedSize(horizontal: false, vertical: true)
-                GlassButton(title: "Buscar más gente", systemImage: "magnifyingglass") { store.select(.discover) }
+                GlassButton(title: "Buscar más gente", systemImage: "magnifyingglass", flat: true) { store.select(.discover) }
                     .padding(.top, 6)
             }
             .padding(.horizontal, 28)
@@ -696,13 +696,17 @@ private struct FeedCard: View, Equatable {
             if !pills.isEmpty {
                 FlowLayout(spacing: 7, lineSpacing: 7) {
                     ForEach(Array(pills.enumerated()), id: \.offset) { _, p in StatusPill(glyph: p.0, label: p.1) }
+                    // "agregó … a" + the collection's own name: Newsreader roman lowercase, its
+                    // identity everywhere else (crítica #22), not mono caps inside the pill.
+                    if let c = addedCollection { collectionName(c) }
                 }
             }
             switch event.kind {
-            case .suggestion(let pid, let reason, let social, _):
-                Text(reason)
-                    .font(.kura.newsItalic(26))
-                    .foregroundStyle(KColor.text)
+            case .suggestion(let pid, let reason, let social, let ids):
+                // Roman sentence, the work in italic (crítica #37: all-italic hid which part is the work).
+                Self.reasonText(reason, works: ids.compactMap { store.title($0)?.name })
+                    .font(.kura.news(26))
+                    .foregroundColor(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                 if let p = store.person(pid) {
                     Button { store.push(.person(p.id)) } label: {
@@ -751,11 +755,69 @@ private struct FeedCard: View, Equatable {
         }
     }
 
-    /// " · artist" for music, " · year" for film and series.
+    /// " · creator" (artist, studio/network), the format when there's none — never the year: the
+    /// same second datum the burst's captions carry (crítica #21).
     private func tail(_ t: Title) -> String {
-        if t.format == .album, let c = t.creator { return " · \(c)" }
-        if let y = t.year { return " · \(y)" }
-        return t.creator.map { " · \($0)" } ?? ""
+        " · " + (t.creator ?? t.format.metaLabel)
+    }
+
+    /// The collection an add / a burst went into, drawn after its pill.
+    private var addedCollection: String? {
+        switch event.kind {
+        case .added(let c), .burst(let c, _): return c.isEmpty ? nil : c
+        default: return nil
+        }
+    }
+
+    /// The collection's name, tappable when there's somewhere to go: yours (by id, else by name —
+    /// the mock's events carry none), or someone's public collection page.
+    @ViewBuilder private func collectionName(_ name: String) -> some View {
+        let text = Text(name)
+            .font(.kura.news(17))
+            .foregroundStyle(KColor.text)
+            .lineLimit(1)
+            .frame(height: KPill.card.height)
+        if let open = openCollection(named: name) {
+            Button(action: open) { text.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Colección \(name)")
+                .accessibilityAddTraits(.isButton)
+        } else {
+            text
+        }
+    }
+
+    private func openCollection(named name: String) -> (() -> Void)? {
+        if isMe {
+            let mine = event.collectionID.flatMap { store.collection($0) }
+                ?? store.collections.first { $0.name == name }
+            guard let c = mine else { return nil }
+            return { store.push(.collection(c.id)) }
+        }
+        guard let id = event.collectionID, let a = author else { return nil }
+        return { store.push(.publicCollection(handle: a.handle, id: id)) }
+    }
+
+    /// The suggestion's reason with every named work in italic; the rest roman.
+    static func reasonText(_ reason: String, works: [String]) -> Text {
+        var ranges: [Range<String.Index>] = []
+        for w in works where !w.isEmpty {
+            var from = reason.startIndex
+            while let r = reason.range(of: w, range: from..<reason.endIndex) {
+                if !ranges.contains(where: { $0.overlaps(r) }) { ranges.append(r) }
+                from = r.upperBound
+            }
+        }
+        ranges.sort { $0.lowerBound < $1.lowerBound }
+        var out = Text("")
+        var i = reason.startIndex
+        for r in ranges {
+            if i < r.lowerBound { out = out + Text(String(reason[i..<r.lowerBound])) }
+            out = out + Text(String(reason[r])).font(.kura.newsItalic(26))
+            i = r.upperBound
+        }
+        if i < reason.endIndex { out = out + Text(String(reason[i...])) }
+        return out
     }
 
     /// One vocabulary of states: each is a pill with its glyph. A completed title with a
@@ -773,11 +835,12 @@ private struct FeedCard: View, Equatable {
         case .reviewed:
             return [(.review, isMe ? "Reseñaste" : "Reseñó")] + [react(store.review(event.reviewID)?.mark)].compactMap { $0 }
         case .added(let c):
-            return [(.bookmark, isMe ? "Agregaste a \(c)" : "Agregó a \(c)")]
+            // The name follows the pill (`collectionName`); without one, the verb stands alone.
+            return [(.bookmark, (isMe ? "Agregaste" : "Agregó") + (c.isEmpty ? "" : " a"))]
         case .waitingAdd(_, let label):
             return [(.clock, "No puede esperar · \(label)")]
-        case .burst(let c, let ids):
-            return [(.bookmark, isMe ? "Agregaste \(ids.count) títulos a \(c)" : "Agregó \(ids.count) títulos a \(c)")]
+        case .burst(_, let ids):
+            return [(.bookmark, isMe ? "Agregaste \(ids.count) títulos a" : "Agregó \(ids.count) títulos a")]
         case .suggestion:
             return []
         }

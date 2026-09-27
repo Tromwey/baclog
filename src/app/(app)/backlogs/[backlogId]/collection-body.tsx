@@ -162,12 +162,6 @@ function arrange(items: CollectionItem[], order: readonly string[]): CollectionI
   return [...unplaced, ...placed];
 }
 
-/** "4 d" → "en 4 d" · "17 oct" → "el 17 oct" · "hoy" stays. */
-export function nextLabel(label: string): string {
-  if (label === "hoy") return "hoy";
-  return /^\d+ [hd]$/.test(label) ? `en ${label}` : `el ${label}`;
-}
-
 type SheetState =
   | { kind: "options" }
   | { kind: "sort" }
@@ -630,7 +624,7 @@ function sheetLabel(s: SheetState, name: string): string {
     case "sort":
       return "Ordenar";
     case "reorder":
-      return "Reordenar";
+      return "Editar el orden";
     case "rename":
       return "Editar colección";
     case "privacy":
@@ -757,7 +751,7 @@ function EmptyCollection({ addHref, auto }: { addHref: string; auto: boolean }) 
   if (auto) {
     return (
       <div className="flex flex-col items-center gap-2.5 px-8 pt-4 text-center">
-        <h2 className="font-brand text-[28px] font-normal leading-[1.1] [text-wrap:balance]">
+        <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
           nada por estrenarse.
         </h2>
         <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
@@ -768,7 +762,9 @@ function EmptyCollection({ addHref, auto }: { addHref: string; auto: boolean }) 
   }
   return (
     <div className="flex flex-col items-center gap-3 px-7 pt-2 text-center">
-      <h2 className="font-brand text-[28px] font-normal leading-[1.1] [text-wrap:balance]">
+      {/* Second voice, not a second headline (critique 2026-09-27): the
+          name above is the title; this line sits under it at 22 in text-2. */}
+      <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
         colección nueva, repisa vacía.
       </h2>
       <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
@@ -853,7 +849,11 @@ function OptionsBody({
       {/* Right after Ordenar: Ordenar picks how you LOOK at it (Manual is one
           of the modes), Reordenar edits that manual order — the one everyone
           sees. It left the body (founder, 2026-09-27). */}
-      {count > 1 && <MenuRow icon="grip" label="Reordenar" onClick={() => go("reorder")} />}
+      {/* Not "Reordenar" beside "Ordenar" (critique 2026-09-27): two near-
+          identical verbs. The aside says whose order it is. */}
+      {count > 1 && (
+        <MenuRow icon="grip" label="Editar el orden" aside="el que ven todos" onClick={() => go("reorder")} />
+      )}
       <MenuRow icon="pencil" label="Editar" onClick={() => go("rename")} />
       <MenuRow icon="lock" label="Privacidad" aside={visibilityLabel} onClick={() => go("privacy")} />
       <MenuGap />
@@ -927,7 +927,7 @@ function ReorderBody({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <SheetTitle>reordenar</SheetTitle>
+      <SheetTitle>editar el orden</SheetTitle>
       <p className="pb-2 font-sans text-[13px] leading-[1.45] text-text-2">
         Arrastra desde las rayas. Así se ve la colección para todos.
       </p>
@@ -968,8 +968,10 @@ function ReorderBody({
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="truncate font-brand text-[17px] italic leading-[1.1] text-text">{it.title}</span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
-                  {i + 1} · {it.year ?? FORMAT[it.mediaType].one}
+                {/* The list row's meta (creator, or the format): no position —
+                    the order IS the position — and no year (founder, 2026-09-27). */}
+                <span className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
+                  {it.byline || FORMAT[it.mediaType].one}
                 </span>
               </span>
               <button

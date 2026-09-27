@@ -33,6 +33,9 @@ struct GlassButton: View {
     var fullWidth = false
     var fill: Color = KColor.glassBg
     var trailingSystemImage: String? = nil
+    /// Content, not floating chrome (a button inside a page body, an empty state, a sheet row):
+    /// the same fill, flat on every OS — never the iOS 26 Liquid Glass.
+    var flat = false
     let action: () -> Void
     /// Icons grow with the label next to them (Dynamic Type).
     @ScaledMetric(relativeTo: .subheadline) private var k: CGFloat = 1
@@ -54,10 +57,10 @@ struct GlassButton: View {
             .padding(.trailing, 16)
             .frame(height: height)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .modifier(ChromeFill(fill: fill, shape: Capsule()))
+            .modifier(ChromeFill(fill: fill, shape: Capsule(), flat: flat))
             .contentShape(Capsule())
         }
-        .modifier(ChromePress(glass: fill == KColor.glassBg))
+        .modifier(ChromePress(glass: !flat && fill == KColor.glassBg))
     }
 }
 
@@ -74,8 +77,9 @@ struct SolidButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let systemImage { Image(systemName: systemImage).font(.system(size: iconSize, weight: .semibold)) }
-                Text(title).font(.kura.ui(16, .semibold))
+                Text(title).font(.kura.ui(16, .semibold)).lineLimit(1)
             }
+            .padding(.horizontal, 20)
             .foregroundStyle(enabled ? KColor.bg : KColor.text2)
             .frame(maxWidth: .infinity)
             .frame(height: height)
@@ -106,19 +110,21 @@ enum FollowState: Equatable {
     }
 }
 
-/// The one Seguir button. Honey (the screen's one accent) only on `Seguir` and only
-/// where the caller spends it; Siguiendo / Solicitado go quiet per size.
+/// The one Seguir button, drawn ONE way everywhere (crítica 2026-09-27 #16): Seguir is honey
+/// where the caller spends the screen's one accent (a profile, the feed's suggestion), a flat
+/// glass pill otherwise (a list of many — honey is once per screen); Siguiendo / Solicitado are
+/// always the flat glass pill, on every size and every OS. It's content, never chrome: no
+/// Liquid Glass, no bare text.
 struct FollowButton: View {
     enum Size {
-        /// 36 pt pill in a list row (Descubrir, Avisos, onboarding) — 16 aside, like the web's row. Siguiendo loses its fill.
+        /// 36 pt pill in a list row (Descubrir, Avisos, onboarding) — 16 aside, like the web's row.
         case row
-        /// 40 pt pill in Seguidores / Siguiendo. Siguiendo loses its fill.
+        /// 40 pt pill in Seguidores / Siguiendo.
         case list
         /// The feed's suggestion card: the design's honey button (44 · 0 20 · 15 semibold, same as
-        /// the web card). Siguiendo keeps a flat glass fill.
+        /// the web card).
         case card
-        /// A profile's hero, 48 pt. Siguiendo / Solicitado sit next to the share chip, so they
-        /// take the chrome's glass (Liquid Glass on iOS 26).
+        /// A profile's hero, 48 pt.
         case hero
     }
 
@@ -156,22 +162,9 @@ struct FollowButton: View {
         }
     }
 
-    private var fill: FollowFill.Kind {
-        if state == .follow && honey { return .honey }
-        switch size {
-        case .row, .list: return state == .following ? .none : .flatGlass
-        case .card: return .flatGlass
-        case .hero: return .chromeGlass
-        }
-    }
+    private var fill: FollowFill.Kind { state == .follow && honey ? .honey : .flatGlass }
 
-    private var foreground: Color {
-        switch fill {
-        case .honey: return KColor.onAccent
-        case .none: return KColor.text2
-        case .flatGlass, .chromeGlass: return KColor.text
-        }
-    }
+    private var foreground: Color { fill == .honey ? KColor.onAccent : KColor.text }
 
     @ViewBuilder private var face: some View {
         let m = metrics
@@ -195,15 +188,10 @@ struct FollowButton: View {
 }
 
 private struct FollowFill: ViewModifier {
-    enum Kind { case honey, flatGlass, chromeGlass, none }
+    enum Kind { case honey, flatGlass }
     let kind: Kind
     func body(content: Content) -> some View {
-        switch kind {
-        case .honey: content.background(KColor.accent, in: Capsule())
-        case .flatGlass: content.background(KColor.glassBg, in: Capsule())
-        case .chromeGlass: content.kGlass(Capsule(), interactive: true)
-        case .none: content.background(Color.clear, in: Capsule())
-        }
+        content.background(kind == .honey ? KColor.accent : KColor.glassBg, in: Capsule())
     }
 }
 
@@ -344,14 +332,18 @@ struct SaveChip: View {
     enum Style {
         /// 44 pt capsule with the label — "Guardar" / "En N colecciones" (ficha 24a–d, the rec card 19a).
         case pill
-        /// 44 pt round chip in a list row (19a tendencias, 19f resultados, O7 obra). Saved, it drops
-        /// its fill and reads as an indicator: the filled bookmark + the count in mono.
+        /// 44 pt round chip in a list row (19a tendencias, 19f resultados, O7 obra). Saved, it KEEPS
+        /// its flat surface (a 44 capsule: the filled bookmark + the count in mono) — without the
+        /// fill, "🔖 2" in a trending list read as a popularity metric, not as your button.
         case icon
     }
 
     @Environment(AppStore.self) private var store
     let titleID: String
     var style: Style = .icon
+    /// `pill` only: 14 pt label and 12/14 padding, for a row that would not fit at 15 (the ficha's
+    /// three actions next to "Me obsesiona" on a 402 pt screen). Same shape, same height.
+    var compact = false
     @ScaledMetric(relativeTo: .subheadline) private var k: CGFloat = 1
 
     var body: some View {
@@ -369,24 +361,26 @@ struct SaveChip: View {
             HStack(spacing: 8) {
                 Image(systemName: symbol).font(.system(size: 15 * k, weight: .semibold))
                 Text(n == 0 ? "Guardar" : (n == 1 ? "En 1 colección" : "En \(n) colecciones"))
-                    .font(.kura.ui(15, .semibold))
+                    .font(.kura.ui(compact ? 14 : 15, .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(KColor.text)
-            .padding(.leading, 14).padding(.trailing, 16)
+            .padding(.leading, compact ? 12 : 14).padding(.trailing, compact ? 14 : 16)
             .frame(height: 44)
             .background(KColor.glassBg, in: Capsule())
             .contentShape(Capsule())
         case .icon:
             Group {
                 if n > 0 {
-                    HStack(spacing: 6) {
-                        Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
-                        Text("\(n)").font(.kura.mono(11))
+                    HStack(spacing: 5) {
+                        Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(KColor.text)
+                        Text("\(n)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
                     }
-                    .foregroundStyle(KColor.text2)
+                    .padding(.leading, 11).padding(.trailing, 13)
                     .frame(minWidth: 44, minHeight: 44)
+                    .background(KColor.glassBg, in: Capsule())
                 } else {
                     Image(systemName: symbol).font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(KColor.text)

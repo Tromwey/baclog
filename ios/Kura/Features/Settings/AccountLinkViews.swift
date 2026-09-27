@@ -68,11 +68,11 @@ private struct ProviderRow: View {
             } else if store.identityBusy == p {
                 ProgressView().tint(KColor.text).frame(width: 44, height: 36)
             } else if link.linked {
-                GlassButton(title: "Desconectar", height: 36, fontSize: 14) { store.present(.unlinkIdentity(p)) }
+                GlassButton(title: "Desconectar", height: 36, fontSize: 14, flat: true) { store.present(.unlinkIdentity(p)) }
                     .kHitArea(vertical: 4)
                     .accessibilityLabel("Desconectar \(p.label)")
             } else {
-                GlassButton(title: "Conectar", height: 36, fontSize: 14) { Task { await store.connect(p) } }
+                GlassButton(title: "Conectar", height: 36, fontSize: 14, flat: true) { Task { await store.connect(p) } }
                     .kHitArea(vertical: 4)
                     .disabled(store.identityBusy != nil || !store.canRun(p))
                     .accessibilityLabel("Conectar \(p.label)")
@@ -212,7 +212,7 @@ struct MergeAccountView: View {
                     if providers.isEmpty {
                         SolidButton(title: store.mergeBusy ? "Enviando…" : "Mandarme un código", enabled: !busy, action: send)
                     } else {
-                        GlassButton(title: store.mergeBusy ? "Enviando…" : "Mandarme un código", height: 52, fontSize: 16, fullWidth: true, action: send)
+                        GlassButton(title: store.mergeBusy ? "Enviando…" : "Mandarme un código", height: 52, fontSize: 16, fullWidth: true, flat: true, action: send)
                             .disabled(busy)
                     }
                     InlineError(text: store.mergeError).padding(.horizontal, 8)
@@ -228,7 +228,7 @@ struct MergeAccountView: View {
                 .animation(KMotion.fade, value: providers)
             }
             .scrollDismissesKeyboard(.interactively)
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
@@ -300,7 +300,7 @@ struct MergeCodeView: View {
             }
             .padding(.horizontal, 24)
             .padding(.top, KSize.pushedTitleTop)
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
@@ -342,7 +342,7 @@ struct MergeConfirmView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, KSize.pushedTitleTop)
             }
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
     }

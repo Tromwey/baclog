@@ -4,9 +4,9 @@ import SwiftUI
 
 /// ONE options sheet per collection, the same wherever you come from (propuesta 9: "una sola hoja
 /// de Opciones por rol"). The name 24 + "N títulos", then Agregar títulos · Compartir ·
-/// Fijar/Desfijar · — · [Ver como lista · Ordenar · Reordenar ·] Editar (nombre y frase) · Privacidad · — ·
-/// Borrar colección. `full` (Opciones, the ⋯ chip in 10a/10b) carries the VIEW rows (Reordenar
-/// only with 2+ titles; it left the body, founder 2026-09-27); holding a fan (9a: Tus
+/// Fijar/Desfijar · — · [Ver como lista · Ordenar · Editar el orden ·] Editar (nombre y frase) · Quién la ve
+/// · — · Borrar colección. `full` (Opciones, the ⋯ chip in 10a/10b) carries the VIEW rows (Editar el
+/// orden only with 2+ titles; it left the body, founder 2026-09-27); holding a fan (9a: Tus
 /// colecciones, your own profile) leaves them out — they change the view of a screen you're not on.
 struct CollectionOptionsSheet: View {
     @Environment(AppStore.self) private var store
@@ -43,14 +43,21 @@ struct CollectionOptionsSheet: View {
                     SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
                         Text(c.sort.label).monoLabel(color: KColor.text3)
                     }
-                    // Right after Ordenar: Ordenar picks how you LOOK at it (Manual is one of
-                    // the modes), Reordenar edits that manual order — the one everyone sees.
+                    // Right after Ordenar: Ordenar picks how YOU look at it (Manual is one of the
+                    // modes); this edits that manual order — the one everyone sees. Two verbs
+                    // that read apart, with the difference said on the row (critica 2026-09-27 #8;
+                    // it was "Ordenar" / "Reordenar").
                     if n > 1 {
-                        SheetRow(systemImage: "line.3.horizontal", label: "Reordenar") { store.present(.reorder(c.id)) }
+                        SheetRow(systemImage: "line.3.horizontal", label: "Editar el orden",
+                                 action: { store.present(.reorder(c.id)) }) {
+                            Text("el que ven todos").monoLabel(color: KColor.text3)
+                        }
                     }
                 }
                 SheetRow(systemImage: "pencil", label: "Editar") { store.present(.rename(c.id)) }
-                SheetRow(systemImage: "lock", label: "Privacidad", action: { store.present(.privacy(c.id)) }) {
+                // The one visibility vocabulary (`Privacy.label`: Solo yo · Con el link · En tu
+                // perfil), asked the way Nueva colección asks it.
+                SheetRow(systemImage: c.privacy.symbol, label: "Quién la ve", action: { store.present(.privacy(c.id)) }) {
                     Text(c.privacy.label).monoLabel(color: KColor.text3)
                 }
                 SheetDivider()
@@ -98,10 +105,13 @@ struct SortSheet: View {
 
 // MARK: - O3b Reordenar
 
-/// Every title of the collection in its manual order, each row with a grip: drag the grip (the
+/// "Editar el orden". Every title of the collection in its manual order, each row with a grip: drag the grip (the
 /// row follows the finger and the others make room), or use the ↑/↓ actions (VoiceOver: swipe up
 /// or down on the row). "Guardar orden" writes the WHOLE order at once (`PUT …/order`) and puts
 /// the view back on Manual; closing the sheet discards it. Twin of the web's `ReorderBody`.
+/// A compact sheet that hugs its rows (critica 2026-09-27 #28: full height, 5 titles left half of
+/// it empty); the list scrolls past ~7 rows. Row meta = format · creator like the list — no
+/// position (the order IS the position) and no year (founder: no year in a collection).
 struct ReorderSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduce
@@ -115,7 +125,7 @@ struct ReorderSheet: View {
     var body: some View {
         if let c = store.collection(collectionID) {
             VStack(alignment: .leading, spacing: 0) {
-                SheetHeader(title: "reordenar") { store.dismissSheet() }
+                SheetHeader(title: "editar el orden") { store.dismissSheet() }
                     .padding(.horizontal, 20)
                 Text("Arrastra desde las rayas. Así se ve la colección para todos.")
                     .font(.kura.ui(13))
@@ -130,8 +140,9 @@ struct ReorderSheet: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 4)
                 }
+                .frame(height: min(CGFloat(order.count) * rowH + 4, rowH * 7.5))
                 .scrollDisabled(drag != nil)
                 SolidButton(title: "Guardar orden") {
                     store.reorder(c.id, to: order)
@@ -139,7 +150,6 @@ struct ReorderSheet: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
-                .padding(.bottom, 34)
             }
             .onAppear {
                 guard !seeded else { return }
@@ -167,7 +177,8 @@ struct ReorderSheet: View {
                 .frame(width: 44)
             VStack(alignment: .leading, spacing: 4) {
                 Text(t.name).font(.kura.newsItalic(17)).foregroundStyle(KColor.text).lineLimit(1)
-                Text("\(i + 1) · \(t.year.map(String.init) ?? t.format.metaLabel)").monoLabel(10)
+                Text([t.format.metaLabel, t.creator].compactMap { $0 }.filter { !$0.isEmpty }
+                    .joined(separator: " · ")).monoLabel(10).lineLimit(1)
             }
             Spacer(minLength: 8)
             Image(systemName: "line.3.horizontal")
@@ -244,22 +255,49 @@ struct EditCollectionSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             SheetHeader(title: "editar") { store.dismissSheet() }
             VStack(alignment: .leading, spacing: 14) {
-                GlassField(placeholder: "nombre", text: $name, serif: true, clearable: true,
-                           focus: $nameFocused)
-                    .submitLabel(.next)
-                    .onSubmit { vibeFocused = true }
-                    .accessibilityLabel("Nombre de la colección")
-                    .onChange(of: name) { _, v in
-                        if v.count > AppStore.collectionNameLimit { name = String(v.prefix(AppStore.collectionNameLimit)) }
+                // A mono label over each field, so once they're filled it still says which is
+                // which; the frase wraps up to 3 lines with its count (critica 2026-09-27 #7).
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("nombre").monoLabel(11).padding(.horizontal, 4).accessibilityHidden(true)
+                    GlassField(placeholder: "ponle nombre", text: $name, serif: true, clearable: true,
+                               focus: $nameFocused)
+                        .submitLabel(.next)
+                        .onSubmit { vibeFocused = true }
+                        .accessibilityLabel("Nombre de la colección")
+                        .onChange(of: name) { _, v in
+                            if v.count > AppStore.collectionNameLimit { name = String(v.prefix(AppStore.collectionNameLimit)) }
+                        }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("frase · opcional").monoLabel(11)
+                        Spacer(minLength: 0)
+                        Text("\(vibe.count)/\(AppStore.collectionVibeLimit)").monoLabel(11, color: KColor.text3)
                     }
-                GlassField(placeholder: "una frase para esta colección (opcional)", text: $vibe, clearable: true,
-                           focus: $vibeFocused)
-                    .submitLabel(.done)
-                    .onSubmit(save)
-                    .accessibilityLabel("Frase de la colección, opcional")
-                    .onChange(of: vibe) { _, v in
-                        if v.count > AppStore.collectionVibeLimit { vibe = String(v.prefix(AppStore.collectionVibeLimit)) }
-                    }
+                    .padding(.horizontal, 4)
+                    .accessibilityHidden(true)
+                    TextField("", text: $vibe, prompt: Text("una frase para esta colección").foregroundStyle(KColor.text3),
+                              axis: .vertical)
+                        .lineLimit(1...3)
+                        .font(.kura.ui(16))
+                        .foregroundStyle(KColor.text)
+                        .tint(KColor.text)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .focused($vibeFocused)
+                        .submitLabel(.done)
+                        .onSubmit(save)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 15)
+                        .frame(minHeight: 52)
+                        .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.field, style: .continuous))
+                        .accessibilityLabel("Frase de la colección, opcional")
+                        .onChange(of: vibe) { _, v in
+                            // A vertical field takes Return as a newline: it means "done" here.
+                            if v.contains("\n") { vibe = v.replacingOccurrences(of: "\n", with: ""); save(); return }
+                            if v.count > AppStore.collectionVibeLimit { vibe = String(v.prefix(AppStore.collectionVibeLimit)) }
+                        }
+                }
                 Text("Los links que ya compartiste siguen funcionando.")
                     .font(.kura.ui(13))
                     .foregroundStyle(KColor.text2)
@@ -311,6 +349,10 @@ struct PrivacySheet: View {
 struct ShareCollectionSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
+    /// "Solo yo" with no link: the who-sees-it choices open right here, and picking one that has
+    /// a link shows the three share buttons in place (critica 2026-09-27 #4 — the note used to
+    /// send you out to Opciones).
+    @State private var choosing = false
 
     var body: some View {
         if let c = store.collection(collectionID) {
@@ -326,6 +368,26 @@ struct ShareCollectionSheet: View {
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 8).padding(.top, 14).padding(.bottom, 8)
+                    if c.privacy == .onlyMe && !store.profilePrivate {
+                        if choosing {
+                            VStack(spacing: 0) {
+                                ForEach(Privacy.options) { p in
+                                    PrivacyOptionRow(privacy: p, selected: c.privacy == p) {
+                                        withAnimation(KMotion.short) {
+                                            store.setPrivacy(c.id, p)
+                                            choosing = false
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            GlassButton(title: "Cambiar quién la ve", systemImage: c.privacy.symbol, flat: true) {
+                                withAnimation(KMotion.short) { choosing = true }
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.top, 4)
+                        }
+                    }
                 }
                 if let url { HStack(spacing: 8) {
                     shareAction("link", "Copiar link") {
@@ -351,7 +413,7 @@ struct ShareCollectionSheet: View {
     /// Why there's no link (the web would answer 404, same as a collection that doesn't exist).
     private func unshareableNote(_ c: KCollection) -> String {
         if store.profilePrivate { return AppStore.privateProfileShareNote }
-        if c.privacy == .onlyMe { return "Está en Solo yo. Cambia quién la ve en sus opciones para compartirla." }
+        if c.privacy == .onlyMe { return "Está en \(Privacy.onlyMe.label): nadie más la puede abrir. Cambia quién la ve para compartirla." }
         return "Todavía se está guardando. Inténtalo en un momento."
     }
 
@@ -403,7 +465,9 @@ struct SharePreviewCard: View {
                     Text(PublicLinks.display(url))
                         .font(.kura.mono(12))
                         .foregroundStyle(KColor.text)
-                        .lineLimit(1).truncationMode(.middle)
+                        // Cut at the HEAD ("…/mariel.ok/hermana"): the middle cut split the handle
+                        // (critica 2026-09-27 #29).
+                        .lineLimit(1).truncationMode(.head)
                         .padding(.top, 2)
                 }
             }
@@ -505,6 +569,18 @@ struct TitleActionsSheet: View {
                         store.dismissSheet()
                         store.remove(t.id, from: c.id)
                     }
+                } else if store.isUnreleased(t) {
+                    // Not out yet: nothing to complete or review — the release alert instead (the
+                    // ficha's pill), and the preview mark like the in-collection branch above.
+                    let on = store.alerts.contains(t.id)
+                    SheetRow(systemImage: "clock", label: on ? "Te avisamos del estreno" : "Avísame del estreno",
+                             glyph: on ? .check : .clock,
+                             action: { store.toggleAlert(t.id) }) {
+                        if let when = store.releaseLabel(t) { Text(when).monoLabel(color: KColor.text3) }
+                    }
+                    SheetRow(systemImage: "clock", label: "La vi en preestreno", iconColor: KColor.text2) {
+                        store.present(.complete(titleID: t.id, focusReview: false))
+                    }
                 } else {
                     reactionRows(t)
                 }
@@ -515,7 +591,8 @@ struct TitleActionsSheet: View {
 
     @ViewBuilder private func reactionRows(_ t: Title) -> some View {
         let m = store.mark(t.id)
-        SheetRow(systemImage: "checkmark", label: "Tu reacción", glyph: m?.glyph ?? .check,
+        // Neutral (text-2) until there IS a reaction: a salvia check read as "ya completado".
+        SheetRow(systemImage: "checkmark", label: "Tu reacción", iconColor: KColor.text2, glyph: m?.glyph,
                  action: { store.present(.complete(titleID: t.id, focusReview: false)) }) {
             Text(m?.myLabel ?? "Completar").monoLabel(color: KColor.text3)
         }
@@ -556,10 +633,13 @@ struct MoveToSheet: View {
                         ForEach(store.orderedCollections) { c in
                             let here = c.id == fromID
                             let already = !here && c.titleIDs.contains(t.id)
+                            // One choice: the radio dot. The collection it's in says "ya está", the
+                            // same words as Guardar en (critica 2026-09-27 #33) — the one it leaves
+                            // from is also dimmed and can't be picked.
                             FanPickRow(name: c.name, covers: store.fan(of: c), count: c.titleIDs.count,
-                                       on: here || target == c.id,
-                                       note: here ? "aquí está" : already ? "ya está" : nil,
-                                       disabled: here) {
+                                       on: target == c.id,
+                                       note: here || already ? "ya está" : nil,
+                                       disabled: here, single: true) {
                                 target = c.id
                                 KHaptic.play(.selection)
                             }

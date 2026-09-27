@@ -8,6 +8,7 @@ import { KuraSheet, useKuraSheetDismiss } from "./kura-sheet";
 import { SheetTitleBlock, type SheetWork } from "./sheet-title";
 import { TriangleGlyph } from "./toast";
 import { useItemReaction } from "./reaction-state";
+import { saveSheetLabel } from "@/modules/backlog/save-label";
 
 /**
  * "Guardar" / "En N colecciones" (Kura 24a–d · §patrones · guardar): the
@@ -25,7 +26,8 @@ export function SaveButton() {
  * collection with its mini fan and count (Colecciones formalizado · 7a) and a
  * check disc, and the solid action.
  *
- * STAGED: checks are local until "Guardar en N colecciones" writes the diff
+ * STAGED: checks are local until the solid action (its label names the change —
+ * `saveSheetLabel`: "Guardar en música 2026", "Quitar de…", "Listo") writes the diff
  * (provider `commitMemberships`). Pre-checked with where the title lives; a
  * title that isn't saved anywhere starts on the collection used last ("con la
  * última colección usada marcada"), and with no collections at all the sheet
@@ -86,13 +88,7 @@ function SaveSheetBody({ work }: { work: SheetWork }) {
   const unchanged = n === current.length && current.every((id) => checked.has(id));
   const label = busy
     ? "Guardando…"
-    : n === 0
-      ? wasSaved
-        ? "Quitar de tus colecciones"
-        : "Elige una colección"
-      : n === 1
-        ? "Guardar en 1 colección"
-        : `Guardar en ${n} colecciones`;
+    : saveSheetLabel(current, checked, (id) => backlogs.find((c) => c.id === id)?.name);
 
   async function save() {
     if (busy) return;
@@ -182,7 +178,7 @@ function SaveSheetBody({ work }: { work: SheetWork }) {
         disabled={busy || (n === 0 && !wasSaved)}
         className={`${SOLID_BUTTON} mt-2.5 w-full flex-none`}
       >
-        {label}
+        <span className="min-w-0 truncate">{label}</span>
       </button>
     </>
   );

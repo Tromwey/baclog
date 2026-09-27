@@ -43,7 +43,7 @@ struct NotificationsView: View {
                     .padding(.bottom, 56)
                 }
             }
-            TopChrome { EmptyView() }
+            TopChrome(veil: true) { EmptyView() }
         }
         .ignoresSafeArea(.container, edges: .top)
         .onDisappear { store.markNotificationsRead() }
@@ -149,7 +149,7 @@ struct NotificationsView: View {
                             .background(KColor.text, in: Capsule())
                     }
                     .kPress()
-                    IconChip44(systemName: "xmark", size: 36, iconSize: 12, label: "Rechazar") { store.setRequest(n.id, .rejected) }
+                    IconChip44(systemName: "xmark", size: 36, iconSize: 12, flat: true, label: "Rechazar") { store.setRequest(n.id, .rejected) }
                 }
             case .approved: Text("Aprobada").monoLabel()
             case .rejected: Text("Rechazada").monoLabel()

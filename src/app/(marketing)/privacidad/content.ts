@@ -234,7 +234,7 @@ export const SECTIONS: Section[] = [
       },
       {
         kind: "p",
-        text: "Cada colección tiene su propia visibilidad: Privada (solo tú), Pública (la ve quien tenga el link, pero no sale en tu perfil) o En tu perfil. Ojo: lo que haces con un título (completarlo, obsesionarte, reseñarlo) depende de que tu perfil sea público, no de la colección donde lo guardaste; ocultar una colección no oculta esa actividad.",
+        text: "Cada colección tiene su propia visibilidad: Solo yo (solo tú), Con el link (la ve quien tenga el link, pero no sale en tu perfil) o En tu perfil. Ojo: lo que haces con un título (completarlo, obsesionarte, reseñarlo) depende de que tu perfil sea público, no de la colección donde lo guardaste; ocultar una colección no oculta esa actividad.",
       },
       {
         kind: "p",

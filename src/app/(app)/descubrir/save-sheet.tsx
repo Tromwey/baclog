@@ -19,6 +19,7 @@ import {
 import type { SearchBacklog } from "./descubrir-screen";
 import type { LibraryIndex } from "./library";
 import { RowCover, TriangleGlyph, workMeta } from "./kura-bits";
+import { saveSheetLabel } from "@/modules/backlog/save-label";
 
 /** Whatever Descubrir can offer to save: a result, a reco, a trend. */
 export interface SaveWork {
@@ -45,7 +46,7 @@ function useHydrated(): boolean {
  * `--s2` sheet inset 8, radius 36: the title on top, then "Nueva colección"
  * and every collection with its mini fan (Colecciones formalizado · 7a) and a
  * check disc, and the solid action
- * at the end — "Guardar en N colecciones".
+ * at the end, labelled with the change (`saveSheetLabel`).
  *
  * Pre-checked with where the title already lives; a title that isn't saved
  * anywhere starts on the collection used last. Unchecking is how a title
@@ -130,13 +131,7 @@ function SaveSheetBody({
     n === current.length && current.every((id) => checked.has(id));
   const label = busy
     ? "Guardando…"
-    : n === 0
-      ? wasSaved
-        ? "Quitar de tus colecciones"
-        : "Elige una colección"
-      : n === 1
-        ? "Guardar en 1 colección"
-        : `Guardar en ${n} colecciones`;
+    : saveSheetLabel(current, checked, (id) => collections.find((c) => c.id === id)?.name);
 
   const save = async () => {
     if (busy) return;
@@ -260,7 +255,7 @@ function SaveSheetBody({
           disabled={busy || (n === 0 && !wasSaved)}
           className={`${SOLID_BUTTON} mt-2.5 w-full`}
         >
-          {label}
+          <span className="min-w-0 truncate">{label}</span>
         </button>
       </div>
     </div>,

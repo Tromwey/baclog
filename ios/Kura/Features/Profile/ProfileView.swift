@@ -10,6 +10,8 @@ struct ProfileView: View {
     /// over your profile — its fan travels from the row to the header — and Volver lands it back
     /// in its row.
     @State private var hero = HeroController(kind: .collection)
+    /// Where the page's content sits, for the veil under the clock (read only by `TopVeil`).
+    @State private var veil = VeilScroll()
 
     private var obsessions: [Title] {
         store.userTitles.filter { $0.value.mark == .obsessed }
@@ -59,18 +61,6 @@ struct ProfileView: View {
         }
     }
 
-    /// The palette that tints your profile (the feed gradient over the whole page): the obsession
-    /// you featured, else the newest obsession with a cover palette, else your library's dominant
-    /// hexes (`me.hexes`), else none — `bg` ("sin portada no hay color"). The lima never counts.
-    private var profileHexes: [String] {
-        if let id = store.me.featuredTitleID, let t = store.title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
-            return FanOrder.kuraHexes(t.palette)
-        }
-        if let t = obsessions.reversed().first(where: { !FanOrder.kuraHexes($0.palette).isEmpty }) {
-            return FanOrder.kuraHexes(t.palette)
-        }
-        return FanOrder.kuraHexes(store.me.hexes)
-    }
 
     /// Your collections as the showcase draws them (pinned first; every one, the empty ones as a
     /// ghost fan).
@@ -85,7 +75,7 @@ struct ProfileView: View {
 
     private var full: some View {
         let me = store.me
-        let tint = profileHexes
+        let tint = store.myProfileHexes
         return ZStack(alignment: .top) {
             Tint.feedTail(tint).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
@@ -111,12 +101,10 @@ struct ProfileView: View {
                                          onFollowers: { store.push(.followers(me.id, showFollowing: false)) },
                                          onFollowing: { store.push(.followers(me.id, showFollowing: true)) })
                         }
-                        FlowLayout(spacing: 7, lineSpacing: 7) {
-                            RibbonPill(glyph: .flame, value: store.count(of: .obsessed))
-                            RibbonPill(glyph: .check, value: store.count(of: .completed) + store.count(of: .liked) + store.count(of: .obsessed))
-                            RibbonPill(glyph: .thumb, value: store.count(of: .liked))
-                            RibbonPill(glyph: .review, value: store.reviewCount)
-                        }
+                        StatRibbon(obsessed: store.count(of: .obsessed),
+                                   completed: store.count(of: .completed) + store.count(of: .liked) + store.count(of: .obsessed),
+                                   liked: store.count(of: .liked),
+                                   reviews: store.reviewCount)
                         if let recapLabel = store.recapButtonLabel {
                             Button { store.push(.recap()) } label: {
                                 HStack(spacing: 8) {
@@ -139,17 +127,37 @@ struct ProfileView: View {
                         if !obsessions.isEmpty {
                             VStack(alignment: .leading, spacing: 14) {
                                 SectionTitle(text: "me obsesiona").padding(.horizontal, 20)
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    LazyHStack(alignment: .bottom, spacing: 12) {
+                                if obsessions.count == 1 {
+                                    // A shelf of one left ~70 % of the row empty (crítica #26): the
+                                    // cover grows to the pinned fan's 186 and the rest of the row says
+                                    // what fills it. (Two already fill most of the row at 150.)
+                                    HStack(alignment: .bottom, spacing: 16) {
                                         ForEach(obsessions) { t in
-                                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
+                                            Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 186).zoomSource(ZoomID.title(t.id)) }
                                                 .buttonStyle(.plain)
                                         }
+                                        Text("Lo que te obsesione se va juntando aquí.")
+                                            .font(.kura.ui(14))
+                                            .foregroundStyle(KColor.text2)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.bottom, 4)
                                     }
                                     .padding(.horizontal, 20)
                                     .padding(.bottom, 12)
+                                } else {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        LazyHStack(alignment: .bottom, spacing: 12) {
+                                            ForEach(obsessions) { t in
+                                                Button { store.push(.title(t.id)) } label: { CoverView(title: t, height: 150).zoomSource(ZoomID.title(t.id)) }
+                                                    .buttonStyle(.plain)
+                                            }
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.bottom, 12)
+                                    }
+                                    .scrollClipDisabled()
                                 }
-                                .scrollClipDisabled()
                             }
                         }
                         CollectionsShowcase(title: "tus colecciones", items: showcase,
@@ -165,12 +173,15 @@ struct ProfileView: View {
                     .padding(.bottom, 150)
                 }
                 .kFeedSurface(tint, span: 900)
+                .kVeilTracking(veil)
                 // Recedes 4 % while a collection opens over it.
                 .heroRecedes()
             }
             .ignoresSafeArea(.container, edges: .top)
             .kDebugScrollAnchor()
             .kDebugScrollLog("profile")
+            // Nothing runs under the clock once the chips have scrolled away (crítica #1).
+            TopVeil(hexes: tint, span: 900, scroll: veil, reach: .statusBar)
         }
         .kFeedDockBand(tint)
         .task(id: store.loadState) { if store.loadState == .loaded { await store.loadRecapMonths() } }
@@ -232,6 +243,7 @@ private struct EmptyOwnProfile: View {
             .padding(.bottom, 110)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .overlay(alignment: .top) { TopVeil(reach: .statusBar) }
     }
 }
 
@@ -425,5 +437,24 @@ struct EditProfileView: View {
     private func save() {
         store.saveProfile(name: name, handle: handle, featured: featured, isPrivate: isPrivate, showCommon: showCommon)
         store.pop()
+    }
+}
+
+extension AppStore {
+    /// The palette that tints your profile (the feed gradient over the whole page): the obsession
+    /// you featured, else the newest obsession with a cover palette, else your library's dominant
+    /// hexes (`me.hexes`), else none — `bg` ("sin portada no hay color"). The lima never counts.
+    /// Your seguidores page wears the same one.
+    var myProfileHexes: [String] {
+        if let id = me.featuredTitleID, let t = title(id), !FanOrder.kuraHexes(t.palette).isEmpty {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        let newest = userTitles.filter { $0.value.mark == .obsessed }
+            .sorted { $0.value.savedAt > $1.value.savedAt }
+            .compactMap { title($0.key) }
+        if let t = newest.first(where: { !FanOrder.kuraHexes($0.palette).isEmpty }) {
+            return FanOrder.kuraHexes(t.palette)
+        }
+        return FanOrder.kuraHexes(me.hexes)
     }
 }

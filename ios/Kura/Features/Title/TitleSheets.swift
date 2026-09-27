@@ -284,22 +284,16 @@ struct SaveToSheet: View {
                 }
                 .frame(maxHeight: 340)
 
-                let n = selected.count
+                // The button says the CHANGE, not the state: nothing new → "Listo"; one collection
+                // added/removed → its name; the sheets' one primary (`SolidButton`).
                 let before = Set(store.collectionsContaining(t.id).map(\.id))
-                Button {
+                let added = selected.subtracting(before)
+                let removed = before.subtracting(selected)
+                SolidButton(title: saveLabel(added: added, removed: removed, before: before),
+                            enabled: !(selected.isEmpty && before.isEmpty)) {
                     store.setMembership(t.id, collections: selected)
                     store.dismissSheet()
-                } label: {
-                    Text(n == 0 ? (before.isEmpty ? "Elige una colección" : "Quitar de tus colecciones")
-                         : (n == 1 ? "Guardar en 1 colección" : "Guardar en \(n) colecciones"))
-                        .font(.kura.ui(16, .semibold))
-                        .foregroundStyle(n == 0 && before.isEmpty ? KColor.text2 : KColor.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(KColor.glassBg, in: Capsule())
                 }
-                .kPress()
-                .disabled(n == 0 && before.isEmpty)
                 .padding(.top, 10)
             }
             .padding(.horizontal, 12)
@@ -317,6 +311,20 @@ struct SaveToSheet: View {
                     selected = current
                 }
             }
+        }
+    }
+}
+
+extension SaveToSheet {
+    fileprivate func saveLabel(added: Set<String>, removed: Set<String>, before: Set<String>) -> String {
+        func name(_ id: String?) -> String? { id.flatMap { store.collection($0)?.name } }
+        switch (added.count, removed.count) {
+        case (0, 0): return before.isEmpty ? "Elige una colección" : "Listo"
+        case (1, 0): return name(added.first).map { "Guardar en \($0)" } ?? "Guardar en 1 colección"
+        case (let n, 0): return "Guardar en \(n) colecciones"
+        case (0, 1): return name(removed.first).map { "Quitar de \($0)" } ?? "Quitar de 1 colección"
+        case (0, let n): return "Quitar de \(n) colecciones"
+        default: return "Guardar cambios"
         }
     }
 }

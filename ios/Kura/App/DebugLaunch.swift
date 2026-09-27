@@ -258,6 +258,12 @@ enum DebugLaunch {
             store.pendingAction = { [weak store] in store?.followFromProfile("luciarrr") }
         case "followers":
             main(.feed, [.person("luciarrr"), .followers("luciarrr", showFollowing: false)])
+        case "critfollowersdenied":
+            // A list its owner keeps to mutuals, seen by someone not followed back: the private-list note.
+            main(.feed, [.person("tono_v"), .followers("tono_v", showFollowing: false)])
+        case "critmoveto":
+            // O4a Mover a, from "hermana" (critica 2026-09-27 #33: radio dot, "ya está").
+            main(.collections, [.collection("hermana")], sheet: .moveTo(titleID: "chihiro", fromID: "hermana"))
         case "private":
             main(.feed, [.person("tomasv")])
         case "requested":
@@ -351,8 +357,8 @@ enum DebugLaunch {
             store.debugSettingsAnchor = "notificaciones"
             main(.profile, [.settings])
         case "hapticsettings":
-            // Ajustes scrolled to "este iphone" (Vibraciones, the device's haptics switch).
-            store.debugSettingsAnchor = "este iphone"
+            // Ajustes scrolled to "este dispositivo" (Vibraciones, the device's haptics switch).
+            store.debugSettingsAnchor = "este dispositivo"
             main(.profile, [.settings])
         default:
             break

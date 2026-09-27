@@ -7,7 +7,8 @@ import { Fan } from "@/components/kura/fan";
 import { DotsIcon, KIcon } from "@/components/kura/icons";
 import { feedSurface, feedTail, releaseLabel } from "@/components/kura/tint";
 import { ZoomBackButton } from "../zoom-back-button";
-import { CollectionBody, nextLabel, type CollectionBodyProps } from "./collection-body";
+import { waitMeta } from "@/modules/backlog/wait-meta";
+import { CollectionBody, type CollectionBodyProps } from "./collection-body";
 
 export type { CollectionItem, OtherCollection } from "./collection-body";
 
@@ -59,8 +60,13 @@ export function CollectionScreen({
     <CollectionBody {...props} introClassName="pt-2.5">
       {({ present, fan, hexes, empty, addHref, open, body }) => {
         const tail = feedTail(empty ? [] : hexes);
-        const nextWait =
-          mode === "auto" && present[0]?.releaseDate ? releaseLabel(present[0].releaseDate, now) : null;
+        const autoMeta =
+          mode === "auto"
+            ? waitMeta(
+                present.length,
+                present.flatMap((i) => (i.releaseDate ? [releaseLabel(i.releaseDate, now)] : [])),
+              )
+            : null;
         return (
           <div className="relative isolate mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text">
             <div
@@ -141,8 +147,7 @@ export function CollectionScreen({
                     </span>
                     {!empty && (
                       <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-                        {present.length} {present.length === 1 ? "título" : "títulos"}
-                        {nextWait && ` · el próximo ${nextLabel(nextWait)}`}
+                        {autoMeta}
                       </span>
                     )}
                   </>

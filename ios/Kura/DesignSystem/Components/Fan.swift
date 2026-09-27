@@ -29,6 +29,9 @@ struct FanView: View {
     /// Height of the front cover.
     let lead: CGFloat
     var ghost = false
+    /// The ghost's "+" (only when it IS the way in). An empty collection in the carousel draws
+    /// the ghost without it — there, tapping the fan only centres it.
+    var plus = true
     /// Accessible name ("Portadas de verano 2026"); nil = decorative.
     var label: String? = nil
     @Environment(AppStore.self) private var store: AppStore?
@@ -87,7 +90,7 @@ struct FanView: View {
             if ghost && isFront {
                 // Dashed mock affordance (exempt from the borderless rule).
                 shape.strokeBorder(Color.white.opacity(0.18), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-                if lead >= 60 {
+                if plus && lead >= 60 {
                     Image(systemName: "plus")
                         .font(.system(size: max(18, 26 * s).rounded(), weight: .medium))
                         .foregroundStyle(KColor.text2)
@@ -132,9 +135,12 @@ struct FanPickRow: View {
     let covers: [Title]
     let count: Int
     let on: Bool
-    /// "ya está" / "aquí está" after the count.
+    /// "ya está" after the count (the collections the title is already in).
     var note: String? = nil
     var disabled = false
+    /// One choice among many ("mover a"): a radio DOT instead of the check disc that "guardar
+    /// en" (several at once) wears — critica 2026-09-27 #33.
+    var single = false
     let action: () -> Void
 
     var body: some View {
@@ -148,7 +154,7 @@ struct FanPickRow: View {
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                RadioMark(on: on)
+                if single { RadioDot(on: on) } else { RadioMark(on: on) }
             }
             .padding(.horizontal, 8)
             .frame(minHeight: 72)
@@ -183,5 +189,20 @@ struct NewCollectionRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SheetRowStyle())
+    }
+}
+
+/// The single-choice mark: a ring, and a filled dot inside it when chosen. `RadioMark` (the check
+/// disc) stays for multiple choice.
+struct RadioDot: View {
+    let on: Bool
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(on ? KColor.text : KColor.radioRing, lineWidth: 1.5)
+            if on { Circle().fill(KColor.text).frame(width: 12, height: 12) }
+        }
+        .frame(width: 26, height: 26)
+        .animation(KMotion.fade, value: on)
+        .accessibilityHidden(true)
     }
 }

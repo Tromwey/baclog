@@ -49,10 +49,13 @@ enum Route: Hashable {
     /// What moves and what disappears, then `POST /me/merge` (the proof lives in `AppStore.mergeProof`).
     case mergeConfirm
 
-    /// The dock stays on these (a title, a collection — yours, automatic or someone else's).
+    /// The dock stays on these (a title, a collection — yours, automatic or someone else's — and
+    /// a person and their seguidores: the same browsing from any tab, crítica 2026-09-27 #15; it
+    /// used to vanish on a profile opened from the feed and stay on one opened from a collection).
+    /// It hides on the management flows (ajustes, recap, avisos, fusionar…).
     var keepsDock: Bool {
         switch self {
-        case .collection, .title, .automatic, .publicCollection: return true
+        case .collection, .title, .automatic, .publicCollection, .person, .followers: return true
         default: return false
         }
     }
