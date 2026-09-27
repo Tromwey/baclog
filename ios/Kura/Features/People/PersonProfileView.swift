@@ -229,39 +229,33 @@ struct FollowersOnlyCard: View {
     }
 }
 
-/// 20d · a private profile you don't follow: the shape of the collections, locked.
+/// 20d · a private profile you don't follow: the vitrina's fan as a ghost (lead 186, no "+":
+/// there's nothing to add here), a lock on its front card in text3, then the two lines — the
+/// collections' language, not the old spine card (founder, 2026-09-27).
 private struct LockedCollections: View {
     let firstName: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 0) {
-                Image(systemName: "lock.fill").font(.system(size: 15))
-                    .foregroundStyle(KColor.text2)
-                    .frame(width: 40, height: 136)
-                    .background(KColor.spine)
-                HStack(alignment: .bottom, spacing: 10) {
-                    ForEach([70.0, 104, 70, 104], id: \.self) { w in
-                        RoundedRectangle(cornerRadius: KRadius.coverL, style: .continuous).fill(KColor.s2).frame(width: w, height: 104)
-                    }
+        VStack(spacing: 22) {
+            FanView(covers: [], lead: 186, ghost: true, plus: false)
+                .overlay {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(KColor.text3)
                 }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 14)
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                .clipped()
-            }
-            .background(KColor.s1)
-            .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
-            .padding(.horizontal, 12)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 8) {
+                .accessibilityHidden(true)
+            VStack(spacing: 8) {
                 Text("\(firstName) tiene su perfil en privado.")
                     .font(.kura.news(24)).foregroundStyle(KColor.text)
+                    .accessibilityAddTraits(.isHeader)
                 Text("Mientras sea privado, nadie más ve sus obsesiones ni sus colecciones.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 300)
             }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 24)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 

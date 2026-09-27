@@ -20,7 +20,7 @@ export type { CollectionItem, OtherCollection } from "./collection-body";
  * The whole page wears the FEED gradient of the fan's front cover (168°,
  * anchored at 900 px, continuing in its bottom tone). Header: Volver · and
  * Compartir + Opciones at the right, all 44 over art (`--glass-art`); the fan
- * at 225; "colección · fijada" in mono; the name in Newsreader 36.
+ * at 225; "fijada" in mono (only when it is); the name in Newsreader 36.
  *
  * Everything below the name — the line, the credits, the format pills, "el
  * orden", the titles, holding a title (18c) and the Opciones sheet — is
@@ -127,9 +127,13 @@ export function CollectionScreen({
                     auto
                   </span>
                 ) : (
-                  !empty && (
+                  // The eyebrow says only "fijada", and only when it is: "colección"
+                  // repeated the screen and who sees it lives in Opciones (founder,
+                  // 2026-09-27). Unpinned = no eyebrow, and the column's gap closes.
+                  !empty &&
+                  backlog.pinned && (
                     <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
-                      {backlog.pinned ? "colección · fijada" : "colección"}
+                      fijada
                     </span>
                   )
                 )}

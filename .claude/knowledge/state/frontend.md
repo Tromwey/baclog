@@ -226,6 +226,12 @@ Fuente: `design/kura/colecciones-transiciones.dc.html` (su `spr()` = `spring(res
 - **Feed**: segundo dato del título = creador o formato (nunca año) en todas las cards; "agregó/agregaste … a" es la píldora y el nombre de la colección va detrás en Newsreader 17, tocable; la razón de la sugerencia es romana con las obras en itálica (`FeedCard.reasonText`). Alturas de card y `FeedHits` intactos (demo: 5 golpes).
 - DEBUG: `-kuraScreen critfollowersdenied` (lista de tono_v negada).
 
+## Eyebrow de la colección y perfil privado (2026-09-27, founder: "EN TU PERFIL es redundante")
+
+- **Eyebrow de 10b = solo "fijada", y solo si lo está** (iOS `CollectionDetailView` → `FanHeader`; web `collection-screen.tsx`). Nada de "colección" ni de quién la ve: la visibilidad vive en Opciones ("Quién la ve"). Sin fijar no hay eyebrow y no queda hueco (el `VStack` de iOS y el `gap-2.5` web solo espacian hijos presentes). 10a (carrusel) nunca lo mostró. "No puedo esperar" conserva su píldora "auto"; la colección pública ajena, su "una colección de @x". La vitrina del perfil sigue con "fijada · N títulos" (otra pantalla, no se tocó).
+- **Perfil privado ajeno (20d, iOS `LockedCollections` en `PersonProfileView.swift`)**: ya no es la tarjeta de lomo (franja `KColor.spine` + rectángulos). Es el abanico fantasma de la vitrina (`FanView(covers: [], lead: 186, ghost: true, plus: false)`) con `lock.fill` 20 en text3 centrado en la carta frontal, y las dos líneas centradas debajo. El lomo (`SpineLabel`/`KColor.spine`) solo queda en la tarjeta 9:16 del recap.
+- DEBUG: `-kuraScreen collection` (hermana, sin fijar) · `-kuraScreen shelf` (música 2026, fijada) · `-kuraScreen private`.
+
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
 

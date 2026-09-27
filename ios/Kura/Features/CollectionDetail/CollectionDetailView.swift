@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// The whole page wears the FEED gradient of the fan's front cover (168°, anchored at 900,
 /// continuing in its bottom tone). Header: Volver · Compartir + Opciones; the fan at 225;
-/// "fijada · solo yo" (pinned + who sees it) in mono; the name in Newsreader 36; the line in italic 16; the credits
+/// "fijada" in mono (only when pinned); the name in Newsreader 36; the line in italic 16; the credits
 /// (seals + names only once collaborators exist); and the format pills (always:
 /// one format = a label, several = they filter; tap again to clear).
 ///
@@ -61,13 +61,11 @@ struct CollectionDetailView: View {
                 VStack(spacing: 0) {
                     FanHeader(fan: store.fan(of: c), name: c.name, ghost: empty,
                               onGhost: { store.present(.addTitles(c.id)) }, bottom: empty ? 26 : 0) {
-                        if !empty {
-                            // Who sees it (the one visibility vocabulary, `Privacy.label`) and
-                            // whether it's pinned — not "colección", which the screen already
-                            // says (critica 2026-09-27 #39).
-                            Text([c.pinned ? "fijada" : nil, c.privacy.label.lowercased()]
-                                .compactMap { $0 }.joined(separator: " · "))
-                                .monoLabel(10).padding(.top, 4)
+                        // Only "fijada", and only when it is (founder, 2026-09-27): who sees
+                        // it lives in Opciones ("Quién la ve"), and "colección" repeated the
+                        // screen. Unpinned = no eyebrow; the VStack drops its spacing too.
+                        if !empty && c.pinned {
+                            Text("fijada").monoLabel(10).padding(.top, 4)
                         }
                     } below: {
                         EmptyView()
