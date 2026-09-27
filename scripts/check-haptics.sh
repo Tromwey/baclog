@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Guardrail: every haptic in the iOS app goes through `KHaptic.play` (ios/Kura/DesignSystem/Components/Press.swift).
-# That is where the semantic vocabulary lives (selection · tap · firm · hit · success · warning · error) and
+# That is where the semantic vocabulary lives (selection · tap · firm · hit · pull · success · warning · error) and
 # where Ajustes › Vibraciones is checked ONCE. A generator or `.sensoryFeedback` anywhere else vibrates with
 # the switch off and drifts from "same event = same haptic". Run: `bash scripts/check-haptics.sh` (exit 1 on a hit).
 set -euo pipefail

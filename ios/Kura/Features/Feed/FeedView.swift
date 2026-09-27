@@ -287,6 +287,12 @@ struct FeedView: View {
 ///   (it decelerates exponentially into the mark, so it always arrives slow), up to `cap` for
 ///   a fling that runs cards through the top.
 ///
+/// The pull (founder, 2026-09-27: "el opuesto a cuando toca el techo"): scrolling back UP, the
+/// card above drops onto that same line, dragged down by the one below — `KHaptic.pull`, soft,
+/// on the offset coming down to a mark (card 0's is the top, 0). Mirror rules: finger only,
+/// `tolerance` above the mark (the snap's landing from above is one pull), re-arms `rearm` pt
+/// above it, same `gap`, and the rubber band past the top is clamped so it never pulls.
+///
 /// iOS 18+ (`onScrollPhaseChange` is what tells a finger from code); on 17 there's no hit
 /// rather than a hit that could fire on a programmatic scroll.
 @MainActor
@@ -295,9 +301,16 @@ private final class FeedHits {
     private var marks: [CGFloat] = []
     /// How many marks the stack is past; the rest are armed.
     private var passed = 0
+    /// The pull's marks: `0` (card 0 back at the top) then `marks`. Pull mark j = card j aligned.
+    private var pullMarks: [CGFloat] = [0]
+    /// How many pull marks the offset is above (armed to pull when it comes back down); the
+    /// last one it dropped onto is card `above`.
+    private var above = 0
     private var offset: CGFloat = 0
     private var userDriven = false
     private var samples: [(t: CFTimeInterval, y: CGFloat)] = []
+    /// Shared by hit and pull: any feed haptic within `gap` of the last is merged away, so one
+    /// crossing never plays both.
     private var lastHit: CFTimeInterval = -1
 
     /// How close counts as touching. The snap decelerates exponentially into the mark and
@@ -309,59 +322,87 @@ private final class FeedHits {
     private static let window: CFTimeInterval = 0.1
     private static let floor: CGFloat = 0.4
     private static let cap: CGFloat = 0.9
+    /// The pull is the `.soft` generator: a compliant body, weaker per unit than `.rigid`, so its
+    /// range sits a notch higher to stay felt on the snap's slow landing.
+    private static let pullFloor: CGFloat = 0.5
+    private static let pullCap: CGFloat = 0.85
     /// Speed (pt/s) at which the tap reaches `cap`.
     private static let fullSpeed: CGFloat = 2400
 
     func setMarks(_ m: [CGFloat]) {
         guard m != marks else { return }
         marks = m
+        pullMarks = [0] + m
         // New data (a page, a refresh) never fires: re-seat on the current offset.
         passed = m.prefix { $0 - Self.tolerance <= offset }.count
+        let y = max(offset, 0)
+        above = pullMarks.prefix { y > $0 + Self.tolerance }.count
     }
 
     func phase(user: Bool, active: Bool) {
         userDriven = user
-        if active { KHaptic.prepare(.hit(intensity: 0)) } else { samples.removeAll(keepingCapacity: true) }
+        if active {
+            KHaptic.prepare(.hit(intensity: 0))
+            KHaptic.prepare(.pull(intensity: 0))
+        } else { samples.removeAll(keepingCapacity: true) }
         #if DEBUG
         KBodyLog.hit("FEEDHIT phase user=\(user) active=\(active) off \(Int(offset))")
         #endif
     }
 
     func scrolled(to y: CGFloat) {
+        let previous = offset
         offset = y
         let now = CACurrentMediaTime()
         samples.append((now, y))
         samples.removeAll { now - $0.t > Self.window }
 
+        // Hit: a card rises into the header line.
         var crossed = 0
         while passed < marks.count, y >= marks[passed] - Self.tolerance { passed += 1; crossed += 1 }
         while passed > 0, y < marks[passed - 1] - Self.tolerance - Self.rearm { passed -= 1 }
-        guard crossed > 0 else { return }
 
+        // Pull: scrolling back up, the card above drops onto the line (the offset comes down to
+        // its mark + tolerance); re-arms once the offset goes `rearm` pt back above. The rubber
+        // band past the top (offset < 0) is clamped to 0: it never pulls or re-arms anything.
+        let p = max(y, 0)
+        var pulled = 0
+        while above < pullMarks.count, p > pullMarks[above] + Self.tolerance + Self.rearm { above += 1 }
+        while above > 0, p <= pullMarks[above - 1] + Self.tolerance { above -= 1; pulled += 1 }
+
+        // One frame moves one way: only the matching event can sound (belt and braces over the
+        // hysteresis, which already keeps a hit and a pull off the same mark).
+        if crossed > 0, y > previous { fire(pull: false, card: passed, count: crossed, y: y, mark: marks[passed - 1], now: now) }
+        if pulled > 0, y < previous { fire(pull: true, card: above, count: pulled, y: y, mark: pullMarks[above], now: now) }
+    }
+
+    private func fire(pull: Bool, card: Int, count: Int, y: CGFloat, mark: CGFloat, now: CFTimeInterval) {
         #if DEBUG
-        let card = passed  // mark k is card k + 1: the last one that reached the top
+        let tag = pull ? "FEEDPULL" : "FEEDHIT"
         #endif
         guard userDriven else {
             #if DEBUG
-            KBodyLog.hit("FEEDHIT silent card \(card) (not the finger) off \(Int(y))")
+            KBodyLog.hit("\(tag) silent card \(card) (not the finger) off \(Int(y))")
             #endif
             return
         }
         guard now - lastHit >= Self.gap else {
             #if DEBUG
-            KBodyLog.hit("FEEDHIT merged card \(card) (\(Int((now - lastHit) * 1000)) ms after the last)")
+            KBodyLog.hit("\(tag) merged card \(card) (\(Int((now - lastHit) * 1000)) ms after the last)")
             #endif
             return
         }
         let first = samples.first ?? (now, y)
         let dt = now - first.t
-        let speed = dt > 0.008 ? max(0, (y - first.y) / CGFloat(dt)) : 0
-        let intensity = min(Self.cap, Self.floor + (Self.cap - Self.floor) * speed / Self.fullSpeed)
-        KHaptic.play(.hit(intensity: intensity))
+        let travel = pull ? first.y - y : y - first.y
+        let speed = dt > 0.008 ? max(0, travel / CGFloat(dt)) : 0
+        let (lo, hi) = pull ? (Self.pullFloor, Self.pullCap) : (Self.floor, Self.cap)
+        let intensity = min(hi, lo + (hi - lo) * speed / Self.fullSpeed)
+        KHaptic.play(pull ? .pull(intensity: intensity) : .hit(intensity: intensity))
         lastHit = now
         #if DEBUG
-        KBodyLog.hit(String(format: "FEEDHIT card %d x%d off %.1f mark %.1f speed %.0f intensity %.2f",
-                            card, crossed, y, marks[passed - 1], speed, intensity))
+        KBodyLog.hit(String(format: "%@ card %d x%d off %.1f mark %.1f speed %.0f intensity %.2f",
+                            tag, card, count, y, mark, speed, intensity))
         #endif
     }
 }
@@ -392,8 +433,10 @@ private extension View {
 /// reaches `FeedHits` through the same `onScrollGeometryChange`) and stands in for
 /// `onScrollPhaseChange` — a programmatic move reports no finger. The log shows each `FEEDHIT`.
 /// A drag through card 1, a fling through card 2, a snap-like landing on card 3, back up to the
-/// top (silent), down through card 1 again (re-armed), two cards in one frame (one hit), and a
-/// jump with no finger (silent).
+/// top (pulls, no hits), down through card 1 again (re-armed), two cards in one frame (one hit), a
+/// jump with no finger (silent); then the pull: a slow drag up over one mark, a fling up over two,
+/// a snap-like landing onto card 1 from below, a drag down (a hit, no pull), a fling into the
+/// rubber band past the top (no pull in the bounce) and a finger-less scroll-to-top (silent).
 private struct FeedHitDemo: UIViewRepresentable {
     let hits: FeedHits
     let marks: [CGFloat]
@@ -442,7 +485,7 @@ private struct FeedHitDemo: UIViewRepresentable {
             }
             y = target; set(y)
             try? await Task.sleep(for: .milliseconds(300))
-            KBodyLog.hit("FEEDHIT demo D: back up to the top (cards drop: expect nothing)")
+            KBodyLog.hit("FEEDHIT demo D: back up to the top (no hit; FEEDPULL card 2, 1, 0)")
             await line(to: 0, speed: 1500)
             KBodyLog.hit("FEEDHIT demo E: slow drag 300 pt/s through card 1 again (re-armed)")
             await line(to: marks[0] + 20, speed: 300)
@@ -453,6 +496,39 @@ private struct FeedHitDemo: UIViewRepresentable {
             KBodyLog.hit("FEEDHIT demo G: jump past card 4 and 5 with no finger (expect silent)")
             hits.phase(user: false, active: true)
             y = marks[4] + 10; set(y)
+            try? await Task.sleep(for: .milliseconds(100))
+            hits.phase(user: false, active: false)
+            try? await Task.sleep(for: .milliseconds(100))
+            // The pull: scrolling back up, the card above settles under the header.
+            hits.phase(user: true, active: true)
+            KBodyLog.hit("FEEDHIT demo H: slow drag up 500 pt/s over card 4's mark (expect FEEDPULL card 4)")
+            await line(to: marks[3] - 20, speed: 500)
+            try? await Task.sleep(for: .milliseconds(200))
+            KBodyLog.hit("FEEDHIT demo I: fling up 2000 pt/s past cards 3 and 2 (expect FEEDPULL card 3, card 2)")
+            await line(to: marks[1] - 30, speed: 2000)
+            KBodyLog.hit("FEEDHIT demo J: decelerate down onto card 1 (snap landing: one FEEDPULL)")
+            let y1 = y, target1 = marks[0]
+            for i in 1...75 {
+                y = target1 + (y1 - target1) * exp(-CGFloat(i) * 0.016 / 0.15)
+                set(y)
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            y = target1; set(y)
+            try? await Task.sleep(for: .milliseconds(300))
+            KBodyLog.hit("FEEDHIT demo K: drag down through card 2 (expect a FEEDHIT, no FEEDPULL)")
+            await line(to: marks[1] + 20, speed: 800)
+            try? await Task.sleep(for: .milliseconds(200))
+            KBodyLog.hit("FEEDHIT demo L: fling up past the top into the rubber band (FEEDPULL card 2, 1, 0; none in the bounce)")
+            await line(to: -60, speed: 2000)
+            await line(to: 0, speed: 400)
+            await line(to: -25, speed: 400)
+            await line(to: 0, speed: 300)
+            try? await Task.sleep(for: .milliseconds(200))
+            KBodyLog.hit("FEEDHIT demo M: scroll-to-top with no finger from card 3 (expect silent)")
+            hits.phase(user: false, active: true)
+            y = marks[2]; set(y)
+            try? await Task.sleep(for: .milliseconds(100))
+            y = 0; set(y)
             try? await Task.sleep(for: .milliseconds(100))
             hits.phase(user: false, active: false)
             KBodyLog.hit("FEEDHIT demo end")
