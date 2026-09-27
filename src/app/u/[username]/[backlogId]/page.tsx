@@ -19,7 +19,6 @@ import {
 } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { Masonry, type MasonryItem } from "@/components/kura/masonry";
-import { subFor } from "@/components/kura/masonry-data";
 import { feedSurface, feedTail, releaseLabel } from "@/components/kura/tint";
 import { visibilityOf } from "@/modules/backlog/visibility";
 import { OwnerOptions } from "./owner-options";
@@ -111,7 +110,6 @@ export default async function PublicBacklogPage({
       paletteHex: i.paletteHex ?? null,
       glyph: stateGlyph({ obsessed: i.obsessed, status: i.status, verdict: i.verdict }),
       wait: upcoming && i.releaseDate ? releaseLabel(i.releaseDate, now) : null,
-      sub: subFor(i),
     };
   });
   const ownerPalette = owner.palette.filter((h) => h.toLowerCase() !== "#d8ff3e");

@@ -450,7 +450,6 @@ export function CollectionBody({
     paletteHex: it.paletteHex,
     glyph: glyphOf(it),
     wait: waitOf(it, now),
-    sub: it.year ? String(it.year) : FORMAT[it.mediaType].one,
     flightKey: it.catalogItemId,
   }));
   const byKey = new Map(shown.map((it) => [it.backlogItemId, it]));
@@ -706,7 +705,8 @@ function ListRow({
   const h = album ? 59 : 66;
   const wait = waitOf(it, now);
   const glyph = glyphOf(it);
-  const meta = [it.year, it.byline].filter(Boolean).join(" · ") || FORMAT[it.mediaType].one;
+  // No year in a collection row: detail lives in the ficha (founder, 2026-09-27).
+  const meta = it.byline || FORMAT[it.mediaType].one;
   return (
     <Link
       href={`/item/${it.catalogItemId}`}

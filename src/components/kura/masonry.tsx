@@ -13,7 +13,8 @@ import { useHold } from "./use-hold";
  * each title dealt in order to the shortest column (`dealColumns`) so the
  * reading runs along the rows and no column is left empty. Each tile: the
  * cover at its native form with the state glyph or the wait pill top-left,
- * the title in Newsreader italic 14 and the year in mono 10.
+ * and the title in Newsreader italic 14 — no year: detail lives in the ficha
+ * (founder, 2026-09-27).
  *
  * Shared by Tus colecciones, the collection, the automatic one and the
  * shared web page. `onHold` (the owner's 18c sheet) is optional.
@@ -29,8 +30,6 @@ export interface MasonryItem {
   glyph: GlyphKind | null;
   /** "4 d" / "17 oct" — wins over the glyph. */
   wait: string | null;
-  /** The mono line under the title: the year, else the format. */
-  sub: string;
   /** The ficha this cover opens (its catalog id): tapping it flies the
    *  cover into the ficha and Volver flies it back (`cover-flight.tsx`). */
   flightKey?: string;
@@ -154,7 +153,6 @@ function Tile({ it, onHold }: { it: MasonryItem; onHold?: (key: string) => void 
         ) : null}
       </span>
       <span className="truncate font-brand text-[14px] italic leading-[1.15] text-text">{it.title}</span>
-      <span className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">{it.sub}</span>
     </Link>
   );
 }

@@ -1,4 +1,3 @@
-import type { MediaType } from "@/modules/catalog/types";
 import type { GlyphKind } from "./components";
 
 /**
@@ -18,9 +17,3 @@ export function glyphFor(it: {
   return null;
 }
 
-const ONE: Record<MediaType, string> = { film: "Cine", series: "Serie", album: "Álbum" };
-
-/** The mono line: the year, else the format. */
-export function subFor(it: { year: number | null; mediaType: MediaType }): string {
-  return it.year ? String(it.year) : ONE[it.mediaType];
-}

@@ -313,7 +313,7 @@ struct TitleList: View {
 
     private func meta(_ t: Title) -> String {
         var parts = [t.format.metaLabel]
-        if let y = t.year { parts.append(String(y)) }
+        // No year in a collection row: detail lives in the ficha (founder, 2026-09-27).
         if let cr = t.creator { parts.append(cr) }
         if store.isUnreleased(t), let l = store.releaseLabel(t) { parts.append(l) }
         return parts.joined(separator: " · ")

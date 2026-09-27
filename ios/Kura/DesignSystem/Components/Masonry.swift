@@ -3,8 +3,8 @@ import SwiftUI
 /// "Títulos en columnas" (Colecciones formalizado): a collection's titles in three independent
 /// columns — records 1:1 and posters 2:3 stack without gaps, each title dealt in order to the
 /// shortest column so the reading runs along the rows (`ColumnsLayout`). Each tile: the cover at its native form with the
-/// state glyph (24) or the wait pill top-left, the title in Newsreader italic 14 and the year (or
-/// the format) in mono 10. Gap 12 between columns, 18 between tiles, 20 on the sides.
+/// state glyph (24) or the wait pill top-left and the title in Newsreader italic 14 — no year:
+/// detail lives in the ficha (founder, 2026-09-27). Gap 12 between columns, 18 between tiles, 20 on the sides.
 ///
 /// Shared by Tus colecciones, a collection, the automatic one and someone else's. `onHold` (the
 /// owner's 18c sheet) is optional. Twin of the web's `src/components/kura/masonry.tsx`.
@@ -58,9 +58,6 @@ struct MasonryTile: View {
             Text(title.name)
                 .font(.kura.newsItalic(14))
                 .foregroundStyle(KColor.text)
-                .lineLimit(1)
-            Text(title.year.map(String.init) ?? title.format.metaLabel)
-                .monoLabel(10)
                 .lineLimit(1)
         }
         .contentShape(Rectangle())
