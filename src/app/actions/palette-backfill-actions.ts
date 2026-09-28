@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { requireUser } from "@/auth";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
@@ -41,7 +41,14 @@ export async function getPaletteBackfillTargetsAction(): Promise<
       posterUrl: catalogItems.posterUrl,
     })
     .from(catalogItems)
-    .where(isNotNull(catalogItems.posterUrl));
+    .where(isNotNull(catalogItems.posterUrl))
+    // Titles someone actually has first: those are the covers people see, so a long
+    // run is useful from the first minute. The outer id is written qualified — a bare
+    // ${catalogItems.id} renders as "id" in a one-table select and would bind to
+    // user_item.id inside the subquery (learnings/2026-09-27-columna-sin-calificar…).
+    .orderBy(
+      sql`exists (select 1 from user_item ui where ui.catalog_item_id = ${catalogItems}.${sql.identifier("id")}) desc`,
+    );
 
   return rows
     .filter((r): r is { catalogItemId: string; posterUrl: string } =>
