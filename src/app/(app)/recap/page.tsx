@@ -20,8 +20,7 @@ import { alsoInMonth, monthName, shortYear } from "@/modules/backlog/recap-forma
  *
  * Same month the F3.3 recap draws: the newest month with any activity (the
  * one in progress included), or `?mes=YYYY-MM` from Meses anteriores. The
- * exported card itself is the untouched F3.3/F3.5.7 pattern card, one tap
- * away (/recap/tarjeta).
+ * exported card (`cards/render/recap.ts`) is one tap away (/recap/tarjeta).
  *
  * 69 Recap vacío is the state with no month at all.
  */

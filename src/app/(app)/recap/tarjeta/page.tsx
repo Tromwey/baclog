@@ -1,16 +1,18 @@
 import { requireUser } from "@/auth";
-import { buildLatestRecap, buildMonthlyRecap } from "@/modules/backlog/recap";
+import { getRecapMonths } from "@/modules/backlog/recap";
+import { toRecapCardBacklog } from "@/modules/cards/adapter";
 import { CardExporter } from "@/components/card-exporter";
 import { BackButton } from "@/components/ui";
-import { monthName, monthYear } from "@/modules/backlog/recap-format";
+import { monthYear } from "@/modules/backlog/recap-format";
 
 /**
- * 66 Tarjeta recap / 67 C2 Tarjeta firmada — the Kura frame around the
- * F3.3/F3.5.7 recap card: Volver 44 at the top, the mono eyebrow, and the
- * UNTOUCHED exporter (the pattern card, drawn by modules/cards — its
- * renderer is not redesigned in this pass; the export stays ADR-008: palette
- * and type, no artwork). The card's title is the Kura name of the month,
- * "recap de agosto", and your public link signs it when your page is live.
+ * 66 Tarjeta recap / 67 C2 Tarjeta firmada — the Kura frame around the recap
+ * card: Volver 44 at the top, the mono eyebrow, and the exporter drawing
+ * `render/recap.ts` (flujo 10 · Tarjeta: the month, the fan with "lo más
+ * tuyo" in front, the month's numbers; ADR-008: palette and type, no
+ * artwork). It reads the month the recap SCREEN reads (`getRecapMonths`:
+ * `?mes=YYYY-MM`, else the newest), so the card's numbers are the screen's.
+ * Your public link travels with it when your page is live.
  */
 export default async function RecapCardPage({
   searchParams,
@@ -18,11 +20,8 @@ export default async function RecapCardPage({
   searchParams: Promise<{ mes?: string }>;
 }) {
   const user = await requireUser();
-  const { mes } = await searchParams;
-  const recap =
-    (mes && /^\d{4}-\d{2}$/.test(mes)
-      ? await buildMonthlyRecap(user.id, mes, user.username)
-      : null) ?? (await buildLatestRecap(user.id, user.username));
+  const [{ mes }, months] = await Promise.all([searchParams, getRecapMonths(user.id)]);
+  const recap = months.find((m) => m.key === mes) ?? months[0];
 
   if (!recap) {
     return (
@@ -36,19 +35,15 @@ export default async function RecapCardPage({
     );
   }
 
-  const label = `recap de ${monthName(recap.eraKey)}`;
   return (
     <div className="relative">
       <div className="absolute left-6 top-[calc(16px+env(safe-area-inset-top))] z-10">
         <BackButton className="h-11! w-11!" />
       </div>
       <CardExporter
-        backlog={{ ...recap.cardBacklog, name: label }}
-        style="pattern"
-        eyebrow={`recap · ${monthYear(recap.eraKey)}`}
-        subtitle={`${recap.completedCount} ${recap.completedCount === 1 ? "completo" : "completos"} · ${recap.totalItems} ${recap.totalItems === 1 ? "título" : "títulos"}${
-          recap.topGenre ? ` · ${recap.topGenre}` : ""
-        }`}
+        backlog={toRecapCardBacklog(recap, user.username)}
+        style="recap"
+        eyebrow={`recap · ${monthYear(recap.key)}`}
         publicUrl={user.username && user.isPublic ? `https://baclog.app/${user.username}` : null}
         noLinkNote="Elige tu @usuario en Ajustes para que tu link firme la tarjeta."
       />

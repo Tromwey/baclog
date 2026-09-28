@@ -1,4 +1,5 @@
 import type { BacklogItemWithCatalog } from "@/modules/backlog/queries";
+import { alsoInMonth, monthName, type RecapMonth, type RecapTitle } from "@/modules/backlog/recap-format";
 import type { CardBacklog, CardItem, ItemStatus } from "./types";
 
 const STATUS_MAP: Record<string, ItemStatus> = {
@@ -43,5 +44,41 @@ export function toCardBacklog(
         ...(i.releaseDate ? { releaseDate: i.releaseDate.toISOString() } : {}),
       }),
     ),
+  };
+}
+
+function recapItem(t: RecapTitle): CardItem {
+  return {
+    title: t.title,
+    byline: t.byline ?? "",
+    type: t.mediaType,
+    year: t.year ?? 0,
+    genre: "",
+    mood: "",
+    status: t.completed ? "completed" : "on-my-radar",
+    reaction: t.obsessed ? "obsessed" : t.liked ? "liked" : undefined,
+    palette: t.paletteHex.length > 0 ? t.paletteHex : undefined,
+  };
+}
+
+/**
+ * The recap card's data from the month the recap SCREEN reads
+ * (`getRecapMonths`): the same four numbers, and every title of the month
+ * with "lo más tuyo" first — the card fans `items[0..2]` with it in front
+ * (iOS `RecapPayload.fan`: the top plus the next two of the month).
+ */
+export function toRecapCardBacklog(month: RecapMonth, username: string | null): CardBacklog {
+  const rest = month.top ? alsoInMonth(month, Infinity) : month.titles;
+  return {
+    name: `recap de ${monthName(month.key)}`,
+    username: username ?? "",
+    recap: {
+      eraKey: month.key,
+      completed: month.completed,
+      obsessions: month.obsessions,
+      reviews: month.reviews,
+      saved: month.saved,
+    },
+    items: [...(month.top ? [month.top] : []), ...rest].map(recapItem),
   };
 }

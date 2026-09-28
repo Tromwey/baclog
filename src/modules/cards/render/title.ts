@@ -1,4 +1,3 @@
-import { tintEnds } from "@/components/kura/tint";
 import {
   CHECK_FILL_PATH,
   CLOCK_PATH,
@@ -7,7 +6,7 @@ import {
 } from "@/components/glyph-paths";
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog, type CardItem, type MediaType } from "../types";
 import { cardFoot, drawLockup, track } from "./brand";
-import { drawCover } from "./collection";
+import { drawCover, drawSurface } from "./collection";
 import { NEWS, RHMONO, SANS } from "./fonts";
 import { truncateToWidth, wrapText } from "./util";
 
@@ -37,7 +36,7 @@ const TEXT_2 = "#b9b8c2";
 const PILL_FILL = "rgba(255,255,255,0.1)";
 
 /** Pill colours = the state tokens (`--st-*` in globals.css). */
-const ST = {
+export const ST = {
   obsessed: "#ec8e76",
   liked: "#9cbae1",
   completed: "#a0cba0",
@@ -129,21 +128,7 @@ export function drawTitleCard(
   now = Date.now(),
 ) {
   // Surface: the title's palette as the 168° tint (same as the collection card).
-  const [top, bottom] = tintEnds(item.palette ?? []);
-  ctx.save();
-  const t = ((168 - 90) * Math.PI) / 180;
-  const half = (Math.abs(CARD_WIDTH * Math.cos(t)) + Math.abs(CARD_HEIGHT * Math.sin(t))) / 2;
-  const bg = ctx.createLinearGradient(
-    CARD_WIDTH / 2 - Math.cos(t) * half,
-    CARD_HEIGHT / 2 - Math.sin(t) * half,
-    CARD_WIDTH / 2 + Math.cos(t) * half,
-    CARD_HEIGHT / 2 + Math.sin(t) * half,
-  );
-  bg.addColorStop(0, top);
-  bg.addColorStop(1, bottom);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  ctx.restore();
+  drawSurface(ctx, item.palette ?? []);
 
   const padX = 24 * X;
   const padY = 26 * X;

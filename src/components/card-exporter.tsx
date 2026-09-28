@@ -14,8 +14,8 @@ import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
  * F3.5.7 — the contextual card exporter. Each share context renders exactly ONE
- * style (no generic picker): backlog → receipt, item → ticket, monthly era →
- * pattern. The Double Feature (reco) card has its own surface (F3.5.6). Reuses
+ * style (no generic picker): collection → collection, item → title, month →
+ * recap. The Double Feature (reco) card has its own surface (F3.5.6). Reuses
  * the exact M1/M2 rasterization path (drawCard → canvas.toBlob → Web Share), so
  * every export is 9:16 PNG with ZERO copyrighted artwork (ADR-008: CardItem has
  * no image field — enforced by shape).

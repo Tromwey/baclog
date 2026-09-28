@@ -48,7 +48,7 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const recap = await buildMonthlyRecap(u.id, eraKey, u.username);
+      const recap = await buildMonthlyRecap(u.id, eraKey);
       if (!recap) continue; // no activity that month — claim stays, no email
 
       await sendRecapEmail(u.email, recap);

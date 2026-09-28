@@ -2,8 +2,6 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { itemReviews, userItems } from "@/db/schema";
-import { toCardBacklog } from "@/modules/cards/adapter";
-import type { CardBacklog } from "@/modules/cards/types";
 import { deriveEras } from "./era";
 import { getUserLibrary } from "./library";
 import type { BacklogItemWithCatalog } from "./queries";
@@ -28,75 +26,44 @@ export function previousMonthKey(now = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** The Kura name of the month ("recap de agosto") — the email subject and
- *  the card title read it; never the old English "August Era". */
+/** The Kura name of the month ("recap de agosto") — the email subject reads
+ *  it; never the old English "August Era". */
 function labelFor(eraKey: string): string {
   return `recap de ${monthName(eraKey)}`;
 }
 
-// ---------- F3.3 card (cron + /recap/tarjeta) ----------
+// ---------- F3.3 monthly email (cron) ----------
 
 export interface MonthlyRecap {
   eraKey: string;
   label: string;
   totalItems: number;
   completedCount: number;
-  topGenre: string | null;
-  cardBacklog: CardBacklog;
 }
 
-function recapFromEra(
-  key: string,
-  eraItems: BacklogItemWithCatalog[],
-  username: string | null,
-): MonthlyRecap {
-  const label = labelFor(key);
-  const genreCounts = new Map<string, number>();
-  let completedCount = 0;
-  for (const it of eraItems) {
-    if (it.status === "completed") completedCount++;
-    if (it.genre) genreCounts.set(it.genre, (genreCounts.get(it.genre) ?? 0) + 1);
-  }
-  const topGenre =
-    [...genreCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-
+function recapFromEra(key: string, eraItems: BacklogItemWithCatalog[]): MonthlyRecap {
   return {
     eraKey: key,
-    label,
+    label: labelFor(key),
     totalItems: eraItems.length,
-    completedCount,
-    topGenre,
-    // Reuse the M2 adapter; the backlog "name" becomes the era label
-    cardBacklog: toCardBacklog(label, topGenre, username, eraItems),
+    completedCount: eraItems.filter((it) => it.status === "completed").length,
   };
 }
 
 /**
- * F3.3 — builds a cross-backlog recap for one user + era, reusing the exact
- * M2 pipeline: all the user's items → deriveEras → filter to eraKey →
- * toCardBacklog (so the same receipt/ticket/pattern renderers draw it).
- * Returns null when the user had no activity that month (skip silently).
+ * F3.3 — the numbers the monthly email carries for one user + era: all the
+ * user's items → deriveEras → filter to eraKey. Returns null when the user
+ * had no activity that month (skip silently). The shareable card reads
+ * `getRecapMonths` instead (below), like the recap screen.
  */
 export async function buildMonthlyRecap(
   userId: string,
   eraKey?: string,
-  username: string | null = null,
 ): Promise<MonthlyRecap | null> {
   const key = eraKey ?? previousMonthKey();
   const era = deriveEras(await getUserLibrary(userId)).find((e) => e.key === key);
   if (!era || era.items.length === 0) return null;
-  return recapFromEra(key, era.items, username);
-}
-
-/** In-app surface: the most recent era with any activity; null if none. */
-export async function buildLatestRecap(
-  userId: string,
-  username: string | null = null,
-): Promise<MonthlyRecap | null> {
-  const eras = deriveEras(await getUserLibrary(userId));
-  const era = eras[0]; // deriveEras sorts most-recent first
-  if (!era) return null;
-  return recapFromEra(era.key, era.items, username);
+  return recapFromEra(key, era.items);
 }
 
 // ---------- Kura recap screen + GET /recap/* ----------

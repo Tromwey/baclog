@@ -296,7 +296,7 @@ export const catalogItems = pgTable(
     /** Studio/network for video, artist for music */
     byline: text("byline"),
     year: smallint("year"),
-    /** Primary genre label — also seeds the pattern card style */
+    /** Primary genre label */
     genre: text("genre"),
     synopsis: text("synopsis"),
     /** Hotlinked TMDB/mzstatic URL — never proxied or stored as binary */

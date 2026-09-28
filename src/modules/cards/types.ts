@@ -37,14 +37,31 @@ export interface CardBacklog {
   vibe?: string;
   username: string;
   items: CardItem[];
+  /**
+   * The monthly recap's own data (style `recap`): the month and its four
+   * numbers, the same ones the recap screen shows (`RecapMonth`). The items
+   * then come top first ("lo más tuyo", the fan's front) — see
+   * `toRecapCardBacklog` in adapter.ts.
+   */
+  recap?: RecapCardData;
+}
+
+export interface RecapCardData {
+  /** "2026-09" */
+  eraKey: string;
+  completed: number;
+  obsessions: number;
+  reviews: number;
+  saved: number;
 }
 
 /**
  * `title` = one title from the ficha (render/title.ts), `collection` = the
- * 9:16 fan card (Colecciones formalizado · 4b), `pattern` = the monthly recap.
+ * 9:16 fan card (Colecciones formalizado · 4b), `recap` = the monthly recap
+ * (render/recap.ts).
  * The style also names the downloaded file (`kura-{style}.png`).
  */
-export type CardStyle = "title" | "pattern" | "collection";
+export type CardStyle = "title" | "recap" | "collection";
 
 export const CARD_WIDTH = 1080;
 export const CARD_HEIGHT = 1920;

@@ -1,6 +1,6 @@
 import type { CardBacklog, CardItem, CardStyle } from "../types";
 import { drawCollection } from "./collection";
-import { drawPattern } from "./pattern";
+import { drawRecap } from "./recap";
 import { drawTitleCard } from "./title";
 
 export { CARD_HEIGHT, CARD_WIDTH } from "../types";
@@ -21,8 +21,8 @@ export function drawCard(
     case "title":
       drawTitleCard(ctx, backlog, item);
       break;
-    case "pattern":
-      drawPattern(ctx, backlog);
+    case "recap":
+      drawRecap(ctx, backlog);
       break;
     case "collection":
       drawCollection(ctx, backlog);

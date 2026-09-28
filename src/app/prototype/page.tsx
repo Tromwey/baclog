@@ -10,7 +10,7 @@ import {
 } from "@/modules/cards/render";
 import type { CardStyle } from "@/modules/cards/types";
 import { SAMPLE_DOUBLE_FEATURE } from "@/modules/cards/double-feature";
-import { ALT_BACKLOG, DEMO_BACKLOG } from "./data";
+import { ALT_BACKLOG, DEMO_BACKLOG, RECAP_SAMPLES } from "./data";
 import { SKELETON_PULSE } from "@/components/kura/components";
 
 /**
@@ -22,7 +22,8 @@ import { SKELETON_PULSE } from "@/components/kura/components";
  * `?raw=<style>` renders just the canvas at 1:1 (1080×1920 CSS px, no
  * chrome) and flags `<html data-card-ready>` once drawn, so a headless
  * browser can screenshot each card: `&i=N` picks the title for the title
- * card, `&alt=1` swaps to the second sample collection.
+ * card and the recap sample for the recap card (`RECAP_SAMPLES`), `&alt=1`
+ * swaps to the second sample collection.
  */
 
 type LabStyle = CardStyle | "double-feature";
@@ -30,7 +31,7 @@ type LabStyle = CardStyle | "double-feature";
 const STYLES: { id: LabStyle; label: string }[] = [
   { id: "title", label: "Título" },
   { id: "collection", label: "Colección" },
-  { id: "pattern", label: "Recap" },
+  { id: "recap", label: "Recap" },
   { id: "double-feature", label: "Conexión" },
 ];
 
@@ -70,8 +71,14 @@ function Lab({ query }: { query: URLSearchParams }) {
   const raw = query.get("raw") as LabStyle | null;
   const [style, setStyle] = useState<LabStyle>(raw ?? "title");
   const [index, setIndex] = useState(() => Number(query.get("i") ?? 0) || 0);
-  const backlog = query.has("alt") ? ALT_BACKLOG : DEMO_BACKLOG;
+  const backlog =
+    style === "recap"
+      ? RECAP_SAMPLES[index % RECAP_SAMPLES.length]
+      : query.has("alt")
+        ? ALT_BACKLOG
+        : DEMO_BACKLOG;
   const item = backlog.items[index % backlog.items.length];
+  const count = style === "recap" ? RECAP_SAMPLES.length : backlog.items.length;
 
   useEffect(() => {
     if (!fontsReady) return;
@@ -126,22 +133,22 @@ function Lab({ query }: { query: URLSearchParams }) {
         {!fontsReady && <div className={`absolute inset-0 rounded-xl bg-surface-2 ${SKELETON_PULSE}`} />}
       </div>
 
-      {style === "title" && (
+      {(style === "title" || style === "recap") && (
         <div className="mt-3 flex w-full max-w-[340px] items-center justify-between text-sm">
           <button
             type="button"
-            aria-label="Título anterior"
+            aria-label="Anterior"
             className="h-11 rounded-full bg-surface-2 px-4"
-            onClick={() => setIndex((i) => (i - 1 + backlog.items.length) % backlog.items.length)}
+            onClick={() => setIndex((i) => (i - 1 + count) % count)}
           >
             ‹
           </button>
-          <span className="truncate px-3 text-text-2">{item.title}</span>
+          <span className="truncate px-3 text-text-2">{style === "recap" ? backlog.name : item.title}</span>
           <button
             type="button"
-            aria-label="Título siguiente"
+            aria-label="Siguiente"
             className="h-11 rounded-full bg-surface-2 px-4"
-            onClick={() => setIndex((i) => (i + 1) % backlog.items.length)}
+            onClick={() => setIndex((i) => (i + 1) % count)}
           >
             ›
           </button>

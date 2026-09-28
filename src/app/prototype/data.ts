@@ -68,7 +68,7 @@ export const DEMO_BACKLOG: CardBacklog = {
   ],
 };
 
-/** A second collection only used to verify F1.4: different data → a visibly different pattern. */
+/** A second sample collection (`&alt=1`). */
 export const ALT_BACKLOG: CardBacklog = {
   name: "recap de agosto",
   username: "sofi",
@@ -107,3 +107,33 @@ export const ALT_BACKLOG: CardBacklog = {
     },
   ],
 };
+
+/**
+ * The recap card's samples (`?raw=recap&i=N`): a month led by a film
+ * obsession, one led by an album, and a thin month (one title, one number).
+ * Items come top first, as `toRecapCardBacklog` orders them.
+ */
+export const RECAP_SAMPLES: CardBacklog[] = [
+  {
+    name: "recap de septiembre",
+    username: "sofi",
+    recap: { eraKey: "2026-09", completed: 3, obsessions: 1, reviews: 2, saved: 4 },
+    items: [DEMO_BACKLOG.items[0], DEMO_BACKLOG.items[1], DEMO_BACKLOG.items[2], DEMO_BACKLOG.items[3], DEMO_BACKLOG.items[4]],
+  },
+  {
+    name: "recap de agosto",
+    username: "sofi",
+    recap: { eraKey: "2026-08", completed: 2, obsessions: 1, reviews: 0, saved: 3 },
+    items: [
+      { ...ALT_BACKLOG.items[1] },
+      ALT_BACKLOG.items[0],
+      ALT_BACKLOG.items[2],
+    ],
+  },
+  {
+    name: "recap de julio",
+    username: "sofi",
+    recap: { eraKey: "2026-07", completed: 0, obsessions: 0, reviews: 0, saved: 1 },
+    items: [DEMO_BACKLOG.items[3]],
+  },
+];

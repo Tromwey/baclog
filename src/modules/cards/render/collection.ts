@@ -24,7 +24,7 @@ const TEXT_2 = "#b9b8c2";
 const EMPTY = "#141417";
 
 /** The fan geometry at lead = 225 (components/kura/fan.tsx), on 300 × 243. */
-const FAN = {
+export const FAN = {
   w: 300,
   lead: { cx: 150, cy: 112.5, poster: [150, 225], album: [180, 180] },
   left: { cx: 69.5, cy: 126, rot: -10 },
@@ -109,7 +109,34 @@ export function drawCover(
   ctx.restore();
 }
 
-function drawFan(ctx: CanvasRenderingContext2D, items: CardItem[], left: number, top: number, s: number) {
+/**
+ * The card surface every 1080×1920 card shares: a cover palette as the feed
+ * card's 168° tint between `tintEnds` (capped for AA). No palette → `--bg`.
+ */
+export function drawSurface(ctx: CanvasRenderingContext2D, palette: readonly string[]) {
+  const [top, bottom] = tintEnds(palette);
+  ctx.save();
+  const t = ((168 - 90) * Math.PI) / 180;
+  const half = (Math.abs(CARD_WIDTH * Math.cos(t)) + Math.abs(CARD_HEIGHT * Math.sin(t))) / 2;
+  const bg = ctx.createLinearGradient(
+    CARD_WIDTH / 2 - Math.cos(t) * half,
+    CARD_HEIGHT / 2 - Math.sin(t) * half,
+    CARD_WIDTH / 2 + Math.cos(t) * half,
+    CARD_HEIGHT / 2 + Math.sin(t) * half,
+  );
+  bg.addColorStop(0, top);
+  bg.addColorStop(1, bottom);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+  ctx.restore();
+}
+
+/**
+ * The fan (`kura/fan.tsx` geometry) with its box's top-left at (left, top)
+ * and scale `s` (canvas px per unit of the lead-225 geometry): `items[0]` in
+ * front, `[1]` left, `[2]` right. Shared with the recap card (recap.ts).
+ */
+export function drawFan(ctx: CanvasRenderingContext2D, items: CardItem[], left: number, top: number, s: number) {
   // No floor shadow: each cover carries its own (founder, 2026-09-27 — same as `Fan`).
   const radius = 14 * X;
   const slots = [
@@ -138,24 +165,7 @@ function drawCentered(ctx: CanvasRenderingContext2D, text: string, y: number) {
 }
 
 export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBacklog) {
-  const lead = backlog.items.find((i) => i.palette?.length)?.palette ?? [];
-  const [top, bottom] = tintEnds(lead);
-
-  // Background: the feed card's 168° between the two ends.
-  ctx.save();
-  const t = ((168 - 90) * Math.PI) / 180;
-  const half = (Math.abs(CARD_WIDTH * Math.cos(t)) + Math.abs(CARD_HEIGHT * Math.sin(t))) / 2;
-  const bg = ctx.createLinearGradient(
-    CARD_WIDTH / 2 - Math.cos(t) * half,
-    CARD_HEIGHT / 2 - Math.sin(t) * half,
-    CARD_WIDTH / 2 + Math.cos(t) * half,
-    CARD_HEIGHT / 2 + Math.sin(t) * half,
-  );
-  bg.addColorStop(0, top);
-  bg.addColorStop(1, bottom);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  ctx.restore();
+  drawSurface(ctx, backlog.items.find((i) => i.palette?.length)?.palette ?? []);
 
   const padX = 24 * X;
   const padY = 26 * X;

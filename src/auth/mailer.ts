@@ -169,10 +169,10 @@ function releaseCopyFor(
 }
 
 /**
- * F3.3 — monthly recap notification. The numbers are the card's own
- * (`totalItems` = every title with activity that month, `completedCount` =
- * the completed ones), named as the card names them: "títulos" and
- * "completos" — never "obsesiones", which is a different, smaller count.
+ * F3.3 — monthly recap notification. `totalItems` = every title with
+ * activity that month (the card's "N TÍTULOS"), `completedCount` = the
+ * completed ones, named as the recap names them: "títulos" and "completos" —
+ * never "obsesiones", which is a different, smaller count.
  */
 export function sendRecapEmail(
   email: string,
