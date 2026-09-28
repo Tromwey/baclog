@@ -66,7 +66,6 @@
 		B4E0A3D82BF54686D9B215B2 /* Pills.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA9B8D2CC3B028EE69A485 /* Pills.swift */; };
 		B7811168720BE3ACBA0A9841 /* ZoomTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F4697357313399FE5AF1B88 /* ZoomTransition.swift */; };
 		BC3D8A5148A0125C75E460EE /* AppStore+Auth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE3C29E49CF903F8F1A7424 /* AppStore+Auth.swift */; };
-		BDEB2D81872C971652CFFA23 /* SpineLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3476DD7E1BAF685B873BFF50 /* SpineLabel.swift */; };
 		BF84DA70350C22370BA5E25F /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F08B00EC6CF7156CDD3888E /* AppStore.swift */; };
 		C2D4148AE9BFE59E95F3E3B8 /* AppStore+Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70A0005FAF01EDC32D82582 /* AppStore+Library.swift */; };
 		C4DCA37762679311F26CBB44 /* Cover.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E5D7FB7DDFF90FFAEB0F76 /* Cover.swift */; };
@@ -113,7 +112,6 @@
 		2F7C5475F1FA265DDFF740F6 /* PersonProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonProfileView.swift; sourceTree = "<group>"; };
 		33DC8E082F999BF4A321343E /* AppStore+Releases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppStore+Releases.swift"; sourceTree = "<group>"; };
 		33FCFAB0DF7E52745E0945DC /* CollectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionDetailView.swift; sourceTree = "<group>"; };
-		3476DD7E1BAF685B873BFF50 /* SpineLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpineLabel.swift; sourceTree = "<group>"; };
 		3494F2C0C282ED6670814C28 /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		359B629B81F695D1844AB399 /* LiveAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAPI.swift; sourceTree = "<group>"; };
 		3D5E639D989ADFE6535FE9E4 /* RedHatMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "RedHatMono-Regular.ttf"; sourceTree = "<group>"; };
@@ -379,7 +377,6 @@
 				4096B712EC5496641D0859A7 /* Masonry.swift */,
 				A1AA9B8D2CC3B028EE69A485 /* Pills.swift */,
 				60746C9E7409F5B883F84830 /* Press.swift */,
-				3476DD7E1BAF685B873BFF50 /* SpineLabel.swift */,
 				7F4697357313399FE5AF1B88 /* ZoomTransition.swift */,
 			);
 			path = Components;
@@ -617,7 +614,6 @@
 				7A655870EA7526F062546291 /* Session.swift in Sources */,
 				F6B3DEEFE278F7BC224EDA22 /* SettingsViews.swift in Sources */,
 				D8CD782A689077E36A2AC4F6 /* SocialSignIn.swift in Sources */,
-				BDEB2D81872C971652CFFA23 /* SpineLabel.swift in Sources */,
 				DFF33BB30FE2B1E844C8EEF8 /* Title.swift in Sources */,
 				4F2EEACD6AA7AC1DE80FB770 /* TitleDetailView.swift in Sources */,
 				E44F4779A7043F7579304E3B /* TitleHeroHost.swift in Sources */,

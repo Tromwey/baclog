@@ -378,50 +378,116 @@ struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
 
-/// 360×640 exportable card (scaled to fit).
+/// 9:16 preview of the exportable card — a faithful MINIATURE of the web's
+/// `/recap/tarjeta` export (`src/modules/cards/render/recap.ts`, the source of
+/// truth for this design; twin it by eye, not the old lomo layout): "RECAP" in
+/// mono up top (no date — the title already says it) · the month title
+/// (`RecapMonthTitle`, centred) · the month's fan ("lo más tuyo" in front,
+/// `FanView`'s own short-fan rule for 1–2 titles) · the non-zero numbers, 1–3
+/// in a row or 4 in a 2×2, singular at 1 · a dashed foot with "N TÍTULOS" ·
+/// @handle, and the 蔵 kura lockup. What actually gets SHARED is the web's
+/// card (`RecapShareView.openWebCard`) — this view is only the in-app look of
+/// it, so it carries no "Firmar con tu @" switch (the web decides that).
 struct RecapCard: View {
     @Environment(AppStore.self) private var store
     var era: String? = nil
+
+    private static let width: CGFloat = 306
+    private static let height: CGFloat = (width * 16 / 9).rounded()
+
+    private struct Stat { let v: Int; let one: String; let many: String; let glyph: Glyph; let color: Color }
+
+    /// The month's numbers in the card's order (twin of the web's `recapStats`), non-zero only.
+    private func stats(_ r: RecapPayload) -> [Stat] {
+        [Stat(v: r.stats.completed, one: "COMPLETO", many: "COMPLETOS", glyph: .check, color: KColor.completed),
+         Stat(v: r.stats.obsessed, one: "OBSESIÓN", many: "OBSESIONES", glyph: .flame, color: KColor.obsessed),
+         Stat(v: r.stats.reviews, one: "RESEÑA", many: "RESEÑAS", glyph: .review, color: KColor.text),
+         Stat(v: r.stats.saved, one: "GUARDADO", many: "GUARDADOS", glyph: .bookmark, color: KColor.text2)]
+            .filter { $0.v > 0 }
+    }
+
     var body: some View {
         let r = store.recap(era)
-        let top = r?.top
-        HStack(spacing: 0) {
-            SpineLabel(text: "KURA · recap \(r.map { String(format: "%02d.%d", ($0.era.split(separator: "-").last.flatMap { Int($0) } ?? 0), $0.year) } ?? "")", height: 540)
-            VStack(alignment: .leading, spacing: 18) {
-                Text(r?.month ?? "").font(.kura.newsItalic(50)).foregroundStyle(KColor.text)
-                GeometryReader { geo in
-                    let h = geo.size.height * 0.7
-                    ZStack {
-                        ForEach(Array((r?.fan ?? []).enumerated()), id: \.element.id) { i, t in
-                            CoverView(title: t, height: h)
-                                .rotationEffect(.degrees(Double(i - 1) * 8))
-                                .offset(x: CGFloat(i - 1) * 54 * 0.85)
-                                .zIndex(i == 1 ? 3 : 1)
-                        }
-                    }
-                    .frame(width: geo.size.width, height: geo.size.height)
-                }
-                HStack(alignment: .top) {
-                    ForEach((r?.tiles ?? []).prefix(3), id: \.1) { v, l, g in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(v).font(.kura.mono(26)).foregroundStyle(KColor.text)
-                            HStack(spacing: 5) {
-                                GlyphView(glyph: g, size: 11)
-                                Text(l).font(.kura.mono(10)).tracking(0.4).textCase(.uppercase).foregroundStyle(KColor.text2)
-                                    .lineLimit(1).minimumScaleFactor(0.7)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                Text("@\(store.me.handle)").font(.kura.mono(12)).foregroundStyle(KColor.text2)
+        Group {
+            if let r, let top = r.top {
+                content(r, top: top)
+            } else {
+                KColor.bg
+                    .overlay { ProgressView().tint(KColor.text2) }
             }
-            .padding(.top, 32).padding(.horizontal, 22).padding(.bottom, 28)
         }
-        .frame(width: 306, height: 540)
-        .background(Tint.card(top?.palette ?? []))
+        .frame(width: Self.width, height: Self.height)
         .clipShape(RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
         .accessibilityElement(children: .combine)
+    }
+
+    private func content(_ r: RecapPayload, top: Title) -> some View {
+        let cardStats = stats(r)
+        let cols = cardStats.isEmpty ? 1 : (cardStats.count <= 3 ? cardStats.count : 2)
+        let n = 1 + r.also.count
+        return VStack(spacing: 0) {
+            Text("RECAP").monoLabel(9, tracking: 0.7)
+                .padding(.top, 22)
+            Spacer(minLength: 10)
+            VStack(spacing: 20) {
+                RecapMonthTitle(month: r.month, year: r.year, size: 38)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                FanView(covers: r.fan, lead: 124)
+                if !cardStats.isEmpty {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: cols), alignment: .leading, spacing: 16) {
+                        ForEach(cardStats, id: \.many) { s in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("\(s.v)").font(.kura.mono(22)).foregroundStyle(KColor.text)
+                                HStack(spacing: 5) {
+                                    GlyphView(glyph: s.glyph, size: 11, color: s.color)
+                                    Text(s.v == 1 ? s.one : s.many).monoLabel(8, tracking: 0.6)
+                                        .lineLimit(1).minimumScaleFactor(0.8)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 220)
+                }
+            }
+            Spacer(minLength: 10)
+            VStack(spacing: 12) {
+                DashedRule(width: Self.width - 44)
+                HStack {
+                    Text("\(n) \(n == 1 ? "TÍTULO" : "TÍTULOS")").monoLabel(9, tracking: 0.7)
+                    Spacer()
+                    Text("@\(store.me.handle)").monoLabel(9, tracking: 0.7).lineLimit(1)
+                }
+                Wordmark(variant: .c, color: KColor.text)
+            }
+            .padding(.bottom, 22)
+        }
+        .padding(.horizontal, 22)
+        .background(background(top))
+    }
+
+    @ViewBuilder
+    private func background(_ top: Title) -> some View {
+        if !top.palette.isEmpty {
+            Tint.card(top.palette)
+        } else {
+            KColor.bg
+        }
+    }
+}
+
+/// The card's foot rule (`cardFoot` on the web): a hairline dash — a content
+/// divider between the stats and the "N TÍTULOS · @handle" row, exempt from
+/// the no-borders rule same as the web canvas's dashed stroke.
+private struct DashedRule: View {
+    let width: CGFloat
+    var body: some View {
+        Path { p in
+            p.move(to: CGPoint(x: 0, y: 0))
+            p.addLine(to: CGPoint(x: width, y: 0))
+        }
+        .stroke(Color.white.opacity(0.18), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        .frame(width: width, height: 1)
     }
 }
 
