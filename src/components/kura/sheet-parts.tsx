@@ -52,9 +52,9 @@ export function MenuRow({
 }: {
   icon: KIconName | ReactNode;
   label: ReactNode;
-  /** Current value at the right ("Manual", "En tu perfil", "Me obsesiona"): UI font, sentence
+  /** Current value at the right ("Manual", "Todos", "Me obsesiona"): UI font, sentence
    *  case, text-3 — like a settings value. Mono caps made a phrase shout next to a word
-   *  ("EN TU PERFIL" vs "MANUAL"; founder, 2026-09-28). Twin of iOS `SheetValue`. */
+   *  ("TODOS" vs "MANUAL"; founder, 2026-09-28). Twin of iOS `SheetValue`. */
   aside?: ReactNode;
   href?: string;
   onClick?: () => void;

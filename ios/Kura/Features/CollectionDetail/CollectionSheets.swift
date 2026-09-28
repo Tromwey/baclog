@@ -55,8 +55,8 @@ struct CollectionOptionsSheet: View {
                     }
                 }
                 SheetRow(systemImage: "pencil", label: "Editar") { store.present(.rename(c.id)) }
-                // The one visibility vocabulary (`Privacy.label`: Solo yo · Con el link · En tu
-                // perfil), asked the way Nueva colección asks it.
+                // The one visibility vocabulary (`Privacy.label`: Solo yo · Quien tenga el link ·
+                // Todos), asked the way Nueva colección asks it.
                 SheetRow(systemImage: c.privacy.symbol, label: "Quién la ve", action: { store.present(.privacy(c.id)) }) {
                     SheetValue(c.privacy.label)
                 }
@@ -660,9 +660,9 @@ struct MoveToSheet: View {
     }
 }
 
-/// A sheet row's current value on the right ("Manual", "En tu perfil", "Fijada"): UI font in
+/// A sheet row's current value on the right ("Manual", "Todos", "Fijada"): UI font in
 /// sentence case and text-3, like a system settings value — not mono caps, which made a phrase
-/// ("EN TU PERFIL") shout next to a one-word value ("MANUAL") (founder, 2026-09-28).
+/// ("TODOS") shout next to a one-word value ("MANUAL") (founder, 2026-09-28).
 struct SheetValue: View {
     let text: String
     init(_ text: String) { self.text = text }

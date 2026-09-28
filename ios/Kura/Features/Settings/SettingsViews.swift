@@ -388,7 +388,7 @@ struct RevokeSessionSheet: View {
 
 /// Same grammar as Ajustes (crítica #19): grouped `SettingsRow`s on s1 under mono headers, not
 /// loose rows. The two multi-option values open a menu with every option (`SettingsChoiceRow`).
-/// Words: a collection is Solo yo · Con el link · En tu perfil (`Privacy.label`); the lists are
+/// Words: a collection is Solo yo · Quien tenga el link · Todos (`Privacy.label`); the lists are
 /// Solo yo · Seguidores mutuos · Todos (`FollowListsVisibility.label`) — the same everywhere.
 struct PrivacySettingsView: View {
     @Environment(AppStore.self) private var store

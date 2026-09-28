@@ -16,35 +16,37 @@ enum Privacy: String, CaseIterable, Identifiable, Hashable {
     case publicAccess, followers, onlyMe, link
     var id: String { rawValue }
 
-    /// The choices the backend persists, in the one visibility vocabulary (founder, 2026-09-27):
-    /// Solo yo · Con el link · En tu perfil — the same words in every sheet, in Ajustes and on the
-    /// web. `.followers` is no longer offered (it was mock-only and saved as `link`).
+    /// The choices the backend persists, in the one visibility vocabulary (founder, 2026-09-28):
+    /// Solo yo · Quien tenga el link · Todos — the same words in every sheet, in Ajustes and on
+    /// the web. The row asks "quién la ve", so the answer names a who, not a mechanism (it used
+    /// to read "Con el link" / "En tu perfil", which don't answer "quién"). `.followers` is no
+    /// longer offered (it was mock-only and saved as `link`).
     static var options: [Privacy] { [.onlyMe, .link, .publicAccess] }
 
     var label: String {
         switch self {
-        case .publicAccess: return "En tu perfil"
+        case .publicAccess: return "Todos"
         case .followers: return "Seguidores"
         case .onlyMe: return "Solo yo"
-        case .link: return "Con el link"
+        case .link: return "Quien tenga el link"
         }
     }
 
     var note: String {
         switch self {
-        case .publicAccess: return "Sale en tu perfil y la abre cualquiera con el link, con o sin cuenta."
+        case .publicAccess: return "Aparece en tu perfil."
         case .followers: return "Solo quien te sigue."
-        case .onlyMe: return "Solo tú la ves. El link no abre para nadie más."
-        case .link: return "La abre quien tenga el link. No sale en tu perfil."
+        case .onlyMe: return "Nadie más la ve. Su link deja de abrir."
+        case .link: return "No aparece en tu perfil; se abre con su link."
         }
     }
 
     /// The undo toast after a visibility change: it says who sees it now, without ambiguity.
     var changedToast: String {
         switch self {
-        case .publicAccess: return "Ahora está en tu perfil."
+        case .publicAccess: return "Ahora la ven todos."
         case .onlyMe: return "Ahora solo tú la ves."
-        case .link, .followers: return "Ahora la abre quien tenga el link."
+        case .link, .followers: return "Ahora la ve quien tenga el link."
         }
     }
 

@@ -227,14 +227,14 @@ export const SECTIONS: Section[] = [
         items: [
           "Tu nombre, tu @usuario, tu foto y tu sello de fundador si lo tienes.",
           "Cuántas personas sigues y cuántas te siguen.",
-          "Las colecciones que marcas como «En tu perfil», con sus títulos y tus marcas.",
+          "Las colecciones que marcas como «Todos», con sus títulos y tus marcas.",
           "Tus reseñas, en tu perfil y en la página de cada título (salvo las que moderación haya ocultado).",
           "En el feed de quien te sigue: lo que agregas a colecciones públicas, lo que completas, lo que te obsesiona, lo que no puedes esperar a que salga y tus reseñas.",
         ],
       },
       {
         kind: "p",
-        text: "Cada colección tiene su propia visibilidad: Solo yo (solo tú), Con el link (la ve quien tenga el link, pero no sale en tu perfil) o En tu perfil. Ojo: lo que haces con un título (completarlo, obsesionarte, reseñarlo) depende de que tu perfil sea público, no de la colección donde lo guardaste; ocultar una colección no oculta esa actividad.",
+        text: "Cada colección tiene su propia visibilidad: Solo yo (solo tú), Quien tenga el link (la ve quien tenga el link, pero no sale en tu perfil) o Todos. Ojo: lo que haces con un título (completarlo, obsesionarte, reseñarlo) depende de que tu perfil sea público, no de la colección donde lo guardaste; ocultar una colección no oculta esa actividad.",
       },
       {
         kind: "p",

@@ -31,14 +31,16 @@ import {
 /**
  * K1a mapped onto the product (F3.10.1): `is_public` + `show_on_profile` give
  * three states, and they have ONE vocabulary everywhere — web, iOS, Ajustes,
- * the privacy page (critique 2026-09-27, twin of iOS `Privacy.label`):
- * Solo yo · Con el link · En tu perfil, in that order (the narrowest first).
+ * the privacy page (twin of iOS `Privacy.label`): Solo yo · Quien tenga el
+ * link · Todos, in that order (the narrowest first). The row asks "quién la
+ * ve", so the answer names a who, not a mechanism (founder, 2026-09-28 — it
+ * used to read "Con el link" / "En tu perfil", which don't answer "quién").
  * "Seguidores" (K1b) was never built and isn't offered.
  */
 export const VISIBILITY_LABEL: Record<BacklogVisibility, string> = {
   private: "Solo yo",
-  public: "Con el link",
-  featured: "En tu perfil",
+  public: "Quien tenga el link",
+  featured: "Todos",
 };
 
 const CHOICES: {
@@ -49,17 +51,17 @@ const CHOICES: {
   {
     id: "private",
     icon: <FillIcon d={LOCK_FILL} size={18} />,
-    description: "Solo tú. No aparece en tu perfil y el link no abre.",
+    description: "Nadie más la ve. Su link deja de abrir.",
   },
   {
     id: "public",
     icon: <KIcon name="link" size={18} strokeWidth={1.8} />,
-    description: "Fuera de tu perfil. La abre quien tenga el link.",
+    description: "No aparece en tu perfil; se abre con su link.",
   },
   {
     id: "featured",
     icon: <KIcon name="globe" size={18} strokeWidth={1.8} />,
-    description: "En tu perfil y con el link, con o sin cuenta.",
+    description: "Aparece en tu perfil.",
   },
 ];
 
