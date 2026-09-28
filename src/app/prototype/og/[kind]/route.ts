@@ -5,9 +5,10 @@ import { DEMO_BACKLOG } from "../../data";
  * The link previews with the lab's sample data, through the same renderers
  * the `opengraph-image` routes use (lib/og-cards.tsx) — no database, no
  * session. Development only: layouts don't wrap route handlers, so this one
- * 404s in production itself. `/prototype/og/{coleccion|perfil|titulo|album}`.
+ * 404s in production itself. `/prototype/og/{coleccion|perfil|titulo|album}`;
+ * `perfil?big=1` prints four-digit counts (the stats line must hold one line).
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ kind: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ kind: string }> }) {
   if (process.env.NODE_ENV === "production") return ogNotFound();
   const items = DEMO_BACKLOG.items;
   const covers = items.slice(0, 3).map((i) => ({ mediaType: i.type, paletteHex: i.palette ?? null, src: null }));
@@ -27,7 +28,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ kind: s
       return profileOg({
         displayName: "Sofía Rivera",
         username: "sofi",
-        meta: "3 COLECCIONES · 128 SEGUIDORES",
+        meta: new URL(req.url).searchParams.has("big")
+          ? "1284 COLECCIONES · 9999 SEGUIDORES"
+          : "3 COLECCIONES · 128 SEGUIDORES",
         hexes: lead,
         covers,
       });

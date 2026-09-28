@@ -98,7 +98,7 @@ struct WelcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             // §marca · C: the entrance is the first contact, before the account — brand material.
-            // The §marca recipe (蔵 ×2, gap 20/48) at A's minimum; flujos-v2 13 draws 44/30/14.
+            // At A's minimum with the product proportions (蔵 1.5×, gap 15/48); flujos-v2 13 draws 44/30/14.
             Wordmark(variant: .c)
 
             GeometryReader { geo in

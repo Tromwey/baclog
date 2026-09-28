@@ -2,6 +2,7 @@ import "server-only";
 import { ImageResponse } from "next/og";
 import { posterFallbackStyle } from "@/components/cover-tile";
 import { BG, sealColors, sealInitials, tintEnds } from "@/components/kura/tint";
+import { LOCKUP_C } from "@/components/kura/lockup-c";
 import { OG_KANJI, loadOgFonts } from "@/lib/og";
 
 /**
@@ -44,20 +45,34 @@ function background(hexes: readonly string[]) {
 }
 
 /**
- * §marca · C "con kanji" (brand material): 蔵 in serif JP at 700, twice the
- * wordmark, a 20/48 gap, "kura" in Newsreader italic 500 at −0.03 em. The
- * kanji ships as one Regular glyph, so the 700 is a 0.03 em stroke.
+ * §marca · C "con kanji" (brand material) at the product proportions in
+ * `LOCKUP_C` (components/kura/lockup-c.ts): 蔵 at 1.5× the wordmark, ~600
+ * (the kanji ships as one Regular glyph, so the weight is a stroke of
+ * `LOCKUP_C.stroke` em), gap 15/48, "kura" in Newsreader italic 500 at
+ * −0.03 em, 蔵's ink centred on the kura's optical centre.
+ *
+ * Satori has no baseline alignment, so both boxes are top-aligned at
+ * line-height 1 and 蔵 is placed by the fonts' metrics: Satori puts a
+ * line-height-1 baseline at (1 + asc − desc) / 2 em from the box top (hhea:
+ * Newsreader 0.735/0.265 → 0.735; the kanji 1.151/0.286 → 0.9325). 蔵 then
+ * sits so its baseline is `LOCKUP_C.drop` under the kura's.
  */
+const OG_NEWS_BASE = 0.735;
+const OG_KANJI_BASE = 0.9325;
 function OgLockup({ size = 40 }: { size?: number }) {
-  const k = size * 2;
+  const k = size * LOCKUP_C.kanji;
+  const kanjiTop = size * (OG_NEWS_BASE + LOCKUP_C.drop) - k * OG_KANJI_BASE;
+  // The row's own top is the higher of the two boxes; the other is pushed down.
+  const lift = Math.min(0, kanjiTop);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: (size * 20) / 48 }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: size * LOCKUP_C.gap }}>
       <span
         style={{
           fontFamily: OG_KANJI,
           fontSize: k,
           lineHeight: 1,
-          WebkitTextStrokeWidth: k * 0.03,
+          marginTop: kanjiTop - lift,
+          WebkitTextStrokeWidth: k * LOCKUP_C.stroke,
           WebkitTextStrokeColor: TEXT,
         }}
       >
@@ -70,7 +85,8 @@ function OgLockup({ size = 40 }: { size?: number }) {
           fontWeight: 500,
           fontSize: size,
           letterSpacing: "-0.03em",
-          lineHeight: 0.9,
+          lineHeight: 1,
+          marginTop: -lift,
         }}
       >
         kura
@@ -79,13 +95,14 @@ function OgLockup({ size = 40 }: { size?: number }) {
   );
 }
 
-function Mono({ children }: { children: string }) {
+function Mono({ children, size = 30, tracking = 0.06 }: { children: string; size?: number; tracking?: number }) {
   return (
     <span
       style={{
         fontFamily: "RedHatMono",
-        fontSize: 30,
-        letterSpacing: "0.06em",
+        fontSize: size,
+        letterSpacing: `${tracking}em`,
+        whiteSpace: "nowrap",
         textTransform: "uppercase",
         color: TEXT_2,
       }}
@@ -253,6 +270,19 @@ export function collectionOg(input: {
 
 /* --------------------------------------------------------------- profile */
 
+/** The words' column is 580 − 72 of padding = 508 px wide. */
+const WORDS_W = 508;
+const STATS_TRACKING = 0.04;
+/**
+ * "1284 COLECCIONES · 9999 SEGUIDORES" must stay ONE line: Red Hat Mono is
+ * 0.6 em a glyph (+ tracking), so the size is the largest that fits the
+ * column, capped at the Mono's 30 and floored at 20 (≈ 39 characters).
+ */
+function statsSize(text: string) {
+  const perEm = text.length * (0.6 + STATS_TRACKING);
+  return Math.max(20, Math.min(30, Math.floor(WORDS_W / perEm)));
+}
+
 export function profileOg(input: {
   displayName: string;
   username: string;
@@ -295,7 +325,11 @@ export function profileOg(input: {
         {name}
       </span>
       <span style={{ fontSize: 32, color: TEXT_2 }}>@{input.username}</span>
-      {input.meta && <Mono>{input.meta}</Mono>}
+      {input.meta && (
+        <Mono size={statsSize(input.meta)} tracking={STATS_TRACKING}>
+          {input.meta}
+        </Mono>
+      )}
     </Words>,
     input.covers.length ? <OgFan covers={input.covers} ghost={false} /> : <OgFan covers={[]} ghost />,
   );

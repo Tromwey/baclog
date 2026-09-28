@@ -1,6 +1,6 @@
 import { tintEnds } from "@/components/kura/tint";
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog, type CardItem } from "../types";
-import { drawLockup, track } from "./brand";
+import { cardFoot, drawLockup, track } from "./brand";
 import { NEWS, RHMONO } from "./fonts";
 import { truncateToWidth, wrapText } from "./util";
 
@@ -203,12 +203,8 @@ export function drawCollection(ctx: CanvasRenderingContext2D, backlog: CardBackl
     }
   }
 
-  // Foot: the dashed rule, "12 títulos" · "@sofi", and the 蔵 kura lockup
-  // (§marca · C: the kanji is twice the wordmark, so the lockup is 2 × markSize tall).
-  const markSize = 14 * X;
-  const markCy = CARD_HEIGHT - padY - markSize;
-  const rowY = markCy - markSize - 10 * X - 9 * X * 1.2;
-  const ruleY = rowY - 12 * X;
+  // Foot: the dashed rule, "12 títulos" · "@sofi", and the 蔵 kura lockup (`cardFoot`).
+  const { markSize, markCy, rowY, ruleY } = cardFoot(CARD_HEIGHT, padY, X, 9 * X * 1.2);
   ctx.save();
   ctx.strokeStyle = "rgba(255,255,255,.18)";
   ctx.lineWidth = X;

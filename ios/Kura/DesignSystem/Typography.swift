@@ -113,13 +113,20 @@ extension View {
 ///   wordmark inside the app. At least 24 pt tall — the k is 0.714 em, so never under 34
 ///   (`Wordmark.minimum`); smaller than that, use `.b`.
 /// - `.b` sello: KURA in Red Hat Mono Medium, tracking +24 %. Spines, card feet, small signatures.
-/// - `.c` con kanji: 蔵 in the serif JP (W6 ≈ 700) at TWICE the kura, a 20/48 gap, *kura* at
-///   −3 %. Brand material only — in the app that's the entrance before the account, NEVER the
-///   interface. The kura keeps A's minimum.
+/// - `.c` con kanji: 蔵 in the serif JP (Hiragino Mincho W6 = 600; W3 would be 300) at 1.5× the
+///   kura, a 15/48 gap, *kura* at −3 %, 蔵's ink centred on the kura's optical centre. Brand
+///   material only — in the app that's the entrance before the account, NEVER the interface. The
+///   kura keeps A's minimum. Same numbers as the web's `LOCKUP_C` (src/components/kura/
+///   lockup-c.ts) — change both together. §marca's 2×/700 is kept only for isolated brand pieces
+///   (press, merch); 1.5× is the founder's call (2026-09-28).
 /// `size` is the latin part's point size. Never A and B together; VoiceOver reads one word.
 struct Wordmark: View {
     enum Variant { case a, b, c }
     static let minimum: CGFloat = 34
+    /// §marca · C at product proportions (web `LOCKUP_C`): 蔵 size, gap and baseline drop, × s.
+    static let lockupKanji: CGFloat = 1.5
+    static let lockupGap: CGFloat = 15 / 48
+    static let lockupDrop: CGFloat = 0.25
 
     var variant: Variant = .a
     var size: CGFloat? = nil
@@ -142,8 +149,12 @@ struct Wordmark: View {
                 .padding(.leading, s * 0.24) // balances the tracking after the A, as §marca centres it
         case .c:
             let s = max(Self.minimum, size ?? Self.minimum)
-            HStack(alignment: .center, spacing: s * 20 / 48) {
-                Text("蔵").font(.custom(KFontName.kanji, fixedSize: s * 2))
+            HStack(alignment: .firstTextBaseline, spacing: s * Self.lockupGap) {
+                // Baselines aligned, then 蔵 drops `lockupDrop` so its ink (centre 0.381 em)
+                // lands on the kura's optical centre (0.32 em over its baseline).
+                Text("蔵")
+                    .font(.custom(KFontName.kanji, fixedSize: s * Self.lockupKanji))
+                    .alignmentGuide(.firstTextBaseline) { d in d[.firstTextBaseline] - s * Self.lockupDrop }
                 Text("kura")
                     .font(.kura.newsMediumItalic(s, fixed: true))
                     .tracking(-s * 0.03)

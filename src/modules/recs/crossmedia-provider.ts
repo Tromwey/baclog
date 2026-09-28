@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI, Type, type Schema } from "@google/genai";
 import { env } from "@/lib/env";
+import { stripRating } from "./hook-eyebrow";
 
 /**
  * F3.5.5 — the cross-media recommendation PROVIDER layer.
@@ -180,7 +181,7 @@ const FIXTURE_PAIRINGS: {
       targetByline: "ROSÉ",
       linkClaim: "Fixture: pairing canónico del founder (F1 → Rosie de ROSÉ).",
       narrative: {
-        hookEyebrow: "viste algo a toda velocidad · ★★★★★",
+        hookEyebrow: "viste algo a toda velocidad",
         hookTitle: "Así que fuimos a buscar quién le puso voz a esa última vuelta.",
         resultEyebrow: "y dimos con tu próxima obsesión",
         closer: "No la vas a soltar — lo sabemos.",
@@ -195,7 +196,7 @@ const FIXTURE_PAIRINGS: {
       targetByline: "Vangelis",
       linkClaim: "Vangelis compuso el score original de Blade Runner (1982).",
       narrative: {
-        hookEyebrow: "te perdiste en otro mundo · ★★★★★",
+        hookEyebrow: "te perdiste en otro mundo",
         hookTitle: "Buscamos el sonido que hace que un futuro se sienta habitado.",
         resultEyebrow: "y esto es lo que encontramos",
         closer: "Ponlo en loop y mira el techo.",
@@ -210,7 +211,7 @@ const FIXTURE_PAIRINGS: {
       targetByline: "Bon Iver",
       linkClaim: "Vínculo temático: el registro íntimo del disco debut de Bon Iver.",
       narrative: {
-        hookEyebrow: "te dejó pensando · ★★★★★",
+        hookEyebrow: "te dejó pensando",
         hookTitle: "Fuimos a buscar el disco que vive en el mismo silencio.",
         resultEyebrow: "y dimos con tu próxima obsesión",
         closer: "Para escuchar solo, de noche.",
@@ -226,7 +227,7 @@ const FIXTURE_PAIRINGS: {
       targetByline: "A24",
       linkClaim: "Vínculo temático: registro emocional compartido con el seed.",
       narrative: {
-        hookEyebrow: "no te lo pudiste sacar de la cabeza · ★★★★★",
+        hookEyebrow: "no te lo pudiste sacar de la cabeza",
         hookTitle: "Buscamos la película que se siente como ese disco.",
         resultEyebrow: "y esto te va a doler bonito",
         closer: "Guárdala para cuando estés listo.",
@@ -242,7 +243,7 @@ const FIXTURE_FALLBACK: CrossMediaProposal = {
   targetByline: "Tame Impala",
   linkClaim: "Fixture: fallback genérico para cualquier seed de video.",
   narrative: {
-    hookEyebrow: "te quedaste con ganas de más · ★★★★★",
+    hookEyebrow: "te quedaste con ganas de más",
     hookTitle: "Buscamos qué escuchar mientras se te pasa el subidón.",
     resultEyebrow: "y dimos con tu próxima obsesión",
     closer: "Sube el volumen.",
@@ -283,7 +284,7 @@ class FixtureProvider implements CrossMediaRecProvider {
     return {
       ok: true,
       narrative: {
-        hookEyebrow: `amaste ${seed.title.toUpperCase().slice(0, 60)} · ★★★★★`,
+        hookEyebrow: `amaste ${seed.title.toUpperCase().slice(0, 60)}`,
         hookTitle: `Así que seguimos el hilo real hasta ${who}.`,
         resultEyebrow: "y dimos con tu próxima obsesión",
         closer: "Conexión verificada — dale una vuelta.",
@@ -334,7 +335,7 @@ Formato de salida (JSON):
   "targetByline": "artista del álbum, o estudio/creador del video",
   "linkClaim": "el vínculo real en 1 frase factual (auditable, no se muestra al usuario)",
   "narrative": {
-    "hookEyebrow": "eyebrow corto en mayúsculas, ej: VISTE X HASTA EL FINAL · ★★★★★",
+    "hookEyebrow": "eyebrow corto en mayúsculas, ej: VISTE X HASTA EL FINAL (sin estrellas: Kura no tiene calificaciones)",
     "hookTitle": "el gancho (por qué fuimos a buscar), 1 frase",
     "resultEyebrow": "eyebrow del resultado, ej: Y DIMOS CON TU PRÓXIMA OBSESIÓN",
     "closer": "cierre corto en cursiva, 1 frase"
@@ -358,7 +359,7 @@ Reglas:
 Formato de salida (JSON):
 {
   "narrative": {
-    "hookEyebrow": "eyebrow corto en mayúsculas, ej: VISTE X HASTA EL FINAL · ★★★★★",
+    "hookEyebrow": "eyebrow corto en mayúsculas, ej: VISTE X HASTA EL FINAL (sin estrellas: Kura no tiene calificaciones)",
     "hookTitle": "el gancho (por qué fuimos a buscar), 1 frase",
     "resultEyebrow": "eyebrow del resultado, ej: Y DIMOS CON TU PRÓXIMA OBSESIÓN",
     "closer": "cierre corto en cursiva, 1 frase"
@@ -398,7 +399,7 @@ function finalizeNarrative(
 ): CrossMediaProposal["narrative"] | null {
   const narrative = (raw.narrative ?? {}) as Record<string, unknown>;
   const out = {
-    hookEyebrow: clamp(narrative.hookEyebrow, 120),
+    hookEyebrow: stripRating(clamp(narrative.hookEyebrow, 120)),
     hookTitle: clamp(narrative.hookTitle, 240),
     resultEyebrow: clamp(narrative.resultEyebrow, 120),
     closer: clamp(narrative.closer, 200),
@@ -526,7 +527,7 @@ function finalizeProposal(
     targetByline: clamp(raw.targetByline, 120) || null,
     linkClaim: clamp(raw.linkClaim, 300) || null,
     narrative: {
-      hookEyebrow: clamp(narrative.hookEyebrow, 120),
+      hookEyebrow: stripRating(clamp(narrative.hookEyebrow, 120)),
       hookTitle: clamp(narrative.hookTitle, 240),
       resultEyebrow: clamp(narrative.resultEyebrow, 120),
       closer: clamp(narrative.closer, 200),

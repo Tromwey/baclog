@@ -136,11 +136,14 @@
   line-height: 0.9;
 }
 
-/* …beside 蔵 in a serif JP at 700. Newsreader has no CJK, so the stack names
-   the platform's Mincho first. */
+/* …beside 蔵 in a serif JP at 600 (Hiragino Mincho's W6; founder 2026-09-28,
+   §marca's 700 read too heavy at the lockup's size). Newsreader has no CJK,
+   so the stack names the platform's Mincho first. `relative` lets `Wordmark`
+   drop it (`top`, LOCKUP_C.drop) onto the kura's optical centre. */
 .kura-kanji {
+  position: relative;
   font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", "Source Han Serif", serif;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
 }
 

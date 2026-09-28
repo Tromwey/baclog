@@ -1,6 +1,7 @@
 import { tintEnds } from "@/components/kura/tint";
 import { CARD_HEIGHT, CARD_WIDTH, type DoubleFeatureData, type DoubleFeatureWork } from "../types";
-import { drawLockup, track } from "./brand";
+import { stripRating } from "@/modules/recs/hook-eyebrow";
+import { cardFoot, drawLockup, track } from "./brand";
 import { drawCover } from "./collection";
 import { NEWS, RHMONO } from "./fonts";
 import { truncateToWidth, wrapText } from "./util";
@@ -90,10 +91,7 @@ export function drawDoubleFeature(ctx: CanvasRenderingContext2D, data: DoubleFea
   ctx.textBaseline = "top";
 
   // Foot (fixed), as on the title card: rule · "UNA CONEXIÓN · Nº 014" / @handle · lockup.
-  const markSize = 14 * X;
-  const markCy = CARD_HEIGHT - padY - markSize;
-  const rowY = markCy - markSize - 10 * X - MONO_LEAD;
-  const ruleY = rowY - 12 * X;
+  const { markSize, markCy, rowY, ruleY } = cardFoot(CARD_HEIGHT, padY, X, MONO_LEAD);
 
   // ---- measure the body (top → rule) so it can be centred and fitted
   const hookSize = 19 * X;
@@ -156,7 +154,7 @@ export function drawDoubleFeature(ctx: CanvasRenderingContext2D, data: DoubleFea
   // ---- the why: mono eyebrow + the hook in Newsreader (roman: a sentence, not a work)
   ctx.textAlign = "center";
   mono(ctx);
-  ctx.fillText(truncateToWidth(ctx, narrative.hookEyebrow.toUpperCase(), inner), cx, y);
+  ctx.fillText(truncateToWidth(ctx, stripRating(narrative.hookEyebrow).toUpperCase(), inner), cx, y);
   track(ctx, 0);
   y += MONO_LEAD + g.eyebrow;
   ctx.fillStyle = TEXT;

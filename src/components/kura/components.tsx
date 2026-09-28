@@ -12,6 +12,7 @@ import {
   REVIEW_PATH,
   USERS_PATH,
 } from "@/components/glyph-paths";
+import { LOCKUP_C } from "./lockup-c";
 import { sealColors, tintCard } from "./tint";
 
 /**
@@ -37,9 +38,11 @@ import { sealColors, tintCard } from "./tint";
  *   (`WORDMARK_MIN`). Under that, use B.
  * - **B · sello**: KURA in Red Hat Mono 500, tracking +24 %. Only spines,
  *   card feet and small signatures, where A loses its shape.
- * - **C · con kanji**: 蔵 in a serif JP at 700 and TWICE the wordmark, a
- *   20/48 gap, *kura* at −3 %. Brand material only (onboarding, press,
- *   merch): NEVER inside the interface. The kura keeps A's minimum.
+ * - **C · con kanji**: 蔵 in a serif JP at 600 and 1.5× the wordmark, a
+ *   15/48 gap, *kura* at −3 %, 蔵's ink on the kura's optical centre
+ *   (`LOCKUP_C`, lockup-c.ts — §marca's 2×/700 only for isolated brand
+ *   pieces). Brand material only (onboarding, press, merch): NEVER inside the
+ *   interface. The kura keeps A's minimum.
  *
  * `size` is the font size of the latin part in px. The system's "no": no
  * serif uppercase, no roman, no glow/outline/gradient, never A and B in the
@@ -73,10 +76,15 @@ export function Wordmark({
       <span
         role="img"
         aria-label="kura"
-        className={`inline-flex items-center ${className}`}
-        style={{ gap: (px * 20) / 48 }}
+        className={`inline-flex items-baseline ${className}`}
+        style={{ gap: px * LOCKUP_C.gap }}
       >
-        <span className="kura-kanji" style={{ fontSize: px * 2 }} aria-hidden>
+        {/* Baselines aligned, then 蔵 drops so its ink centres on the kura's (LOCKUP_C). */}
+        <span
+          className="kura-kanji"
+          style={{ fontSize: px * LOCKUP_C.kanji, top: px * LOCKUP_C.drop }}
+          aria-hidden
+        >
           蔵
         </span>
         <span className="kura-wordmark kura-wordmark-c" style={{ fontSize: px }} aria-hidden>

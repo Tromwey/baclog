@@ -6,7 +6,7 @@ import {
   LIKE_PATH,
 } from "@/components/glyph-paths";
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog, type CardItem, type MediaType } from "../types";
-import { drawLockup, track } from "./brand";
+import { cardFoot, drawLockup, track } from "./brand";
 import { drawCover } from "./collection";
 import { NEWS, RHMONO, SANS } from "./fonts";
 import { truncateToWidth, wrapText } from "./util";
@@ -161,12 +161,8 @@ export function drawTitleCard(
   ctx.fillText(`${KIND[item.type]} · ${item.year}`, cx, padY);
   track(ctx, 0);
 
-  // Foot (fixed): the dashed rule, collection · @handle, the lockup.
-  // (§marca · C: the kanji is twice the wordmark, so the lockup is 2 × markSize tall).
-  const markSize = 14 * X;
-  const markCy = CARD_HEIGHT - padY - markSize;
-  const rowY = markCy - markSize - 10 * X - monoSize * 1.2;
-  const ruleY = rowY - 12 * X;
+  // Foot (fixed): the dashed rule, collection · @handle, the lockup (`cardFoot`).
+  const { markSize, markCy, rowY, ruleY } = cardFoot(CARD_HEIGHT, padY, X, monoSize * 1.2);
 
   // Body, centred between the eyebrow and the rule: cover, title, creator, pills.
   const album = item.type === "album";

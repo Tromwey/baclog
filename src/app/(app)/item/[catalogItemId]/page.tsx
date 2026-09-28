@@ -27,6 +27,7 @@ import { ReviewsBlock } from "@/components/reviews/reviews-block";
 import { Synopsis } from "@/components/synopsis";
 import { Tracklist } from "@/components/tracklist";
 import { ThemeColorSync } from "@/components/theme-color-sync";
+import { stripRating } from "@/modules/recs/hook-eyebrow";
 import {
   CountRibbon,
   Cover,
@@ -125,7 +126,7 @@ export default async function ItemPage({
     entry.recResultEyebrow !== null &&
     entry.recSeedTitle !== null
       ? {
-          hookEyebrow: entry.recHookEyebrow,
+          hookEyebrow: stripRating(entry.recHookEyebrow),
           hookTitle: entry.recHookTitle,
           resultEyebrow: entry.recResultEyebrow,
           closer: entry.recCloser,

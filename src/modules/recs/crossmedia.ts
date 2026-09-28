@@ -27,6 +27,7 @@ import {
   type CrossMediaLinkType,
   type RankedTarget,
 } from "./linkgraph";
+import { stripRating } from "./hook-eyebrow";
 import { screenNarrative } from "./moderation";
 import { logLlmCall, type LlmCallOutcome } from "./telemetry";
 
@@ -579,7 +580,7 @@ function toCachedReco(hit: CacheHit): CrossMediaReco {
     targetYear: hit.target.year,
     targetPosterUrl: hit.target.posterUrl,
     narrative: {
-      hookEyebrow: hit.hookEyebrow,
+      hookEyebrow: stripRating(hit.hookEyebrow),
       hookTitle: hit.hookTitle,
       resultEyebrow: hit.resultEyebrow,
       closer: hit.closer ?? "",

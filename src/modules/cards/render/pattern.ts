@@ -1,10 +1,9 @@
 import { CARD_HEIGHT, CARD_WIDTH, type CardBacklog } from "../types";
-import { drawLockup, track } from "./brand";
-import { MONO, NEWS, RHMONO } from "./fonts";
+import { CARD_MARK_SIZE, drawLockup, track } from "./brand";
+import { NEWS, RHMONO } from "./fonts";
 import {
   CARD_TOKENS,
   drawGrain,
-  footerUrl,
   hashString,
   mulberry32,
   truncateToWidth,
@@ -86,7 +85,7 @@ export function drawPattern(
   // caller passes "recap de agosto" — lowercase, never "Era"), the count in
   // mono. No date line: the old one printed TODAY's month in English, which
   // lied on a card shared after its month ended; the name already says it.
-  drawLockup(ctx, CARD_WIDTH / 2, panelY + 100, 42, "center", CARD_TOKENS.text);
+  drawLockup(ctx, CARD_WIDTH / 2, panelY + 100, CARD_MARK_SIZE, "center", CARD_TOKENS.text);
 
   ctx.textAlign = "center";
   ctx.fillStyle = CARD_TOKENS.text;
@@ -108,8 +107,12 @@ export function drawPattern(
   ctx.fillStyle = "rgba(10, 8, 14, 0.85)";
   ctx.fillRect(0, CARD_HEIGHT - 170, CARD_WIDTH, 170);
   ctx.fillStyle = CARD_TOKENS.text;
-  ctx.font = MONO(42, true);
-  ctx.fillText(footerUrl(backlog.username), CARD_WIDTH / 2, CARD_HEIGHT - 68);
+  // The signature is the @handle in Red Hat Mono, like every other Kura card — never the
+  // baclog.app URL in Space Mono (founder 2026-09-28: "ninguna tarjeta dice BACLOG").
+  ctx.font = RHMONO(34);
+  track(ctx, 34 * 0.08);
+  if (backlog.username) ctx.fillText(`@${backlog.username}`, CARD_WIDTH / 2, CARD_HEIGHT - 72);
+  track(ctx, 0);
 
   drawGrain(ctx, CARD_WIDTH, CARD_HEIGHT, 0.06, seed);
 }

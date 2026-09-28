@@ -104,7 +104,7 @@ export interface DoubleFeatureData {
    * grounded. Optional overrides let the caller localize each fragment.
    */
   narrative: {
-    /** Mono eyebrow over the hook, e.g. "viste F1 hasta la última vuelta · ★★★★★". */
+    /** Mono eyebrow over the hook, e.g. "viste F1 hasta la última vuelta" — what you watched, never a rating (Kura has none). */
     hookEyebrow: string;
     /** The hook headline (Newsreader), e.g. "Así que fuimos a buscar quién le puso voz…". */
     hookTitle: string;
