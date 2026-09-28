@@ -13,7 +13,7 @@ import { truncateToWidth } from "./util";
  * title and collection cards — replaces the Baclog generative field (HSL
  * shapes, grain, dark bands; founder 2026-09-28).
  *
- *   "RECAP · 09.2026" in mono (the card keeps the context the app dropped:
+ *   "RECAP" in mono — no date, the title already says it — (the card keeps the context the app dropped:
  *   it travels outside Kura) · "septiembre ’26" in Newsreader roman with the
  *   short year smaller in text-2 (`RecapMonthTitle` / the web h1) · the fan
  *   of the month with "lo más tuyo" in front (flujo 10 draws three covers,
@@ -66,7 +66,8 @@ export function drawRecap(ctx: CanvasRenderingContext2D, backlog: CardBacklog) {
     ctx.fillStyle = TEXT_2;
     ctx.font = RHMONO(monoSize);
     track(ctx, monoSize * 0.08);
-    ctx.fillText(`RECAP · ${r.eraKey.slice(5)}.${r.eraKey.slice(0, 4)}`, cx, padY);
+    // Only "RECAP": the month and year already live in the title (founder, 2026-09-28).
+    ctx.fillText("RECAP", cx, padY);
     track(ctx, 0);
   }
 

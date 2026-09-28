@@ -3,7 +3,6 @@ import { getRecapMonths } from "@/modules/backlog/recap";
 import { toRecapCardBacklog } from "@/modules/cards/adapter";
 import { CardExporter } from "@/components/card-exporter";
 import { BackButton } from "@/components/ui";
-import { monthYear } from "@/modules/backlog/recap-format";
 
 /**
  * 66 Tarjeta recap / 67 C2 Tarjeta firmada — the Kura frame around the recap
@@ -43,7 +42,7 @@ export default async function RecapCardPage({
       <CardExporter
         backlog={toRecapCardBacklog(recap, user.username)}
         style="recap"
-        eyebrow={`recap · ${monthYear(recap.key)}`}
+        eyebrow="recap"
         publicUrl={user.username && user.isPublic ? `https://baclog.app/${user.username}` : null}
         noLinkNote="Elige tu @usuario en Ajustes para que tu link firme la tarjeta."
       />
