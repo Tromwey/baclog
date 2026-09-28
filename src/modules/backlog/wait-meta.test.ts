@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { nextLabel, waitMeta } from "./wait-meta";
-import { K, TINT_MAX_LUMINANCE, mixHex, relativeLuminance, tintEnds } from "@/components/kura/tint";
+import { K, MIN_ENDS_DELTA, TINT_MAX_LUMINANCE, deltaE, mixHex, relativeLuminance, tintEnds } from "@/components/kura/tint";
 
 // Run: pnpm tsx --test src/modules/backlog/wait-meta.test.ts
 
@@ -57,4 +57,26 @@ test("saveSheetLabel describes the change", async () => {
   assert.equal(saveSheetLabel(["a"], new Set(), of), "Quitar de tus colecciones");
   assert.equal(saveSheetLabel([], new Set(), of), "Elige una colección");
   assert.equal(saveSheetLabel(["a"], new Set(["b"]), of), "Guardar cambios");
+});
+
+// Degradado plano (founder 2026-09-28): the two most dominant colours of a
+// cover are often one hue twice — tone 2 then comes from the rest of the palette.
+test("tintEnds picks a distinct tone 2 when the first two collapse", () => {
+  const flat = {
+    burning: ["#325aa6", "#4c6ab1", "#3562ac", "#164893", "#193a70"],
+    hermoso: ["#ce2727", "#b62426", "#e62e29", "#4f58a6", "#ec8e52"],
+    mosca: ["#082b7d", "#2e498c", "#354777", "#173783", "#26396e"],
+  };
+  for (const [name, hexes] of Object.entries(flat)) {
+    const [top, end] = tintEnds(hexes);
+    const [, plain] = tintEnds(hexes.slice(0, 2));
+    assert.ok(deltaE(top, plain) < MIN_ENDS_DELTA, `${name}: the first pair really is flat`);
+    assert.ok(deltaE(top, end) > deltaE(top, plain), `${name}: ${plain} → ${end}`);
+    assert.ok(ratio(TEXT_2, end) >= 4.5, `${name}: AA on the new tone 2`);
+  }
+});
+
+test("tintEnds keeps tone 2 = second colour when the pair already reads", () => {
+  const lively = ["#82c5c7", "#d22917", "#eaac5c", "#b6b2a6", "#f2ecda"];
+  assert.deepEqual(tintEnds(lively), tintEnds(lively.slice(0, 2)));
 });

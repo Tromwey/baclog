@@ -63,18 +63,65 @@ function capLuminance(hex: string, ink: string, max = TINT_MAX_LUMINANCE): strin
   return mixHex(hex, ink, hi);
 }
 
+/** CIE L*a*b* (D65) of `#rrggbb` — only to measure how far apart two ends read. */
+function lab(hex: string): [number, number, number] {
+  const c = parseHex(hex) ?? parseHex(BG)!;
+  const lin = (v: number) => {
+    const x = v / 255;
+    return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  const [r, g, b] = [lin(c.r), lin(c.g), lin(c.b)];
+  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+
+/** CIE76 ΔE between two `#rrggbb` (twin of iOS `RGB.deltaE`). */
+export function deltaE(a: string, b: string): number {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+/**
+ * How far apart (CIE76 ΔE, after tinting) tone 1 and tone 2 must be before
+ * tone 2 stops being simply the second colour (founder 2026-09-28: Burning
+ * 4.7, mosca 7.8, Hermoso 11.7 read flat; lively multicolour pairs sit ≥ 15).
+ * Twin of iOS `Tint.minEndsDelta`.
+ */
+export const MIN_ENDS_DELTA = 13;
+
 /**
  * The two ends of a tinted surface: tone 1 pulled toward black, tone 2
  * further — each capped at `TINT_MAX_LUMINANCE` so text on it keeps AA.
+ *
+ * Tone 1 is always the first colour. Tone 2 is the second — unless the two
+ * land closer than `MIN_ENDS_DELTA` once tinted (a cover's two most dominant
+ * colours are often two shades of one blue: tone 1 ≈ tone 2 and the gradient
+ * vanished on every surface). Then tone 2 is the palette colour whose tinted
+ * end is FARTHEST from tone 1 (first on a tie). Pairs already far enough
+ * apart never change. Twin of iOS `Tint.ends`; change both or neither.
  */
 export function tintEnds(hexes: readonly string[]): [string, string] {
   const a = hexes[0];
-  const b = hexes[1] ?? hexes[0];
   if (!a) return [BG, BG];
-  return [
-    capLuminance(mixHex(a, TOP_INK, K), TOP_INK),
-    capLuminance(mixHex(b, BOTTOM_INK, Math.min(1, K + 0.08)), BOTTOM_INK),
-  ];
+  const top = capLuminance(mixHex(a, TOP_INK, K), TOP_INK);
+  const bottom = (hex: string) =>
+    capLuminance(mixHex(hex, BOTTOM_INK, Math.min(1, K + 0.08)), BOTTOM_INK);
+  let end = bottom(hexes[1] ?? a);
+  let gap = deltaE(top, end);
+  if (gap < MIN_ENDS_DELTA) {
+    for (const hex of hexes.slice(2)) {
+      const c = bottom(hex);
+      const d = deltaE(top, c);
+      if (d > gap) {
+        end = c;
+        gap = d;
+      }
+    }
+  }
+  return [top, end];
 }
 
 /**

@@ -41,6 +41,26 @@ struct RGB: Hashable {
         return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
     }
 
+    /// CIE L*a*b* (D65) — only to measure how far apart two tint ends read (`Tint.ends`).
+    var lab: (l: Double, a: Double, b: Double) {
+        func lin(_ v: Double) -> Double {
+            let x = v / 255
+            return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
+        }
+        let (R, G, B) = (lin(r), lin(g), lin(b))
+        let x = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047
+        let y = 0.2126 * R + 0.7152 * G + 0.0722 * B
+        let z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883
+        func f(_ t: Double) -> Double { t > 0.008856 ? pow(t, 1.0 / 3) : 7.787 * t + 16.0 / 116 }
+        return (116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
+    }
+
+    /// CIE76 ΔE — the web's `deltaE` (src/components/kura/tint.ts).
+    func deltaE(_ o: RGB) -> Double {
+        let p = lab, q = o.lab
+        return ((p.l - q.l) * (p.l - q.l) + (p.a - q.a) * (p.a - q.a) + (p.b - q.b) * (p.b - q.b)).squareRoot()
+    }
+
     /// `0xffffff ^ hex` — used by the seal.
     var inverted: RGB { RGB(r: 255 - r, g: 255 - g, b: 255 - b) }
 
@@ -202,12 +222,33 @@ enum Tint {
 
     /// The two ends — each capped at `maxLuminance` so text on it keeps AA. Twin of the web's
     /// `tintEnds` (src/components/kura/tint.ts); change both or neither.
+    ///
+    /// Tone 1 is always the palette's first colour. Tone 2 is its second — unless those two land
+    /// closer than `minEndsDelta` once tinted (a cover's two most dominant colours are often two
+    /// shades of the same blue: tone 1 ≈ tone 2 and the gradient vanished on the card, the page
+    /// and the profile alike). Then tone 2 is the palette colour whose tinted end is FARTHEST
+    /// from tone 1 (first one on a tie). Pairs already ≥ `minEndsDelta` apart never change.
     static func ends(_ palette: [String]) -> (RGB, RGB) {
-        let a = RGB(hex: palette.first ?? "#6c6b76")
-        let b = RGB(hex: palette.count > 1 ? palette[1] : (palette.first ?? "#6c6b76"))
-        return (capLuminance(a.mix(topTarget, k), toward: topTarget),
-                capLuminance(b.mix(bottomTarget, min(1, k + 0.08)), toward: bottomTarget))
+        let first = palette.first ?? "#6c6b76"
+        let top = capLuminance(RGB(hex: first).mix(topTarget, k), toward: topTarget)
+        func bottom(_ hex: String) -> RGB {
+            capLuminance(RGB(hex: hex).mix(bottomTarget, min(1, k + 0.08)), toward: bottomTarget)
+        }
+        var end = bottom(palette.count > 1 ? palette[1] : first)
+        var gap = top.deltaE(end)
+        if gap < minEndsDelta {
+            for hex in palette.dropFirst(2) {
+                let c = bottom(hex), d = top.deltaE(c)
+                if d > gap { end = c; gap = d }
+            }
+        }
+        return (top, end)
     }
+
+    /// How far apart (CIE76 ΔE, after tinting) tone 1 and tone 2 must be before tone 2 stops
+    /// being simply the second colour (founder 2026-09-28: Burning 4.7, mosca 7.8, Hermoso 11.7
+    /// read flat; the lively multicolour pairs sit ≥ 15). Twin of the web's `MIN_ENDS_DELTA`.
+    static let minEndsDelta = 13.0
 
     /// The brightest a tint end may be (critica 2026-09-27, WCAG 1.4.3 — the web's
     /// `TINT_MAX_LUMINANCE`). A pale, desaturated cover (white sleeve, grey poster) mixed at
