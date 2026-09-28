@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-27 (migración 0031 `follow_lists_visibility` generada, SIN aplicar — va DESPUÉS de 0030) · 2026-09-27 (migración 0030 `collection_curation` generada, SIN aplicar) · 2026-09-24 (fase 4g fusión de cuentas, sin migración · migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
+> Actualizado: 2026-09-28 (migración 0032 `party_rsvp` generada — invitación /party) · 2026-09-27 (migración 0031 `follow_lists_visibility` generada, SIN aplicar — va DESPUÉS de 0030) · 2026-09-27 (migración 0030 `collection_curation` generada, SIN aplicar) · 2026-09-24 (fase 4g fusión de cuentas, sin migración · migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -85,6 +85,8 @@ se corta ahí). Irrelevante a decenas de usuarios, revisar si el feed crece.
 Regla de queries: un instante JS en un template `sql\`…\`` va SIEMPRE como `toISOString()::timestamp`
 (`atParam` en `modules/social/queries.ts`), nunca como `Date` crudo — el driver lo serializa con el offset
 local y las columnas `timestamp` sin zona lo descartan (learning 2026-09-02-date-crudo-…).
+
+**0032 `party_rsvp`** (invitación /party, 2026-09-28; generada con `drizzle-kit generate`). Aditiva-inocua: tabla nueva `party_rsvp (id uuid PK, event_slug, guest_token, name, attending, plus_one, plus_name, diets text[], drink, costume, created_at, updated_at)` + único `(event_slug, guest_token)`. **Sin FK a `user`** (los invitados son anónimos) → no entra en `MERGE_COVERAGE`. Ningún código existente la lee, así que el orden migración/deploy da igual para el resto de la app; solo el envío del RSVP en /party falla sin ella.
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.

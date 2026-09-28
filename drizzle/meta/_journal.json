@@ -225,6 +225,13 @@
       "when": 1790526242666,
       "tag": "0031_follow_lists_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790635920188,
+      "tag": "0032_party_rsvp",
+      "breakpoints": true
     }
   ]
 }

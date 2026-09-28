@@ -1,0 +1,30 @@
+/* Keyframes of the /party invitation (see party-scene.tsx). Prefixed pt- so they never collide with the app's. */
+@keyframes pt-fogA{0%{transform:translate(-10%,0) scale(1)}50%{transform:translate(8%,-4%) scale(1.15)}100%{transform:translate(-10%,0) scale(1)}}
+@keyframes pt-fogB{0%{transform:translate(10%,4%) scale(1.1)}50%{transform:translate(-8%,0) scale(1)}100%{transform:translate(10%,4%) scale(1.1)}}
+@keyframes pt-flicker{0%,100%{opacity:1}8%{opacity:.35}10%{opacity:1}47%{opacity:.9}49%{opacity:.2}51%{opacity:.95}80%{opacity:1}82%{opacity:.5}83%{opacity:1}}
+@keyframes pt-candle{0%,100%{opacity:1;transform:scaleY(1)}30%{opacity:.8;transform:scaleY(.9)}60%{opacity:1;transform:scaleY(1.08)}}
+@keyframes pt-nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+@keyframes pt-sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes pt-lampFlick{0%,10%{opacity:1}11%{opacity:.15}12%{opacity:.85}13%{opacity:.1}15%,48%{opacity:1}49%{opacity:.3}50%,58%{opacity:1}59%{opacity:.08}60%,72%{opacity:0}73%{opacity:.7}74%{opacity:.1}76%,100%{opacity:1}}
+@keyframes pt-fogDrift{0%{transform:translateX(-30%)}100%{transform:translateX(30%)}}
+@keyframes pt-fogDrift2{0%{transform:translateX(25%)}100%{transform:translateX(-25%)}}
+@keyframes pt-lampDark{0%,10%{opacity:0}11%{opacity:.85}12%{opacity:.15}13%{opacity:.9}15%,48%{opacity:0}49%{opacity:.7}50%,58%{opacity:0}59%{opacity:.92}60%,72%{opacity:1}73%{opacity:.3}74%{opacity:.9}76%,100%{opacity:0}}
+@keyframes pt-cloudA{0%{transform:translateX(-12%)}100%{transform:translateX(12%)}}
+@keyframes pt-eyes{0%,18%{opacity:0;transform:scaleY(1)}24%,56%{opacity:1;transform:scaleY(1)}58%{transform:scaleY(.1)}60%,78%{opacity:1;transform:scaleY(1)}84%,100%{opacity:0}}
+@keyframes pt-shade{0%,100%{transform:translateX(0);opacity:.95}50%{transform:translateX(8px);opacity:.55}}
+@keyframes pt-sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes pt-glitchA{0%,92%{opacity:0}92.5%{opacity:1;clip-path:inset(12% 0 78% 0);transform:translateX(-10px)}93.2%{clip-path:inset(44% 0 40% 0);transform:translateX(14px)}94%{clip-path:inset(72% 0 10% 0);transform:translateX(-6px)}94.6%{clip-path:inset(28% 0 58% 0);transform:translateX(8px)}95.2%,100%{opacity:0}}
+@keyframes pt-glitchB{0%,95%{opacity:0}95.4%{opacity:1;transform:translateX(6px)}96%{opacity:.6;transform:translateX(-9px)}96.6%{opacity:1;transform:translateX(3px)}97.2%,100%{opacity:0}}
+@keyframes pt-bubble{0%{transform:scale(0);opacity:0}40%{opacity:1}100%{transform:scale(1.5);opacity:0}}
+@keyframes pt-brew{0%,100%{box-shadow:0 0 30px 10px rgba(120,220,90,.35)}50%{box-shadow:0 0 44px 16px rgba(120,220,90,.55)}}
+@keyframes pt-edgePulse{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes pt-deathGlitch{0%,86%,100%{transform:translate(0);opacity:1;text-shadow:none}87%{transform:translate(-3px,1px);text-shadow:2px 0 #ff003c,-2px 0 #00ffe6}88%{transform:translate(3px,-1px);opacity:.4}89%{transform:translate(-1px,0);text-shadow:-3px 0 #ff003c,3px 0 #00ffe6}90%{opacity:0}91%{opacity:1;transform:translate(2px,0)}92%{transform:translate(0);text-shadow:none}}
+@keyframes pt-hintInOut{0%{opacity:0;filter:blur(6px);transform:translateY(8px)}22%{opacity:1;filter:blur(0);transform:translateY(0)}78%{opacity:1;filter:blur(0)}100%{opacity:0;filter:blur(4px)}}
+@keyframes pt-swing{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes pt-rise{from{opacity:0}to{opacity:1}}
+.party { min-height: 100dvh; background: #070605; color: #ece6dc; -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
+.party * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.party a { color: #e8785d; text-decoration: none; }
+.party a:hover { color: #ece6dc; }
+.party input, .party select, .party textarea, .party button { font: inherit; }
+.party input::placeholder { color: #7d746b; }

@@ -923,6 +923,38 @@ export const waitlistReferrals = pgTable(
   ],
 );
 
+// ---------- party module (invitación /party, 2026-09-28) ----------
+
+/**
+ * RSVPs to a one-off event invitation hosted at /party (src/modules/party).
+ * Guests are ANONYMOUS — no user FK on purpose: the invitation is shared by
+ * WhatsApp and nobody signs in. A guest is a random `guest_token` the page
+ * keeps in localStorage, so re-submitting edits the same row. Only the admin
+ * reads the rows (Torre › /admin/party); the costume is a spoiler, never
+ * shown to other guests (the page only learns "someone already picked this").
+ */
+export const partyRsvps = pgTable(
+  "party_rsvp",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Which invitation (PARTY_EVENT.slug) — lets a future party reuse the table. */
+    eventSlug: text("event_slug").notNull(),
+    guestToken: text("guest_token").notNull(),
+    name: text("name").notNull(),
+    attending: boolean("attending").notNull(),
+    plusOne: boolean("plus_one").notNull().default(false),
+    plusName: text("plus_name"),
+    diets: text("diets").array().notNull().default(sql`'{}'::text[]`),
+    drink: text("drink"),
+    costume: text("costume"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("party_rsvp_event_guest_unique").on(t.eventSlug, t.guestToken),
+  ],
+);
+
 // ---------- backlog module (F3.3 monthly recap idempotency) ----------
 
 export const recapSends = pgTable(

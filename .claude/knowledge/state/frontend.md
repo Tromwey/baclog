@@ -246,6 +246,11 @@ Fuente: `design/kura/colecciones-transiciones.dc.html` (su `spr()` = `spring(res
 - **Perfil privado ajeno (20d, iOS `LockedCollections` en `PersonProfileView.swift`)**: ya no es la tarjeta de lomo (franja `KColor.spine` + rectángulos). Es el abanico fantasma de la vitrina (`FanView(covers: [], lead: 186, ghost: true, plus: false)`) con `lock.fill` 20 en text3 centrado en la carta frontal, y las dos líneas centradas debajo. El lomo (`SpineLabel`/`KColor.spine`) solo queda en la tarjeta 9:16 del recap.
 - DEBUG: `-kuraScreen collection` (hermana, sin fijar) · `-kuraScreen shelf` (música 2026, fijada) · `-kuraScreen private`.
 
+## Invitación /party (2026-09-28, diseño Claude Design 3cd00900… "Invitacion Cementerio Iso")
+- Ruta pública `src/app/party/` **fuera del sistema Kura a propósito** (tipografías Cormorant/Manrope/JetBrains Mono/Creepster vía next/font con vars `--pt-*`, bordes, glows y pulsos del diseño). No aplicar las reglas borderless/glow-free ahí.
+- Estructura = la del DC: `party-invitation.tsx` es la clase `Component extends DCLogic` (estado + `renderVals`) y `party-scene.tsx` es el template convertido 1:1 a JSX por un conversor de un solo uso (estilos inline, `sc-if` → ternario, `sc-for` → map). Keyframes con prefijo `pt-` en `party.css`. Client-only (`dynamic(..., { ssr: false })`): lee `window` y `Date.now()` en cada render.
+- Evento fijo en `src/modules/party/event.ts` (`PARTY_EVENT`). RSVP → DB (ver security/data); el anfitrión lo ve en `/admin/party` (sin pestaña en la Torre).
+
 ## En progreso
 <!-- Trabajo a medias que otro agente podría pisar. Vaciar al terminar. -->
 

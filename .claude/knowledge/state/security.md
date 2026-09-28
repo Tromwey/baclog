@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-27 (listas de seguidores/siguiendo ajenas como lectura cross-user con viewer: `getFollowListsAccess` + `getOthersPeoplePage`, 0031 sin aplicar) · 2026-09-25 (push solo a sesiones vivas · nonce de Google · fase 4g: conectar proveedores y fusionar cuentas · API v1 · fases 0–3 · fase 4b auth: `token_version` en bearers Y cookies web + handoff web endurecido · 0027 aplicada: revocación ACTIVA · 4c reportar y bloquear, App Store 1.2 — 0028 sin aplicar · 4d sesiones por dispositivo (`sid`) · 4f Sign in with Apple/Google — 0029 sin aplicar)
+> Actualizado: 2026-09-28 (/party: escritura ANÓNIMA acotada a `party_rsvp`) · 2026-09-27 (listas de seguidores/siguiendo ajenas como lectura cross-user con viewer: `getFollowListsAccess` + `getOthersPeoplePage`, 0031 sin aplicar) · 2026-09-25 (push solo a sesiones vivas · nonce de Google · fase 4g: conectar proveedores y fusionar cuentas · API v1 · fases 0–3 · fase 4b auth: `token_version` en bearers Y cookies web + handoff web endurecido · 0027 aplicada: revocación ACTIVA · 4c reportar y bloquear, App Store 1.2 — 0028 sin aplicar · 4d sesiones por dispositivo (`sid`) · 4f Sign in with Apple/Google — 0029 sin aplicar)
 
 ## Qué cubre este dominio
 <!-- Autenticación, autorización app-layer, gates de admin, superficies públicas y manejo de secretos.
@@ -45,6 +45,8 @@
 | `src/app/api/avatar/[key]/route.ts` | F3.11: sirve la foto de perfil por `key` aleatorio por subida. Gate: dueño **público** → se sirve a cualquiera con la URL; dueño **privado** → solo a su propia sesión, resuelta por **bearer (`readApiUser`) o cookie (`getCurrentUser`)**, en ese orden; key inválido/inexistente/ajeno = mismo 404 vacío (sin oráculo). `users.image` entra en las listas blancas público-safe (public.ts, social, reviews) bajo el MISMO gate que `username`: es identidad, no estado; en las listas de gente un seguido que se volvió privado devuelve `avatarUrl: null` |
 | `src/lib/env.ts` | Acceso a variables de entorno |
 | `.env.example` | Envs requeridos (los valores reales viven en `.env.local`, no versionado) |
+
+**Invitación /party (2026-09-28) — la única escritura sin sesión fuera de waitlist.** `src/app/actions/party-actions.ts` escribe `party_rsvp` sin usuario: el invitado es un `guest_token` aleatorio (localStorage) y el upsert va por `(event_slug, guest_token)`. Acotado por zod (largos ≤ 80, dietas/bebidas en lista blanca) y un techo de 400 filas por evento en `saveRsvp` (lleno = solo editar). El disfraz es spoiler "solo lo ve el anfitrión": `isCostumeTaken` responde un booleano por coincidencia EXACTA normalizada, nunca devuelve el disfraz de otro. Lectura solo admin (`/admin/party`, `requireAdmin`). Si un token se filtra, quien lo tenga puede editar ESA respuesta — aceptado para una fiesta.
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda.
