@@ -29,7 +29,7 @@ struct CollectionOptionsSheet: View {
                 SheetRow(systemImage: "square.and.arrow.up", label: "Compartir") { store.present(.share(c.id)) }
                 SheetRow(systemImage: c.pinned ? "pin.slash" : "pin", label: c.pinned ? "Desfijar" : "Fijar",
                          action: { store.dismissSheet(); store.togglePin(c.id) }) {
-                    if c.pinned { Text("fijada").monoLabel(color: KColor.text3) }
+                    if c.pinned { SheetValue("fijada") }
                 }
                 SheetDivider()
                 if full {
@@ -41,7 +41,7 @@ struct CollectionOptionsSheet: View {
                         withAnimation(KMotion.short) { store.toggleLayout(c.id) }
                     }
                     SheetRow(systemImage: "arrow.up.arrow.down", label: "Ordenar", action: { store.present(.sort(c.id)) }) {
-                        Text(c.sort.label).monoLabel(color: KColor.text3)
+                        SheetValue(c.sort.label)
                     }
                     // Right after Ordenar: Ordenar picks how YOU look at it (Manual is one of the
                     // modes); this edits that manual order — the one everyone sees. Two verbs
@@ -50,7 +50,7 @@ struct CollectionOptionsSheet: View {
                     if n > 1 {
                         SheetRow(systemImage: "line.3.horizontal", label: "Editar el orden",
                                  action: { store.present(.reorder(c.id)) }) {
-                            Text("el que ven todos").monoLabel(color: KColor.text3)
+                            SheetValue("el que ven todos")
                         }
                     }
                 }
@@ -58,7 +58,7 @@ struct CollectionOptionsSheet: View {
                 // The one visibility vocabulary (`Privacy.label`: Solo yo · Con el link · En tu
                 // perfil), asked the way Nueva colección asks it.
                 SheetRow(systemImage: c.privacy.symbol, label: "Quién la ve", action: { store.present(.privacy(c.id)) }) {
-                    Text(c.privacy.label).monoLabel(color: KColor.text3)
+                    SheetValue(c.privacy.label)
                 }
                 SheetDivider()
                 SheetRow(systemImage: "trash", label: "Borrar colección") { store.present(.deleteCollection(c.id)) }
@@ -594,7 +594,7 @@ struct TitleActionsSheet: View {
         // Neutral (text-2) until there IS a reaction: a salvia check read as "ya completado".
         SheetRow(systemImage: "checkmark", label: "Tu reacción", iconColor: KColor.text2, glyph: m?.glyph,
                  action: { store.present(.complete(titleID: t.id, focusReview: false)) }) {
-            Text(m?.myLabel ?? "Completar").monoLabel(color: KColor.text3)
+            SheetValue(m?.myLabel ?? "Completar")
         }
         SheetRow(systemImage: "text.bubble", label: store.myReview(t.id) == nil ? "Reseñar" : "Editar reseña") {
             store.present(.complete(titleID: t.id, focusReview: true))
@@ -657,5 +657,19 @@ struct MoveToSheet: View {
             }
             .padding(.horizontal, 20)
         }
+    }
+}
+
+/// A sheet row's current value on the right ("Manual", "En tu perfil", "Fijada"): UI font in
+/// sentence case and text-3, like a system settings value — not mono caps, which made a phrase
+/// ("EN TU PERFIL") shout next to a one-word value ("MANUAL") (founder, 2026-09-28).
+struct SheetValue: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.capitalizedFirst)
+            .font(.kura.ui(15))
+            .foregroundStyle(KColor.text3)
+            .lineLimit(1)
     }
 }
