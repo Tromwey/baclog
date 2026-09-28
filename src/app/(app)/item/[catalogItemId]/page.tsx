@@ -35,7 +35,7 @@ import {
   SectionTitle,
   type GlyphKind,
 } from "@/components/kura/components";
-import { releaseSentence, tintSurfaceVertical } from "@/components/kura/tint";
+import { feedDockBand, feedSurface, feedTail, releaseSentence, tintEnds } from "@/components/kura/tint";
 import { CLOCK_PATH } from "@/components/glyph-paths";
 import { plural } from "@/lib/plural";
 import { SaveSheetHost } from "./add-to-backlog";
@@ -183,14 +183,18 @@ export default async function ItemPage({
       initialCompleted={entry?.status === "completed"}
       initialOwnReview={reviews.own}
     >
-      <main className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-dock-clearance text-text">
-        {/* Safari's status-bar band tints from theme-color — match the cover. */}
-        <ThemeColorSync color={palette[0]} />
+      {/* The page recipe (páginas = degradado del feed): the title's 168° gradient
+          anchored in px from the top, continuing in tone 2 — the same surface as a
+          collection or a profile, and what the cover flight's backdrop paints. */}
+      <main
+        className="relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-dock-clearance text-text"
+        style={{ background: feedSurface(palette, 900), backgroundColor: feedTail(palette) }}
+      >
+        {/* Safari's status-bar band tints from theme-color — the page's tone 1,
+            exactly (like a collection). */}
+        <ThemeColorSync color={palette[0] ? tintEnds(palette)[0] : undefined} exact />
 
-        <header
-          className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]"
-          style={{ background: tintSurfaceVertical(palette) }}
-        >
+        <header className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]">
           <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] z-[2] flex items-center justify-between">
             <BackChip flightKey={catalogItemId} />
             <OptionsButton />
@@ -352,6 +356,13 @@ export default async function ItemPage({
           recId={narrative ? (entry?.sourceCrossMediaRecId ?? null) : null}
         />
         <ToastHost />
+
+        {/* The dock floats over the page's own bottom tone, not over black. */}
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
+          style={{ background: feedDockBand(palette) }}
+        />
       </main>
     </ItemReactionProvider>
   );

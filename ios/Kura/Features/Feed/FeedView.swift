@@ -19,9 +19,19 @@ struct FeedView: View {
     /// flip the feed to "quiet" on the spot and the other suggestions went with it.
     @State private var holdEmpty = false
 
+    #if DEBUG
+    /// `-kuraFeedSkeleton YES`: the skeleton stays up (the mock loads too fast to see it), with
+    /// `-kuraBodyLog YES` it logs `FEEDSKEL` frames to line up against the loaded stack's `FEEDGEO`.
+    private static let debugSkeleton = UserDefaults.standard.bool(forKey: "kuraFeedSkeleton")
+    #else
+    private static let debugSkeleton = false
+    #endif
+
     var body: some View {
         Group {
-            if store.loadState == .failed {
+            if Self.debugSkeleton {
+                loading
+            } else if store.loadState == .failed {
                 // The launch failed: "nobody you follow" would be a lie — we don't know yet.
                 failed(store.loadError(.library) ?? .server("")) { Task { await store.bootstrap() } }
             } else if holdEmpty || (store.following.isEmpty && store.me.followingCount == 0) {
@@ -80,23 +90,44 @@ struct FeedView: View {
         .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
-    /// The stack's shape while `GET /feed` runs.
+    /// The stack's shape while `GET /feed` runs — the SAME geometry as `stack` at rest (founder,
+    /// 2026-09-27: the old skeleton started its card under the title, the feed runs it up to the
+    /// top): card 0 runs up behind the transparent header with no corners and its content starts
+    /// at `hdr`; card 1 starts at `hdr` + card 0's tier height, rounded, with the stack's shadow.
+    /// Both are M (every cover card is M; the feed nearly always opens on one) and are laid out
+    /// by `FeedSkeletonCard`, which uses `FeedCardInset` and the real chip/pill heights. Neutral
+    /// tint (`palette(nil)`): the colour is the one thing a skeleton can't know.
     private var loading: some View {
-        VStack(spacing: 0) {
-            header
-            VStack(alignment: .leading, spacing: 14) {
-                Skeleton(radius: 999).frame(width: 150, height: 28)
-                Skeleton().frame(maxWidth: .infinity).frame(height: 260)
-                Skeleton(radius: 6).frame(width: 220, height: 26)
-                Skeleton(radius: 5).frame(width: 140, height: 12)
-                Spacer()
+        GeometryReader { geo in
+            let base = geo.size.height - headerTop
+            let h = tierHeight(.M, base: base)
+            let pal = palette(nil)
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    FeedSkeletonCard(index: 0, height: h, topInset: hdr)
+                        .background(Tint.card(pal))
+                    FeedSkeletonCard(index: 1, height: h, topInset: 0)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(Tint.card(pal))
+                        .clipShape(UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous))
+                        .background(alignment: .top) {
+                            // The resting band of the stack (`FeedStackCard`, p = 0): its shadow casts upward.
+                            UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous)
+                                .fill(Tint.ends(pal).0.color)
+                                .frame(height: hdr + KRadius.screen * 3)
+                                .kShadow(.stack, opacity: 1)
+                        }
+                }
+                header(transparent: true)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity)
-            .background(KColor.s1)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: KRadius.screen, topTrailingRadius: KRadius.screen, style: .continuous))
+            #if DEBUG
+            .onChange(of: h, initial: true) { _, h in
+                guard h > 0 else { return }
+                KBodyLog.hit(String(format: "FEEDSKEL row 0 top 0.0 h %.1f · row 1 top %.1f h %.1f · hdr %.1f", h + hdr, hdr + h, h, hdr))
+            }
+            #endif
         }
-        .background(KColor.bg.ignoresSafeArea())
+        .background(KColor.bg)
         .ignoresSafeArea(.container, edges: [.top, .bottom])
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Cargando tu feed")
@@ -177,6 +208,14 @@ struct FeedView: View {
 
                 header(transparent: true)
                     .zIndex(1)
+                    #if DEBUG
+                    .onAppear {
+                        // The skeleton's `FEEDSKEL` line, from the real rows: the two must match.
+                        guard rows.count > 1 else { return }
+                        KBodyLog.hit(String(format: "FEEDROWS row 0 top 0.0 h %.1f · row 1 top %.1f h %.1f · hdr %.1f",
+                                            rows[0].height + hdr, rows[1].top, rows[1].height, hdr))
+                    }
+                    #endif
 
                 if let e = store.loadError(.feed) {
                     // A refresh (or its titles) failed over a feed already on screen: say it's old.
@@ -931,6 +970,56 @@ private struct FeedCard: View, Equatable {
         if months < 12 { return months == 1 ? "hace 1 mes" : "hace \(months) meses" }
         let years = months / 12
         return years == 1 ? "hace 1 año" : "hace \(years) años"
+    }
+}
+
+/// One card of the loading stack, laid out like an M `FeedCard` whose title fits one line (the
+/// feed's usual opener): author chip (36 — seal 28 + 4/4), the 2:3 cover filling the art, and the
+/// text block (a `KPill.card` pill, 9, one Newsreader italic 26 line) ending `FeedCardInset.bottom`
+/// above the edge. Heights come from the real parts (the title line is a hidden `Text` in that
+/// font), so the skeleton → content swap doesn't move a line. Logs `FEEDGEO` in the card's space
+/// under `-kuraBodyLog YES`, tagged `skel<index>`.
+private struct FeedSkeletonCard: View {
+    let index: Int
+    let height: CGFloat
+    let topInset: CGFloat
+
+    var body: some View {
+        let id = "skel\(index)"
+        VStack(alignment: .leading, spacing: FeedCardInset.gap) {
+            Capsule().fill(KColor.glassBg)
+                .frame(width: 168, height: 36)
+                .overlay(alignment: .leading) {
+                    Skeleton(radius: 999).frame(width: 28, height: 28).padding(.leading, 4)
+                }
+                .feedGeo("chip", id)
+            GeometryReader { geo in
+                let w = min(geo.size.width, geo.size.height * 2 / 3)
+                Skeleton(radius: KRadius.coverL)
+                    .frame(width: w, height: w * 3 / 2)
+                    .feedGeo("cover", id)
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .feedGeo("art", id)
+            VStack(alignment: .leading, spacing: 9) {
+                Capsule().fill(KColor.glassBg).frame(width: 150, height: KPill.card.height)
+                Text(verbatim: "Título")
+                    .font(.kura.newsItalic(26))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .leading) { Skeleton(radius: 6).frame(width: 210, height: 22) }
+            }
+            .feedGeo("block", id)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, FeedCardInset.top + topInset)
+        .padding(.bottom, FeedCardInset.bottom)
+        .frame(height: height + topInset, alignment: .top)
+        .feedGeo("card", id)
+        .coordinateSpace(name: FeedCard.space)
+        .kFixedChrome()
     }
 }
 

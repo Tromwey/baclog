@@ -562,8 +562,11 @@ struct CreatorView: View {
         let shown = works.filter { filter == nil || $0.format == filter }
         let people = Array(Set(works.flatMap { store.followedMarks(for: $0.id).map(\.0) })).sorted { $0.handle < $1.handle }
 
+        // A page (degradado único): the first work's feed gradient over the whole page, not a
+        // header fading to black.
+        let tint = works.first?.palette ?? []
         ZStack(alignment: .top) {
-            KColor.bg.ignoresSafeArea()
+            Tint.feedTail(tint).ignoresSafeArea()
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(spacing: 10) {
@@ -575,8 +578,6 @@ struct CreatorView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, KSize.pushedTitleTop)
                     .padding(.bottom, 28)
-                    .background(works.first.map { Tint.header($0.palette) } ?? Tint.neutralHeader)
-                    .kOverscrollFill(Tint.headerTop(works.first?.palette))
 
                     VStack(alignment: .leading, spacing: 28) {
                         if !saved.isEmpty {
@@ -659,6 +660,7 @@ struct CreatorView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 56)
                 }
+                .kFeedSurface(tint, span: 900)
             }
             .ignoresSafeArea(.container, edges: .top)
             // No share here: the web has no public page for a creator (only /{handle},

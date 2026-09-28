@@ -56,7 +56,7 @@ export function RecoProvenance({
         </span>
         <span
           className={`ml-auto flex-none font-mono text-[10px] uppercase tracking-[0.16em] ${
-            narrative.linkKind === "factual" ? "text-text" : "text-text-3"
+            narrative.linkKind === "factual" ? "text-text" : "text-text-2"
           }`}
         >
           {narrative.linkKind === "factual" ? "conexión real" : "misma vibra"}
@@ -65,7 +65,7 @@ export function RecoProvenance({
           d={CHEVRON_DOWN_PATH}
           size={14}
           strokeWidth={2.4}
-          className={`flex-none text-text-3 transition-transform duration-[var(--dur-base)] ${
+          className={`flex-none text-text-2 transition-transform duration-[var(--dur-base)] ${
             open ? "rotate-180" : ""
           }`}
         />

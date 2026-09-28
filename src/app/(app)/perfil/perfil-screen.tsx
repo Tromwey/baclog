@@ -9,7 +9,7 @@ import {
   type GlyphKind,
   SectionTitle,
 } from "@/components/kura/components";
-import { feedSurface, feedTail, releaseLabel, tintCard } from "@/components/kura/tint";
+import { feedDockBand, feedSurface, feedTail, releaseLabel, tintCard } from "@/components/kura/tint";
 import type {
   ObsessionTile,
   ProfileCards,
@@ -168,7 +168,7 @@ export function PerfilScreen({
       <div
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
-        style={{ background: `linear-gradient(transparent, ${feedTail(hexes)} 75%)` }}
+        style={{ background: feedDockBand(hexes) }}
       />
     </div>
   );

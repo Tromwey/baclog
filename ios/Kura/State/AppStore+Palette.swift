@@ -3,7 +3,7 @@ import Foundation
 /// Cover palettes filled on this device. `catalog_item.paletteHex` is extracted on-device, once,
 /// by whoever shows the title first (AGENTS.md, the web does it on add and on view). A title that
 /// only the app has ever shown arrives with `palette: []`, and everything tinted from it
-/// (`Tint.card` / `Tint.header`) would fall back to gray `#6c6b76`.
+/// (`Tint.card`) would fall back to gray `#6c6b76` — and its page (`FeedSurface`) to bare `bg`.
 ///
 /// So: the first `CoverView` that draws such a title extracts its cover (`CoverPalette`), the
 /// store uses the hexes at once, and they go to the server by the channel that fits:

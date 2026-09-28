@@ -5,7 +5,6 @@ import { useState } from "react";
 import { sealHexesOf } from "@/components/adn-avatar";
 import { FollowButton } from "@/components/follow-button";
 import { Seal } from "@/components/kura/components";
-import { tintEnds } from "@/components/kura/tint";
 import {
   BOOKMARK_PATH,
   CHECK_FILL_PATH,
@@ -20,7 +19,19 @@ import { rgba } from "@/lib/color";
 import { dominantHexes } from "@/modules/backlog/palette";
 import type { MediaType } from "@/modules/catalog/types";
 import type { FeedBurst, FeedCard, FeedEvent, FeedSuggestion } from "@/modules/social/types";
-import { EXT_BOTTOM, STICKY_TOP } from "./feed-geometry";
+import {
+  BAND_SHADOW_ALPHA,
+  CARD_RADIUS,
+  EXT_BOTTOM,
+  STICKY_TOP,
+  TIER,
+  bandShadow,
+  cardBackground,
+  cardEnds,
+  tierHeight,
+  type TierName,
+} from "./feed-geometry";
+
 
 /**
  * Feed v8 Stack (design "Feed v8 Stack", 2026-09-21) — the feed stops being a
@@ -59,36 +70,32 @@ import { EXT_BOTTOM, STICKY_TOP } from "./feed-geometry";
  * with the Revamp), and the feed's greys are the root's (no `.feed-v8`
  * override). The tint is `tintEnds` from `kura/tint.ts` — the same 45 % the
  * v8 mock drew, now shared with every tinted surface of the app.
+ *
+ * iOS parity (founder, 2026-09-27: "en la web todavía está la vieja versión
+ * del feed") — the web follows `ios/Kura/Features/Feed/FeedView.swift`:
+ *  - the FIRST card runs up behind the transparent header (no corners, its
+ *    content starts under the header); cards 1… pin under it with 26 corners
+ *    and raise a BAND of their own top colour over the header in the last
+ *    140px before pinning (`data-feed-band`, driven by FeedList's scroll).
+ *    The resting shadow lives on the band and fades as it rises.
+ *  - tiers: a review or the suggestion is L, every cover card is M.
+ *  - pills follow iOS: a completion with a reaction shows only the reaction;
+ *    an add/burst pill ends in "en" and the collection's NAME follows it in
+ *    Newsreader 17 (a link to the public collection); the title's tail is the
+ *    creator, else the format — never the year.
+ *  - the suggestion opens with the "Sugerencia para ti" pill, says its
+ *    reason roman with the work in italic, then the seal 44 + @handle, the
+ *    shared follows and the honey Seguir (44 · 20 · 15).
+ *  - the burst strip snaps the first cover to the start, the last to the end
+ *    and the rest to the centre (iOS `BurstSnap`); each caption is 46 high.
  */
 
-type Tier = { h: number; cap: number; textMax: number };
-/** [fixed height, ceiling as a fraction of the screen, max height of the text block] */
-const TIER: Record<"L" | "M" | "S", Tier> = {
-  L: { h: 620, cap: 0.72, textMax: 180 },
-  M: { h: 500, cap: 0.58, textMax: 105 },
-  S: { h: 370, cap: 0.44, textMax: 105 },
-};
-
-/** The palette pair dragged toward black (`tintEnds`); never lit by nothing. */
-function cardEnds(hexes: readonly string[]): [string, string] {
-  return tintEnds(hexes.length > 0 ? hexes : ["#6C6B76"]);
-}
-
-export function cardBackground(hexes: readonly string[]): string {
-  const [top, bot] = cardEnds(hexes);
-  return `linear-gradient(168deg, ${top} 0%, ${bot} 100%)`;
-}
-
-/** The colour the page continues in below the last card (the mock's tailBg). */
-export function cardTailHex(hexes: readonly string[]): string {
-  return cardEnds(hexes)[1];
-}
 
 /** Kura's forms: disco 1:1, póster 2:3. */
 const aspectOf = (m: MediaType) => (m === "album" ? "1 / 1" : "2 / 3");
 
-/** A burst cover's caption: 8 gap + Newsreader 16 × 1.2 + 4 + mono 10 × 1.2. */
-const BURST_CAPTION = 44;
+/** A burst cover's caption (iOS `BurstCaption.height`): 8 + Newsreader 16 + 3 + mono 10. */
+const BURST_CAPTION = 46;
 
 /** The cover's hexes, else the author's ADN (minus the lima fallback pair). */
 const cardHexes = (e: FeedEvent): readonly string[] =>
@@ -117,58 +124,88 @@ const P = {
 };
 
 /**
- * "No le gusta" doesn't exist in kura (founder 2026-09-27): three states
- * (Me obsesiona · Me gusta · Completo) plus the clock. An old `disliked`
- * verdict gets no reaction pill — the event still reads as Completo.
+ * The author's reaction as a pill. "No le gusta" doesn't exist in kura
+ * (founder 2026-09-27): an old `disliked` verdict gets no pill.
  */
-const MARK_PILL = {
-  liked: () => P.up("Le gusta"),
-  obsessed: () => P.flame("Le obsesiona"),
-} as const;
+function reactionPill(mark: FeedEvent["mark"]): Pill | null {
+  if (mark === "liked") return P.up("Le gusta");
+  if (mark === "obsessed") return P.flame("Le obsesiona");
+  return null;
+}
 
 /**
- * The mock's pill rules. A waiting add REPLACES the "guardó en" pill instead of
- * adding to it: two long pills wrap the row and eat the artwork's height.
+ * iOS `FeedCard.pills`: one vocabulary of states. A completed title with a
+ * reaction shows only the reaction; a review adds its reaction; a waiting add
+ * shows only the wait; an add ends in "en" and the collection's name follows
+ * the pill (`CollectionName`).
  */
 function pillsFor(e: FeedEvent): Pill[] {
-  const out: Pill[] = [];
-  if (e.waiting) out.push(P.clock(`No puede esperar · ${e.waiting}`));
-  else if (e.kind === "added")
-    out.push(P.bookmark(e.backlogName ? `Guardó en ${e.backlogName}` : "Guardó"));
-  else if (e.kind === "completed") out.push(P.check("Completo"));
-  else if (e.kind === "obsessed") out.push(P.flame("Le obsesiona"));
-  else if (e.kind === "reviewed") out.push(P.review("Reseñó"));
-
-  if (e.mark === "liked") out.push(MARK_PILL.liked());
-  else if (e.mark === "obsessed" && e.kind !== "obsessed") out.push(MARK_PILL.obsessed());
-  return out;
+  if (e.waiting) return [P.clock(`No puede esperar · ${e.waiting}`)];
+  switch (e.kind) {
+    case "obsessed":
+      return [P.flame("Le obsesiona")];
+    case "completed":
+      return [reactionPill(e.mark) ?? P.check("Completo")];
+    case "reviewed": {
+      const r = reactionPill(e.mark);
+      return r ? [P.review("Reseñó"), r] : [P.review("Reseñó")];
+    }
+    case "added":
+      return [P.bookmark(e.backlogName ? "Guardó en" : "Guardó")];
+  }
 }
 
 /** The design's Card pill (sistema-de-diseno · pillVariants: glifo 13 · mono 12 · 9/14, 30 high)
- *  — iOS `KPill.card`. It had the profile Ribbon's 7/12 (26 high). */
-function PillRow({ pills }: { pills: Pill[] }) {
-  if (pills.length === 0) return null;
+ *  — iOS `KPill.card`. */
+function PillView({ p }: { p: Pill }) {
   return (
-    <div className="flex flex-wrap gap-[7px]">
+    <span className="inline-flex h-[30px] items-center gap-2 rounded-full bg-[var(--glass-bg)] px-[14px] font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text">
+      <svg width="13" height="13" viewBox={GLYPH_VIEWBOX} fill={p.color} aria-hidden className="flex-none">
+        <path d={p.d} />
+      </svg>
+      {p.label}
+    </span>
+  );
+}
+
+/** Pills, then (adds and bursts) the collection's name — wraps like iOS's FlowLayout (7/7). */
+function PillRow({ pills, collection }: { pills: Pill[]; collection?: React.ReactNode }) {
+  if (pills.length === 0 && !collection) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-[7px]">
       {pills.map((p) => (
-        <span
-          key={p.label}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--glass-bg)] px-[14px] py-[9px] font-mono text-[12px] uppercase leading-none tracking-[0.06em] text-text"
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox={GLYPH_VIEWBOX}
-            fill={p.color}
-            aria-hidden
-            className="flex-none"
-          >
-            <path d={p.d} />
-          </svg>
-          {p.label}
-        </span>
+        <PillView key={p.label} p={p} />
       ))}
+      {collection}
     </div>
+  );
+}
+
+/**
+ * "guardó … en" + the collection's own name: Newsreader roman, its identity
+ * everywhere else (crítica #22), 30 high like the pill it follows. A link to
+ * the public collection — the feed query already gates adds on
+ * `backlogs.isPublic`, so a named add's collection has a live public URL.
+ */
+function CollectionName({
+  name,
+  username,
+  backlogId,
+}: {
+  name: string;
+  username: string;
+  backlogId: string | null;
+}) {
+  const cls = "inline-flex h-[30px] max-w-full items-center truncate font-brand text-[17px] leading-none text-text";
+  if (!backlogId) return <span className={cls}>{name}</span>;
+  return (
+    <Link
+      href={`/u/${username}/${backlogId}`}
+      aria-label={`Colección ${name}`}
+      className={`${cls} rounded-[6px] transition-opacity active:opacity-60`}
+    >
+      {name}
+    </Link>
   );
 }
 
@@ -188,10 +225,10 @@ function AuthorPill({
   return (
     <Link
       href={`/u/${username}`}
-      className="relative z-10 flex max-w-full flex-none items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] py-1 pl-1 pr-3 bl-press"
+      className="relative z-10 flex h-9 max-w-full flex-none items-center gap-2 self-start rounded-full bg-[var(--glass-bg)] py-1 pl-1 pr-3 bl-press"
     >
       <Seal name={username} hexes={sealHexesOf(avatarHexes)} src={avatarUrl} size={28} />
-      <span className="truncate text-[14px] font-semibold text-text">@{username}</span>
+      <span className="truncate text-[13px] font-semibold text-text">@{username}</span>
       <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
         {trailing}
       </span>
@@ -200,30 +237,70 @@ function AuthorPill({
 }
 
 /**
- * The card shell: sticky at the header, its own tint, and a body that runs
- * EXT_BOTTOM past its height so the next card never rises over bare page.
+ * The card shell: sticky, its own tint, and a body that runs EXT_BOTTOM past
+ * its height so the next card never rises over bare page.
+ *
+ * The FIRST card (`first`) runs up behind the header — pinned at 0, pulled up
+ * by the header's height, no corners, its content starting under the header —
+ * exactly iOS's card 0. Every other card pins under the header with 26
+ * corners and carries its BAND: its own top colour, rounded, sitting behind
+ * the card; FeedList lifts it (`--rise`, `--p`) over the last 140px before
+ * the card pins so the header area turns to the arriving card's colour, and
+ * the resting shadow fades as it goes. The band is a sibling of the clipped
+ * surface (the surface clips, the article doesn't) so it can rise above it.
  */
-function StackCard({
+export function StackCard({
   hexes,
   size,
+  first = false,
   children,
 }: {
   hexes: readonly string[];
-  size: "L" | "M" | "S";
+  size: TierName;
+  first?: boolean;
   children: React.ReactNode;
 }) {
-  const tier = TIER[size];
+  const h = tierHeight(size);
+  const bg = cardBackground(hexes);
   return (
     <article
-      className="sticky flex flex-col gap-3.5 overflow-hidden rounded-t-[26px] px-5 pb-[142px] pt-[18px] shadow-[0_-8px_18px_rgba(0,0,0,.42)] [container-type:inline-size] [scroll-snap-align:start]"
+      data-feed-card
+      className="sticky flex-none [scroll-snap-align:start]"
       style={{
-        top: STICKY_TOP,
-        height: `calc(min(${tier.h}px, calc(100dvh * ${tier.cap})) + ${EXT_BOTTOM}px)`,
+        top: first ? 0 : STICKY_TOP,
+        height: first ? `calc(${h} + ${STICKY_TOP} + ${EXT_BOTTOM}px)` : `calc(${h} + ${EXT_BOTTOM}px)`,
+        marginTop: first ? `calc(-1 * ${STICKY_TOP})` : undefined,
         marginBottom: `-${EXT_BOTTOM}px`,
-        background: cardBackground(hexes),
       }}
     >
-      {children}
+      {!first && (
+        <div
+          aria-hidden
+          data-feed-band
+          className="pointer-events-none absolute inset-x-0 top-0"
+          style={{
+            height: `calc(${STICKY_TOP} + ${CARD_RADIUS * 3}px)`,
+            borderTopLeftRadius: CARD_RADIUS,
+            borderTopRightRadius: CARD_RADIUS,
+            background: cardEnds(hexes)[0],
+            // The resting shadow fades as the band rises (`--p` 0 → 1).
+            boxShadow: bandShadow(`calc(${BAND_SHADOW_ALPHA} * (1 - var(--p, 0)))`),
+            transform: "translateY(calc(-1 * var(--rise, 0px)))",
+          }}
+        />
+      )}
+      <div
+        className="absolute inset-0 flex flex-col gap-3.5 overflow-hidden px-5 [container-type:inline-size]"
+        style={{
+          background: bg,
+          borderTopLeftRadius: first ? 0 : CARD_RADIUS,
+          borderTopRightRadius: first ? 0 : CARD_RADIUS,
+          paddingTop: first ? `calc(18px + ${STICKY_TOP})` : "18px",
+          paddingBottom: `${22 + EXT_BOTTOM}px`,
+        }}
+      >
+        {children}
+      </div>
     </article>
   );
 }
@@ -233,11 +310,12 @@ function Art({ children }: { children: React.ReactNode }) {
   return <div className="relative flex min-h-0 flex-1 items-center justify-center">{children}</div>;
 }
 
-function TextBlock({ size, children }: { size: "L" | "M" | "S"; children: React.ReactNode }) {
+/** Hugs its text up to the tier's cap (iOS `CappedHeight`); a suggestion never clips. */
+function TextBlock({ size, capped = true, children }: { size: TierName; capped?: boolean; children: React.ReactNode }) {
   return (
     <div
       className="flex flex-none flex-col gap-[9px] overflow-hidden"
-      style={{ maxHeight: `${TIER[size].textMax}px` }}
+      style={capped ? { maxHeight: `${TIER[size].textMax}px` } : undefined}
     >
       {children}
     </div>
@@ -260,35 +338,41 @@ function Title({ title, tail }: { title: string; tail: string | null }) {
  */
 export function hexesOfCard(card: FeedCard): readonly string[] {
   if (card.kind !== "burst") return cardHexes(card.event);
-  const first = card.items[0]?.paletteHex ?? [];
-  const last = card.items[card.items.length - 1]?.paletteHex ?? [];
+  return burstHexes(card);
+}
+
+/** iOS `palette(.burst)`: the first cover's first hex, the last cover's second. */
+function burstHexes({ items, author }: FeedBurst): readonly string[] {
+  const first = items[0]?.paletteHex ?? [];
+  const last = items[items.length - 1]?.paletteHex ?? [];
   if (first.length > 0) return [first[0], last[1] ?? last[0] ?? first[0]];
-  const mixed = dominantHexes(card.items, 4);
-  return mixed.length > 0 ? mixed : sealHexesOf(card.author.avatarHexes);
+  const mixed = dominantHexes(items, 4);
+  return mixed.length > 0 ? mixed : sealHexesOf(author.avatarHexes);
 }
 
 // ---------- cards ----------
 
-export function FeedCardView({ card }: { card: FeedCard }) {
-  if (card.kind === "burst") return <BurstCard burst={card} />;
-  return <EventCard event={card.event} />;
+export function FeedCardView({ card, first = false }: { card: FeedCard; first?: boolean }) {
+  if (card.kind === "burst") return <BurstCard burst={card} first={first} />;
+  return <EventCard event={card.event} first={first} />;
 }
 
-/** The mock's tiers: L a review with words, M an obsession or completion, S a quick add. */
-function sizeOf(e: FeedEvent): "L" | "M" | "S" {
-  if (e.reviewBody) return "L";
-  return e.kind === "added" ? "S" : "M";
+/** iOS `FeedEvent.tier`: a review (with or without words) is L; every cover card is M. */
+function sizeOf(e: FeedEvent): TierName {
+  return e.kind === "reviewed" ? "L" : "M";
 }
 
 const BODY =
   "text-[15px] leading-[1.5] text-pretty text-text [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden";
 
-function EventCard({ event }: { event: FeedEvent }) {
+function EventCard({ event, first }: { event: FeedEvent; first: boolean }) {
   const size = sizeOf(event);
-  // v10: "título · autor" — the byline (artist / director), else the year.
-  const tail = event.byline ?? event.year?.toString() ?? null;
+  // "título · creador" — the byline (artist, studio/network), else the format; never the year
+  // (iOS `FeedCard.tail`, crítica #21: the same second datum the burst captions carry).
+  const tail = event.byline ?? event.mediaTypeLabel;
+  const named = event.kind === "added" && !event.waiting && event.backlogName;
   return (
-    <StackCard hexes={cardHexes(event)} size={size}>
+    <StackCard hexes={cardHexes(event)} size={size} first={first}>
       <AuthorPill
         username={event.author.username}
         avatarUrl={event.author.avatarUrl}
@@ -315,7 +399,18 @@ function EventCard({ event }: { event: FeedEvent }) {
         </Link>
       </Art>
       <TextBlock size={size}>
-        <PillRow pills={pillsFor(event)} />
+        <PillRow
+          pills={pillsFor(event)}
+          collection={
+            named ? (
+              <CollectionName
+                name={event.backlogName!}
+                username={event.author.username}
+                backlogId={event.backlogId}
+              />
+            ) : undefined
+          }
+        />
         <Title title={event.title} tail={tail} />
         {event.reviewBody !== null && (
           <ReviewBody body={event.reviewBody} hasSpoiler={event.hasSpoiler} />
@@ -346,22 +441,16 @@ function ReviewBody({ body, hasSpoiler }: { body: string; hasSpoiler: boolean })
  * N consecutive adds by one author: the covers become a snapping strip that
  * drops in height until the widest one fits the card's width (the mock's
  * `maxRatio` against `100cqw` — which is why the card declares a container).
+ * Each cover carries its title and creator underneath; the caption comes out
+ * of the art, so the card keeps its tier height.
  */
-function BurstCard({ burst }: { burst: FeedBurst }) {
+function BurstCard({ burst, first }: { burst: FeedBurst; first: boolean }) {
   const { author, items } = burst;
-  const first = items[0]?.paletteHex ?? [];
-  const last = items[items.length - 1]?.paletteHex ?? [];
-  const mixed = dominantHexes(items, 4);
-  const hexes =
-    first.length > 0
-      ? [first[0], last[1] ?? last[0] ?? first[0]]
-      : mixed.length > 0
-        ? mixed
-        : sealHexesOf(author.avatarHexes);
   // The widest cover decides how short the strip gets: a square album is 1.
   const maxRatio = items.some((i) => i.mediaType === "album") ? 1 : 2 / 3;
+  const lastIndex = items.length - 1;
   return (
-    <StackCard hexes={hexes} size="M">
+    <StackCard hexes={burstHexes(burst)} size="M" first={first}>
       <AuthorPill
         username={author.username}
         avatarUrl={author.avatarUrl}
@@ -373,10 +462,10 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
             (`BURST_CAPTION`), capped so the widest one still fits the width. */}
         <div className="flex h-full w-full items-center [container-type:size]">
           <div
-            className="bl-scroll -mx-5 flex w-auto flex-none items-start gap-3.5 overflow-x-auto overflow-y-hidden px-5 [mask-image:linear-gradient(90deg,transparent_0,#000_20px,#000_calc(100%-46px),transparent_100%)] [scroll-padding-left:20px] [scroll-snap-type:x_mandatory]"
-            style={{ ["--burst-h" as string]: `min(100cqh - ${BURST_CAPTION}px, 100cqw / ${maxRatio})` }}
+            className="bl-scroll -mx-5 flex w-auto flex-none items-start gap-3.5 overflow-x-auto overflow-y-hidden px-5 [scroll-padding-inline:20px] [scroll-snap-type:x_mandatory]"
+            style={{ ["--burst-h" as string]: `min(100cqh - ${BURST_CAPTION}px, (100cqw + 40px) / ${maxRatio})` }}
           >
-            {items.map((e) => {
+            {items.map((e, i) => {
               const ratio = e.mediaType === "album" ? 1 : 2 / 3;
               // Artist for music, studio/network for video; the format when there's none.
               const sub = e.byline ?? e.mediaTypeLabel;
@@ -385,8 +474,12 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
                   key={e.id}
                   href={`/item/${e.catalogItemId}`}
                   aria-label={sub ? `${e.title}, ${sub}` : e.title}
-                  className="flex flex-none flex-col gap-1 [scroll-snap-align:start] bl-press-lg"
-                  style={{ width: `calc(var(--burst-h) * ${ratio})` }}
+                  className="flex flex-none flex-col bl-press-lg"
+                  style={{
+                    width: `calc(var(--burst-h) * ${ratio})`,
+                    // iOS `BurstSnap`: the first rests at the start, the last at the end, the rest centre.
+                    scrollSnapAlign: i === 0 ? "start" : i === lastIndex ? "end" : "center",
+                  }}
                 >
                   <span
                     aria-hidden
@@ -396,14 +489,16 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
                       backgroundImage: e.posterUrl ? `url(${e.posterUrl})` : posterFill(e.paletteHex),
                     }}
                   />
-                  <span className="mt-1 truncate font-brand text-[16px] italic leading-[1.2] text-text">
-                    {e.title}
-                  </span>
-                  {sub && (
-                    <span className="truncate font-mono text-[10px] uppercase leading-[1.2] tracking-[0.08em] text-text-2">
-                      {sub}
+                  <span className="flex flex-col gap-[3px] pt-2" style={{ height: BURST_CAPTION }}>
+                    <span className="truncate font-brand text-[16px] italic leading-[1.2] text-text">
+                      {e.title}
                     </span>
-                  )}
+                    {sub && (
+                      <span className="truncate font-mono text-[10px] uppercase leading-[1.2] tracking-[0.08em] text-text-2">
+                        {sub}
+                      </span>
+                    )}
+                  </span>
                 </Link>
               );
             })}
@@ -411,54 +506,82 @@ function BurstCard({ burst }: { burst: FeedBurst }) {
         </div>
       </Art>
       <TextBlock size="M">
-        <PillRow pills={[P.bookmark(`Guardó ${items.length} títulos en ${burst.backlogName}`)]} />
+        <PillRow
+          pills={[P.bookmark(`Guardó ${items.length} títulos en`)]}
+          collection={
+            <CollectionName name={burst.backlogName} username={author.username} backlogId={burst.backlogId} />
+          }
+        />
       </TextBlock>
     </StackCard>
   );
 }
 
 /**
- * "Quizá quieras seguir" — the one non-event card. Three covers fanned behind
- * the words, the middle one (the title the reason names) in front.
+ * The suggestion's reason with the work in italic, the rest roman (crítica
+ * #37: all-italic hid which part is the work). Of the server's reasons
+ * (`getFeedSuggestion`) only "También le obsesiona {título}" names a work.
  */
-export function SuggestCard({ s }: { s: FeedSuggestion }) {
+const REASON_WORK = "También le obsesiona ";
+function Reason({ text }: { text: string }) {
+  const work = text.startsWith(REASON_WORK) ? text.slice(REASON_WORK.length) : null;
+  return (
+    <span className="font-brand text-[26px] leading-[1.08] text-pretty text-text">
+      {work ? (
+        <>
+          {REASON_WORK}
+          <i>{work}</i>
+        </>
+      ) : (
+        text
+      )}
+    </span>
+  );
+}
+
+/**
+ * "Sugerencia para ti" — the one non-event card (iOS `FeedCard` `.suggestion`).
+ * Three covers fanned behind the words, the middle one (the title the reason
+ * names) in front; the card pill where the author chip goes elsewhere; the
+ * person as seal 44 + @handle; the honey Seguir.
+ */
+export function SuggestCard({ s, first = false }: { s: FeedSuggestion; first?: boolean }) {
   const mixed = dominantHexes(s.covers, 4);
   const hexes = mixed.length > 0 ? mixed : sealHexesOf(s.avatarHexes);
   // The named title goes to the centre and to the front; the others flank it.
   const order = s.covers.length >= 3 ? [s.covers[1], s.covers[0], s.covers[2]] : s.covers;
+  const front = s.covers.length >= 3 ? 1 : Math.floor(order.length / 2);
   return (
-    <StackCard hexes={hexes} size="L">
-      <AuthorPill
-        username={s.username}
-        avatarUrl={s.avatarUrl}
-        avatarHexes={s.avatarHexes}
-        trailing="Sugerencia"
-      />
+    <StackCard hexes={hexes} size="L" first={first}>
+      <div className="flex-none self-start">
+        <PillView p={P.users("Sugerencia para ti")} />
+      </div>
       <Art>
         {order.map((c, i) => (
           <span
-            key={c.posterUrl}
+            key={c.catalogItemId}
             role="img"
             aria-hidden
             className="absolute left-1/2 top-1/2 h-[64%] rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
             style={{
               aspectRatio: aspectOf(c.mediaType),
-              zIndex: i === 1 ? 3 : 1,
-              transform: `translate(-50%, -50%) translateX(${(i - 1) * 58}px) rotate(${(i - 1) * 8}deg)`,
+              zIndex: i === front ? 3 : 1,
+              transform: `translate(-50%, -50%) translateX(${(i - front) * 58}px) rotate(${(i - front) * 8}deg)`,
               backgroundImage: c.posterUrl ? `url(${c.posterUrl})` : posterFill(c.paletteHex),
             }}
           />
         ))}
       </Art>
-      <TextBlock size="L">
-        <PillRow pills={[P.users("Sugerencia")]} />
-        <Title title={s.reason} tail={null} />
-        {s.common && <span className="text-[14px] leading-[1.35] text-text-2">{s.common}</span>}
-        {/* The real follow (the v8 port had left a local-only toggle here
-            that never reached the server). Honey, no glow. */}
+      <TextBlock size="L" capped={false}>
+        <Reason text={s.reason} />
+        <Link href={`/u/${s.username}`} className="flex items-center gap-3 self-start bl-press">
+          <Seal name={s.username} hexes={sealHexesOf(s.avatarHexes)} src={s.avatarUrl} size={44} />
+          <span className="truncate text-[17px] font-semibold text-text">@{s.username}</span>
+        </Link>
+        {s.common && <span className="text-[14px] leading-[1.35] text-pretty text-text-2">{s.common}</span>}
+        {/* The real follow; honey, no glow — iOS `FollowButton(.card, honey:)` 44 · 20 · 15. */}
         <FollowButton username={s.username} initialFollowing={false} className="mt-1 self-start" />
       </TextBlock>
     </StackCard>
   );
 }
-

@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// 24a/24b/24c · Ficha — film, series or album. Tinted header (180°, fades to
-/// bg), cover, italic title, ribbon, actions; then sections in Newsreader 24.
+/// 24a/24b/24c · Ficha — film, series or album. The PAGE recipe (degradado único, founder
+/// 2026-09-27): the title's feed gradient over the whole page (`kFeedSurface`, span 900, it
+/// continues in tone 2 — never to black), the band under the dock, tone 1 above a pull-down.
+/// Cover, italic title, ribbon, actions; then sections in Newsreader 24.
 struct TitleDetailView: View {
     @Environment(AppStore.self) private var store
     let titleID: String
@@ -19,9 +21,10 @@ struct TitleDetailView: View {
 
     private func detail(_ t: Title) -> some View {
             ZStack(alignment: .top) {
-                // Opened in place from a cell (`TitleHeroHost`): the page's ground and tint come in
-                // over the first 60 %, the cover flies in, the rest rises from 40 %.
-                KColor.bg.ignoresSafeArea().heroBackdrop()
+                // Opened in place from a cell (`TitleHeroHost`): the page's ground and gradient come
+                // in over the first 60 % (so the backdrop IS the final ground — no jump on landing),
+                // the cover flies in, the rest rises from 40 %.
+                Tint.feedTail(t.palette).ignoresSafeArea().heroBackdrop()
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         TitleHeader(title: t)
@@ -41,8 +44,16 @@ struct TitleDetailView: View {
                         }
                         .heroRest()
                     }
+                    .kFeedSurface(t.palette, span: 900)
                 }
+                .kDebugScrollAnchor()
                 .ignoresSafeArea(.container, edges: .top)
+
+                // The dock stays on a ficha (`Route.keepsDock`): it floats over the page's own
+                // bottom tone. Staged with the backdrop so a hero never flashes it at 0 %.
+                if store.dockVisible(store.tab) {
+                    Color.clear.kFeedDockBand(t.palette).heroBackdrop().allowsHitTesting(false)
+                }
 
                 TopChrome {
                     HStack(spacing: 8) {
@@ -156,10 +167,6 @@ private struct TitleHeader: View {
         .padding(.top, KSize.pushedTitleTop)
         .padding(.horizontal, 24)
         .padding(.bottom, 30)
-        .background { Tint.header(t.palette).heroBackdrop() }
-        .background(alignment: .top) {
-            Tint.headerTop(t.palette).frame(height: 1200).offset(y: -1200).allowsHitTesting(false).heroBackdrop()
-        }
     }
 
     private enum RowSize { case regular, compact, glyph }
@@ -824,9 +831,11 @@ private struct AlbumSections: View {
                                 .monoLabel(unreleased ? 11 : 12)
                                 .frame(width: 22, alignment: .leading)
                             Text(tr.name).font(.kura.ui(unreleased ? 16 : 15))
-                                .foregroundStyle(soon ? KColor.text3 : KColor.text).lineLimit(1)
+                                .foregroundStyle(soon ? KColor.text2 : KColor.text).lineLimit(1)
                             Spacer()
-                            if soon { Text("pronto").monoLabel(10, color: KColor.text3) }
+                            // text2, not text3: the page continues in the title's tone 2 now, not in
+                            // black — text3 on a pale palette's capped tone reads ~3.6:1.
+                            if soon { Text("pronto").monoLabel(10, color: KColor.text2) }
                         }
                         .frame(minHeight: 48)
                         .accessibilityElement(children: .combine)

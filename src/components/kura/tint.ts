@@ -78,17 +78,13 @@ export function tintEnds(hexes: readonly string[]): [string, string] {
 }
 
 /**
- * The surface behind a header (collection, work, person): 168° from the two
- * ends, then fused into the page background over its last third. Without a
- * palette there is no colour — the surface is `--bg`.
+ * 180° to `--bg` (ends at 0 / 66 / 100) — ONLY for the onboarding (flujos-v2
+ * 32a/32b `obBg`: `linear-gradient(180deg, <pick> 0%, #0b0b0d 55%)`, a
+ * vertical fade into black the design asks for) and the Double Feature (two
+ * covers' tones behind a split screen, not one object's page). Degradado único
+ * (founder 2026-09-27): every PAGE uses `feedSurface` (+ `feedTail`, and
+ * `feedDockBand` where there's a dock); every card/tile/block uses `tintCard`.
  */
-export function tintSurface(hexes: readonly string[]): string {
-  if (!hexes[0]) return BG;
-  const [top, bottom] = tintEnds(hexes);
-  return `linear-gradient(168deg, ${top} 0%, ${bottom} 66%, ${BG} 100%)`;
-}
-
-/** The ficha's vertical variant (24a: 180°, ends at 0 / 66 / 100). */
 export function tintSurfaceVertical(hexes: readonly string[]): string {
   if (!hexes[0]) return BG;
   const [top, bottom] = tintEnds(hexes);
@@ -111,6 +107,12 @@ export function feedSurface(hexes: readonly string[], span = 900): string {
 /** The colour a feed-gradient page continues in (under the dock's fade). */
 export function feedTail(hexes: readonly string[]): string {
   return hexes[0] ? tintEnds(hexes)[1] : BG;
+}
+
+/** The 150 px band under the dock on a feed-gradient page: transparent to the
+ *  tail at 75 %, so the dock floats over the page's own bottom tone. */
+export function feedDockBand(hexes: readonly string[]): string {
+  return `linear-gradient(transparent, ${feedTail(hexes)} 75%)`;
 }
 
 /** A collection card's own surface (no fade — the card IS the object). */

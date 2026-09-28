@@ -6,7 +6,7 @@ import { posterFallbackStyle } from "@/components/cover-tile";
 import { prefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { SpringValue, clamp01, lerp } from "@/lib/spring";
 import type { MediaType } from "@/modules/catalog/types";
-import { tintSurfaceVertical } from "./tint";
+import { feedDockBand, feedSurface, feedTail } from "./tint";
 
 /**
  * "La portada se vuelve la ficha" (Colecciones · transiciones §4,
@@ -19,7 +19,8 @@ import { tintSurfaceVertical } from "./tint";
  * The ficha is a real route, so the old page unmounts on navigation: the
  * flight lives in ONE persistent layer (`CoverFlightLayer`, mounted by the
  * (app) layout, above the pages and the collection overlay, under the
- * sheets). Open: a tinted backdrop fades in over the first 60 % (hiding the
+ * sheets). Open: a backdrop — the ficha's exact ground, its page gradient —
+ * fades in over the first 60 % (hiding the
  * swap underneath) and the cover flies to where the ficha's cover will be
  * (predicted from its geometry, re-targeted to the real element when the
  * ficha mounts its `CoverFlightTarget`); once the ficha is there the
@@ -129,7 +130,9 @@ export function CoverFlightLayer() {
     dstR: 14,
     cell: null as HTMLElement | null,
     target: null as HTMLElement | null,
-    headerH: 0,
+    /** Where the ficha's page (its `<main>`) starts on screen: the backdrop
+     *  anchors the page gradient there, so it IS the ficha's ground. */
+    pageTop: 0,
     p: null as SpringValue | null,
     r: null as SpringValue | null,
     watchdog: 0 as ReturnType<typeof setTimeout> | 0,
@@ -152,7 +155,7 @@ export function CoverFlightLayer() {
       let cover = clamp01(p / 0.6);
       if (s.mode === "open" && s.target) cover = Math.min(cover, 1 - Math.min(r, clamp01((p - 0.4) / 0.6)));
       bd.style.opacity = cover.toFixed(4);
-      if (tintRef.current) tintRef.current.style.height = `${Math.round(s.headerH)}px`;
+      if (tintRef.current) tintRef.current.style.top = `${Math.round(s.pageTop)}px`;
 
       if (s.mode === "close" && !s.cell) {
         const cell = document.querySelector<HTMLElement>(`[data-cover-flight="${CSS.escape(s.key)}"]`);
@@ -221,7 +224,7 @@ export function CoverFlightLayer() {
         s.dst = predictedTarget(f.mediaType);
         s.dstR = 14;
         s.target = null;
-        s.headerH = s.dst.y + s.dst.h + 300;
+        s.pageTop = 0;
         s.last = {
           key: f.key,
           src: s.src,
@@ -243,14 +246,14 @@ export function CoverFlightLayer() {
         const target = document.querySelector<HTMLElement>(`[data-cover-target="${CSS.escape(key)}"]`);
         if (!last || last.key !== key || !target || prefersReducedMotion()) return false;
         s.last = null;
-        const header = target.closest("header");
+        const page = target.closest("main");
         start({ key, posterUrl: flightImage(target), paletteHex: flightPalette(target) }, "close");
         s.cell = null;
         s.src = last.src;
         s.srcR = last.srcR;
         s.dst = rectOf(target);
         s.dstR = radiusOf(target.firstElementChild, 14);
-        s.headerH = header ? header.getBoundingClientRect().bottom : s.dst.y + s.dst.h + 300;
+        s.pageTop = page ? page.getBoundingClientRect().top : 0;
         apply();
         navigate();
         s.p!.to(0, { response: 0.3 }, finish);
@@ -267,8 +270,8 @@ export function CoverFlightLayer() {
         hide(el);
         s.dst = rectOf(el);
         s.dstR = radiusOf(el.firstElementChild, s.dstR);
-        const header = el.closest("header");
-        if (header) s.headerH = header.getBoundingClientRect().bottom;
+        const page = el.closest("main");
+        if (page) s.pageTop = page.getBoundingClientRect().top;
         // Reveal the ficha (its text) — during the flight from 40 %, or now
         // if the cover has already landed.
         s.r!.to(1, { response: 0.3 }, () => {
@@ -297,10 +300,21 @@ export function CoverFlightLayer() {
         aria-hidden
         className="pointer-events-none fixed inset-0 z-[45] hidden bg-bg"
       >
+        {/* The ficha's own ground, exactly (páginas = degradado del feed):
+            the page gradient anchored where its <main> starts, continuing in
+            tone 2, and the band under the dock — so the reveal from 40 % only
+            brings in the text, and landing never changes the colour. */}
         <div
           ref={tintRef}
-          className="mx-auto w-full max-w-md"
-          style={{ background: tintSurfaceVertical(flight?.paletteHex ?? []) }}
+          className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md"
+          style={{
+            background: feedSurface(flight?.paletteHex ?? [], 900),
+            backgroundColor: feedTail(flight?.paletteHex ?? []),
+          }}
+        />
+        <div
+          className="absolute inset-x-0 bottom-0 h-[150px]"
+          style={{ background: feedDockBand(flight?.paletteHex ?? []) }}
         />
       </div>
       <div

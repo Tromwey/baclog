@@ -33,7 +33,7 @@ import {
   SectionTitle,
   formatMil,
 } from "@/components/kura/components";
-import { releaseSentence, tintSurfaceVertical } from "@/components/kura/tint";
+import { feedSurface, feedTail, releaseSentence } from "@/components/kura/tint";
 import { PublicReviews } from "./public-reviews";
 
 // Dynamic on purpose (see u/[username]/page.tsx) — F3.4 viewer analytics.
@@ -157,11 +157,12 @@ export default async function PublicItemPage({
     .join(" · ");
 
   return (
-    <div className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip bg-bg pb-14 text-text">
-      <header
-        className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]"
-        style={{ background: tintSurfaceVertical(palette) }}
-      >
+    // Same page recipe as the in-app ficha (degradado del feed, continuing in tone 2).
+    <div
+      className="kura relative mx-auto min-h-dvh w-full max-w-md overflow-x-clip pb-14 text-text"
+      style={{ background: feedSurface(palette, 900), backgroundColor: feedTail(palette) }}
+    >
+      <header className="relative flex flex-col items-center gap-3 px-6 pb-[30px] pt-[calc(124px+env(safe-area-inset-top))]">
         <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))] flex items-center justify-between">
           <BrandLockup />
           <EnterPill />

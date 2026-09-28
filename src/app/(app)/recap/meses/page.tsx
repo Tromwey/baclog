@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { BackButton } from "@/components/ui";
-import { tintSurfaceVertical } from "@/components/kura/tint";
+import { tintCard } from "@/components/kura/tint";
 import { getRecapMonths } from "@/modules/backlog/recap";
 import { monthName, monthOf, monthYear, shortYear } from "@/modules/backlog/recap-format";
 import { getRenderInstant } from "@/modules/catalog/release";
@@ -55,7 +55,7 @@ export default async function RecapMonthsPage() {
                 href={`/recap?mes=${m.key}`}
                 aria-label={`Recap de ${monthYear(m.key)}`}
                 className="flex h-48 w-[108px] flex-none flex-col items-center justify-end gap-3 overflow-hidden rounded-[var(--r-cover-l)] px-2.5 py-3.5 shadow-cover bl-press-lg"
-                style={{ background: tintSurfaceVertical(m.top?.paletteHex ?? []) }}
+                style={{ background: tintCard(m.top?.paletteHex ?? []) }}
               >
                 {m.top?.posterUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- hotlinked external CDN (ADR-007)

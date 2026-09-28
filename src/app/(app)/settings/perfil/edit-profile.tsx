@@ -22,13 +22,11 @@ import { AvatarPicker } from "../avatar-picker";
  * it needs its own decision, not a text field.
  */
 export function EditProfile({
-  tint,
   hexes,
   initialName,
   initialUsername,
   initialAvatarUrl,
 }: {
-  tint: string;
   hexes: string[];
   initialName: string;
   initialUsername: string | null;
@@ -82,10 +80,7 @@ export function EditProfile({
 
   return (
     <>
-      <div
-        className="flex flex-col items-center gap-3.5 px-5 pb-[30px] pt-[calc(16px+env(safe-area-inset-top))]"
-        style={{ background: tint }}
-      >
+      <div className="flex flex-col items-center gap-3.5 px-5 pb-[30px] pt-[calc(16px+env(safe-area-inset-top))]">
         <div className="mx-1 flex items-center justify-between self-stretch">
           <Link href="/settings" aria-label="Cancelar" className={CHIP_44}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>

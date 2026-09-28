@@ -236,17 +236,14 @@ enum Tint {
                               startPoint: angle168.start, endPoint: angle168.end)
     }
 
-    /// Header surface outside the feed: fades to `bg` in its last third.
-    static func header(_ palette: [String]) -> LinearGradient {
-        let (top, bottom) = ends(palette)
-        return LinearGradient(stops: [
-            .init(color: top.color, location: 0),
-            .init(color: bottom.color, location: 0.66),
-            .init(color: KColor.bg, location: 1)
-        ], startPoint: .top, endPoint: .bottom)
-    }
+    // Degradado único (founder, 2026-09-27): every PAGE — profiles, collections, a public
+    // collection, the ficha, a creator, Editar perfil — wears `FeedSurface` (`kFeedSurface` +
+    // `feedTail` ground + `kFeedDockBand` where the dock shows); every card / tile / block inside
+    // a page wears `card`. The vertical header that faded to black (`header`) is gone. The one
+    // exception is the onboarding below (`header3`), whose fade into black is the design's
+    // (flujos-v2 32a/32b `obBg`: `linear-gradient(180deg, <pick> 0%, #0b0b0d 55%)`).
 
-    /// Profile header: the three obsessions blended top to bottom, fading to bg.
+    /// Onboarding (O1/O2) only: the three picks blended top to bottom, fading to bg.
     static func header3(_ palettes: [[String]]) -> LinearGradient {
         let tops = palettes.prefix(3).map { ends($0).0 }
         guard !tops.isEmpty else { return neutralHeader }
@@ -261,8 +258,8 @@ enum Tint {
     /// Without a cover there is no color: s1 → bg.
     static let neutralHeader = LinearGradient(colors: [KColor.s1, KColor.bg], startPoint: .top, endPoint: .bottom)
 
-    /// The top edge of `header`/`card` (its palette's first end) — or `neutralHeader`'s s1 without
-    /// one. What `kOverscrollFill` extends upward.
+    /// The top edge of `header3`/`card` (its palette's first end) — or `neutralHeader`'s s1
+    /// without one. What `kOverscrollFill` extends upward (the onboarding's hero).
     static func headerTop(_ palette: [String]?) -> Color {
         guard let palette, !palette.isEmpty else { return KColor.s1 }
         return ends(palette).0.color
@@ -291,7 +288,7 @@ enum Tint {
 
 extension Tint {
     /// The two ends of the feed gradient, or nil without a palette ("sin portada no hay color").
-    /// Same ends as `card`/`header` (`tintEnds` on the web); the lima ADN fallback never counts.
+    /// Same ends as `card` (`tintEnds` on the web); the lima ADN fallback never counts.
     static func feedEnds(_ hexes: [String]) -> (top: Color, bottom: Color)? {
         let h = FanOrder.kuraHexes(hexes)
         guard !h.isEmpty else { return nil }
@@ -311,7 +308,8 @@ extension Tint {
 /// Anchored in points (CSS `linear-gradient(168deg, a 0px, b {span}px, b 100%)`): at 168° the 0
 /// line passes through the top-left corner, so the colour of a point only depends on its offset
 /// from that corner — a long page never stretches it. Put it BEHIND the scroll content (it scrolls
-/// with it). 760 on Tus colecciones, 900 on a collection and the profiles.
+/// with it). 760 on Tus colecciones, 900 on every other page (a collection, the profiles, the
+/// ficha, a creator, Editar perfil).
 struct FeedSurface: View {
     let hexes: [String]
     var span: CGFloat = 900

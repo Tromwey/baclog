@@ -1,7 +1,7 @@
 import { requireUser } from "@/auth";
 import { getUserPalette } from "@/modules/backlog/queries";
 import { getObsessions } from "@/modules/backlog/profile-stats";
-import { tintSurfaceVertical } from "@/components/kura/tint";
+import { feedSurface, feedTail } from "@/components/kura/tint";
 import { profileHexes } from "@/modules/backlog/profile-hexes";
 import { EditProfile } from "./edit-profile";
 
@@ -25,9 +25,13 @@ export default async function EditProfilePage() {
   const hexes = profileHexes(obsessions, palette);
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
+    // A page: your profile's own ground (páginas = degradado del feed), not a
+    // header fading to black.
+    <main
+      className="mx-auto min-h-dvh w-full max-w-md pb-dock-clearance text-text"
+      style={{ background: feedSurface(hexes, 900), backgroundColor: feedTail(hexes) }}
+    >
       <EditProfile
-        tint={tintSurfaceVertical(hexes)}
         hexes={hexes}
         initialName={user.name ?? ""}
         initialUsername={user.username}

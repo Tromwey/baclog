@@ -325,9 +325,6 @@ struct EditProfileView: View {
                 .padding(.top, KSize.chromeTop)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 30)
-                .background(palette.map { Tint.header($0) } ?? Tint.neutralHeader)
-                .kOverscrollFill(Tint.headerTop(palette))
-                .animation(KMotion.tint, value: featured)
 
                 VStack(alignment: .leading, spacing: 24) {
                     GroupedList {
@@ -391,7 +388,12 @@ struct EditProfileView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 60)
             }
+            // A page (degradado único): the featured obsession's feed gradient over the whole
+            // form, continuing in its tone 2 — the same ground as the profile it edits.
+            .kFeedSurface(palette ?? [], span: 900)
+            .animation(KMotion.tint, value: featured)
         }
+        .background(Tint.feedTail(palette ?? []).ignoresSafeArea().animation(KMotion.tint, value: featured))
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
             guard !loaded else { return }
