@@ -33,7 +33,7 @@ const APP_ID = "F975J7TBHP.com.tromwey.kura";
 const EXCLUDED_ROOTS = [
   "admin", "api", "app", "baclog", "kura", "colecciones", "coleccion", "blocked", "descubrir",
   "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
-  "verify", "www", "waitlist", "analytics", "cron", "marketing", "feed", "creditos", "privacidad",
+  "verify", "www", "waitlist", "analytics", "cron", "marketing", "feed", "creditos", "privacidad", "party",
   "_next", ".well-known",
 ];
 

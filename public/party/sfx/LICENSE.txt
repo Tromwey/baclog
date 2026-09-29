@@ -1,0 +1,9 @@
+Sound effects in this folder — all Creative Commons Zero (CC0), public domain:
+http://creativecommons.org/publicdomain/zero/1.0/ — trimmed/normalized and converted to AAC.
+
+- gate-*, link-*, stone-*, thud-*, tink-*, flip-*, latch-*, creak-*:
+  Kenney "Impact Sounds" (1.0) and "RPG Audio" — www.kenney.nl
+- chain-*: "chain" by nettimato — https://freesound.org/people/nettimato/sounds/387240/
+- bell-0, toll-0: "Church bell.wav" by Audeption — https://freesound.org/people/Audeption/sounds/425172/
+- gateswing-0, gateclang-0, gatelock-0: "Epic Metal Gate" by qubodup — https://freesound.org/people/qubodup/sounds/184935/
+(CC0 needs no attribution; credited anyway, with thanks.)

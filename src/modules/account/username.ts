@@ -24,6 +24,8 @@ export const RESERVED = new Set([
   "feed", "creditos",
   // Public aviso de privacidad (App Store privacy-policy URL).
   "privacidad",
+  // The /party invitation (2026-09-28).
+  "party",
 ]);
 
 /** Trim, lowercase, and drop a leading `@` — the ONE normalization every

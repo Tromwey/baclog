@@ -788,7 +788,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Kura/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				KURA_API_HOST = baclog.app;
+				KURA_API_HOST = "get-kura.app";
 				KURA_API_SCHEME = https;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

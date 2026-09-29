@@ -12,6 +12,12 @@ export const PARTY_EVENT = {
   dateISO: "2026-10-31T18:00:00",
   venue: "Unio Residencial",
   address: "",
+  /**
+   * Teaser mode: the gate is chained and reads "MUY PRONTO"; tapping only
+   * rattles the chains. `/party?abrir` bypasses it (for the host's own tests —
+   * not a secret, just a door ajar). Set false to open the party.
+   */
+  locked: true,
 } as const;
 
 export const PARTY_DIETS = [

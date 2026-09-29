@@ -2,22 +2,30 @@
  * GENERATED from the Claude Design template "Invitacion Cementerio Iso.dc.html"
  * (project 3cd00900…) by a one-off DC→JSX converter: inline styles, sc-if →
  * ternaries, sc-for → map. Values come from PartyInvitation.renderVals()
- * (./party-invitation.tsx); the lamp ref travels as its own prop. Edits by hand: the submit button's sending state
- * and the error line above it. Keyframes are prefixed "pt-" (./party.css).
+ * (./party-invitation.tsx); the lamp ref travels as its own prop. Edits by hand:
+ * the submit button's sending state and the error line above it; the host
+ * sheet's dates on two lines; candles instead of the progress bars; and the
+ * cauldron (+ its candies and candle) moved -296,-483, away from the map tomb;
+ * the landing's path behind the gate is <PartyPath /> (./party-path.tsx); the
+ * secret tombs show <SealedFace/> until found; decor from ./party-decor.tsx;
+ * teaser mode (PARTY_EVENT.locked) chains the gate and swaps the sign to MUY PRONTO. Keyframes are prefixed "pt-" (./party.css).
  */
 import { Fragment, type RefObject } from "react";
 import type { SceneVals } from "./party-invitation";
+import { GateChains, LandingSky, LandingTree, SealedFace, WorldDecor } from "./party-decor";
+import { PartyPath } from "./party-path";
 
 export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HTMLDivElement | null> }) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0d0b0a", color: "#ece6dc", fontFamily: "var(--pt-sans)", position: "relative", overflow: "hidden", maxWidth: "440px", margin: "0 auto" }}>
-      <button onClick={v.toggleAudio} aria-label="Audio" style={{ position: "fixed", top: "16px", right: "max(16px,calc(50% - 204px))", zIndex: "50", display: "flex", alignItems: "center", gap: "8px", height: "44px", padding: "0 16px", borderRadius: "999px", border: "none", background: "none", color: "#ece6dc", fontFamily: "var(--pt-mono)", fontSize: "12px", letterSpacing: ".08em", cursor: "pointer" }}>
+    <div style={{ minHeight: "100dvh", background: "#050404", color: "#ece6dc", fontFamily: "var(--pt-sans)", position: "relative", overflow: "hidden" }}>
+      <button onClick={v.toggleAudio} aria-label="Audio" style={{ position: "fixed", top: "calc(16px + env(safe-area-inset-top))", right: "calc(16px + env(safe-area-inset-right))", zIndex: "50", display: "flex", alignItems: "center", gap: "8px", height: "44px", padding: "0 16px", borderRadius: "999px", border: "none", background: "none", color: "#ece6dc", fontFamily: "var(--pt-mono)", fontSize: "12px", letterSpacing: ".08em", cursor: "pointer" }}>
         <span style={{ color: v.audioInk }}>
           {v.audioLabel}
         </span>
       </button>
       {v.notEntered ? (
-          <section data-screen-label="01 Portada" onClick={v.enter} style={{ cursor: "pointer", WebkitTapHighlightColor: "transparent", position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "28px", padding: "88px 24px 40px", overflow: "hidden", textAlign: "center", background: "radial-gradient(ellipse at 70% 12%,#15161c,#0a090b 55%,#050404)" }}>
+          <section data-screen-label="01 Portada" onClick={v.enter} style={{ cursor: "pointer", WebkitTapHighlightColor: "transparent", position: "relative", minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "28px", padding: "88px 24px 40px", overflow: "hidden", textAlign: "center", background: "radial-gradient(ellipse at 70% 12%,#15161c,#0a090b 55%,#050404)" }}>
+            <LandingSky />
             <div style={{ position: "absolute", top: "70px", right: "14%", width: "64px", height: "64px", borderRadius: "50%", background: "#d8d2c4", boxShadow: "0 0 50px 16px rgba(233,226,210,.1),0 0 160px 60px rgba(233,226,210,.04)" }} />
             <div style={{ position: "absolute", left: "-40%", right: "-40%", top: "-40px", height: "280px", pointerEvents: "none", zIndex: "1" }}>
               <div style={{ position: "absolute", left: "10%", top: "10px", width: "55%", height: "120px", borderRadius: "50%", background: "#0b0b10", filter: "blur(18px)", boxShadow: "0 18px 30px -10px rgba(90,90,105,.25)", animation: "pt-cloudA 40s ease-in-out infinite alternate" }} />
@@ -26,6 +34,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
               <div style={{ position: "absolute", left: "58%", top: "96px", width: "26%", height: "52px", borderRadius: "50%", background: "rgba(20,20,26,.9)", filter: "blur(12px)", animation: "pt-cloudA 22s ease-in-out infinite alternate-reverse" }} />
             </div>
             <div style={{ position: "relative", width: "300px", height: "372px", flexShrink: "0", transform: v.gateZoom, transformOrigin: "50% 70%", transition: "transform 1.5s cubic-bezier(.6,0,.3,1)" }}>
+              <LandingTree />
               <div style={{ position: "absolute", left: "-260px", right: "-260px", bottom: "0", height: "58px", zIndex: "1", background: "repeating-linear-gradient(90deg,rgba(0,0,0,.35) 0 2px,transparent 2px 46px),repeating-linear-gradient(0deg,rgba(0,0,0,.4) 0 2px,transparent 2px 20px),linear-gradient(180deg,#39332d,#1e1a17)", borderTop: "6px solid #4a433c" }}>
                 <div style={{ position: "absolute", inset: "-6px 0 0 0", background: "radial-gradient(ellipse 40px 10px at 12% 0,rgba(40,54,32,.9),transparent),radial-gradient(ellipse 30px 8px at 88% 0,rgba(40,54,32,.9),transparent),radial-gradient(ellipse 60px 30px at 20% 100%,rgba(0,0,0,.5),transparent),radial-gradient(ellipse 50px 24px at 80% 60%,rgba(0,0,0,.45),transparent)" }} />
                 <div style={{ position: "absolute", left: "8%", top: "-6px", width: "30px", height: "16px", background: "#0a090b", clipPath: "polygon(0 0,100% 0,70% 100%,20% 60%)" }} />
@@ -96,10 +105,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div style={{ position: "absolute", left: "-3px", right: "-3px", top: "-10px", height: "10px", background: "#0a0808", clipPath: "polygon(50% 0,100% 100%,0 100%)" }} />
                   <div style={{ position: "absolute", left: "12px", right: "12px", bottom: "0", height: "14px", background: "rgba(232,120,93,.5)" }} />
                 </div>
-                <div style={{ position: "absolute", left: "0", right: "0", bottom: "0", height: "62%", background: "linear-gradient(180deg,#141a13,#1c2419)" }} />
-                <div style={{ position: "absolute", left: "0", right: "0", bottom: "0", height: "62%", clipPath: "polygon(45% 0,55% 0,96% 100%,4% 100%)", background: "radial-gradient(ellipse at 50% 100%,rgba(0,0,0,0),rgba(0,0,0,.55) 90%),repeating-linear-gradient(0deg,#171310 0 2px,transparent 2px 11px),repeating-linear-gradient(90deg,#171310 0 2px,transparent 2px 16px),linear-gradient(180deg,#3a3029,#5a4b3e)" }} />
-                <div style={{ position: "absolute", left: "0", right: "0", bottom: "0", height: "62%", clipPath: "polygon(44% 0,46% 0,8% 100%,2% 100%)", background: "#25301f" }} />
-                <div style={{ position: "absolute", left: "0", right: "0", bottom: "0", height: "62%", clipPath: "polygon(54% 0,56% 0,98% 100%,92% 100%)", background: "#25301f" }} />
+                <PartyPath />
                 <div style={{ position: "absolute", left: "14px", top: "112px", width: "18px", height: "24px", borderRadius: "9px 9px 0 0", background: "#0a0808", transform: "rotate(-5deg)" }} />
                 <div style={{ position: "absolute", left: "44px", top: "100px", width: "12px", height: "16px", borderRadius: "6px 6px 0 0", background: "#0a0808" }} />
                 <div style={{ position: "absolute", left: "60px", top: "92px", width: "9px", height: "12px", borderRadius: "5px 5px 0 0", background: "#0a0808" }} />
@@ -143,6 +149,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div style={{ position: "absolute", inset: "0", pointerEvents: "none", background: "radial-gradient(ellipse 10px 40px at 30% 30%,rgba(120,50,20,.55),transparent),radial-gradient(ellipse 8px 30px at 70% 70%,rgba(110,45,18,.5),transparent),radial-gradient(ellipse 18px 10px at 50% 26%,rgba(130,58,24,.5),transparent)" }} />
                 </div>
               </div>
+              {v.locked ? <GateChains rattle={v.rattleKey} /> : null}
               <div style={{ position: "absolute", left: "44px", right: "44px", bottom: "250px", height: "118px", zIndex: "3", border: "6px solid #120f0d", borderBottom: "none", borderRadius: "106px 106px 0 0", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 8px 6px", borderTopColor: "#1c1310", transform: "rotate(-1.5deg)" }}>
                 <div style={{ position: "absolute", left: "58%", top: "-8px", width: "22px", height: "12px", background: "#15161c" }} />
                 <div style={{ position: "absolute", left: "18%", top: "10px", width: "14px", height: "18px", borderRadius: "50%", background: "radial-gradient(rgba(120,50,20,.6),transparent 70%)" }} />
@@ -192,15 +199,28 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
             </div>
             <div style={{ position: "relative", zIndex: "9", marginTop: "-6px", perspective: "240px", perspectiveOrigin: "50% -40%", opacity: v.copyOp, transition: "opacity .5s" }}>
               <button style={{ position: "relative", background: "none", border: "none", padding: "6px 10px 18px", cursor: "pointer", WebkitTapHighlightColor: "transparent", WebkitFontSmoothing: "antialiased", textRendering: "geometricPrecision", backfaceVisibility: "hidden", transform: "rotateX(46deg) scaleX(.84)", animation: "pt-lampFlick 7s linear infinite", transformOrigin: "50% 0", display: "flex", flexDirection: "column", alignItems: "center", fontFamily: "var(--pt-creep)", fontSize: "68px", letterSpacing: ".04em", lineHeight: ".9", color: "#7a0a0a", textShadow: "0 1px 0 #b3140f,0 2px 0 #2a0303" }}>
-                <span style={{ fontSize: "40px", letterSpacing: "0" }}>
-                  ENTRA
-                </span>
-                <span style={{ fontSize: "54px", letterSpacing: ".01em" }}>
-                  SI TE
-                </span>
-                <span style={{ fontSize: "74px", letterSpacing: ".02em" }}>
-                  ATREVES
-                </span>
+                {v.locked ? (
+                  <>
+                    <span style={{ fontSize: "54px", letterSpacing: ".01em" }}>
+                      MUY
+                    </span>
+                    <span style={{ fontSize: "74px", letterSpacing: ".02em" }}>
+                      PRONTO
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "40px", letterSpacing: "0" }}>
+                      ENTRA
+                    </span>
+                    <span style={{ fontSize: "54px", letterSpacing: ".01em" }}>
+                      SI TE
+                    </span>
+                    <span style={{ fontSize: "74px", letterSpacing: ".02em" }}>
+                      ATREVES
+                    </span>
+                  </>
+                )}
                 <div style={{ position: "absolute", left: "12%", bottom: "2px", width: "26px", height: "9px", borderRadius: "50%", background: "#6a0808", boxShadow: "0 0 4px #3a0404" }} />
                 <div style={{ position: "absolute", left: "40%", bottom: "6px", width: "10px", height: "6px", borderRadius: "50%", background: "#7a0a0a" }} />
                 <div style={{ position: "absolute", left: "56%", bottom: "-2px", width: "40px", height: "12px", borderRadius: "50%", background: "#5e0707", boxShadow: "0 0 5px #3a0404" }} />
@@ -241,11 +261,12 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
       {v.entered ? (
         <>
           <div style={{ position: "fixed", inset: "0", zIndex: "60", pointerEvents: "none", background: `radial-gradient(circle at 50% 55%,rgba(5,4,4,${v.revealCore}) 0,#050404 ${v.revealR})`, opacity: v.revealOp, transition: "opacity 1.8s ease-out .2s" }} />
-          <section data-screen-label="02 Cementerio" style={{ transform: v.revealScale, transition: "transform 2.4s cubic-bezier(.15,.7,.2,1)", position: "fixed", top: "0", bottom: "0", left: "0", right: "0", maxWidth: "440px", margin: "0 auto", overflow: "hidden", background: "radial-gradient(ellipse at 50% 20%,#15161c,#0a0a0c 70%)", animation: "pt-rise 1.2s ease both" }}>
+          <section data-screen-label="02 Cementerio" style={{ transform: v.revealScale, transition: "transform 2.4s cubic-bezier(.15,.7,.2,1)", position: "fixed", top: "0", bottom: "0", left: "0", right: "0", overflow: "hidden", background: "radial-gradient(ellipse at 50% 20%,#15161c,#0a0a0c 70%)", animation: "pt-rise 1.2s ease both" }}>
             <div style={{ position: "absolute", top: "9%", left: `${v.moonX}px`, width: "80px", height: "80px", borderRadius: "50%", background: "#e9e2d2", boxShadow: "0 0 60px 20px rgba(233,226,210,.16),0 0 180px 60px rgba(233,226,210,.07)" }} />
             <div onPointerDown={v.onPD} onPointerMove={v.onPM} onPointerUp={v.onPU} onPointerLeave={v.onPU} style={{ position: "absolute", inset: "0", touchAction: "none", cursor: "grab", userSelect: "none" }}>
               <div style={{ position: "absolute", left: "50%", top: "50%", width: "0", height: "0", transform: v.camTransform, transition: v.camTrans }}>
                 <div style={{ position: "absolute", left: "-800px", top: "-800px", width: "1600px", height: "1600px", transform: "rotateX(60deg) rotateZ(45deg)", transformStyle: "preserve-3d", background: "radial-gradient(circle at 30% 70%,#1f1b16,transparent 30%),radial-gradient(circle at 75% 30%,#1c1915,transparent 30%),radial-gradient(circle at 50% 50%,#1a1713,transparent 40%),repeating-linear-gradient(0deg,rgba(236,230,220,.022) 0 1px,transparent 1px 110px),repeating-linear-gradient(90deg,rgba(236,230,220,.022) 0 1px,transparent 1px 110px),#14110e" }}>
+                  <WorldDecor />
                   <div style={{ position: "absolute", left: "0", top: "1600px", width: "1600px", height: "60px", transformOrigin: "top", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#221d18,#0a0908)" }} />
                   <div style={{ position: "absolute", left: "1600px", top: "0", width: "60px", height: "1600px", transformOrigin: "left", transform: "rotateY(90deg)", background: "linear-gradient(90deg,#17130f,#070605)" }} />
                   <div style={{ position: "absolute", left: "1524px", top: "1524px", width: "32px", height: "32px", borderRadius: "6px", background: "#221e1a", transform: "rotate(8deg)" }} />
@@ -448,7 +469,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     </div>
                     <div style={{ position: "absolute", left: "-26px", top: "0", width: "121px", height: "16px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#161412" }} />
                   </div>
-                  <div onClick={v.openBring} role="button" aria-label="Caldero" style={{ position: "absolute", left: "946px", top: "633px", width: "104px", height: "64px", transformStyle: "preserve-3d", cursor: "pointer" }}>
+                  <div onClick={v.openBring} role="button" aria-label="Caldero" style={{ position: "absolute", left: "650px", top: "150px", width: "104px", height: "64px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(72px)", borderRadius: "50%", background: "#0c0b0a", boxShadow: "inset 0 0 0 6px #242120" }}>
                       <div style={{ position: "absolute", inset: "8px", borderRadius: "50%", background: "radial-gradient(ellipse at 50% 45%,#c6f27a,#5fbf3a 45%,#1f5a1a 90%)", animation: "pt-brew 3s ease-in-out infinite" }}>
                         <div style={{ position: "absolute", left: "22%", top: "30%", width: "12px", height: "12px", borderRadius: "50%", border: "2px solid #d9ff9e", animation: "pt-bubble 1.8s ease-out infinite" }} />
@@ -457,19 +478,22 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                       </div>
                     </div>
                     <div style={{ position: "absolute", left: "0", top: "-8px", width: "104px", height: "72px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "radial-gradient(ellipse at 50% 0,rgba(120,220,90,.25),transparent 60%),linear-gradient(180deg,#2a2725,#0f0e0d)", borderRadius: "4px 4px 52px 52px / 4px 4px 40px 40px", borderTop: "7px solid #3a3633", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", paddingTop: "6px" }}>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a" }}>
-                        BREBAJES
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cBring ? 1 : 0, filter: v.cBring ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a" }}>
+                          BREBAJES
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a", marginTop: "2px" }}>
+                          Y GOLOSINAS
+                        </div>
                       </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a", marginTop: "2px" }}>
-                        Y GOLOSINAS
-                      </div>
+                      <SealedFace kind="bring" size={30} label={false} broken={!!v.cBring} />
                     </div>
                     <div style={{ position: "absolute", left: "32px", top: "0", width: "72px", height: "64px", transformOrigin: "right", transform: "rotateY(90deg)", background: "linear-gradient(180deg,#1a1817,#0a0908)", borderRadius: "0 0 30px 30px" }} />
                   </div>
-                  <div style={{ position: "absolute", left: "926px", top: "712px", width: "14px", height: "9px", borderRadius: "50%", background: "#e8785d", boxShadow: "-5px 0 0 -2px #f2b44a,5px 0 0 -2px #f2b44a", pointerEvents: "none" }} />
-                  <div style={{ position: "absolute", left: "1066px", top: "640px", width: "12px", height: "12px", borderRadius: "50%", background: "radial-gradient(circle,#fff 0 2px,#b25adf 3px)", pointerEvents: "none" }} />
-                  <div style={{ position: "absolute", left: "1000px", top: "722px", width: "16px", height: "8px", borderRadius: "4px", background: "#f2b44a", boxShadow: "-5px 0 0 -2px #e8785d,5px 0 0 -2px #e8785d", pointerEvents: "none" }} />
-                  <div style={{ position: "absolute", left: "1072px", top: "690px", width: "10px", height: "10px", borderRadius: "50%", background: "#7fd35a", pointerEvents: "none" }} />
+                  <div style={{ position: "absolute", left: "630px", top: "229px", width: "14px", height: "9px", borderRadius: "50%", background: "#e8785d", boxShadow: "-5px 0 0 -2px #f2b44a,5px 0 0 -2px #f2b44a", pointerEvents: "none" }} />
+                  <div style={{ position: "absolute", left: "770px", top: "157px", width: "12px", height: "12px", borderRadius: "50%", background: "radial-gradient(circle,#fff 0 2px,#b25adf 3px)", pointerEvents: "none" }} />
+                  <div style={{ position: "absolute", left: "704px", top: "239px", width: "16px", height: "8px", borderRadius: "4px", background: "#f2b44a", boxShadow: "-5px 0 0 -2px #e8785d,5px 0 0 -2px #e8785d", pointerEvents: "none" }} />
+                  <div style={{ position: "absolute", left: "776px", top: "207px", width: "10px", height: "10px", borderRadius: "50%", background: "#7fd35a", pointerEvents: "none" }} />
                   <div onClick={v.decoy} role="button" aria-label="Lápida" style={{ position: "absolute", left: "70px", top: "754px", width: "71px", height: "16px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", left: "0", top: "-81px", width: "71px", height: "81px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#141210", borderRadius: "35.5px 35.5px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-78px", width: "71px", height: "81px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "35.5px 35.5px 0 0", pointerEvents: "none" }} />
@@ -688,48 +712,57 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     <div style={{ position: "absolute", left: "0", top: "-137px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-132px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-128px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", borderRadius: "62px 62px 0 0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", paddingTop: "30px" }}>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".3em" }}>
-                        ¿DÓNDE?
-                      </div>
-                      <div style={{ position: "relative", width: "78px", height: "46px", margin: "6px 0", border: "1px solid #6a6158", borderRadius: "3px", background: "#2c2824" }}>
-                        <div style={{ position: "absolute", left: "8px", top: "32px", width: "44px", height: "1px", borderTop: "2px dashed #8a7f73", transform: "rotate(-24deg)", transformOrigin: "left" }} />
-                        <div style={{ position: "absolute", left: "50px", top: "8px", width: "14px", height: "14px", fontFamily: "var(--pt-serif)", fontSize: "18px", lineHeight: "14px", fontWeight: "700", color: "#d9573b" }}>
-                          ✕
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cPlace ? 1 : 0, filter: v.cPlace ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".3em" }}>
+                          ¿DÓNDE?
                         </div>
-                        <div style={{ position: "absolute", right: "4px", bottom: "2px", fontFamily: "var(--pt-serif)", fontSize: "9px", color: "#8a7f73" }}>
-                          N↑
+                        <div style={{ position: "relative", width: "78px", height: "46px", margin: "6px 0", border: "1px solid #6a6158", borderRadius: "3px", background: "#2c2824" }}>
+                          <div style={{ position: "absolute", left: "8px", top: "32px", width: "44px", height: "1px", borderTop: "2px dashed #8a7f73", transform: "rotate(-24deg)", transformOrigin: "left" }} />
+                          <div style={{ position: "absolute", left: "50px", top: "8px", width: "14px", height: "14px", fontFamily: "var(--pt-serif)", fontSize: "18px", lineHeight: "14px", fontWeight: "700", color: "#d9573b" }}>
+                            ✕
+                          </div>
+                          <div style={{ position: "absolute", right: "4px", bottom: "2px", fontFamily: "var(--pt-serif)", fontSize: "9px", color: "#8a7f73" }}>
+                            N↑
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "18px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba" }}>
+                          {v.venue}
                         </div>
                       </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "18px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba" }}>
-                        {v.venue}
-                      </div>
+                      <SealedFace kind="place" size={58} broken={!!v.cPlace} />
                     </div>
                     <div style={{ position: "absolute", left: "20px", top: "0", width: "104px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815", borderRadius: "11px 0 0 11px" }} />
                   </div>
                   <div onClick={v.openTheme} role="button" aria-label="Obelisco" style={{ position: "absolute", left: "1284px", top: "348px", width: "44px", height: "44px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(240px)", background: "#4d463f" }} />
                     <div style={{ position: "absolute", left: "0", top: "-196px", width: "44px", height: "240px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "26px", gap: "40px" }}>
-                      <svg width="40" height="18" viewBox="0 0 56 22">
-                        <path d="M2 6 Q14 0 28 6 Q42 0 54 6 Q54 18 40 18 Q32 18 28 12 Q24 18 16 18 Q2 18 2 6Z" fill="#b8ad9f" />
-                        <ellipse cx="16" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
-                        <ellipse cx="40" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
-                      </svg>
-                      <div style={{ width: "26px", height: "34px", borderRadius: "50% 50% 45% 45%", border: "2px solid #8a7f73", display: "flex", justifyContent: "center", gap: "5px", paddingTop: "9px" }}>
-                        <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
-                        <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cTheme ? 1 : 0, filter: v.cTheme ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <svg width="40" height="18" viewBox="0 0 56 22">
+                          <path d="M2 6 Q14 0 28 6 Q42 0 54 6 Q54 18 40 18 Q32 18 28 12 Q24 18 16 18 Q2 18 2 6Z" fill="#b8ad9f" />
+                          <ellipse cx="16" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
+                          <ellipse cx="40" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
+                        </svg>
+                        <div style={{ width: "26px", height: "34px", borderRadius: "50% 50% 45% 45%", border: "2px solid #8a7f73", display: "flex", justifyContent: "center", gap: "5px", paddingTop: "9px" }}>
+                          <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
+                          <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
+                        </div>
                       </div>
+                      <SealedFace kind="theme" size={30} label={false} broken={!!v.cTheme} />
                     </div>
                     <div style={{ position: "absolute", left: "-196px", top: "0", width: "240px", height: "44px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
                   </div>
                   <div onClick={v.openTheme} role="button" aria-label="Obelisco" style={{ position: "absolute", left: "1240px", top: "400px", width: "134px", height: "20px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(64px)", background: "#48423b" }} />
                     <div style={{ position: "absolute", left: "0", top: "-44px", width: "134px", height: "64px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "4px" }}>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "16px", fontWeight: "600", color: "#d2c7ba" }}>
-                        Disfrazado
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cTheme ? 1 : 0, filter: v.cTheme ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "16px", fontWeight: "600", color: "#d2c7ba" }}>
+                          Disfrazado
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".15em" }}>
+                          NO SEAS AGUAFIESTAS
+                        </div>
                       </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".15em" }}>
-                        NO SEAS AGUAFIESTAS
-                      </div>
+                      <SealedFace kind="theme" size={30} label={false} broken={!!v.cTheme} />
                     </div>
                     <div style={{ position: "absolute", left: "70px", top: "0", width: "64px", height: "20px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
                   </div>
@@ -741,44 +774,50 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     <div style={{ position: "absolute", left: "0", top: "-138px", width: "124px", height: "156px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-134px", width: "124px", height: "156px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", borderRadius: "62px 62px 0 0", borderTop: "4px solid #5a524a" }}>
                       <div style={{ width: "34px", height: "42px", borderRadius: "50%", border: "2px solid #9a8f82", marginBottom: "8px", background: "radial-gradient(circle at 50% 36%,#7a7066 0 7px,transparent 8px),radial-gradient(ellipse 15px 11px at 50% 100%,#7a7066 0 99%,transparent),#1d1a17", boxShadow: "0 0 0 3px #2c2824" }} />
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "10px", letterSpacing: ".3em" }}>
-                        AQUÍ YACE
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cHost ? 1 : 0, filter: v.cHost ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "10px", letterSpacing: ".3em" }}>
+                          AQUÍ YACE
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "25px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba", margin: "4px 0" }}>
+                          {v.host}
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontStyle: "italic", fontSize: "12px" }}>
+                          anfitrión
+                        </div>
+                        <div style={{ display: "flex", gap: "3px", alignItems: "center", marginTop: "4px", fontFamily: "var(--pt-mono)", fontSize: "7px", color: "#aa9f93" }}>
+                          <span>
+                            20·XI·1994 —
+                          </span>
+                          <span style={{ position: "relative", color: "#8a7f73", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
+                            20·XI·??
+                            <span style={{ position: "absolute", left: "-1px", right: "-1px", top: "50%", height: "1px", background: "#b3140f" }} />
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "25px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba", margin: "4px 0" }}>
-                        {v.host}
-                      </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontStyle: "italic", fontSize: "12px" }}>
-                        anfitrión
-                      </div>
-                      <div style={{ display: "flex", gap: "3px", alignItems: "center", marginTop: "4px", fontFamily: "var(--pt-mono)", fontSize: "7px", color: "#aa9f93" }}>
-                        <span>
-                          20·XI·1994 —
-                        </span>
-                        <span style={{ position: "relative", color: "#8a7f73", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
-                          20·XI·??
-                          <span style={{ position: "absolute", left: "-1px", right: "-1px", top: "50%", height: "1px", background: "#b3140f" }} />
-                        </span>
-                      </div>
+                      <SealedFace kind="host" size={50} broken={!!v.cHost} />
                     </div>
                     <div style={{ position: "absolute", left: "14px", top: "0", width: "110px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815", borderRadius: "11px 0 0 11px" }} />
                   </div>
                   <div onClick={v.openDate} role="button" aria-label="Lápida" style={{ position: "absolute", left: "1010px", top: "1230px", width: "130px", height: "22px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(176px)", background: "#48423b" }} />
                     <div style={{ position: "absolute", left: "0", top: "-154px", width: "130px", height: "176px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", borderRadius: "6px 6px 0 0", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", justifyContent: "flex-start", padding: "0 0 10px" }}>
-                      <div style={{ position: "relative", alignSelf: "stretch", height: "30px", background: "#6e1e14", borderRadius: "6px 6px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--pt-serif)", fontSize: "13px", fontWeight: "700", letterSpacing: ".3em", color: "#f0d9cc" }}>
-                        <div style={{ position: "absolute", left: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
-                        <div style={{ position: "absolute", right: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
-                        OCTUBRE
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cDate ? 1 : 0, filter: v.cDate ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
+                        <div style={{ position: "relative", alignSelf: "stretch", height: "30px", background: "#6e1e14", borderRadius: "6px 6px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--pt-serif)", fontSize: "13px", fontWeight: "700", letterSpacing: ".3em", color: "#f0d9cc" }}>
+                          <div style={{ position: "absolute", left: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
+                          <div style={{ position: "absolute", right: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
+                          OCTUBRE
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "72px", fontWeight: "700", lineHeight: "1", color: "#d2c7ba", margin: "10px 0 2px" }}>
+                          31
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".2em" }}>
+                          FALTAN {v.cdDays} NOCHES
+                        </div>
+                        <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", marginTop: "4px" }}>
+                          {v.cdClock}
+                        </div>
                       </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "72px", fontWeight: "700", lineHeight: "1", color: "#d2c7ba", margin: "10px 0 2px" }}>
-                        31
-                      </div>
-                      <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".2em" }}>
-                        FALTAN {v.cdDays} NOCHES
-                      </div>
-                      <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", marginTop: "4px" }}>
-                        {v.cdClock}
-                      </div>
+                      <SealedFace kind="date" size={64} broken={!!v.cDate} />
                     </div>
                     <div style={{ position: "absolute", left: "-46px", top: "0", width: "176px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
                   </div>
@@ -814,7 +853,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                       <div style={{ position: "absolute", left: "-12px", top: "0", width: "22px", height: "10px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#a89f90" }} />
                     </div>
                   </div>
-                  <div style={{ position: "absolute", left: "1068px", top: "600px", width: "40px", height: "40px", transformStyle: "preserve-3d", opacity: v.cBring, transition: "opacity .6s", pointerEvents: "none" }}>
+                  <div style={{ position: "absolute", left: "772px", top: "117px", width: "40px", height: "40px", transformStyle: "preserve-3d", opacity: v.cBring, transition: "opacity .6s", pointerEvents: "none" }}>
                     {v.glow} 
                     <div style={{ position: "absolute", left: "15px", top: "15px", width: "10px", height: "10px", transformStyle: "preserve-3d" }}>
                       <div style={{ position: "absolute", inset: "0", transform: "translateZ(22px)", background: "#ffd79a" }} />
@@ -838,14 +877,14 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
             </div>
           </section>
           {v.showHint ? (
-              <div key={v.hintKey} style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", maxWidth: "440px", margin: "0 auto", zIndex: "55", pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 28px", opacity: "0", animation: "pt-hintInOut 6s ease-in-out 1.8s forwards" }}>
+              <div key={v.hintKey} style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", zIndex: "55", pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 28px", opacity: "0", animation: "pt-hintInOut 6s ease-in-out 1.8s forwards" }}>
                 <div style={{ fontFamily: "var(--pt-creep)", fontSize: "44px", lineHeight: "1.05", letterSpacing: ".03em", textAlign: "center", textWrap: "balance", color: "#b3140f", textShadow: "0 2px 0 #2a0303,0 0 24px rgba(179,20,15,.45)" }}>
                   {v.hintText}
                 </div>
               </div>
           ) : null}
           {v.edgeOn ? (
-              <div style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", maxWidth: "440px", margin: "0 auto", zIndex: "45", pointerEvents: "none", overflow: "hidden" }}>
+              <div style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", zIndex: "45", pointerEvents: "none", overflow: "hidden" }}>
                 <div style={{ position: "absolute", inset: "0", background: `radial-gradient(circle 190px at ${v.edgeX} ${v.edgeY},rgba(255,110,70,.55),rgba(217,87,59,.22) 45%,transparent 75%)`, animation: "pt-edgePulse 2.2s ease-in-out infinite" }} />
               </div>
           ) : null}
@@ -857,11 +896,18 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
               <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: "#a79d92" }}>
                 Secretos {v.foundCount}/5
               </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {v.dots.map((d, i) => (
-                  <Fragment key={i}>
-                    <div style={{ width: "18px", height: "4px", borderRadius: "2px", background: d.c }} />
-                  </Fragment>
+              {/* One candle per secret (replaces the design's progress bars):
+                  unlit wax until found, then the flame catches and flickers. */}
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", height: "34px" }}>
+                {v.candles.map((c, i) => (
+                  <div key={i} style={{ position: "relative", width: "12px", height: "34px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+                    <div style={{ position: "absolute", left: "50%", top: "2px", width: "34px", height: "34px", marginLeft: "-17px", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,170,90,.4), rgba(255,140,60,.1) 45%, transparent 70%)", opacity: c.lit ? 1 : 0, transition: "opacity .8s ease .15s", pointerEvents: "none" }} />
+                    <div style={{ width: "7px", height: "12px", transformOrigin: "50% 100%", transform: c.lit ? "scale(1)" : "scale(0)", opacity: c.lit ? 1 : 0, transition: "transform .45s cubic-bezier(.3,1.7,.5,1), opacity .2s" }}>
+                      <div style={{ width: "100%", height: "100%", borderRadius: "50% 50% 40% 40%", background: "radial-gradient(ellipse at 50% 70%, #fff4d6 0 25%, #ffcf8a 50%, #e8785d 100%)", boxShadow: "0 0 10px 3px rgba(255,170,90,.55)", transformOrigin: "50% 100%", animation: "pt-candle 1.4s ease-in-out infinite", animationDelay: `${i * 0.23}s` }} />
+                    </div>
+                    <div style={{ width: "1.5px", height: "4px", background: c.lit ? "#2a1a10" : "#3a332d" }} />
+                    <div style={{ width: "10px", height: "16px", borderRadius: "2px 2px 1px 1px", background: c.lit ? "linear-gradient(180deg,#fff1dc,#d9d0c0 35%,#b8ad9f)" : "linear-gradient(180deg,#4a433c,#2e2925)", transition: "background .6s" }} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -889,7 +935,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div style={{ fontSize: "15px", color: "#bdb3a8", textTransform: "capitalize" }}>
                     {v.dateLabel}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "8px" }}>
                     {v.countdown.map((c, i) => (
                       <Fragment key={i}>
                         <div style={{ border: "1px solid rgba(236,230,220,.14)", borderRadius: "14px", padding: "14px 4px 12px", display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" }}>
@@ -926,15 +972,17 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div style={{ fontFamily: "var(--pt-serif)", fontSize: "44px", lineHeight: "1" }}>
                     Aquí yace {v.host}
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "10px", fontFamily: "var(--pt-serif)", fontSize: "20px", color: "#bdb3a8" }}>
+                  {/* Two fixed lines (deviation from the design): the death text
+                      alternates "ERROR" / "▒▒ de ▒▒▒▒ de 20▒▒", and on one wrapping
+                      row it jumped lines and resized the sheet every second. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontFamily: "var(--pt-serif)", fontSize: "20px", color: "#bdb3a8" }}>
                     <span>
-                      20 de noviembre de 1994
+                      20 de noviembre de 1994 —
                     </span>
-                    <span>
-                      —
-                    </span>
-                    <span style={{ position: "relative", fontFamily: "var(--pt-mono)", fontSize: "15px", color: "#8a7f73", textDecoration: "line-through", textDecorationColor: "#b3140f", textDecorationThickness: "2px", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
-                      {v.deathText}
+                    <span style={{ height: "24px", display: "flex", alignItems: "center" }}>
+                      <span style={{ position: "relative", whiteSpace: "nowrap", fontFamily: "var(--pt-mono)", fontSize: "15px", color: "#8a7f73", textDecoration: "line-through", textDecorationColor: "#b3140f", textDecorationThickness: "2px", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
+                        {v.deathText}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -1024,18 +1072,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                               {v.f.plusOne ? (
                                   <input value={v.f.plusName} onChange={v.setPlusName} placeholder="Nombre de tu acompañante" style={{ height: "52px", padding: "0 16px", borderRadius: "14px", border: "1px solid rgba(236,230,220,.18)", background: "#0d0b0a", color: "#ece6dc", fontSize: "16px", outline: "none" }} />
                               ) : null}
-                              <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px", color: "#a79d92" }}>
-                                Restricciones alimentarias 
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                                  {v.diets.map((d, i) => (
-                                    <Fragment key={i}>
-                                      <button type="button" onClick={d.toggle} style={{ height: "40px", padding: "0 16px", borderRadius: "999px", border: `1px solid ${d.border}`, background: d.bg, color: d.color, fontSize: "14px", cursor: "pointer" }}>
-                                        {d.label}
-                                      </button>
-                                    </Fragment>
-                                  ))}
-                                </div>
-                              </div>
                               <label style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px", color: "#a79d92" }}>
                                 Bebida preferida 
                                 <select value={v.f.drink} onChange={v.setDrink} style={{ height: "52px", padding: "0 16px", borderRadius: "14px", border: "1px solid rgba(236,230,220,.18)", background: "#0d0b0a", color: "#ece6dc", fontSize: "16px" }}>

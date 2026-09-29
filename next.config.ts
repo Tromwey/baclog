@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 import { LEGACY_HOSTS, SITE_HOST, SITE_URL } from "./src/lib/site";
 
 const nextConfig: NextConfig = {
+  /**
+   * Dev only: let a phone on the same Wi-Fi load the dev server by LAN IP
+   * (Next 16 blocks cross-origin requests to dev assets/HMR by default, so
+   * the page would render but never hydrate). No effect on production.
+   */
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "*.local"],
   experimental: {
     /**
      * Client router cache for DYNAMIC pages (default 0 = every soft nav

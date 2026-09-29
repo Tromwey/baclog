@@ -28,3 +28,16 @@
 .party a:hover { color: #ece6dc; }
 .party input, .party select, .party textarea, .party button { font: inherit; }
 .party input::placeholder { color: #7d746b; }
+
+/* Full-bleed: the app's body (#0b0b0d) must not show around or behind the invitation. */
+html:has(.party), body:has(.party) { background: #050404; }
+
+/* Decor + sealed tombs (party-decor.tsx). */
+@keyframes pt-ember{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes pt-flap{from{transform:scaleY(1)}to{transform:scaleY(.35)}}
+@keyframes pt-batfly{0%{opacity:1;transform:translate(-12vw,0)}25%{transform:translate(22vw,-14px)}50%{transform:translate(52vw,10px)}75%{transform:translate(82vw,-8px)}99%{opacity:1;transform:translate(112vw,4px)}100%{opacity:0;transform:translate(112vw,4px)}}
+
+/* Sheets (info/RSVP and minigames) scroll when taller than the screen, but never show a scrollbar. */
+.party [data-screen-label="03 Lápida abierta"], .party [role="dialog"] { scrollbar-width: none; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.party [data-screen-label="03 Lápida abierta"]::-webkit-scrollbar, .party [role="dialog"]::-webkit-scrollbar { display: none; }
+@keyframes pt-rattle{0%{transform:translate(0,0) rotate(0)}15%{transform:translate(-3px,1px) rotate(-1.4deg)}30%{transform:translate(3px,-1px) rotate(1.2deg)}45%{transform:translate(-2px,1px) rotate(-.8deg)}60%{transform:translate(2px,0) rotate(.5deg)}80%{transform:translate(-1px,0) rotate(-.2deg)}100%{transform:translate(0,0) rotate(0)}}

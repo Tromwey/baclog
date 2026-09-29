@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Creepster, JetBrains_Mono, Manrope } from "next/font/google";
 import { PARTY_EVENT } from "@/modules/party/event";
 import { PartyClient } from "./party-client";
@@ -32,6 +32,9 @@ export const metadata: Metadata = {
     url: "/party",
   },
 };
+
+/** Safari's bars take the invitation's black instead of Kura's. */
+export const viewport: Viewport = { themeColor: "#050404" };
 
 export default function PartyPage() {
   return (
