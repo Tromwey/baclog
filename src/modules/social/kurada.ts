@@ -1,11 +1,11 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { backlogItems, backlogs, catalogItems, users } from "@/db/schema";
+import { backlogs, users } from "@/db/schema";
 import { env } from "@/lib/env";
-import { byManualOrder, fanHexes, fanOf, type FanCover } from "@/modules/backlog/fan";
 import type { MediaType } from "@/modules/catalog/types";
 import { notBlockedWith } from "./block-gate";
+import { collectionCards, type CollectionCard } from "./collection-cards";
 import { publicAuthor } from "./queries";
 
 /**
@@ -20,28 +20,14 @@ import { publicAuthor } from "./queries";
  *    (env.ts; never `isAdmin`, which is the Torre de Control's gate);
  *  - public (`backlog.is_public`), under the same `publicAuthor` gate as every
  *    cross-user read, and not blocked either way with the viewer;
- *  - filed under the format most of its titles are (a tie goes film → series
- *    → album).
+ *  - filed under the format most of its titles are (`collection-cards.ts`).
  * Cross-user read WITH a viewer: whitelisted fields only (name, curator's
  * public name/handle, count, the fan's covers).
  */
 
-export interface KuradaCard {
-  id: string;
-  name: string;
-  /** The curator's public name (display name, else @handle). */
+export interface KuradaCard extends CollectionCard {
+  /** The curator's public name (= `owner`). */
   curator: string;
-  username: string;
-  count: number;
-  /** The fan's titles, front first — covers for the web, summaries for the API. */
-  fan: (FanCover & {
-    catalogItemId: string;
-    year: number | null;
-    byline: string | null;
-    /** ISO, or null — a string so the card crosses the RSC boundary as-is. */
-    releaseDate: string | null;
-  })[];
-  hexes: string[];
 }
 
 export type KuradaShelves = Record<MediaType, KuradaCard[]>;
@@ -80,62 +66,8 @@ export async function getKuradas(viewerId: string): Promise<KuradaShelves> {
     )
     .orderBy(desc(backlogs.updatedAt))
     .limit(30);
-  if (lists.length === 0) return EMPTY;
-
-  const items = await db
-    .select({
-      backlogId: backlogItems.backlogId,
-      catalogItemId: catalogItems.id,
-      title: catalogItems.title,
-      year: catalogItems.year,
-      byline: catalogItems.byline,
-      releaseDate: catalogItems.releaseDate,
-      mediaType: catalogItems.mediaType,
-      posterUrl: catalogItems.posterUrl,
-      paletteHex: catalogItems.paletteHex,
-      position: backlogItems.position,
-      addedAt: backlogItems.addedAt,
-    })
-    .from(backlogItems)
-    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-    .where(inArray(backlogItems.backlogId, lists.map((l) => l.id)))
-    .orderBy(asc(backlogItems.backlogId));
-
-  const byList = new Map<string, typeof items>();
-  for (const it of items) {
-    const arr = byList.get(it.backlogId) ?? [];
-    arr.push(it);
-    byList.set(it.backlogId, arr);
-  }
 
   const out: KuradaShelves = { film: [], series: [], album: [] };
-  for (const l of lists) {
-    const all = (byList.get(l.id) ?? []).sort(byManualOrder);
-    if (all.length === 0) continue;
-    const tally = { film: 0, series: 0, album: 0 };
-    for (const t of all) tally[t.mediaType] += 1;
-    const format = (["film", "series", "album"] as const).reduce((best, k) =>
-      tally[k] > tally[best] ? k : best,
-    );
-    const fan = fanOf(all, l.coverCatalogItemId).map((c) => ({
-      catalogItemId: c.catalogItemId,
-      year: c.year,
-      byline: c.byline,
-      releaseDate: c.releaseDate ? c.releaseDate.toISOString() : null,
-      posterUrl: c.posterUrl,
-      paletteHex: c.paletteHex ?? null,
-      mediaType: c.mediaType,
-      title: c.title,
-    }));
-    out[format].push({
-      id: l.id,
-      name: l.name,
-      curator: l.displayName?.trim() || `@${l.username}`,
-      username: l.username!,
-      count: all.length,
-      fan,
-      hexes: fanHexes(fan, all),
-    });
-  }
+  for (const c of await collectionCards(lists)) out[c.format].push({ ...c, curator: c.owner });
   return out;
 }

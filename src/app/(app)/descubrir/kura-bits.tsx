@@ -44,12 +44,15 @@ export function workMeta(w: {
 export function KindTrack({
   value,
   onSelect,
+  surface = "bg-[var(--glass-bg)]",
 }: {
   value: KindTab;
   onSelect: (k: KindTab) => void;
+  /** The track's fill — Todo (3a) sets it on dark glass so its tint shows through. */
+  surface?: string;
 }) {
   return (
-    <div role="tablist" aria-label="Formato" className="flex gap-1 rounded-full bg-[var(--glass-bg)] p-[5px]">
+    <div role="tablist" aria-label="Formato" className={`flex gap-1 rounded-full p-[5px] ${surface}`}>
       {KIND_TABS.map((t) => {
         const on = t.key === value;
         return (

@@ -29,7 +29,7 @@ import { extractPalette } from "@/modules/cards/palette";
 import type { LatestDoubleFeature } from "@/modules/recs/discover-rails";
 import type { KuradaShelves } from "@/modules/social/kurada";
 import type { TrendingTitle } from "@/modules/social/trending";
-import type { UpcomingItem } from "@/components/upcoming-shelf";
+import type { CollectionCard } from "@/modules/social/collection-cards";
 import {
   CHIP_44,
   GLASS_BUTTON,
@@ -37,7 +37,7 @@ import {
 } from "@/components/kura/components";
 import { BACK_PATH } from "@/components/glyph-paths";
 import { Toast, useToast } from "@/components/kura/toast";
-import { DiscoverHome, type RecCard } from "./discover-home";
+import { DiscoverHome, type RecCard, type SoonItem } from "./discover-home";
 import { SearchView } from "./search-view";
 import { SearchSheet } from "./search-sheet";
 import { SaveSheet, type SaveWork } from "./save-sheet";
@@ -89,6 +89,7 @@ export function DescubrirScreen({
   now,
   doubleFeature,
   kuradas,
+  followedCollections,
 }: {
   username: string;
   backlogs: SearchBacklog[];
@@ -101,10 +102,11 @@ export function DescubrirScreen({
   hasLoved: boolean;
   recs: RecCard[];
   trending: TrendingTitle[];
-  upcoming: UpcomingItem[];
+  upcoming: SoonItem[];
   now: number;
   doubleFeature: LatestDoubleFeature | null;
   kuradas: KuradaShelves;
+  followedCollections: CollectionCard[];
 }) {
   // ?q= is what survives a trip into an item: the search writes it before
   // pushing /item/…, so the item's back lands on the SAME results.
@@ -384,6 +386,7 @@ export function DescubrirScreen({
           totalTitles={totalTitles}
           library={library}
           kuradas={kuradas}
+          followedCollections={followedCollections}
           pending={pending}
           onSearch={openSearch}
           onSave={setSaving}
