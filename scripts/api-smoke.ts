@@ -683,6 +683,53 @@ const DiscoverResponseSchema = z.object({
   ),
   upcoming: z.array(z.object({ title: TitleSchema, releaseDate: IsoDateSchema })),
 });
+const KuradaSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  curator: z.string().min(1),
+  handle: z.string().min(1),
+  count: z.number().int().positive(),
+  palette: z.array(z.string()),
+  covers: z.array(z.object({ coverUrl: z.string().nullable(), format: z.enum(["film", "series", "album"]), palette: z.array(z.string()) })),
+});
+const MoodSchema = z.object({ label: z.string().min(1), palette: z.array(z.string()).length(2) });
+const DiscoverFormatSchemas = {
+  film: z.object({
+    format: z.literal("film"),
+    time: z.number().int(),
+    times: z.array(z.object({ label: z.string(), sub: z.string() })).length(3),
+    moods: z.array(MoodSchema).min(1),
+    titles: z.array(
+      z.object({
+        title: TitleSchema,
+        runtimeMinutes: z.number().int().positive().nullable(),
+        inCinemas: z.boolean(),
+        genre: z.string().nullable(),
+        moods: z.array(z.number().int().min(0)),
+      }),
+    ),
+    kuradas: z.array(KuradaSchema),
+  }),
+  series: z.object({
+    format: z.literal("series"),
+    lenses: z.array(z.object({ label: z.string(), sub: z.string(), maxMinutes: z.number().int().positive() })).min(1),
+    titles: z.array(
+      z.object({
+        title: TitleSchema,
+        minutes: z.number().int().positive(),
+        episodes: z.number().int().positive(),
+        network: z.string().nullable(),
+      }),
+    ),
+    kuradas: z.array(KuradaSchema),
+  }),
+  album: z.object({
+    format: z.literal("album"),
+    moods: z.array(MoodSchema).min(1),
+    titles: z.array(z.object({ title: TitleSchema, moods: z.array(z.number().int().min(0)).min(1) })),
+    kuradas: z.array(KuradaSchema),
+  }),
+} as const;
 const l2 = { titleIds: [] as string[] };
 
 /** Read-only SQL for cases that need to FIND data (a pre-order album, the
@@ -1295,6 +1342,34 @@ const reads: Case[] = [
       }
       for (const t of d.trending) assert.ok(t.people.length <= 3 && t.people.length <= t.saves);
       assert.ok(!res.text.includes("\"userId\""), "ningún userId viaja");
+    },
+  },
+  {
+    name: "GET /discover/formats/{film|series|album} → estantes + vocabularios + kuradas; formato desconocido 404, time inválido 400",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      for (const format of ["film", "series", "album"] as const) {
+        const res = await call("GET", `/discover/formats/${format}`, { token: ctx.token });
+        const d = expectOk(res, 200, DiscoverFormatSchemas[format]);
+        if (format === "film") {
+          const f = d as z.infer<typeof DiscoverFormatSchemas.film>;
+          assert.equal(f.time, 1, "cine abre en «hasta dos horas»");
+          for (const t of f.titles) {
+            for (const m of t.moods) assert.ok(m < f.moods.length, "índice de humor dentro del vocabulario");
+            if (t.runtimeMinutes !== null) assert.ok(t.runtimeMinutes >= 100 && t.runtimeMinutes <= 130, "runtime dentro de la ventana");
+          }
+        }
+        if (format === "series") {
+          const sr = d as z.infer<typeof DiscoverFormatSchemas.series>;
+          const longest = Math.max(...sr.lenses.map((l) => l.maxMinutes));
+          for (const t of sr.titles) assert.ok(t.minutes <= longest, "cabe en la lente más larga");
+        }
+        assert.ok(!res.text.includes("\"userId\""), "ningún userId viaja");
+      }
+      const missing = await call("GET", "/discover/formats/podcast", { token: ctx.token });
+      assert.equal(missing.status, 404, "formato desconocido = 404");
+      const bad = await call("GET", "/discover/formats/film?time=9", { token: ctx.token });
+      assert.equal(bad.status, 400, "time fuera de 0..2 = 400");
     },
   },
   // L3 — gente + feed (ios/API.md §4 Gente y feed). All READ-ONLY, all on
