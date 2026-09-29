@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SITE_HOST } from "@/lib/site";
 import {
   checkUsernameAction,
   claimUsernameAction,
@@ -139,7 +140,7 @@ export function UsernameStep({ onDone }: { onDone: () => void }) {
         </h1>
         <p className="text-[14px] leading-[1.5] text-text-2 text-pretty">
           Es tu link:{" "}
-          <span className="text-text">baclog.app/{username || "usuario"}</span>
+          <span className="text-text">{SITE_HOST}/{username || "usuario"}</span>
         </p>
 
         <div className="mt-3.5 flex flex-col gap-2.5">

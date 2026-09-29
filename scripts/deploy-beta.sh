@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Deploy a beta (preview) build and point beta.baclog.app at it.
+# Deploy a beta (preview) build and point beta.get-kura.app at it.
 #   pnpm beta
 # Beta shares the production DB + Resend (real OTP emails). It uploads the
 # CURRENT working dir — uncommitted changes included — so you can test on
@@ -27,10 +27,10 @@ echo "→ Deployed: $URL"
 # Stable .vercel.app alias — always works, no DNS. Use this on mobile.
 vercel alias set "$URL" baclog-beta.vercel.app || true
 
-# Branded alias — only resolves once beta.baclog.app DNS points at Vercel.
-if vercel alias set "$URL" beta.baclog.app; then
-  echo "✓ Beta live: https://beta.baclog.app  ·  https://baclog-beta.vercel.app"
+# Branded alias — only resolves once beta.get-kura.app DNS points at Vercel.
+if vercel alias set "$URL" beta.get-kura.app; then
+  echo "✓ Beta live: https://beta.get-kura.app  ·  https://baclog-beta.vercel.app"
 else
   echo "✓ Beta live: https://baclog-beta.vercel.app"
-  echo "⚠ beta.baclog.app not applied yet — set its Cloudflare DNS record (see README/scripts)."
+  echo "⚠ beta.get-kura.app not applied yet — set its Cloudflare DNS record (A beta 76.76.21.21, DNS-only)."
 fi

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE_HOST } from "@/lib/site";
 import { requireUser } from "@/auth";
 import { getUserPalette } from "@/modules/backlog/queries";
 import { getObsessions } from "@/modules/backlog/profile-stats";
@@ -80,7 +81,7 @@ export default async function SettingsPage() {
                 <Divider />
                 <Row
                   title="Tu página"
-                  value={`baclog.app/${user.username}`}
+                  value={`${SITE_HOST}/${user.username}`}
                   href={user.isPublic ? `/u/${user.username}` : undefined}
                 />
                 <Divider />

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { SITE_URL } from "@/lib/site";
 import {
   and,
   asc,
@@ -373,7 +374,7 @@ export async function GET(request: Request) {
               format: item.mediaType,
               title: item.title,
               byline: item.byline,
-              itemUrl: `https://baclog.app/item/${item.id}`,
+              itemUrl: `${SITE_URL}/item/${item.id}`,
               // An add is an instant, not a release day: printed in the
               // product's home zone (an add at 20:00 CDMX is tomorrow in UTC).
               addedOn: homeDayLong(owner.addedAt),

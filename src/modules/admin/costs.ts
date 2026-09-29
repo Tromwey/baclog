@@ -54,7 +54,8 @@ export function llmCostUsd(
 /** Fixed monthly line items (founder-maintained; see module comment). */
 export const FIXED_MONTHLY_COSTS: { name: string; usd: number }[] = [
   { name: "TMDB comercial", usd: 149 },
-  { name: "Dominio baclog.app (~$20/año)", usd: 1.67 },
+  { name: "Dominio get-kura.app (~$20/año)", usd: 1.67 },
+  { name: "Dominio baclog.app, redirige al nuevo (~$20/año)", usd: 1.67 },
   // $0 hoy, listados para que el burn los recuerde cuando dejen de serlo:
   { name: "Resend (free tier)", usd: 0 },
   { name: "Neon (free tier)", usd: 0 },

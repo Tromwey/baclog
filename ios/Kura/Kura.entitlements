@@ -9,9 +9,11 @@
 	<array>
 		<string>Default</string>
 	</array>
-	<!-- Universal Links: shared https://baclog.app links open the app (AASA: src/app/.well-known/apple-app-site-association). -->
+	<!-- Universal Links: shared https://get-kura.app links open the app (AASA: src/app/.well-known/apple-app-site-association).
+	     baclog.app stays (legacy, 2026-09-29): links shared before the domain change keep opening the app; its AASA is still served. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:get-kura.app</string>
 		<string>applinks:baclog.app</string>
 	</array>
 </dict>

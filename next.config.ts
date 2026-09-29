@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { LEGACY_HOSTS, SITE_HOST, SITE_URL } from "./src/lib/site";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -15,7 +16,7 @@ const nextConfig: NextConfig = {
     },
   },
   /**
-   * Clean public URLs: baclog.app/{username}, /{username}/item/{id} and
+   * Clean public URLs: get-kura.app/{username}, /{username}/item/{id} and
    * /{username}/{backlogId} — the pretty form the exported cards' watermark and
    * Web Share text point at — proxied onto the /u/... routes the pages actually
    * live at. These live in `fallback`, which Next checks AFTER every real route
@@ -25,6 +26,23 @@ const nextConfig: NextConfig = {
    * allowlist — the one guard is claimUsernameAction's RESERVED set, which stops
    * a handle from shadowing a real top-level route.
    */
+  /**
+   * One canonical host. The legacy hosts (baclog.app, www.baclog.app — still
+   * attached to the Vercel project so old links keep resolving) and
+   * www.get-kura.app 308 every WEB path to https://get-kura.app, query string
+   * included. `/api/*` and `/.well-known/*` are deliberately left alone: the
+   * installed iOS builds call `https://baclog.app/api/v1` (URLSession would
+   * drop the bearer on a cross-host redirect), and Apple's CDN refuses a
+   * redirected apple-app-site-association. See `src/lib/site.ts`.
+   */
+  async redirects() {
+    return [...LEGACY_HOSTS, `www.${SITE_HOST}`].map((host) => ({
+      source: "/:path((?!api/|\\.well-known/).*)",
+      has: [{ type: "host" as const, value: host }],
+      destination: `${SITE_URL}/:path`,
+      permanent: true,
+    }));
+  },
   async rewrites() {
     return {
       fallback: [

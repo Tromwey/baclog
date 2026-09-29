@@ -1,4 +1,5 @@
 import { requireUser } from "@/auth";
+import { SITE_URL } from "@/lib/site";
 import { getRecapMonths } from "@/modules/backlog/recap";
 import { toRecapCardBacklog } from "@/modules/cards/adapter";
 import { CardExporter } from "@/components/card-exporter";
@@ -43,7 +44,7 @@ export default async function RecapCardPage({
         backlog={toRecapCardBacklog(recap, user.username)}
         style="recap"
         eyebrow="recap"
-        publicUrl={user.username && user.isPublic ? `https://baclog.app/${user.username}` : null}
+        publicUrl={user.username && user.isPublic ? `${SITE_URL}/${user.username}` : null}
         noLinkNote="Elige tu @usuario en Ajustes para que tu link firme la tarjeta."
       />
     </div>

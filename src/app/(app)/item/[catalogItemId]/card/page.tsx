@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
+import { SITE_URL } from "@/lib/site";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getUserCatalogEntry } from "@/modules/backlog/queries";
 import { toCardBacklog } from "@/modules/cards/adapter";
@@ -39,7 +40,7 @@ export default async function ItemCardPage({
       style="title"
       publicUrl={
         user.username && user.isPublic
-          ? `https://baclog.app/${user.username}/item/${catalogItemId}`
+          ? `${SITE_URL}/${user.username}/item/${catalogItemId}`
           : null
       }
     />

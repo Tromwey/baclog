@@ -2,7 +2,8 @@
  * Universal Links for the native app (Kura iOS, `com.tromwey.kura`).
  *
  * iOS fetches this file (through Apple's CDN) when the app is installed and,
- * for every tapped `https://baclog.app/…` link, checks `components` in order:
+ * for every tapped `https://get-kura.app/…` link (and the legacy
+ * `https://baclog.app/…` ones), checks `components` in order:
  * the FIRST rule that matches decides, and `exclude: true` means "leave it to
  * Safari". The app only receives what it can open (`ios/Kura/App/DeepLinks.swift`
  * parses the same shapes); everything else stays on the web.
@@ -17,8 +18,11 @@
  * Requirements Apple enforces: served over HTTPS at exactly this path, 200 with
  * NO redirect, `application/json`, no auth. There is no middleware/proxy in
  * this app and real routes win over the `next.config.ts` fallback rewrites, so
- * nothing intercepts it. `www.baclog.app` redirects to the apex, so only the
- * apex is declared in the app's entitlement (`applinks:baclog.app`).
+ * nothing intercepts it — the host redirects in `next.config.ts` skip
+ * `/.well-known/*` on purpose, so the legacy apex (baclog.app) still serves it
+ * for the `applinks:baclog.app` entitlement that keeps old shared links opening
+ * the app. `www.*` redirects to the apex, so only the apexes are declared in
+ * the app's entitlement (`applinks:get-kura.app` + `applinks:baclog.app`).
  */
 
 export const dynamic = "force-static";

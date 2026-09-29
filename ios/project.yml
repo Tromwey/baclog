@@ -58,7 +58,7 @@ targets:
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
         # KURA_API_BASE, split in scheme/host so `//` never lands in a build setting.
-        # Debug: http://localhost:3010/api/v1 · Release: https://baclog.app/api/v1 (see configs below).
+        # Debug: http://localhost:3010/api/v1 · Release: https://get-kura.app/api/v1 (see configs below).
         KuraAPIBase: $(KURA_API_SCHEME)://$(KURA_API_HOST)/api/v1
         UIAppFonts:
           - Newsreader-Regular.ttf
@@ -82,7 +82,7 @@ targets:
         # method app-store-connect) re-signs with Apple Distribution. Do NOT pin CODE_SIGN_IDENTITY /
         # PROVISIONING_PROFILE_SPECIFIER here: with Automatic they conflict and the archive fails.
         # Entitlements: Sign in with Apple + Push (aps-environment) + Associated Domains
-        # (applinks:baclog.app, Universal Links). One file per configuration because the APNs
+        # (applinks:get-kura.app + legacy applinks:baclog.app, Universal Links). One file per configuration because the APNs
         # gateway differs: Debug = development (sandbox tokens), Release = production (TestFlight /
         # App Store). All three capabilities must be on in the App ID com.tromwey.kura; automatic
         # signing with -allowProvisioningUpdates usually turns them on. No keychain sharing.
@@ -98,7 +98,7 @@ targets:
         Release:
           CODE_SIGN_ENTITLEMENTS: Kura/Kura.entitlements
           KURA_API_SCHEME: https
-          KURA_API_HOST: baclog.app
+          KURA_API_HOST: get-kura.app
 schemes:
   Kura:
     build:

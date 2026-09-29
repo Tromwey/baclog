@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Hanken_Grotesk, Newsreader, Red_Hat_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/site";
 
 /* Design system fonts (Kura, design/kura/sistema-de-diseno.dc.html §tipografía).
    next/font self-hosts each family and exposes a CSS variable that globals.css
@@ -48,8 +49,8 @@ export const metadata: Metadata = {
   // among them). Fixed to the public domain, like the share links in the app:
   // without it Vercel falls back to its own production URL, and a beta deploy
   // would advertise a *.vercel.app host. Beta shares the DB, so the image
-  // served from baclog.app is the same one.
-  metadataBase: new URL("https://baclog.app"),
+  // served from get-kura.app is the same one.
+  metadataBase: new URL(SITE_URL),
   title: "kura",
   description: "Guarda lo que más vale: películas, series y música, en colecciones.",
   // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest
