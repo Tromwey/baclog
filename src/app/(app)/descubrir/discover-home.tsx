@@ -251,9 +251,9 @@ export function DiscoverHome({
         )}
 
         {shownSoon.length > 0 && (
-          <section className="flex flex-col gap-3.5 pt-9">
+          <section className="flex flex-col gap-3.5 pt-10">
             <SectionHead>los más esperados</SectionHead>
-            <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5 pb-4">
+            <div className="bl-scroll -mb-4 flex items-start gap-3 overflow-x-auto px-5 pb-4">
               {shownSoon.map((u) => (
                 <SoonTile key={u.catalogItemId} item={u} now={now} onOpen={onOpen} />
               ))}
@@ -265,9 +265,9 @@ export function DiscoverHome({
           <CreatorsSkeleton />
         ) : (
           shownCreators.length > 0 && (
-            <section className="flex flex-col gap-3.5 pt-9">
+            <section className="flex flex-col gap-3.5 pt-10">
               <SectionHead>lo nuevo de tus favoritos</SectionHead>
-              <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5 pb-4">
+              <div className="bl-scroll -mb-4 flex items-start gap-3 overflow-x-auto px-5 pb-4">
                 {shownCreators.map((c) => (
                   <CreatorTile key={c.catalogItemId} item={c} now={now} onOpen={onOpen} />
                 ))}
@@ -577,7 +577,7 @@ function CreatorsSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-3.5 pt-9">
       <span className={`mx-5 block h-[22px] w-52 rounded-full bg-white/[0.06] ${SKELETON_PULSE}`} />
-      <div className="flex gap-3 overflow-hidden px-5 pb-4">
+      <div className="-mb-4 flex gap-3 overflow-hidden px-5 pb-4">
         {[0, 1, 2, 3].map((i) => (
           <span key={i} className="flex w-[100px] flex-none flex-col gap-[7px]">
             <span className={`block h-[150px] rounded-[14px] bg-white/[0.06] ${SKELETON_PULSE}`} />
