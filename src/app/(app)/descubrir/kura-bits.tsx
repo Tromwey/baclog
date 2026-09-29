@@ -20,16 +20,6 @@ export const KIND_TABS: { key: KindTab; label: string }[] = [
   { key: "album", label: "Música" },
 ];
 
-export const inKind = (tab: KindTab, mediaType: MediaType) =>
-  tab === "all" || tab === mediaType;
-
-/** How a kind is named inside a sentence ("nada de cine por aquí"). */
-export const KIND_NOUN: Record<MediaType, string> = {
-  film: "cine",
-  series: "series",
-  album: "música",
-};
-
 /** The mock's short kind names for meta lines ("Cine · 2001 · Miyazaki"). */
 export const KIND_SHORT: Record<MediaType, string> = {
   film: "Cine",
@@ -47,8 +37,9 @@ export function workMeta(w: {
 }
 
 /**
- * 19a — the home filter: one glass track, four equal segments in mono, the
- * selected one a lighter fill. A tablist, not links: it filters in place.
+ * 19a — the format track: one glass track, four equal segments in mono, the
+ * selected one a lighter fill. Todo is Descubrir's home; Cine, Series and
+ * Música open that format's own page in place (format-pages.tsx, 2a–2c).
  */
 export function KindTrack({
   value,

@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { releaseDayInstant } from "./release";
-import { tmdbAuth } from "./tmdb";
+import { TMDB_GENRES, tmdbAuth } from "./tmdb";
 import type { ExternalItem } from "./types";
 
 const IMG = "https://image.tmdb.org/t/p/w342";
@@ -32,6 +32,12 @@ export interface DiscoverQuery {
   /** Below this the popularity sort surfaces junk. */
   minVotes: number;
   page: number;
+  /** Descubrir · Cine (2a): runtime window in minutes, either end optional. */
+  runtime?: { gte?: number; lte?: number };
+  /** Descubrir · Series (2b): TMDB `with_type` (2 = miniseries) and
+   *  `with_status` (3 = ended). TV only. */
+  tvType?: number;
+  tvStatus?: number;
 }
 
 interface TmdbDiscoverResult {
@@ -43,6 +49,7 @@ interface TmdbDiscoverResult {
   overview?: string;
   poster_path?: string | null;
   vote_average?: number;
+  genre_ids?: number[];
 }
 
 export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | null> {
@@ -55,6 +62,10 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | 
   url.searchParams.set("vote_count.gte", String(q.minVotes));
   url.searchParams.set("page", String(q.page));
   if (q.genre !== null) url.searchParams.set("with_genres", String(q.genre));
+  if (q.runtime?.gte !== undefined) url.searchParams.set("with_runtime.gte", String(q.runtime.gte));
+  if (q.runtime?.lte !== undefined) url.searchParams.set("with_runtime.lte", String(q.runtime.lte));
+  if (q.tvType !== undefined) url.searchParams.set("with_type", String(q.tvType));
+  if (q.tvStatus !== undefined) url.searchParams.set("with_status", String(q.tvStatus));
   const headers = tmdbAuth(url, env.TMDB_API_KEY);
 
   try {
@@ -76,7 +87,8 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | 
         // Same day rule as `TmdbApi.search` (tmdb.ts): film `release_date`,
         // series `first_air_date`, at 06:00Z; invalid → null.
         releaseDate: releaseDayInstant(q.type === "film" ? r.release_date : r.first_air_date),
-        genre: q.genreSlug,
+        // The shelf asked for, else the first genre TMDB tags (like search).
+        genre: q.genreSlug ?? r.genre_ids?.map((g) => TMDB_GENRES[g]).find(Boolean) ?? null,
         synopsis: r.overview || null,
         posterUrl: `${IMG}${r.poster_path}`,
         sourceRating: r.vote_average ?? null,

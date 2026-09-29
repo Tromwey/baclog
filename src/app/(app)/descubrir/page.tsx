@@ -7,6 +7,7 @@ import {
   getObsessionRails,
 } from "@/modules/recs/discover-rails";
 import { recCards } from "@/modules/recs/discover-cards";
+import { getKuradas } from "@/modules/social/kurada";
 import { getKuraTrending } from "@/modules/social/trending";
 import { getRenderInstant } from "@/modules/catalog/release";
 import { DescubrirScreen, type SearchBacklog } from "./descubrir-screen";
@@ -21,21 +22,23 @@ import { getLibraryIndex } from "./library-index";
  * its card's tap. Plus what "guardar" needs to be honest: the collections and
  * the caller's own membership index.
  *
- * Trending and rails are read wider than they're shown: the format track
- * filters on the client, and "Cine" should still find five.
+ * The format pages (Cine · Series · Música, "Descubrir Final – Formatos")
+ * fetch their shelves when opened; only their closing Kurada rows — the
+ * team's public collections — are read here.
  */
 export default async function DescubrirPage() {
   const user = await requireUser();
   const now = await getRenderInstant();
-  const [list, counts, rails, trending, upcoming, doubleFeature, library] =
+  const [list, counts, rails, trending, upcoming, doubleFeature, library, kuradas] =
     await Promise.all([
       getBacklogsForUser(user.id),
       getFirstRunCounts(user.id),
       getObsessionRails(user.id, { maxRails: 4, perRail: 4 }),
-      getKuraTrending(user.id, new Date(now), 15),
+      getKuraTrending(user.id, new Date(now), 5),
       getLibraryUpcoming(user.id, now, 12),
       getLatestDoubleFeature(user.id),
       getLibraryIndex(user.id),
+      getKuradas(user.id),
     ]);
 
   // No slice: every collection has to be reachable as a save target.
@@ -59,6 +62,7 @@ export default async function DescubrirPage() {
       upcoming={upcoming}
       now={now}
       doubleFeature={doubleFeature}
+      kuradas={kuradas}
     />
   );
 }

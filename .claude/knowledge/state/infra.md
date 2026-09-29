@@ -21,6 +21,7 @@
 | `vercel.json` · `.vercel/` | Config y vínculo del proyecto en Vercel |
 | `scripts/deploy-beta.sh` | Deploy a beta (`pnpm beta`) |
 | `.env.example` · `.env.local` | Envs requeridos y valores locales (este último no versionado) |
+| `KURADA_HANDLES` (env opcional, 2026-09-29) | Usernames (coma) de las cuentas del equipo cuyas colecciones públicas salen como "Colecciones Kuradas" en Descubrir por formato (`modules/social/kurada.ts`). Sin definir = la sección no aparece. Hay que darla de alta en Vercel (Production y Preview) cuando existan esas cuentas |
 | `eslint.config.mjs` · `postcss.config.mjs` · `tsconfig.json` | Lint, PostCSS/Tailwind v4 y TypeScript |
 | `.claude/launch.json` | Config del dev server para el runner de preview (`pnpm dev`, puerto 3000, `autoPort`) |
 | `drizzle.config.ts` | Aplicación de migraciones (ver `data.md`) |
