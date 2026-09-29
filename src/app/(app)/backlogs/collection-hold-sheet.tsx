@@ -18,9 +18,11 @@ import {
 /**
  * 9a — mantener el abanico (Colecciones · "Opciones según desde dónde
  * entras", 2026-09-27). One sheet per role: what belongs to the COLLECTION
- * comes out the same from anywhere — Tus colecciones (holding the fan), your
- * own profile (holding a fan) and your public link as its owner (the glass
- * Opciones, 9c). Same rows and order as Opciones in 10b minus the ones that
+ * comes out the same from anywhere OFF the collection's own body — your own
+ * profile (holding a fan) and your public link as its owner (the glass
+ * Opciones, 9c). Holding the fan in Tus colecciones opens the FULL Opciones
+ * instead (founder, 2026-09-29: its body is right below, so the view rows
+ * apply there). Same rows and order as Opciones in 10b minus the ones that
  * change that screen's view (Ver como lista, Ordenar):
  *
  *   Agregar títulos · Compartir · Fijar/Desfijar · — · Editar ·

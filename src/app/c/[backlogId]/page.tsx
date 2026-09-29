@@ -22,7 +22,8 @@ import { partyPath } from "@/modules/party-collections/rules";
  * draws no dock here). The onboarding gate `(app)` gives is repeated below.
  *
  * `?w=new|back` (from the join) opens the welcome sheet; `?sheet=share`
- * (from "Crear fiesta") opens "invita a la fiesta.". Both leave the URL once
+ * (from "Crear fiesta") opens "invita a la fiesta."; `?sheet=search` (the
+ * Buscar chip of Tus colecciones) opens the search. All leave the URL once
  * read (party-room.tsx).
  */
 
@@ -67,6 +68,7 @@ export default async function PartyPage({
       viewerHandle={user.username}
       welcome={w}
       openShare={sp.sheet === "share"}
+      openSearch={sp.sheet === "search"}
     />
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { getPartyAction } from "@/app/actions/party-collection-actions";
 import { CHIP_ART } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { DotsIcon, KIcon } from "@/components/kura/icons";
@@ -28,10 +29,10 @@ import {
   nameStyle,
   useCarouselMotion,
 } from "./carousel-motion";
-import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
+import { PartyBody, type PartyBodyState } from "./party-body";
 import { isLongCollectionName } from "@/modules/backlog/name-limit";
-import { handleOf, perGuestPhrase, songsLabel } from "@/components/party/party-parts";
+import { logged } from "@/components/party/party-errors";
 import { partyPath } from "@/modules/party-collections/rules";
 import type { PartyCard } from "@/modules/party-collections/types";
 
@@ -47,8 +48,9 @@ import type { PartyCard } from "@/modules/party-collections/types";
  *    NAMES peek at the edges (the current centred at 30, the neighbours
  *    142 px off-centre at 22, dimmed). Tapping
  *    the fan does NOT open anything (founder): it only sits in the centre;
- *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Editar ·
- *    Quién la ve · Borrar colección).
+ *    HOLDING it opens the same Opciones as the header's ⋯ (the view rows
+ *    included: the collection's body is right below, so they apply here —
+ *    founder, 2026-09-29). The short 9a sheet is only for the profile.
  *  - The order: FIRST the ghost fan "Nueva colección" (founder, 2026-09-27:
  *    to the left of the first collection) — which is where creating a
  *    collection lives now —, then the pinned one, the rest (server order),
@@ -178,8 +180,42 @@ export function CollectionCards({
 
   const router = useRouter();
   const ctl = useRef<CollectionControls>(null);
-  const [holding, setHolding] = useState<Shelf | null>(null);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+
+  // A party's songs, read on demand for the party in the centre (its card
+  // only carries the fan). Keyed by the card's version, so the refresh after
+  // a write elsewhere (revalidatePath) reads it again.
+  const [partyReads, setPartyReads] = useState<Record<string, Exclude<PartyBodyState, undefined>>>({});
+  const inflight = useRef(new Set<string>());
+  const partyKey = cur.kind === "party" ? readKey(cur.party) : null;
+  const partyRead = partyKey ? partyReads[partyKey] : undefined;
+  useEffect(() => {
+    if (!partyKey || partyRead !== undefined || inflight.current.has(partyKey)) return;
+    const id = partyKey.slice(0, partyKey.indexOf(":"));
+    inflight.current.add(partyKey);
+    void logged("carousel read", id, getPartyAction(id)).then((res) => {
+      inflight.current.delete(partyKey);
+      if (res && "error" in res && res.error === "signin_required") {
+        window.location.assign(res.loginPath);
+        return;
+      }
+      const read: Exclude<PartyBodyState, undefined> =
+        res && "ok" in res && res.ok ? res.party : res && "error" in res && res.error === "not_found" ? "gone" : "error";
+      if (res && "error" in res && res.error !== "not_found") {
+        console.error("[party] carousel read refused", { partyId: id, error: res.error });
+      }
+      setPartyReads((m) => ({ ...m, [partyKey]: read }));
+    });
+  }, [partyKey, partyRead]);
+  const retryParty = () => {
+    if (!partyKey) return;
+    setPartyReads((m) => {
+      const next = { ...m };
+      delete next[partyKey];
+      return next;
+    });
+  };
+  const partyDetail = typeof partyRead === "object" ? partyRead : null;
 
   const { go, reduced, handlers, swiped, bindSurface, bindMain, bindBg, bindBody, bindTail } = useCarouselMotion(entries, idx, (i) => {
     const next = entries[i];
@@ -235,8 +271,13 @@ export function CollectionCards({
               <KIcon name="share" size={18} />
             </button>
           )}
-          {/* A party's own sheets live on its page (/c/{id}): the host's
-              Compartir opens "invita a la fiesta." there. */}
+          {/* A party's own sheets live on its page (/c/{id}): Buscar opens
+              its search there, the host's Compartir "invita a la fiesta.". */}
+          {cur.kind === "party" && (cur.party.role === "host" || partyDetail?.viewer.canAdd) && (
+            <Link href={`${partyPath(cur.id)}?sheet=search`} aria-label={`Buscar canción para ${cur.name}`} className={CHIP_ART}>
+              <KIcon name="search" size={18} />
+            </Link>
+          )}
           {cur.kind === "party" && cur.party.role === "host" && (
             <Link href={`${partyPath(cur.id)}?sheet=share`} aria-label={`Invitar a ${cur.name}`} className={CHIP_ART}>
               <KIcon name="share" size={18} />
@@ -294,7 +335,7 @@ export function CollectionCards({
                 current={i === idx}
                 index={i}
                 style={fanStyle(i, p)}
-                onHold={e.kind === "shelf" ? () => setHolding(e.shelf) : undefined}
+                onHold={e.kind === "shelf" ? () => ctl.current?.open("options") : undefined}
                 onTap={e.kind === "party" ? () => !swiped() && router.push(partyPath(e.id)) : undefined}
               />
             );
@@ -388,7 +429,9 @@ export function CollectionCards({
           </>
         )}
 
-        {cur.kind === "party" && <PartyCardBody party={cur.party} />}
+        {cur.kind === "party" && (
+          <PartyBody key={cur.id} party={cur.party} detail={partyRead} onRetry={retryParty} />
+        )}
 
         {cur.kind === "ghost" && <GhostBody />}
       </div>
@@ -402,22 +445,6 @@ export function CollectionCards({
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
         style={{ background: `linear-gradient(transparent, ${bg.tail} 75%)` }}
       />
-
-      {holding && (
-        <CollectionHoldSheet
-          collection={{
-            id: holding.id,
-            name: holding.name,
-            vibe: holding.vibe,
-            count: holding.itemCount,
-            pinned: holding.pinned,
-            visibility: visibilityOf(holding),
-          }}
-          username={username}
-          profilePublic={profilePublic}
-          onClose={() => setHolding(null)}
-        />
-      )}
     </main>
   );
 }
@@ -452,7 +479,7 @@ function autoItem(u: UpcomingItem): CollectionItem {
 /**
  * The fan in the centre. Tapping it does nothing more than being in the
  * centre (founder, 2026-09-27 — it no longer opens the collection: the
- * collection is right below); holding a real collection's fan opens 9a.
+ * collection is right below); holding a real collection's fan opens Opciones.
  */
 function FanSlide({
   entry,
@@ -467,7 +494,7 @@ function FanSlide({
   style: React.CSSProperties;
   index: number;
   onHold?: () => void;
-  /** A party's fan opens its page (its body here is only a summary). */
+  /** A party's fan opens its page (its sheets and search live there). */
   onTap?: () => void;
 }) {
   const { handlers } = useHold(onHold ?? (() => {}));
@@ -482,12 +509,23 @@ function FanSlide({
       }`}
       style={style}
     >
-      <Fan
-        covers={entry.fan}
-        lead={225}
-        ghost={entry.fan.length === 0}
-        label={entry.kind === "ghost" ? undefined : `Portadas de ${entry.name}`}
-      />
+      {entry.kind === "party" ? (
+        // An empty party is three quiet 1:1 slots ("la pista está vacía."),
+        // never the dashed "+" of "nueva colección" (it isn't a way in).
+        <Fan
+          covers={entry.fan.length ? entry.fan : (new Array<FanCover>(3) as FanCover[])}
+          lead={225}
+          emptyShape="album"
+          label={entry.fan.length ? `Portadas de ${entry.name}` : undefined}
+        />
+      ) : (
+        <Fan
+          covers={entry.fan}
+          lead={225}
+          ghost={entry.fan.length === 0}
+          label={entry.kind === "ghost" ? undefined : `Portadas de ${entry.name}`}
+        />
+      )}
     </div>
   );
 }
@@ -505,32 +543,9 @@ function partyEntry(p: PartyCard): Entry {
   return { kind: "party", id: p.id, name: p.name, party: p, fan, hexes };
 }
 
-/**
- * Colecciones de fiesta (fiesta-app-v2 · list): the carousel shows a party
- * like any collection — its fan, its name — and under it only a summary and
- * the way in; the party itself (songs, who put each, the host's sheets)
- * lives at /c/{id}, where its rules are drawn.
- */
-function PartyCardBody({ party }: { party: PartyCard }) {
-  const who = party.role === "host" ? "tuya" : `de ${handleOf(party.host)}`;
-  const people = `${party.peopleCount} ${party.peopleCount === 1 ? "persona" : "personas"}`;
-  return (
-    <div className="flex flex-col items-center gap-2.5 px-6 pb-[26px] pt-1 text-center">
-      <span className="font-brand text-[16px] italic leading-[1.3] text-text-2 [text-wrap:balance]">
-        {perGuestPhrase(party.perGuestLimit)}
-      </span>
-      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
-        De fiesta · {who} · {songsLabel(party.songCount)}
-        {party.peopleCount > 0 ? ` · ${people}` : ""}
-      </span>
-      <Link
-        href={partyPath(party.id)}
-        className="mt-1.5 flex h-11 items-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 font-sans text-[15px] font-semibold text-text bl-press"
-      >
-        Abrir la fiesta
-      </Link>
-    </div>
-  );
+/** The version of a party's card: a new one (songs added, renamed) re-reads. */
+function readKey(p: PartyCard): string {
+  return `${p.id}:${p.songCount}:${new Date(p.updatedAt).getTime()}`;
 }
 
 /* ------------------------------------------------------------- auto meta */

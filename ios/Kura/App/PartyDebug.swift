@@ -7,7 +7,8 @@ import SwiftUI
 /// partyblocked · partyblockedremove (blocked, taking your own song out — C4) · partyguestopts ·
 /// partyleave (a guest's "¿salir de la fiesta?" — C3) · partyempty · partyhost · partyhostempty · partyshare · partylink · partylinkoff ·
 /// partyopts · partyremove · partyexport · partyedit · partysearch (`-kuraPartyQuery caifanes|thriller|error`) ·
-/// partycap · partycreate · partylist · partyunavailable · invite (signed out) · invitedead · inviteunavailable
+/// partycap · partycreate · partylist (guest, centred in the carousel) · partylistmine ·
+/// partylisthost · partylistempty · partyunavailable · invite (signed out) · invitedead · inviteunavailable
 enum PartyDebug {
     @MainActor
     static func configure(_ screen: String, store: AppStore) {
@@ -78,6 +79,18 @@ enum PartyDebug {
             main(sheet: .newCollection(addingTitleID: nil))
         case "partylist":
             UserDefaults.standard.register(defaults: ["kuraCarousel": "party:\(eric)"])
+            main()
+        case "partylistmine":
+            // A guest centred on the party with one song of theirs ("Pusiste tú", Buscar otra).
+            server.seedMine(["afuera"])
+            UserDefaults.standard.register(defaults: ["kuraCarousel": "party:\(eric)"])
+            main()
+        case "partylisthost":
+            UserDefaults.standard.register(defaults: ["kuraCarousel": "party:\(mine)"])
+            main()
+        case "partylistempty":
+            server.mutate(mine) { $0.songs = [] }
+            UserDefaults.standard.register(defaults: ["kuraCarousel": "party:\(mine)"])
             main()
         case "partyunavailable":
             UserDefaults.standard.register(defaults: ["kuraPartyUnavailable": true])

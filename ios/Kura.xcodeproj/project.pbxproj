@@ -22,6 +22,7 @@
 		28E5C35D3F6049831436A933 /* Person.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FE565B6FBB3C3EA4039C8E /* Person.swift */; };
 		29D4B20FA028FB3E0C256A47 /* CollectionSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1A1ED30047BCF97E1A15EB /* CollectionSheets.swift */; };
 		2E8BF449DD06A3144CB42A7F /* AppStore+Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B5B780D02E8E6402FD9E79 /* AppStore+Profile.swift */; };
+		307932018E585B95E726AB90 /* PartyCarouselBody.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AFC016BA7A92AE70BA0329A /* PartyCarouselBody.swift */; };
 		3174289F2C1C65DF812EB622 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FC5FB6E0FC535F4906236A9 /* Navigation.swift */; };
 		322A3B689C5D3A77F4F0BD9D /* Glyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4568E178755CE7254A40502B /* Glyph.swift */; };
 		3326817198D10144D4ABB5A0 /* AppStore+Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC9F6650D714D2AF672B921 /* AppStore+Palette.swift */; };
@@ -127,6 +128,7 @@
 		3494F2C0C282ED6670814C28 /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		359B629B81F695D1844AB399 /* LiveAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAPI.swift; sourceTree = "<group>"; };
 		39ACBDD337D1CD701DBC8AD8 /* InviteLandingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteLandingView.swift; sourceTree = "<group>"; };
+		3AFC016BA7A92AE70BA0329A /* PartyCarouselBody.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartyCarouselBody.swift; sourceTree = "<group>"; };
 		3D5E639D989ADFE6535FE9E4 /* RedHatMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "RedHatMono-Regular.ttf"; sourceTree = "<group>"; };
 		3DB6EFAAB0741C435C162CA3 /* KuraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KuraApp.swift; sourceTree = "<group>"; };
 		3DBBBEC18D9BF9BD0037E0FD /* OnboardingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingViews.swift; sourceTree = "<group>"; };
@@ -434,6 +436,7 @@
 			isa = PBXGroup;
 			children = (
 				39ACBDD337D1CD701DBC8AD8 /* InviteLandingView.swift */,
+				3AFC016BA7A92AE70BA0329A /* PartyCarouselBody.swift */,
 				707D55684CD6DD0C997AB6E3 /* PartyComponents.swift */,
 				0556EAE5A8B6729AF65E5EBE /* PartySearchView.swift */,
 				7D949C4A6440C84FF7F85C0F /* PartySheets.swift */,
@@ -642,6 +645,7 @@
 				3AEDE8DEC95202754C0EF489 /* NotificationsView.swift in Sources */,
 				79C1D95382CD42043BDDF162 /* OnboardingViews.swift in Sources */,
 				1B134A6D44620E3ED6A9543E /* Party.swift in Sources */,
+				307932018E585B95E726AB90 /* PartyCarouselBody.swift in Sources */,
 				763BB751945D45E311B0DA15 /* PartyComponents.swift in Sources */,
 				ABB730F4BA9CD549E6E3172D /* PartyDebug.swift in Sources */,
 				BB8815C778A7281D407A1E35 /* PartySearchView.swift in Sources */,
