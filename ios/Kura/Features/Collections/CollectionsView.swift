@@ -74,8 +74,9 @@ private enum CarouselEntry: Identifiable {
     case shelf(KCollection)
     case auto([Title])
     case new
-    /// A party (colección de fiesta), yours or one you joined — `GET /parties`. Its page is
-    /// `Route.party`, never `CollectionBody` (a song is not a title).
+    /// A party (colección de fiesta), yours or one you joined — `GET /parties`. Its body is
+    /// `PartyCarouselBody` (its songs as a list), never `CollectionBody` (a song is not a title);
+    /// its fan opens `Route.party`.
     case party(PartyCard)
 
     static let autoID = "no-puedo-esperar"
@@ -101,6 +102,11 @@ private enum CarouselEntry: Identifiable {
 
     var collection: KCollection? {
         if case .shelf(let c) = self { return c }
+        return nil
+    }
+
+    var partyID: String? {
+        if case .party(let p) = self { return p.id }
         return nil
     }
 }
@@ -355,10 +361,16 @@ private struct CollectionsCarousel: View {
                 if let c = cur.collection {
                     CollectionChips(collection: c)
                         .transition(.opacity)
+                } else if case .party(let card) = cur, let p = store.party(card.id) {
+                    // The party's own pair (as on its page): the host's Compartir + Opciones, a
+                    // guest's Opciones (Salir). Only once it's loaded — the sheets read it.
+                    PartyChips(party: p)
+                        .transition(.opacity)
                 }
             }
             .frame(height: 44)
-            .animation(.easeOut(duration: 0.3), value: cur.collection?.id)
+            .animation(.easeOut(duration: 0.3), value: cur.id)
+            .animation(.easeOut(duration: 0.3), value: store.party(cur.partyID ?? "") != nil)
         }
         .padding(.bottom, 18)
     }
@@ -452,7 +464,7 @@ private struct CollectionsCarousel: View {
     // MARK: Under the names
 
     /// A collection of yours: the SAME body as Colección (10b) — `CollectionBody`, 6b when it's
-    /// empty. "No puedo esperar": its line, count and countdowns (holding a title = 9b). The
+    /// empty. A party: its songs as a list (`PartyCarouselBody`). "No puedo esperar": its line, count and countdowns (holding a title = 9b). The
     /// ghost: the phrase and the glass "Nueva colección".
     @ViewBuilder private func below(_ e: CarouselEntry) -> some View {
         switch e {
@@ -465,15 +477,8 @@ private struct CollectionsCarousel: View {
                         onHold: { t in store.present(.titleActions(titleID: t.id, collectionID: nil)) })
             }
         case .party(let p):
-            VStack(spacing: 8) {
-                VibeLine(text: PartyCopy.heroLine(p.perGuestLimit), size: 15)
-                Text(p.meta).monoLabel(11).multilineTextAlignment(.center)
-                GlassButton(title: "Abrir la fiesta", flat: true) { store.push(.party(p.id)) }
-                    .padding(.top, 10)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 32)
-            .padding(.top, 4)
+            // Its songs, as a list, like any collection shows its titles (founder, 2026-09-29).
+            PartyCarouselBody(card: p)
         case .new:
             VStack(spacing: 12) {
                 Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.")

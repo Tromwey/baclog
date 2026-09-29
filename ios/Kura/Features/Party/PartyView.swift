@@ -91,19 +91,8 @@ private struct PartyPage: View {
             .refreshable { await store.loadParty(p.id, force: true) }
             .ignoresSafeArea(.container, edges: .top)
 
-            TopChrome {
-                HStack(spacing: 8) {
-                    if p.isHost {
-                        IconChip44(systemName: "square.and.arrow.up", label: "Compartir \(p.name)") {
-                            store.present(.partyShare(p.id))
-                        }
-                    }
-                    // The host's Opciones, or a guest's (Salir de la fiesta).
-                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de \(p.name)") {
-                        store.present(.partyOptions(p.id))
-                    }
-                }
-            }
+            // The host's Compartir + Opciones, or a guest's Opciones (Salir de la fiesta).
+            TopChrome { PartyChips(party: p) }
         }
         .overlay(alignment: .bottom) { bottomBar(tail: Tint.feedTail(tint)) }
     }
