@@ -67,8 +67,18 @@ export const env = {
   APPLE_KEY_ID: process.env.APPLE_KEY_ID,
   APPLE_PRIVATE_KEY: process.env.APPLE_PRIVATE_KEY,
   /** Optional (phase 4f): kill-switch — "1"/"true" turns Sign in with Apple
-   *  off (`auth/providers` says `apple: false`, `auth/apple` answers 503). */
+   *  off everywhere (`auth/providers` says `apple: false`, `auth/apple`
+   *  answers 503, the web button disappears). */
   AUTH_APPLE_DISABLED: process.env.AUTH_APPLE_DISABLED,
+  /**
+   * Optional (Sign in with Apple on the WEB, 2026-09-29): the Services ID
+   * registered at developer.apple.com for the site (e.g. `com.tromwey.kura.web`,
+   * grouped with the app id, return URL `https://get-kura.app/api/auth/callback/apple`).
+   * It is the web's `client_id`; the `client_secret` is minted with the SAME
+   * APPLE_* key above. Absent (or the key absent) → no Apple button on /login;
+   * the app's Apple sign-in is unaffected. See src/auth/apple-web.ts.
+   */
+  APPLE_WEB_CLIENT_ID: process.env.APPLE_WEB_CLIENT_ID,
   /** Optional (phase 4f): the iOS OAuth client id of Google Sign-In (the
    *  `aud` of its ID tokens; not a secret). Absent → `auth/google` answers
    *  503 and `auth/providers` says `google: null`. */

@@ -72,6 +72,8 @@
 - **Antes de tocar el `select` de una query "fuente"**, `grep -rn "ReturnType<typeof <fn>>" src`: si alguien deriva un tipo de ella y lo construye por otro camino, agrega una query hermana (`getBacklogItemsWithState`) o un `Pick`, no columnas (learning `2026-09-24-campo-aditivo-en-select-rompe-tipos-construidos-a-mano.md`).
 
 ## Decisiones tomadas (y por qué)
+
+- **Sign in with Apple en la web (2026-09-29)** — `src/auth/apple-web.ts` (`appleWebClientId` / `appleWebSignInEnabled` / `appleWebClientSecret`) + proveedor `Apple` en `src/auth/config.ts` (config como función async) + `(auth)/login/actions.ts` (`continueWithAppleAction` → `signIn("apple", { redirectTo: "/backlogs" })`). Reusa `signInWithIdentity`, `linkOwner` (ahora exportado) y la nueva `saveAppleRefreshToken` de `src/auth/social.ts`. Detalle y postura de seguridad en `state/security.md`; pasos de Apple Developer y env en `state/infra.md`.
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->
 - **Las fiestas no viajan como `Collection` ni sus canciones como `Title` (2026-09-29).** Un `Collection` no sabe de invitados ni de "quién puso cuál", y una build de iOS vieja que recibiera `titleIds` de canciones pediría `/titles?ids=` y no podría decodificar `format: "track"`. Por eso los lectores genéricos las excluyen (`notPartyBacklog` en shelves/pickers/`GET /collections`/stats; `getCatalogItem`/`getCatalogItems`/`findCatalogItemByRef` solo-biblioteca) y todo lo de fiestas va por `/api/v1/parties/**` y `modules/party-collections`.
 - **El anfitrión no tiene tope de canciones (2026-09-29).** Es quien organiza; el diseño solo muestra "tus 3" a colaboradores. `viewer.remaining: null`.
