@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { FLAME_PATH } from "@/components/glyph-paths";
-import { Cover, Seal } from "@/components/kura/components";
+import { Cover, SKELETON_PULSE, Seal } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { SaveChip } from "@/components/kura/save-chip";
 import { feedDockBand, feedSurface, releaseLabel, tintCard } from "@/components/kura/tint";
-import type { UpcomingItem } from "@/components/upcoming-shelf";
 import type { MediaType } from "@/modules/catalog/types";
+import type { AnticipatedItem } from "@/modules/discover/anticipated";
+import type { CreatorNewItem } from "@/modules/discover/creators-new";
 import type {
   LatestDoubleFeature,
   RailWork,
@@ -30,9 +31,6 @@ export interface RecCard {
   /** That obsession's own work — its cover sits tilted behind the reco's (3a). */
   seed: RailWork | null;
 }
-
-/** A release still ahead in your library, with the collection it's filed in (3a). */
-export type SoonItem = UpcomingItem & { collection: string | null };
 
 /** The page tone with nothing to follow (no recommendation yet) — the mock's neutral. */
 const NEUTRAL = ["#3a3a44", "#141417"];
@@ -64,11 +62,24 @@ const REC_GLASS =
  *    title, the mono meta, Guardar.
  *  - **Para empezar** — with no recommendation yet, a card that explains the
  *    flame instead.
- *  - **colecciones para ti · de gente que sigues** — two-column fans.
- *  - **tendencias · esta semana** — rank 1–5.
- *  - **próximos lanzamientos · en tus colecciones** — the date on the cover,
- *    the collection under the title.
+ *  - **colecciones para ti** (de gente que sigues) — two-column fans.
+ *  - **tendencias** (esta semana) — rank 1–5.
+ *  - **los más esperados** — what's still ahead, ordered by how many Kura
+ *    people saved it (`getMostAnticipated`): the date on the cover, "N lo
+ *    esperan" in mono under the title.
+ *  - **lo nuevo de tus favoritos** — the newest / upcoming work of the
+ *    artists, directors and series creators behind what you love: "de
+ *    {nombre}" in mono under the title, the date on the cover when it's still
+ *    ahead. It asks providers, so the screen loads it AFTER render (a quiet
+ *    skeleton meanwhile) and the section disappears when it comes back empty.
  *  - **una conexión** — the Double Feature card.
+ *
+ * Nothing already in your library shows anywhere here (founder: "no tiene
+ * caso ver cosas que ya conoces"): the server reads exclude it, and every
+ * title list is also filtered against `owned` — the library as it was when
+ * the page loaded, so a title saved during the visit stays put.
+ *
+ * Section heads carry no mono aside (founder, 2026-09-29).
  *
  * Guardar keeps the product's one flow (the "guardar en" sheet, then its
  * toast) instead of the mock's instant "en pendientes" toast.
@@ -80,7 +91,10 @@ const REC_GLASS =
 export function DiscoverHome({
   recs,
   trending,
-  upcoming,
+  anticipated,
+  anticipatedAlbums,
+  owned,
+  creators,
   now,
   doubleFeature,
   hasLoved,
@@ -96,7 +110,14 @@ export function DiscoverHome({
 }: {
   recs: RecCard[];
   trending: TrendingTitle[];
-  upcoming: SoonItem[];
+  /** "los más esperados" — ahead, most saved on Kura first. */
+  anticipated: AnticipatedItem[];
+  /** The same, albums only (Música's "próximos discos"). */
+  anticipatedAlbums: AnticipatedItem[];
+  /** The library at load — never listed here (see the header). */
+  owned: ReadonlySet<string>;
+  /** "lo nuevo de tus favoritos"; null while it loads after render. */
+  creators: CreatorNewItem[] | null;
   /** Server clock for the release labels — the client renders the same text. */
   now: number;
   doubleFeature: LatestDoubleFeature | null;
@@ -124,8 +145,9 @@ export function DiscoverHome({
         onTab={setTab}
         onSearch={onSearch}
         library={library}
+        owned={owned}
         kuradas={kuradas[tab]}
-        upcoming={upcoming}
+        upcoming={anticipatedAlbums.filter((u) => !owned.has(u.catalogItemId))}
         now={now}
         onSave={onSave}
         onOpen={onOpen}
@@ -135,7 +157,8 @@ export function DiscoverHome({
 
   const shownRecs = recs.slice(0, 6);
   const shownTrend = trending.slice(0, 5);
-  const shownSoon = upcoming;
+  const shownSoon = anticipated.filter((u) => !owned.has(u.catalogItemId));
+  const shownCreators = creators?.filter((c) => !owned.has(c.catalogItemId)) ?? null;
   const current = Math.min(active, Math.max(0, shownRecs.length - 1));
   const tones = (r: RecCard | undefined) => (r?.work.paletteHex.length ? r.work.paletteHex : NEUTRAL);
   const hexes = shownRecs.length > 0 ? tones(shownRecs[current]) : NEUTRAL;
@@ -200,7 +223,7 @@ export function DiscoverHome({
 
         {followedCollections.length > 0 && (
           <section className="flex flex-col gap-[18px] pt-10">
-            <SectionHead aside="de gente que sigues">colecciones para ti</SectionHead>
+            <SectionHead>colecciones para ti</SectionHead>
             <div className="grid grid-cols-2 gap-x-3 gap-y-7 px-5">
               {followedCollections.map((c) => (
                 <CollectionTile key={c.id} card={c} />
@@ -211,7 +234,7 @@ export function DiscoverHome({
 
         {shownTrend.length > 0 && (
           <section className="flex flex-col gap-2 pt-10">
-            <SectionHead aside="esta semana">tendencias</SectionHead>
+            <SectionHead>tendencias</SectionHead>
             <ol className="flex flex-col">
               {shownTrend.map((t, i) => (
                 <TrendRow
@@ -228,14 +251,29 @@ export function DiscoverHome({
         )}
 
         {shownSoon.length > 0 && (
-          <section className="flex flex-col gap-3.5 pt-9">
-            <SectionHead aside="en tus colecciones">próximos lanzamientos</SectionHead>
-            <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-4">
+          <section className="flex flex-col gap-3.5 pt-10">
+            <SectionHead>los más esperados</SectionHead>
+            <div className="bl-scroll -mb-4 flex items-start gap-3 overflow-x-auto px-5 pb-4">
               {shownSoon.map((u) => (
                 <SoonTile key={u.catalogItemId} item={u} now={now} onOpen={onOpen} />
               ))}
             </div>
           </section>
+        )}
+
+        {shownCreators === null ? (
+          <CreatorsSkeleton />
+        ) : (
+          shownCreators.length > 0 && (
+            <section className="flex flex-col gap-3.5 pt-10">
+              <SectionHead>lo nuevo de tus favoritos</SectionHead>
+              <div className="bl-scroll -mb-4 flex items-start gap-3 overflow-x-auto px-5 pb-4">
+                {shownCreators.map((c) => (
+                  <CreatorTile key={c.catalogItemId} item={c} now={now} onOpen={onOpen} />
+                ))}
+              </div>
+            </section>
+          )
         )}
 
         <section className="flex flex-col gap-3.5 pt-10">
@@ -260,14 +298,11 @@ export function DiscoverHome({
   );
 }
 
-/** A section title at 22 with the optional mono note on the right (3a · "ritmo"). */
-function SectionHead({ children, aside }: { children: ReactNode; aside?: string }) {
+/** A section title at 22 — no mono aside (founder, 2026-09-29). */
+function SectionHead({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 px-5">
+    <div className="px-5">
       <h2 className="font-display text-[22px] leading-[1.1] text-text">{children}</h2>
-      {aside && (
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{aside}</span>
-      )}
     </div>
   );
 }
@@ -460,39 +495,97 @@ function TrendRow({
   );
 }
 
+const TILE_META = "truncate font-mono text-[10px] uppercase tracking-[0.08em] text-text-2";
+
+/**
+ * A 150-tall cover tile for the horizontal strips (3a): the cover — with the
+ * date riding on it when `wait` is given (the lavender clock pill) — the
+ * title in italic, and one mono line under it.
+ */
+function StripTile({
+  work,
+  wait,
+  meta,
+  onOpen,
+}: {
+  work: { catalogItemId: string; title: string; mediaType: MediaType; posterUrl: string | null; paletteHex: readonly string[] | null };
+  wait?: string;
+  meta: string | null;
+  onOpen: (w: SeenWork) => void;
+}) {
+  const width = work.mediaType === "album" ? 150 : 100;
+  return (
+    <Link
+      href={`/item/${work.catalogItemId}`}
+      onClick={() => onOpen(seenOf(work))}
+      className="flex flex-none flex-col gap-[7px] bl-press-lg"
+      style={{ width }}
+    >
+      <Cover
+        posterUrl={work.posterUrl}
+        paletteHex={work.paletteHex}
+        mediaType={work.mediaType}
+        alt={work.title}
+        radius="rounded-[14px]"
+        wait={wait}
+        style={{ height: 150 }}
+      />
+      <span className="truncate font-serif text-[14px] italic text-text">{work.title}</span>
+      {meta && <span className={TILE_META}>{meta}</span>}
+    </Link>
+  );
+}
+
+/** "los más esperados": the date on the cover, how many wait for it under the title. */
 function SoonTile({
   item,
   now,
   onOpen,
 }: {
-  item: SoonItem;
+  item: AnticipatedItem;
   now: number;
   onOpen: (w: SeenWork) => void;
 }) {
-  const width = item.mediaType === "album" ? 150 : 100;
+  const meta =
+    item.waiting > 0 ? (item.waiting === 1 ? "1 lo espera" : `${item.waiting} lo esperan`) : null;
+  return <StripTile work={item} wait={releaseLabel(item.releaseDate, now)} meta={meta} onOpen={onOpen} />;
+}
+
+/** "lo nuevo de tus favoritos": who made it under the title; the date only while it's ahead. */
+function CreatorTile({
+  item,
+  now,
+  onOpen,
+}: {
+  item: CreatorNewItem;
+  now: number;
+  onOpen: (w: SeenWork) => void;
+}) {
+  const ahead = item.releaseDate !== null && new Date(item.releaseDate).getTime() > now;
   return (
-    <Link
-      href={`/item/${item.catalogItemId}`}
-      onClick={() => onOpen(seenOf(item))}
-      className="flex flex-none flex-col gap-[7px] bl-press-lg"
-      style={{ width }}
-    >
-      {/* 3a: the date rides on the cover (the lavender clock pill); the
-          collection it's filed in reads under the title. */}
-      <Cover
-        posterUrl={item.posterUrl}
-        paletteHex={item.paletteHex}
-        mediaType={item.mediaType}
-        alt={item.title}
-        radius="rounded-[14px]"
-        wait={releaseLabel(item.releaseDate, now)}
-        style={{ height: 150 }}
-      />
-      <span className="truncate font-serif text-[14px] italic text-text">{item.title}</span>
-      {item.collection && (
-        <span className="truncate font-serif text-[13px] text-text-2">{item.collection}</span>
-      )}
-    </Link>
+    <StripTile
+      work={item}
+      wait={ahead && item.releaseDate ? releaseLabel(item.releaseDate, now) : undefined}
+      meta={`de ${item.creator.name}`}
+      onOpen={onOpen}
+    />
+  );
+}
+
+/** While "lo nuevo de tus favoritos" loads: the strip's shape, quietly (skeleton pulse is exempt). */
+function CreatorsSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col gap-3.5 pt-9">
+      <span className={`mx-5 block h-[22px] w-52 rounded-full bg-white/[0.06] ${SKELETON_PULSE}`} />
+      <div className="-mb-4 flex gap-3 overflow-hidden px-5 pb-4">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="flex w-[100px] flex-none flex-col gap-[7px]">
+            <span className={`block h-[150px] rounded-[14px] bg-white/[0.06] ${SKELETON_PULSE}`} />
+            <span className={`block h-3.5 w-3/4 rounded-full bg-white/[0.06] ${SKELETON_PULSE}`} />
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

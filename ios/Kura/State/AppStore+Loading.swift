@@ -183,21 +183,28 @@ extension AppStore {
         }
     }
 
-    /// `GET /discover`.
+    /// `GET /discover`. Nothing already in your library shows in Descubrir: the server drops it
+    /// from `trending` and `upcoming`, and this re-checks against the library as it is NOW (a
+    /// title saved since the server read it). Filtered on load, not per render, so saving from the
+    /// page doesn't yank the tile out from under your thumb.
     func loadDiscover(force: Bool = false) async {
         guard force || discover == nil, !discoverLoading else { return }
         discoverLoading = true
         let session = s
         defer { session.discoverLoading = false }
         do {
-            let d = try await api.discover()
+            var d = try await api.discover()
             try check(session)
             loaded(.discover)
             for t in d.allTitles { register(t) }
-            // `upcoming` = your library's titles with a release day still ahead (web's
-            // `getLibraryUpcoming`). Its summaries carry no `release`, so seed the day here:
-            // it's what "no puedo esperar" and the clock labels read.
-            for u in d.upcoming {
+            let mine = libraryIDs
+            d.trending.removeAll { mine.contains($0.title.id) }
+            d.upcoming.removeAll { mine.contains($0.title.id) }
+            d.upcomingAlbums.removeAll { mine.contains($0.title.id) }
+            // `upcoming` = "los más esperados": titles still ahead, outside your library, ranked by
+            // how many Kura people saved them. Summaries carry no `release`, so seed the day here:
+            // it's what the clock label on the cover reads.
+            for u in d.upcoming + d.upcomingAlbums {
                 if let rd = u.releaseDate, titles[u.title.id]?.release == nil {
                     titles[u.title.id]?.release = .day(KuraJSON.dayAtNoon(rd))
                 }
@@ -207,6 +214,33 @@ extension AppStore {
             guard s === session else { return }
             fail(.discover, error)
         }
+    }
+
+    /// "lo nuevo de tus favoritos": `GET /discover/creators`, once per session, AFTER `/discover`
+    /// (it hits external APIs and can be slow — the page never waits for it). Fails silently: an
+    /// error stores an empty payload, which hides the section. Library titles are dropped on load.
+    func loadDiscoverCreators() async {
+        guard discoverCreators == nil, !discoverCreatorsLoading else { return }
+        discoverCreatorsLoading = true
+        let session = s
+        defer { session.discoverCreatorsLoading = false }
+        var payload: DiscoverCreatorsPayload
+        do {
+            payload = try await api.discoverCreators()
+        } catch {
+            guard s === session, !(error is CancellationError), (error as? KuraAPIError) != .cancelled else { return }
+            payload = DiscoverCreatorsPayload()
+        }
+        guard s === session else { return }
+        for i in payload.items { register(i.title) }
+        let mine = libraryIDs
+        payload.items.removeAll { mine.contains($0.title.id) }
+        for i in payload.items {
+            if let rd = i.releaseDate, titles[i.title.id]?.release == nil {
+                titles[i.title.id]?.release = .day(KuraJSON.dayAtNoon(rd))
+            }
+        }
+        discoverCreators = payload
     }
 
     static func formatKey(_ format: MediaFormat, time: Int?) -> String {
@@ -219,7 +253,7 @@ extension AppStore {
         let key = Self.formatKey(format, time: time)
         guard discoverFormats[key] == nil else { return }
         let session = s
-        let payload: DiscoverFormatPayload
+        var payload: DiscoverFormatPayload
         do {
             payload = try await api.discoverFormat(format, time: time)
         } catch {
@@ -228,6 +262,10 @@ extension AppStore {
         }
         guard s === session else { return }
         for t in payload.allTitles { register(t) }
+        // Nothing already in your library (the shelves are charts, the server doesn't know you):
+        // filtered once on load, so a title saved from the page stays until the next visit.
+        let mine = libraryIDs
+        payload.titles.removeAll { mine.contains($0.title.id) }
         discoverFormats[key] = payload
     }
 

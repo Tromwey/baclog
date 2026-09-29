@@ -10,6 +10,7 @@ import {
   users,
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
+import { notInLibrary } from "@/modules/discover/library-gate";
 import { avatarHexesFor } from "@/modules/reviews/queries";
 import { FALLBACK_ADN, WEEK } from "@/modules/reviews/format";
 import { notBlockedWith } from "./block-gate";
@@ -32,6 +33,11 @@ import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media"
  * pointer, catalog metadata). An account that goes private simply stops
  * counting. Same for a block in either direction with the viewer
  * (`notBlockedWith`, next to the gate).
+ *
+ * Titles the viewer already has (any `user_item`) are dropped INSIDE every
+ * branch (`notInLibrary`, founder 2026-09-29: "no tiene caso ver cosas que ya
+ * conoces en descubrir") — so the 400-row cap is spent on titles that can
+ * actually be shown.
  *
  * Each branch keeps its newest `BRANCH_CAP` rows (ordered by the touch
  * time): at today's volume that is the whole week; if Kura outgrows it, the
@@ -99,6 +105,7 @@ export async function getKuraTrending(
       .where(
         and(
           gte(backlogItems.addedAt, since),
+          notInLibrary(userId, backlogItems.catalogItemId),
         ),
       )
       .orderBy(desc(backlogItems.addedAt))
@@ -119,6 +126,7 @@ export async function getKuraTrending(
         and(
           eq(userItems.status, "completed"),
           gte(userItems.statusChangedAt, since),
+          notInLibrary(userId, userItems.catalogItemId),
         ),
       )
       .orderBy(desc(userItems.statusChangedAt))
@@ -140,6 +148,7 @@ export async function getKuraTrending(
           eq(userItems.obsessed, true),
           isNotNull(userItems.obsessedAt),
           gte(userItems.obsessedAt, since),
+          notInLibrary(userId, userItems.catalogItemId),
         ),
       )
       .orderBy(desc(userItems.obsessedAt))
@@ -160,6 +169,7 @@ export async function getKuraTrending(
         and(
           isNull(itemReviews.hiddenAt),
           gte(itemReviews.createdAt, since),
+          notInLibrary(userId, itemReviews.catalogItemId),
         ),
       )
       .orderBy(desc(itemReviews.createdAt))

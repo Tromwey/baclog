@@ -47,13 +47,17 @@ import { DiscoverTop, type KindTab } from "./kura-bits";
  *    ≤ 5 h · un fin de semana ≤ 12 h); the pill is the whole series' hours,
  *    the meta the network and episodes; Guardar sits on the poster.
  *  - 2c **Música · por momento**: moments read from the chart's genres; the
- *    picked one tints the page. Albums 1:1, then the releases still ahead in
- *    your own collections.
+ *    picked one tints the page. Albums 1:1, then "próximos discos" — the
+ *    most anticipated albums on Kura (`getMostAnticipated`, albums only).
  *
  * Every page closes with **Colecciones Kuradas** (the team's public
  * collections, `modules/social/kurada.ts`), hidden when there are none. The
  * page is a feed surface (`feedSurface` 760 + its tail and the dock band).
- * Shelves are fetched when a page first opens and kept for the visit.
+ * Shelves are fetched when a page first opens and kept for the visit (they're
+ * the same for everyone), so the viewer's own titles are filtered HERE, on
+ * the client: nothing already in the library shows (founder: "no tiene caso
+ * ver cosas que ya conoces"), against `owned` — the library as it was when
+ * Descubrir loaded, so a title saved during the visit keeps its tile.
  */
 
 type Format = Exclude<KindTab, "all">;
@@ -111,6 +115,8 @@ export interface FormatPageProps {
   onTab: (k: KindTab) => void;
   onSearch: () => void;
   library: LibraryIndex;
+  /** The library at load: never listed on these pages. */
+  owned: ReadonlySet<string>;
   kuradas: KuradaCard[];
   upcoming: UpcomingItem[];
   now: number;
@@ -351,7 +357,8 @@ function CinePage(props: FormatPageProps) {
   const [time, setTime] = useState<CineTime>(1);
   const [mood, setMood] = useState<number | null>(null);
   const films = useShelf<CineWork[]>(`cine:${time}`, () => getCineShelfAction(time).catch(() => []));
-  const shown = (films ?? []).filter((f) => inCineMood(mood, f)).slice(0, 12);
+  const fresh = (films ?? []).filter((f) => !props.owned.has(f.catalogItemId));
+  const shown = fresh.filter((f) => inCineMood(mood, f)).slice(0, 12);
   const hexes =
     mood !== null ? CINE_MOODS[mood].hexes : (shown[0]?.paletteHex ?? films?.[0]?.paletteHex ?? []);
 
@@ -378,6 +385,8 @@ function CinePage(props: FormatPageProps) {
         <Empty>
           {films.length === 0
             ? "No pudimos traer películas ahora. Prueba en un rato."
+            : fresh.length === 0
+            ? "Ya tienes todas las de este tiempo. Prueba otra duración."
             : "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor."}
         </Empty>
       ) : (
@@ -413,7 +422,9 @@ function CinePage(props: FormatPageProps) {
 function SeriesPage(props: FormatPageProps) {
   const [lens, setLens] = useState(1);
   const all = useShelf<SeriesWork[]>("series", () => getMaratonShelfAction().catch(() => []));
-  const shown = (all ?? []).filter((s) => s.minutes <= SERIES_LENSES[lens].maxMinutes).slice(0, 12);
+  const shown = (all ?? [])
+    .filter((s) => !props.owned.has(s.catalogItemId) && s.minutes <= SERIES_LENSES[lens].maxMinutes)
+    .slice(0, 12);
   const hexes = shown[0]?.paletteHex ?? [];
   const savedIn = (id: string) => props.library.byTitle[id]?.length ?? 0;
 
@@ -468,9 +479,10 @@ function MusicPage(props: FormatPageProps) {
   const albums = useShelf<AlbumWork[]>("music", () => getMusicShelfAction().catch(() => []));
   const [picked, setPicked] = useState<number | null>(null);
   // Until a moment is picked, open on the first one the chart can fill.
-  const first = albums ? MUSIC_MOODS.findIndex((_, i) => albums.some((a) => inMusicMood(i, a.genre))) : -1;
+  const fresh = albums?.filter((a) => !props.owned.has(a.catalogItemId)) ?? null;
+  const first = fresh ? MUSIC_MOODS.findIndex((_, i) => fresh.some((a) => inMusicMood(i, a.genre))) : -1;
   const mood = picked ?? Math.max(0, first);
-  const shown = (albums ?? []).filter((a) => inMusicMood(mood, a.genre)).slice(0, 8);
+  const shown = (fresh ?? []).filter((a) => inMusicMood(mood, a.genre)).slice(0, 8);
   const soon = props.upcoming.filter((u) => u.mediaType === "album");
 
   return (
@@ -509,7 +521,7 @@ function MusicPage(props: FormatPageProps) {
   );
 }
 
-/** 2c · the albums still ahead in your own collections, with their date. */
+/** 2c · the most anticipated albums on Kura (none of yours), with their date. */
 function SoonDiscs({
   items,
   now,
@@ -523,7 +535,6 @@ function SoonDiscs({
     <section className="flex flex-col gap-3.5 pt-10">
       <div className="flex items-baseline justify-between gap-3 px-5">
         <h2 className="font-display text-[22px] leading-[1.1] text-text">próximos discos</h2>
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">en tus colecciones</span>
       </div>
       <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5">
         {items.map((u) => (

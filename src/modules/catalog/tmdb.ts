@@ -313,6 +313,237 @@ export async function getFilmFacts(tmdbId: string): Promise<FilmFacts | null> {
   }
 }
 
+// ─── Descubrir · "los más esperados" + "lo nuevo de tus favoritos" ──────────
+// (2026-09-29). Fanned-out reads on a page load, so every call has a
+// per-call timeout, a Next fetch cache, and fails OPEN (null/[] + warn): a
+// dead TMDB costs a section, never the page. Same stored shape as
+// `TmdbApi.search` (English titles, day at 06:00Z) via `videoItemOf`.
+
+/** Per-call budget for the Descubrir fan-out. */
+const TMDB_FANOUT_TIMEOUT_MS = 4000;
+
+/** A list row as TMDB returns it from discover and person credits. */
+interface TmdbListRow extends TmdbResult {
+  popularity?: number;
+  adult?: boolean;
+  video?: boolean;
+  job?: string;
+  department?: string;
+  credit_id?: string;
+  episode_count?: number;
+  character?: string;
+  order?: number;
+  original_language?: string;
+  origin_country?: string[];
+}
+
+async function tmdbFanoutJson(
+  path: string,
+  params: Record<string, string>,
+  revalidate: number,
+): Promise<unknown | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const url = new URL(`https://api.themoviedb.org/3${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
+  try {
+    const res = await fetch(url, {
+      headers,
+      next: { revalidate },
+      signal: AbortSignal.timeout(TMDB_FANOUT_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.warn(`[catalog] TMDB ${path} failed: ${res.status}`);
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn(`[catalog] TMDB ${path} failed:`, err);
+    return null;
+  }
+}
+
+const CREDIT_KEYS = ["job", "department", "credit_id", "episode_count", "character", "order"] as const;
+
+/** A TMDB list row → the catalog's stored shape (the `search` mapping). The
+ *  credit-only keys (job, character, credit_id…) are dropped from `raw` so a
+ *  row cached from credits looks like one cached from search. */
+function videoItemOf(r: TmdbListRow, type: "film" | "series"): ExternalItem {
+  const raw: Record<string, unknown> = { ...r };
+  for (const k of CREDIT_KEYS) delete raw[k];
+  return {
+    source: "tmdb",
+    externalId: String(r.id),
+    mediaType: type,
+    title: r.title ?? r.name ?? "Untitled",
+    byline: null,
+    year: yearOf(r.release_date ?? r.first_air_date),
+    releaseDate: releaseDayInstant(type === "film" ? r.release_date : r.first_air_date),
+    genre: r.genre_ids?.map((g) => TMDB_GENRES[g]).find(Boolean) ?? null,
+    synopsis: r.overview || null,
+    posterUrl: r.poster_path ? `${IMG}${r.poster_path}` : null,
+    sourceRating: r.vote_average ?? null,
+    isrc: null,
+    upc: null,
+    raw,
+  };
+}
+
+/** A discover hit with TMDB's own popularity (the cross-list rank). */
+export interface RankedVideo {
+  item: ExternalItem;
+  popularity: number;
+}
+
+/** Talk, news, reality and soap: the "popular upcoming TV" noise. */
+const UPCOMING_TV_NOISE = "10763,10764,10766,10767";
+
+/**
+ * Floor for upcoming TV (TMDB popularity). An unaired show has no votes, so
+ * popularity is the only signal; it is filtered here, not in the query
+ * (`/discover/tv` has no popularity filter). Picked against the real list on
+ * 2026-09-29: the head (VisionQuest 19, Harry Potter 12, Carrie 13, Avatar:
+ * Seven Havens 10) sits at ≥ 10, the long tail of regional dailies and
+ * minor anime below it. Re-check if the section runs dry.
+ */
+const UPCOMING_TV_MIN_POPULARITY = 10;
+
+/** Chinese animation (donghua) must clear a higher bar: it floods TMDB's
+ *  upcoming popularity with titles nobody in Kura's audience has heard of. */
+const DONGHUA_MIN_POPULARITY = 25;
+
+const ANIMATION_GENRE = 16;
+
+function isDonghua(r: TmdbListRow): boolean {
+  if (!r.genre_ids?.includes(ANIMATION_GENRE)) return false;
+  return r.original_language === "zh" || Boolean(r.origin_country?.includes("CN"));
+}
+
+/**
+ * "Los más esperados" — TMDB's most popular titles that haven't come out yet,
+ * one page (20) by popularity, cached 6h. `fromDay` is `YYYY-MM-DD`
+ * (tomorrow, UTC).
+ *  - Films: only those with an upcoming THEATRICAL release in Mexico —
+ *    `region=MX` + `with_release_type=2|3` + `release_date.gte` (with a
+ *    region, TMDB applies `release_date.*` to that region's dates). That is
+ *    what drops the festival/VOD long tail. With a region TMDB also answers
+ *    `release_date` with the MEXICAN date (Avengers: Doomsday 12-17 vs the
+ *    primary 12-15), and that is the day stored — the one a Kura user in
+ *    Mexico waits for. Caveat: `/search/movie` (no region) writes the
+ *    primary date back, so a film can flip between the two days; each flip
+ *    is one upsert and the countdown moves by a day or two.
+ *  - Series: `first_air_date.gte`, minus talk/news/reality/soap, then a
+ *    popularity floor (`UPCOMING_TV_MIN_POPULARITY`).
+ *  - Both: no adult or video-only rows, no posterless rows, donghua only
+ *    above `DONGHUA_MIN_POPULARITY`.
+ * No `vote_count` floor: an unreleased title has (almost) no votes.
+ * `[]` on no key or any failure.
+ */
+export async function discoverUpcomingVideo(
+  type: "film" | "series",
+  fromDay: string,
+): Promise<RankedVideo[]> {
+  const film = type === "film";
+  const params: Record<string, string> = {
+    sort_by: "popularity.desc",
+    include_adult: "false",
+    language: "en-US",
+    page: "1",
+  };
+  if (film) {
+    params.region = "MX";
+    params.with_release_type = "2|3";
+    params["release_date.gte"] = fromDay;
+    params.include_video = "false";
+  } else {
+    params["first_air_date.gte"] = fromDay;
+    params.without_genres = UPCOMING_TV_NOISE;
+  }
+  const data = (await tmdbFanoutJson(
+    `/discover/${film ? "movie" : "tv"}`,
+    params,
+    60 * 60 * 6,
+  )) as { results?: TmdbListRow[] } | null;
+  return (data?.results ?? [])
+    .filter((r) => {
+      if (!r.poster_path || r.adult === true || r.video === true) return false;
+      const popularity = r.popularity ?? 0;
+      if (!film && popularity < UPCOMING_TV_MIN_POPULARITY) return false;
+      return !isDonghua(r) || popularity >= DONGHUA_MIN_POPULARITY;
+    })
+    .map((r) => ({ item: videoItemOf(r, type), popularity: r.popularity ?? 0 }));
+}
+
+/** A person as the Descubrir fan-out needs them. */
+export interface TmdbPerson {
+  id: number;
+  name: string;
+}
+
+/** A film's directors (`/movie/{id}/credits`, crew job "Director"). A
+ *  finished film's director never changes: cached 30 days. */
+export async function getFilmDirectors(tmdbId: string): Promise<TmdbPerson[]> {
+  const data = (await tmdbFanoutJson(`/movie/${tmdbId}/credits`, {}, 60 * 60 * 24 * 30)) as {
+    crew?: { id?: number; name?: string; job?: string }[];
+  } | null;
+  return peopleOf((data?.crew ?? []).filter((c) => c.job === "Director"));
+}
+
+/** A series' creators (`/tv/{id}` `created_by`). Cached 30 days (no language
+ *  param, so it never shares a cache entry with `getSeriesFacts`). */
+export async function getSeriesCreators(tmdbId: string): Promise<TmdbPerson[]> {
+  const data = (await tmdbFanoutJson(`/tv/${tmdbId}`, {}, 60 * 60 * 24 * 30)) as {
+    created_by?: { id?: number; name?: string }[];
+  } | null;
+  return peopleOf(data?.created_by ?? []);
+}
+
+function peopleOf(rows: { id?: number; name?: string }[]): TmdbPerson[] {
+  const out: TmdbPerson[] = [];
+  for (const r of rows) {
+    if (typeof r.id !== "number" || !r.name || out.some((p) => p.id === r.id)) continue;
+    out.push({ id: r.id, name: r.name });
+  }
+  return out;
+}
+
+/**
+ * The films a person DIRECTED (`/person/{id}/movie_credits`, crew job
+ * "Director") released on or after `sinceMs` — upcoming included; a credit
+ * with no date yet is dropped (TMDB leaves announced-but-unscheduled films
+ * dateless, and a shelf of "lo nuevo" can't place them). Cached 24h.
+ */
+export async function getDirectorFilms(personId: number, sinceMs: number): Promise<ExternalItem[]> {
+  return personCredits(`/person/${personId}/movie_credits`, "Director", "film", sinceMs);
+}
+
+/** The series a person CREATED (`/person/{id}/tv_credits`, crew job
+ *  "Creator") whose first air date is on or after `sinceMs`. Cached 24h. */
+export async function getCreatorSeries(personId: number, sinceMs: number): Promise<ExternalItem[]> {
+  return personCredits(`/person/${personId}/tv_credits`, "Creator", "series", sinceMs);
+}
+
+async function personCredits(
+  path: string,
+  job: string,
+  type: "film" | "series",
+  sinceMs: number,
+): Promise<ExternalItem[]> {
+  const data = (await tmdbFanoutJson(path, { language: "en-US" }, 60 * 60 * 24)) as {
+    crew?: TmdbListRow[];
+  } | null;
+  const seen = new Set<number>();
+  const out: ExternalItem[] = [];
+  for (const r of data?.crew ?? []) {
+    if (r.job !== job || r.adult === true || seen.has(r.id)) continue;
+    seen.add(r.id);
+    const item = videoItemOf(r, type);
+    if (!item.releaseDate || item.releaseDate.getTime() < sinceMs) continue;
+    out.push(item);
+  }
+  return out;
+}
+
 class TmdbFixtures implements VideoCatalog {
   async search(query: string, type: "film" | "series"): Promise<ExternalItem[]> {
     const q = query.toLowerCase();

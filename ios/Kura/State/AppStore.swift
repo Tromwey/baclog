@@ -202,6 +202,10 @@ final class SessionData {
     var feedCursor: String?
     var discover: DiscoverPayload?
     var discoverLoading = false
+    /// "lo nuevo de tus favoritos" (`GET /discover/creators`) — asked once per session after
+    /// `discover`; a failure stores an empty payload (no section), never an error.
+    var discoverCreators: DiscoverCreatorsPayload?
+    var discoverCreatorsLoading = false
     /// Descubrir por formato, by `AppStore.formatKey` ("film:1", "series", "album") — kept for the session.
     var discoverFormats: [String: DiscoverFormatPayload] = [:]
     var searchQuery = ""
@@ -440,6 +444,8 @@ final class AppStore {
     var feedStale: Bool { feedLoaded && (feedDirty || feedFollowingKey != following) }
     var discover: DiscoverPayload? { get { s.discover } set { s.discover = newValue } }
     var discoverLoading: Bool { get { s.discoverLoading } set { s.discoverLoading = newValue } }
+    var discoverCreators: DiscoverCreatorsPayload? { get { s.discoverCreators } set { s.discoverCreators = newValue } }
+    var discoverCreatorsLoading: Bool { get { s.discoverCreatorsLoading } set { s.discoverCreatorsLoading = newValue } }
     var discoverFormats: [String: DiscoverFormatPayload] { get { s.discoverFormats } _modify { yield &s.discoverFormats } set { s.discoverFormats = newValue } }
     var searchQuery: String { get { s.searchQuery } set { s.searchQuery = newValue } }
     var searchResults: [SearchResult] { get { s.searchResults } set { s.searchResults = newValue } }

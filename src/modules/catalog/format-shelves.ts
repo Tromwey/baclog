@@ -67,12 +67,22 @@ async function cacheWithSource(
   return rows.map((row) => ({ row, ext: byKey.get(keyOf(row))! })).filter((p) => p.ext);
 }
 
+/** Inside the window; an unknown runtime passes (it sorts last instead). */
+const fitsWindow = (runtime: number | null, w: { gte?: number; lte?: number }) =>
+  runtime === null || ((w.gte === undefined || runtime >= w.gte) && (w.lte === undefined || runtime <= w.lte));
+
 /**
- * 2a — popular films inside one runtime window (TMDB filters the window
- * itself), two pages deep so a mood still finds a handful. Sorted shortest
- * first, like the mock; an unknown runtime sorts last.
+ * 2a — popular films inside one runtime window, two pages deep so a mood
+ * still finds a handful. Sorted shortest first, like the mock; an unknown
+ * runtime sorts last.
+ *
+ * TMDB's discover filters the window with its own (stale) index, which can
+ * disagree with the detail runtime we show: `Minions & Monsters` came back
+ * for 100–130 while `/movie/{id}` said 90. So the window is re-checked here
+ * against the runtime the tile actually carries.
  */
 export async function getCineShelf(time: CineTime, now: number): Promise<CineWork[]> {
+  const span = CINE_TIMES[time].runtime;
   const pages = await Promise.all(
     [1, 2].map((page) =>
       discoverVideo({
@@ -81,7 +91,7 @@ export async function getCineShelf(time: CineTime, now: number): Promise<CineWor
         genreSlug: null,
         minVotes: 400,
         page,
-        runtime: CINE_TIMES[time].runtime,
+        runtime: span,
       }),
     ),
   );
@@ -119,7 +129,9 @@ export async function getCineShelf(time: CineTime, now: number): Promise<CineWor
       inCinemas: released !== null && released <= now && now - released <= IN_CINEMAS_MS,
     };
   });
-  return films.sort((a, b) => (a.runtime ?? Infinity) - (b.runtime ?? Infinity));
+  return films
+    .filter((f) => fitsWindow(f.runtime, span))
+    .sort((a, b) => (a.runtime ?? Infinity) - (b.runtime ?? Infinity));
 }
 
 /**

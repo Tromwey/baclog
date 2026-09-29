@@ -153,6 +153,75 @@ export async function getArtistUpcoming(
   artistId: number,
   now: number = Date.now(),
 ): Promise<ExternalItem[]> {
+  const lookup = await lookupArtistAlbums(artistId);
+  if (!lookup) return [];
+  return lookup.albums
+    .filter((r) => new Date(r.releaseDate as string).getTime() > now)
+    .sort(
+      (a, b) =>
+        new Date(a.releaseDate as string).getTime() -
+        new Date(b.releaseDate as string).getTime(),
+    )
+    .map((r) => toAlbumItem(r, String(r.collectionId)));
+}
+
+/** What `getArtistReleases` found: the artist's own name (the lookup's
+ *  `wrapperType: "artist"` row; null if iTunes left it out) and the albums. */
+export interface ArtistReleases {
+  artistName: string | null;
+  items: ExternalItem[];
+}
+
+/**
+ * Descubrir · "lo nuevo de tus favoritos" (2026-09-29) — the sibling of
+ * `getArtistUpcoming` over the SAME discography lookup (same URL, same 6h
+ * cache, so the two never double the outbound traffic): every album released
+ * in the last `pastDays` days PLUS everything still unreleased, in iTunes'
+ * order (the caller sorts by closeness to now).
+ *
+ * Differences from `getArtistUpcoming`, on purpose:
+ *  - singles (" - Single") are dropped: a one-song "album" crowds out the
+ *    records on a shelf of new work, and a pre-order single is rare;
+ *  - explicit/clean twins collapse to the first one iTunes lists;
+ *  - a per-call timeout (`timeoutMs`) — this runs fanned out on a page load.
+ * Fail-open: `{ artistName: null, items: [] }` on any upstream failure.
+ */
+export async function getArtistReleases(
+  artistId: number,
+  now: number,
+  pastDays = 120,
+  timeoutMs = 4000,
+): Promise<ArtistReleases> {
+  const lookup = await lookupArtistAlbums(artistId, AbortSignal.timeout(timeoutMs));
+  if (!lookup) return { artistName: null, items: [] };
+  const since = now - pastDays * 24 * 60 * 60 * 1000;
+  const seen = new Set<string>();
+  const items: ExternalItem[] = [];
+  for (const r of lookup.albums) {
+    const at = new Date(r.releaseDate as string).getTime();
+    if (!Number.isFinite(at) || at < since) continue;
+    const name = (r.collectionName as string).trim();
+    if (/ - single$/i.test(name)) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(toAlbumItem(r, String(r.collectionId)));
+  }
+  return { artistName: lookup.artistName, items };
+}
+
+/**
+ * The artist discography lookup shared by `getArtistUpcoming` and
+ * `getArtistReleases`: collection rows with an id, a name and a release date.
+ * Null on any upstream failure (logged) — each caller decides what empty means.
+ */
+async function lookupArtistAlbums(
+  artistId: number,
+  signal?: AbortSignal,
+): Promise<{
+  artistName: string | null;
+  albums: Array<ItunesCollection & { wrapperType?: string }>;
+} | null> {
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", String(artistId));
   url.searchParams.set("entity", "album");
@@ -161,30 +230,29 @@ export async function getArtistUpcoming(
   try {
     // 6h: short enough that a newly announced record shows up the same day,
     // long enough that a fleet of users doesn't re-ask for one discography.
-    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
-    if (!res.ok) return [];
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 }, signal });
+    if (!res.ok) {
+      console.warn(`[catalog] iTunes artist lookup ${artistId} failed: ${res.status}`);
+      return null;
+    }
     const data = await res.json();
     const rows = (data.results ?? []) as Array<
       ItunesCollection & { wrapperType?: string }
     >;
-    return rows
-      .filter(
+    const artist = rows.find((r) => r.wrapperType === "artist");
+    return {
+      artistName: artist?.artistName ?? null,
+      albums: rows.filter(
         (r) =>
           r.wrapperType === "collection" &&
           r.collectionId != null &&
           Boolean(r.collectionName) &&
-          Boolean(r.releaseDate) &&
-          new Date(r.releaseDate as string).getTime() > now,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.releaseDate as string).getTime() -
-          new Date(b.releaseDate as string).getTime(),
-      )
-      .map((r) => toAlbumItem(r, String(r.collectionId)));
+          Boolean(r.releaseDate),
+      ),
+    };
   } catch (err) {
     console.error(`[catalog] iTunes artist lookup ${artistId} failed:`, err);
-    return [];
+    return null;
   }
 }
 
