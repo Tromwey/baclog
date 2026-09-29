@@ -114,6 +114,8 @@ struct MonoSegmented<T: Hashable>: View {
     let options: [(T, String)]
     @Binding var selection: T
     var height: CGFloat = 36
+    /// The track's fill — Descubrir · Todo (3a) puts it on dark glass so the page tint shows through.
+    var fill: Color = KColor.glassBg
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, opt in
@@ -137,7 +139,7 @@ struct MonoSegmented<T: Hashable>: View {
             }
         }
         .padding(5)
-        .background(KColor.glassBg, in: Capsule())
+        .background(fill, in: Capsule())
     }
 }
 

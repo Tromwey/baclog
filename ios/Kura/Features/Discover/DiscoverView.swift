@@ -69,8 +69,24 @@ struct DiscoverView: View {
 
     // MARK: 19a
 
+    /// Todo 3a · "la página sigue a la recomendación": the card in view, by id.
+    @State private var recID: String?
+
+    private var recs: [DiscoverPayload.Recommended] { Array((store.discover?.recommended ?? []).prefix(6)) }
+
+    /// The tones the page wears: the recommendation in view, else the mock's neutral.
+    private var pageHexes: [String] {
+        guard let r = recs.first(where: { $0.title.id == recID }) ?? recs.first else { return ["#3a3a44", "#141417"] }
+        let palette = (store.title(r.title.id) ?? r.title).palette
+        return palette.isEmpty ? ["#3a3a44", "#141417"] : palette
+    }
+
+    /// Dark glass under the search field and the track, so the tint shows through (3a).
+    private static let darkGlass = Color(.sRGB, red: 11 / 255, green: 11 / 255, blue: 13 / 255, opacity: 0.35)
+
     private var editorial: some View {
-        ScrollView(showsIndicators: false) {
+        let hexes = pageHexes
+        return ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 TabTitleBar(title: "descubrir")
                     .padding(.bottom, 16)
@@ -81,91 +97,184 @@ struct DiscoverView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .medium))
-                        Text("Obras, personas, usuarios").font(.kura.ui(16))
+                        Text("Películas, series y álbumes").font(.kura.ui(16))
                         Spacer()
                     }
                     .foregroundStyle(KColor.text2)
                     .padding(.horizontal, 16)
                     .frame(height: 48)
-                    .background(KColor.glassBg, in: Capsule())
+                    .background(Self.darkGlass, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)
 
                 MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
-                              selection: $tab, height: 40)
+                              selection: $tab, height: 40, fill: Self.darkGlass)
                     .padding(.horizontal, 20)
-                    .padding(.top, 14)
+                    .padding(.top, 12)
 
-                VStack(alignment: .leading, spacing: 34) {
+                VStack(alignment: .leading, spacing: 40) {
                     if store.discover == nil, !store.discoverLoading, let e = store.loadError(.discover) {
                         LoadErrorBlock(error: e) { Task { await store.loadDiscover(force: true) } }
                             .padding(.horizontal, 28)
                             .padding(.top, 20)
-                    } else if let d = store.discover, d.recommended.isEmpty, d.trending.isEmpty, d.upcoming.isEmpty {
-                        // A fresh account: nothing to recommend yet.
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("todavía no hay nada que recomendarte.").font(.kura.news(28)).foregroundStyle(KColor.text)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text("Guarda y completa lo que te obsesiona; con eso aparece lo tuyo aquí. Mientras, busca arriba.")
-                                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 20)
                     } else {
+                        if store.discover != nil && recs.isEmpty { firstSteps }
                         recommended
+                        followedCollections
                         trends
                         upcoming
                     }
                 }
-                .padding(.top, 26)
+                .padding(.top, 32)
                 .padding(.bottom, 150)
             }
+            .kFeedSurface(hexes, span: 760)
+            .animation(.easeOut(duration: 0.6), value: hexes)
         }
         .ignoresSafeArea(.container, edges: .top)
+        .background(Tint.feedTail(hexes).ignoresSafeArea())
+        .kFeedDockBand(hexes)
     }
 
-    /// The editorial is Todo's page; the formats have their own (`DiscoverFormatPage`).
     private func inTab(_ t: Title) -> Bool { true }
 
-    /// The subtitle under a recommendation: the creator, or the series length.
-    private func recSubtitle(_ t: Title) -> String {
-        if t.format == .series, let d = t.detail { return d }
-        return t.lowerCreator ?? ""
+    /// A section title at 22 with the optional mono note on the right (3a · "ritmo").
+    private func sectionHead(_ text: String, trailing: String? = nil) -> some View {
+        SectionTitle(text: text, trailing: trailing, size: 22).padding(.horizontal, 20)
     }
 
-    // "recomendado para ti" — a tinted card with the reason.
+    /// 3a · Cuenta nueva: nothing to recommend yet — explain what lights it up.
+    private var firstSteps: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "flame.fill").font(.system(size: 12)).foregroundStyle(KColor.obsessed)
+                Text("Para empezar").monoLabel(12, tracking: 0.06, color: KColor.text)
+            }
+            .padding(.horizontal, 14).frame(height: 30)
+            .background(KColor.glassBg, in: Capsule())
+            Text("descubrir aprende de tus obsesiones.").font(.kura.news(24)).foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Marca algo con la llama en cualquier ficha y aquí aparecen títulos que se le parecen.")
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 20).padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .padding(.horizontal, 12)
+    }
+
+    // "recomendado para ti" — 340 pt tinted cards that slide; the page follows the one in view.
     @ViewBuilder private var recommended: some View {
-        let recs = store.discover?.recommended ?? []
         if store.discover == nil && store.discoverLoading {
             DiscoverSkeleton()
-        } else if let r = recs.first(where: { inTab($0.title) }), let t = store.title(r.title.id) ?? Optional(r.title) {
+        } else if !recs.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                SectionTitle(text: "recomendado para ti").padding(.horizontal, 20)
-                // Centered, and the name capped at 2 lines: a long album name ("… (Original Motion
-                // Picture Soundtrack)") ran to 4 lines and left the cover stranded at the bottom.
-                HStack(alignment: .center, spacing: 16) {
-                    Button { store.push(.title(t.id)) } label: {
-                        CoverView(title: t, height: 132).zoomSource(ZoomID.title(t.id))
+                HStack {
+                    Text("recomendado para ti").font(.kura.news(22)).foregroundStyle(KColor.text)
+                    Spacer()
+                    if recs.count > 1 {
+                        HStack(spacing: 4) {
+                            ForEach(recs, id: \.title.id) { r in
+                                let on = r.title.id == (recID ?? recs.first?.title.id)
+                                Capsule().fill(KColor.text).opacity(on ? 1 : 0.35)
+                                    .frame(width: on ? 18 : 6, height: 6)
+                            }
+                        }
+                        .animation(KMotion.short, value: recID)
+                        .accessibilityHidden(true)
                     }
-                    .buttonStyle(.plain)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(r.reason).monoLabel(10).lineSpacing(3).lineLimit(2)
-                        Text(t.name).font(.kura.newsItalic(24)).foregroundStyle(KColor.text)
-                            .lineLimit(2).minimumScaleFactor(0.85)
-                        Text(recSubtitle(t)).font(.kura.ui(14)).foregroundStyle(KColor.text2).lineLimit(1)
-                        SaveChip(titleID: t.id, style: .pill)
-                            .padding(.top, 4)
-                    }
-                    Spacer(minLength: 0)
                 }
-                .padding(20)
-                .background(Tint.card(t.palette), in: RoundedRectangle(cornerRadius: KRadius.screen, style: .continuous))
-                .padding(.horizontal, 12)
-                .animation(KMotion.tint, value: t.id)
-                // Cover + text + pill side by side in a card: past xxxLarge the pill truncates.
-                .kFixedChrome()
+                .padding(.horizontal, 20)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(recs, id: \.title.id) { r in recCard(r) }
+                    }
+                    .scrollTargetLayout()
+                    .padding(.horizontal, 12)
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollPosition(id: $recID)
+                .scrollClipDisabled()
+            }
+        }
+    }
+
+    private func recCard(_ r: DiscoverPayload.Recommended) -> some View {
+        let t = store.title(r.title.id) ?? r.title
+        let seed = r.seed.map { store.title($0.id) ?? $0 }
+        let album = t.format == .album
+        let meta = [t.format.metaLabel, t.year.map(String.init), t.creator].compactMap { $0 }
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+        // 3a geometry: the reco's cover in front (88×132 · disc 116), the obsession's behind, −9°.
+        return HStack(alignment: .bottom, spacing: 18) {
+            Button { store.push(.title(t.id)) } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    if let seed {
+                        CoverView(title: seed, width: seed.format == .album ? 70 : 60, radius: 10)
+                            .rotationEffect(.degrees(-9))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(.top, 6)
+                    }
+                    CoverView(title: t, width: album ? 116 : 88, radius: 12).zoomSource(ZoomID.title(t.id))
+                }
+                .frame(width: album ? 140 : 118, height: 146)
+            }
+            .buttonStyle(.plain)
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flame.fill").font(.system(size: 10)).foregroundStyle(KColor.obsessed)
+                        Text("Porque te obsesiona").monoLabel(10).lineLimit(2)
+                    }
+                    let because = seed?.name ?? r.reason.replacingOccurrences(of: "Porque te obsesiona ", with: "")
+                    if !because.isEmpty {
+                        Text(because).font(.kura.newsItalic(14)).foregroundStyle(KColor.text).lineLimit(1)
+                    }
+                }
+                Text(t.name).font(.kura.newsItalic(24)).foregroundStyle(KColor.text)
+                    .lineLimit(3).minimumScaleFactor(0.85)
+                Text(meta).monoLabel(10).lineLimit(1)
+                SaveChip(titleID: t.id, style: .pill)
+                    .padding(.top, 4)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(20)
+        .frame(width: 340, alignment: .leading)
+        .background(Tint.card(t.palette), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .id(r.title.id)
+        .kFixedChrome()
+    }
+
+    // "colecciones para ti · de gente que sigues" — two-column fans (3a).
+    @ViewBuilder private var followedCollections: some View {
+        let cols = store.discover?.collections ?? []
+        if !cols.isEmpty {
+            VStack(alignment: .leading, spacing: 18) {
+                sectionHead("colecciones para ti", trailing: "de gente que sigues")
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 28) {
+                    ForEach(cols) { c in
+                        VStack(spacing: 8) {
+                            FanView(covers: c.covers.map { store.title($0.id) ?? $0 }, lead: 118, label: "Portadas de \(c.name)")
+                                .frame(height: 150, alignment: .bottom)
+                            Text(c.name).font(.kura.news(18)).foregroundStyle(KColor.text)
+                                .multilineTextAlignment(.center).lineLimit(2)
+                            HStack(spacing: 6) {
+                                InitialsSeal(initials: String(c.handle.prefix(2)).lowercased(), size: 22)
+                                Text("@\(c.handle) · \(c.count == 1 ? "1 título" : "\(c.count) títulos")")
+                                    .font(.kura.ui(13)).foregroundStyle(KColor.text2).lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .kPressable { store.push(.publicCollection(handle: c.handle, id: c.id)) }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                    }
+                }
+                .padding(.horizontal, 20)
             }
         }
     }
@@ -175,7 +284,7 @@ struct DiscoverView: View {
         let list = (store.discover?.trending ?? []).map { store.title($0.title.id) ?? $0.title }.filter(inTab).prefix(5)
         if !list.isEmpty {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(text: "tendencias", trailing: "esta semana").padding(.horizontal, 20)
+            sectionHead("tendencias", trailing: "esta semana")
             VStack(spacing: 0) {
                 ForEach(Array(list.enumerated()), id: \.element.id) { i, t in
                     HStack(spacing: 14) {
@@ -211,23 +320,38 @@ struct DiscoverView: View {
 
     // "nuevos y próximos lanzamientos"
     @ViewBuilder private var upcoming: some View {
-        let list = (store.discover?.upcoming ?? []).map { u -> (Title, String) in
+        let list = (store.discover?.upcoming ?? []).map { u -> (Title, String, String?) in
             let t = store.title(u.title.id) ?? u.title
-            return (t, upcomingLabel(t, releaseDate: u.releaseDate))
+            return (t, upcomingLabel(t, releaseDate: u.releaseDate), u.collection?.name)
         }.filter { inTab($0.0) }
         if !list.isEmpty {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(text: "nuevos y próximos lanzamientos").padding(.horizontal, 20)
+            sectionHead("próximos lanzamientos", trailing: "en tus colecciones")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .bottom, spacing: 12) {
-                    ForEach(list, id: \.0.id) { t, when in
+                    ForEach(list, id: \.0.id) { t, when, filed in
                         let w = t.format == .album ? 150.0 : 100.0
                         Button { store.push(.title(t.id)) } label: {
                             VStack(alignment: .leading, spacing: 7) {
+                                // 3a: the date rides on the cover; the collection reads under the title.
                                 CoverView(title: t, width: w).zoomSource(ZoomID.title(t.id))
+                                    .overlay(alignment: .topLeading) {
+                                        if !when.isEmpty {
+                                            HStack(spacing: 5) {
+                                                Image(systemName: "clock.fill").font(.system(size: 10)).foregroundStyle(KColor.waiting)
+                                                Text(when).monoLabel(10, tracking: 0.04, color: KColor.text)
+                                            }
+                                            .padding(.horizontal, 8).frame(height: 24)
+                                            .background(KColor.glassArt, in: Capsule())
+                                            .padding(6)
+                                        }
+                                    }
                                 Text(t.name).font(.kura.newsItalic(14)).foregroundStyle(KColor.text)
                                     .lineLimit(1).frame(width: w, alignment: .leading)
-                                Text(when).monoLabel(10).lineLimit(1).frame(width: w, alignment: .leading)
+                                if let filed {
+                                    Text(filed).font(.kura.news(13)).foregroundStyle(KColor.text2)
+                                        .lineLimit(1).frame(width: w, alignment: .leading)
+                                }
                             }
                         }
                         .buttonStyle(.plain)
