@@ -61,7 +61,7 @@ extension AppStore {
     @discardableResult
     func createCollection(name: String, privacy: Privacy, adding titleID: String? = nil) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalName = trimmed.isEmpty ? "colección nueva" : trimmed.lowercased()
+        let finalName = trimmed.isEmpty ? "colección nueva" : String(trimmed.lowercased().prefix(Self.collectionNameLimit))
         var c = KCollection(id: "c-\(UUID().uuidString.prefix(8))", name: finalName, titleIDs: [], privacy: privacy, createdAt: Date())
         if let titleID {
             c.titleIDs = [titleID]
@@ -154,9 +154,11 @@ extension AppStore {
         }
     }
 
-    /// Límites del servidor (`backlogNameSchema` / `backlogVibeSchema` en
-    /// `src/modules/backlog/collections.ts`): nombre 1–60, frase ≤ 80, ambos recortados.
-    static let collectionNameLimit = 60
+    /// Frase ≤ 80 = el límite del servidor (`backlogVibeSchema` en `src/modules/backlog/collections.ts`).
+    /// El nombre se topa en 40 al ESCRIBIR (founder, 2026-09-29: medido para caber en las dos
+    /// líneas del carrusel, ver `CarouselNames`); el servidor sigue aceptando 60 para no romper
+    /// los nombres que ya existen, así que un nombre viejo más largo se respeta si no lo tocas.
+    static let collectionNameLimit = 40
     static let collectionVibeLimit = 80
 
     /// Editar (O2b, nombre + frase): one optimistic write for whatever changed, one Deshacer that
@@ -164,7 +166,9 @@ extension AppStore {
     func editCollection(_ id: String, name: String, vibe: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let c = collection(id) else { return }
-        let newName = String(trimmed.lowercased().prefix(Self.collectionNameLimit))
+        // An untouched name (older, longer than today's limit) stays whole: editing the frase
+        // must never cut it.
+        let newName = trimmed.lowercased() == c.name ? c.name : String(trimmed.lowercased().prefix(Self.collectionNameLimit))
         let newVibe = String(vibe.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.collectionVibeLimit))
         let oldName = c.name, oldVibe = c.vibe ?? ""
         let nameChanged = newName != oldName, vibeChanged = newVibe != oldVibe

@@ -11,6 +11,7 @@ import { Sheet, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, PEOPLE_FILL } from "@/components/kura/icons";
 import { SHEET_FIELD, SHEET_SOLID, SheetTitle } from "@/components/kura/sheet-parts";
 import { PrivacyChoices, VISIBILITY_LABEL } from "./collection-forms";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 /**
  * Any "create a collection" entry point: renders the caller's button (the
@@ -104,7 +105,7 @@ function NewCollectionBody() {
         <input
           autoFocus
           required
-          maxLength={60}
+          maxLength={COLLECTION_NAME_MAX}
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-label="Nombre de la colección"

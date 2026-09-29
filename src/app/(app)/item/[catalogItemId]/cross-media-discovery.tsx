@@ -16,6 +16,7 @@ import {
 import type { DoubleFeatureData } from "@/modules/cards/types";
 import { extractPalette } from "@/modules/cards/palette";
 import { MEDIA_TYPE_LABEL } from "@/modules/catalog/types";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 /**
  * F3.5.5 in-app discovery (FRAME B). Surfaces one cross-media reco on a loved
@@ -451,7 +452,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
               <div className="mt-4 flex gap-2">
                 <input
                   value={newName}
-                  maxLength={60}
+                  maxLength={COLLECTION_NAME_MAX}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="nombre de la colección"
                   className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3.5 py-3 outline-none focus:bg-surface-3"

@@ -43,6 +43,7 @@ import {
   ShareBody,
   VISIBILITY_LABEL,
 } from "../collection-forms";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 export type { CollectionItem, OtherCollection };
 
@@ -1151,7 +1152,7 @@ function MoveBody({
           <input
             autoFocus
             required
-            maxLength={60}
+            maxLength={COLLECTION_NAME_MAX}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             aria-label="Nombre de la nueva colección"
