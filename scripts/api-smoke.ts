@@ -670,6 +670,25 @@ const TitleDetailResponseSchema = z.object({
   reviews: paginated(ReviewSchema),
   collections: z.array(z.string().min(1)),
 });
+const DiscoverCreatorsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      title: TitleSchema,
+      releaseDate: IsoDateSchema.nullable(),
+      creator: z.object({
+        name: z.string().min(1),
+        role: z.enum(["artist", "director", "creator"]),
+      }),
+    }),
+  ),
+});
+const AnticipatedSchema = z.object({
+  title: TitleSchema,
+  releaseDate: IsoDateSchema,
+  // Always null since "los más esperados" (2026-09-29) — kept for installed builds.
+  collection: z.null(),
+  waiting: z.number().int().nonnegative(),
+});
 const DiscoverResponseSchema = z.object({
   recommended: z.array(
     z.object({
@@ -686,13 +705,8 @@ const DiscoverResponseSchema = z.object({
       people: z.array(z.string().min(1)),
     }),
   ),
-  upcoming: z.array(
-    z.object({
-      title: TitleSchema,
-      releaseDate: IsoDateSchema,
-      collection: z.object({ id: z.string().min(1), name: z.string().min(1) }).nullable(),
-    }),
-  ),
+  upcoming: z.array(AnticipatedSchema),
+  upcomingAlbums: z.array(AnticipatedSchema),
   collections: z.array(
     z.object({
       id: z.string().min(1),
@@ -795,6 +809,8 @@ const SWEEP_SEGMENTS: Record<string, string> = {
   "[apnsToken]": "a".repeat(64),
   // Phase 4g: `me/identities/{provider}` (the sweep only sends it without a bearer).
   "[provider]": "apple",
+  // Descubrir por formato: `discover/formats/{film|series|album}`.
+  "[format]": "film",
 };
 /** The only v1 routes that are public by design (`withPublicApi`): the OTP
  *  pair and, since phase 4f, the social sign-ins + the provider list. */
@@ -1363,9 +1379,37 @@ const reads: Case[] = [
         assert.ok(new Date(u.releaseDate).getTime() > now, "upcoming siempre en el futuro");
       }
       for (let i = 1; i < d.upcoming.length; i++) {
-        assert.ok(d.upcoming[i - 1].releaseDate <= d.upcoming[i].releaseDate, "upcoming soonest first");
+        assert.ok(d.upcoming[i - 1].waiting >= d.upcoming[i].waiting, "upcoming por más esperados primero");
+      }
+      for (const u of d.upcomingAlbums) {
+        assert.equal(u.title.format, "album", "upcomingAlbums solo álbumes");
+        assert.ok(new Date(u.releaseDate).getTime() > now, "upcomingAlbums siempre en el futuro");
+      }
+      const upIds = d.upcoming.map((u) => u.title.id);
+      assert.equal(new Set(upIds).size, upIds.length, "upcoming sin repetidos");
+      // Nothing the caller already has (founder, 2026-09-29).
+      const mine = await call("GET", "/me/titles", { token: ctx.token });
+      if (mine.status === 200) {
+        const own = new Set(((mine.body as { items?: { titleId?: string }[] }).items ?? []).map((i) => i.titleId));
+        for (const id of [...upIds, ...d.upcomingAlbums.map((u) => u.title.id), ...d.trending.map((t) => t.title.id)]) {
+          assert.ok(!own.has(id), `descubrir no muestra títulos de tu biblioteca (${id})`);
+        }
       }
       for (const t of d.trending) assert.ok(t.people.length <= 3 && t.people.length <= t.saves);
+      assert.ok(!res.text.includes("\"userId\""), "ningún userId viaja");
+    },
+  },
+  {
+    name: "GET /discover/creators → { items: [{ title, releaseDate, creator }] } (lo nuevo de tus favoritos)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const res = await call("GET", "/discover/creators", { token: ctx.token });
+      const d = expectOk(res, 200, DiscoverCreatorsResponseSchema);
+      const ids = d.items.map((i) => i.title.id);
+      assert.equal(new Set(ids).size, ids.length, "sin repetidos");
+      const per = new Map<string, number>();
+      for (const i of d.items) per.set(i.creator.name, (per.get(i.creator.name) ?? 0) + 1);
+      for (const [name, n] of per) assert.ok(n <= 2, `máximo 2 por creador (${name}: ${n})`);
       assert.ok(!res.text.includes("\"userId\""), "ningún userId viaja");
     },
   },

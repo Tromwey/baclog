@@ -182,21 +182,22 @@ struct DiscoverPayload: Decodable {
             saves = try c.decodeIfPresent(Int.self, forKey: .saves) ?? 0
         }
     }
+    /// "los más esperados": a title still ahead that is NOT in your library, ranked by how many
+    /// Kura people saved it (up to 20). The wire still sends `collection: null` — ignored.
     struct Upcoming: Decodable, Hashable {
-        struct Filed: Decodable, Hashable { let id: String; let name: String }
         let title: Title
         let releaseDate: Date?
-        /// The collection of yours it's filed in — the line under the title (Todo 3a).
-        let collection: Filed?
-        init(title: Title, releaseDate: Date? = nil, collection: Filed? = nil) {
-            self.title = title; self.releaseDate = releaseDate; self.collection = collection
+        /// How many Kura people saved it — the mono meta under the title ("N lo esperan").
+        let waiting: Int
+        init(title: Title, releaseDate: Date? = nil, waiting: Int = 0) {
+            self.title = title; self.releaseDate = releaseDate; self.waiting = waiting
         }
-        private enum CodingKeys: String, CodingKey { case title, releaseDate, collection }
+        private enum CodingKeys: String, CodingKey { case title, releaseDate, waiting }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             title = try c.decode(Title.self, forKey: .title)
             releaseDate = try c.decodeIfPresent(Date.self, forKey: .releaseDate)
-            collection = try c.decodeIfPresent(Filed.self, forKey: .collection)
+            waiting = try c.decodeIfPresent(Int.self, forKey: .waiting) ?? 0
         }
     }
     /// "colecciones para ti · de gente que sigues" (Todo 3a): a followed person's showcased collection.
@@ -215,25 +216,68 @@ struct DiscoverPayload: Decodable {
     var recommended: [Recommended]
     var trending: [Trending]
     var upcoming: [Upcoming]
+    /// "próximos discos" on the Música page: same shape as `upcoming`, albums only (≤ 12), outside
+    /// your library. Empty from an older server → the page falls back to `upcoming`'s albums.
+    var upcomingAlbums: [Upcoming]
     var collections: [FollowedCollection]
 
-    init(recommended: [Recommended], trending: [Trending], upcoming: [Upcoming], collections: [FollowedCollection] = []) {
-        self.recommended = recommended; self.trending = trending; self.upcoming = upcoming; self.collections = collections
+    init(recommended: [Recommended], trending: [Trending], upcoming: [Upcoming], upcomingAlbums: [Upcoming] = [],
+         collections: [FollowedCollection] = []) {
+        self.recommended = recommended; self.trending = trending; self.upcoming = upcoming
+        self.upcomingAlbums = upcomingAlbums; self.collections = collections
     }
 
-    private enum CodingKeys: String, CodingKey { case recommended, trending, upcoming, collections }
+    private enum CodingKeys: String, CodingKey { case recommended, trending, upcoming, upcomingAlbums, collections }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         recommended = try c.decodeIfPresent([Recommended].self, forKey: .recommended) ?? []
         trending = try c.decodeIfPresent([Trending].self, forKey: .trending) ?? []
         upcoming = try c.decodeIfPresent([Upcoming].self, forKey: .upcoming) ?? []
+        upcomingAlbums = try c.decodeIfPresent([Upcoming].self, forKey: .upcomingAlbums) ?? []
         collections = try c.decodeIfPresent([FollowedCollection].self, forKey: .collections) ?? []
     }
 
     var allTitles: [Title] {
         recommended.map(\.title) + recommended.compactMap(\.seed) + trending.map(\.title)
-            + upcoming.map(\.title) + collections.flatMap(\.covers)
+            + upcoming.map(\.title) + upcomingAlbums.map(\.title) + collections.flatMap(\.covers)
+    }
+}
+
+/// `GET /discover/creators` — "lo nuevo de tus favoritos": the newest / upcoming work of the
+/// artists, directors and series creators behind the titles you love. It hits external APIs on
+/// the server, so it's its own request AFTER `/discover` (never blocks the page) and fails
+/// silently (no section).
+struct DiscoverCreatorsPayload: Decodable {
+    struct Item: Decodable, Hashable, Identifiable {
+        enum Role: String, Decodable { case artist, director, creator }
+        struct Credit: Decodable, Hashable {
+            let name: String
+            /// Unknown roles decode as nil rather than failing the item.
+            let role: Role?
+            init(name: String, role: Role?) { self.name = name; self.role = role }
+            private enum CodingKeys: String, CodingKey { case name, role }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                name = try c.decode(String.self, forKey: .name)
+                role = (try? c.decodeIfPresent(String.self, forKey: .role)).flatMap { $0 }.flatMap(Role.init(rawValue:))
+            }
+        }
+        let title: Title
+        var id: String { title.id }
+        let releaseDate: Date?
+        /// Whose work it is — the mono meta "de {name}".
+        let creator: Credit
+        init(title: Title, releaseDate: Date? = nil, creator: Credit) {
+            self.title = title; self.releaseDate = releaseDate; self.creator = creator
+        }
+    }
+    var items: [Item]
+    init(items: [Item] = []) { self.items = items }
+    private enum CodingKeys: String, CodingKey { case items }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        items = try c.decodeIfPresent([Item].self, forKey: .items) ?? []
     }
 }
 

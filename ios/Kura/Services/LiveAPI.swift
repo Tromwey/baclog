@@ -965,6 +965,10 @@ struct LiveAPI: KuraAPI {
         try await client.decode(.get("discover"))
     }
 
+    func discoverCreators() async throws -> DiscoverCreatorsPayload {
+        try await client.decode(.get("discover/creators"))
+    }
+
     func discoverFormat(_ format: MediaFormat, time: Int?) async throws -> DiscoverFormatPayload {
         try await client.decode(.get("discover/formats/\(format.rawValue)",
                                      time.map { [URLQueryItem(name: "time", value: String($0))] } ?? []))

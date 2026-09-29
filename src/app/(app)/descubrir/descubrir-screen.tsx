@@ -30,6 +30,9 @@ import type { LatestDoubleFeature } from "@/modules/recs/discover-rails";
 import type { KuradaShelves } from "@/modules/social/kurada";
 import type { TrendingTitle } from "@/modules/social/trending";
 import type { CollectionCard } from "@/modules/social/collection-cards";
+import type { AnticipatedItem } from "@/modules/discover/anticipated";
+import type { CreatorNewItem } from "@/modules/discover/creators-new";
+import { getNewFromCreatorsAction } from "@/app/actions/discover-creators-actions";
 import {
   CHIP_44,
   GLASS_BUTTON,
@@ -37,7 +40,7 @@ import {
 } from "@/components/kura/components";
 import { BACK_PATH } from "@/components/glyph-paths";
 import { Toast, useToast } from "@/components/kura/toast";
-import { DiscoverHome, type RecCard, type SoonItem } from "./discover-home";
+import { DiscoverHome, type RecCard } from "./discover-home";
 import { SearchView } from "./search-view";
 import { SearchSheet } from "./search-sheet";
 import { SaveSheet, type SaveWork } from "./save-sheet";
@@ -85,7 +88,8 @@ export function DescubrirScreen({
   hasLoved,
   recs,
   trending,
-  upcoming,
+  anticipated,
+  anticipatedAlbums,
   now,
   doubleFeature,
   kuradas,
@@ -102,7 +106,10 @@ export function DescubrirScreen({
   hasLoved: boolean;
   recs: RecCard[];
   trending: TrendingTitle[];
-  upcoming: SoonItem[];
+  /** "los más esperados": ahead, ordered by how many Kura people saved it. */
+  anticipated: AnticipatedItem[];
+  /** The same read, albums only — Música's "próximos discos". */
+  anticipatedAlbums: AnticipatedItem[];
   now: number;
   doubleFeature: LatestDoubleFeature | null;
   kuradas: KuradaShelves;
@@ -126,6 +133,28 @@ export function DescubrirScreen({
   // Pinned for the visit (learnings/2026-09-02-revalidatepath…): the client
   // copy is the truth after the first save, the server prop never overrides it.
   const [library, setLibrary] = useState<LibraryIndex>(initialLibrary);
+  // What the viewer already had when the page loaded — Descubrir never lists
+  // it (founder: "no tiene caso ver cosas que ya conoces"). A SNAPSHOT, not
+  // the live index: a title saved during this visit stays put (bookmark
+  // filled) instead of vanishing under the thumb, matching the server-side
+  // exclusion of the lists read at load.
+  const [owned] = useState<ReadonlySet<string>>(() => new Set(Object.keys(initialLibrary.byTitle)));
+  // "lo nuevo de tus favoritos" asks providers (artists' discographies,
+  // directors' and creators' credits), so it never rides the SSR: fetched
+  // once after the first paint and held HERE, not in the home, so flipping to
+  // the search and back doesn't ask again. null = still loading; fail-open.
+  const [creators, setCreators] = useState<CreatorNewItem[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    getNewFromCreatorsAction()
+      .catch(() => [])
+      .then((items) => {
+        if (live) setCreators(items);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
   const [collections, setCollections] = useState<SearchBacklog[]>(backlogs);
   const [saving, setSaving] = useState<SaveWork | null>(null);
   const toastHost = useToast();
@@ -379,7 +408,10 @@ export function DescubrirScreen({
         <DiscoverHome
           recs={recs}
           trending={trending}
-          upcoming={upcoming}
+          anticipated={anticipated}
+          anticipatedAlbums={anticipatedAlbums}
+          owned={owned}
+          creators={creators}
           now={now}
           doubleFeature={doubleFeature}
           hasLoved={hasLoved}
