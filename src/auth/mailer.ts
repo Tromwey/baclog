@@ -1,5 +1,6 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { SITE_URL } from "@/lib/site";
 import type { mediaTypeEnum } from "@/db/schema";
 import { monthName } from "@/modules/backlog/recap-format";
 
@@ -33,6 +34,9 @@ async function send(
       },
       body: JSON.stringify({
         // Display name entre comillas: los paréntesis son sintaxis de comentario en RFC 5322.
+        // El remitente sigue en baclog.app A PROPÓSITO: Resend solo manda desde un
+        // dominio verificado (DKIM/SPF), y get-kura.app aún no está verificado ahí.
+        // Cuando el founder lo verifique en Resend, cambiar a auth@get-kura.app.
         from: `"kura (anteriormente Baclog)" <auth@baclog.app>`,
         to: [to],
         subject,
@@ -113,7 +117,7 @@ export function sendReleaseEmail(
     waited +
     `${cta}: ${title.itemUrl}\n\n` +
     `Te avisamos porque estaba en tu no puedo esperar. Si no quieres estos avisos, ` +
-    `apágalos en https://baclog.app/settings`;
+    `apágalos en ${SITE_URL}/settings`;
   return send(email, releaseSubject(title.title), body, "RELEASE");
 }
 
@@ -183,6 +187,6 @@ export function sendRecapEmail(
   const done = `${recap.completedCount} ${recap.completedCount === 1 ? "completo" : "completos"}`;
   // Recap has no permanent nav tab (it's a monthly moment) — this link is its
   // in-app entry point, so the ritual stays reachable without a constant tab.
-  const body = `Tu ${month}: ${titles}, ${done}. Tu tarjeta del mes: https://baclog.app/recap`;
+  const body = `Tu ${month}: ${titles}, ${done}. Tu tarjeta del mes: ${SITE_URL}/recap`;
   return send(email, `tu ${recap.label} está listo.`, body, "RECAP");
 }

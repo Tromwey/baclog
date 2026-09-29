@@ -14,7 +14,7 @@ import { analyticsEvents, users } from "@/db/schema";
 export const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
 
 // Handles that would shadow a real top-level route once clean public URLs
-// (next.config.ts fallback rewrites) resolve baclog.app/{username}. Keep in
+// (next.config.ts fallback rewrites) resolve get-kura.app/{username}. Keep in
 // sync with the app's top-level routes.
 export const RESERVED = new Set([
   "admin", "api", "app", "baclog", "kura", "colecciones", "coleccion", "backlogs", "blocked", "descubrir", "item",

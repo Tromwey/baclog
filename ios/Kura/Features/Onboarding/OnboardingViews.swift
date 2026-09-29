@@ -353,7 +353,7 @@ struct UsernameView: View {
                         .font(.kura.news(40))
                         .foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
-                    Text("Es tu link: baclog.app/\(clean.isEmpty ? "usuario" : clean)")
+                    Text("Es tu link: get-kura.app/\(clean.isEmpty ? "usuario" : clean)")
                         .font(.kura.ui(14))
                         .foregroundStyle(KColor.text2)
                     VStack(spacing: 10) {

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { SITE_URL } from "@/lib/site";
 import { NotFoundError, UnauthorizedError, assertOwnsBacklog } from "@/authz";
 import { toCardBacklog } from "@/modules/cards/adapter";
 import { getBacklogItems } from "@/modules/backlog/queries";
@@ -44,7 +45,7 @@ export default async function CardPage({
       subtitle="tu colección, como tarjeta"
       publicUrl={
         accountPublic && backlog.isPublic
-          ? `https://baclog.app/${user.username}/${backlog.id}`
+          ? `${SITE_URL}/${user.username}/${backlog.id}`
           : null
       }
       noLinkNote={

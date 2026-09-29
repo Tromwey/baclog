@@ -248,7 +248,7 @@ final class APIClient: @unchecked Sendable {
     static var configuredBase: URL {
         let raw = (Bundle.main.object(forInfoDictionaryKey: "KuraAPIBase") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return URL(string: raw.isEmpty ? "https://baclog.app/api/v1" : raw) ?? URL(string: "https://baclog.app/api/v1")!
+        return URL(string: raw.isEmpty ? "https://get-kura.app/api/v1" : raw) ?? URL(string: "https://get-kura.app/api/v1")!
     }
 
     init(base: URL = APIClient.configuredBase, session: Session = Session()) {

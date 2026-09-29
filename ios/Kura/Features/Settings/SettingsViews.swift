@@ -10,7 +10,7 @@ struct SettingsView: View {
 
     /// The integral privacy notice (public, no session; text in the web's `(marketing)/privacidad`).
     /// Same URL App Store Connect carries as the Privacy Policy URL, so it never points at Debug's localhost.
-    static let privacyNoticeURL = URL(string: "https://baclog.app/privacidad")!
+    static let privacyNoticeURL = URL(string: "https://get-kura.app/privacidad")!
 
     var body: some View {
         @Bindable var store = store

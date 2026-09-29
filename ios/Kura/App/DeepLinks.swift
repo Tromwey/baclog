@@ -2,12 +2,14 @@ import Foundation
 import UIKit
 import os
 
-// Universal Links: a shared `https://baclog.app/…` link opens Kura instead of the web.
+// Universal Links: a shared `https://get-kura.app/…` link opens Kura instead of the web (and so
+// does a legacy `https://baclog.app/…` one, shared before the domain change of 2026-09-29).
 //
 // The web side is `src/app/.well-known/apple-app-site-association/route.ts`: it only hands the app
 // the shapes parsed here (everything else stays in Safari), and the entitlement is
-// `applinks:baclog.app` (Kura.entitlements / Kura-Debug.entitlements). `www.baclog.app` redirects
-// to the apex, so Apple can't read an AASA there and it's not declared.
+// `applinks:get-kura.app` + `applinks:baclog.app` (Kura.entitlements / Kura-Debug.entitlements).
+// `www.*` redirects to the apex, so Apple can't read an AASA there and it's not declared — but a
+// tapped `www.` link is still ours, hence `hosts` lists them.
 
 /// Where a web link points, in the app's terms. Built ONLY from a URL of our own site.
 enum DeepLink: Equatable {
@@ -22,7 +24,7 @@ enum DeepLink: Equatable {
     /// `/recap` (the monthly recap email).
     case recap
 
-    static let hosts: Set<String> = ["baclog.app", "www.baclog.app"]
+    static let hosts: Set<String> = ["get-kura.app", "www.get-kura.app", "baclog.app", "www.baclog.app"]
 
     /// Nil = not ours or not a shape the app opens. Every path piece is validated as ONE segment
     /// (ids `[A-Za-z0-9_-]`, handles `USERNAME_RE`), so nothing with `/`, `.`/`..` or `%` ever

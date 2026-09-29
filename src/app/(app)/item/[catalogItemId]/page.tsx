@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
+import { SITE_URL } from "@/lib/site";
 import {
   getBacklogNames,
   getUserCatalogEntry,
@@ -166,7 +167,7 @@ export default async function ItemPage({
     paletteHex: item.paletteHex ?? null,
   };
   const publicUrl =
-    user.username && user.isPublic ? `https://baclog.app/${user.username}/item/${item.id}` : null;
+    user.username && user.isPublic ? `${SITE_URL}/${user.username}/item/${item.id}` : null;
 
   return (
     // key: a title added/removed during the visit is tracked by the provider

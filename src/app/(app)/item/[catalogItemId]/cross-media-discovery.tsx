@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SITE_URL } from "@/lib/site";
 import {
   acceptRecoAction,
   acceptRecoToBacklogAction,
@@ -170,7 +171,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const file = new File([blob], "kura-una-conexion.png", { type: "image/png" });
-      const shareUrl = username ? `https://baclog.app/${username}` : undefined;
+      const shareUrl = username ? `${SITE_URL}/${username}` : undefined;
       try {
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], ...(shareUrl ? { text: shareUrl } : {}) });

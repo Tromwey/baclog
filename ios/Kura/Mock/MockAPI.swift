@@ -27,7 +27,7 @@ struct MockAPI: KuraAPI {
     func forgetSession() {}
     func webSession(to: String) async throws -> URL {
         try await write()
-        return URL(string: "https://baclog.app\(to)") ?? URL(string: "https://baclog.app/recap/tarjeta")!
+        return URL(string: "https://get-kura.app\(to)") ?? URL(string: "https://get-kura.app/recap/tarjeta")!
     }
     /// `-kuraProviders all|apple|google|none|fail` (DEBUG captures). Default: Apple + Google.
     func authProviders() async throws -> AuthProviders {

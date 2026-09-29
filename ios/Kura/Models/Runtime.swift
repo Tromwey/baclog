@@ -149,9 +149,9 @@ enum KuraRuntime {
 /// profile `/{handle}` · public collection `/{handle}/{collectionId}` (the collection's id, never a
 /// slug) · public item `/{handle}/item/{titleId}`. Every one 404s unless the handle's profile is
 /// public (and, for a collection, the collection too) — callers decide whether to offer it.
-/// Base = the API origin (Debug → `localhost:3010`, Release → `baclog.app`); mock → `baclog.app`.
+/// Base = the API origin (Debug → `localhost:3010`, Release → `get-kura.app`); mock → `get-kura.app`.
 enum PublicLinks {
-    static var base: URL { KuraRuntime.apiOrigin ?? URL(string: "https://baclog.app")! }
+    static var base: URL { KuraRuntime.apiOrigin ?? URL(string: "https://get-kura.app")! }
 
     static func profile(_ handle: String) -> URL? {
         guard let h = clean(handle) else { return nil }
@@ -168,7 +168,7 @@ enum PublicLinks {
         return base.appending(path: h).appending(path: "item").appending(path: titleID)
     }
 
-    /// "baclog.app/mariel.ok/…" — the link as printed on a card (no scheme).
+    /// "get-kura.app/mariel.ok/…" — the link as printed on a card (no scheme).
     static func display(_ url: URL) -> String {
         let s = url.absoluteString
         if let r = s.range(of: "://") { return String(s[r.upperBound...]) }

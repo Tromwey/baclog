@@ -16,7 +16,7 @@
 
 export const PRIVACY_EFFECTIVE_DATE = "24 de septiembre de 2026";
 
-export const CONTACT_EMAIL = "ericbriseno@baclog.app";
+export const CONTACT_EMAIL = "ericbriseno@get-kura.app";
 const RESPONSIBLE = "Tromwey";
 const ADDRESS = "Querétaro, Querétaro, México";
 
@@ -45,7 +45,7 @@ export type Block =
 export type Section = { id: string; title: string; blocks: Block[] };
 
 export const INTRO: Rich[] = [
-  "Aquí está lo que guardamos de ti, para qué, quién más lo ve y cómo lo borras. Es el aviso de privacidad integral de Kura (antes Baclog) y aplica a la web baclog.app y a la app de iOS.",
+  "Aquí está lo que guardamos de ti, para qué, quién más lo ve y cómo lo borras. Es el aviso de privacidad integral de Kura (antes Baclog) y aplica a la web get-kura.app (antes baclog.app) y a la app de iOS.",
   "Resumen: no te pedimos contraseña, no mostramos publicidad, no vendemos tus datos y no te rastreamos en otras apps ni sitios. Tu perfil es privado hasta que tú lo hagas público, y puedes borrar tu cuenta desde Ajustes cuando quieras.",
 ];
 

@@ -199,7 +199,7 @@ if ! xcodebuild archive \
 fi
 
 # ── validar el binario archivado (antes de exportar/subir) ────────────────────────────────────
-EXPECTED_API_BASE="https://baclog.app/api/v1"
+EXPECTED_API_BASE="https://get-kura.app/api/v1"
 APP_PLIST="$ARCHIVE_PATH/Products/Applications/Kura.app/Info.plist"
 [[ -f "$APP_PLIST" ]] || fail "El archive no contiene Products/Applications/Kura.app/Info.plist." \
   "xcodebuild dijo que terminó pero el .xcarchive está incompleto. Log: $ARCHIVE_LOG"
