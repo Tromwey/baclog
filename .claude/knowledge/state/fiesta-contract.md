@@ -26,7 +26,7 @@
   (`components/party/party-soon.tsx`); `getInvitePreview` LANZA `PartyUnavailableError`;
   `getPartySummaryByToken` → `null` + `console.warn` (la tarjeta de /party no se pinta).
   El resto de la app funciona igual con o sin la migración.
-- Orden: `drizzle-kit migrate` (founder, DB compartida) → poner `MIGRATION_0033_LIVE = true` → deploy.
+- Orden: `drizzle-kit migrate` (founder, DB compartida) → poner `MIGRATION_0033_LIVE = true` → deploy. **HECHO 2026-09-29**: 0033 aplicada, switch en `true`, prod + beta desplegados.
   Nunca `true` sin la tabla (Colecciones daría 500 en todas sus pantallas).
 - Exportar a Apple Music/Tidal: **fase 2, NO existe backend**. La UI lo muestra como "próximamente".
 
@@ -293,8 +293,6 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 
 ## 8. Pendientes reales (no son backend)
 
-- **Cableado /party**: `PartyPlaylistCard` (`src/app/party/party-playlist-card.tsx`) existe pero ninguna pantalla
-  de `/party` lo monta todavía; montarlo tras el RSVP y configurar `PARTY_PLAYLIST_TOKEN` en Vercel.
+- **/party**: `PartyPlaylistCard` ya se monta tras un RSVP de "sí voy" (`showPlaylist` en party-invitation.tsx → party-scene.tsx). Falta `PARTY_PLAYLIST_TOKEN` en Vercel (el token de 16 del link `/f/…` de la fiesta del founder); sin él la tarjeta no se pinta.
 - **URL de la App Store**: la tarjeta "kura para iPhone." no trae "Ver en App Store" hasta tener la URL.
-- **Aplicar 0033** (regenerada con `left_at`, sigue sin aplicar) → `MIGRATION_0033_LIVE = true` → deploy.
 - Exportar a Apple Music/Tidal: fase 2.

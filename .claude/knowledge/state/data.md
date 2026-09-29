@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-29 (migración 0033 `party_collections` generada, SIN aplicar — colecciones de fiesta, detrás de `MIGRATION_0033_LIVE`) · 2026-09-28 (migración 0032 `party_rsvp` generada — invitación /party) · 2026-09-27 (migración 0031 `follow_lists_visibility` generada, SIN aplicar — va DESPUÉS de 0030) · 2026-09-27 (migración 0030 `collection_curation` generada, SIN aplicar) · 2026-09-24 (fase 4g fusión de cuentas, sin migración · migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
+> Actualizado: 2026-09-29 tarde (**0000–0033 APLICADAS en la DB compartida** con `drizzle-kit migrate`: hoy entraron 0032 `party_rsvp` y 0033 `party_collections`; `MIGRATION_0033_LIVE = true`. Cualquier "SIN aplicar" de 0028–0033 más abajo es histórico) · 2026-09-29 (migración 0033 `party_collections` generada, SIN aplicar — colecciones de fiesta, detrás de `MIGRATION_0033_LIVE`) · 2026-09-28 (migración 0032 `party_rsvp` generada — invitación /party) · 2026-09-27 (migración 0031 `follow_lists_visibility` generada, SIN aplicar — va DESPUÉS de 0030) · 2026-09-27 (migración 0030 `collection_curation` generada, SIN aplicar) · 2026-09-24 (fase 4g fusión de cuentas, sin migración · migración 0027 aplicada: `token_version` + `notify_recap` · 0028 `user_block` y 0029 `device_sessions_push` generadas, SIN aplicar)
 
 ## Qué cubre este dominio
 <!-- Esquema Drizzle, migraciones, conexión a Neon y forma de las queries.
@@ -26,7 +26,7 @@ Tablas principales en `schema.ts`: `users` (con `token_version` y `notify_recap`
 NextAuth), `catalogItems`, `backlogs`, `backlogItems`, `userItems`, `itemReviews`, `userFollows`,
 `mediaLinks`, `crossMediaLinks`, `crossMediaRecs`, `crossMediaRecUsage`, `crossMediaRecSeen`,
 `crossMediaRecoFeedback`, `llmCallLog`, `analyticsEvents`, `waitlistEntries`, `waitlistReferrals`,
-`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11), `parties`/`partyInvites`/`partySongs` (colecciones de fiesta, 0033 — sin aplicar), `userBlocks` (App Store 1.2, 0028 — sin aplicar), `mobileSessions`, `deviceTokens` (+ enum `apns_environment`), `followPushNotices` (fases 4d/4e, 0029 — sin aplicar).
+`recapSends`, `releaseNotices`, `reports`, `userAvatars` (F3.11), `parties`/`partyInvites`/`partySongs` (colecciones de fiesta, 0033 — aplicada 2026-09-29), `userBlocks` (App Store 1.2, 0028 — sin aplicar), `mobileSessions`, `deviceTokens` (+ enum `apns_environment`), `followPushNotices` (fases 4d/4e, 0029 — sin aplicar).
 
 Últimas migraciones: **0023 `user_follows`** (F3.10, aditiva-inocua — `user_follow` con unique
 `(follower, followed)` + índice en `followed`) y **0024 `backlog_visibility`** (F3.10.1, aditiva —
