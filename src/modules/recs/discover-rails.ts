@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 import { getLovedSeeds } from "@/modules/backlog/queries";
+import { assertLibraryMedia } from "@/modules/catalog/library-media";
 
 /**
  * Revamp UI (2026-09-03) — the rails Discover renders on PAGE LOAD, read from
@@ -43,7 +44,9 @@ export interface ObsessionRail {
 const toWork = (c: typeof catalogItems.$inferSelect): RailWork => ({
   catalogItemId: c.id,
   title: c.title,
-  mediaType: c.mediaType,
+  // Seeds come from user_item (never a song) and reco targets are picked by
+  // the engine among film/series/album: a `track` here is a broken invariant.
+  mediaType: assertLibraryMedia(c.mediaType, "discover rail"),
   year: c.year,
   byline: c.byline,
   posterUrl: c.posterUrl,

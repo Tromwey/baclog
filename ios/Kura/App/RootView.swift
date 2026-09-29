@@ -26,7 +26,14 @@ struct RootView: View {
                 }
             }
             // A sheet is modal: VoiceOver never wanders into what's behind it.
-            .accessibilityHidden(store.sheet != nil)
+            .accessibilityHidden(store.sheet != nil || store.inviteLanding != nil)
+
+            // A party link (`get-kura.app/f/{token}`) signed out, or a dead one: over every phase.
+            if let token = store.inviteLanding {
+                InviteLandingView(token: token)
+                    .transition(.opacity)
+                    .accessibilityHidden(store.sheet != nil)
+            }
 
             SheetHost()
             ToastHost(dockVisible: store.phase == .main && store.dockVisible(store.tab))
@@ -199,6 +206,8 @@ struct RouteView: View {
             case .mergeAccount: MergeAccountView()
             case .mergeCode: MergeCodeView()
             case .mergeConfirm: MergeConfirmView()
+            case .party(let id): PartyView(partyID: id)
+            case .partySearch(let id): PartySearchView(partyID: id)
             }
         }
         .background(KColor.bg.ignoresSafeArea())
@@ -233,6 +242,16 @@ struct SheetContent: View {
         case .revokeSession(let s): RevokeSessionSheet(session: s)
         case .unlinkIdentity(let p): UnlinkIdentitySheet(provider: p)
         case .notificationsAsk: NotificationsAskSheet()
+        case .partyWelcome(let id, let returning): PartyWelcomeSheet(partyID: id, returning: returning)
+        case .partyCap(let id): PartyCapSheet(partyID: id)
+        case .partySong(let id, let t): PartySongSheet(partyID: id, titleID: t)
+        case .partyShare(let id): PartyShareSheet(partyID: id)
+        case .partyOptions(let id): PartyOptionsSheet(partyID: id)
+        case .partyLink(let id): PartyLinkSheet(partyID: id)
+        case .partyExport(let id): PartyExportSheet(partyID: id)
+        case .partyEdit(let id): PartyEditSheet(partyID: id)
+        case .partyBlocked(let id): PartyBlockedSheet(partyID: id)
+        case .partyDelete(let id): PartyDeleteSheet(partyID: id)
         }
     }
 }

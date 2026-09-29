@@ -56,6 +56,7 @@ export function Fan({
   label,
   className = "",
   style,
+  emptyShape,
 }: {
   covers: readonly FanCover[];
   /** Height of the front cover: 225 header · 186 profile · 99 grid · 51 row · 22 pill. */
@@ -65,6 +66,9 @@ export function Fan({
   label?: string;
   className?: string;
   style?: CSSProperties;
+  /** The form of a MISSING slot (default: the mixed 2:3 / 1:1 ghost). A
+   *  party's empty fan is three records (`"album"`, fiesta-app-v2). */
+  emptyShape?: "album" | "poster";
 }) {
   const s = lead / 225;
   const { width, height } = fanBox(lead);
@@ -94,7 +98,11 @@ export function Fan({
         const front = i === 2;
         if (front ? !showFront : i === 0 ? !showLeft : !showRight) return null;
         const at = front ? G.lead : i === 0 ? G.left : G.right;
-        const album = c ? c.mediaType === "album" : !front && i === 1;
+        const album = c
+          ? c.mediaType === "album"
+          : emptyShape
+            ? emptyShape === "album"
+            : !front && i === 1;
         const [w, h] = front ? (album ? G.lead.album : G.lead.poster) : album ? G.back.album : G.back.poster;
         const rot = front ? 0 : (at as typeof G.left).rot;
         const empty = ghost || !c;

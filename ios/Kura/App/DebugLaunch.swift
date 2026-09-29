@@ -361,7 +361,8 @@ enum DebugLaunch {
             store.debugSettingsAnchor = "este dispositivo"
             main(.profile, [.settings])
         default:
-            break
+            // Colecciones de fiesta: `party*` / `invite*` (`PartyDebug`).
+            PartyDebug.configure(screen, store: store)
         }
         #endif
     }

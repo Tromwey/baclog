@@ -11,6 +11,7 @@ import { afterResponse } from "@/lib/after-response";
 import { apiContext } from "./api-context";
 import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
+import { PartyUnavailableError } from "@/modules/party-collections/errors";
 
 export { apiContext } from "./api-context";
 
@@ -116,6 +117,10 @@ export interface ApiErrorExtra {
    *  follow-lists setting, so the app can say why ("solo seguidores
    *  mutuos" vs "solo su dueño"). */
   visibility?: "public" | "mutuals" | "private";
+  /** `conflict` + reason `duplicate_other` only (colecciones de fiesta): who
+   *  already put that song — `{ handle, name, avatarUrl }`, or null =
+   *  "alguien". Gated like every party identity (publicAuthor + blocks). */
+  addedBy?: { handle: string; name: string | null; avatarUrl: string | null } | null;
   /** HTTP status override — only 422, only for `invalid` + reason
    *  `invalid_proof` (phase 4g): a rejected ownership proof (provider token,
    *  merge code) on an AUTHENTICATED route. Not 401, which the app reads as
@@ -174,6 +179,7 @@ export function apiError(
       ...(extra.mergeToken ? { mergeToken: extra.mergeToken } : {}),
       ...(extra.source !== undefined ? { source: extra.source } : {}),
       ...(extra.visibility ? { visibility: extra.visibility } : {}),
+      ...(extra.addedBy !== undefined ? { addedBy: extra.addedBy } : {}),
     },
   };
   const headers = new Headers({
@@ -191,6 +197,10 @@ export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   if (err instanceof ApiError) return apiError(err.code, err.message, err.extra);
   if (err instanceof UnauthorizedError) return apiError("unauthorized");
   if (err instanceof NotFoundError) return apiError("not_found");
+  // Colecciones de fiesta before migration 0033 is live (party-collections/live.ts).
+  if (err instanceof PartyUnavailableError) {
+    return apiError("unavailable", "Las colecciones de fiesta todavía no están disponibles. Inténtalo más tarde.");
+  }
   if (err instanceof ZodError) {
     const fields: Record<string, string> = {};
     for (const issue of err.issues) {
@@ -538,10 +548,13 @@ export function withApi<P extends ApiParams = ApiParams>(
 
 /**
  * Unauthenticated wrapper for the public `auth/*` routes only (OTP
- * request/verify, `auth/apple`, `auth/google`, `auth/providers`): no bearer,
- * rate limit by client IP BEFORE anything else runs (write limit — they're
- * all POSTs), same error contract, cache policy and request id. Nothing else
- * in v1 may use it.
+ * request/verify, `auth/apple`, `auth/google`, `auth/providers`) and the
+ * party invite landing `GET invites/{token}` (colecciones de fiesta: the app
+ * opens a universal link before sign-in; the 96-bit token IS the
+ * credential, and the handler reads an OPTIONAL bearer with `readApiUser`):
+ * no bearer required, rate limit by client IP BEFORE anything else runs
+ * (write limit), same error contract, cache policy and request id. Nothing
+ * else in v1 may use it.
  */
 export function withPublicApi<P extends ApiParams = ApiParams>(
   handler: PublicApiHandler<P>,

@@ -55,6 +55,14 @@ export const MERGE_COVERAGE: Record<string, MergeCoverageEntry> = {
     actions: ["move"],
     note: "Memberships follow their collections (user_id re-keyed; unique is per backlog, unaffected).",
   },
+  backlog_collaborator: {
+    actions: ["merge"],
+    note: "Collection membership (colecciones de fiesta: a guest who joined through the invite link). O's rows move to D. Collision (both members of the same collection) → one row: the earlier created_at and blocked_at = D ?? O (a block by the host is never lost). A row that would make D a member of D's OWN collection (O hosted it, or O was a guest in D's party) is deleted: the host is never a guest. blocked_at only while MIGRATION_0033_LIVE.",
+  },
+  party_song: {
+    actions: ["move"],
+    note: "Who put each party song: added_by_user_id O → D (the songs stay credited to the same person). Only while MIGRATION_0033_LIVE (the table is 0033's).",
+  },
   user_item: {
     actions: ["merge"],
     note: "No collision → re-keyed. Collision (D, catalogItemId) → D's row absorbs: more advanced status (STATUS_RANK) with its status_changed_at (tie keeps D), verdict D ?? O, obsessed OR with the older obsessed_at, source rec D ?? O, added_at = the earlier. Then O's row is deleted.",

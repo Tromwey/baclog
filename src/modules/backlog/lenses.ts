@@ -3,6 +3,7 @@ import { desc, eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
+import { libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Lentes inteligentes (HANDOFF §4): auto-generated FILTERS over the user's
@@ -59,7 +60,7 @@ export async function getLensItems(
       backlogItemId: backlogItems.id,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       verdict: userItems.verdict,
       obsessed: userItems.obsessed,
       sourceCrossMediaRecId: userItems.sourceCrossMediaRecId,

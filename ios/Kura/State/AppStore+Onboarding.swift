@@ -40,6 +40,13 @@ extension AppStore {
                 m = try await api.completeOnboarding(name: name.trimmingCharacters(in: .whitespaces).lowercased(), birthYear: birthYear)
                 try check(session)
                 applyMe(m!)
+                if invitePending {
+                    // A party link brought this account here: "elige 3" and the people are
+                    // optional (fiesta-contract §3) — straight to the party, which joins it.
+                    partyJustOnboarded = true
+                    enterMain()
+                    return true
+                }
                 onboardingStep = .pick
                 Task { await loadOnboardingGrid() }
             } else {

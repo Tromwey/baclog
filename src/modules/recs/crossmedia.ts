@@ -30,6 +30,8 @@ import {
 import { stripRating } from "./hook-eyebrow";
 import { screenNarrative } from "./moderation";
 import { logLlmCall, type LlmCallOutcome } from "./telemetry";
+import type { CatalogItemRow } from "@/modules/catalog/cache";
+import { asLibraryRow, assertLibraryMedia, libraryMedia } from "@/modules/catalog/library-media";
 
 /**
  * F3.5.5 — the public cross-media reco engine (Baclog's moat surface).
@@ -150,7 +152,8 @@ export function eraKey(now = new Date()): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-type SeedRow = typeof catalogItems.$inferSelect;
+/** Library rows only: a party song (`track`) is never a seed nor a target. */
+type SeedRow = CatalogItemRow;
 
 /**
  * Get the cross-media reco for a loved seed item.
@@ -176,11 +179,12 @@ export async function getCrossMediaReco(
   userId: string,
   opts: { forceNew?: boolean } = {},
 ): Promise<RecoResult> {
-  const [seed] = await db
+  const [seedRaw] = await db
     .select()
     .from(catalogItems)
-    .where(eq(catalogItems.id, seedCatalogItemId))
+    .where(and(eq(catalogItems.id, seedCatalogItemId), libraryMedia()))
     .limit(1);
+  const seed = seedRaw ? asLibraryRow(seedRaw) : null;
   if (!seed) return { status: "empty" };
 
   // Direction scope: only cine/series/album have a catalog (books/games out).
@@ -575,7 +579,7 @@ function toCachedReco(hit: CacheHit): CrossMediaReco {
     seen: false,
     targetCatalogItemId: hit.target.id,
     targetTitle: hit.target.title,
-    targetMediaType: hit.target.mediaType,
+    targetMediaType: assertLibraryMedia(hit.target.mediaType, "crossmedia cache hit"),
     targetByline: hit.target.byline,
     targetYear: hit.target.year,
     targetPosterUrl: hit.target.posterUrl,
@@ -981,9 +985,10 @@ async function groundProposal(
     const [row] = await db
       .select()
       .from(catalogItems)
-      .where(eq(catalogItems.id, match.catalogItemId))
+      .where(and(eq(catalogItems.id, match.catalogItemId), libraryMedia()))
       .limit(1);
-    if (row) return row;
+    const lib = row ? asLibraryRow(row) : null;
+    if (lib) return lib;
   }
   return null;
 }

@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { catalogItems, crossMediaLinks, userItems } from "@/db/schema";
 import { unifiedSearch } from "@/modules/catalog/search";
 import { videoCatalog } from "@/modules/catalog/tmdb";
+import type { CatalogItemRow as LibraryCatalogItemRow } from "@/modules/catalog/cache";
+import { libraryMedia } from "@/modules/catalog/library-media";
 
 /**
  * F3.5.8 — the LINK GRAPH module: lazy extraction + deterministic per-user
@@ -30,7 +32,9 @@ export type CrossMediaLinkType =
  *  deep-cut fallback marker (v2 propose+ground — honest about being vibes). */
 export type CrossMediaRecLinkType = CrossMediaLinkType | "thematic";
 
-export type CatalogItemRow = typeof catalogItems.$inferSelect;
+/** Library rows only (film · series · album): a party song (`track`) is never a
+ *  seed nor a target — every catalog read below filters with `libraryMedia()`. */
+export type CatalogItemRow = LibraryCatalogItemRow;
 export type LinkEdgeRow = typeof crossMediaLinks.$inferSelect;
 
 export interface RankedTarget {
@@ -117,7 +121,11 @@ export async function rankEdgesForUser(
   );
 
   const [targets, owned, tasteRows] = await Promise.all([
-    db.select().from(catalogItems).where(inArray(catalogItems.id, targetIds)),
+    db
+      .select()
+      .from(catalogItems)
+      .where(and(inArray(catalogItems.id, targetIds), libraryMedia()))
+      .then((rows) => rows as CatalogItemRow[]),
     db
       .select({ catalogItemId: userItems.catalogItemId })
       .from(userItems)
@@ -321,10 +329,10 @@ async function searchCatalogRows(
     .filter((h) => h.mediaType === tab)
     .map((h) => h.catalogItemId);
   if (ids.length === 0) return [];
-  const rows = await db
+  const rows = (await db
     .select()
     .from(catalogItems)
-    .where(inArray(catalogItems.id, ids));
+    .where(and(inArray(catalogItems.id, ids), libraryMedia()))) as CatalogItemRow[];
   const byId = new Map(rows.map((r) => [r.id, r]));
   return ids.flatMap((id) => byId.get(id) ?? []);
 }

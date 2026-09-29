@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, itemReviews, userItems } from "@/db/schema";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
+import { libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Library-wide reads — across ALL of a user's backlogs, keyed on `user_item`
@@ -36,7 +37,7 @@ export async function getUserLibrary(userId: string) {
       addedAt: userItems.addedAt,
       statusChangedAt: userItems.statusChangedAt,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       year: catalogItems.year,
       byline: catalogItems.byline,
       genre: catalogItems.genre,
@@ -74,7 +75,7 @@ export async function getLibraryUpcoming(
     .select({
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
       releaseDate: catalogItems.releaseDate,

@@ -11,6 +11,7 @@ import {
   SOLID_BUTTON,
   Wordmark,
 } from "@/components/kura/components";
+import { returnToParam } from "../return-to-param";
 
 /**
  * Kura · the second half of "entrar." — the code the email carries. Same
@@ -36,7 +37,7 @@ function VerifyForm() {
     }
     // Hard navigation on purpose: the client router pre-sign-in has no
     // session and would serve stale redirects from its cache.
-    window.location.href = "/backlogs";
+    window.location.href = returnToParam() ?? "/backlogs";
   }
 
   return (

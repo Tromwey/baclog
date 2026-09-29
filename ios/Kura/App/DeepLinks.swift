@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import SwiftUI
 import os
 
 // Universal Links: a shared `https://get-kura.app/…` link opens Kura instead of the web (and so
@@ -23,6 +24,10 @@ enum DeepLink: Equatable {
     case ownCollection(String)
     /// `/recap` (the monthly recap email).
     case recap
+    /// `/f/{token}`: a party invite (16 chars `[A-Za-z0-9_-]`). Works signed out (the landing).
+    case invite(String)
+    /// `/c/{uuid}`: a party page (host + members; anyone else gets the same 404).
+    case party(String)
 
     static let hosts: Set<String> = ["get-kura.app", "www.get-kura.app", "baclog.app", "www.baclog.app"]
 
@@ -53,6 +58,14 @@ enum DeepLink: Equatable {
                 return .ownCollection(id)
             case "recap":
                 return parts.count == 1 ? .recap : nil
+            // Colecciones de fiesta (fiesta-contract §2). Both are 1 char, so no handle can collide
+            // (`USERNAME_RE` needs 3); a malformed piece is nil → Safari, never an API path.
+            case "f":
+                guard parts.count == 2, let t = inviteToken(parts[1]) else { return nil }
+                return .invite(t)
+            case "c":
+                guard parts.count == 2, let id = uuid(parts[1]) else { return nil }
+                return .party(id)
             default:
                 break
             }
@@ -74,6 +87,17 @@ enum DeepLink: Equatable {
     private static func id(_ raw: String) -> String? {
         guard (1...64).contains(raw.count), raw.unicodeScalars.allSatisfy(idChars.contains) else { return nil }
         return raw
+    }
+
+    /// `^[A-Za-z0-9_-]{16}$` — the server's invite token (96 bits base64url).
+    static func inviteToken(_ raw: String) -> String? {
+        guard raw.count == 16, raw.unicodeScalars.allSatisfy(idChars.contains) else { return nil }
+        return raw
+    }
+
+    /// A party id: a UUID (the server 404s anything else anyway).
+    private static func uuid(_ raw: String) -> String? {
+        UUID(uuidString: raw) != nil ? raw.lowercased() : nil
     }
 
     /// Same shape as the server's `USERNAME_RE` (`^[a-z0-9_.]{3,30}$`, lowercased, `@` dropped).
@@ -101,6 +125,12 @@ extension AppStore {
         let now = Date()
         if let last = DeepLinkInbox.last, last.url == url, now.timeIntervalSince(last.at) < 1 { return }
         DeepLinkInbox.last = (url, now)
+        // A party invite signed out: the landing (public preview + "Entra a kura…") instead of
+        // waiting for a sign-in the person doesn't know they need yet.
+        if case .invite(let token)? = DeepLink.parse(url), !api.hasSession {
+            withAnimation(KMotion.fade) { inviteLanding = token }
+            return
+        }
         guard let link = DeepLink.parse(url) else {
             // The AASA only sends the shapes above; anything else (a malformed id, a route added
             // to the web later) is still a real page — show it there rather than drop the tap.
@@ -136,6 +166,10 @@ extension AppStore {
             else { showToast(ToastModel(text: "No encontramos esa colección.", kind: .info)) }
         case .recap:
             show(.recap())
+        case .invite(let token):
+            Task { await openInvite(token) }
+        case .party(let id):
+            show(.party(id))
         }
         KuraLog.links.info("universal link → \(String(describing: link), privacy: .public) on \(self.tab.rawValue, privacy: .public)")
     }

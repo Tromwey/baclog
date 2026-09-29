@@ -12,6 +12,8 @@ import {
 } from "@/db/schema";
 import type { MediaType } from "@/modules/cards/types";
 import { dominantHexes, groupDominantHexes } from "./palette";
+import { libraryMediaType } from "@/modules/catalog/library-media";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 
 /**
  * All reads here are scoped by userId in the query itself — callers pass
@@ -33,7 +35,7 @@ export async function getBacklogsForUser(userId: string) {
     })
     .from(backlogs)
     .leftJoin(backlogItems, eq(backlogItems.backlogId, backlogs.id))
-    .where(eq(backlogs.userId, userId))
+    .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id)))
     .groupBy(backlogs.id)
     .orderBy(desc(backlogs.createdAt));
 
@@ -76,7 +78,8 @@ export async function getBacklogNames(userId: string) {
   return db
     .select({ id: backlogs.id, name: backlogs.name })
     .from(backlogs)
-    .where(eq(backlogs.userId, userId))
+    // A picker must never offer a party ("guardar en" a film into a fiesta).
+    .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id)))
     .orderBy(desc(backlogs.createdAt));
 }
 
@@ -104,7 +107,7 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     db
       .select({ totalBacklogs: sql<number>`count(*)::int` })
       .from(backlogs)
-      .where(eq(backlogs.userId, userId)),
+      .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id))),
   ]);
 
   return {
@@ -172,7 +175,7 @@ export async function getUserCatalogEntry(
       year: catalogItems.year,
       releaseDate: catalogItems.releaseDate,
       genre: catalogItems.genre,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       recHookEyebrow: crossMediaRecs.hookEyebrow,
       recHookTitle: crossMediaRecs.hookTitle,
@@ -259,7 +262,7 @@ export async function getLovedSeeds(
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       backlogId: backlogItems.backlogId,
       backlogName: backlogs.name,
@@ -333,7 +336,7 @@ const backlogItemColumns = {
   // F3.8 — what turns a row into a countdown and feeds the shelf above it.
   releaseDate: catalogItems.releaseDate,
   genre: catalogItems.genre,
-  mediaType: catalogItems.mediaType,
+  mediaType: libraryMediaType(),
   posterUrl: catalogItems.posterUrl,
 } as const;
 

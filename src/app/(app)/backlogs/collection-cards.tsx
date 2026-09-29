@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { CHIP_ART } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
@@ -29,6 +31,9 @@ import {
 import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { isLongCollectionName } from "@/modules/backlog/name-limit";
+import { handleOf, perGuestPhrase, songsLabel } from "@/components/party/party-parts";
+import { partyPath } from "@/components/party/paths";
+import type { PartyCard } from "@/modules/party-collections/types";
 
 /**
  * Tus colecciones (Colecciones · una sola página, 2026-09-27 — design 10a).
@@ -65,6 +70,7 @@ import { isLongCollectionName } from "@/modules/backlog/name-limit";
 type Entry =
   | { kind: "shelf"; id: string; name: string; shelf: Shelf; fan: FanCover[]; hexes: string[] }
   | { kind: "auto"; id: string; name: string; items: UpcomingItem[]; fan: FanCover[]; hexes: string[] }
+  | { kind: "party"; id: string; name: string; party: PartyCard; fan: FanCover[]; hexes: string[] }
   | { kind: "ghost"; id: string; name: string; fan: FanCover[]; hexes: string[] };
 
 const AUTO_ID = "no-puedo-esperar";
@@ -92,6 +98,7 @@ function remembered(): string | null {
 
 export function CollectionCards({
   shelves,
+  parties = [],
   upcoming,
   now,
   owner,
@@ -100,6 +107,8 @@ export function CollectionCards({
   coach,
 }: {
   shelves: Shelf[];
+  /** Colecciones de fiesta the user hosts or joined (after the pinned one). */
+  parties?: PartyCard[];
   upcoming: UpcomingItem[];
   /** The render instant every wait is measured from. */
   now: number;
@@ -131,7 +140,9 @@ export function CollectionCards({
     const empties = shelves.filter((s) => !s.pinned && s.itemCount === 0);
     const out: Entry[] = [
       { kind: "ghost", id: GHOST_ID, name: "nueva colección", fan: [], hexes: [] },
-      ...[...pinned, ...full, ...empties].map(shelf),
+      ...pinned.map(shelf),
+      ...parties.map(partyEntry),
+      ...[...full, ...empties].map(shelf),
     ];
     if (upcoming.length > 0) {
       // Soonest first; the fan leads with the soonest.
@@ -139,7 +150,7 @@ export function CollectionCards({
       out.push({ kind: "auto", id: AUTO_ID, name: "no puedo esperar", items: upcoming, fan, hexes: fanHexes(fan, upcoming) });
     }
     return out;
-  }, [shelves, upcoming, live]);
+  }, [shelves, parties, upcoming, live]);
 
   // Mover a (7a): the other collections with their fan, and where every
   // title already lives (a move never duplicates; its undo never removes a
@@ -165,6 +176,7 @@ export function CollectionCards({
   const idx = found >= 0 ? found : Math.min(1, entries.length - 1);
   const cur = entries[idx];
 
+  const router = useRouter();
   const ctl = useRef<CollectionControls>(null);
   const [holding, setHolding] = useState<Shelf | null>(null);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
@@ -223,15 +235,24 @@ export function CollectionCards({
               <KIcon name="share" size={18} />
             </button>
           )}
-          <button
-            type="button"
-            tabIndex={ghost ? -1 : 0}
-            aria-label={`Opciones de ${cur.name}`}
-            onClick={() => ctl.current?.open("options")}
-            className={CHIP_ART}
-          >
-            <DotsIcon />
-          </button>
+          {/* A party's own sheets live on its page (/c/{id}): the host's
+              Compartir opens "invita a la fiesta." there. */}
+          {cur.kind === "party" && cur.party.role === "host" && (
+            <Link href={`${partyPath(cur.id)}?sheet=share`} aria-label={`Invitar a ${cur.name}`} className={CHIP_ART}>
+              <KIcon name="share" size={18} />
+            </Link>
+          )}
+          {cur.kind !== "party" && (
+            <button
+              type="button"
+              tabIndex={ghost ? -1 : 0}
+              aria-label={`Opciones de ${cur.name}`}
+              onClick={() => ctl.current?.open("options")}
+              className={CHIP_ART}
+            >
+              <DotsIcon />
+            </button>
+          )}
         </div>
       </header>
 
@@ -274,6 +295,7 @@ export function CollectionCards({
                 index={i}
                 style={fanStyle(i, p)}
                 onHold={e.kind === "shelf" ? () => setHolding(e.shelf) : undefined}
+                onTap={e.kind === "party" ? () => !swiped() && router.push(partyPath(e.id)) : undefined}
               />
             );
           })}
@@ -366,6 +388,8 @@ export function CollectionCards({
           </>
         )}
 
+        {cur.kind === "party" && <PartyCardBody party={cur.party} />}
+
         {cur.kind === "ghost" && <GhostBody />}
       </div>
 
@@ -436,12 +460,15 @@ function FanSlide({
   style,
   index,
   onHold,
+  onTap,
 }: {
   entry: Entry;
   current: boolean;
   style: React.CSSProperties;
   index: number;
   onHold?: () => void;
+  /** A party's fan opens its page (its body here is only a summary). */
+  onTap?: () => void;
 }) {
   const { handlers } = useHold(onHold ?? (() => {}));
   return (
@@ -449,6 +476,7 @@ function FanSlide({
       data-carousel-fan={index}
       aria-hidden={!current}
       {...(onHold && current ? handlers : {})}
+      onClick={onTap && current ? onTap : undefined}
       className={`absolute left-1/2 top-3.5 -ml-[150px] flex w-[300px] select-none justify-center [-webkit-touch-callout:none] ${
         current ? "" : "pointer-events-none"
       }`}
@@ -460,6 +488,47 @@ function FanSlide({
         ghost={entry.fan.length === 0}
         label={entry.kind === "ghost" ? undefined : `Portadas de ${entry.name}`}
       />
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- party */
+
+/** A party in the carousel: its three records (1:1), tinted by its first song. */
+function partyEntry(p: PartyCard): Entry {
+  const hexes = p.paletteHex ?? [];
+  const fan: FanCover[] = p.artworkUrls.slice(0, 3).map((url, i) => ({
+    posterUrl: url,
+    paletteHex: i === 0 ? hexes : null,
+    mediaType: "album",
+  }));
+  return { kind: "party", id: p.id, name: p.name, party: p, fan, hexes };
+}
+
+/**
+ * Colecciones de fiesta (fiesta-app-v2 · list): the carousel shows a party
+ * like any collection — its fan, its name — and under it only a summary and
+ * the way in; the party itself (songs, who put each, the host's sheets)
+ * lives at /c/{id}, where its rules are drawn.
+ */
+function PartyCardBody({ party }: { party: PartyCard }) {
+  const who = party.role === "host" ? "tuya" : `de ${handleOf(party.host)}`;
+  const people = `${party.peopleCount} ${party.peopleCount === 1 ? "persona" : "personas"}`;
+  return (
+    <div className="flex flex-col items-center gap-2.5 px-6 pb-[26px] pt-1 text-center">
+      <span className="font-brand text-[16px] italic leading-[1.3] text-text-2 [text-wrap:balance]">
+        {perGuestPhrase(party.perGuestLimit)}
+      </span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+        De fiesta · {who} · {songsLabel(party.songCount)}
+        {party.peopleCount > 0 ? ` · ${people}` : ""}
+      </span>
+      <Link
+        href={partyPath(party.id)}
+        className="mt-1.5 flex h-11 items-center gap-2 rounded-full bg-[var(--glass-bg)] px-4 font-sans text-[15px] font-semibold text-text bl-press"
+      >
+        Abrir la fiesta
+      </Link>
     </div>
   );
 }

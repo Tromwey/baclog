@@ -16,6 +16,7 @@ import {
 } from "@/modules/recs/crossmedia";
 import type { DoubleFeatureData } from "@/modules/cards/types";
 import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -70,7 +71,9 @@ export async function defaultBacklogForSeed(seedCatalogItemId: string): Promise<
   const [discoveries] = await db
     .select({ id: backlogs.id, name: backlogs.name })
     .from(backlogs)
-    .where(and(eq(backlogs.userId, user.id), eq(backlogs.name, DISCOVERIES)))
+    .where(
+      and(eq(backlogs.userId, user.id), eq(backlogs.name, DISCOVERIES), notPartyBacklog(backlogs.id)),
+    )
     .limit(1);
   if (discoveries) return { backlogId: discoveries.id, backlogName: discoveries.name };
 

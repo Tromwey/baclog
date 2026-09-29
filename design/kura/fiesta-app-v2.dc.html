@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=Hanken+Grotesk:wght@400;500;600&amp;family=Red+Hat+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+.kura{--bg:#0b0b0d;--surface-1:rgba(255,255,255,.05);--surface-2:rgba(255,255,255,.075);--surface-3:rgba(255,255,255,.14);--sheet:#1c1c21;--text:#f4f3ee;--text-2:#b9b8c2;--text-3:#8f8e9b;--accent:#efce8d;--accent-press:#e3bd72;--on-accent:#0b0b0d;--hot:#e27d64;--completed:#a0cba0;--tint:rgba(255,255,255,.075);--tint-2:rgba(255,255,255,.12);--on-tint:#f4f3ee;--scrim:rgba(0,0,0,.55);--inverse:#f4f3ee;--on-inverse:#0b0b0d;--glass:rgba(11,11,13,.5);--p-bg:#0c0e11;--p-surface:#171b20;--p-surface-2:#20262d;--p-bone:#ebe4d2;--p-bone-2:#aaa291;--p-moss:#7f8f6a}
+.kura *{box-sizing:border-box}
+.kura *::-webkit-scrollbar{display:none}
+.kura input::placeholder{color:var(--text-3)}
+.kura button{font-family:inherit}
+</style>
+</helmet>
+<div class="kura" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Hanken Grotesk',sans-serif;border-radius:44px;-webkit-font-smoothing:antialiased">
+
+<sc-if value="{{ isKura }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;top:0;left:0;right:0;height:50px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 6px;z-index:4;background:transparent;pointer-events:none">
+  <span style="font:600 15px 'Hanken Grotesk';color:var(--text)">9:41</span>
+  <span style="font:500 11px 'Red Hat Mono',monospace;background:var(--glass);backdrop-filter:blur(14px);color:var(--text-2);padding:5px 12px;border-radius:99px">{{ url }}</span>
+  <span style="display:flex;gap:3px;align-items:flex-end"><i style="width:3px;height:6px;background:var(--text);border-radius:1px"></i><i style="width:3px;height:8px;background:var(--text);border-radius:1px"></i><i style="width:3px;height:10px;background:var(--text);border-radius:1px"></i><i style="width:3px;height:12px;background:var(--text);border-radius:1px"></i></span>
+</div>
+</sc-if>
+
+<!-- ========== /party ========== -->
+<sc-if value="{{ isParty }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:var(--p-bg);color:var(--p-bone);display:flex;flex-direction:column">
+  <div style="height:50px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 6px">
+    <span style="font:600 15px 'Hanken Grotesk'">9:41</span>
+    <span style="font:500 11px 'Red Hat Mono',monospace;background:var(--p-surface);color:var(--p-bone-2);padding:5px 12px;border-radius:99px">get-kura.app/party</span>
+    <span style="width:24px"></span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 24px;gap:10px">
+    <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--p-moss)">confirmación enviada</span>
+    <div style="font:400 40px/1.02 'Newsreader',serif;color:var(--p-bone)">¡Ahí nos vemos!</div>
+    <div style="font:400 16px/1.45 'Hanken Grotesk';color:var(--p-bone-2);text-wrap:pretty">Tu lugar está apartado. Sábado 31 de octubre, 9 de la noche, en casa de Eric.</div>
+  </div>
+  <div style="flex:none;margin:0 16px 34px;background:var(--p-surface);border-radius:28px;padding:24px 20px 20px;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;justify-content:center;padding-top:4px">
+      <div style="{{ partyFan.box }}"><sc-for list="{{ partyFan.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div>
+    </div>
+    <div style="font:400 26px/1.1 'Newsreader',serif;color:var(--p-bone);text-align:center;text-wrap:balance">Arma la playlist de la fiesta en kura</div>
+    <div style="font:400 15px/1.45 'Hanken Grotesk';color:var(--p-bone-2);text-align:center;text-wrap:pretty">Pon tus 3 canciones. Van a sonar esa noche, y todos verán quién puso cuál.</div>
+    <button onClick="{{ goBridge }}" style="height:56px;border:none;border-radius:999px;background:var(--p-bone);color:var(--p-bg);font:600 16px 'Hanken Grotesk';cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-active="background:var(--p-bone-2)">Abrir la playlist <span style="font-weight:500;opacity:.6">en kura</span></button>
+    <div style="font:500 10px 'Red Hat Mono',monospace;letter-spacing:.04em;text-transform:uppercase;color:var(--p-bone-2);text-align:center;text-wrap:balance">8 canciones · @ana, @rodri y 2 más ya están dentro</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ========== playlist (visitor / collab / host) ========== -->
+<sc-if value="{{ isPlaylist }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;overflow-y:auto;padding:54px 0 170px;background:{{ feedBg }};background-attachment:local">
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px">
+    <sc-if value="{{ isVisitor }}"><span style="display:flex;align-items:center;gap:6px;height:44px"><span style="font:400 22px/1 'Newsreader',serif">蔵</span><span style="font:500 22px/1 'Newsreader',serif;letter-spacing:-.02em">kura</span></span></sc-if>
+    <sc-if value="{{ isMember }}"><button onClick="{{ goList }}" aria-label="Volver" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--glass);backdrop-filter:blur(14px);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg></button></sc-if>
+    <sc-if value="{{ isVisitor }}"><button onClick="{{ goLogin }}" style="height:44px;padding:0 18px;border:none;border-radius:99px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Entrar</button></sc-if>
+    <sc-if value="{{ isHost }}"><div style="display:flex;gap:8px"><button onClick="{{ openShare }}" aria-label="Compartir" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--glass);backdrop-filter:blur(14px);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 002 2h10a2 2 0 002-2v-5"></path></svg></button><button onClick="{{ openOpts }}" aria-label="Opciones" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--glass);backdrop-filter:blur(14px);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></div></sc-if>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 24px 26px;text-align:center">
+    <div ref="{{ heroRef }}" style="{{ heroHide }}"><div style="position:relative;width:{{ hero.w }}px;height:{{ hero.h }}px;flex:none"><span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span><sc-for list="{{ hero.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div></div>
+    <sc-if value="{{ loaded }}" hint-placeholder-val="{{ true }}">
+      <span style="font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-top:4px">colección de fiesta · sáb 31 oct · 9 pm</span>
+      <h1 style="margin:0;font:400 36px/1 'Newsreader',serif;color:var(--text);text-wrap:balance">la fiesta de eric</h1>
+      <span style="font:italic 400 16px/1.3 'Newsreader',serif;color:var(--text-2)">{{ heroSub }}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex"><sc-for list="{{ heroSeals }}" as="s" hint-placeholder-count="3"><span style="{{ s.s }}">{{ s.ini }}</span></sc-for></div>
+        <span style="font:400 13px 'Hanken Grotesk';color:var(--text-2)">{{ heroWho }}</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+      <div style="width:140px;height:10px;border-radius:5px;background:var(--surface-2);margin-top:8px"></div>
+      <div style="width:230px;height:32px;border-radius:10px;background:var(--surface-2)"></div>
+      <div style="width:170px;height:12px;border-radius:6px;background:var(--surface-1)"></div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ showSlots }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:0 12px 22px;background:var(--surface-1);border-radius:26px;padding:14px 16px;display:flex;align-items:center;gap:14px">
+      <div style="display:flex;gap:6px"><sc-for list="{{ slots }}" as="sl"><div style="{{ sl.s }}"><div style="{{ sl.m }}"></div></div></sc-for></div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <span style="font:600 15px 'Hanken Grotesk';color:var(--text)">{{ slotsTitle }}</span>
+        <span style="font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)">{{ slotsSub }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ blocked }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:0 12px 22px;background:var(--surface-1);border-radius:26px;padding:16px 18px;display:flex;flex-direction:column;gap:4px">
+      <span style="font:600 15px 'Hanken Grotesk';color:var(--text)">Ya no puedes agregar canciones</span>
+      <span style="font:400 14px/1.45 'Hanken Grotesk';color:var(--text-2)">@eric te quitó de los colaboradores. Puedes seguir viendo la colección.</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hasSongs }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 20px 14px"><span style="font:400 22px 'Newsreader',serif">las canciones</span><span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)">{{ gridAside }}</span></div>
+    <div style="display:flex;flex-direction:column;gap:2px;padding:0 8px">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+        <div onClick="{{ r.onTap }}" style="{{ r.rowS }}">
+          <div style="{{ r.lcov.s }}"><div style="{{ r.lcov.m }}"></div></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:italic 400 17px/1.2 'Newsreader',serif;color:var(--text)">{{ r.t }}</span>
+            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:400 14px 'Hanken Grotesk';color:var(--text-2)">{{ r.a }}</span>
+            <span style="display:flex;align-items:center;gap:6px;font:400 12px 'Hanken Grotesk';color:var(--text-2)"><span style="{{ r.av }}">{{ r.ini }}</span>{{ r.byShort }}</span>
+          </div>
+          
+          
+          <sc-if value="{{ r.canMore }}"><button onClick="{{ r.onMoreG }}" aria-label="Opciones de la canción" style="width:44px;height:44px;border:none;border-radius:99px;background:transparent;color:var(--text-2);cursor:pointer;flex:none;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></sc-if>
+          
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:2px;padding:36px 8px 0"><sc-for list="{{ skel }}" as="k"><div style="display:flex;align-items:center;gap:12px;padding:8px 12px"><div style="width:56px;height:56px;border-radius:10px;background:var(--surface-2)"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="{{ k.a }}"></div><div style="{{ k.b }}"></div></div><div style="width:44px;height:44px;border-radius:99px;background:var(--surface-1)"></div></div></sc-for></div>
+  </sc-if>
+
+  <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:0 32px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+      <span style="font:400 28px/1.1 'Newsreader',serif;color:var(--text)">la pista está vacía.</span>
+      <span style="font:400 15px/1.5 'Hanken Grotesk';color:var(--text-2);max-width:28ch;text-wrap:pretty">{{ emptyBody }}</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showIos }}" hint-placeholder-val="{{ false }}">
+    <div style="margin:28px 12px 0;background:var(--surface-1);border-radius:26px;padding:16px 8px 16px 18px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+        <span style="font:400 20px 'Newsreader',serif;color:var(--text)">kura para iPhone.</span>
+        <span style="font:400 14px/1.4 'Hanken Grotesk';color:var(--text-2)">Sigue la colección desde tu teléfono la noche de la fiesta.</span>
+        <button style="align-self:flex-start;margin-top:8px;height:44px;padding:0 16px;border:none;border-radius:99px;background:var(--surface-2);color:var(--text);font:500 14px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Ver en App Store</button>
+      </div>
+      <button onClick="{{ dismissIos }}" style="align-self:flex-start;width:44px;height:44px;border:none;border-radius:99px;background:transparent;color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+    </div>
+  </sc-if>
+</div>
+
+<sc-if value="{{ showBar }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:0;right:0;bottom:0;padding:56px 16px 30px;background:linear-gradient(transparent,{{ tailBg }} 42%);display:flex;flex-direction:column;gap:10px;z-index:3">
+  <sc-if value="{{ barVisitor }}">
+    <button onClick="{{ goLogin }}" style="height:56px;width:100%;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Entra a kura para poner tus 3 canciones</button>
+    <span style="text-align:center;font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)">Con correo, Apple o Google · 1 minuto</span>
+  </sc-if>
+  <sc-if value="{{ barSearch }}">
+    <button onClick="{{ openSearch }}" style="height:56px;width:100%;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-active="background:var(--accent-press)"><svg width="18" height="18" viewBox="0 0 18 18"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"></circle><path d="M12.2 12.2L16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>{{ searchCta }}</button>
+  </sc-if>
+  <sc-if value="{{ barFull }}">
+    <button onClick="{{ openCap }}" style="height:56px;width:100%;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Cambiar una canción</button>
+  </sc-if>
+  <sc-if value="{{ barHost }}">
+    <button onClick="{{ openShare }}" style="height:56px;width:100%;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Invitar a la fiesta</button>
+  </sc-if>
+</div>
+</sc-if>
+</sc-if>
+
+<!-- ========== bridge overlay ========== -->
+<sc-if value="{{ isBridge }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:6;pointer-events:none">
+  <div style="{{ bridge.bg }}"></div>
+  <div style="{{ bridge.party }}">Te llevamos a la playlist…</div>
+  <div style="{{ bridge.fan }}"><div style="position:relative;width:{{ hero.w }}px;height:{{ hero.h }}px;flex:none"><span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span><sc-for list="{{ hero.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div></div>
+</div>
+</sc-if>
+
+<!-- ========== revoked ========== -->
+<sc-if value="{{ isRevoked }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;display:flex;flex-direction:column">
+  <div style="height:56px;display:flex;align-items:center;padding:0 20px"><span style="font:500 26px 'Newsreader',serif;letter-spacing:-.02em">kura</span></div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 40px;gap:12px">
+    <div style="{{ emptyFan.box }}"><sc-for list="{{ emptyFan.items }}" as="f"><div style="{{ f.s }}"></div></sc-for></div>
+    <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-top:18px">la fiesta de eric</span>
+    <span style="font:400 36px/1.02 'Newsreader',serif;letter-spacing:-.015em">este link ya no funciona.</span>
+    <span style="font:400 16px/1.45 'Hanken Grotesk';color:var(--text-2);text-wrap:pretty">@eric lo desactivó o ya venció. Pídele uno nuevo por WhatsApp y vuelve a abrirlo.</span>
+  </div>
+  <div style="padding:12px 16px 30px;display:flex;flex-direction:column;gap:8px">
+    <button style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Conocer kura</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ========== login ========== -->
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;overflow-y:auto;padding:0 20px 30px;display:flex;flex-direction:column">
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;margin:0 -8px">
+    <span style="font:500 26px 'Newsreader',serif;letter-spacing:-.02em;padding-left:8px">kura</span>
+    <button onClick="{{ goLanding }}" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--surface-2);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center" style-active="background:var(--surface-3)"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+  </div>
+  <div style="background:var(--tint);border-radius:22px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-top:6px">
+    <div style="{{ miniFan.box }}"><sc-for list="{{ miniFan.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:400 19px/1.15 'Newsreader',serif;color:var(--on-tint)">@eric te invitó a su fiesta.</span>
+      <span style="font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)">la fiesta de eric · {{ countLabel }}</span>
+    </div>
+  </div>
+  <span style="font:400 38px/1 'Newsreader',serif;letter-spacing:-.015em;margin-top:30px">entra a kura.</span>
+  <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">Para poner tus 3 canciones necesitas una cuenta. Es gratis.</span>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:24px">
+    <button onClick="{{ goOnboard }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Continuar con Apple</button>
+    <button onClick="{{ goOnboard }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Continuar con Google</button>
+  </div>
+  <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);text-align:center;margin:20px 0 12px">o con tu correo</span>
+  <input value="{{ email }}" onChange="{{ onEmail }}" placeholder="tu@correo.com" type="email" style="height:52px;border:none;outline:none;border-radius:16px;background:var(--surface-2);color:var(--text);font:400 16px 'Hanken Grotesk';padding:0 18px" style-focus="background:var(--surface-3)">
+  <button onClick="{{ goCode }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;margin-top:10px" style-active="background:var(--accent-press)">Enviarme un código</button>
+  <span style="font:400 12px/1.4 'Hanken Grotesk';color:var(--text-3);text-align:center;margin-top:16px">Al continuar aceptas los términos y el aviso de privacidad de kura.</span>
+</div>
+</sc-if>
+
+<!-- ========== code ========== -->
+<sc-if value="{{ isCode }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;padding:0 20px 30px;display:flex;flex-direction:column">
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;margin:0 -8px">
+    <button onClick="{{ goLogin }}" style="width:44px;height:44px;border:none;border-radius:99px;background:transparent;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center" style-active="background:var(--surface-2)"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M11 4L6 9l5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    <span style="height:32px;padding:0 12px;border-radius:99px;background:var(--tint);font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);display:flex;align-items:center">fiesta de @eric</span>
+  </div>
+  <span style="font:400 38px/1 'Newsreader',serif;letter-spacing:-.015em;margin-top:18px">revisa tu correo.</span>
+  <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px">Te mandamos un código de 6 números a {{ emailShown }}.</span>
+  <div onClick="{{ tapCode }}" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:28px;cursor:text">
+    <sc-for list="{{ codeBoxes }}" as="b"><div style="{{ b.s }}">{{ b.d }}</div></sc-for>
+  </div>
+  <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-top:16px">Reenviar código en 0:42</span>
+  <div style="flex:1"></div>
+  <button onClick="{{ verify }}" style="{{ verifyS }}">Verificar</button>
+</div>
+</sc-if>
+
+<!-- ========== onboarding ========== -->
+<sc-if value="{{ isOnboard }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;padding:0 20px 30px;display:flex;flex-direction:column">
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between">
+    <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)">Último paso</span>
+    <span style="height:32px;padding:0 12px;border-radius:99px;background:var(--tint);font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);display:flex;align-items:center">fiesta de @eric</span>
+  </div>
+  <span style="font:400 38px/1 'Newsreader',serif;letter-spacing:-.015em;margin-top:18px">cuéntanos de ti.</span>
+  <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px">Dos datos y entras a la fiesta.</span>
+  <label style="display:flex;flex-direction:column;gap:8px;margin-top:28px">
+    <span style="font:600 14px 'Hanken Grotesk';color:var(--text)">¿Cuántos años tienes?</span>
+    <input value="{{ age }}" onChange="{{ onAge }}" inputmode="numeric" placeholder="Edad" style="height:52px;width:120px;border:none;outline:none;border-radius:16px;background:var(--surface-2);color:var(--text);font:500 18px 'Red Hat Mono',monospace;padding:0 18px" style-focus="background:var(--surface-3)">
+    <span style="display:flex;align-items:center;gap:7px;font:400 13px 'Hanken Grotesk';color:var(--text-2)"><sc-if value="{{ ageBad }}"><i style="width:7px;height:7px;border-radius:9px;background:var(--hot)"></i></sc-if>{{ ageHint }}</span>
+  </label>
+  <label style="display:flex;flex-direction:column;gap:8px;margin-top:22px">
+    <span style="font:600 14px 'Hanken Grotesk';color:var(--text)">Nombre de usuario</span>
+    <div style="height:52px;border-radius:16px;background:var(--surface-2);display:flex;align-items:center;padding:0 18px;gap:2px" style-focus-within="background:var(--surface-3)">
+      <span style="font:500 17px 'Red Hat Mono',monospace;color:var(--text-3)">@</span>
+      <input value="{{ user }}" onChange="{{ onUser }}" placeholder="tu_nombre" style="flex:1;min-width:0;height:100%;border:none;outline:none;background:transparent;color:var(--text);font:500 17px 'Red Hat Mono',monospace">
+    </div>
+    <span style="display:flex;align-items:center;gap:7px;font:400 13px 'Hanken Grotesk';color:var(--text-2)"><i style="{{ userDot }}"></i>{{ userHint }}</span>
+  </label>
+  <div style="flex:1"></div>
+  <button onClick="{{ enterParty }}" style="{{ enterS }}">Entrar a la fiesta</button>
+</div>
+</sc-if>
+
+<!-- ========== search ========== -->
+<sc-if value="{{ isSearch }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:6px;padding:6px 12px 6px 16px">
+    <div style="flex:1;height:48px;border-radius:16px;background:var(--surface-2);display:flex;align-items:center;gap:10px;padding:0 14px;color:var(--text-2)">
+      <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8" fill="none"></circle><path d="M12.2 12.2L16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>
+      <input value="{{ q }}" onChange="{{ onQuery }}" placeholder="Canción o artista" style="flex:1;min-width:0;border:none;outline:none;background:transparent;color:var(--text);font:400 16px 'Hanken Grotesk'">
+    </div>
+    <button onClick="{{ closeSearch }}" style="height:44px;padding:0 10px;border:none;border-radius:99px;background:transparent;color:var(--text);font:500 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-2)">Cancelar</button>
+  </div>
+  <div style="padding:10px 24px 6px;font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)">{{ remainLabel }}</div>
+  <div style="flex:1;overflow-y:auto;padding:0 8px 40px">
+    <sc-if value="{{ sIdle }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:60px 24px;text-align:center;font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2)">Busca por nombre de la canción o del artista.</div>
+    </sc-if>
+    <sc-if value="{{ sLoading }}" hint-placeholder-val="{{ false }}">
+      <sc-for list="{{ skel }}" as="k"><div style="display:flex;align-items:center;gap:12px;padding:8px 12px"><div style="width:56px;height:56px;border-radius:8px;background:var(--surface-2)"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="{{ k.a }}"></div><div style="{{ k.b }}"></div></div><div style="width:88px;height:44px;border-radius:99px;background:var(--surface-1)"></div></div></sc-for>
+    </sc-if>
+    <sc-if value="{{ sError }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:56px 20px 0;display:flex;flex-direction:column;gap:10px">
+        <span style="font:400 30px/1.05 'Newsreader',serif;letter-spacing:-.01em">no pudimos buscar.</span>
+        <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);text-wrap:pretty">El buscador de canciones no respondió. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas.</span>
+        <button onClick="{{ retrySearch }}" style="align-self:flex-start;margin-top:12px;height:52px;padding:0 28px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Reintentar</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ sResults }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ results }}" as="r" hint-placeholder-count="5">
+        <div style="{{ r.rowS }}">
+          <div style="{{ r.cov.s }}"><div style="{{ r.cov.m }}"></div></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font:italic 400 18px/1.2 'Newsreader',serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span>
+            <span style="font:400 13px 'Hanken Grotesk';color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.a }}</span>
+            <sc-if value="{{ r.sub }}"><span style="font:500 12px 'Hanken Grotesk';color:var(--text-3)">{{ r.sub }}</span></sc-if>
+          </div>
+          
+          <button onClick="{{ r.onAdd }}" style="{{ r.addS }}">{{ r.addLabel }}</button>
+          
+        </div>
+      </sc-for>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- ========== colecciones ========== -->
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;overflow-y:auto;padding:54px 0 60px;background:{{ L.feed }};background-attachment:local">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:14px;padding:10px 20px 18px">
+    <h1 style="margin:0;font:400 36px/1.02 'Newsreader',serif">tus colecciones</h1>
+    <div style="display:flex;gap:8px"><button onClick="{{ openShare }}" aria-label="Compartir" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--glass);backdrop-filter:blur(14px);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 002 2h10a2 2 0 002-2v-5"></path></svg></button><button onClick="{{ openOpts }}" aria-label="Opciones" style="width:44px;height:44px;border:none;border-radius:99px;background:var(--glass);backdrop-filter:blur(14px);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></button></div>
+  </div>
+  <div style="position:relative;height:270px;overflow:hidden">
+    <sc-for list="{{ L.car }}" as="k" hint-placeholder-count="3">
+      <div onClick="{{ k.go }}" style="{{ k.wrap }}"><div style="position:relative;width:{{ k.fan.w }}px;height:{{ k.fan.h }}px;flex:none"><span style="position:absolute;left:48px;right:48px;bottom:0;height:24px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,0))"></span><sc-for list="{{ k.fan.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div><sc-if value="{{ k.ghost }}"><span style="position:absolute;left:53px;top:0;width:150px;height:225px;border-radius:14px;border:1.5px dashed rgba(255,255,255,.18);box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:var(--text-2)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span></sc-if></div>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 24px 26px;text-align:center">
+    <span style="font:400 26px/1.1 'Newsreader',serif">{{ L.cur.t }}</span>
+    <span style="font:italic 400 16px/1.3 'Newsreader',serif;color:var(--text-2)">{{ L.cur.vibe }}</span>
+    <span style="font:400 13px 'Hanken Grotesk';color:var(--text-2)">{{ L.cur.meta }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 12px;padding:0 20px">
+    <sc-for list="{{ L.items }}" as="it" hint-placeholder-count="6"><div onClick="{{ L.open }}" style="display:flex;flex-direction:column;gap:6px;min-width:0;cursor:pointer"><div style="{{ it.cov.s }}"><div style="{{ it.cov.m }}"></div></div><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:italic 400 14px/1.15 'Newsreader',serif">{{ it.t }}</span></div></sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ========== exportar ========== -->
+<sc-if value="{{ isExport }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:50px;left:0;right:0;bottom:0;padding:0 20px 30px;display:flex;flex-direction:column">
+  <div style="height:56px;display:flex;align-items:center;margin:0 -8px">
+    <button onClick="{{ backToColl }}" style="width:44px;height:44px;border:none;border-radius:99px;background:transparent;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center" style-active="background:var(--surface-2)"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+  </div>
+  <div style="{{ exportFan.box }}"><sc-for list="{{ exportFan.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div>
+  <span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-top:26px">la fiesta de eric → {{ svc }}</span>
+  <span style="font:400 36px/1.02 'Newsreader',serif;letter-spacing:-.015em;margin-top:8px">{{ xTitle }}</span>
+  <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">{{ xBody }}</span>
+
+  <sc-if value="{{ xProgress }}" hint-placeholder-val="{{ false }}">
+    <div style="margin-top:28px;height:6px;border-radius:6px;background:var(--surface-2);overflow:hidden"><div style="{{ xBarS }}"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)"><span>{{ xCount }}</span><span>No cierres esta pestaña</span></div>
+  </sc-if>
+  <sc-if value="{{ xDone }}" hint-placeholder-val="{{ false }}">
+    <sc-if value="{{ hasMissing }}">
+    <div style="margin-top:24px;font:500 11px 'Red Hat Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)">No están en {{ svc }}</div>
+    <sc-for list="{{ missing }}" as="r"><div style="display:flex;align-items:center;gap:12px;padding:10px 0"><div style="{{ r.cov.s }}"><div style="{{ r.cov.m }}"></div></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font:italic 400 17px 'Newsreader',serif">{{ r.t }}</span><span style="font:400 13px 'Hanken Grotesk';color:var(--text-2)">{{ r.a }} · {{ r.by }}</span></div></div></sc-for>
+    </sc-if>
+  </sc-if>
+  <div style="flex:1"></div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <sc-if value="{{ xConnect }}"><button onClick="{{ runExport }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Conectar {{ svc }}</button></sc-if>
+    <sc-if value="{{ xDone }}"><button style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Abrir en {{ svc }}</button></sc-if>
+    <sc-if value="{{ xFailed }}"><button onClick="{{ runExport }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Reintentar</button></sc-if>
+    <sc-if value="{{ xNotProgress }}"><button onClick="{{ backToColl }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Volver a la colección</button></sc-if>
+  </div>
+</div>
+</sc-if>
+
+<!-- ========== toast ========== -->
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:16px;right:16px;bottom:112px;z-index:30;display:flex;justify-content:center;pointer-events:none">
+  <span style="background:var(--inverse);color:var(--on-inverse);font:500 14px 'Hanken Grotesk';padding:13px 18px;border-radius:16px;text-align:center">{{ toast }}</span>
+</div>
+</sc-if>
+
+<!-- ========== sheets ========== -->
+<sc-if value="{{ hasSheet }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim);z-index:20"></div>
+<div style="position:absolute;left:8px;right:8px;bottom:8px;background:var(--sheet);border-radius:36px;padding:26px 20px 22px;box-shadow:0 14px 44px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.1);z-index:21;display:flex;flex-direction:column;max-height:760px;overflow-y:auto">
+  
+
+  <sc-if value="{{ shWelcome }}">
+    <div style="{{ miniFan.box }}"><sc-for list="{{ miniFan.items }}" as="f"><div style="{{ f.s }}"><div style="{{ f.m }}"></div></div></sc-for></div>
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em;margin-top:18px">{{ welcomeTitle }}</span>
+    <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">{{ welcomeBody }}</span>
+    <button onClick="{{ openSearch }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;margin-top:24px" style-active="background:var(--accent-press)">Buscar mi primera canción</button>
+    <button onClick="{{ closeSheet }}" style="height:48px;border:none;border-radius:999px;background:transparent;color:var(--text-2);font:500 15px 'Hanken Grotesk';cursor:pointer;margin-top:4px" style-active="background:var(--surface-2)">Ver la colección primero</button>
+  </sc-if>
+
+  <sc-if value="{{ shCap }}">
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em">ya pusiste tus 3.</span>
+    <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.</span>
+    <div style="display:flex;flex-direction:column;gap:2px;margin:18px -8px 0">
+      <sc-for list="{{ mineRows }}" as="r"><div style="display:flex;align-items:center;gap:12px;padding:8px"><div style="{{ r.cov.s }}"><div style="{{ r.cov.m }}"></div></div><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font:italic 400 17px 'Newsreader',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span><span style="font:400 13px 'Hanken Grotesk';color:var(--text-2)">{{ r.a }}</span></div><button onClick="{{ r.onRemove }}" style="height:44px;padding:0 16px;border:none;border-radius:99px;background:var(--surface-2);color:var(--text);font:500 14px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Quitar</button></div></sc-for>
+    </div>
+    <button onClick="{{ capDone }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;margin-top:18px" style-active="background:var(--accent-press)">Listo</button>
+  </sc-if>
+
+  <sc-if value="{{ shRemove }}">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="{{ target.cov.s }}"><div style="{{ target.cov.m }}"></div></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font:italic 400 20px 'Newsreader',serif">{{ target.t }}</span><span style="font:400 14px 'Hanken Grotesk';color:var(--text-2)">{{ target.a }}</span><span style="display:flex;align-items:center;gap:6px;font:500 12px 'Hanken Grotesk';color:var(--text-3);margin-top:2px"><span style="{{ target.av }}">{{ target.ini }}</span>{{ target.by }}</span></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:22px">
+      <button onClick="{{ confirmRemove }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Quitar de la colección</button>
+      <sc-if value="{{ target.canBlock }}"><button onClick="{{ removeBlock }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">{{ target.blockLabel }}</button></sc-if>
+      <button onClick="{{ closeSheet }}" style="height:48px;border:none;border-radius:999px;background:transparent;color:var(--text-2);font:500 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-2)">Cancelar</button>
+    </div>
+    <span style="font:400 12px/1.4 'Hanken Grotesk';color:var(--text-3);margin-top:8px;text-align:center">{{ target.note }}</span>
+  </sc-if>
+
+  <sc-if value="{{ shShare }}">
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em">invita a la fiesta.</span>
+    <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">Quien abra el link ve la colección en vivo. Con cuenta en kura, pone hasta 3 canciones.</span>
+    <div style="margin-top:18px;height:56px;border-radius:16px;background:var(--surface-2);display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 16px">
+      <span style="font:500 14px 'Red Hat Mono',monospace;color:var(--text)">get-kura.app/f/eric-31oct</span>
+      <button onClick="{{ copyLink }}" style="height:40px;padding:0 14px;border:none;border-radius:99px;background:var(--surface-3);color:var(--text);font:500 13px 'Hanken Grotesk';cursor:pointer">{{ copyLabel }}</button>
+    </div>
+    <button style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;margin-top:12px" style-active="background:var(--accent-press)">Compartir link</button>
+    <button onClick="{{ openLink }}" style="height:52px;border:none;border-radius:999px;background:transparent;color:var(--text);font:500 15px 'Hanken Grotesk';cursor:pointer;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px" style-active="background:var(--surface-2)">Gestionar link</button>
+  </sc-if>
+
+  <sc-if value="{{ shOpts }}">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 0 10px"><span style="font:400 24px 'Newsreader',serif">la fiesta de eric</span><span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2)">{{ countLabel }}</span></div>
+    <div style="display:flex;flex-direction:column;gap:2px;margin:0 -8px">
+      <sc-for list="{{ optRows }}" as="o"><div onClick="{{ o.on }}" style="cursor:pointer;display:flex;align-items:center;gap:14px;min-height:56px;padding:0 12px;border-radius:18px" style-hover="background:rgba(255,255,255,.05)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ o.d }}"></path></svg><span style="flex:1;font:500 16px 'Hanken Grotesk'">{{ o.label }}</span><span style="font:500 11px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)">{{ o.aside }}</span></div></sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ shLink }}">
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em">el link.</span>
+    <div style="margin-top:16px;border-radius:18px;background:var(--surface-1);padding:14px 16px;display:flex;flex-direction:column;gap:4px">
+      <span style="display:flex;align-items:center;gap:8px;font:600 15px 'Hanken Grotesk'"><i style="{{ linkDot }}"></i>{{ linkStatus }}</span>
+      <span style="font:500 12px 'Red Hat Mono',monospace;color:var(--text-2)">{{ linkUrl }}</span>
+    </div>
+    <span style="font:400 14px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:12px;text-wrap:pretty">{{ linkBody }}</span>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+      <sc-if value="{{ linkActive }}">
+        <button onClick="{{ newLink }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Crear link nuevo</button>
+        <button onClick="{{ revokeLink }}" style="height:52px;border:none;border-radius:999px;background:var(--surface-2);color:var(--text);font:600 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-3)">Desactivar link</button>
+      </sc-if>
+      <sc-if value="{{ linkRevoked }}">
+        <button onClick="{{ newLink }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--accent-press)">Crear link nuevo</button>
+      </sc-if>
+      <button onClick="{{ closeSheet }}" style="height:48px;border:none;border-radius:999px;background:transparent;color:var(--text-2);font:500 15px 'Hanken Grotesk';cursor:pointer" style-active="background:var(--surface-2)">Cerrar</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ shExport }}">
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em">llévala a otra app.</span>
+    <span style="font:400 15px/1.45 'Hanken Grotesk';color:var(--text-2);margin-top:10px;text-wrap:pretty">Creamos una playlist con las {{ songCount }} canciones en tu cuenta. La colección sigue viva en kura.</span>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+      <button onClick="{{ pickApple }}" style="height:60px;border:none;border-radius:18px;background:var(--surface-2);color:var(--text);font:600 16px 'Hanken Grotesk';cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 18px" style-active="background:var(--surface-3)">Llévala a Apple Music<svg width="18" height="18" viewBox="0 0 18 18"><path d="M7 4l5 5-5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button onClick="{{ pickTidal }}" style="height:60px;border:none;border-radius:18px;background:var(--surface-2);color:var(--text);font:600 16px 'Hanken Grotesk';cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 18px" style-active="background:var(--surface-3)">Llévala a Tidal<svg width="18" height="18" viewBox="0 0 18 18"><path d="M7 4l5 5-5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+    <span style="font:500 10px 'Red Hat Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-top:14px;text-align:center">Próximamente · fase 2</span>
+  </sc-if>
+
+  <sc-if value="{{ shCreate }}">
+    <span style="font:400 34px/1.02 'Newsreader',serif;letter-spacing:-.015em">nueva colección.</span>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+      <sc-for list="{{ ctypes }}" as="ct"><button onClick="{{ ct.on }}" style="{{ ct.s }}"><span style="font:600 16px 'Hanken Grotesk';color:var(--text)">{{ ct.t }}</span><span style="font:400 14px/1.4 'Hanken Grotesk';color:var(--text-2);text-align:left">{{ ct.d }}</span></button></sc-for>
+    </div>
+    <span style="font:600 14px 'Hanken Grotesk';margin-top:20px">Nombre</span>
+    <input value="{{ cname }}" onChange="{{ onCname }}" placeholder="{{ cnamePh }}" style="margin-top:8px;height:52px;border:none;outline:none;border-radius:16px;background:var(--surface-2);color:var(--text);font:400 17px 'Newsreader',serif;padding:0 18px" style-focus="background:var(--surface-3)">
+    <sc-if value="{{ isFiestaType }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:22px">
+        <span style="font:600 14px 'Hanken Grotesk'">Canciones por invitado</span>
+      </div>
+      <div style="margin-top:8px;height:60px;border-radius:18px;background:var(--surface-1);display:flex;align-items:center;justify-content:space-between;padding:0 8px">
+        <button onClick="{{ limitDec }}" aria-label="Menos" style="{{ decS }}"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 7h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
+        <span style="flex:1;min-width:0;text-align:center;font:500 15px 'Red Hat Mono',monospace;color:var(--text);text-wrap:balance">{{ limitLabel }}</span>
+        <button onClick="{{ limitInc }}" aria-label="Más" style="{{ incS }}"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 7h8M7 3v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ createHint }}" hint-placeholder-val="{{ false }}"><span style="font:400 13px/1.4 'Hanken Grotesk';color:var(--text-3);margin-top:12px">{{ createHint }}</span></sc-if>
+    <button onClick="{{ createColl }}" style="height:56px;border:none;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 16px 'Hanken Grotesk';cursor:pointer;margin-top:20px" style-active="background:var(--accent-press)">{{ createLabel }}</button>
+  </sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;start&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;party&quot;,&quot;options&quot;:[&quot;party&quot;,&quot;bridge&quot;,&quot;landing&quot;,&quot;loading&quot;,&quot;landing-play&quot;,&quot;revoked&quot;,&quot;login&quot;,&quot;code&quot;,&quot;onboard&quot;,&quot;onboard-taken&quot;,&quot;welcome&quot;,&quot;returning&quot;,&quot;collab&quot;,&quot;search-idle&quot;,&quot;search-loading&quot;,&quot;search-results&quot;,&quot;search-dup&quot;,&quot;search-error&quot;,&quot;cap&quot;,&quot;ios&quot;,&quot;blocked&quot;,&quot;empty&quot;,&quot;host-empty&quot;,&quot;list&quot;,&quot;create&quot;,&quot;host&quot;,&quot;share&quot;,&quot;link&quot;,&quot;link-revoked&quot;,&quot;remove&quot;,&quot;export-pick&quot;,&quot;export-connect&quot;,&quot;export-progress&quot;,&quot;export-done&quot;,&quot;export-failed&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+const CAT = {
+  thriller:{t:'Thriller',a:'Michael Jackson',c:['#211c28','#c4473b'],sh:'bar'},
+  llorona:{t:'La Llorona',a:'Chavela Vargas',c:['#e6d9bf','#3a2923'],sh:'circle'},
+  bidi:{t:'Bidi Bidi Bom Bom',a:'Selena',c:['#d8a340','#6a2140'],sh:'circle'},
+  toxic:{t:'Toxic',a:'Britney Spears',c:['#2d5a6d','#e2c369'],sh:'bar'},
+  tusa:{t:'Tusa',a:'Karol G y Nicki Minaj',c:['#e39aa7','#2a2440'],sh:'half'},
+  watching:{t:"Somebody's Watching Me",a:'Rockwell',c:['#43503a','#e8e1cf'],sh:'circle'},
+  oye:{t:'Oye mi amor',a:'Maná',c:['#3a6a8e','#efd8a7'],sh:'half'},
+  macabre:{t:'Dance Macabre',a:'Ghost',c:['#5a1f2b','#d7c8a7'],sh:'bar'},
+  negra:{t:'La negra Tomasa',a:'Caifanes',al:'Caifanes',c:['#161616','#e9e4d8'],sh:'circle'},
+  afuera:{t:'Afuera',a:'Caifanes',al:'El nervio del volcán',c:['#8c3b2a','#1c1916'],sh:'half'},
+  viento:{t:'Viento',a:'Caifanes',al:'El diablito',c:['#b9a27a','#2c2a26'],sh:'bar',np:true},
+  avientame:{t:'Aviéntame',a:'Caifanes',al:'El nervio del volcán',c:['#7b3326','#e9d6b0'],sh:'circle'},
+  nodejes:{t:'No dejes que…',a:'Caifanes',al:'El silencio',c:['#dcd3c4','#6b1e24'],sh:'bar'},
+  thriller2:{t:'Thriller',a:'Fall Out Boy',al:'From Under the Cork Tree',c:['#2b2b33','#d6d0c2'],sh:'half'},
+  f1:{c:['#3b2b22','#c9b48a'],sh:'circle'},f2:{c:['#b3262e','#1a1414'],sh:'bar'},f3:{c:['#d9772b','#2a1a14'],sh:'half'},
+  a1:{c:['#9fb2a6','#2b3a33'],sh:'circle'},a2:{c:['#e8c4a0','#4a2b3a'],sh:'half'},a3:{c:['#28324a','#d8b36a'],sh:'bar'}
+};
+const INIT=[['thriller','ana'],['llorona','eric'],['bidi','ana'],['toxic','rodri'],['tusa','vale'],['watching','rodri'],['oye',null],['macabre','vale']];
+const AV={ana:'#c98b6b',rodri:'#6f8a9a',vale:'#a58bb0',eric:'#8a9a6f',mau:'#c9a25a'};
+const TAKEN=['ana','rodri','vale','eric','kura'];
+const CAIF=['negra','afuera','viento','avientame','nodejes'];
+const THRI=['thriller','thriller2','watching'];
+const MISSING={'Apple Music':['oye'],'Tidal':['oye','watching']};
+
+function cover(id,w,h,r){
+  const c=CAT[id];
+  if(!c) return {s:{width:w,height:h,borderRadius:r,background:'var(--surface-2)',flex:'none',position:'relative'},m:{display:'none'}};
+  const s={width:w,height:h,borderRadius:r,background:c.c[0],position:'relative',overflow:'hidden',flex:'none',boxShadow:w>=40?'0 18px 36px -16px rgba(0,0,0,.88)':'0 8px 16px -8px rgba(0,0,0,.8)'};
+  const m=c.sh==='circle'?{position:'absolute',left:'27%',top:(50-23*w/h)+'%',width:'46%',height:(46*w/h)+'%',borderRadius:'50%',background:c.c[1]}
+    :c.sh==='bar'?{position:'absolute',left:0,right:0,top:'60%',height:'16%',background:c.c[1]}
+    :{position:'absolute',right:0,top:0,bottom:0,width:'40%',background:c.c[1]};
+  return {s,m};
+}
+function fan(ids,w,h,emptyBg){
+  h=h||w; const n=ids.length, step=w*(n>3?0.46:0.5);
+  const ang=n===5?[-13,-6.5,0,6.5,13]:n===3?[-9,0,9]:[0], dy=n===5?[14,5,0,5,14]:n===3?[8,0,8]:[0];
+  const r=Math.max(6,Math.round(w*.1));
+  const items=ids.map((id,i)=>{const cv=id?cover(id,w,h,r):{s:{width:w,height:h,borderRadius:r,background:emptyBg||'var(--tint-2)'},m:{display:'none'}};
+    cv.s={...cv.s,position:'absolute',left:i*step,top:dy[i],transform:`rotate(${ang[i]}deg)`,zIndex:10-Math.round(Math.abs(i-(n-1)/2)*2)};return cv;});
+  return {items,box:{position:'relative',width:w+(n-1)*step,height:h+Math.max(...dy)+4,flex:'none'}};
+}
+function bigFan(ids,sq,ox){
+  ox=ox||0; const sh='0 18px 36px -16px rgba(0,0,0,.88)';
+  const P=sq?[[65,16,170,170,0],[14,50,124,124,-10],[162,54,124,124,9]]:[[75,0,150,225,0],[11,38,117,176,-10],[164,59,135,135,9]];
+  const order=[1,2,0];
+  const items=order.map(k=>{const [l,t,w,h,rot]=P[k], id=ids[k];
+    const cv=id?cover(id,w,h,14):{s:{width:w,height:h,borderRadius:14,background:'rgba(255,255,255,.075)'},m:{display:'none'}};
+    cv.s={...cv.s,position:'absolute',left:l+ox,top:t,transform:rot?`rotate(${rot}deg)`:'none',boxShadow:id?sh:'none'}; return cv;});
+  return {items,w:300+ox*2,h:sq?212:243};
+}
+function avatar(by,size){
+  size=size||18;
+  return {width:size,height:size,borderRadius:99,background:by?AV[by]||'var(--surface-3)':'var(--surface-3)',color:by?'#1c1916':'var(--text-2)',font:`600 ${Math.round(size*.52)}px 'Hanken Grotesk'`,display:'inline-flex',alignItems:'center',justifyContent:'center',flex:'none',textTransform:'uppercase'};
+}
+
+class Component extends DCLogic {
+  state = this.initial(this.props.start ?? 'party');
+  initial(k){
+    const songs=INIT.map(([id,by])=>({id,by}));
+    const mine=ids=>[...songs,...ids.map(id=>({id,by:'mau'}))];
+    const base={screen:'party',role:'visitor',songs,sheet:null,q:'',sstat:'idle',toast:null,playing:null,pp:0,linkRevoked:false,xstep:'connect',svc:'Apple Music',xn:0,blocked:false,iosOff:false,loading:false,phase:0,code:'',age:'',user:'',returning:false,target:null,ctype:'fiesta',cname:'la fiesta de eric',filter:'Todas',copied:false,email:'',theme:null};
+    const C={screen:'collection',role:'collab'};
+    const H={screen:'collection',role:'host'};
+    const P={
+      party:{},bridge:{screen:'landing',bridge:1},
+      landing:{screen:'landing'},loading:{screen:'landing',loading:true},'landing-play':{screen:'landing',playing:'bidi',pp:12},
+      revoked:{screen:'revoked'},login:{screen:'login'},code:{screen:'code',code:'4829',email:'mau@correo.com'},
+      onboard:{screen:'onboard',age:'27',user:'mau'},'onboard-taken':{screen:'onboard',age:'27',user:'ana'},
+      welcome:{...C,sheet:'welcome'},returning:{...C,sheet:'welcome',returning:true},
+      collab:{...C,songs:mine(['afuera'])},
+      'search-idle':{...C,screen:'search',songs:mine(['afuera'])},
+      'search-loading':{...C,screen:'search',songs:mine(['afuera']),q:'caifanes',sstat:'loading'},
+      'search-results':{...C,screen:'search',songs:mine(['afuera']),q:'caifanes',sstat:'results',playing:'negra',pp:9},
+      'search-dup':{...C,screen:'search',songs:mine(['afuera']),q:'thriller',sstat:'results',toast:'Ya está, la puso @ana'},
+      'search-error':{...C,screen:'search',songs:mine(['afuera']),q:'caifanes',sstat:'error'},
+      cap:{...C,screen:'search',songs:mine(['afuera','negra','nodejes']),q:'caifanes',sstat:'results',sheet:'cap'},
+      ios:{...C,songs:mine(['afuera','negra','nodejes'])},
+      blocked:{...C,blocked:true,songs:mine(['afuera'])},
+      empty:{...C,songs:[]},'host-empty':{...H,songs:[]},
+      list:{screen:'list',role:'host'},create:{screen:'list',role:'host',sheet:'create',lIdx:3},
+      host:{...H},share:{...H,sheet:'share'},link:{...H,sheet:'link'},'link-revoked':{...H,sheet:'link',linkRevoked:true},
+      remove:{...H,sheet:'remove',target:'toxic'},
+      'export-pick':{...H,sheet:'export'},'export-connect':{...H,screen:'export',xstep:'connect'},
+      'export-progress':{...H,screen:'export',xstep:'progress',xn:5},'export-done':{...H,screen:'export',xstep:'done'},
+      'export-failed':{...H,screen:'export',xstep:'failed',xn:5}
+    };
+    return {...base,...(P[k]||{})};
+  }
+  heroRef = React.createRef();
+  componentDidMount(){ if(this.props.start==='bridge'){ const cyc=()=>this.runBridge(true); this.bt3=setTimeout(cyc,400); this.loop=setInterval(cyc,3600); } }
+  runBridge(loop){
+    [this.bt,this.bt2].forEach(clearTimeout);
+    this.setState({screen:'landing',role:'visitor',sheet:null,bridge:1});
+    this.bt=setTimeout(()=>{
+      const el=this.heroRef.current; let tgt=null;
+      if(el){ const root=el.closest('.kura'), rr=root.getBoundingClientRect(), er=el.getBoundingClientRect(), k=rr.width/390||1; tgt={x:(er.left-rr.left)/k,y:(er.top-rr.top)/k,w:er.width/k}; }
+      this.setState({bridge:2,btgt:tgt});
+    },60);
+    this.bt2=setTimeout(()=>this.setState({bridge:loop?3:0}),1700);
+  }
+  componentWillUnmount(){ [this.loop,this.pi,this.xi].forEach(clearInterval); [this.tt,this.qt,this.bt,this.bt2,this.bt3].forEach(clearTimeout); }
+  me(){ return this.state.role==='host'?'eric':'mau'; }
+  toastMsg(m){ clearTimeout(this.tt); this.setState({toast:m}); this.tt=setTimeout(()=>this.setState({toast:null}),2400); }
+  play(id){
+    clearInterval(this.pi);
+    if(this.state.playing===id){ this.setState({playing:null,pp:0}); return; }
+    this.setState({playing:id,pp:0});
+    this.pi=setInterval(()=>this.setState(s=>{const pp=s.pp+.25; if(pp>=30){clearInterval(this.pi);return {playing:null,pp:0};} return {pp};}),250);
+  }
+  search(q){
+    clearTimeout(this.qt);
+    if(!q.trim()){ this.setState({sstat:'idle'}); return; }
+    this.setState({sstat:'loading'});
+    this.qt=setTimeout(()=>this.setState({sstat:/error/i.test(q)?'error':'results'}),800);
+  }
+  add(id){
+    const s=this.state, me=this.me(), ex=s.songs.find(x=>x.id===id);
+    if(ex){ this.toastMsg(ex.by===me?'Ya la pusiste tú.':`Ya está, la puso ${ex.by?'@'+ex.by:'alguien'}`); return; }
+    const n=s.songs.filter(x=>x.by===me).length;
+    if(n>=3){ this.setState({sheet:'cap'}); return; }
+    this.setState({songs:[...s.songs,{id,by:me}]});
+    if(n+1===3) this.setState({sheet:'cap',toast:null}); else this.toastMsg(`Pusiste ${CAT[id].t}.`);
+  }
+  removeMine(id){
+    const s=this.state;
+    this.setState({songs:s.songs.filter(x=>!(x.id===id&&x.by===this.me()))});
+    if(s.sheet==='cap') this.setState({sheet:null,screen:'search'});
+    this.toastMsg(`Quitaste ${CAT[id].t}.`);
+  }
+  runExport(){
+    clearInterval(this.xi);
+    const total=this.state.songs.length;
+    this.setState({screen:'export',xstep:'progress',xn:0,sheet:null});
+    this.xi=setInterval(()=>this.setState(s=>{const xn=s.xn+1; if(xn>=total){clearInterval(this.xi);return {xn:total,xstep:'done'};} return {xn};}),380);
+  }
+  row(s,i,{mode}){
+    const st=this.state, c=CAT[s.id], me=this.me(), mine=s.by===me, playing=st.playing===s.id;
+    const canPlay=!c.np;
+    return {
+      key:s.id, t:c.t, a:mode==='search'?`${c.a}${c.al?' · '+c.al:''}`:c.a, cov:cover(s.id,56,56,8),
+      by:mine?'Pusiste':s.by?`Puso @${s.by}`:'Puso alguien', av:avatar(s.by), ini:s.by?s.by[0]:'·',
+      
+      playS:{width:44,height:44,border:'none',borderRadius:99,background:playing?'var(--text)':'var(--glass)',backdropFilter:'blur(14px)',color:playing?'var(--bg)':'var(--text)',cursor:'pointer',flex:'none',display:'flex',alignItems:'center',justifyContent:'center'},
+      barS:{height:'100%',borderRadius:3,background:'var(--text)',width:(st.pp/30*100)+'%'},
+      time:`0:${String(Math.floor(st.pp)).padStart(2,'0')} / 0:30`,
+      rowS:{position:'relative',display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:18,cursor:'pointer',background:playing?'var(--surface-1)':'transparent'},
+      canRemove:st.role==='collab'&&mine&&!st.blocked, canMore:st.role==='host',
+      gcov:(()=>{const cv=cover(s.id,1,1,14);cv.s={...cv.s,width:'100%',height:'auto',aspectRatio:'1 / 1',boxShadow:'0 18px 36px -16px rgba(0,0,0,.88)'};return cv;})(),
+      gPlayS:{width:32,height:32,borderRadius:99,background:playing?'var(--text)':'var(--glass)',backdropFilter:'blur(14px)',color:playing?'var(--bg)':'var(--text)',display:'flex',alignItems:'center',justifyContent:'center'},
+      onPlayG:e=>{if(e&&e.stopPropagation)e.stopPropagation(); this.play(s.id);},
+      onTap:()=>{ if(st.role==='host'||(st.role==='collab'&&mine&&!st.blocked&&st.screen!=='landing')) this.setState({sheet:'remove',target:s.id}); },
+      byShort:mine?'Pusiste tú':s.by?'Puso @'+s.by:'Puso alguien',
+      lcov:(()=>{const cv=cover(s.id,56,56,10);cv.s={...cv.s,boxShadow:'0 12px 24px -12px rgba(0,0,0,.85)'};return cv;})(),
+      onMoreG:e=>{if(e&&e.stopPropagation)e.stopPropagation(); this.setState({sheet:'remove',target:s.id});},
+      onPlay:()=>this.play(s.id), onRemove:()=>this.removeMine(s.id), onMore:()=>this.setState({sheet:'remove',target:s.id})
+    };
+  }
+  renderVals(){
+    const st=this.state, me=this.me();
+    const hx=x=>{const n=parseInt(x.slice(1),16);return [n>>16&255,n>>8&255,n&255];};
+    const mix=(a,b,k)=>'#'+hx(a).map((x,i)=>Math.round(x*(1-k)+hx(b)[i]*k).toString(16).padStart(2,'0')).join('');
+    const lum=x=>{const l=v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;};const [r,g,b]=hx(x);return .2126*l(r)+.7152*l(g)+.0722*l(b);};
+    const capL=(x,ink)=>{if(lum(x)<=.04)return x;let lo=0,hi=1;for(let i=0;i<14;i++){const m=(lo+hi)/2;if(lum(mix(x,ink,m))>.04)lo=m;else hi=m;}return mix(x,ink,hi);};
+    const K=1-.45*.78, first=st.songs[0]&&CAT[st.songs[0].id];
+    const pal=first?[first.c[1],first.c[0]]:['#5a5a70','#16161c'];
+    const fA=capL(mix(pal[0],'#101013',K),'#101013'), fB=capL(mix(pal[1],'#0c0c10',Math.min(1,K+.08)),'#0c0c10');
+    const feedBg=`linear-gradient(168deg, ${fA} 0px, ${fB} 760px, ${fB} 100%)`, tailBg=fB;
+    const theme='dark';
+    const scr=st.screen, role=st.role;
+    const isPlaylist=scr==='landing'||scr==='collection';
+    const visitor=scr==='landing';
+    const songs=st.songs, n=songs.length;
+    const mineList=songs.filter(s=>s.by===me);
+    const mineN=role==='collab'?mineList.length:0;
+    const people=[...new Set(songs.map(s=>s.by).filter(Boolean))];
+    const empty=isPlaylist&&!st.loading&&n===0;
+    const heroIds=st.loading||empty?[null,null,null,null,null]:[...songs.slice(0,5).map(s=>s.id),null,null,null,null,null].slice(0,5);
+    const collab=role==='collab'&&!visitor;
+    const skel=[0,1,2,3,4].map(i=>({a:{width:[140,180,120,160,110][i],height:12,borderRadius:6,background:'var(--surface-2)'},b:{width:[90,70,110,80,100][i],height:10,borderRadius:5,background:'var(--surface-1)'}}));
+
+    // search
+    const q=st.q.toLowerCase();
+    const resIds=/thri/.test(q)?THRI:CAIF;
+    const results=resIds.map(id=>{
+      const ex=songs.find(x=>x.id===id); const r=this.row({id,by:null},0,{mode:'search'});
+      const dup=!!ex;
+      return {...r, sub:dup?(ex.by===me?'Ya la pusiste':`Ya está · la puso ${ex.by?'@'+ex.by:'alguien'}`):'',
+        addLabel:dup?'Ya está':'Agregar', onAdd:()=>this.add(id),
+        addS:{height:44,padding:'0 16px',border:'none',borderRadius:99,background:dup?'var(--surface-1)':'var(--surface-2)',color:dup?'var(--text-3)':'var(--text)',font:"500 14px 'Hanken Grotesk'",cursor:'pointer',flex:'none'}};
+    });
+    const remain=3-mineN;
+
+    // code
+    const codeBoxes=[0,1,2,3,4,5].map(i=>({d:st.code[i]||'',s:{height:60,borderRadius:14,background:i===st.code.length?'var(--surface-3)':'var(--surface-2)',display:'flex',alignItems:'center',justifyContent:'center',font:"500 24px 'Red Hat Mono',monospace",color:'var(--text)'}}));
+    const codeOk=st.code.length===6;
+    const primary=(on)=>({height:56,border:'none',borderRadius:999,background:on?'var(--accent)':'var(--surface-2)',color:on?'var(--on-accent)':'var(--text-3)',font:"600 16px 'Hanken Grotesk'",cursor:on?'pointer':'default'});
+
+    // onboarding
+    const ageN=parseInt(st.age,10), ageBad=!!st.age&&(!(ageN>0)||ageN<13);
+    const u=st.user.trim().toLowerCase(), taken=TAKEN.includes(u), uOk=u.length>=3&&!taken&&/^[a-z0-9_.]+$/.test(u);
+    const userHint=!u?'Así te verán los demás en la fiesta.':taken?`@${u} ya está ocupado. Prueba otro.`:u.length<3?'Usa al menos 3 caracteres.':!uOk?'Solo letras, números, punto y guion bajo.':`@${u} está disponible.`;
+    const userDot={width:7,height:7,borderRadius:9,flex:'none',background:!u?'transparent':uOk?'var(--completed)':'var(--hot)',display:u?'inline-block':'none'};
+    const canEnter=ageN>=13&&uOk;
+
+    // list
+    const allCards=[
+      {t:'la fiesta de eric.',meta:role==='host'?`De fiesta · ${n} canciones · ${people.length} personas`:'De fiesta · de @eric · colaboras',k:'De fiesta',ids:songs.slice(0,3).map(s=>s.id),lomo:'#6a2140',w:48,h:48,party:true},
+      {t:'terror para octubre.',meta:'Cine · 12 películas',k:'Cine',ids:['f1','f2','f3'],lomo:'#b3262e',w:40,h:60},
+      {t:'discos de 2026.',meta:'Música · 9 álbumes',k:'Música',ids:['a1','a2','a3'],lomo:'#28324a',w:48,h:48}
+    ].filter(c=>role==='host'||c.party).filter(c=>st.filter==='Todas'||c.k===st.filter);
+    const cards=allCards.map(c=>({t:c.t,meta:c.meta,fan:fan(c.ids.length?c.ids:[null,null,null],c.w,c.h,'var(--surface-2)'),lomo:{width:10,flex:'none',background:c.lomo},on:()=>this.setState({screen:'collection',sheet:null})}));
+    const filters=['Todas','Cine','Series','Música','De fiesta'].map(label=>({label,on:()=>this.setState({filter:label}),s:{height:44,padding:'0 16px',border:'none',borderRadius:99,flex:'none',cursor:'pointer',font:"500 14px 'Hanken Grotesk'",background:st.filter===label?'var(--inverse)':'var(--surface-1)',color:st.filter===label?'var(--on-inverse)':'var(--text)'}}));
+    const ctypes=[{k:'normal',t:'Colección',d:'Agrega series, películas o álbumes.'},{k:'fiesta',t:'Fiesta',d:'Cada invitado agrega canciones.'}].map(c=>({...c,on:()=>this.setState({ctype:c.k,cname:c.k==='fiesta'?'la fiesta de eric':''}),s:{border:'none',borderRadius:18,padding:'14px 16px',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:3,cursor:'pointer',background:st.ctype===c.k?'var(--surface-3)':'var(--surface-1)'}}));
+    const LIM=[0,1,2,3,4,5,null], li=st.limitIdx??3, limV=LIM[li], limOn=limV!==null, limN=limV??0;
+    const stepS=on=>({width:44,height:44,border:'none',borderRadius:99,background:'var(--surface-2)',color:on?'var(--text)':'var(--text-3)',cursor:on?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center'});
+
+    // target
+    const tg=st.target&&songs.find(s=>s.id===st.target);
+    const target=tg?{t:CAT[tg.id].t,a:CAT[tg.id].a,cov:cover(tg.id,64,64,8),av:avatar(tg.by),ini:tg.by?tg.by[0]:'·',by:tg.by===me?'Pusiste':tg.by?`Puso @${tg.by}`:'Puso alguien',canBlock:!!tg.by&&tg.by!==me,blockLabel:`Quitar y bloquear a @${tg.by}`,note:tg.by&&tg.by!==me?`@${tg.by} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones.`:'La canción sale de la colección para todos.'}:{cov:cover(null,64,64,8)};
+
+    // export
+    const total=n, miss=(MISSING[st.svc]||[]).filter(id=>songs.some(s=>s.id===id));
+    const xs=st.xstep;
+    const xTitle={connect:`conecta ${st.svc.toLowerCase()}.`,progress:'pasando la colección.',done:'lista.',failed:'no se pudo exportar.'}[xs];
+    const cur=songs[Math.min(st.xn,n-1)];
+    const xBody={connect:`kura solo crea la playlist «la fiesta de eric» en tu cuenta. No lee ni cambia tu biblioteca.`,
+      progress:cur?`Buscando ${CAT[cur.id].t} en ${st.svc}…`:'',
+      done:`${total-miss.length} de ${total} canciones ya están en tu playlist de ${st.svc}.`,
+      failed:`${st.svc} dejó de responder a mitad del proceso. Tu colección sigue intacta en kura; al reintentar no se duplican canciones.`}[xs];
+
+    const linkActive=!st.linkRevoked;
+    return {
+      theme, feedBg, tailBg,
+      hero:bigFan(st.loading||empty?[null,null,null]:[0,1,2].map(i=>songs[i]&&songs[i].id),true,0),
+      heroSeals:people.slice(0,6).map((p,i)=>({ini:p[0],s:{...avatar(p,26),marginLeft:i?-7:0,boxShadow:'0 0 0 2px rgba(11,11,13,.6)'}})),
+      heroWho:role==='host'&&!visitor?`tuya · ${n} ${n===1?'canción':'canciones'}`:`de @eric · ${n} ${n===1?'canción':'canciones'}`,
+      gridAside:'',
+      skel6:[0,1,2,3,4,5],
+      shOpts:st.sheet==='opts', openOpts:()=>this.setState({sheet:'opts'}),
+      optRows:[
+        {label:'Gestionar link',aside:st.linkRevoked?'desactivado':'activo',d:'M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1 1M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1-1',on:()=>this.setState({sheet:'link'})},
+        {label:'Llevar a otra app',aside:'',d:'M4 12h14M13 6l6 6-6 6',on:()=>this.setState({sheet:'export'})},
+        {label:'Editar',aside:'',d:'M4 20h4L19 9l-4-4L4 16v4z',on:()=>this.setState({sheet:null})}
+      ],
+      L:(()=>{
+        const cols=[
+          {t:'la fiesta de eric',vibe:'cada invitado pone 3',meta:`${role==='host'?'tuya':'de @eric'} · ${n} canciones`,ids:[0,1,2].map(i=>songs[i]&&songs[i].id),sq:true,party:true,grid:songs.slice(0,6).map(s=>s.id)},
+          {t:'terror para octubre',vibe:'para no dormir',meta:'tuya · 12 películas',ids:['f1','f2','f3'],sq:false,grid:['f1','f2','f3']},
+          {t:'discos de 2026',vibe:'lo que más sonó',meta:'tuya · 9 álbumes',ids:['a1','a2','a3'],sq:true,grid:['a1','a2','a3']},
+          {t:'nueva colección',vibe:'normal o de fiesta',meta:'',ids:[null,null,null],sq:false,ghost:true,grid:[]}
+        ];
+        const ci=Math.min(st.lIdx||0,cols.length-1), cur=cols[ci];
+        const fid=cur.ids.find(Boolean), fc=fid?CAT[fid].c:['#5a5a70','#16161c'];
+        const A=capL(mix(fc[1],'#101013',K),'#101013'), B=capL(mix(fc[0],'#0c0c10',Math.min(1,K+.08)),'#0c0c10');
+        return {
+          feed:`linear-gradient(168deg, ${A} 0px, ${B} 760px, ${B} 100%)`, cur,
+          car:cols.map((k,i)=>{const dd=i-ci; return {ghost:!!k.ghost, fan:bigFan(k.ids,k.sq,-22),
+            wrap:{position:'absolute',left:67,top:10,width:256,height:243,cursor:'pointer',transform:`translateX(${dd*232}px) scale(${dd?.72:1})`,opacity:Math.abs(dd)>1?0:dd?.5:1,transition:'transform .45s cubic-bezier(.16,1,.3,1),opacity .35s'},
+            go:()=>{ if(dd) this.setState({lIdx:i}); else if(k.party) this.setState({screen:'collection',sheet:null}); else if(k.ghost) this.setState({sheet:'create'}); }};}),
+          items:cur.grid.map(id=>{const cv=cover(id,1,cur.sq?1:1.5,14); cv.s={...cv.s,width:'100%',height:'auto',aspectRatio:cur.sq?'1 / 1':'2 / 3',boxShadow:'0 18px 36px -16px rgba(0,0,0,.88)'}; return {cov:cv,t:CAT[id].t||''};}),
+          open:()=>{ if(cur.party) this.setState({screen:'collection',sheet:null}); }
+        };
+      })(),
+      bridge:(()=>{const b=st.bridge||0, t=st.btgt||{x:45,y:120,w:300}, sc=.56, sx=(390-t.w*sc)/2, sy=466, go=b>=2;
+        return {
+          bg:{position:'absolute',inset:0,background:'var(--p-bg)',opacity:go?0:1,transition:go?'opacity 650ms 380ms ease':'none'},
+          party:{position:'absolute',top:360,left:0,right:0,textAlign:'center',font:"400 20px 'Newsreader',serif",color:'var(--p-bone)',opacity:go?0:1,transform:go?'translateY(-8px)':'none',transition:go?'opacity 280ms, transform 280ms':'none'},
+          fan:{position:'absolute',left:t.x,top:t.y,transformOrigin:'0 0',transform:go?'none':`translate(${sx-t.x}px,${sy-t.y}px) scale(${sc})`,transition:go?'transform 1000ms cubic-bezier(.2,.85,.25,1)':'none'}
+        };})(),
+      url:{landing:'get-kura.app/f/eric-31oct',revoked:'get-kura.app/f/eric-31oct',login:'get-kura.app/entrar',code:'get-kura.app/entrar',onboard:'get-kura.app/bienvenida',list:'get-kura.app/colecciones',search:'get-kura.app/c/fiesta-eric',collection:'get-kura.app/c/fiesta-eric',export:'get-kura.app/c/fiesta-eric',bridge:'get-kura.app/f/eric-31oct'}[scr]||'get-kura.app',
+      isKura:scr!=='party', isParty:scr==='party', isBridge:!!st.bridge&&st.bridge<3, heroRef:this.heroRef, heroHide:{opacity:st.bridge&&st.bridge<3?0:1,display:'flex',justifyContent:'center',width:300}, isPlaylist, isRevoked:scr==='revoked', isLogin:scr==='login', isCode:scr==='code', isOnboard:scr==='onboard', isSearch:scr==='search', isList:scr==='list', isExport:scr==='export',
+      isVisitor:visitor, isMember:!visitor, isHost:isPlaylist&&!visitor&&role==='host',
+      partyFan:fan(songs.slice(0,5).map(s=>s.id),58),
+      heroFan:fan(heroIds,112),
+      miniFan:fan(songs.slice(0,3).map(s=>s.id),40),
+      exportFan:fan(songs.slice(0,3).map(s=>s.id),72),
+      emptyFan:{box:fan([null,null,null],72).box,items:fan([null,null,null],72,72,'var(--surface-2)').items},
+      bridgeOld:{
+        wrap:{position:'absolute',inset:0,zIndex:6,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:24,background:st.phase?'var(--bg)':'var(--p-bg)',transition:'background 900ms cubic-bezier(.2,.7,.2,1)'},
+        party:{position:'absolute',top:120,left:0,right:0,textAlign:'center',font:"400 20px 'Newsreader',serif",color:'var(--p-bone)',opacity:st.phase?0:1,transition:'opacity 400ms'},
+        fanWrap:{transform:st.phase?'translateY(0) scale(1)':'translateY(170px) scale(.6)',transition:'transform 900ms cubic-bezier(.2,.9,.25,1.08)'},
+        kura:{display:'flex',flexDirection:'column',alignItems:'center',gap:10,opacity:st.phase?1:0,transform:st.phase?'none':'translateY(12px)',transition:'opacity 500ms 450ms, transform 500ms 450ms'}
+      },
+      loaded:!st.loading, loading:isPlaylist&&st.loading, isEmpty:empty, hasSongs:isPlaylist&&!st.loading&&n>0,
+      heroSub:'cada invitado pone 3 canciones',
+      countLabel:`${n} ${n===1?'canción':'canciones'}`, peopleLabel:`${people.length} ${people.length===1?'persona':'personas'}`, songCount:n,
+      emptyBody:role==='host'?'Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga sus 3.':'Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.',
+      showSlots:collab&&!st.blocked&&!st.loading,
+      slots:[0,1,2].map(i=>mineList[i]?cover(mineList[i].id,44,44,6):{s:{width:44,height:44,borderRadius:6,background:'var(--surface-2)'},m:{display:'none'}}),
+      slotsTitle:mineN===0?'Tus 3 canciones':mineN===3?'Pusiste tus 3':`Pusiste ${mineN} de 3`,
+      slotsSub:mineN===0?'Todavía no pones ninguna':mineN===3?'Quita una para cambiarla':`Te ${remain===1?'queda':'quedan'} ${remain}`,
+      blocked:isPlaylist&&collab&&st.blocked,
+      people:people.map(p=>({av:avatar(p,26),ini:p[0],label:`@${p} · ${songs.filter(s=>s.by===p).length}`})).concat(songs.some(s=>!s.by)?[{av:avatar(null,26),ini:'·',label:`alguien · ${songs.filter(s=>!s.by).length}`}]:[]),
+      linkChip:st.linkRevoked?'Link desactivado':'Link activo',
+      linkDot:{width:7,height:7,borderRadius:9,background:st.linkRevoked?'var(--text-3)':'var(--completed)',flex:'none'},
+      rows:songs.map((s,i)=>this.row(s,i,{mode:'list'})),
+      skel,
+      showIos:collab&&!st.blocked&&mineN===3&&!st.iosOff&&!st.sheet,
+      dismissIos:()=>this.setState({iosOff:true}),
+      showBar:isPlaylist&&!st.loading&&!(collab&&st.blocked),
+      barVisitor:visitor, barSearch:collab&&mineN<3, barFull:collab&&mineN===3, barHost:!visitor&&role==='host',
+      searchCta:mineN===0?'Buscar canción':'Buscar otra canción',
+      // nav
+      goBridge:()=>this.runBridge(false),
+      goLanding:()=>this.setState({screen:'landing',role:'visitor',sheet:null}),
+      goLogin:()=>this.setState({screen:'login',playing:null}),
+      goCode:()=>this.setState({screen:'code',code:''}),
+      goOnboard:()=>this.setState({screen:'onboard'}),
+      goList:()=>this.setState({screen:'list',playing:null,sheet:null}),
+      email:st.email, onEmail:e=>this.setState({email:e.target.value}), emailShown:st.email||'tu correo',
+      codeBoxes, tapCode:()=>this.setState(s=>({code:s.code.length<6?'482917'.slice(0,s.code.length+1):s.code})),
+      verifyS:primary(codeOk), verify:()=>codeOk&&this.setState({screen:'onboard'}),
+      age:st.age, onAge:e=>this.setState({age:e.target.value.replace(/\D/g,'').slice(0,3)}), ageBad, ageHint:ageBad?'Necesitas tener 13 años o más para usar kura.':'No aparece en tu perfil.',
+      user:st.user, onUser:e=>this.setState({user:e.target.value.replace(/^@/,'').slice(0,20)}), userHint, userDot,
+      enterS:primary(canEnter), enterParty:()=>canEnter&&this.setState({screen:'collection',role:'collab',sheet:'welcome',returning:false}),
+      welcomeTitle:st.returning?'ya estás dentro, @mau.':'ya estás dentro.',
+      welcomeBody:st.returning?'Entraste con tu cuenta de kura. Pon hasta 3 canciones en la fiesta de @eric; todos ven quién puso cuál.':'Eres parte de la fiesta de @eric. Pon hasta 3 canciones; todos ven quién puso cuál y las escuchan esa noche.',
+      // search
+      q:st.q, onQuery:e=>{const q=e.target.value; this.setState({q}); this.search(q);},
+      openSearch:()=>this.setState({screen:'search',sheet:null,sstat:st.q?st.sstat:'idle'}),
+      closeSearch:()=>{clearInterval(this.pi); this.setState({screen:'collection',playing:null});},
+      retrySearch:()=>{this.setState({sstat:'loading'}); this.qt=setTimeout(()=>this.setState({sstat:'results'}),900);},
+      sIdle:st.sstat==='idle', sLoading:st.sstat==='loading', sError:st.sstat==='error', sResults:st.sstat==='results',
+      results, remainLabel:remain===0?'Ya pusiste tus 3':`Te ${remain===1?'queda':'quedan'} ${remain} de 3`,
+      toast:st.toast,
+      // sheets
+      hasSheet:!!st.sheet, shWelcome:st.sheet==='welcome', shCap:st.sheet==='cap', shRemove:st.sheet==='remove', shShare:st.sheet==='share', shLink:st.sheet==='link', shExport:st.sheet==='export', shCreate:st.sheet==='create',
+      closeSheet:()=>this.setState({sheet:null}),
+      openCap:()=>this.setState({sheet:'cap'}),
+      capDone:()=>this.setState({sheet:null,screen:'collection'}),
+      mineRows:mineList.map((s,i)=>this.row(s,i,{mode:'list'})),
+      target,
+      confirmRemove:()=>{const t=CAT[st.target].t; this.setState({songs:songs.filter(s=>s.id!==st.target),sheet:null}); this.toastMsg(`Quitaste ${t}.`);},
+      removeBlock:()=>{const t=CAT[st.target].t; this.setState({songs:songs.filter(s=>s.id!==st.target),sheet:null}); this.toastMsg(`Quitaste ${t} y bloqueaste a @${tg.by}.`);},
+      openShare:()=>this.setState({sheet:'share',copied:false}),
+      copyLink:()=>this.setState({copied:true}), copyLabel:st.copied?'Copiado':'Copiar',
+      openLink:()=>this.setState({sheet:'link'}),
+      linkActive, linkRevoked:st.linkRevoked,
+      linkStatus:linkActive?'Activo · creado el 20 oct':'Desactivado',
+      linkUrl:linkActive?'get-kura.app/f/eric-31oct':'get-kura.app/f/eric-31oct · ya no abre',
+      linkBody:linkActive?'Si creas uno nuevo, el anterior deja de funcionar. Quien ya entró sigue como colaborador.':'Nadie más puede entrar con este link. Quien ya entró sigue como colaborador; crea uno nuevo para seguir invitando.',
+      revokeLink:()=>this.setState({linkRevoked:true}),
+      newLink:()=>{this.setState({linkRevoked:false,sheet:null}); this.toastMsg('Link nuevo listo. El anterior ya no funciona.');},
+      openExport:()=>this.setState({sheet:'export'}),
+      pickApple:()=>this.setState({screen:'export',xstep:'connect',svc:'Apple Music',sheet:null}),
+      pickTidal:()=>this.setState({screen:'export',xstep:'connect',svc:'Tidal',sheet:null}),
+      openCreate:()=>this.setState({sheet:'create'}),
+      isFiestaType:st.ctype==='fiesta',
+      limitLabel:limOn?(limN===0?'solo podrán ver la colección':String(limN)):'ilimitadas', limitDec:()=>this.setState({limitIdx:Math.max(0,li-1)}), limitInc:()=>this.setState({limitIdx:Math.min(6,li+1)}), decS:stepS(li>0), incS:stepS(li<6),
+      cnamePh:st.ctype==='fiesta'?'la fiesta de…':'para llorar a gusto',
+      createHint:'',
+      createLabel:st.ctype==='fiesta'?'Crear fiesta':'Crear colección',
+      ctypes, cname:st.cname, onCname:e=>this.setState({cname:e.target.value}),
+      createColl:()=>this.setState({screen:'collection',role:'host',songs:[],sheet:'share',linkRevoked:false}),
+      filters, cards,
+      // export
+      svc:st.svc, xTitle, xBody, xProgress:xs==='progress', xDone:xs==='done', xFailed:xs==='failed', xConnect:xs==='connect', xNotProgress:xs!=='progress',
+      xBarS:{height:'100%',borderRadius:6,background:'var(--text)',width:(total?st.xn/total*100:0)+'%',transition:'width 300ms'},
+      xCount:`${st.xn} de ${total}`,
+      hasMissing:miss.length>0, missing:miss.map(id=>{const s=songs.find(x=>x.id===id);return {t:CAT[id].t,a:CAT[id].a,cov:cover(id,48,48,6),by:s.by?`Puso @${s.by}`:'Puso alguien'};}),
+      runExport:()=>this.runExport(),
+      backToColl:()=>{clearInterval(this.xi); this.setState({screen:'collection'});}
+    };
+  }
+}
+</script>
+</body>
+</html>

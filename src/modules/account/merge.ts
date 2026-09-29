@@ -3,6 +3,7 @@ import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { identityScrubStatements } from "./scrub";
 import { STATUS_RANK } from "./merge-coverage";
 
@@ -29,6 +30,8 @@ export { MERGE_COVERAGE, STATUS_RANK, mergedStatus } from "./merge-coverage";
  * | user                      | identity      | D intact; is_founder OR, founder_rank lower; O deleted last    |
  * | account                   | move          | links move (Apple refresh tokens too, NOT revoked)             |
  * | backlog · backlog_item    | move          | no unique name → no suffix; a private O's shelves arrive Privado |
+ * | backlog_collaborator      | merge         | one row per collection, block kept; never a member of D's own     |
+ * | party_song                | move          | added_by O → D                                                   |
  * | user_item                 | merge         | collision: more advanced status, verdict D??O, obsessed OR…    |
  * | item_review               | merge         | collision: D's wins, O's deleted (+ its reports); hidden kept  |
  * | user_follow · user_block  | merge         | both directions (incoming follows only to a public D), no dupes, no self-edge; blocked follows gone |
@@ -83,6 +86,39 @@ function statusRankSql(col: string): SQL {
   return sql.raw(`(case ${col} ${arms} else 0 end)`);
 }
 
+/**
+ * `backlog_collaborator` (a guest of a party) and `party_song` (who put each
+ * song). Runs AFTER the backlogs moved, so "D's own collection" already
+ * includes O's parties. `blocked_at` and `party_song` are migration 0033's:
+ * before it is live only the plain membership move runs (the table itself
+ * is 0030's).
+ */
+function collaboratorStatements(D: SQL, O: SQL): BatchItem<"pg">[] {
+  const out: BatchItem<"pg">[] = [];
+  if (MIGRATION_0033_LIVE) {
+    out.push(
+      db.execute(sql`update "backlog_collaborator" as d set
+          created_at = least(d.created_at, o.created_at),
+          blocked_at = coalesce(d.blocked_at, o.blocked_at)
+        from "backlog_collaborator" as o
+        where d.user_id = ${D} and o.user_id = ${O} and o.backlog_id = d.backlog_id`),
+    );
+  }
+  out.push(
+    db.execute(sql`delete from "backlog_collaborator" as o
+      where o.user_id = ${O}
+        and exists (select 1 from "backlog_collaborator" d where d.user_id = ${D} and d.backlog_id = o.backlog_id)`),
+    db.execute(sql`update "backlog_collaborator" set user_id = ${D} where user_id = ${O}`),
+    db.execute(sql`delete from "backlog_collaborator" as c
+      where c.user_id = ${D}
+        and exists (select 1 from "backlog" b where b.id = c.backlog_id and b.user_id = ${D})`),
+  );
+  if (MIGRATION_0033_LIVE) {
+    out.push(db.execute(sql`update "party_song" set added_by_user_id = ${D} where added_by_user_id = ${O}`));
+  }
+  return out;
+}
+
 export async function mergeAccounts(destinationId: string, sourceId: string): Promise<void> {
   if (destinationId === sourceId) throw new Error("mergeAccounts: source === destination");
   // Tables named literally (quoted) so the SQL reads as SQL; the coverage
@@ -113,6 +149,9 @@ export async function mergeAccounts(destinationId: string, sourceId: string): Pr
         and exists (select 1 from "user" where id = ${O} and not (is_public and username is not null))`),
     db.execute(sql`update "backlog" set user_id = ${D} where user_id = ${O}`),
     db.execute(sql`update "backlog_item" set user_id = ${D} where user_id = ${O}`),
+
+    // ---- collection members (colecciones de fiesta) + who put each song ----
+    ...collaboratorStatements(D, O),
 
     // ---- user_item: collisions absorbed into D's row, the rest re-keyed ----
     db.execute(sql`update "user_item" as d set

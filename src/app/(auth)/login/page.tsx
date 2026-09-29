@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 import { FIELD, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
+import { carryReturnTo } from "../return-to-param";
 
 /**
  * Kura · O1c "entrar." (design/kura/flujos-v2.dc.html, flujo 01 · rama "ya
@@ -34,7 +35,7 @@ export default function LoginPage() {
       body: JSON.stringify({ email }),
     });
     if (res.ok) {
-      router.push(`/verify?email=${encodeURIComponent(email)}`);
+      router.push(carryReturnTo(`/verify?email=${encodeURIComponent(email)}`));
       return;
     }
     setStatus(res.status === 429 ? "cooldown" : "error");

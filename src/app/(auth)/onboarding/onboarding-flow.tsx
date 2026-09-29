@@ -26,16 +26,21 @@ export function OnboardingFlow({
   initialPool,
   initialNextPage,
   initialStep,
+  returnTo = null,
 }: {
   initialPool: OnboardingPoolItem[];
   initialNextPage: number | null;
   initialStep: OnboardingStep;
+  /** A party to go back to (`safeReturnTo`): the user step ends there, not in "elige 3". */
+  returnTo?: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<OnboardingStep>(initialStep);
 
   if (step === "usuario") {
-    return <UsernameStep onDone={() => setStep("picks")} />;
+    return (
+      <UsernameStep onDone={() => (returnTo ? window.location.assign(returnTo) : setStep("picks"))} />
+    );
   }
 
   return (

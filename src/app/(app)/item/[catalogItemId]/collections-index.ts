@@ -1,8 +1,9 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems } from "@/db/schema";
 import { getCollectionFans, type CollectionFan } from "@/modules/backlog/shelves";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 
 /**
  * What the ficha's "guardar en" sheet needs beyond the collection names
@@ -25,7 +26,8 @@ export async function getCollectionsIndex(userId: string): Promise<CollectionsIn
     db
       .select({ backlogId: backlogItems.backlogId })
       .from(backlogItems)
-      .where(eq(backlogItems.userId, userId))
+      // A party (colecciones de fiesta) is never the "last used" collection.
+      .where(and(eq(backlogItems.userId, userId), notPartyBacklog(backlogItems.backlogId)))
       .orderBy(desc(backlogItems.addedAt))
       .limit(1),
     getCollectionFans(userId),

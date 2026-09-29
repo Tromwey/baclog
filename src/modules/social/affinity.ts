@@ -13,6 +13,7 @@ import {
 import type { MediaType } from "@/modules/catalog/types";
 import { notBlockedWith } from "./block-gate";
 import { publicAuthor } from "./queries";
+import { libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Viewer ↔ profile affinity (Revamp UI screen 10, 2026-09-03): the line under
@@ -122,7 +123,7 @@ export async function getAffinity(
       .select({
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         posterUrl: catalogItems.posterUrl,
         paletteHex: catalogItems.paletteHex,
       })

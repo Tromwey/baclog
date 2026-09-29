@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: YYYY-MM-DD
+> Actualizado: 2026-09-29 (canciones de fiesta fuera del motor)
 
 ## Qué cubre este dominio
 <!-- El motor de recomendaciones cross-media: proveedores LLM, prompts, moderación, grafo de links,
@@ -30,6 +30,7 @@
 
 ## Convenciones vigentes
 <!-- Las reglas que un agente debe respetar al tocar este dominio, con un ejemplo correcto/incorrecto si ayuda. -->
+- **Una canción de fiesta (`media_type = 'track'`, migración 0033) nunca es semilla ni destino (2026-09-29).** Las semillas salen de `user_item` (una canción nunca tiene uno) y las lecturas del catálogo del motor filtran con `libraryMedia()` (`crossmedia.ts` semilla y `resolveProposal`, `linkgraph.ts` destinos y `searchCatalogRows`); `CatalogItemRow`/`SeedRow` son la fila de biblioteca (`mediaType: MediaType`). Un destino de caché con otro formato es un invariante roto: `assertLibraryMedia` lanza (no re-etiqueta en silencio). `discover-rails.ts` igual. Nada del motor debe leer `AnyCatalogItemRow`.
 
 ## Decisiones tomadas (y por qué)
 <!-- Una línea por decisión de arquitectura viva, con la razón. Si se revierte, se reescribe la línea. -->

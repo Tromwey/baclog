@@ -100,7 +100,9 @@ export const ErrorBodySchema = z.object({
     code: ErrorCodeSchema,
     /** Final Spanish copy — show as is. */
     message: z.string().min(1),
-    /** Sub-code the app branches on — `forbidden`: "underage", "lists_private" · `conflict`:
+    /** Sub-code the app branches on — `forbidden`: "underage", "lists_private",
+     *  "blocked", "view_only" · `conflict`: "duplicate_mine", "duplicate_other",
+     *  "cap_reached" (colecciones de fiesta) ·
      *  "not_released", "reaction_required", "taken", "linked_elsewhere",
      *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
      *  422, phase 4g): "invalid_proof" = a rejected provider token / merge
@@ -117,6 +119,10 @@ export const ErrorBodySchema = z.object({
     /** `forbidden` + reason `lists_private` only
      *  (`GET /people/{handle}/followers|following`): the owner's setting. */
     visibility: z.enum(FOLLOW_LISTS_VISIBILITY).optional(),
+    /** `conflict` + reason `duplicate_other` only (colecciones de fiesta,
+     *  `PUT /parties/{id}/songs/{titleId}`): who already put the song; null =
+     *  "alguien". */
+    addedBy: z.lazy(() => PartyPersonSchema).nullable().optional(),
   }),
 });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
@@ -719,3 +725,171 @@ export const WebSessionSchema = z.object({
   url: z.string().url(),
 });
 export type WebSession = z.infer<typeof WebSessionSchema>;
+
+
+// ---------- Parties (colecciones de fiesta, 2026-09-29) ----------
+//
+// Contract: .claude/knowledge/state/fiesta-contract.md. A party is a private
+// collection of SONGS (catalog `track`) with guests; it never appears in
+// `GET /collections` and a song never appears as a `Title`.
+
+/** Songs each guest may add: 0 = solo ver · 1..5 · null = ilimitadas. */
+export const PerGuestLimitSchema = z.number().int().min(0).max(5).nullable();
+
+/** A named person; everywhere it is nullable, null = "alguien". */
+export const PartyPersonSchema = z.object({
+  handle: z.string().min(1),
+  name: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+});
+export type PartyPersonWire = z.infer<typeof PartyPersonSchema>;
+
+export const PartySongSchema = z.object({
+  /** catalog id of the song — the `{titleId}` of the song routes. */
+  titleId: z.string().min(1),
+  title: z.string().min(1),
+  artist: z.string().nullable(),
+  album: z.string().nullable(),
+  /** 600×600 mzstatic hotlink. */
+  artworkUrl: z.string().url().nullable(),
+  /** 30 s iTunes preview (m4a). */
+  previewUrl: z.string().url().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  appleMusicUrl: z.string().url().nullable(),
+  /** Cover palette; empty until someone extracted it on-device. */
+  palette: z.array(HexSchema),
+  addedAt: IsoDateSchema,
+  /** null = "Puso alguien". */
+  addedBy: PartyPersonSchema.nullable(),
+  /** The caller put it ("Pusiste"). */
+  mine: z.boolean(),
+  byHost: z.boolean(),
+  canRemove: z.boolean(),
+  canBlockAuthor: z.boolean(),
+});
+export type PartySongWire = z.infer<typeof PartySongSchema>;
+
+export const PartyContributorSchema = z.object({
+  /** null = the "alguien" bucket (always last). */
+  person: PartyPersonSchema.nullable(),
+  isYou: z.boolean(),
+  songCount: z.number().int().positive(),
+});
+
+export const PartyRoleSchema = z.enum(["host", "guest"]);
+
+export const PartyViewerSchema = z.object({
+  role: PartyRoleSchema,
+  blocked: z.boolean(),
+  mineCount: z.number().int().nonnegative(),
+  /** null = no cap (host, or ilimitadas). */
+  remaining: z.number().int().nonnegative().nullable(),
+  canAdd: z.boolean(),
+});
+
+export const PartyInviteSchema = z.object({
+  active: z.boolean(),
+  token: z.string().nullable(),
+  /** `https://get-kura.app/f/{token}` while active. */
+  url: z.string().url().nullable(),
+  createdAt: IsoDateSchema.nullable(),
+});
+
+export const PartyBlockedGuestSchema = z.object({
+  /** Opaque, per party — the `{guestRef}` of `DELETE /parties/{id}/blocked/{guestRef}`. */
+  guestRef: z.string().min(1),
+  person: PartyPersonSchema.nullable(),
+  blockedAt: IsoDateSchema,
+});
+
+export const PartySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  perGuestLimit: PerGuestLimitSchema,
+  createdAt: IsoDateSchema,
+  host: PartyPersonSchema.nullable(),
+  viewer: PartyViewerSchema,
+  songs: z.array(PartySongSchema),
+  contributors: z.array(PartyContributorSchema),
+  guestCount: z.number().int().nonnegative(),
+  /** Host only; null for guests. */
+  invite: PartyInviteSchema.nullable(),
+  /** Host only; [] for guests. */
+  blockedGuests: z.array(PartyBlockedGuestSchema),
+});
+export type PartyWire = z.infer<typeof PartySchema>;
+
+export const PartyCardSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  role: PartyRoleSchema,
+  perGuestLimit: PerGuestLimitSchema,
+  songCount: z.number().int().nonnegative(),
+  peopleCount: z.number().int().nonnegative(),
+  host: PartyPersonSchema.nullable(),
+  artworkUrls: z.array(z.string().url().nullable()).max(3),
+  palette: z.array(HexSchema),
+  updatedAt: IsoDateSchema,
+});
+
+export const InvitePreviewSchema = z.object({
+  token: z.string().min(1),
+  party: z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    perGuestLimit: PerGuestLimitSchema,
+    host: PartyPersonSchema.nullable(),
+    songs: z.array(PartySongSchema),
+    contributors: z.array(PartyContributorSchema),
+    guestCount: z.number().int().nonnegative(),
+  }),
+  /** null without a bearer. */
+  viewer: z
+    .object({
+      role: PartyRoleSchema.nullable(),
+      joined: z.boolean(),
+      blocked: z.boolean(),
+    })
+    .nullable(),
+});
+
+export const PartySongHitSchema = z.object({
+  titleId: z.string().min(1),
+  title: z.string().min(1),
+  artist: z.string().nullable(),
+  album: z.string().nullable(),
+  artworkUrl: z.string().url().nullable(),
+  previewUrl: z.string().url().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  appleMusicUrl: z.string().url().nullable(),
+  palette: z.array(HexSchema),
+  /** null = not in the party yet ("Agregar"). */
+  inParty: z
+    .object({ mine: z.boolean(), addedBy: PartyPersonSchema.nullable() })
+    .nullable(),
+});
+
+export const JoinResultSchema = z.object({
+  party: PartySchema,
+  /** "new" = "ya estás dentro." · "already" = returning member · "host". */
+  joined: z.enum(["new", "already", "host"]),
+});
+
+export const CreatePartyBodySchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  /** Omitted = 3. */
+  perGuestLimit: PerGuestLimitSchema.optional(),
+});
+
+export const UpdatePartyBodySchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  perGuestLimit: PerGuestLimitSchema.optional(),
+});
+
+export const AddPartySongBodySchema = z.object({
+  paletteHex: z.array(HexSchema).max(6).optional(),
+});
+
+export const PartySongPaletteBodySchema = z.object({
+  paletteHex: z.array(HexSchema).min(1).max(6),
+});

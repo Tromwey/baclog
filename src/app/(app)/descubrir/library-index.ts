@@ -1,8 +1,9 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems } from "@/db/schema";
 import { getCollectionFans } from "@/modules/backlog/shelves";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 import type { LibraryIndex } from "./library";
 
 /**
@@ -22,7 +23,9 @@ export async function getLibraryIndex(userId: string): Promise<LibraryIndex> {
         catalogItemId: backlogItems.catalogItemId,
       })
       .from(backlogItems)
-      .where(eq(backlogItems.userId, userId))
+      // Party songs are the host's memberships too (colecciones de fiesta):
+      // never "the last collection used" nor a "guardar" target.
+      .where(and(eq(backlogItems.userId, userId), notPartyBacklog(backlogItems.backlogId)))
       .orderBy(desc(backlogItems.addedAt)),
     getCollectionFans(userId),
   ]);

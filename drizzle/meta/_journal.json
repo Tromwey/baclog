@@ -232,6 +232,13 @@
       "when": 1790635920188,
       "tag": "0032_party_rsvp",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790665564150,
+      "tag": "0033_party_collections",
+      "breakpoints": true
     }
   ]
 }

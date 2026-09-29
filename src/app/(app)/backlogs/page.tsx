@@ -12,6 +12,8 @@ import { getRenderInstant } from "@/modules/catalog/release";
 import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
+import { PartyUnavailableError } from "@/modules/party-collections/errors";
+import { listPartiesForUser } from "@/modules/party-collections/queries";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { CollectionCards } from "./collection-cards";
 
@@ -26,12 +28,18 @@ import { CollectionCards } from "./collection-cards";
  */
 export default async function BacklogsPage() {
   const user = await requireUser();
-  const [shelves, now] = await Promise.all([
+  const [shelves, now, parties] = await Promise.all([
     getShelvesForUser(user.id),
     getRenderInstant(),
+    // Colecciones de fiesta the user hosts or joined (their own read: the
+    // generic shelves exclude parties). Before migration 0033 there are none.
+    listPartiesForUser(user.id).catch((err) => {
+      if (err instanceof PartyUnavailableError) return [];
+      throw err;
+    }),
   ]);
 
-  if (shelves.length === 0) return <NoCollections />;
+  if (shelves.length === 0 && parties.length === 0) return <NoCollections />;
 
   // Novedades (modules/announcements.ts + components/novedades-modal). Gated
   // FIRST so the extra read only happens for an account that can see it.
@@ -54,6 +62,7 @@ export default async function BacklogsPage() {
       {invitation && <NovedadesModal invitation={invitation} />}
       <CollectionCards
         shelves={shelves}
+        parties={parties}
         upcoming={upcoming}
         now={now}
         owner={{ name: user.name ?? user.username ?? "", image: user.image, hexes: palette }}

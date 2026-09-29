@@ -7,6 +7,7 @@ import {
   getCollectionsWithMemberships,
   type CollectionWithMemberships,
 } from "./shelves";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 import { VISIBILITY, type BacklogVisibility } from "./visibility";
 
 /**
@@ -93,7 +94,16 @@ export async function updateBacklog(
   const updated = await db
     .update(backlogs)
     .set(patch)
-    .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
+    .where(
+      and(
+        eq(backlogs.id, backlogId),
+        eq(backlogs.userId, userId),
+        // A party collection is ALWAYS private (reached by its invite link or
+        // membership, never by /u/** or the feed): a visibility patch on one
+        // matches nothing. Renames go through modules/party-collections.
+        input.visibility !== undefined ? notPartyBacklog(backlogs.id) : undefined,
+      ),
+    )
     .returning({ id: backlogs.id });
   return updated.length > 0;
 }
