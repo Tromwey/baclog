@@ -1425,7 +1425,7 @@ const reads: Case[] = [
           assert.equal(f.time, 1, "cine abre en «hasta dos horas»");
           for (const t of f.titles) {
             for (const m of t.moods) assert.ok(m < f.moods.length, "índice de humor dentro del vocabulario");
-            if (t.runtimeMinutes !== null) assert.ok(t.runtimeMinutes >= 100 && t.runtimeMinutes <= 130, "runtime dentro de la ventana");
+            if (t.runtimeMinutes !== null) assert.ok(t.runtimeMinutes >= 100 && t.runtimeMinutes <= 130, `runtime dentro de la ventana (${t.title.name} · ${t.title.id} · ${t.runtimeMinutes} min)`);
           }
         }
         if (format === "series") {
