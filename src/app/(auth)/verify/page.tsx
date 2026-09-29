@@ -11,7 +11,7 @@ import {
   SOLID_BUTTON,
   Wordmark,
 } from "@/components/kura/components";
-import { returnToParam } from "../return-to-param";
+import { carryReturnTo, returnToParam } from "../return-to-param";
 
 /**
  * Kura · the second half of "entrar." — the code the email carries. Same
@@ -85,7 +85,7 @@ function VerifyForm() {
               </p>
               <button
                 type="button"
-                onClick={() => router.push("/login")}
+                onClick={() => router.push(carryReturnTo("/login"))}
                 className={GLASS_BUTTON}
               >
                 Enviar otro código

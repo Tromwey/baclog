@@ -118,6 +118,12 @@ enum KColor {
     static let radioRing = Color(hex: textHex, opacity: 0.24)
     /// Selected glass (`rgba(255,255,255,.22)`) — pressed/selected state for glass controls.
     static let glassSelected = Color.white.opacity(0.22)
+    /// Party seals (fiesta-app-v2 `AV`): each person a flat disk of ONE of these muted tones,
+    /// picked stably from their handle (`PartySeal`), with `sealInk` initials. No red.
+    static let sealHexes = ["#c98b6b", "#6f8a9a", "#a58bb0", "#8a9a6f", "#c9a25a", "#b0898f"]
+    static let sealInk = Color(hex: "#1c1916")
+    /// "alguien"'s seal: the design's `surface-3` (white .14 over bg), opaque so stacked seals don't show through.
+    static let sealSomeone = Color(hex: "#2c2c30")
     /// Hairline between groups of sheet rows `rgba(255,255,255,.08)` (a content divider: allowed).
     static let sheetDivider = Color.white.opacity(0.08)
 

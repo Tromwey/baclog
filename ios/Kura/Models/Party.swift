@@ -30,21 +30,12 @@ struct PartyPerson: Hashable, Decodable {
     /// "@ana" — or the name when there's no handle (never happens on the wire, kept safe).
     var at: String { handle.isEmpty ? name : "@\(handle)" }
 
-    /// For `Seal`: the photo when there is one, else the initials on s2.
-    var seal: Person {
-        var p = Person(handle: handle, name: name, initials: Person.initials(of: name.isEmpty ? handle : name), hexes: [])
-        p.avatarURL = avatarURL
-        return p
-    }
-
-    /// The anonymous seal ("alguien"): a dot on s2.
-    static let someoneSeal = Person(handle: "", name: "alguien", initials: "·", hexes: [])
+    // Its seal is `PartySeal` (a colour per handle, design `avatar(by)`), not `Seal`.
 }
 
 extension Optional where Wrapped == PartyPerson {
     /// "@ana" or "alguien".
     var atOrSomeone: String { self?.at ?? "alguien" }
-    var seal: Person { self?.seal ?? PartyPerson.someoneSeal }
 }
 
 /// A song in the party (playlist order: first added first).
@@ -455,7 +446,17 @@ enum PartyCopy {
 
     /// The copy for a server that doesn't have parties yet (`503 unavailable`, `MIGRATION_0033_LIVE`).
     static let unavailableTitle = "las fiestas llegan muy pronto."
-    static let unavailableNote = "Las fiestas llegan muy pronto. Vuelve a abrir el link en unos días."
+    static let unavailableNote = "Todavía no están listas en kura. Vuelve a abrir este link en unos días; sigue siendo el mismo."
+
+    /// The toast / search copy for the same 503 (a write or a search while parties are off).
+    static let unavailable = "Las fiestas llegan muy pronto."
+    /// A party that answered 404 after we had it (deleted, you left, a block with the host).
+    static let gone = "Esa fiesta ya no está."
+    /// 409 `too_many_parties` when the server sends no message of its own.
+    static let tooManyParties = "Ya tienes 20 fiestas. Borra alguna para crear otra."
+    /// 429 on "Crear link nuevo".
+    static let rotateLimited = "Creaste varios links seguidos. Espera un momento y vuelve a intentarlo."
+    static let left = "Saliste de la fiesta."
 
     static let deadTitle = "este link ya no funciona."
     static let deadNote = "Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo."

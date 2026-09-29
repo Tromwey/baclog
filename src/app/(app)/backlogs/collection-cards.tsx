@@ -32,7 +32,7 @@ import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { isLongCollectionName } from "@/modules/backlog/name-limit";
 import { handleOf, perGuestPhrase, songsLabel } from "@/components/party/party-parts";
-import { partyPath } from "@/components/party/paths";
+import { partyPath } from "@/modules/party-collections/rules";
 import type { PartyCard } from "@/modules/party-collections/types";
 
 /**

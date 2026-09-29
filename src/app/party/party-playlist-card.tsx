@@ -29,6 +29,8 @@ export interface PartyPlaylistSummary {
   href: string;
   /** `presenceLine(summary)`. */
   line: string;
+  /** `playlistPitch(perGuestLimit)` — "Pon tus 3 canciones. …" (the real cap). */
+  pitch: string;
   artworkUrls: string[];
 }
 
@@ -56,7 +58,10 @@ export function PartyPlaylistCard({
       .then((s) => {
         if (!off) setLoaded(s);
       })
-      .catch(() => {});
+      .catch((err) => {
+        // The card simply doesn't show — but say why in the console.
+        console.error("[party] /party playlist card: getPartyPlaylistAction failed", err);
+      });
     return () => {
       off = true;
     };
@@ -108,7 +113,7 @@ export function PartyPlaylistCard({
         className="text-center font-sans text-[15px] leading-[1.45] [text-wrap:pretty]"
         style={{ color: "var(--p-bone-2)" }}
       >
-        Pon tus canciones. Van a sonar esa noche, y todos verán quién puso cuál.
+        {summary.pitch}
       </div>
       <button
         type="button"

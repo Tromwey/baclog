@@ -16,7 +16,8 @@
  *   - every party entry point (module functions, server actions, `/api/v1/
  *     parties/**`, `/api/v1/invites/**`) answers "unavailable" (actions:
  *     `{ error: "unavailable" }`; API: 503 `unavailable`), and the anonymous
- *     reads (`getInvitePreview`, `getPartySummaryByToken`) return null.
+ *     reads: `getInvitePreview` throws (→ 503 / "las fiestas llegan muy pronto."),
+ *     `getPartySummaryByToken` returns null with a warning.
  *
  * The library-format filters (`libraryMedia()`, catalog/library-media.ts) do
  * NOT depend on this switch: they are spelled `IN ('film','series','album')`

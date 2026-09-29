@@ -13,7 +13,7 @@ import os
 // tapped `www.` link is still ours, hence `hosts` lists them.
 
 /// Where a web link points, in the app's terms. Built ONLY from a URL of our own site.
-enum DeepLink: Equatable {
+enum DeepLink: Equatable, Codable {
     /// `/item/{id}`, `/{handle}/item/{id}`, `/u/{handle}/item/{id}`.
     case title(String)
     /// `/{handle}`, `/u/{handle}`.
@@ -112,9 +112,40 @@ enum DeepLink: Equatable {
 
 /// A link that arrived before the tabs were up (cold start, or signed out): opened by
 /// `AppStore.startIfNeeded` once the library is loaded — after a sign-in too, which is the point.
+///
+/// It is also kept in `UserDefaults` for an hour: a party invite opened signed out has to survive
+/// the person leaving for Mail to get the code (iOS may kill the app meanwhile). Consuming it
+/// (`openPendingLink`) or setting nil clears both; an older one is dropped on read.
 @MainActor
 enum DeepLinkInbox {
-    static var pending: DeepLink?
+    private static let key = "kura.pendingDeepLink"
+    static let ttl: TimeInterval = 60 * 60
+    private struct Saved: Codable { let link: DeepLink; let at: Date }
+    private static var memory: DeepLink?
+
+    static var pending: DeepLink? {
+        get {
+            if let memory { return memory }
+            let d = UserDefaults.standard
+            guard let data = d.data(forKey: key) else { return nil }
+            guard let saved = try? JSONDecoder().decode(Saved.self, from: data),
+                  Date().timeIntervalSince(saved.at) < ttl else {
+                d.removeObject(forKey: key)
+                return nil
+            }
+            memory = saved.link
+            return saved.link
+        }
+        set {
+            memory = newValue
+            if let newValue, let data = try? JSONEncoder().encode(Saved(link: newValue, at: Date())) {
+                UserDefaults.standard.set(data, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
     /// The same link can arrive twice (`onOpenURL` and the browsing-web activity).
     fileprivate static var last: (url: URL, at: Date)?
 }

@@ -21,11 +21,11 @@ import {
   canAddNow,
   canBlockAuthor,
   canRemoveSong,
-  guestRefOf,
   inviteUrl,
   parseInviteToken,
   remainingFor,
 } from "./rules";
+import { guestRefOf } from "./tokens";
 import type {
   InvitePreview,
   PartyBlockedGuest,
@@ -197,7 +197,13 @@ async function guestCountOf(backlogId: string): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(backlogCollaborators)
-    .where(and(eq(backlogCollaborators.backlogId, backlogId), isNull(backlogCollaborators.blockedAt)));
+    .where(
+      and(
+        eq(backlogCollaborators.backlogId, backlogId),
+        isNull(backlogCollaborators.blockedAt),
+        isNull(backlogCollaborators.leftAt),
+      ),
+    );
   return Number(row?.n ?? 0);
 }
 
@@ -314,11 +320,17 @@ export async function resolveInviteToken(raw: unknown): Promise<InviteTarget | n
  * malformed, unknown or revoked, AND when a signed-in viewer has a user block
  * with the host in either direction (same answer, no oracle). Songs never
  * carry `canRemove`/`canBlockAuthor` here (the member page does that).
+ *
+ * THROWS `PartyUnavailableError` while migration 0033 isn't live (contract
+ * C1): the API answers 503 `unavailable` for EVERY token (so it's no oracle)
+ * and /f/{token} shows "las fiestas llegan muy pronto." — not the dead-link
+ * screen, which would tell a guest their valid link is dead.
  */
 export async function getInvitePreview(
   token: string,
   viewerId: string | null,
 ): Promise<InvitePreview | null> {
+  assertPartyLive();
   const target = await resolveInviteToken(token);
   if (!target) return null;
   const blockedWithHost =
@@ -377,6 +389,12 @@ export function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
  * up to 5 artwork URLs. No user ids, no private names.
  */
 export async function getPartySummaryByToken(token: string): Promise<PartySummary | null> {
+  if (!MIGRATION_0033_LIVE) {
+    // /party is configured (PARTY_PLAYLIST_TOKEN) but the tables aren't
+    // there yet: the card hides itself — say so in the log, once per call.
+    console.warn("[party] getPartySummaryByToken: migration 0033 is not live; the /party playlist card stays hidden");
+    return null;
+  }
   const target = await resolveInviteToken(token);
   if (!target) return null;
   const guest = alias(users, "guest");
@@ -384,14 +402,20 @@ export async function getPartySummaryByToken(token: string): Promise<PartySummar
     db
       .select({
         songs: sql<number>`(select count(*)::int from party_song ps where ps.backlog_id = ${target.backlogId})`,
-        guests: sql<number>`(select count(*)::int from backlog_collaborator c where c.backlog_id = ${target.backlogId} and c.blocked_at is null)`,
+        guests: sql<number>`(select count(*)::int from backlog_collaborator c where c.backlog_id = ${target.backlogId} and c.blocked_at is null and c.left_at is null)`,
       })
       .from(sql`(select 1) as one`),
     db
       .select({ handle: guest.username })
       .from(backlogCollaborators)
       .innerJoin(guest, and(eq(guest.id, backlogCollaborators.userId), personGate(guest, null)))
-      .where(and(eq(backlogCollaborators.backlogId, target.backlogId), isNull(backlogCollaborators.blockedAt)))
+      .where(
+        and(
+          eq(backlogCollaborators.backlogId, target.backlogId),
+          isNull(backlogCollaborators.blockedAt),
+          isNull(backlogCollaborators.leftAt),
+        ),
+      )
       .orderBy(asc(backlogCollaborators.createdAt))
       .limit(2),
     db
@@ -408,6 +432,7 @@ export async function getPartySummaryByToken(token: string): Promise<PartySummar
   const handles = named.flatMap((n) => (n.handle ? [n.handle] : []));
   return {
     name: target.name,
+    perGuestLimit: target.perGuestLimit,
     songCount,
     guestCount,
     named: handles,
@@ -421,7 +446,9 @@ export async function getPartySummaryByToken(token: string): Promise<PartySummar
 /**
  * Every party the user hosts or joined (blocked included — they still see
  * it), most recently touched first. For "Tus colecciones · De fiesta" and
- * `GET /api/v1/parties`. Two queries.
+ * `GET /api/v1/parties`. Two queries. Same membership as `getPartyAccess`: a
+ * guest who left (`left_at`) or who has a user block with the host (either
+ * way, C2) doesn't get the party.
  */
 export async function listPartiesForUser(userId: string): Promise<PartyCard[]> {
   assertPartyLive();
@@ -443,7 +470,10 @@ export async function listPartiesForUser(userId: string): Promise<PartyCard[]> {
     .where(
       or(
         eq(backlogs.userId, userId),
-        sql`exists (select 1 from backlog_collaborator c where c.backlog_id = ${backlogs.id} and c.user_id = ${userId})`,
+        and(
+          sql`exists (select 1 from backlog_collaborator c where c.backlog_id = ${backlogs.id} and c.user_id = ${userId} and c.left_at is null)`,
+          notBlockedWith(userId, backlogs.userId),
+        ),
       ),
     )
     .orderBy(sql`${backlogs.updatedAt} desc`);

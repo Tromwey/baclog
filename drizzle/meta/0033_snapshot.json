@@ -1,5 +1,5 @@
 {
-  "id": "1bdbc429-2e95-40d8-ae53-78e84ef46a9b",
+  "id": "3e0a431d-458b-4e9a-8351-5358cd19037b",
   "prevId": "9b85f472-7a27-4205-b5f9-a776b44c635d",
   "version": "7",
   "dialect": "postgresql",
@@ -240,6 +240,12 @@
         },
         "blocked_at": {
           "name": "blocked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "left_at": {
+          "name": "left_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false

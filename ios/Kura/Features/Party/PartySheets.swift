@@ -106,11 +106,13 @@ struct PartyCapSheet: View {
         .task { await store.loadParty(partyID) }
     }
 
-    /// Design: quitar closes the sheet and leaves you in the search, to pick another.
+    /// Design: quitar closes the sheet and leaves you in the search, to pick another. A failed
+    /// Quitar (the toast said why) keeps the sheet up with the song still in it.
     private func remove(_ s: PartySong) async {
         busy = s.id
-        await store.removePartySong(partyID, s)
+        let ok = await store.removePartySong(partyID, s)
         busy = nil
+        guard ok else { return }
         store.dismissSheet()
         if store.path(store.tab).last != .partySearch(partyID) { store.push(.partySearch(partyID)) }
     }
@@ -141,7 +143,7 @@ struct PartySongSheet: View {
                     }
                 }
                 VStack(spacing: 8) {
-                    if s.canRemove {
+                    if s.canRemove || s.mine {
                         PartyFlatButton(title: "Quitar de la colección") { run { await store.removePartySong(partyID, s) } }
                     }
                     if s.canBlockAuthor, let by = s.addedBy {
@@ -168,12 +170,13 @@ struct PartySongSheet: View {
         }
     }
 
-    private func run(_ op: @escaping () async -> Void) {
+    /// Closes only when it worked; a failure leaves the sheet up (the toast said why).
+    private func run(_ op: @escaping () async -> Bool) {
         busy = true
         Task {
-            await op()
+            let ok = await op()
             busy = false
-            store.dismissSheet()
+            if ok { store.dismissSheet() }
         }
     }
 }
@@ -256,8 +259,8 @@ struct PartyShareSheet: View {
     }
 }
 
-/// The host's Opciones (design `opts`): Gestionar link · Llevar a otra app · Editar, plus
-/// Bloqueados (when there are) and Borrar fiesta.
+/// Opciones. The host's (design `opts`): Gestionar link · Llevar a otra app · Editar, plus
+/// Bloqueados (when there are) and Borrar fiesta. A guest's: Salir de la fiesta.
 struct PartyOptionsSheet: View {
     @Environment(AppStore.self) private var store
     let partyID: String
@@ -271,26 +274,73 @@ struct PartyOptionsSheet: View {
                 Text(PartyCopy.songs(p?.songs.count ?? 0)).monoLabel(11)
             }
             .padding(.bottom, 10)
-            VStack(spacing: 2) {
-                SheetRow(systemImage: "link", label: "Gestionar link", action: { store.present(.partyLink(partyID)) }) {
-                    Text(p?.invite?.active == true ? "activo" : "desactivado").monoLabel(11, color: KColor.text3)
-                }
-                SheetRow(systemImage: "arrow.right", label: "Llevar a otra app", action: { store.present(.partyExport(partyID)) }) {
-                    Text("próximamente").monoLabel(11, color: KColor.text3)
-                }
-                SheetRow(systemImage: "pencil", label: "Editar") { store.present(.partyEdit(partyID)) }
-                if let n = p?.blockedGuests.count, n > 0 {
-                    SheetRow(systemImage: "hand.raised", label: "Bloqueados", action: { store.present(.partyBlocked(partyID)) }) {
-                        Text("\(n)").monoLabel(11, color: KColor.text3)
+            if p?.isHost == false {
+                VStack(spacing: 2) {
+                    SheetRow(systemImage: "rectangle.portrait.and.arrow.right", label: "Salir de la fiesta") {
+                        store.present(.partyLeave(partyID))
                     }
                 }
-                SheetDivider()
-                SheetRow(systemImage: "trash", label: "Borrar fiesta") { store.present(.partyDelete(partyID)) }
+                .padding(.horizontal, -8)
+            } else {
+                hostRows(p)
             }
-            .padding(.horizontal, -8)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+    }
+
+    private func hostRows(_ p: Party?) -> some View {
+        VStack(spacing: 2) {
+            SheetRow(systemImage: "link", label: "Gestionar link", action: { store.present(.partyLink(partyID)) }) {
+                Text(p?.invite?.active == true ? "activo" : "desactivado").monoLabel(11, color: KColor.text3)
+            }
+            SheetRow(systemImage: "arrow.right", label: "Llevar a otra app", action: { store.present(.partyExport(partyID)) }) {
+                Text("próximamente").monoLabel(11, color: KColor.text3)
+            }
+            SheetRow(systemImage: "pencil", label: "Editar") { store.present(.partyEdit(partyID)) }
+            if let n = p?.blockedGuests.count, n > 0 {
+                SheetRow(systemImage: "hand.raised", label: "Bloqueados", action: { store.present(.partyBlocked(partyID)) }) {
+                    Text("\(n)").monoLabel(11, color: KColor.text3)
+                }
+            }
+            SheetDivider()
+            SheetRow(systemImage: "trash", label: "Borrar fiesta") { store.present(.partyDelete(partyID)) }
+        }
+        .padding(.horizontal, -8)
+    }
+}
+
+/// "¿salir de la fiesta?" (a guest, C3): you stop seeing it and it leaves your collections; your
+/// songs stay. Coming back takes the link again.
+struct PartyLeaveSheet: View {
+    @Environment(AppStore.self) private var store
+    let partyID: String
+    @State private var busy = false
+
+    var body: some View {
+        let p = store.party(partyID)
+        let host = p?.host.atOrSomeone ?? "alguien"
+        let mine = p?.mySongs.count ?? 0
+        VStack(alignment: .leading, spacing: 0) {
+            PartySheetTitle(text: "¿salir de la fiesta?")
+            PartySheetBody(text: note(host: host, mine: mine)).padding(.top, 10)
+            VStack(spacing: 8) {
+                PartyFlatButton(title: "Salir de la fiesta") {
+                    busy = true
+                    Task { await store.leaveParty(partyID); busy = false }
+                }
+                PartyFlatButton(title: "Cancelar", quiet: true) { store.dismissSheet() }
+            }
+            .disabled(busy)
+            .padding(.top, 22)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+    }
+
+    private func note(host: String, mine: Int) -> String {
+        let songs = mine == 0 ? "" : mine == 1 ? " La canción que pusiste se queda." : " Las \(mine) canciones que pusiste se quedan."
+        return "Deja de aparecer en tus colecciones.\(songs) Para volver, pídele el link a \(host)."
     }
 }
 
@@ -461,7 +511,7 @@ struct PartyBlockedSheet: View {
         let list = store.party(partyID)?.blockedGuests ?? []
         VStack(alignment: .leading, spacing: 0) {
             PartySheetTitle(text: "bloqueados.")
-            PartySheetBody(text: "Siguen viendo la colección, pero no pueden agregar ni quitar canciones.").padding(.top, 10)
+            PartySheetBody(text: "Siguen viendo la colección y pueden quitar las suyas, pero ya no agregan canciones.").padding(.top, 10)
             VStack(spacing: 2) {
                 ForEach(list, id: \.guestRef) { g in
                     HStack(spacing: 12) {

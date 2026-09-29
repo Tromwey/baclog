@@ -372,6 +372,9 @@ private struct CollectionsCarousel: View {
                 Task { await store.retryLibraryTitles() }
             }
             .padding(.horizontal, 12).padding(.bottom, 16)
+        } else if let e = store.loadError(.parties) {
+            // `GET /parties` failed (not the 503 of "no parties yet", which stays silent).
+            PartiesRetryStrip(error: e).padding(.horizontal, 12).padding(.bottom, 16)
         }
     }
 
@@ -779,6 +782,18 @@ struct CollectionsSkeleton: View {
 
 /// The ghost fan — three empty slots, the dashed "+" in front, which is the way in — then the
 /// phrase in Newsreader 34, one line of body and the glass "Nueva colección".
+/// "No se cargaron tus fiestas." + Reintentar (`GET /parties` failed; the collections are fine).
+private struct PartiesRetryStrip: View {
+    @Environment(AppStore.self) private var store
+    let error: KuraAPIError
+
+    var body: some View {
+        RetryStrip(error: error, text: error == .offline ? "Sin conexión. No se cargaron tus fiestas." : "No se cargaron tus fiestas.") {
+            Task { await store.loadParties(force: true) }
+        }
+    }
+}
+
 struct NoCollectionsView: View {
     @Environment(AppStore.self) private var store
 
@@ -791,6 +806,11 @@ struct NoCollectionsView: View {
                     }
                 }
                 .padding(.bottom, 18)
+                // Someone whose only "collection" is a party they joined: a failed `GET /parties`
+                // must not read as "you have nothing".
+                if let e = store.loadError(.parties) {
+                    PartiesRetryStrip(error: e).padding(.horizontal, 12).padding(.bottom, 16)
+                }
 
                 VStack(spacing: 14) {
                     FanView(covers: [], lead: 180, ghost: true)

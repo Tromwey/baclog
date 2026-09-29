@@ -477,11 +477,14 @@ export const backlogItems = pgTable(
  * every write still goes through `assertOwnsBacklog`, and nothing here lets a
  * collaborator read a private collection or touch its titles.
  *
- * NO WRITER YET, on purpose: inviting someone needs their consent (their name
- * would show on a public page) and that flow has no design — the table exists
- * so the readers are built and the credit line renders. Reads that leave the
- * owner's session (`public.ts`) gate each collaborator on `users.isPublic AND
- * username IS NOT NULL`, like any other public identity.
+ * ONE writer: colecciones de fiesta (0033) — `joinParty` inserts the guest who
+ * entered a PARTY through its invite link (there it IS the membership that
+ * `getPartyAccess` reads). Normal collections still have no writer (inviting
+ * someone needs their consent and that flow has no design), and the credit
+ * readers (`modules/backlog/collaborators.ts`) only ever see normal
+ * collections. Reads that leave the owner's session (`public.ts`) gate each
+ * collaborator on `users.isPublic AND username IS NOT NULL`, like any other
+ * public identity.
  */
 export const backlogCollaborators = pgTable(
   "backlog_collaborator",
@@ -501,6 +504,16 @@ export const backlogCollaborators = pgTable(
      * host's unblock clears it).
      */
     blockedAt: timestamp("blocked_at"),
+    /**
+     * Colecciones de fiesta (0033) — "Salir de la fiesta" by a guest the host
+     * had BLOCKED. A guest who leaves unblocked is simply deleted (and may
+     * re-enter with an active link); a blocked one keeps the row with
+     * `left_at` set, so the block survives: re-entering through the link
+     * clears `left_at` and they come back still blocked (only the host's
+     * "Desbloquear" clears `blocked_at`). Every membership read filters
+     * `left_at IS NULL`.
+     */
+    leftAt: timestamp("left_at"),
   },
   (t) => [
     primaryKey({ columns: [t.backlogId, t.userId] }),

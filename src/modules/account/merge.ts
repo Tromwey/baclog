@@ -89,7 +89,8 @@ function statusRankSql(col: string): SQL {
 /**
  * `backlog_collaborator` (a guest of a party) and `party_song` (who put each
  * song). Runs AFTER the backlogs moved, so "D's own collection" already
- * includes O's parties. `blocked_at` and `party_song` are migration 0033's:
+ * includes O's parties. `blocked_at`, `left_at` and `party_song` are migration 0033's
+ * (collision: a block is never lost; the merged row is "left" only if BOTH were):
  * before it is live only the plain membership move runs (the table itself
  * is 0030's).
  */
@@ -99,7 +100,8 @@ function collaboratorStatements(D: SQL, O: SQL): BatchItem<"pg">[] {
     out.push(
       db.execute(sql`update "backlog_collaborator" as d set
           created_at = least(d.created_at, o.created_at),
-          blocked_at = coalesce(d.blocked_at, o.blocked_at)
+          blocked_at = coalesce(d.blocked_at, o.blocked_at),
+          left_at = case when d.left_at is null or o.left_at is null then null else greatest(d.left_at, o.left_at) end
         from "backlog_collaborator" as o
         where d.user_id = ${D} and o.user_id = ${O} and o.backlog_id = d.backlog_id`),
     );

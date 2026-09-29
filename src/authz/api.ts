@@ -494,12 +494,24 @@ function withRequestId(res: Response, rid: string): Response {
   }
 }
 
+/**
+ * The request path for logs, with credentials-in-the-path REDACTED: an
+ * invite token (`/invites/{token}`, colecciones de fiesta) is a 96-bit
+ * bearer secret for its party, and a 500 line must not hand it to whoever
+ * reads the logs (security B4).
+ */
+export function redactPath(path: string): string {
+  return path.replace(/\/invites\/[^/?#]+/g, "/invites/:token");
+}
+
 function pathOf(request: Request): string {
+  let path: string;
   try {
-    return new URL(request.url).pathname;
+    path = new URL(request.url).pathname;
   } catch {
-    return request.url;
+    path = request.url;
   }
+  return redactPath(path);
 }
 
 /**
@@ -546,6 +558,15 @@ export function withApi<P extends ApiParams = ApiParams>(
   };
 }
 
+/** Per-route rate-limit bucket for `withPublicApi` (default: the shared
+ *  `ip:` bucket of `auth/*` at the write limit). */
+export interface PublicApiOptions {
+  /** Key prefix: the limiter keys `${bucket}:${ip}`. */
+  bucket?: string;
+  /** Hits per 60 s window in that bucket. */
+  limit?: number;
+}
+
 /**
  * Unauthenticated wrapper for the public `auth/*` routes only (OTP
  * request/verify, `auth/apple`, `auth/google`, `auth/providers`) and the
@@ -555,14 +576,22 @@ export function withApi<P extends ApiParams = ApiParams>(
  * no bearer required, rate limit by client IP BEFORE anything else runs
  * (write limit), same error contract, cache policy and request id. Nothing
  * else in v1 may use it.
+ *
+ * `options.bucket` gives a route its OWN per-IP bucket (security B1): the
+ * invite landing uses `invite-ip`, so someone hammering tokens doesn't
+ * starve that IP's OTP requests, and a busy sign-in doesn't lock the
+ * landing.
  */
 export function withPublicApi<P extends ApiParams = ApiParams>(
   handler: PublicApiHandler<P>,
+  options: PublicApiOptions = {},
 ): RouteHandler<P> {
+  const bucket = options.bucket ?? "ip";
+  const limit = options.limit ?? RATE_LIMIT_WRITES;
   return async (request, context) => {
     const requestId = randomUUID();
     try {
-      const rl = checkRateLimit(`ip:${clientIp(request)}`, RATE_LIMIT_WRITES);
+      const rl = checkRateLimit(`${bucket}:${clientIp(request)}`, limit);
       if (!rl.ok) {
         return withRequestId(
           apiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds }),

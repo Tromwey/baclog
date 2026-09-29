@@ -6,7 +6,8 @@ import { PartySongPaletteBodySchema } from "../../../../../_lib/schemas";
 /**
  * PUT /api/v1/parties/{id}/songs/{titleId}/palette { paletteHex } → 204.
  * The on-device cover palette of a song IN this party (the party's aura),
- * first writer wins. Members only. The generic `PUT /titles/{id}/palette`
+ * first writer wins. Members not blocked by the host (a blocked guest → 404,
+ * nothing to do; B7). The generic `PUT /titles/{id}/palette`
  * doesn't take songs (a song is not a `Title`).
  */
 export const PUT = withApi<{ id: string; titleId: string }>(async (request, { user, params }) => {

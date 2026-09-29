@@ -8,6 +8,7 @@ import { KIcon } from "@/components/kura/icons";
 import type { ToastHost } from "@/components/kura/toast";
 import { useDialogFocus } from "@/hooks/use-dialog-focus";
 import type { PartyDetail, PartySongHit } from "@/modules/party-collections/types";
+import { logged, usePartyFailure } from "./party-errors";
 import { SongCover, SongRowsSkeleton } from "./party-parts";
 import { paletteFor } from "./use-party-tint";
 
@@ -17,6 +18,11 @@ import { paletteFor } from "./use-party-tint";
  * never trapped under anything). iTunes songs through
  * `searchPartySongsAction`, each hit already annotated against the party:
  * "Agregar" / "Ya está" with "Ya la pusiste" or "Ya está · la puso @ana".
+ *
+ * Failures (party-errors.ts): `not_found` = the party is gone for this
+ * person → `onGone` (the room closes the search and re-reads, which sends
+ * them to /backlogs); a gone session → login; iTunes down → the "no pudimos
+ * buscar." state with Reintentar; everything thrown is logged.
  *
  * No 30 s preview play button: the v2 design removed it from the rows (the
  * contract carries `previewUrl` for when a design brings it back).
@@ -37,6 +43,7 @@ export function PartySearch({
   onParty,
   onCap,
   onClose,
+  onGone,
   toast,
   covered = false,
 }: {
@@ -45,6 +52,8 @@ export function PartySearch({
   /** The guest reached their cap ("ya pusiste tus 3." sheet). */
   onCap: () => void;
   onClose: () => void;
+  /** `not_found`: the party is no longer this person's — close and re-read. */
+  onGone: () => void;
   toast: ToastHost;
   /** A sheet sits on top (the cap sheet): it owns focus and Escape. */
   covered?: boolean;
@@ -52,6 +61,7 @@ export function PartySearch({
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [hits, setHits] = useState<PartySongHit[]>([]);
+  const fail = usePartyFailure(toast);
   const [adding, setAdding] = useState<string | null>(null);
   const seq = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,24 +75,38 @@ export function PartySearch({
       return;
     }
     setStatus("loading");
-    searchPartySongsAction(party.id, query.trim())
-      .then((res) => {
-        if (id !== seq.current) return;
-        if ("ok" in res && res.ok) {
-          setHits(res.items);
-          setStatus("results");
-          return;
-        }
-        if ("error" in res && res.error === "rate_limited") {
+    void logged("search songs", party.id, searchPartySongsAction(party.id, query.trim())).then((res) => {
+      if (id !== seq.current) return;
+      if (!res) {
+        setStatus("error");
+        return;
+      }
+      if ("ok" in res && res.ok) {
+        setHits(res.items);
+        setStatus("results");
+        return;
+      }
+      if (!("error" in res)) return;
+      switch (res.error) {
+        case "rate_limited":
           setStatus(hits.length ? "results" : "idle");
           toast.show({ message: "Vas muy rápido. Espera un momento y vuelve a buscar.", kind: "error" });
           return;
-        }
-        setStatus("error");
-      })
-      .catch(() => {
-        if (id === seq.current) setStatus("error");
-      });
+        case "unavailable":
+          // iTunes down (or 0033 not live): the "no pudimos buscar." state.
+          setStatus("error");
+          return;
+        case "invalid":
+          setStatus("idle");
+          return;
+        case "not_found":
+          onGone();
+          return;
+        default:
+          setStatus(hits.length ? "results" : "idle");
+          fail(res, "No pudimos buscar. Inténtalo otra vez.");
+      }
+    });
   };
 
   const onQuery = (value: string) => {
@@ -115,7 +139,7 @@ export function PartySearch({
     }
     setAdding(hit.titleId);
     const palette = await paletteFor(hit.artworkUrl, hit.paletteHex);
-    const res = await addPartySongAction(party.id, hit.titleId, palette).catch(() => null);
+    const res = await logged("add song", party.id, addPartySongAction(party.id, hit.titleId, palette));
     setAdding(null);
     if (res && "ok" in res && res.ok) {
       onParty(res.party);
@@ -141,9 +165,12 @@ export function PartySearch({
         case "view_only":
           toast.show({ message: "En esta fiesta solo se ve la colección." });
           return;
+        case "not_found":
+          onGone();
+          return;
       }
     }
-    toast.show({ message: "No pudimos agregarla. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos agregarla. Inténtalo otra vez.");
   }
 
   return createPortal(

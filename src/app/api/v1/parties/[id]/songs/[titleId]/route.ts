@@ -15,6 +15,7 @@ const SONG_NOT_FOUND =
  *   403 `blocked` (the host blocked you) · 403 `view_only` (solo ver)
  *   409 `duplicate_mine` ("Ya la pusiste tú.") · 409 `duplicate_other`
  *       ("Ya está, la puso @ana", with `addedBy`) · 409 `cap_reached`
+ *   409 `conflict` without reason: nothing written, cause unknown — reload
  * The `message` of each is the design's copy, show it as is.
  */
 export const PUT = withApi<{ id: string; titleId: string }>(async (request, { user, params }) => {
@@ -43,14 +44,19 @@ export const PUT = withApi<{ id: string; titleId: string }>(async (request, { us
       throw new ApiError("conflict", "Ya pusiste todas tus canciones. Quita una para cambiarla.", {
         reason: "cap_reached",
       });
+    case "conflict":
+      // Nothing was written and nobody knows why (logged in the module, C5).
+      throw new ApiError("conflict");
   }
 });
 
 /**
  * DELETE /api/v1/parties/{id}/songs/{titleId} → Party. Host: any song.
- * Guest: own songs, not while blocked (403 `forbidden`). A song that isn't
- * there is not an error (idempotent). Answers the fresh party (not 204) so
- * the slots/"te quedan N" redraw from the server.
+ * Guest: own songs — also while blocked by the host (C4); someone else's →
+ * 403 `forbidden` + `not_yours`. A song that isn't there is not an error
+ * (idempotent). 409 `conflict` if the delete removed nothing and the cause
+ * is unknown (C5). Answers the fresh party (not 204) so the slots/"te
+ * quedan N" redraw from the server.
  */
 export const DELETE = withApi<{ id: string; titleId: string }>(async (_req, { user, params }) => {
   const id = parseId(params.id);
@@ -60,6 +66,7 @@ export const DELETE = withApi<{ id: string; titleId: string }>(async (_req, { us
     if (res.error === "forbidden") {
       throw new ApiError("forbidden", "Solo puedes quitar las canciones que pusiste tú.", { reason: "not_yours" });
     }
+    if (res.error === "conflict") throw new ApiError("conflict");
     throw new ApiError("not_found", PARTY_NOT_FOUND);
   }
   return json(await partyJson(user.id, id));

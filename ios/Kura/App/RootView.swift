@@ -252,6 +252,7 @@ struct SheetContent: View {
         case .partyEdit(let id): PartyEditSheet(partyID: id)
         case .partyBlocked(let id): PartyBlockedSheet(partyID: id)
         case .partyDelete(let id): PartyDeleteSheet(partyID: id)
+        case .partyLeave(let id): PartyLeaveSheet(partyID: id)
         }
     }
 }

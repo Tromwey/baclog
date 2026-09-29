@@ -57,7 +57,7 @@ export const MERGE_COVERAGE: Record<string, MergeCoverageEntry> = {
   },
   backlog_collaborator: {
     actions: ["merge"],
-    note: "Collection membership (colecciones de fiesta: a guest who joined through the invite link). O's rows move to D. Collision (both members of the same collection) → one row: the earlier created_at and blocked_at = D ?? O (a block by the host is never lost). A row that would make D a member of D's OWN collection (O hosted it, or O was a guest in D's party) is deleted: the host is never a guest. blocked_at only while MIGRATION_0033_LIVE.",
+    note: "Collection membership (colecciones de fiesta: a guest who joined through the invite link). O's rows move to D. Collision (both members of the same collection) → one row: the earlier created_at and blocked_at = D ?? O (a block by the host is never lost) and left_at = null unless both had left (then the later). A row that would make D a member of D's OWN collection (O hosted it, or O was a guest in D's party) is deleted: the host is never a guest. blocked_at/left_at only while MIGRATION_0033_LIVE.",
   },
   party_song: {
     actions: ["move"],

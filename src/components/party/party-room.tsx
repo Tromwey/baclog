@@ -11,6 +11,8 @@ import { Toast, useToast } from "@/components/kura/toast";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { Sheet } from "@/components/ui";
 import type { PartyDetail, PartySong } from "@/modules/party-collections/types";
+import { logged, PARTY_GONE_MESSAGE } from "./party-errors";
+import { setPartyFlash } from "./party-flash";
 import { handleOf, PartyHero, songsLabel, SongCover, SongRowBody } from "./party-parts";
 import { PartySearch } from "./party-search";
 import {
@@ -19,6 +21,8 @@ import {
   DeleteSheet,
   EditSheet,
   ExportSheet,
+  GuestOptionsSheet,
+  LeaveSheet,
   LinkSheet,
   OptionsSheet,
   RemoveSheet,
@@ -39,12 +43,17 @@ import { usePartyHexes } from "./use-party-tint";
  *    bar "Buscar canción" / "Buscar otra canción" / "Cambiar una canción",
  *    the dismissible "kura para iPhone." once the cap is full, the blocked
  *    notice. Tapping one of their own songs opens "Quitar".
+ *  - Guest: Opciones in the header → "Salir de la fiesta" (C3; confirmed,
+ *    then /backlogs with a toast). A guest the host blocked can still take
+ *    their OWN songs out (C4).
  *  - Host: Compartir + Opciones in the header, "…" per song ("Quitar" and
  *    "Quitar y bloquear a @x"), "Invitar a la fiesta" at the bottom — plus a
  *    search chip beside it: the host has no cap (contract §6.1) and the
  *    design gave them no way in to add (desviación, state/frontend.md).
  *
- * Live: the page re-reads the party when the tab comes back into view.
+ * Live: the page re-reads the party when the tab comes back into view. A
+ * failed re-read is logged; a gone session goes to login, a gone party to
+ * /backlogs with "Esa fiesta ya no está disponible.".
  */
 
 const IOS_OFF = (id: string) => `kura:party-ios-off:${id}`;
@@ -90,9 +99,22 @@ export function PartyRoom({
   }, [initial.id]);
 
   const refresh = useCallback(async () => {
-    const res = await getPartyAction(party.id).catch(() => null);
-    if (res && "ok" in res && res.ok) setParty(res.party);
-    else if (res && "error" in res && res.error === "not_found") router.replace("/backlogs");
+    const res = await logged("refresh", party.id, getPartyAction(party.id));
+    if (!res) return; // logged; the page keeps what it has
+    if ("ok" in res && res.ok) {
+      setParty(res.party);
+      return;
+    }
+    if ("error" in res) {
+      if (res.error === "signin_required") {
+        window.location.assign(res.loginPath);
+      } else if (res.error === "not_found") {
+        setPartyFlash(PARTY_GONE_MESSAGE);
+        router.replace("/backlogs");
+      } else {
+        console.error("[party] refresh refused", { partyId: party.id, error: res.error });
+      }
+    }
   }, [party.id, router, setParty]);
 
   useEffect(() => {
@@ -115,7 +137,7 @@ export function PartyRoom({
     setSearching(true);
   };
   const tapSong = (s: PartySong) => {
-    if (host || (s.canRemove && !v.blocked)) setSheet({ k: "remove", titleId: s.titleId });
+    if (host || s.canRemove) setSheet({ k: "remove", titleId: s.titleId });
   };
   const dismissIos = () => {
     setIosOff(true);
@@ -138,7 +160,7 @@ export function PartyRoom({
         <Link href="/backlogs" aria-label="Volver a tus colecciones" className={CHIP_ART}>
           <KIcon name="back" size={18} />
         </Link>
-        {host && (
+        {host ? (
           <div className="flex gap-2">
             <button type="button" aria-label="Compartir" onClick={() => setSheet({ k: "share" })} className={CHIP_ART}>
               <KIcon name="share" size={18} />
@@ -147,6 +169,15 @@ export function PartyRoom({
               <DotsIcon />
             </button>
           </div>
+        ) : (
+          <button
+            type="button"
+            aria-label="Opciones"
+            onClick={() => setSheet({ k: "guestOpts" })}
+            className={CHIP_ART}
+          >
+            <DotsIcon />
+          </button>
         )}
       </header>
 
@@ -164,7 +195,7 @@ export function PartyRoom({
       {!host && v.blocked && (
         <Notice title="Ya no puedes agregar canciones">
           {party.host ? `@${party.host.handle}` : "Quien organiza"} te quitó de los colaboradores. Puedes seguir
-          viendo la colección.
+          viendo la colección{mine.length > 0 ? " y quitar las canciones que pusiste" : ""}.
         </Notice>
       )}
       {!host && !v.blocked && limit === 0 && (
@@ -181,7 +212,7 @@ export function PartyRoom({
           </div>
           <ul className="flex flex-col gap-0.5 px-2">
             {party.songs.map((s) => {
-              const tappable = host || (s.canRemove && !v.blocked);
+              const tappable = host || s.canRemove;
               return (
                 <li key={s.titleId} className="flex items-center gap-1">
                   <button
@@ -281,6 +312,10 @@ export function PartyRoom({
           onParty={setParty}
           onCap={() => setSheet({ k: "cap" })}
           onClose={() => setSearching(false)}
+          onGone={() => {
+            setSearching(false);
+            void refresh();
+          }}
           toast={toast}
           covered={!!sheet}
         />
@@ -305,7 +340,13 @@ export function PartyRoom({
           )}
           {sheet.k === "remove" &&
             (removeTarget ? (
-              <RemoveSheet party={party} song={removeTarget} onParty={setParty} toast={toast} />
+              <RemoveSheet
+                party={party}
+                song={removeTarget}
+                onParty={setParty}
+                onStale={() => void refresh()}
+                toast={toast}
+              />
             ) : (
               <p className="py-6 text-center font-sans text-[15px] text-text-2">Esa canción ya no está.</p>
             ))}
@@ -327,6 +368,17 @@ export function PartyRoom({
             <DeleteSheet party={party} onDeleted={() => router.replace("/backlogs")} toast={toast} />
           )}
           {sheet.k === "blocked" && <BlockedSheet party={party} onChanged={() => void refresh()} toast={toast} />}
+          {sheet.k === "guestOpts" && <GuestOptionsSheet party={party} onLeave={() => setSheet({ k: "leave" })} />}
+          {sheet.k === "leave" && (
+            <LeaveSheet
+              party={party}
+              onLeft={() => {
+                setPartyFlash(`Saliste de ${party.name}.`);
+                router.replace("/backlogs");
+              }}
+              toast={toast}
+            />
+          )}
         </Sheet>
       )}
 

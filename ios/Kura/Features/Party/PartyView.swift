@@ -10,7 +10,7 @@ import SwiftUI
 ///    once the host blocked them; a host: nothing (no cap);
 ///  - "las canciones", in playlist order, each with who put it ("Pusiste tú" · "Puso @ana" ·
 ///    "Puso alguien"); the host's "…" (and a tap) opens Quitar / Quitar y bloquear, a guest's tap on
-///    their own song opens Quitar;
+///    their own song opens Quitar — blocked too (they can't add, but can take theirs out);
 ///  - the bar at the bottom (over the page's own tail): "Buscar canción" (honey) → "Cambiar una
 ///    canción" once full; the host's "Invitar a la fiesta" (honey) + a search chip.
 ///
@@ -92,14 +92,15 @@ private struct PartyPage: View {
             .ignoresSafeArea(.container, edges: .top)
 
             TopChrome {
-                if p.isHost {
-                    HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    if p.isHost {
                         IconChip44(systemName: "square.and.arrow.up", label: "Compartir \(p.name)") {
                             store.present(.partyShare(p.id))
                         }
-                        IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de \(p.name)") {
-                            store.present(.partyOptions(p.id))
-                        }
+                    }
+                    // The host's Opciones, or a guest's (Salir de la fiesta).
+                    IconChip44(systemName: "ellipsis", iconSize: 17, label: "Opciones de \(p.name)") {
+                        store.present(.partyOptions(p.id))
                     }
                 }
             }
@@ -135,7 +136,9 @@ private struct PartyPage: View {
             card {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ya no puedes agregar canciones").font(.kura.ui(15, .semibold)).foregroundStyle(KColor.text)
-                    Text("\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección.")
+                    Text(mine.isEmpty
+                         ? "\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección."
+                         : "\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección y quitar las que pusiste.")
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -218,7 +221,8 @@ private struct PartyPage: View {
             .padding(.bottom, 14)
             VStack(spacing: 2) {
                 ForEach(p.songs) { s in
-                    let actionable = s.canRemove || s.canBlockAuthor
+                    // Your own song always opens its sheet (C4: blocked, you can still take it out).
+                    let actionable = s.canRemove || s.canBlockAuthor || s.mine
                     PartySongRow(song: s, showMore: p.isHost && actionable,
                                  onTap: actionable ? { store.present(.partySong(partyID: p.id, titleID: s.titleID)) } : nil,
                                  onMore: { store.present(.partySong(partyID: p.id, titleID: s.titleID)) })

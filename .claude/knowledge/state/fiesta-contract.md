@@ -4,12 +4,27 @@
 > archivo. Diseño: `design/kura/fiesta-app-v2.dc.html`. Generado 2026-09-29 (rama `feat/fiesta-colecciones`).
 > Si el backend cambia, este archivo cambia en el mismo commit.
 
+## Cambios de la ronda 2 (2026-09-29) — resumen
+
+| # | Cambio | Dónde |
+|---|---|---|
+| C1 | Switch apagado → `GET /invites/{token}` = **503 `unavailable`** para todo token (no oráculo); web `/f/*` y `/c/*` → pantalla **"las fiestas llegan muy pronto."** (no el link muerto, no 404). `getPartySummaryByToken` sigue `null` + `console.warn`. | §0, §4.1, §5 |
+| C2 | **Bloqueo GLOBAL** (`user_block`, cualquier sentido) invitado↔anfitrión ⇒ la fiesta desaparece para ese invitado: `getPartyAccess` = null (404 idéntico en `/c`, `GET/PATCH/…/parties/{id}`), fuera de `GET /parties`. Ya NO es `viewer.blocked`. Levantar el bloqueo la devuelve. | §6.6 |
+| C3 | **`POST /parties/{id}/leave`** (solo invitado) → 204; web `leavePartyAction`. Regla de regreso abajo (§6.12). | §4.2, §5, §6.12 |
+| C4 | Invitado **bloqueado por la fiesta** SÍ quita SUS canciones (`DELETE …/songs/{id}` 200; `canRemove: true` en las suyas). Sigue sin poder agregar. | §6.4–5 |
+| C5 | **409 `conflict` sin `reason`** (copy genérico) cuando un add/quitar no escribió y el estado fresco no explica por qué (logueado en servidor). Nunca `cap_reached` para el anfitrión. Quitar / quitar-y-bloquear usan RETURNING. | §5 |
+| C6 | `PartySummary.perGuestLimit` (copy de /party con el número real, `playlistPitch`). | §4.1 |
+| C7 | Máx **20 fiestas por anfitrión** → 409 `conflict` + `reason: "too_many_parties"` ("Ya tienes 20 fiestas. Borra alguna para crear otra."). **10 links por hora por fiesta** (el de creación cuenta) → 429 `rate_limited` + `retryAfterSeconds`. | §5 |
+| — | Web: toda action de fiesta con sesión vencida responde `{ error: "signin_required", loginPath }` (ya no lanza). `guestRef` = HMAC con `AUTH_SECRET`. `GET /invites/{token}` con bucket propio `invite-ip` (60/min). Esquema: `backlog_collaborator.left_at` (0033 regenerada, sigue SIN aplicar). | §4.2, §1 |
+
 ## 0. Estado de despliegue — LEER PRIMERO
 
 - Migración **`drizzle/0033_party_collections.sql`** (aditiva). Hasta aplicarla, el switch
   **`MIGRATION_0033_LIVE = false`** (`src/modules/party-collections/live.ts`) hace que TODO lo de fiestas
-  responda "no disponible": server actions → `{ error: "unavailable" }`; API → **503 `unavailable`**;
-  lecturas anónimas (`getInvitePreview`, `getPartySummaryByToken`) → `null` (= "este link ya no funciona").
+  responda "no disponible": server actions → `{ error: "unavailable" }`; API → **503 `unavailable`**
+  (incluida `GET /invites/{token}`, para todo token); web `/f/*` y `/c/*` → "las fiestas llegan muy pronto."
+  (`components/party/party-soon.tsx`); `getInvitePreview` LANZA `PartyUnavailableError`;
+  `getPartySummaryByToken` → `null` + `console.warn` (la tarjeta de /party no se pinta).
   El resto de la app funciona igual con o sin la migración.
 - Orden: `drizzle-kit migrate` (founder, DB compartida) → poner `MIGRATION_0033_LIVE = true` → deploy.
   Nunca `true` sin la tabla (Colecciones daría 500 en todas sus pantallas).
@@ -24,7 +39,7 @@ Una fiesta ES una colección (`backlog`) con una fila en `party`. Nada nuevo en 
 | `backlog` | El contenedor: `id`, `user_id` = **anfitrión**, `name`. **Siempre privada** (`is_public = show_on_profile = false`): nunca sale en `/u/**`, perfil, feed, tendencias ni `GET /collections`. |
 | `party` (nueva) | `backlog_id` PK→backlog CASCADE · `per_guest_limit smallint NULL` (0 = solo ver · 1..5 · NULL = ilimitadas; CHECK 0..50) · `created_at`. Existencia = "es fiesta". |
 | `party_invite` (nueva) | `id uuid` · `backlog_id` · `token text UNIQUE` (16 chars base64url, 96 bits) · `created_at` · `revoked_at NULL`. **Un solo link activo** por fiesta (índice único parcial). Los revocados se quedan (su token nunca vuelve a funcionar). |
-| `backlog_collaborator` (0030) + `blocked_at` (nueva col.) | Miembro = invitado que entró por el link. `blocked_at` = "Quitar y bloquear" del anfitrión (sigue VIENDO, no agrega ni quita). |
+| `backlog_collaborator` (0030) + `blocked_at` + `left_at` (nuevas col.) | Miembro = invitado que entró por el link. `blocked_at` = "Quitar y bloquear" del anfitrión (sigue VIENDO, no agrega; SÍ quita las suyas). `left_at` = un invitado BLOQUEADO que salió (la fila se conserva para que el bloqueo sobreviva); un invitado no bloqueado que sale se BORRA. Toda lectura de membresía filtra `left_at IS NULL`. |
 | `backlog_item` | La canción en la fiesta (membresía). `user_id` = **el anfitrión** siempre (invariante de dueño de la casa). Único `(backlog_id, catalog_item_id)` = una canción una vez por fiesta. |
 | `party_song` (nueva) | **Quién la puso**: `backlog_item_id` PK→backlog_item CASCADE · `backlog_id` · `added_by_user_id`→user **SET NULL** · `added_at`. Autor borra su cuenta → la canción queda, "Puso alguien". |
 | `catalog_item` | La canción: `media_type = 'track'` (valor nuevo del enum), `source = "itunes-track"`, `external_id = trackId`, `title`, `byline` = artista, `poster_url` 600×600, `raw` = lista blanca (`previewUrl`, `trackViewUrl`, `collectionName`, `trackTimeMillis`, …), `palette_hex` (on-device, compartida). Nunca `release_date`. |
@@ -58,7 +73,11 @@ export function loginPathFor(to: string): string;                           // "
 ```
 Flujo que tiene que implementar el carril web (páginas de `(auth)` hoy van fijas a `/backlogs`):
 1. `/f/{token}` sin sesión → CTA a `loginPathFor("/f/{token}")` = `/login?to=%2Ff%2F{token}`.
-2. `/login` conserva `to` → `/verify?email=…&to=…`.
+2. `/login` conserva `to` por las tres puertas: correo → `/verify?email=…&to=…` (`carryReturnTo`); Apple →
+   input hidden `to` → `continueWithAppleAction(formData)` lo re-valida con `safeReturnTo` →
+   `signIn("apple", { redirectTo })`; Apple rechazado → `/login?error=apple&to=…` (`appleErrorUrl` en
+   `auth/config.ts`, leído de la cookie callback-url de Auth.js). En `/verify`, "Enviar otro código" →
+   `/login?to=…`. Guardrail: `scripts/check-party-rules.ts` › "login: cada entrada propaga ?to=".
 3. `/verify` tras `signIn("otp")` OK: `window.location.href = safeReturnTo(to) ?? "/backlogs"`.
 4. De vuelta en `/f/{token}` con sesión: llamar `joinPartyAction(token)`:
    - `{ error: "onboarding_required", onboardingPath }` → ir a `onboardingPath` = `/onboarding?to=%2Ff%2F{token}`.
@@ -82,7 +101,7 @@ onboarding y reintenta).
 `src/modules/party-collections/queries.ts` (tipos en `types.ts`):
 ```ts
 getPartyDetail(viewerId: string, backlogId: string): Promise<PartyDetail | null>   // /c/{id}; null → notFound()
-getInvitePreview(token: string, viewerId: string | null): Promise<InvitePreview | null> // /f/{token}; null → "ya no funciona"
+getInvitePreview(token: string, viewerId: string | null): Promise<InvitePreview | null> // /f/{token}; null → "ya no funciona"; LANZA sin 0033
 getPartySummaryByToken(token: string): Promise<PartySummary | null>                 // /party (anónimo)
 listPartiesForUser(userId: string): Promise<PartyCard[]>                            // "Tus colecciones · De fiesta" (lanza PartyUnavailableError sin 0033)
 ```
@@ -90,11 +109,15 @@ listPartiesForUser(userId: string): Promise<PartyCard[]>                        
 `const s = await getPartySummaryByToken(token); s && presenceLine(s)` →
 `"8 canciones · @ana, @rodri y 2 más ya están dentro"` (`presenceLine` en `rules.ts`; variantes: sin nadie
 → `"8 canciones"`; un nombre → `"… · @ana ya está dentro"`; sin nombres públicos → `"… · 3 personas ya están dentro"`).
-`s.artworkUrls` (≤ 5) sirve para el abanico. `null` = link muerto o migración no aplicada → no pintar la línea.
+`s.artworkUrls` (≤ 5) sirve para el abanico; `s.perGuestLimit` da el copy con el número real
+(`playlistPitch(limit)` → "Pon tus 3 canciones. …"). `null` = link muerto o migración no aplicada → no pintar la
+tarjeta (`getPartyPlaylistAction` loguea por qué).
 
 ### 4.2 Server actions — `src/app/actions/party-collection-actions.ts`
-Todas: sesión obligatoria (`assertUser` lanza como el resto de la app) salvo `joinPartyAction`. Nunca lanzan por
-resultados esperados. Cualquiera puede devolver `{ error: "unavailable" }` (sin 0033).
+Todas: sesión obligatoria; **sin sesión devuelven `{ error: "signin_required", loginPath }`** (ya no lanzan;
+`loginPath` = `/login?to=/c/{id}` cuando hay fiesta). Nunca lanzan por resultados esperados. Cualquiera puede
+devolver `{ error: "unavailable" }` (sin 0033). La UI mapea cada código en `components/party/party-errors.ts`
+(`not_found` → `/backlogs` + toast "Esa fiesta ya no está disponible.").
 ```ts
 getPartyAction(backlogId: string)
   → { ok: true, party: PartyDetail } | { error: "not_found" }
@@ -102,12 +125,14 @@ listMyPartiesAction()
   → { ok: true, parties: PartyCard[] }
 createPartyAction(input: { name: string; perGuestLimit?: number | null })   // omitido = 3; null = ilimitadas
   → { ok: true, id: string, path: string, invite: PartyInvite } | { error: "invalid" }
+  | { error: "too_many_parties", message: string }                          // 20 por anfitrión (C7)
 updatePartyAction(backlogId: string, input: { name?: string; perGuestLimit?: number | null })  // solo anfitrión
   → { ok: true } | { error: "invalid" | "not_found" }
 deletePartyAction(backlogId: string)                                         // solo anfitrión
   → { ok: true } | { error: "not_found" }
 rotatePartyInviteAction(backlogId: string)   // "Crear link nuevo": el anterior deja de funcionar
-  → { ok: true, invite: PartyInvite } | { error: "not_found" }
+  → { ok: true, invite: PartyInvite } | { error: "not_found" | "conflict" }
+  | { error: "rate_limited", retryAfterSeconds: number }                    // 10 links/h por fiesta (C7)
 revokePartyInviteAction(backlogId: string)   // "Desactivar": nadie más entra; miembros siguen
   → { ok: true } | { error: "not_found" }
 joinPartyAction(token: string)
@@ -115,6 +140,8 @@ joinPartyAction(token: string)
   | { error: "signin_required", loginPath: string }
   | { error: "onboarding_required", onboardingPath: string }
   | { error: "invalid_link" }
+leavePartyAction(backlogId: string)          // "Salir de la fiesta" (invitados; C3)
+  → { ok: true } | { error: "not_found" }                                    // anfitrión / no miembro = not_found
 searchPartySongsAction(backlogId: string, query: string)                     // 1..100 chars
   → { ok: true, items: PartySongHit[] }
   | { ok: false, error: "not_found" | "invalid" | "unavailable" }            // unavailable = iTunes caído → estado "Reintentar"
@@ -123,11 +150,11 @@ addPartySongAction(backlogId: string, titleId: string, paletteHex?: string[])
   → { ok: true, party: PartyDetail }
   | { error: "duplicate_mine" | "duplicate_other", addedBy: PartyPerson | null, message: string } // toast tal cual
   | { error: "cap_reached" | "blocked" | "view_only", addedBy: null }
-  | { error: "not_found" | "song_not_found" }
-removePartySongAction(backlogId: string, titleId: string)                   // anfitrión: cualquiera; invitado: las suyas
-  → { ok: true, party: PartyDetail } | { error: "not_found" | "forbidden" }
+  | { error: "not_found" | "song_not_found" | "conflict" }                   // conflict = no escribió, causa desconocida (C5)
+removePartySongAction(backlogId: string, titleId: string)                   // anfitrión: cualquiera; invitado: las suyas (también bloqueado, C4)
+  → { ok: true, party: PartyDetail } | { error: "not_found" | "forbidden" | "conflict" }
 removeAndBlockPartyGuestAction(backlogId: string, titleId: string)          // solo anfitrión; por la CANCIÓN
-  → { ok: true, party: PartyDetail } | { error: "not_found" | "not_blockable" }
+  → { ok: true, party: PartyDetail } | { error: "not_found" | "not_blockable" | "conflict" }
 unblockPartyGuestAction(backlogId: string, guestRef: string)                // guestRef de party.blockedGuests
   → { ok: true } | { error: "not_found" }
 ```
@@ -147,19 +174,20 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 | Método | Path | Body | 200 | Errores |
 |---|---|---|---|---|
 | GET | `/parties` | — | `{ items: PartyCard[] }` (anfitrión + invitado, bloqueado incluido; más reciente primero) | 503 |
-| POST | `/parties` | `{ name: string(1..60), perGuestLimit?: 0..5 \| null }` | `Party` (vista anfitrión, link activo) | 400 `fields` |
+| POST | `/parties` | `{ name: string(1..60), perGuestLimit?: 0..5 \| null }` | `Party` (vista anfitrión, link activo) | 400 `fields` · 409 `conflict` + `reason: "too_many_parties"` (20 por anfitrión) |
 | GET | `/parties/{id}` | — | `Party` | 404 |
 | PATCH | `/parties/{id}` | `{ name?, perGuestLimit? }` | `Party` | 404 (invitado también), 400 |
 | DELETE | `/parties/{id}` | — | 204 | 404 |
-| POST | `/parties/{id}/invite` | — | `Party` (link nuevo; el viejo muere) | 404 |
+| POST | `/parties/{id}/invite` | — | `Party` (link nuevo; el viejo muere) | 404 · 429 `rate_limited` + `retryAfterSeconds` (10 links/h por fiesta, el de creación cuenta) · 409 `conflict` |
+| POST | `/parties/{id}/leave` | — | **204** ("Salir de la fiesta", solo invitado; C3) | 404 (anfitrión, no miembro, inexistente: el mismo) |
 | DELETE | `/parties/{id}/invite` | — | `Party` (`invite.active: false`) | 404 |
 | GET | `/parties/{id}/songs?q=` | — | `{ items: PartySongHit[] }` (`[]` = sin resultados) | 404 · 400 `fields.q` · 503 iTunes caído · 429 |
-| PUT | `/parties/{id}/songs/{titleId}` | `{ paletteHex?: hex[≤6] }` (opcional) | `Party` | 404 · 404 no es canción · 403 `blocked` · 403 `view_only` · 409 `duplicate_mine` · 409 `duplicate_other` (+ `addedBy`) · 409 `cap_reached` |
-| DELETE | `/parties/{id}/songs/{titleId}` | — | `Party` (idempotente) | 404 · 403 `not_yours` |
-| POST | `/parties/{id}/songs/{titleId}/block` | — | `Party` ("Quitar y bloquear") | 404 · 409 `not_blockable` |
-| PUT | `/parties/{id}/songs/{titleId}/palette` | `{ paletteHex: hex[1..6] }` | 204 | 404 |
+| PUT | `/parties/{id}/songs/{titleId}` | `{ paletteHex?: hex[≤6] }` (opcional) | `Party` | 404 · 404 no es canción · 403 `blocked` · 403 `view_only` · 409 `duplicate_mine` · 409 `duplicate_other` (+ `addedBy`) · 409 `cap_reached` · 409 `conflict` sin reason (C5) |
+| DELETE | `/parties/{id}/songs/{titleId}` | — | `Party` (idempotente; un invitado bloqueado quita LAS SUYAS, C4) | 404 · 403 `not_yours` · 409 `conflict` |
+| POST | `/parties/{id}/songs/{titleId}/block` | — | `Party` ("Quitar y bloquear") | 404 · 409 `not_blockable` · 409 `conflict` |
+| PUT | `/parties/{id}/songs/{titleId}/palette` | `{ paletteHex: hex[1..6] }` | 204 | 404 (también si el invitado está bloqueado) |
 | DELETE | `/parties/{id}/blocked/{guestRef}` | — | `Party` (desbloquear) | 404 |
-| GET | `/invites/{token}` | — | `InvitePreview` — **pública** (rate limit por IP); bearer OPCIONAL llena `viewer` | 404 `"Este link ya no funciona. Pídele a quien te invitó uno nuevo."` (malformado = desconocido = revocado = bloqueo con el anfitrión) |
+| GET | `/invites/{token}` | — | `InvitePreview` — **pública** (bucket propio `invite-ip`, 60/min por IP); bearer OPCIONAL llena `viewer` | 404 `"Este link ya no funciona. Pídele a quien te invitó uno nuevo."` (malformado = desconocido = revocado = bloqueo con el anfitrión) · **503 `unavailable` sin 0033, para todo token (C1)** |
 | POST | `/invites/{token}/join` | — | `{ party: Party, joined: "new" \| "already" \| "host" }` | 404 (mismo texto) · 403 `onboarding_required` |
 
 `message` de cada error es el copy final en español: muéstralo tal cual. Zod exacto en
@@ -220,15 +248,20 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
    reporta aunque ya hayas usado tus 3 (el diseño dice "Ya está, la puso @ana").
 3. **Duplicados**: una canción una vez por fiesta (`(backlog, catalog_item)` único). "Ya la pusiste tú." vs
    "Ya está, la puso @x" / "alguien".
-4. **Quitar**: anfitrión cualquier canción ("sale de la colección para todos"); invitado solo las suyas y no
-   estando bloqueado.
+4. **Quitar**: anfitrión cualquier canción ("sale de la colección para todos"); invitado solo las suyas —
+   **también estando bloqueado** (C4).
 5. **Quitar y bloquear a @x** (anfitrión, por canción): quita ESA canción y bloquea a su autor en ESTA fiesta.
    Sus otras canciones se quedan. El autor NO recibe aviso, sigue viendo la fiesta, ve `viewer.blocked: true`
-   ("Ya no puedes agregar canciones") y no puede agregar ni quitar. No aplica a canciones del anfitrión ni de
-   cuentas borradas (409/`not_blockable`). Volver a entrar por el link **no** desbloquea; solo "Desbloquear".
-6. **Bloqueo global de usuarios (App Store 1.2)** entre un invitado y el anfitrión (cualquier sentido):
-   no puede unirse (mismo "link ya no funciona"), y si ya era miembro queda `blocked`. Además la identidad de
-   alguien con quien el viewer tiene bloqueo se muestra como "alguien" (canciones, contributors, host).
+   ("Ya no puedes agregar canciones"), no puede agregar y sí puede quitar las suyas. No aplica a canciones del
+   anfitrión ni de cuentas borradas (409/`not_blockable`). Si el autor ya había salido, igual queda bloqueado
+   (fila con `blocked_at` + `left_at`). Volver a entrar por el link **no** desbloquea; solo "Desbloquear"
+   (y desbloquear a alguien que salió solo borra su fila: puede volver limpio).
+6. **Bloqueo global de usuarios (App Store 1.2)** entre un invitado y el anfitrión (cualquier sentido): la
+   fiesta **desaparece** para ese invitado (C2): no puede unirse (mismo "link ya no funciona"), y si ya era
+   miembro `getPartyAccess` = null → el mismo 404 en todo `/parties/{id}` y `/c/{id}`, fuera de `GET /parties`
+   (su fila se queda; levantar el bloqueo la devuelve tal cual). El anfitrión sigue viendo su fiesta, con esa
+   persona como "alguien". Además la identidad de alguien con quien el viewer tiene bloqueo se muestra como
+   "alguien" (canciones, contributors, host).
 7. **Link**: uno activo a la vez. Crear nuevo = el anterior muere al instante; desactivar = nadie más entra.
    Quien ya entró sigue. Un link muerto/malformado/inexistente es la misma respuesta (sin oráculo).
 8. **Unirse** exige cuenta con onboarding terminado (nombre + edad verificada). Idempotente.
@@ -238,6 +271,15 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
     link ACTIVO (preview). No aparece en perfil, feed, tendencias, búsqueda, recap ni `GET /collections`.
 11. Borrar la cuenta de un invitado: sus canciones quedan como "Puso alguien"; sale de miembros. Borrar la
     cuenta del anfitrión borra la fiesta entera.
+12. **Salir de la fiesta** (C3, `POST /parties/{id}/leave`, solo invitado; anfitrión = 404): la fiesta sale de
+    sus listas; sus canciones se quedan, atribuidas. **Regla de regreso** (`rules.ts` `leaveEffect` /
+    `joinOutcome`, y el SQL de `joinParty` en una sola sentencia):
+    - no bloqueado → su fila se BORRA; puede volver a entrar con un link ACTIVO como cualquiera nuevo (`joined: "new"`);
+    - bloqueado → su fila se CONSERVA con `left_at`; si vuelve a entrar con un link activo, `left_at` se limpia y
+      **vuelve bloqueado** (`joined: "new"`, `blocked: true`): salir nunca lava un bloqueo;
+    - con link revocado/rotado nadie que salió vuelve a entrar; con bloqueo global con el anfitrión, tampoco.
+13. **Límites** (C7): 20 fiestas existentes por anfitrión (lock por anfitrión + recuento dentro del INSERT;
+    borrar una libera el cupo). 10 links por hora por fiesta, contados en `party_invite` (DB, global).
 
 ## 7. Qué NO hacer (lo rechaza el servidor)
 
@@ -249,14 +291,12 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 - La fiesta NO sale en `getShelvesForUser`, `getBacklogNames`, `getCollectionFans`, `GET /collections`: la
   lista "De fiesta" se arma con `listPartiesForUser` / `GET /parties`.
 
-## 8. Pendientes para otros carriles (no son backend)
+## 8. Pendientes reales (no son backend)
 
-- Web: páginas `/f/[token]` y `/c/[backlogId]`, hoja de crear con tipo Fiesta, hojas de link/compartir/quitar,
-  búsqueda con preview de 30 s, `to` en login/verify/onboarding (§3), filtro "De fiesta" en Colecciones.
-- Web (datos en `(app)/**`, fuera del carril backend): `descubrir/library-index.ts` y
-  `item/[catalogItemId]/collections-index.ts` calculan `lastUsedBacklogId` con el último `backlog_item` del
-  usuario **sin excluir fiestas**: tras agregar canciones como anfitrión, el "guardar en" por defecto sería la
-  fiesta (y el add fallaría con `backlog_not_found`). Arreglo: `.where(and(eq(backlogItems.userId, userId),
-  notPartyBacklog(backlogItems.backlogId)))` (`@/modules/party-collections/gate`).
-- iOS: AASA `/f/*` y `/c/*`; `DeepLink` para ambos; pantallas; reproducir `previewUrl`.
-- /party: línea de presencia con `getPartySummaryByToken` + `presenceLine`.
+- **AASA**: `src/app/.well-known/apple-app-site-association/route.ts` debe incluir `/f/*` y `/c/*` (está
+  modificado en el checkout padre por otra sesión; confirmar antes de desplegar).
+- **Cableado /party**: `PartyPlaylistCard` (`src/app/party/party-playlist-card.tsx`) existe pero ninguna pantalla
+  de `/party` lo monta todavía; montarlo tras el RSVP y configurar `PARTY_PLAYLIST_TOKEN` en Vercel.
+- **URL de la App Store**: la tarjeta "kura para iPhone." no trae "Ver en App Store" hasta tener la URL.
+- **Aplicar 0033** (regenerada con `left_at`, sigue sin aplicar) → `MIGRATION_0033_LIVE = true` → deploy.
+- Exportar a Apple Music/Tidal: fase 2.

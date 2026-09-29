@@ -123,7 +123,7 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       )
       .where(eq(backlogItems.userId, userId))
       .orderBy(...MANUAL_ORDER),
-    getCollaboratorsForBacklogs(rows.map((r) => r.id)),
+    getCollaboratorsForBacklogs(userId, rows.map((r) => r.id)),
   ]);
 
   const shelves = new Map<string, Shelf>(

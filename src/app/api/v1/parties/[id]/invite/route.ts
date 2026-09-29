@@ -6,11 +6,26 @@ import { PARTY_NOT_FOUND, partyJson } from "../../_lib/party";
 /**
  * POST /api/v1/parties/{id}/invite → Party. "Crear link nuevo": the active
  * link (if any) stops working and a new one is minted; members stay. Host
- * only.
+ * only. 429 `rate_limited` (+ `retryAfterSeconds`) past 10 links per hour
+ * per party (C7); 409 `conflict` if no active link came out of it.
  */
 export const POST = withApi<{ id: string }>(async (_req, { user, params }) => {
   const id = parseId(params.id);
-  if (!(await rotateInvite(user.id, id))) throw new ApiError("not_found", PARTY_NOT_FOUND);
+  const res = await rotateInvite(user.id, id);
+  if (!res.ok) {
+    switch (res.error) {
+      case "not_found":
+        throw new ApiError("not_found", PARTY_NOT_FOUND);
+      case "rate_limited":
+        throw new ApiError(
+          "rate_limited",
+          "Ya creaste muchos links en poco tiempo. Espera un rato para crear otro.",
+          { retryAfterSeconds: res.retryAfterSeconds },
+        );
+      case "conflict":
+        throw new ApiError("conflict");
+    }
+  }
   return json(await partyJson(user.id, id));
 });
 

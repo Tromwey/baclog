@@ -31,13 +31,40 @@ struct EmptySongSlot: View {
     }
 }
 
-/// A person's 18 pt seal + "Puso @ana" (the list line), or the 26 pt stack of contributors.
+/// A person's seal in a party (design `avatar(by, size)`): the initial of the handle, upright
+/// Hanken 600 uppercase at 52 %, `sealInk` on a flat disk of one of `KColor.sealHexes` — the
+/// same tone for the same person everywhere (a stable hash of the handle, not `hashValue`, which
+/// changes every launch). "alguien" is a "·" on `sealSomeone`. The photo, when there is one,
+/// covers it (and the disk stays if it can't load). No border, no glow.
 struct PartySeal: View {
     let person: PartyPerson?
     var size: CGFloat = 18
 
     var body: some View {
-        Seal(person: person.seal, size: size)
+        let key = person.map { $0.handle.isEmpty ? $0.name : $0.handle } ?? ""
+        Text(Self.initial(key))
+            .font(.kura.ui(size * 0.52, .semibold, fixed: true))
+            .foregroundStyle(key.isEmpty ? KColor.text2 : KColor.sealInk)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(width: size, height: size)
+            .background(key.isEmpty ? KColor.sealSomeone : Self.tone(key), in: Circle())
+            .overlay { if let url = person?.avatarURL { AvatarPhoto(url: url, size: size) } }
+            .accessibilityHidden(true)
+    }
+
+    static func initial(_ key: String) -> String {
+        guard let c = key.first(where: { $0.isLetter || $0.isNumber }) else { return "·" }
+        return String(c).uppercased()
+    }
+
+    /// FNV-1a over the lowercased handle's UTF-8, then murmur3's finalizer (FNV's low bits alone
+    /// sent 4 of the design's 5 names to the same tone) → one of the six tones.
+    static func tone(_ key: String) -> Color {
+        var h: UInt32 = 2_166_136_261
+        for b in key.lowercased().utf8 { h = (h ^ UInt32(b)) &* 16_777_619 }
+        h ^= h >> 16; h = h &* 0x85eb_ca6b; h ^= h >> 13; h = h &* 0xc2b2_ae35; h ^= h >> 16
+        return Color(hex: KColor.sealHexes[Int(h % UInt32(KColor.sealHexes.count))])
     }
 }
 

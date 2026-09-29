@@ -9,7 +9,8 @@ import {
 } from "@/app/actions/backlog-actions";
 import { createPartyAction } from "@/app/actions/party-collection-actions";
 import { LimitStepper } from "@/components/party/limit-stepper";
-import { DEFAULT_PER_GUEST_LIMIT } from "@/components/party/paths";
+import { partyErrorMessage } from "@/components/party/party-errors";
+import { DEFAULT_PER_GUEST_LIMIT } from "@/modules/party-collections/rules";
 import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { Sheet, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, PEOPLE_FILL } from "@/components/kura/icons";
@@ -77,17 +78,31 @@ function NewCollectionBody() {
   const [step, setStep] = useState<"form" | "privacy">("form");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  /** A refusal with its own sentence (party: `too_many_parties`, …). */
+  const [failMessage, setFailMessage] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setFailed(false);
+    setFailMessage(null);
     try {
       if (kind === "party") {
         const res = await createPartyAction({ name: name.trim(), perGuestLimit: limit });
-        if (!("ok" in res) || !res.ok) throw new Error("invalid");
-        dismiss?.();
-        router.push(`${res.path}?sheet=share`);
+        if ("ok" in res && res.ok) {
+          dismiss?.();
+          router.push(`${res.path}?sheet=share`);
+          return;
+        }
+        if ("error" in res && res.error === "signin_required") {
+          window.location.assign(res.loginPath);
+          return;
+        }
+        const code = "error" in res ? res.error : "unknown";
+        console.error("[party] createPartyAction refused", { error: code });
+        setFailMessage(("message" in res && res.message) || partyErrorMessage(code));
+        setFailed(true);
+        setBusy(false);
         return;
       }
       const res = await createBacklogAction({ name });
@@ -97,7 +112,8 @@ function NewCollectionBody() {
       }
       dismiss?.();
       router.push(`/backlogs/${res.id}`);
-    } catch {
+    } catch (err) {
+      console.error(`[collections] create ${kind} failed`, err);
       setFailed(true);
       setBusy(false);
     }
@@ -167,7 +183,7 @@ function NewCollectionBody() {
         )}
         {failed && (
           <p className="px-1 font-sans text-[13px] text-text-2">
-            No se pudo crear. Revisa tu conexión e inténtalo otra vez.
+            {failMessage ?? "No se pudo crear. Revisa tu conexión e inténtalo otra vez."}
           </p>
         )}
         <button type="submit" disabled={busy || !name.trim()} className={SHEET_SOLID}>

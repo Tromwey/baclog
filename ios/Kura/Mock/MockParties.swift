@@ -111,7 +111,8 @@ final class MockPartyServer: @unchecked Sendable {
         let songs = r.songs.map { s in
             PartySong(titleID: s.id, title: s.title, artist: s.artist, album: s.album, palette: s.palette,
                       addedBy: person(s.by), mine: s.by == me, byHost: s.by == r.host,
-                      canRemove: host || (s.by == me && !blocked),
+                      // C4: a blocked guest can still take their OWN songs out.
+                      canRemove: host || s.by == me,
                       canBlockAuthor: host && s.by != nil && s.by != r.host)
         }
         var counts: [String?: Int] = [:]
@@ -154,8 +155,15 @@ final class MockPartyServer: @unchecked Sendable {
 
     func get(_ id: String) throws -> Party { party(try room(id)) }
 
+    /// The server's cap on parties you host (409 `too_many_parties`). `-kuraPartyTooMany YES` forces it.
+    static let maxHosted = 20
+
     func create(name: String, limit: Int?) throws -> Party {
         try check()
+        let hosted = lock.withLock { rooms.values.filter { $0.host == me }.count }
+        if hosted >= Self.maxHosted || UserDefaults.standard.bool(forKey: "kuraPartyTooMany") {
+            throw KuraAPIError.conflict(code: "too_many_parties", message: "Ya tienes 20 fiestas. Borra alguna para crear otra.")
+        }
         let id = UUID().uuidString.lowercased()
         let token = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16))
         let r = Room(id: id, name: name, host: me, limit: limit, songs: [], members: [], blocked: [], token: token, active: true)
@@ -177,8 +185,19 @@ final class MockPartyServer: @unchecked Sendable {
         _ = lock.withLock { rooms.removeValue(forKey: id) }
     }
 
+    /// Rotations in the last minute (the server's 429 on "Crear link nuevo").
+    private var rotations: [Date] = []
+
     func rotate(_ id: String) throws -> Party {
         guard try room(id).host == me else { throw KuraAPIError.notFound }
+        let now = Date()
+        let limited = lock.withLock { () -> Bool in
+            rotations = rotations.filter { now.timeIntervalSince($0) < 60 }
+            guard rotations.count < 3 else { return true }
+            rotations.append(now)
+            return false
+        }
+        if limited { throw KuraAPIError.rateLimited(retryAfter: 60) }
         mutate(id) { r in r.token = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16)); r.active = true }
         return try get(id)
     }
@@ -243,6 +262,14 @@ final class MockPartyServer: @unchecked Sendable {
         return try get(id)
     }
 
+    /// `POST /parties/{id}/leave`: only a guest (the host and a stranger get the same 404). Their
+    /// songs stay in the party, and so does a block.
+    func leave(_ id: String) throws {
+        let r = try room(id)
+        guard r.host != me, r.members.contains(me) else { throw KuraAPIError.notFound }
+        mutate(id) { _ = $0.members.remove(self.me) }
+    }
+
     func preview(_ token: String) throws -> InvitePreview {
         try check()
         guard let r = lock.withLock({ rooms.values.first { $0.token == token && $0.active } }) else { throw KuraAPIError.notFound }
@@ -303,6 +330,7 @@ extension MockAPI {
     func unblockPartyGuest(id: String, guestRef: String) async throws -> Party {
         try await partyWrite(); return try parties_.unblock(id, guestRef)
     }
+    func leaveParty(id: String) async throws { try await partyWrite(); try parties_.leave(id) }
     func invitePreview(token: String) async throws -> InvitePreview { await partyWait(); return try parties_.preview(token) }
     func joinParty(token: String) async throws -> PartyJoin { try await partyWrite(); return try parties_.join(token) }
 }

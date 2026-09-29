@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   deletePartyAction,
+  leavePartyAction,
   removeAndBlockPartyGuestAction,
   removePartySongAction,
   revokePartyInviteAction,
@@ -16,6 +17,7 @@ import { SheetClose, useSheetDismiss } from "@/components/ui";
 import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 import type { PartyDetail, PartySong } from "@/modules/party-collections/types";
 import { LimitStepper } from "./limit-stepper";
+import { logged, usePartyFailure } from "./party-errors";
 import {
   creditOf,
   handleOf,
@@ -44,7 +46,9 @@ export type SheetState =
   | { k: "export" }
   | { k: "edit" }
   | { k: "delete" }
-  | { k: "blocked" };
+  | { k: "blocked" }
+  | { k: "guestOpts" }
+  | { k: "leave" };
 
 export const SHEET_LABEL: Record<SheetState["k"], string> = {
   welcome: "Ya estás dentro",
@@ -57,6 +61,8 @@ export const SHEET_LABEL: Record<SheetState["k"], string> = {
   edit: "Editar fiesta",
   delete: "Borrar fiesta",
   blocked: "Bloqueados",
+  guestOpts: "Opciones de la fiesta",
+  leave: "Salir de la fiesta",
 };
 
 const HONEY =
@@ -139,11 +145,12 @@ export function CapSheet({
   onDone: () => void;
   toast: ToastHost;
 }) {
+  const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState<string | null>(null);
   const mine = party.songs.filter((s) => s.mine);
   const remove = async (s: PartySong) => {
     setBusy(s.titleId);
-    const res = await removePartySongAction(party.id, s.titleId).catch(() => null);
+    const res = await logged("remove song", party.id, removePartySongAction(party.id, s.titleId));
     setBusy(null);
     if (res && "ok" in res && res.ok) {
       onParty(res.party);
@@ -151,7 +158,7 @@ export function CapSheet({
       onRemoved();
       return;
     }
-    toast.show({ message: "No pudimos quitarla. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos quitarla. Inténtalo otra vez.");
   };
   return (
     <div className="flex flex-col">
@@ -191,24 +198,27 @@ export function RemoveSheet({
   party,
   song,
   onParty,
+  onStale,
   toast,
 }: {
   party: PartyDetail;
   song: PartySong;
   onParty: (p: PartyDetail) => void;
+  /** The song (not the party) may be gone: re-read the room. */
+  onStale: () => void;
   toast: ToastHost;
 }) {
   const dismiss = useSheetDismiss();
+  const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState(false);
   const author = song.addedBy ? `@${song.addedBy.handle}` : "quien la puso";
   const blockable = party.viewer.role === "host" && song.canBlockAuthor;
 
   const act = async (block: boolean) => {
     setBusy(true);
-    const res = await (block
-      ? removeAndBlockPartyGuestAction(party.id, song.titleId)
-      : removePartySongAction(party.id, song.titleId)
-    ).catch(() => null);
+    const res = block
+      ? await logged("remove and block", party.id, removeAndBlockPartyGuestAction(party.id, song.titleId))
+      : await logged("remove song", party.id, removePartySongAction(party.id, song.titleId));
     if (res && "ok" in res && res.ok) {
       onParty(res.party);
       dismiss?.();
@@ -218,7 +228,10 @@ export function RemoveSheet({
       return;
     }
     setBusy(false);
-    toast.show({ message: "No pudimos quitarla. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos quitarla. Inténtalo otra vez.", () => {
+      dismiss?.();
+      onStale();
+    });
   };
 
   return (
@@ -249,7 +262,7 @@ export function RemoveSheet({
       </div>
       <p className="mt-2 text-center font-sans text-[12px] leading-[1.4] text-text-3">
         {blockable
-          ? `${author[0] === "@" ? author : "Quien la puso"} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones.`
+          ? `${author[0] === "@" ? author : "Quien la puso"} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones (sí quitar las suyas).`
           : "La canción sale de la colección para todos."}
       </p>
     </div>
@@ -269,6 +282,7 @@ export function ShareSheet({
   onParty: (p: PartyDetail) => void;
   toast: ToastHost;
 }) {
+  const fail = usePartyFailure(toast);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const inv = party.invite;
@@ -306,13 +320,13 @@ export function ShareSheet({
   };
   const newLink = async () => {
     setBusy(true);
-    const res = await rotatePartyInviteAction(party.id).catch(() => null);
+    const res = await logged("rotate link", party.id, rotatePartyInviteAction(party.id));
     setBusy(false);
     if (res && "ok" in res && res.ok) {
       onParty({ ...party, invite: res.invite });
       return;
     }
-    toast.show({ message: "No pudimos crear el link. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos crear el link. Inténtalo otra vez.");
   };
 
   return (
@@ -368,13 +382,14 @@ export function LinkSheet({
   toast: ToastHost;
 }) {
   const dismiss = useSheetDismiss();
+  const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState(false);
   const inv = party.invite;
   const active = !!inv?.active;
 
   const newLink = async () => {
     setBusy(true);
-    const res = await rotatePartyInviteAction(party.id).catch(() => null);
+    const res = await logged("rotate link", party.id, rotatePartyInviteAction(party.id));
     setBusy(false);
     if (res && "ok" in res && res.ok) {
       onParty({ ...party, invite: res.invite });
@@ -382,17 +397,21 @@ export function LinkSheet({
       toast.show({ message: "Link nuevo listo. El anterior ya no funciona." });
       return;
     }
-    toast.show({ message: "No pudimos crear el link. Inténtalo otra vez.", kind: "error" });
+    if (res && "error" in res && res.error === "rate_limited") {
+      toast.show({ message: "Ya creaste muchos links en poco tiempo. Espera un rato para crear otro.", kind: "error" });
+      return;
+    }
+    fail(res, "No pudimos crear el link. Inténtalo otra vez.");
   };
   const revoke = async () => {
     setBusy(true);
-    const res = await revokePartyInviteAction(party.id).catch(() => null);
+    const res = await logged("revoke link", party.id, revokePartyInviteAction(party.id));
     setBusy(false);
     if (res && "ok" in res && res.ok) {
       onParty({ ...party, invite: { active: false, token: null, url: null, createdAt: null } });
       return;
     }
-    toast.show({ message: "No pudimos desactivar el link. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos desactivar el link. Inténtalo otra vez.");
   };
 
   return (
@@ -513,20 +532,25 @@ export function EditSheet({
   toast: ToastHost;
 }) {
   const dismiss = useSheetDismiss();
+  const fail = usePartyFailure(toast);
   const [name, setName] = useState(party.name);
   const [limit, setLimit] = useState<number | null>(party.perGuestLimit);
   const [busy, setBusy] = useState(false);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const res = await updatePartyAction(party.id, { name: name.trim(), perGuestLimit: limit }).catch(() => null);
+    const res = await logged(
+      "update party",
+      party.id,
+      updatePartyAction(party.id, { name: name.trim(), perGuestLimit: limit }),
+    );
     setBusy(false);
     if (res && "ok" in res && res.ok) {
       onSaved({ name: name.trim(), perGuestLimit: limit });
       dismiss?.();
       return;
     }
-    toast.show({ message: "No pudimos guardar. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos guardar. Inténtalo otra vez.");
   };
   return (
     <form onSubmit={save} className="flex flex-col gap-1.5">
@@ -565,16 +589,17 @@ export function DeleteSheet({
   onDeleted: () => void;
   toast: ToastHost;
 }) {
+  const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState(false);
   const del = async () => {
     setBusy(true);
-    const res = await deletePartyAction(party.id).catch(() => null);
+    const res = await logged("delete party", party.id, deletePartyAction(party.id));
     if (res && "ok" in res && res.ok) {
       onDeleted();
       return;
     }
     setBusy(false);
-    toast.show({ message: "No pudimos borrarla. Inténtalo otra vez.", kind: "error" });
+    fail(res, "No pudimos borrarla. Inténtalo otra vez.");
   };
   return (
     <div className="flex flex-col">
@@ -603,22 +628,24 @@ export function BlockedSheet({
   onChanged: () => void;
   toast: ToastHost;
 }) {
+  const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState<string | null>(null);
   const unblock = async (ref: string, who: string) => {
     setBusy(ref);
-    const res = await unblockPartyGuestAction(party.id, ref).catch(() => null);
+    const res = await logged("unblock guest", party.id, unblockPartyGuestAction(party.id, ref));
     setBusy(null);
     if (res && "ok" in res && res.ok) {
       toast.show({ message: `Desbloqueaste a ${who}.` });
       onChanged();
       return;
     }
-    toast.show({ message: "No pudimos desbloquear. Inténtalo otra vez.", kind: "error" });
+    // not_found here = that ref is stale (already unblocked elsewhere): re-read.
+    fail(res, "No pudimos desbloquear. Inténtalo otra vez.", onChanged);
   };
   return (
     <div className="flex flex-col">
       <h2 className={BIG_TITLE}>bloqueados.</h2>
-      <p className={BODY}>Siguen viendo la fiesta, pero no pueden agregar ni quitar canciones.</p>
+      <p className={BODY}>Siguen viendo la fiesta, pero ya no pueden agregar canciones (sí quitar las suyas).</p>
       <ul className="-mx-2 mt-[18px] flex flex-col gap-0.5">
         {party.blockedGuests.map((g) => (
           <li key={g.guestRef} className="flex items-center gap-3 p-2">
@@ -637,6 +664,67 @@ export function BlockedSheet({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- guest options */
+
+/** A guest's "…": for now one row, "Salir de la fiesta" (C3). */
+export function GuestOptionsSheet({ party, onLeave }: { party: PartyDetail; onLeave: () => void }) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-baseline justify-between gap-3 pb-2.5">
+        <h2 className="min-w-0 truncate font-brand text-[24px] font-normal text-text">{party.name}</h2>
+        <span className="flex-none font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">
+          {songsLabel(party.songs.length)}
+        </span>
+      </div>
+      <div className="-mx-2 flex flex-col gap-0.5">
+        <MenuRow icon="arrow" label="Salir de la fiesta" onClick={onLeave} />
+      </div>
+    </div>
+  );
+}
+
+/** "¿salir de la fiesta?" — the confirmation; then /backlogs with a toast. */
+export function LeaveSheet({
+  party,
+  onLeft,
+  toast,
+}: {
+  party: PartyDetail;
+  onLeft: () => void;
+  toast: ToastHost;
+}) {
+  const fail = usePartyFailure(toast);
+  const [busy, setBusy] = useState(false);
+  const mine = party.songs.filter((s) => s.mine).length;
+  const leave = async () => {
+    setBusy(true);
+    const res = await logged("leave party", party.id, leavePartyAction(party.id));
+    if (res && "ok" in res && res.ok) {
+      onLeft();
+      return;
+    }
+    setBusy(false);
+    fail(res, "No pudimos sacarte de la fiesta. Inténtalo otra vez.");
+  };
+  return (
+    <div className="flex flex-col">
+      <h2 className={BIG_TITLE}>¿salir de la fiesta?</h2>
+      <p className={BODY}>
+        {mine > 0
+          ? `La fiesta sale de tus colecciones. ${mine === 1 ? "Tu canción se queda" : `Tus ${songsLabel(mine)} se quedan`} en la colección.`
+          : "La fiesta sale de tus colecciones."}{" "}
+        Si el link sigue activo, puedes volver a entrar.
+      </p>
+      <div className="mt-[22px] flex flex-col gap-2">
+        <button type="button" disabled={busy} onClick={() => void leave()} className={QUIET_52}>
+          {busy ? "Saliendo…" : "Salir de la fiesta"}
+        </button>
+        <SheetClose className={CANCEL}>Cancelar</SheetClose>
+      </div>
     </div>
   );
 }

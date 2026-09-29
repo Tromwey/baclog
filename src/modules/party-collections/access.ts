@@ -1,9 +1,11 @@
 import "server-only";
-import { and, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogCollaborators, backlogs, parties } from "@/db/schema";
 import { notBlockedWith } from "@/modules/social/block-gate";
 import { assertPartyLive } from "./errors";
+import { MIGRATION_0033_LIVE } from "./live";
+import { partyPath } from "./rules";
 import type { PartyRole } from "./types";
 
 /**
@@ -13,9 +15,18 @@ import type { PartyRole } from "./types";
  * link; a member the host blocked is still a member and still sees it).
  * Everyone else gets null = the same 404 as a nonexistent id (no oracle).
  *
- * `blocked` (guests only) = the host's per-party block (`blocked_at`) OR a
- * user block (`user_block`, App Store 1.2) in either direction with the host:
- * such a guest keeps seeing the party but can't add or remove songs.
+ * A guest who LEFT (`left_at`, only ever set on a blocked guest's row —
+ * rules.ts `leaveEffect`) is not a member: null.
+ *
+ * A USER block (`user_block`, App Store 1.2) in either direction between a
+ * guest and the host takes the party away from that guest entirely: null,
+ * the same 404 (contract C2 — AGENTS.md: a block is mutual in visibility, and
+ * the host's songs/name would otherwise keep reaching someone they blocked).
+ * The row stays; lifting the block brings the party back as it was.
+ *
+ * `blocked` (guests only) = the host's per-party block (`blocked_at`,
+ * "Quitar y bloquear"): such a guest keeps SEEING the party, can't add, and
+ * may still remove their own songs (C4).
  *
  * `userId` is always the session/bearer user (never from a client).
  */
@@ -48,19 +59,25 @@ export async function getPartyAccess(
       createdAt: parties.createdAt,
       memberId: backlogCollaborators.userId,
       blockedAt: backlogCollaborators.blockedAt,
-      userBlocked: sql<boolean>`not ${notBlockedWith(userId, backlogs.userId)}`,
       mineCount: sql<number>`(select count(*)::int from party_song ps where ps.backlog_id = ${backlogs.id} and ps.added_by_user_id = ${userId})`,
     })
     .from(backlogs)
     .innerJoin(parties, eq(parties.backlogId, backlogs.id))
     .leftJoin(
       backlogCollaborators,
-      and(eq(backlogCollaborators.backlogId, backlogs.id), eq(backlogCollaborators.userId, userId)),
+      and(
+        eq(backlogCollaborators.backlogId, backlogs.id),
+        eq(backlogCollaborators.userId, userId),
+        isNull(backlogCollaborators.leftAt),
+      ),
     )
     .where(
       and(
         eq(backlogs.id, backlogId),
-        or(eq(backlogs.userId, userId), isNotNull(backlogCollaborators.userId)),
+        or(
+          eq(backlogs.userId, userId),
+          and(isNotNull(backlogCollaborators.userId), notBlockedWith(userId, backlogs.userId)),
+        ),
       ),
     )
     .limit(1);
@@ -74,7 +91,19 @@ export async function getPartyAccess(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     role,
-    blocked: role === "guest" && (row.blockedAt !== null || Boolean(row.userBlocked)),
+    blocked: role === "guest" && row.blockedAt !== null,
     mineCount: Number(row.mineCount) || 0,
   };
+}
+
+/**
+ * `/backlogs/{id}` (the NORMAL collection zoom) opened on a party: the member
+ * page `/c/{id}` if this user may see it, else null (and the zoom answers
+ * its usual 404 — a non-member never learns the id is a party). Null while
+ * 0033 isn't live (no party can exist).
+ */
+export async function partyPathForMember(userId: string, backlogId: string): Promise<string | null> {
+  if (!MIGRATION_0033_LIVE) return null;
+  const access = await getPartyAccess(userId, backlogId);
+  return access ? partyPath(access.backlogId) : null;
 }

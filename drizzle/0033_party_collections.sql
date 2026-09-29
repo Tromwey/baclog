@@ -22,6 +22,7 @@ CREATE TABLE "party_song" (
 );
 --> statement-breakpoint
 ALTER TABLE "backlog_collaborator" ADD COLUMN "blocked_at" timestamp;--> statement-breakpoint
+ALTER TABLE "backlog_collaborator" ADD COLUMN "left_at" timestamp;--> statement-breakpoint
 ALTER TABLE "party" ADD CONSTRAINT "party_backlog_id_backlog_id_fk" FOREIGN KEY ("backlog_id") REFERENCES "public"."backlog"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "party_invite" ADD CONSTRAINT "party_invite_backlog_id_backlog_id_fk" FOREIGN KEY ("backlog_id") REFERENCES "public"."backlog"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "party_song" ADD CONSTRAINT "party_song_backlog_item_id_backlog_item_id_fk" FOREIGN KEY ("backlog_item_id") REFERENCES "public"."backlog_item"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

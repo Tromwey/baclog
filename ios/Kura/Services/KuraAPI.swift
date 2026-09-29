@@ -189,6 +189,8 @@ protocol KuraAPI: Sendable {
     func fillPartySongPalette(id: String, titleID: String, hexes: [String]) async throws
     /// `DELETE /parties/{id}/blocked/{guestRef}`.
     func unblockPartyGuest(id: String, guestRef: String) async throws -> Party
+    /// `POST /parties/{id}/leave` → 204 — a guest leaves (their songs stay). 404 if you're not a guest.
+    func leaveParty(id: String) async throws
     /// `GET /invites/{token}` — public; the bearer (if any) fills `viewer`. 404 = "ya no funciona".
     func invitePreview(token: String) async throws -> InvitePreview
     /// `POST /invites/{token}/join`. 404 dead link · 403 `onboarding_required`.

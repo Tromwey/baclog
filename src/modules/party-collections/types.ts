@@ -44,7 +44,8 @@ export interface PartySong {
   mine: boolean;
   /** The host put it. */
   byHost: boolean;
-  /** The viewer may remove it: host → any; guest → own, while not blocked. */
+  /** The viewer may remove it: host → any; guest → own (also while blocked,
+   *  contract C4). */
   canRemove: boolean;
   /** The viewer (host) may "Quitar y bloquear" its author: a guest who
    *  still exists (not the host, not a deleted account). */
@@ -61,8 +62,10 @@ export interface PartyContributor {
 
 export interface PartyViewer {
   role: PartyRole;
-  /** The host blocked this guest (or a user block exists either way with the
-   *  host): can see, cannot add or remove. Always false for the host. */
+  /** The host blocked this guest in this party ("Quitar y bloquear"): can
+   *  see, cannot add; may still remove their OWN songs (C4). Always false
+   *  for the host. (A user block with the host removes the party from the
+   *  guest altogether — no `PartyDetail` at all, C2.) */
   blocked: boolean;
   /** Songs this viewer put. */
   mineCount: number;
@@ -137,6 +140,9 @@ export interface InvitePreview {
 /** For /party ("8 canciones · @ana, @rodri y 2 más ya están dentro"). */
 export interface PartySummary {
   name: string;
+  /** Songs per guest: 0 = solo ver, 1..5, null = ilimitadas (/party copy:
+   *  "Pon tus 3 canciones"). */
+  perGuestLimit: number | null;
   songCount: number;
   guestCount: number;
   /** Up to 2 public handles of guests, in join order. */

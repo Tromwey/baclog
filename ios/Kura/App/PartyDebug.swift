@@ -4,7 +4,8 @@ import SwiftUI
 /// DEBUG: the party captures (`-kuraScreen <name>`, mock only). Design `fiesta-app-v2` states:
 ///
 /// party (collab, 1 of 3) · partyfull (3 of 3 → "Cambiar una canción") · partywelcome · partyreturning ·
-/// partyblocked · partyempty · partyhost · partyhostempty · partyshare · partylink · partylinkoff ·
+/// partyblocked · partyblockedremove (blocked, taking your own song out — C4) · partyguestopts ·
+/// partyleave (a guest's "¿salir de la fiesta?" — C3) · partyempty · partyhost · partyhostempty · partyshare · partylink · partylinkoff ·
 /// partyopts · partyremove · partyexport · partyedit · partysearch (`-kuraPartyQuery caifanes|thriller|error`) ·
 /// partycap · partycreate · partylist · partyunavailable · invite (signed out) · invitedead · inviteunavailable
 enum PartyDebug {
@@ -33,6 +34,16 @@ enum PartyDebug {
             server.seedMine(["afuera"])
             server.mutate(eric) { $0.blocked.insert(MockData.me.handle) }
             main([.party(eric)])
+        case "partyblockedremove":
+            server.seedMine(["afuera"])
+            server.mutate(eric) { $0.blocked.insert(MockData.me.handle) }
+            main([.party(eric)], sheet: .partySong(partyID: eric, titleID: MockPartyServer.catalog["afuera"]!.id))
+        case "partyguestopts":
+            server.seedMine(["afuera"])
+            main([.party(eric)], sheet: .partyOptions(eric))
+        case "partyleave":
+            server.seedMine(["afuera"])
+            main([.party(eric)], sheet: .partyLeave(eric))
         case "partyempty":
             server.mutate(eric) { $0.songs = [] }
             main([.party(eric)])

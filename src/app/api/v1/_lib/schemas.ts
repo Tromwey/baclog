@@ -102,7 +102,8 @@ export const ErrorBodySchema = z.object({
     message: z.string().min(1),
     /** Sub-code the app branches on — `forbidden`: "underage", "lists_private",
      *  "blocked", "view_only" · `conflict`: "duplicate_mine", "duplicate_other",
-     *  "cap_reached" (colecciones de fiesta) ·
+     *  "cap_reached", "not_blockable", "too_many_parties" (colecciones de
+     *  fiesta; a party `conflict` WITHOUT reason = "algo cambió, recarga") ·
      *  "not_released", "reaction_required", "taken", "linked_elsewhere",
      *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
      *  422, phase 4g): "invalid_proof" = a rejected provider token / merge

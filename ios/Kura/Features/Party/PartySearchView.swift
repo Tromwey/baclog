@@ -99,14 +99,13 @@ struct PartySearchView: View {
         case .loading:
             PartyRowsSkeleton(trailing: 88)
         case .error(let e):
+            let copy = errorCopy(e)
             VStack(alignment: .leading, spacing: 10) {
-                Text(e.isRateLimit ? "un momento." : "no pudimos buscar.")
+                Text(copy.title)
                     .font(.kura.news(30))
                     .foregroundStyle(KColor.text)
                     .accessibilityAddTraits(.isHeader)
-                Text(e.isRateLimit
-                     ? "Fueron muchas búsquedas seguidas. Espera unos segundos y vuelve a intentarlo."
-                     : "El buscador de canciones no respondió. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas.")
+                Text(copy.note)
                     .font(.kura.ui(15))
                     .lineSpacing(3)
                     .foregroundStyle(KColor.text2)
@@ -171,6 +170,21 @@ struct PartySearchView: View {
         .padding(.horizontal, 12)
     }
 
+    /// The search's error, by what failed. (`.notFound` never gets here: `run` leaves the page.)
+    private func errorCopy(_ e: KuraAPIError) -> (title: String, note: String) {
+        switch e {
+        case .rateLimited:
+            return ("un momento.", "Fueron muchas búsquedas seguidas. Espera unos segundos y vuelve a intentarlo.")
+        // A 503 is iTunes down — or the server without parties at all (its reads said so too).
+        case .unavailable where store.partiesUnavailable:
+            return (PartyCopy.unavailableTitle, PartyCopy.unavailable)
+        case .unavailable:
+            return ("no pudimos buscar.", "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas.")
+        default:
+            return ("no pudimos buscar.", "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas.")
+        }
+    }
+
     private var remainLabel: String {
         guard let p = party else { return " " }
         if p.isHost || p.perGuestLimit == nil { return "Pon las que quieras" }
@@ -198,6 +212,13 @@ struct PartySearchView: View {
             phase = .results
         case .failed(let e):
             if e == .cancelled || Task.isCancelled { return }
+            if e == .notFound {
+                // The party isn't there for you any more (deleted, you left, a block with the
+                // host): out of the search, and the re-read takes the page too if it's gone.
+                if store.path(store.tab).last == .partySearch(partyID) { store.pop() }
+                await store.loadParty(partyID, force: true)
+                return
+            }
             phase = .error(e)
         }
     }

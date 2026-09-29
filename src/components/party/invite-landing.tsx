@@ -9,8 +9,9 @@ import { Toast, useToast } from "@/components/kura/toast";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { loginPathFor } from "@/lib/return-to";
-import { invitePath } from "./paths";
+import { invitePath } from "@/modules/party-collections/rules";
 import type { InvitePreview } from "@/modules/party-collections/types";
+import { logged, partyErrorMessage } from "./party-errors";
 import { DeadLinkScreen } from "./dead-link";
 import { handleOf, PartyHero, songsLabel, SongRowBody, yourSongs } from "./party-parts";
 import { BRIDGE_QUERY, PARTY_TOKENS } from "./party-tokens";
@@ -71,7 +72,7 @@ export function InviteLanding({
 
   const join = useCallback(async () => {
     setJoining(true);
-    const res = await joinPartyAction(token).catch(() => null);
+    const res = await logged("join", preview.party.id, joinPartyAction(token));
     if (res && "ok" in res && res.ok) {
       note(JOIN_NOTE(token), null);
       const wasNew = readNote(NEW_NOTE(token));
@@ -98,8 +99,12 @@ export function InviteLanding({
       }
     }
     setJoining(false);
-    toast.show({ message: "No pudimos entrarte a la fiesta. Inténtalo otra vez.", kind: "error" });
-  }, [router, toast, token]);
+    const code = res && "error" in res ? res.error : null;
+    toast.show({
+      message: (code && partyErrorMessage(code)) ?? "No pudimos entrarte a la fiesta. Inténtalo otra vez.",
+      kind: "error",
+    });
+  }, [router, toast, token, preview.party.id]);
 
   // Back from /login (or the onboarding) with a session: finish what the CTA started.
   const auto = useRef(false);

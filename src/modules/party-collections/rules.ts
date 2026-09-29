@@ -1,13 +1,15 @@
-import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { SITE_URL } from "@/lib/site";
 import type { PartyRole } from "./types";
 
 /**
  * Colecciones de fiesta — the business rules as PURE functions (no DB, no
- * `server-only`): the module's writes and reads call these, the web and the
- * API speak their outcomes, and `scripts/check-party-rules.ts` exercises them
- * without a database.
+ * `server-only`, no `node:crypto`): the module's writes and reads call these,
+ * the web and the API speak their outcomes, and `scripts/check-party-rules.ts`
+ * exercises them without a database. CLIENT-SAFE on purpose — client
+ * components import `invitePath`/`partyPath`/`DEFAULT_PER_GUEST_LIMIT` from
+ * here. What needs a secret or randomness (`newInviteToken`, `guestRefOf`)
+ * lives in `tokens.ts` (server only).
  */
 
 // ---------- limits ----------
@@ -28,12 +30,9 @@ export const songQuerySchema = z.string().trim().min(1).max(100);
 
 // ---------- invite link ----------
 
-/** 12 random bytes → 16 chars of base64url (96 bits): the link IS the secret. */
+/** 12 random bytes → 16 chars of base64url (96 bits): the link IS the secret
+ *  (minted by `newInviteToken`, tokens.ts). */
 export const INVITE_TOKEN_RE = /^[A-Za-z0-9_-]{16}$/;
-
-export function newInviteToken(): string {
-  return randomBytes(12).toString("base64url");
-}
 
 /** The token if it has the shape we mint, else null — a malformed token is
  *  the same "este link ya no funciona" as a revoked or unknown one. */
@@ -60,7 +59,9 @@ export function partyPath(backlogId: string): string {
 
 export interface ViewerFacts {
   role: PartyRole;
-  /** Host blocked this guest, or a user block exists with the host. */
+  /** The host blocked this guest IN THIS PARTY ("Quitar y bloquear"). A user
+   *  block (`user_block`, either way) with the host is not "blocked": it
+   *  takes the party away entirely (`getPartyAccess` = null, contract C2). */
   blocked: boolean;
   /** `party.per_guest_limit`. */
   perGuestLimit: number | null;
@@ -111,10 +112,11 @@ export function decideAdd(
   return { ok: true };
 }
 
-/** Host → any song. Guest → only their own, and not while blocked. */
+/** Host → any song. Guest → only their own — ALSO while blocked (contract
+ *  C4: a blocked guest can't add, but may still take their own songs out). */
 export function canRemoveSong(v: Pick<ViewerFacts, "role" | "blocked">, mine: boolean): boolean {
   if (v.role === "host") return true;
-  return mine && !v.blocked;
+  return mine;
 }
 
 /** "Quitar y bloquear a @x": host only, author must be a guest that still
@@ -126,14 +128,98 @@ export function canBlockAuthor(
   return role === "host" && author.exists && !author.isHost;
 }
 
-// ---------- opaque guest reference ----------
-
-/** Per-party opaque reference to a guest (for "Desbloquear"): never the user
- *  id, and not correlatable across parties. */
-export function guestRefOf(backlogId: string, userId: string): string {
-  return createHash("sha256").update(`party-guest:${backlogId}:${userId}`).digest("base64url").slice(0, 22);
+/**
+ * An add whose INSERT wrote nothing (a race: someone put the song, the host
+ * blocked us, our cap filled from another device). Re-decided from FRESH
+ * state; when fresh state says "you may" the loss is unexplained and the
+ * answer is `conflict` (contract C5) — never `cap_reached`, which is a lie
+ * for the host (no cap) and for an unlimited party.
+ */
+export function lostAddOutcome(
+  v: ViewerFacts,
+  existing: { mine: boolean } | null,
+): AddRefusal | "conflict" {
+  const d = decideAdd(v, existing);
+  return d.ok ? "conflict" : d.reason;
 }
 
+// ---------- membership: leave / re-enter (contract C3) ----------
+
+/** The membership row as leave/join see it (`backlog_collaborator`). */
+export interface MemberRow {
+  /** `blocked_at IS NOT NULL` — the host's per-party block. */
+  blocked: boolean;
+  /** `left_at IS NOT NULL` — a blocked guest who left (row kept). */
+  left: boolean;
+}
+
+/** Only a guest leaves (the host deletes the party instead). */
+export function canLeave(role: PartyRole | null): boolean {
+  return role === "guest";
+}
+
+/**
+ * "Salir de la fiesta": an unblocked guest's row is DELETED (they may come
+ * back with an active link, like anyone new); a blocked guest's row is KEPT
+ * with `left_at` — deleting it would launder the block (leave, re-enter,
+ * add again).
+ */
+export function leaveEffect(row: MemberRow): "delete" | "mark_left" {
+  return row.blocked ? "mark_left" : "delete";
+}
+
+export type JoinOutcome =
+  | { ok: true; joined: "new" | "already"; blocked: boolean }
+  | { ok: false; error: "invalid_link" };
+
+/**
+ * Entering through the link, for a non-host account (the SQL in
+ * `joinParty` is this, in one statement): a user block with the host →
+ * `invalid_link` (even for a member, C2); an active row → already inside
+ * (no link needed to stay); otherwise the link must be active — no row → a
+ * new member; a row that LEFT → back in, `blocked` exactly as it was
+ * (re-entering never clears a block).
+ */
+export function joinOutcome(
+  row: MemberRow | null,
+  ctx: { linkActive: boolean; userBlocked: boolean },
+): JoinOutcome {
+  // A user block with the host hides the party even from a member (C2).
+  if (ctx.userBlocked) return { ok: false, error: "invalid_link" };
+  if (row && !row.left) return { ok: true, joined: "already", blocked: row.blocked };
+  if (!ctx.linkActive) return { ok: false, error: "invalid_link" };
+  return { ok: true, joined: "new", blocked: row?.blocked ?? false };
+}
+
+// ---------- abuse limits (contract C7) ----------
+
+/** Parties one account may HOST at once (existing ones: a deleted party
+ *  frees its slot). */
+export const MAX_HOSTED_PARTIES = 20;
+export const TOO_MANY_PARTIES_MESSAGE = "Ya tienes 20 fiestas. Borra alguna para crear otra.";
+
+/** Invite links minted per party per rolling hour — the first one (at
+ *  creation) included. DB-backed: counts the party's `party_invite` rows
+ *  created in the window, so it holds across instances. */
+export const INVITE_ROTATIONS_PER_HOUR = 10;
+const HOUR_S = 60 * 60;
+
+/**
+ * Null = may mint a new link now; else seconds until enough of the window's
+ * links age out. `agesSeconds` = how old each of the party's invite rows
+ * from the last hour is (computed in SQL: `now() - created_at`, so app and
+ * DB clocks never mix).
+ */
+export function rotationRetryAfter(agesSeconds: number[]): number | null {
+  const live = agesSeconds.filter((a) => a >= 0 && a < HOUR_S).sort((a, b) => b - a);
+  if (live.length < INVITE_ROTATIONS_PER_HOUR) return null;
+  const mustExpire = live[live.length - INVITE_ROTATIONS_PER_HOUR];
+  return Math.max(1, Math.ceil(HOUR_S - mustExpire));
+}
+
+// ---------- opaque guest reference ----------
+
+/** Shape of `guestRefOf` (tokens.ts): 22 chars of base64url. */
 export const GUEST_REF_RE = /^[A-Za-z0-9_-]{22}$/;
 
 // ---------- copy helpers (shared by /party and the member page) ----------
@@ -169,4 +255,18 @@ export function presenceLine(s: { songCount: number; named: string[]; othersCoun
 export function duplicateMessage(mine: boolean, byHandle: string | null): string {
   if (mine) return "Ya la pusiste tú.";
   return `Ya está, la puso ${byHandle ? `@${byHandle}` : "alguien"}`;
+}
+
+/**
+ * /party's card body with the party's REAL cap (C6 — it used to say "Pon tus
+ * canciones" whatever the cap): "Pon tus 3 canciones. Van a sonar…" · one →
+ * "Pon tu canción. Va a sonar…" · ilimitadas → "Pon tus canciones. …" ·
+ * solo ver (0) → nothing to put, only to look.
+ */
+export function playlistPitch(perGuestLimit: number | null): string {
+  const tail = "y todos verán quién puso cuál.";
+  if (perGuestLimit === 0) return `Mira lo que va a sonar esa noche ${tail}`;
+  if (perGuestLimit === 1) return `Pon tu canción. Va a sonar esa noche, ${tail}`;
+  if (perGuestLimit === null) return `Pon tus canciones. Van a sonar esa noche, ${tail}`;
+  return `Pon tus ${perGuestLimit} canciones. Van a sonar esa noche, ${tail}`;
 }

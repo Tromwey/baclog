@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// Colecciones de fiesta (`.claude/knowledge/state/fiesta-contract.md`, design `fiesta-app-v2`).
 ///
@@ -22,20 +23,32 @@ extension AppStore {
 
     // MARK: Reads
 
-    /// `GET /parties` — "De fiesta" in Tus colecciones. Silent on failure (the carousel simply
-    /// doesn't show parties); a 503 marks the feature as not there yet.
+    /// `GET /parties` — "De fiesta" in Tus colecciones. A 503 is the feature not being there yet:
+    /// silent, no parties. Anything else is a real failure: `loadError(.parties)` puts a
+    /// Reintentar strip on the carousel (the parties already listed stay), and it's logged — a
+    /// contract change must not look like "you have no parties".
     func loadParties(force: Bool = false) async {
         guard force || s.partyCards == nil else { return }
         let session = s
         do {
             let cards = try await api.parties()
             try check(session)
+            loaded(.parties)
             s.partiesUnavailable = false
             s.partyCards = cards
         } catch {
             guard s === session else { return }
-            let e = noteError(error)
-            if e == .unavailable { s.partiesUnavailable = true; s.partyCards = [] }
+            let e = fail(.parties, error)
+            switch e {
+            case .unavailable:
+                loadErrors[.parties] = nil
+                s.partiesUnavailable = true
+                s.partyCards = []
+            case .cancelled, .unauthorized:
+                break
+            default:
+                KuraLog.party.error("GET /parties failed: \(String(describing: e), privacy: .public)")
+            }
         }
     }
 
@@ -46,14 +59,38 @@ extension AppStore {
             let p = try await api.party(id: id)
             try check(session)
             loaded(.party(id))
+            s.partiesUnavailable = false
             s.missingParties.remove(id)
             applyParty(p)
         } catch {
             guard s === session else { return }
             let e = fail(.party(id), error)
-            if e == .notFound { s.missingParties.insert(id); s.parties[id] = nil }
+            if e == .notFound {
+                // Deleted, you left, or a block with the host (the server never says which). One
+                // we had on screen or in the list: out of every tab + "Esa fiesta ya no está." and
+                // the list re-read. One we never had (a link to someone else's): the page says so.
+                let known = s.parties[id] != nil || s.partyCards?.contains { $0.id == id } == true
+                s.missingParties.insert(id)
+                if known { partyGone(id) }
+            }
             if e == .unavailable { s.partiesUnavailable = true }
         }
+    }
+
+    /// A party that isn't there for you any more: off the maps, the list and every tab's stack
+    /// (its page and its search), its sheet down, and `GET /parties` again.
+    private func partyGone(_ id: String, toast: String? = PartyCopy.gone) {
+        dropParty(id)
+        if let toast { showToast(ToastModel(text: toast, kind: .info)) }
+        Task { await loadParties(force: true) }
+    }
+
+    /// Forget a party locally (deleted, left, gone) and pop it from every tab.
+    private func dropParty(_ id: String) {
+        s.parties[id] = nil
+        s.partyCards?.removeAll { $0.id == id }
+        if let sh = sheet, sh.partyID == id { dismissSheet() }
+        for t in Tab.allCases { paths[t]?.removeAll { $0 == .party(id) || $0 == .partySearch(id) } }
     }
 
     /// `GET /invites/{token}` (the landing, signed in or out).
@@ -64,6 +101,7 @@ extension AppStore {
             let p = try await api.invitePreview(token: token)
             try check(session)
             loaded(.invite(token))
+            s.partiesUnavailable = false
             s.deadInvites.remove(token)
             s.invites[token] = p
             fillSongPalettes(partyID: p.party.id, p.party.songs, via: false)
@@ -71,7 +109,9 @@ extension AppStore {
             guard s === session else { return }
             let e = fail(.invite(token), error)
             if e == .notFound { s.deadInvites.insert(token); s.invites[token] = nil }
-            if e == .unavailable { s.partiesUnavailable = true }
+            // 503 = the server has no parties yet: "las fiestas llegan muy pronto.", and the token
+            // is NOT dead — the same link works once they're on.
+            if e == .unavailable { s.partiesUnavailable = true; s.deadInvites.remove(token) }
         }
     }
 
@@ -103,8 +143,14 @@ extension AppStore {
                 let hexes = await CoverPalette.extract(from: url)
                 guard let self, !hexes.isEmpty, self.s === session else { return }
                 self.setSongPalette(song.titleID, hexes)
-                // Only a member may write it (the preview is anonymous-capable).
-                if member { try? await self.api.fillPartySongPalette(id: partyID, titleID: song.titleID, hexes: hexes) }
+                // Only a member may write it (the preview is anonymous-capable). A failure only
+                // costs the next viewer an extraction; logged, never shown.
+                guard member else { return }
+                do {
+                    try await self.api.fillPartySongPalette(id: partyID, titleID: song.titleID, hexes: hexes)
+                } catch {
+                    KuraLog.party.notice("song palette PUT failed: \(String(describing: error), privacy: .public)")
+                }
             }
         }
     }
@@ -130,8 +176,11 @@ extension AppStore {
     /// The toast for a party write that failed (the server's `message` when it wrote the copy).
     static func partyText(_ e: KuraAPIError) -> String {
         switch e {
-        case .unavailable: return "Las fiestas llegan muy pronto."
+        case .unavailable: return PartyCopy.unavailable
+        // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
         case .conflict(_, let m) where !m.isEmpty: return m
+        case .conflict(let code, _) where code == "too_many_parties": return PartyCopy.tooManyParties
+        case .rateLimited: return PartyCopy.rotateLimited
         case .forbidden(let code):
             switch code {
             case "blocked": return "Ya no puedes agregar canciones a esta fiesta."
@@ -140,8 +189,20 @@ extension AppStore {
             default: return "No tienes permiso para hacer eso."
             }
         case .notFound: return "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella."
+        // A code this build doesn't know: the server's own `message` (never "HTTP 500").
+        case .server(let m) where !m.isEmpty && !m.hasPrefix("HTTP ") && m != "mock": return m
         default: return e.toast
         }
+    }
+
+    /// A party write that failed. A 404 is "not there for you": re-read the party, which pops it
+    /// (with "Esa fiesta ya no está.") when it's really gone; when the party is still there the
+    /// 404 was about the song, and `stale` says so. Everything else is the toast.
+    private func partyWriteFailed(_ partyID: String, _ e: KuraAPIError,
+                                  stale: String = "Eso ya no está en la fiesta. La actualizamos.") async {
+        guard e == .notFound else { partyToast(e); return }
+        await loadParty(partyID, force: true)
+        if s.parties[partyID] != nil { showToast(ToastModel(text: stale, kind: .info)) }
     }
 
     private func partyToast(_ e: KuraAPIError) {
@@ -167,6 +228,9 @@ extension AppStore {
         case .failed(let e):
             if case .invalid(let fields, let m) = e {
                 showToast(ToastModel(text: fields["name"] ?? (m.isEmpty ? "Revisa el nombre." : m), kind: .info))
+            } else if e == .unavailable {
+                s.partiesUnavailable = true
+                partyToast(e)
             } else {
                 partyToast(e)
             }
@@ -180,7 +244,7 @@ extension AppStore {
     func updateParty(_ id: String, name: String?, perGuestLimit: Int??) async -> Bool {
         switch await boundWrite({ try await api.updateParty(id: id, name: name, perGuestLimit: perGuestLimit) }) {
         case .ok(let p): applyParty(p); return true
-        case .failed(let e): partyToast(e); return false
+        case .failed(let e): await partyWriteFailed(id, e); return false
         case .stale: return false
         }
     }
@@ -188,14 +252,30 @@ extension AppStore {
     func deleteParty(_ id: String) async {
         switch await boundWrite({ try await api.deleteParty(id: id) }) {
         case .ok:
-            s.parties[id] = nil
-            s.partyCards?.removeAll { $0.id == id }
             dismissSheet()
-            // Off every tab that shows it.
-            for t in Tab.allCases { paths[t]?.removeAll { $0 == .party(id) || $0 == .partySearch(id) } }
+            dropParty(id)
             showToast(ToastModel(text: "Borraste la fiesta.", kind: .info))
-        case .failed(let e): partyToast(e)
+        case .failed(let e): await partyWriteFailed(id, e)
         case .stale: break
+        }
+    }
+
+    /// "Salir de la fiesta" (a guest, `POST /parties/{id}/leave`): out of the list and every tab,
+    /// back to Colecciones. Their songs stay in the party. True = left.
+    @discardableResult
+    func leaveParty(_ id: String) async -> Bool {
+        switch await boundWrite({ try await api.leaveParty(id: id) }) {
+        case .ok:
+            dismissSheet()
+            dropParty(id)
+            if tab != .collections { tab = .collections }
+            showToast(ToastModel(text: PartyCopy.left, kind: .info))
+            return true
+        case .failed(let e):
+            await partyWriteFailed(id, e)
+            return false
+        case .stale:
+            return false
         }
     }
 
@@ -205,7 +285,7 @@ extension AppStore {
             applyParty(p)
             dismissSheet()
             showToast(ToastModel(text: "Link nuevo listo. El anterior ya no funciona.", kind: .info))
-        case .failed(let e): partyToast(e)
+        case .failed(let e): await partyWriteFailed(id, e)
         case .stale: break
         }
     }
@@ -213,7 +293,7 @@ extension AppStore {
     func revokePartyInvite(_ id: String) async {
         switch await boundWrite({ try await api.revokePartyInvite(id: id) }) {
         case .ok(let p): applyParty(p)
-        case .failed(let e): partyToast(e)
+        case .failed(let e): await partyWriteFailed(id, e)
         case .stale: break
         }
     }
@@ -264,6 +344,10 @@ extension AppStore {
                 present(.partyCap(partyID))
                 return .capReached
             }
+            if e == .notFound {
+                await partyWriteFailed(partyID, e, stale: "Esa canción ya no está disponible.")
+                return .failed
+            }
             partyToast(e)
             if case .forbidden = e { await loadParty(partyID, force: true) }
             return .failed
@@ -272,25 +356,38 @@ extension AppStore {
         }
     }
 
-    /// Quitar (the host: any song, "sale de la colección para todos"; a guest: their own).
-    func removePartySong(_ partyID: String, _ song: PartySong) async {
+    /// Quitar (the host: any song, "sale de la colección para todos"; a guest — blocked too, C4 —
+    /// their own). True = it's out; the sheets only close / move on then.
+    @discardableResult
+    func removePartySong(_ partyID: String, _ song: PartySong) async -> Bool {
         switch await boundWrite({ try await api.removePartySong(id: partyID, titleID: song.titleID) }) {
         case .ok(let p):
             applyParty(p)
             showToast(ToastModel(text: "Quitaste \(song.title).", kind: .info))
-        case .failed(let e): partyToast(e)
-        case .stale: break
+            return true
+        case .failed(let e):
+            await partyWriteFailed(partyID, e)
+            if case .forbidden = e { await loadParty(partyID, force: true) }
+            return false
+        case .stale:
+            return false
         }
     }
 
-    /// "Quitar y bloquear a @x" (host, by the song). The guest gets no notice.
-    func removeAndBlockPartyGuest(_ partyID: String, _ song: PartySong) async {
+    /// "Quitar y bloquear a @x" (host, by the song). The guest gets no notice. True = done.
+    @discardableResult
+    func removeAndBlockPartyGuest(_ partyID: String, _ song: PartySong) async -> Bool {
         switch await boundWrite({ try await api.removeAndBlockPartyGuest(id: partyID, titleID: song.titleID) }) {
         case .ok(let p):
             applyParty(p)
             showToast(ToastModel(text: "Quitaste \(song.title) y bloqueaste a \(song.addedBy.atOrSomeone).", kind: .info))
-        case .failed(let e): partyToast(e)
-        case .stale: break
+            return true
+        case .failed(let e):
+            await partyWriteFailed(partyID, e)
+            if case .conflict = e { await loadParty(partyID, force: true) }
+            return false
+        case .stale:
+            return false
         }
     }
 
@@ -299,7 +396,7 @@ extension AppStore {
         case .ok(let p):
             applyParty(p)
             showToast(ToastModel(text: "Desbloqueaste a \(guest.person.atOrSomeone).", kind: .info))
-        case .failed(let e): partyToast(e)
+        case .failed(let e): await partyWriteFailed(partyID, e, stale: "Esa persona ya no estaba bloqueada.")
         case .stale: break
         }
     }
@@ -325,16 +422,28 @@ extension AppStore {
             }
         case .failed(let e):
             if case .forbidden(let code) = e, code == "onboarding_required" {
+                // The link waits for the account to be ready (and survives a relaunch for an hour,
+                // `DeepLinkInbox`): finishing the onboarding opens it again, which joins.
+                DeepLinkInbox.pending = .invite(token)
                 showToast(ToastModel(text: "Termina de crear tu cuenta para entrar a la fiesta.", kind: .info))
                 return
             }
-            if e == .notFound { s.deadInvites.insert(token) }
-            if e == .unavailable { s.partiesUnavailable = true }
-            if e == .notFound || e == .unavailable {
-                withAnimation(KMotion.fade) { inviteLanding = token }
-            } else {
+            switch e {
+            case .notFound:
+                s.deadInvites.insert(token)
+            case .unavailable:
+                // Not a dead link: the server just doesn't have parties yet.
+                s.partiesUnavailable = true
+                s.deadInvites.remove(token)
+            case .cancelled, .unauthorized:
+                return
+            default:
+                // Offline, a 5xx, a rate limit: never lose the link. The landing shows it with
+                // the error and Reintentar (a preview that loads brings back "Entrar a la fiesta").
+                loadErrors[.invite(token)] = e
                 partyToast(e)
             }
+            withAnimation(KMotion.fade) { inviteLanding = token }
         case .stale:
             break
         }
@@ -362,4 +471,22 @@ extension AppStore {
         if case .invite = DeepLinkInbox.pending { return true }
         return false
     }
+}
+
+extension SheetRoute {
+    /// The party a party sheet is about (nil for every other sheet).
+    var partyID: String? {
+        switch self {
+        case .partyWelcome(let id, _), .partyCap(let id), .partySong(let id, _), .partyShare(let id),
+             .partyOptions(let id), .partyLink(let id), .partyExport(let id), .partyEdit(let id),
+             .partyBlocked(let id), .partyDelete(let id), .partyLeave(let id):
+            return id
+        default:
+            return nil
+        }
+    }
+}
+
+extension KuraLog {
+    static let party = Logger(subsystem: "com.tromwey.kura", category: "party")
 }

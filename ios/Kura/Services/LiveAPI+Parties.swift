@@ -87,6 +87,10 @@ extension LiveAPI {
         try await client.decode(.delete("parties/\(id)/blocked/\(guestRef)"))
     }
 
+    func leaveParty(id: String) async throws {
+        try await client.send(.post("parties/\(id)/leave"))
+    }
+
     func invitePreview(token: String) async throws -> InvitePreview {
         // Public route with an OPTIONAL bearer: signed out it goes bare (`auth: false` never throws
         // `unauthorized` locally), signed in it carries the token so `viewer` comes back filled.

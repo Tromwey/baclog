@@ -57,7 +57,8 @@ enum SheetRoute: Identifiable, Hashable {
     case partySong(partyID: String, titleID: String)
     /// "invita a la fiesta." — the link, Copiar, Compartir link, Gestionar link.
     case partyShare(String)
-    /// The host's Opciones: Gestionar link · Llevar a otra app · Editar · Bloqueados · Borrar.
+    /// Opciones — the host's: Gestionar link · Llevar a otra app · Editar · Bloqueados · Borrar;
+    /// a guest's: Salir de la fiesta.
     case partyOptions(String)
     /// "el link." — active / desactivado, Crear link nuevo, Desactivar link.
     case partyLink(String)
@@ -66,6 +67,8 @@ enum SheetRoute: Identifiable, Hashable {
     case partyEdit(String)
     case partyBlocked(String)
     case partyDelete(String)
+    /// A guest's "¿salir de la fiesta?" (`POST /parties/{id}/leave`).
+    case partyLeave(String)
 
     var id: String { String(describing: self) }
 
@@ -131,6 +134,8 @@ enum LoadKey: Hashable {
     case identities
     case party(String)
     case invite(String)
+    /// `GET /parties` (the "De fiesta" part of Tus colecciones).
+    case parties
 }
 
 /// Everything that belongs to ONE signed-in account (and the entrance that leads to it). Signing

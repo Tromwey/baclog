@@ -12,6 +12,7 @@ import { getRenderInstant } from "@/modules/catalog/release";
 import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
+import { PartyFlash } from "@/components/party/party-flash";
 import { PartyUnavailableError } from "@/modules/party-collections/errors";
 import { listPartiesForUser } from "@/modules/party-collections/queries";
 import { NewBacklogTrigger } from "./new-backlog-button";
@@ -39,7 +40,14 @@ export default async function BacklogsPage() {
     }),
   ]);
 
-  if (shelves.length === 0 && parties.length === 0) return <NoCollections />;
+  if (shelves.length === 0 && parties.length === 0) {
+    return (
+      <>
+        <NoCollections />
+        <PartyFlash />
+      </>
+    );
+  }
 
   // Novedades (modules/announcements.ts + components/novedades-modal). Gated
   // FIRST so the extra read only happens for an account that can see it.
@@ -60,6 +68,8 @@ export default async function BacklogsPage() {
   return (
     <>
       {invitation && <NovedadesModal invitation={invitation} />}
+      {/* "Saliste de la fiesta." / "Esa fiesta ya no está disponible." after /c/{id} sent us here. */}
+      <PartyFlash />
       <CollectionCards
         shelves={shelves}
         parties={parties}

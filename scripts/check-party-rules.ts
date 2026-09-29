@@ -4,10 +4,16 @@
  * (`modules/catalog/song-map.ts`), the login return whitelist
  * (`lib/return-to.ts`), the library-format filter
  * (`modules/catalog/library-media.ts`) and the party wire serializers
- * (`api/v1/_lib/wire/party.ts`) against the zod contract. No DB, no server:
- * `pnpm tsx scripts/check-party-rules.ts`. Exits 1 on any failure.
+ * (`api/v1/_lib/wire/party.ts`) against the zod contract, plus two source
+ * greps: `rules.ts` stays client-safe (no `node:crypto`), and every login
+ * entry point keeps carrying `?to=` (email → /verify, Apple hidden input +
+ * server re-validation, Apple error return, verify's "Enviar otro código").
+ * No DB, no server: `pnpm tsx scripts/check-party-rules.ts`. Exits 1 on any
+ * failure.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { mediaTypeEnum } from "../src/db/schema";
 import { safeReturnTo, loginPathFor } from "../src/lib/return-to";
 import { LIBRARY_MEDIA_TYPES, asLibraryRow, isLibraryMedia } from "../src/modules/catalog/library-media";
@@ -16,19 +22,27 @@ import {
   INVITE_TOKEN_RE,
   canAddNow,
   canBlockAuthor,
+  canLeave,
   canRemoveSong,
   decideAdd,
   duplicateMessage,
-  guestRefOf,
   GUEST_REF_RE,
+  INVITE_ROTATIONS_PER_HOUR,
   inviteUrl,
-  newInviteToken,
+  joinOutcome,
+  leaveEffect,
+  lostAddOutcome,
+  MAX_HOSTED_PARTIES,
   parseInviteToken,
   perGuestLimitSchema,
+  playlistPitch,
   presenceLine,
   remainingFor,
+  rotationRetryAfter,
+  TOO_MANY_PARTIES_MESSAGE,
   type ViewerFacts,
 } from "../src/modules/party-collections/rules";
+import { guestRefOf, newInviteToken } from "../src/modules/party-collections/tokens";
 import type { PartyDetail } from "../src/modules/party-collections/types";
 import {
   ErrorBodySchema,
@@ -38,6 +52,9 @@ import {
   PartySongHitSchema,
 } from "../src/app/api/v1/_lib/schemas";
 import { toInvitePreview, toParty, toPartyCard, toPartySongHit } from "../src/app/api/v1/_lib/wire";
+
+// guestRefOf is an HMAC keyed with AUTH_SECRET (read at call time).
+process.env.AUTH_SECRET ??= "check-party-rules-secret-0123456789abcdef";
 
 let failures = 0;
 function check(name: string, fn: () => void) {
@@ -105,11 +122,26 @@ check("perGuestLimitSchema: 0..5 o null; 6, -1, 2.5 no", () => {
 });
 
 console.log("\nQuitar / bloquear");
-check("anfitrión quita cualquiera; invitado solo las suyas y no bloqueado", () => {
+check("anfitrión quita cualquiera; invitado solo las suyas", () => {
   assert.equal(canRemoveSong({ role: "host", blocked: false }, false), true);
   assert.equal(canRemoveSong({ role: "guest", blocked: false }, true), true);
   assert.equal(canRemoveSong({ role: "guest", blocked: false }, false), false);
-  assert.equal(canRemoveSong({ role: "guest", blocked: true }, true), false);
+});
+check("C4: un invitado BLOQUEADO quita las suyas (y nada ajeno), pero no agrega", () => {
+  assert.equal(canRemoveSong({ role: "guest", blocked: true }, true), true);
+  assert.equal(canRemoveSong({ role: "guest", blocked: true }, false), false);
+  assert.deepEqual(decideAdd(guest({ blocked: true, mineCount: 0 }), null), { ok: false, reason: "blocked" });
+});
+check("C5: un add perdido sin causa es conflict — NUNCA cap_reached para el anfitrión", () => {
+  assert.equal(lostAddOutcome(host({ mineCount: 50 }), null), "conflict");
+  assert.equal(lostAddOutcome(host({ perGuestLimit: 0 }), null), "conflict");
+  assert.equal(lostAddOutcome(guest({ perGuestLimit: null, mineCount: 99 }), null), "conflict");
+  assert.equal(lostAddOutcome(guest({ mineCount: 1 }), null), "conflict");
+  // …but a real cause found in fresh state still wins, in decideAdd's order
+  assert.equal(lostAddOutcome(guest({ mineCount: 3 }), null), "cap_reached");
+  assert.equal(lostAddOutcome(guest({ mineCount: 3 }), { mine: false }), "duplicate_other");
+  assert.equal(lostAddOutcome(host(), { mine: false }), "duplicate_other");
+  assert.equal(lostAddOutcome(guest({ blocked: true }), null), "blocked");
 });
 check("quitar y bloquear: solo anfitrión, autor existente que no es el anfitrión", () => {
   assert.equal(canBlockAuthor("host", { exists: true, isHost: false }), true);
@@ -117,13 +149,78 @@ check("quitar y bloquear: solo anfitrión, autor existente que no es el anfitri�
   assert.equal(canBlockAuthor("host", { exists: false, isHost: false }), false);
   assert.equal(canBlockAuthor("guest", { exists: true, isHost: false }), false);
 });
-check("guestRef: estable, opaco, distinto por fiesta y por persona", () => {
+check("guestRef: estable, opaco, distinto por fiesta, por persona y por secreto (HMAC)", () => {
   const a = guestRefOf("p1", "u1");
+  const saved = process.env.AUTH_SECRET;
+  process.env.AUTH_SECRET = `${saved}-otro`;
+  const other = guestRefOf("p1", "u1");
+  process.env.AUTH_SECRET = saved;
+  assert.notEqual(a, other, "sin el secreto no se puede recalcular");
   assert.equal(a, guestRefOf("p1", "u1"));
   assert.notEqual(a, guestRefOf("p2", "u1"));
   assert.notEqual(a, guestRefOf("p1", "u2"));
   assert.ok(GUEST_REF_RE.test(a), a);
   assert.ok(!a.includes("u1"));
+});
+
+console.log("\nSalir y volver a entrar (C3)");
+const LIVE = { linkActive: true, userBlocked: false };
+check("solo un invitado sale (el anfitrión borra, un extraño no es nadie)", () => {
+  assert.equal(canLeave("guest"), true);
+  assert.equal(canLeave("host"), false);
+  assert.equal(canLeave(null), false);
+});
+check("salir: sin bloqueo se borra la fila; bloqueado se conserva con left_at", () => {
+  assert.equal(leaveEffect({ blocked: false, left: false }), "delete");
+  assert.equal(leaveEffect({ blocked: true, left: false }), "mark_left");
+});
+check("salir y volver NO lava el bloqueo: el bloqueado vuelve bloqueado (y sin poder agregar)", () => {
+  const row = { blocked: true, left: false };
+  assert.equal(leaveEffect(row), "mark_left");
+  const back = joinOutcome({ ...row, left: true }, LIVE);
+  assert.deepEqual(back, { ok: true, joined: "new", blocked: true });
+  assert.deepEqual(decideAdd(guest({ blocked: back.ok && back.blocked }), null), { ok: false, reason: "blocked" });
+});
+check("salir sin bloqueo y volver con link activo: entra como nuevo, sin bloqueo", () => {
+  assert.equal(leaveEffect({ blocked: false, left: false }), "delete");
+  assert.deepEqual(joinOutcome(null, LIVE), { ok: true, joined: "new", blocked: false });
+});
+check("volver a entrar exige link ACTIVO; quedarse no", () => {
+  assert.deepEqual(joinOutcome(null, { ...LIVE, linkActive: false }), { ok: false, error: "invalid_link" });
+  assert.deepEqual(joinOutcome({ blocked: true, left: true }, { ...LIVE, linkActive: false }), {
+    ok: false,
+    error: "invalid_link",
+  });
+  assert.deepEqual(joinOutcome({ blocked: false, left: false }, { ...LIVE, linkActive: false }), {
+    ok: true,
+    joined: "already",
+    blocked: false,
+  });
+});
+check("C2: bloqueo de usuario con el anfitrión = link muerto, aun siendo miembro", () => {
+  assert.deepEqual(joinOutcome(null, { ...LIVE, userBlocked: true }), { ok: false, error: "invalid_link" });
+  assert.deepEqual(joinOutcome({ blocked: false, left: false }, { ...LIVE, userBlocked: true }), {
+    ok: false,
+    error: "invalid_link",
+  });
+});
+
+console.log("\nLímites (C7)");
+check("20 fiestas por anfitrión, con su copy", () => {
+  assert.equal(MAX_HOSTED_PARTIES, 20);
+  assert.equal(TOO_MANY_PARTIES_MESSAGE, "Ya tienes 20 fiestas. Borra alguna para crear otra.");
+});
+check("links: 10 por hora por fiesta; el 11.º espera a que salga el más viejo", () => {
+  assert.equal(INVITE_ROTATIONS_PER_HOUR, 10);
+  assert.equal(rotationRetryAfter([]), null);
+  assert.equal(rotationRetryAfter(Array.from({ length: 9 }, (_, i) => i * 60)), null);
+  const ten = Array.from({ length: 10 }, (_, i) => 3000 - i * 60); // oldest 3000 s
+  assert.equal(rotationRetryAfter(ten), 600);
+  // ages outside the hour don't count
+  assert.equal(rotationRetryAfter([...ten.slice(1), 3700, 5000]), null);
+  // 12 in the window: the 3rd oldest has to age out
+  const twelve = [3500, 3400, 3300, ...Array.from({ length: 9 }, (_, i) => 100 + i)];
+  assert.equal(rotationRetryAfter(twelve), 300);
 });
 
 console.log("\nLink de invitación");
@@ -188,6 +285,12 @@ check("presenceLine (la línea de /party)", () => {
   assert.equal(presenceLine({ songCount: 0, named: [], othersCount: 0 }), "0 canciones");
   assert.equal(presenceLine({ songCount: 4, named: [], othersCount: 3 }), "4 canciones · 3 personas ya están dentro");
   assert.equal(presenceLine({ songCount: 4, named: [], othersCount: 1 }), "4 canciones · 1 persona ya está dentro");
+});
+check("playlistPitch con el tope real (/party)", () => {
+  assert.equal(playlistPitch(3), "Pon tus 3 canciones. Van a sonar esa noche, y todos verán quién puso cuál.");
+  assert.equal(playlistPitch(1), "Pon tu canción. Va a sonar esa noche, y todos verán quién puso cuál.");
+  assert.equal(playlistPitch(null), "Pon tus canciones. Van a sonar esa noche, y todos verán quién puso cuál.");
+  assert.ok(!playlistPitch(0).startsWith("Pon"));
 });
 check("duplicateMessage", () => {
   assert.equal(duplicateMessage(true, "ana"), "Ya la pusiste tú.");
@@ -341,6 +444,30 @@ check("toPartyCard / toInvitePreview / toPartySongHit → zod", () => {
 check("error de duplicado lleva addedBy (o null = alguien) en el sobre", () => {
   ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la puso @ana", reason: "duplicate_other", addedBy: person } });
   ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la puso alguien", reason: "duplicate_other", addedBy: null } });
+});
+
+console.log("\nFuentes (greps)");
+const ROOT = join(__dirname, "..");
+const src = (p: string) => readFileSync(join(ROOT, p), "utf8");
+check("rules.ts es client-safe: sin node:crypto ni server-only (lo importan componentes cliente)", () => {
+  const rules = src("src/modules/party-collections/rules.ts");
+  assert.ok(!/^import\b[^;]*["'](node:crypto|crypto|server-only|@\/db[^"']*)["']/m.test(rules));
+});
+check("login: cada entrada propaga ?to=", () => {
+  const form = src("src/app/(auth)/login/login-form.tsx");
+  assert.ok(/carryReturnTo\(`\/verify\?email=/.test(form), "login-form: el push a /verify debe pasar por carryReturnTo");
+  assert.ok(/type="hidden" name="to"/.test(form), "login-form: el form de Apple debe llevar el input hidden `to`");
+  const actions = src("src/app/(auth)/login/actions.ts");
+  assert.ok(/formData\.get\("to"\)/.test(actions) && /safeReturnTo\(/.test(actions), "continueWithAppleAction: leer `to` y revalidarlo con safeReturnTo");
+  assert.ok(!/redirectTo:\s*"\/backlogs"\s*\}/.test(actions), "continueWithAppleAction: redirectTo fijo a /backlogs pierde el regreso");
+  const page = src("src/app/(auth)/login/page.tsx");
+  assert.ok(/safeReturnTo\(/.test(page) && /returnTo=/.test(page), "login/page: pasar `to` (safeReturnTo) al form");
+  const config = src("src/auth/config.ts");
+  assert.ok(!/return APPLE_WEB_ERROR;\s*\n\s*const kuraAccount/.test(config) && /appleErrorUrl\(\)/.test(config), "auth/config: el error de Apple debe volver con `to` (appleErrorUrl)");
+  const verify = src("src/app/(auth)/verify/page.tsx");
+  assert.ok(/returnToParam\(\)/.test(verify), "verify: navegar a returnToParam() tras el código");
+  assert.ok(/router\.push\(carryReturnTo\("\/login"\)\)/.test(verify), "verify: \"Enviar otro código\" debe volver a /login con `to`");
+  assert.ok(!/router\.push\("\/login"\)/.test(verify), "verify: un push a /login sin `to`");
 });
 
 console.log(failures === 0 ? "\ncheck-party-rules ok" : `\n${failures} fallos`);
