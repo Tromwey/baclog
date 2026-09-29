@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, desc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { catalogItems, itemReviews, userItems } from "@/db/schema";
+import { backlogItems, backlogs, catalogItems, itemReviews, userItems } from "@/db/schema";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
 
 /**
@@ -101,4 +101,30 @@ export async function getLibraryUpcoming(
         ]
       : [],
   );
+}
+
+/**
+ * Descubrir · Todo 3a: the collection each of these titles is filed in, for
+ * the "próximos lanzamientos" line under the title — the user's OWN
+ * memberships (newest first, so a title in two collections names the one it
+ * was last saved to). Own-user read; `catalogItemId → { id, name }`.
+ */
+export async function getFirstCollectionFor(
+  userId: string,
+  catalogItemIds: string[],
+): Promise<Map<string, { id: string; name: string }>> {
+  if (catalogItemIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      catalogItemId: backlogItems.catalogItemId,
+      id: backlogs.id,
+      name: backlogs.name,
+    })
+    .from(backlogItems)
+    .innerJoin(backlogs, eq(backlogs.id, backlogItems.backlogId))
+    .where(and(eq(backlogItems.userId, userId), inArray(backlogItems.catalogItemId, catalogItemIds)))
+    .orderBy(desc(backlogItems.addedAt));
+  const out = new Map<string, { id: string; name: string }>();
+  for (const r of rows) if (!out.has(r.catalogItemId)) out.set(r.catalogItemId, { id: r.id, name: r.name });
+  return out;
 }

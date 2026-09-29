@@ -16,7 +16,7 @@ import type { MediaType } from "@/modules/catalog/types";
 import { getKuradas, type KuradaCard } from "@/modules/social/kurada";
 import { releaseDatesFor } from "../../../_lib/catalog";
 import { json, readQuery } from "../../../_lib/http";
-import { toTitleSummary } from "../../../_lib/wire";
+import { toCollectionCardWire, toTitleSummary } from "../../../_lib/wire";
 
 /**
  * GET /api/v1/discover/formats/{film|series|album} (§4 Descubrir · por
@@ -39,26 +39,7 @@ const QuerySchema = z.object({
 
 const FORMATS = new Set<MediaType>(["film", "series", "album"]);
 
-const kuradaOut = (k: KuradaCard) => ({
-  id: k.id,
-  name: k.name,
-  curator: k.curator,
-  handle: k.username,
-  count: k.count,
-  palette: k.hexes,
-  covers: k.fan.map((c) =>
-    toTitleSummary({
-      catalogItemId: c.catalogItemId,
-      title: c.title ?? "",
-      mediaType: c.mediaType,
-      year: c.year,
-      byline: c.byline,
-      posterUrl: c.posterUrl,
-      paletteHex: c.paletteHex ? [...c.paletteHex] : null,
-      releaseDate: c.releaseDate,
-    }),
-  ),
-});
+const kuradaOut = (k: KuradaCard) => ({ ...toCollectionCardWire(k), curator: k.curator });
 
 export const GET = withApi<{ format: string }>(async (req, { user, params }) => {
   const format = params.format as MediaType;

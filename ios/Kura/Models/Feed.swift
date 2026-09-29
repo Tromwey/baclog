@@ -157,13 +157,18 @@ struct DiscoverPayload: Decodable {
         let title: Title
         let reason: String
         let seedTitleID: String?
-        init(title: Title, reason: String, seedTitleID: String? = nil) { self.title = title; self.reason = reason; self.seedTitleID = seedTitleID }
-        private enum CodingKeys: String, CodingKey { case title, reason, seedTitleId }
+        /// The obsession the card hangs from — its cover sits tilted behind the reco's (Todo 3a).
+        let seed: Title?
+        init(title: Title, reason: String, seedTitleID: String? = nil, seed: Title? = nil) {
+            self.title = title; self.reason = reason; self.seedTitleID = seedTitleID; self.seed = seed
+        }
+        private enum CodingKeys: String, CodingKey { case title, reason, seedTitleId, seed }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             title = try c.decode(Title.self, forKey: .title)
             reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
             seedTitleID = try c.decodeIfPresent(String.self, forKey: .seedTitleId)
+            seed = try c.decodeIfPresent(Title.self, forKey: .seed)
         }
     }
     struct Trending: Decodable, Hashable {
@@ -178,35 +183,58 @@ struct DiscoverPayload: Decodable {
         }
     }
     struct Upcoming: Decodable, Hashable {
+        struct Filed: Decodable, Hashable { let id: String; let name: String }
         let title: Title
         let releaseDate: Date?
-        init(title: Title, releaseDate: Date? = nil) { self.title = title; self.releaseDate = releaseDate }
-        private enum CodingKeys: String, CodingKey { case title, releaseDate }
+        /// The collection of yours it's filed in — the line under the title (Todo 3a).
+        let collection: Filed?
+        init(title: Title, releaseDate: Date? = nil, collection: Filed? = nil) {
+            self.title = title; self.releaseDate = releaseDate; self.collection = collection
+        }
+        private enum CodingKeys: String, CodingKey { case title, releaseDate, collection }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             title = try c.decode(Title.self, forKey: .title)
             releaseDate = try c.decodeIfPresent(Date.self, forKey: .releaseDate)
+            collection = try c.decodeIfPresent(Filed.self, forKey: .collection)
         }
+    }
+    /// "colecciones para ti · de gente que sigues" (Todo 3a): a followed person's showcased collection.
+    struct FollowedCollection: Decodable, Hashable, Identifiable {
+        let id: String
+        let name: String
+        let owner: String
+        let handle: String
+        let avatarUrl: String?
+        let count: Int
+        let palette: [String]
+        /// The fan, front first (≤ 3).
+        let covers: [Title]
     }
 
     var recommended: [Recommended]
     var trending: [Trending]
     var upcoming: [Upcoming]
+    var collections: [FollowedCollection]
 
-    init(recommended: [Recommended], trending: [Trending], upcoming: [Upcoming]) {
-        self.recommended = recommended; self.trending = trending; self.upcoming = upcoming
+    init(recommended: [Recommended], trending: [Trending], upcoming: [Upcoming], collections: [FollowedCollection] = []) {
+        self.recommended = recommended; self.trending = trending; self.upcoming = upcoming; self.collections = collections
     }
 
-    private enum CodingKeys: String, CodingKey { case recommended, trending, upcoming }
+    private enum CodingKeys: String, CodingKey { case recommended, trending, upcoming, collections }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         recommended = try c.decodeIfPresent([Recommended].self, forKey: .recommended) ?? []
         trending = try c.decodeIfPresent([Trending].self, forKey: .trending) ?? []
         upcoming = try c.decodeIfPresent([Upcoming].self, forKey: .upcoming) ?? []
+        collections = try c.decodeIfPresent([FollowedCollection].self, forKey: .collections) ?? []
     }
 
-    var allTitles: [Title] { recommended.map(\.title) + trending.map(\.title) + upcoming.map(\.title) }
+    var allTitles: [Title] {
+        recommended.map(\.title) + recommended.compactMap(\.seed) + trending.map(\.title)
+            + upcoming.map(\.title) + collections.flatMap(\.covers)
+    }
 }
 
 /// `GET /discover/formats/{film|series|album}` — Descubrir por formato (Claude Design

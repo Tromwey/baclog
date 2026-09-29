@@ -672,7 +672,12 @@ const TitleDetailResponseSchema = z.object({
 });
 const DiscoverResponseSchema = z.object({
   recommended: z.array(
-    z.object({ title: TitleSchema, reason: z.string().min(1), seedTitleId: z.string().min(1) }),
+    z.object({
+      title: TitleSchema,
+      reason: z.string().min(1),
+      seedTitleId: z.string().min(1),
+      seed: TitleSchema.nullable(),
+    }),
   ),
   trending: z.array(
     z.object({
@@ -681,7 +686,26 @@ const DiscoverResponseSchema = z.object({
       people: z.array(z.string().min(1)),
     }),
   ),
-  upcoming: z.array(z.object({ title: TitleSchema, releaseDate: IsoDateSchema })),
+  upcoming: z.array(
+    z.object({
+      title: TitleSchema,
+      releaseDate: IsoDateSchema,
+      collection: z.object({ id: z.string().min(1), name: z.string().min(1) }).nullable(),
+    }),
+  ),
+  collections: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      owner: z.string().min(1),
+      handle: z.string().min(1),
+      avatarUrl: z.string().nullable(),
+      count: z.number().int().positive(),
+      format: z.enum(["film", "series", "album"]),
+      palette: z.array(z.string()),
+      covers: z.array(TitleSchema).max(3),
+    }),
+  ).max(4),
 });
 const KuradaSchema = z.object({
   id: z.string().min(1),
@@ -1332,6 +1356,7 @@ const reads: Case[] = [
       for (const r of d.recommended) {
         assert.ok(r.reason.startsWith("Porque te obsesiona "), "kicker en la voz de la página");
         assert.notEqual(r.seedTitleId, r.title.id, "la semilla no se recomienda a sí misma");
+        if (r.seed) assert.equal(r.seed.id, r.seedTitleId, "seed es la obsesión del kicker");
       }
       const now = Date.now();
       for (const u of d.upcoming) {
