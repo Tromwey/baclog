@@ -6,8 +6,9 @@ import SwiftUI
 /// de Opciones por rol"). The name 24 + "N títulos", then Agregar títulos · Compartir ·
 /// Fijar/Desfijar · — · [Ver como lista · Ordenar · Editar el orden ·] Editar (nombre y frase) · Quién la ve
 /// · — · Borrar colección. `full` (Opciones, the ⋯ chip in 10a/10b) carries the VIEW rows (Editar el
-/// orden only with 2+ titles; it left the body, founder 2026-09-27); holding a fan (9a: Tus
-/// colecciones, your own profile) leaves them out — they change the view of a screen you're not on.
+/// orden only with 2+ titles; it left the body, founder 2026-09-27) — also when you hold the fan in
+/// Tus colecciones, whose body is that collection (founder, 2026-09-29). Holding a fan on your own
+/// profile (9a, `full: false`) leaves them out — they change the view of a screen you're not on.
 struct CollectionOptionsSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String

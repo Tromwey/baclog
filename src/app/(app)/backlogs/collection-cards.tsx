@@ -28,7 +28,6 @@ import {
   nameStyle,
   useCarouselMotion,
 } from "./carousel-motion";
-import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { isLongCollectionName } from "@/modules/backlog/name-limit";
 import { handleOf, perGuestPhrase, songsLabel } from "@/components/party/party-parts";
@@ -47,8 +46,9 @@ import type { PartyCard } from "@/modules/party-collections/types";
  *    NAMES peek at the edges (the current centred at 30, the neighbours
  *    142 px off-centre at 22, dimmed). Tapping
  *    the fan does NOT open anything (founder): it only sits in the centre;
- *    HOLDING it opens 9a (Agregar · Compartir · Fijar · Editar ·
- *    Quién la ve · Borrar colección).
+ *    HOLDING it opens the same Opciones as the header's ⋯ (the view rows
+ *    included: the collection's body is right below, so they apply here —
+ *    founder, 2026-09-29). The short 9a sheet is only for the profile.
  *  - The order: FIRST the ghost fan "Nueva colección" (founder, 2026-09-27:
  *    to the left of the first collection) — which is where creating a
  *    collection lives now —, then the pinned one, the rest (server order),
@@ -178,7 +178,6 @@ export function CollectionCards({
 
   const router = useRouter();
   const ctl = useRef<CollectionControls>(null);
-  const [holding, setHolding] = useState<Shelf | null>(null);
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
 
   const { go, reduced, handlers, swiped, bindSurface, bindMain, bindBg, bindBody, bindTail } = useCarouselMotion(entries, idx, (i) => {
@@ -294,7 +293,7 @@ export function CollectionCards({
                 current={i === idx}
                 index={i}
                 style={fanStyle(i, p)}
-                onHold={e.kind === "shelf" ? () => setHolding(e.shelf) : undefined}
+                onHold={e.kind === "shelf" ? () => ctl.current?.open("options") : undefined}
                 onTap={e.kind === "party" ? () => !swiped() && router.push(partyPath(e.id)) : undefined}
               />
             );
@@ -402,22 +401,6 @@ export function CollectionCards({
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[150px]"
         style={{ background: `linear-gradient(transparent, ${bg.tail} 75%)` }}
       />
-
-      {holding && (
-        <CollectionHoldSheet
-          collection={{
-            id: holding.id,
-            name: holding.name,
-            vibe: holding.vibe,
-            count: holding.itemCount,
-            pinned: holding.pinned,
-            visibility: visibilityOf(holding),
-          }}
-          username={username}
-          profilePublic={profilePublic}
-          onClose={() => setHolding(null)}
-        />
-      )}
     </main>
   );
 }
@@ -452,7 +435,7 @@ function autoItem(u: UpcomingItem): CollectionItem {
 /**
  * The fan in the centre. Tapping it does nothing more than being in the
  * centre (founder, 2026-09-27 — it no longer opens the collection: the
- * collection is right below); holding a real collection's fan opens 9a.
+ * collection is right below); holding a real collection's fan opens Opciones.
  */
 function FanSlide({
   entry,

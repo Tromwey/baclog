@@ -8,7 +8,8 @@ import SwiftUI
 ///    Only the fans near the position are drawn — the others slide 320 and fade — so nothing
 ///    half-shows at the edges except the NAMES: the current one centred in Newsreader 30, the previous and next pinned 142 pt
 ///    off-centre at 22, dimmed to .45, so it reads that there's more on either side. Tapping the
-///    fan only centres it; holding one opens 9a (the options without the view rows);
+///    fan only centres it; holding one opens the same Opciones as the ⋯ chip (view rows included:
+///    the collection's body is right below — founder, 2026-09-29);
 ///  - under the names, the SAME body as Colección (`CollectionBody`): credits, format pills that
 ///    filter and every title (holding one = 18c); 6b when it's empty;
 ///  - Compartir + Opciones up top (as in 10b), acting on the collection in the centre;
@@ -422,11 +423,11 @@ private struct CollectionsCarousel: View {
                 .accessibilityAdjustableAction(adjust)
         } else if let c = e.collection {
             art
-                .kPressable(longPress: { store.present(.collectionQuick(c.id)) }) {}
+                .kPressable(longPress: { store.present(.more(c.id)) }) {}
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(c.name), \(c.titleIDs.count) \(c.titleIDs.count == 1 ? "título" : "títulos")")
                 .accessibilityHint("Desliza hacia arriba o abajo para cambiar de colección.")
-                .accessibilityAction(named: "Opciones") { store.present(.collectionQuick(c.id)) }
+                .accessibilityAction(named: "Opciones") { store.present(.more(c.id)) }
                 .accessibilityAdjustableAction(adjust)
         } else {
             art
