@@ -233,3 +233,45 @@ export function Highlight({ text, query }: { text: string; query: string }): Rea
 /** The skeleton's pulse — shared from `kura/components` (re-exported for
  *  Descubrir's existing imports). */
 export { SKELETON_PULSE } from "@/components/kura/components";
+
+/** Dark glass under the search field and the track, so a page's tint shows through (3a). */
+export const DARK_GLASS = "bg-[rgba(11,11,13,.35)] backdrop-blur-[14px]";
+
+/**
+ * Descubrir's top, IDENTICAL on Todo and the three format pages (founder,
+ * 2026-09-29: a different top on the formats made switching tabs jump):
+ * "descubrir" at 36, the search field (a button — the real field lives in the
+ * search screen) and the format track, both on dark glass. Change it here,
+ * never per page.
+ */
+export function DiscoverTop({
+  tab,
+  onTab,
+  onSearch,
+}: {
+  tab: KindTab;
+  onTab: (k: KindTab) => void;
+  onSearch: () => void;
+}) {
+  return (
+    <>
+      <header className="px-5 pb-4 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
+        <h1 className="font-display text-[36px] font-normal leading-[1.02] text-text">descubrir</h1>
+      </header>
+      <div className="px-5">
+        <button
+          type="button"
+          onClick={onSearch}
+          className={`flex h-12 w-full items-center gap-2.5 rounded-full px-4 text-left text-text-2 bl-press ${DARK_GLASS}`}
+        >
+          <SearchGlyph />
+          <span className="truncate text-[16px]">Películas, series y álbumes</span>
+        </button>
+      </div>
+      <div className="px-5 pt-3">
+        <KindTrack value={tab} onSelect={onTab} surface={DARK_GLASS} />
+      </div>
+    </>
+  );
+}
+

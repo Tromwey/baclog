@@ -5,7 +5,8 @@ import SwiftUI
 /// Kura's glass, by OS: from iOS 26 the chrome that floats over content (dock, 44 chips,
 /// glass buttons, toast, compact sheet, the spoiler control) is the system's Liquid Glass;
 /// before that it's Kura's flat fill. Content (pills, cards, cover badges) never goes glass —
-/// glass is the navigation/control layer, not the content layer.
+/// glass is the navigation/control layer, not the content layer. ONE exception (founder,
+/// 2026-09-29): Descubrir's "recomendado para ti" card (`RecGlass` in DiscoverView.swift).
 extension View {
     /// `interactive`: the glass reacts to touch (controls). `fill`: the pre-26 surface.
     /// `tint`: for surfaces that carry reading text (sheet, toast), so what's behind stays quiet.
