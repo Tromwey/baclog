@@ -278,7 +278,10 @@ export function CollectionCards({
             {entries.map((e, i) => {
               const d = i - idx;
               if (Math.abs(d) > 3) return null;
-              const cls = "absolute left-1/2 top-0 whitespace-nowrap font-brand leading-[44px]";
+              // Capped at 256 px at 30 (in em, so it scales with the neighbours' 22): a long
+              // name ends in "…" instead of running into the names 142 px off-centre.
+              const cls =
+                "absolute left-1/2 top-0 max-w-[8.533em] overflow-hidden text-ellipsis whitespace-nowrap font-brand leading-[44px]";
               const style = nameStyle(i, p, e.kind === "ghost");
               return d === 0 ? (
                 <h2 key={e.id} data-carousel-name={i} aria-live="polite" className={`${cls} font-normal`} style={style}>
