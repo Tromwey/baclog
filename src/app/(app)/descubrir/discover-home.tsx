@@ -20,7 +20,7 @@ import type { LibraryIndex } from "./library";
 import type { SeenWork } from "./recents";
 import type { SaveWork } from "./save-sheet";
 import { FormatPage } from "./format-pages";
-import { KIND_SHORT, KindTrack, SearchGlyph, type KindTab } from "./kura-bits";
+import { DiscoverTop, KIND_SHORT, type KindTab } from "./kura-bits";
 
 /** One "recomendado para ti" card: a cached reco and the obsession behind it. */
 export interface RecCard {
@@ -47,8 +47,6 @@ const NEUTRAL = ["#3a3a44", "#141417"];
 const REC_GLASS =
   "bg-white/[0.07] backdrop-blur-[30px] backdrop-saturate-[1.8] shadow-[inset_0_1px_0_rgba(255,255,255,.22),inset_0_0_0_1px_rgba(255,255,255,.12),0_20px_40px_-24px_rgba(0,0,0,.6)]";
 
-/** Dark glass for the controls over the tint (3a · "controles sobre vidrio"). */
-const DARK_GLASS = "bg-[rgba(11,11,13,.35)] backdrop-blur-[14px]";
 
 /**
  * Descubrir's home, Todo (Claude Design "Descubrir Final – Todo" 3a):
@@ -157,26 +155,7 @@ export function DiscoverHome({
       ))}
 
       <div className="relative flex flex-col">
-        <header className="px-5 pb-4 pt-[max(64px,calc(20px+env(safe-area-inset-top)))]">
-          <h1 className="font-display text-[36px] font-normal leading-[1.02] text-text">
-            descubrir
-          </h1>
-        </header>
-
-        <div className="px-5">
-          <button
-            type="button"
-            onClick={onSearch}
-            className={`flex h-12 w-full items-center gap-2.5 rounded-full px-4 text-left text-text-2 bl-press ${DARK_GLASS}`}
-          >
-            <SearchGlyph />
-            <span className="truncate text-[16px]">Películas, series y álbumes</span>
-          </button>
-        </div>
-
-        <div className="px-5 pt-3">
-          <KindTrack value={tab} onSelect={setTab} surface={DARK_GLASS} />
-        </div>
+        <DiscoverTop tab={tab} onTab={setTab} onSearch={onSearch} />
 
         {shownRecs.length === 0 && <FirstSteps />}
 

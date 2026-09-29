@@ -32,7 +32,7 @@ import type { KuradaCard } from "@/modules/social/kurada";
 import type { LibraryIndex } from "./library";
 import type { SeenWork } from "./recents";
 import type { SaveWork } from "./save-sheet";
-import { KindTrack, SearchGlyph, type KindTab } from "./kura-bits";
+import { DiscoverTop, type KindTab } from "./kura-bits";
 
 /**
  * Descubrir · por formato (Claude Design "Descubrir Final – Formatos", 2a–2c).
@@ -149,19 +149,7 @@ function Frame({
       className="flex min-h-dvh flex-col pb-dock-clearance"
       style={{ background: feedSurface(hexes, 760), backgroundColor: feedTail(hexes) }}
     >
-      <div className="flex gap-2 px-5 pt-[max(56px,calc(12px+env(safe-area-inset-top)))]">
-        <div className="min-w-0 flex-1">
-          <KindTrack value={tab} onSelect={onTab} />
-        </div>
-        <button
-          type="button"
-          onClick={onSearch}
-          aria-label="Buscar"
-          className="flex h-[50px] w-[50px] flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm hover:bg-white/[0.12]"
-        >
-          <SearchGlyph />
-        </button>
-      </div>
+      <DiscoverTop tab={tab} onTab={onTab} onSearch={onSearch} />
 
       {children}
 

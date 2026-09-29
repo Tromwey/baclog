@@ -81,37 +81,14 @@ struct DiscoverView: View {
         return palette.isEmpty ? ["#3a3a44", "#141417"] : palette
     }
 
-    /// Dark glass under the search field and the track, so the tint shows through (3a).
-    private static let darkGlass = Color(.sRGB, red: 11 / 255, green: 11 / 255, blue: 13 / 255, opacity: 0.35)
-
     private var editorial: some View {
         let hexes = pageHexes
         return ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                TabTitleBar(title: "descubrir")
-                    .padding(.bottom, 16)
-
-                Button {
+                DiscoverTop(tab: $tab) {
                     withAnimation(KMotion.short) { searching = true }
                     focused = true
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .medium))
-                        Text("Películas, series y álbumes").font(.kura.ui(16))
-                        Spacer()
-                    }
-                    .foregroundStyle(KColor.text2)
-                    .padding(.horizontal, 16)
-                    .frame(height: 48)
-                    .background(Self.darkGlass, in: Capsule())
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 20)
-
-                MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
-                              selection: $tab, height: 40, fill: Self.darkGlass)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
 
                 VStack(alignment: .leading, spacing: 40) {
                     if store.discover == nil, !store.discoverLoading, let e = store.loadError(.discover) {
@@ -932,20 +909,7 @@ private struct DiscoverFormatPage: View {
         let tint = hexes
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
-                                  selection: $tab, height: 40)
-                    Button(action: openSearch) {
-                        Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(KColor.text)
-                            .frame(width: 50, height: 50)
-                            .background(KColor.glassBg, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Buscar")
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, KSize.chromeTop - 8)
+                DiscoverTop(tab: $tab, onSearch: openSearch)
 
                 switch format {
                 case .film: cine
@@ -1262,6 +1226,42 @@ private struct RecGlass: ViewModifier {
             content.glassEffect(.regular, in: shape)
         } else {
             content.background(Tint.card(palette), in: shape)
+        }
+    }
+}
+
+/// Descubrir's top, IDENTICAL on Todo and the three format pages (founder, 2026-09-29: a
+/// different top on the formats made switching tabs jump): "descubrir", the search field (a
+/// button — the real field is the search mode) and the format track, both on dark glass so the
+/// page tint shows through. Twin of the web's `DiscoverTop` (kura-bits.tsx). Change it here,
+/// never per page.
+private struct DiscoverTop: View {
+    @Binding var tab: MediaFormat?
+    let onSearch: () -> Void
+
+    static let darkGlass = Color(.sRGB, red: 11 / 255, green: 11 / 255, blue: 13 / 255, opacity: 0.35)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TabTitleBar(title: "descubrir")
+                .padding(.bottom, 16)
+            Button(action: onSearch) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .medium))
+                    Text("Películas, series y álbumes").font(.kura.ui(16))
+                    Spacer()
+                }
+                .foregroundStyle(KColor.text2)
+                .padding(.horizontal, 16)
+                .frame(height: 48)
+                .background(Self.darkGlass, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
+                          selection: $tab, height: 40, fill: Self.darkGlass)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
         }
     }
 }
