@@ -574,6 +574,8 @@ export default class PartyInvitation extends Component<object, State> {
       f,
       notSubmitted: !this.state.submitted,
       submitted: this.state.submitted,
+      // Tras un RSVP de "sí voy": la tarjeta de la playlist (party-playlist-card.tsx).
+      showPlaylist: this.state.submitted && f.attending,
       setName: (e: React.ChangeEvent<HTMLInputElement>) => this.setF({ name: e.target.value }),
       setPlusName: (e: React.ChangeEvent<HTMLInputElement>) => this.setF({ plusName: e.target.value }),
       setDrink: (e: React.ChangeEvent<HTMLSelectElement>) => this.setF({ drink: e.target.value }),

@@ -14,6 +14,7 @@ import { Fragment, type RefObject } from "react";
 import type { SceneVals } from "./party-invitation";
 import { GateChains, LandingSky, LandingTree, SealedFace, WorldDecor } from "./party-decor";
 import { PartyPath } from "./party-path";
+import { PartyPlaylistCard } from "./party-playlist-card";
 
 export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HTMLDivElement | null> }) {
   return (
@@ -1129,6 +1130,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                         </button>
                       </div>
                   ) : null}
+                  {v.showPlaylist ? <PartyPlaylistCard className="mt-3" /> : null}
                 </div>
             ) : null}
             <button onClick={v.close} style={{ height: "52px", borderRadius: "999px", border: "1px solid rgba(236,230,220,.25)", background: "transparent", color: "#ece6dc", fontWeight: "600", fontSize: "15px", cursor: "pointer" }}>

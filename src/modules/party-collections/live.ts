@@ -29,4 +29,4 @@
  *
  * No `server-only` on purpose: pure constant (scripts read it).
  */
-export const MIGRATION_0033_LIVE = false;
+export const MIGRATION_0033_LIVE = true;
