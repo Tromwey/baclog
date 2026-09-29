@@ -243,7 +243,7 @@ struct DiscoverView: View {
         }
         .padding(20)
         .frame(width: 340, alignment: .leading)
-        .background(Tint.card(t.palette), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .modifier(RecGlass(palette: t.palette))
         .id(r.title.id)
         .kFixedChrome()
     }
@@ -1246,6 +1246,23 @@ private struct MoodRow: View {
             .padding(.horizontal, 15)
         }
         .scrollClipDisabled()
+    }
+}
+
+/// "recomendado para ti" on Apple's Liquid Glass (founder, 2026-09-29): from iOS 26 the card is
+/// `glassEffect(.regular)` — untinted, so the page's tint (which follows the card in view) shows
+/// through it. Before 26 it keeps Kura's tinted card (`Tint.card`). The ONE content surface that
+/// goes glass; every other card stays flat.
+private struct RecGlass: ViewModifier {
+    let palette: [String]
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 26, style: .continuous) }
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(Tint.card(palette), in: shape)
+        }
     }
 }
 

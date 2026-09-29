@@ -36,6 +36,17 @@ export type SoonItem = UpcomingItem & { collection: string | null };
 
 /** The page tone with nothing to follow (no recommendation yet) — the mock's neutral. */
 const NEUTRAL = ["#3a3a44", "#141417"];
+/**
+ * "recomendado para ti" on glass (founder, 2026-09-29 — the mock's "Vidrio"
+ * card, twin of iOS 26 Liquid Glass `glassEffect(.regular)`): a light
+ * translucent fill with blur + saturation so the page tint (which follows the
+ * card in view) shows through, and the material's lit edge as INSET
+ * highlights — part of the glass, not a border. The one content surface that
+ * goes glass; every other card stays flat.
+ */
+const REC_GLASS =
+  "bg-white/[0.07] backdrop-blur-[30px] backdrop-saturate-[1.8] shadow-[inset_0_1px_0_rgba(255,255,255,.22),inset_0_0_0_1px_rgba(255,255,255,.12),0_20px_40px_-24px_rgba(0,0,0,.6)]";
+
 /** Dark glass for the controls over the tint (3a · "controles sobre vidrio"). */
 const DARK_GLASS = "bg-[rgba(11,11,13,.35)] backdrop-blur-[14px]";
 
@@ -368,10 +379,9 @@ function RecCardView({
   const meta = [KIND_SHORT[w.mediaType], w.year, w.byline].filter(Boolean).join(" · ");
   return (
     <div
-      className={`flex flex-none snap-start items-end gap-[18px] rounded-[26px] p-5 transition-[background] duration-[400ms] ${
+      className={`flex flex-none snap-start items-end gap-[18px] rounded-[26px] p-5 ${REC_GLASS} ${
         single ? "w-full" : "w-[340px] max-w-[calc(100%-36px)]"
       }`}
-      style={{ background: tintCard(w.paletteHex) }}
     >
       <Link href={href} onClick={open} className="relative flex-none bl-press-lg" style={box} aria-label={w.title}>
         {seed && (
