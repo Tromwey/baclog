@@ -361,7 +361,6 @@ struct DiscoverView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 12)
             }
             .scrollClipDisabled()
         }

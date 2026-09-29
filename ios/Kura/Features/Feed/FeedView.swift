@@ -104,8 +104,12 @@ struct FeedView: View {
             let pal = palette(nil)
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
+                    // Like the live stack, card 0's surface runs `ext` on under card 1: what shows
+                    // behind card 1's rounded corners and its upward shadow is card 0, never the black bg.
                     FeedSkeletonCard(index: 0, height: h, topInset: hdr)
+                        .frame(height: h + hdr + ext, alignment: .top)
                         .background(Tint.card(pal))
+                        .padding(.bottom, -ext)
                     FeedSkeletonCard(index: 1, height: h, topInset: 0)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .background(Tint.card(pal))
