@@ -62,7 +62,7 @@ Helpers (`src/modules/party-collections/rules.ts`): `inviteUrl(token)` → `http
 `invitePath(token)` → `/f/{token}`, `partyPath(id)` → `/c/{id}`.
 
 **Universal links (carril iOS/infra):** el AASA (`src/app/.well-known/apple-app-site-association/route.ts`)
-tiene que incluir `/f/*` y `/c/*`. `DeepLink.parse` valida: token `^[A-Za-z0-9_-]{16}$`, id UUID.
+incluye `/f/*` y `/c/*` (y excluye `/f` y `/c` a secas). `DeepLink.parse` valida: token `^[A-Za-z0-9_-]{16}$`, id UUID.
 
 ## 3. Flujo de login con regreso (web)
 
@@ -293,8 +293,6 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 
 ## 8. Pendientes reales (no son backend)
 
-- **AASA**: `src/app/.well-known/apple-app-site-association/route.ts` debe incluir `/f/*` y `/c/*` (está
-  modificado en el checkout padre por otra sesión; confirmar antes de desplegar).
 - **Cableado /party**: `PartyPlaylistCard` (`src/app/party/party-playlist-card.tsx`) existe pero ninguna pantalla
   de `/party` lo monta todavía; montarlo tras el RSVP y configurar `PARTY_PLAYLIST_TOKEN` en Vercel.
 - **URL de la App Store**: la tarjeta "kura para iPhone." no trae "Ver en App Store" hasta tener la URL.
