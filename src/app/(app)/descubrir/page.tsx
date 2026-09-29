@@ -1,7 +1,6 @@
 import { requireUser } from "@/auth";
 import { getBacklogsForUser } from "@/modules/backlog/queries";
 import { getFirstRunCounts } from "@/modules/backlog/first-run";
-import { getLibraryUpcoming } from "@/modules/backlog/library";
 import {
   getLatestDoubleFeature,
   getObsessionRails,
@@ -11,6 +10,7 @@ import { getFollowedCollections } from "@/modules/social/followed-collections";
 import { getKuradas } from "@/modules/social/kurada";
 import { getKuraTrending } from "@/modules/social/trending";
 import { getRenderInstant } from "@/modules/catalog/release";
+import { getMostAnticipated } from "@/modules/discover/anticipated";
 import { DescubrirScreen, type SearchBacklog } from "./descubrir-screen";
 import { getLibraryIndex } from "./library-index";
 
@@ -20,25 +20,32 @@ import { getLibraryIndex } from "./library-index";
  * meters generations): the obsession rails become the "recomendado para ti"
  * cards (each with its seed, the obsession it hangs from), "colecciones para
  * ti" are the showcased collections of people you follow, the trend is
- * what's trending on Kura this week, the releases are the ones still ahead in
- * your own collections (with the collection they're in). The Double Feature
+ * what's trending on Kura this week, "los más esperados" are the releases
+ * still ahead that the most Kura people saved. Nothing the viewer already has
+ * shows anywhere in Descubrir (founder: "no tiene caso ver cosas que ya
+ * conoces") — those reads exclude it server-side, and the client filters the
+ * format shelves against the library snapshot it loads with. "lo nuevo de tus
+ * favoritos" hits providers, so it loads after render (never here). The Double Feature
  * feed is only fetched on its card's tap. Plus what "guardar" needs to be
  * honest: the collections and the caller's own membership index.
  *
  * The format pages (Cine · Series · Música, "Descubrir Final – Formatos")
  * fetch their shelves when opened; only their closing Kurada rows — the
- * team's public collections — are read here.
+ * team's public collections — and Música's "próximos discos" (the most
+ * anticipated albums, a dedicated read so Todo's mixed list can't starve it)
+ * are read here.
  */
 export default async function DescubrirPage() {
   const user = await requireUser();
   const now = await getRenderInstant();
-  const [list, counts, rails, trending, upcoming, doubleFeature, library, kuradas, followed] =
+  const [list, counts, rails, trending, anticipated, anticipatedAlbums, doubleFeature, library, kuradas, followed] =
     await Promise.all([
       getBacklogsForUser(user.id),
       getFirstRunCounts(user.id),
       getObsessionRails(user.id, { maxRails: 4, perRail: 4 }),
       getKuraTrending(user.id, new Date(now), 5),
-      getLibraryUpcoming(user.id, now, 12),
+      getMostAnticipated(user.id, now, 12),
+      getMostAnticipated(user.id, now, 12, { mediaType: "album" }),
       getLatestDoubleFeature(user.id),
       getLibraryIndex(user.id),
       getKuradas(user.id),
@@ -54,7 +61,6 @@ export default async function DescubrirPage() {
   }));
 
   const seedById = new Map(rails.map((r) => [r.seed.catalogItemId, r.seed]));
-  const nameById = new Map(list.map((b) => [b.id, b.name]));
 
   return (
     <DescubrirScreen
@@ -66,10 +72,8 @@ export default async function DescubrirPage() {
       hasLoved={counts.loved > 0}
       recs={recCards(rails).map((c) => ({ ...c, seed: seedById.get(c.seedTitleId) ?? null }))}
       trending={trending}
-      upcoming={upcoming.map((u) => {
-        const first = library.byTitle[u.catalogItemId]?.[0];
-        return { ...u, collection: first ? (nameById.get(first.backlogId) ?? null) : null };
-      })}
+      anticipated={anticipated}
+      anticipatedAlbums={anticipatedAlbums}
       now={now}
       doubleFeature={doubleFeature}
       kuradas={kuradas}

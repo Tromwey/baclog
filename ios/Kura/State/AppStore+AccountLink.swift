@@ -357,6 +357,8 @@ extension AppStore {
         feedCursor = nil
         feedDirty = false
         discover = nil
+        discoverCreators = nil
+        discoverFormats = [:]
         loadedCollections = []
         loadedPeople = []
         peopleLists = [:]

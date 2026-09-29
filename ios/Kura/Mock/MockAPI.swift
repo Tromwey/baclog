@@ -253,7 +253,19 @@ struct MockAPI: KuraAPI {
         return DiscoverPayload(
             recommended: recs.compactMap { id, why in t(id).map { DiscoverPayload.Recommended(title: $0, reason: why) } },
             trending: trending.enumerated().compactMap { i, id in t(id).map { DiscoverPayload.Trending(title: $0, saves: 900 - i * 80) } },
-            upcoming: upcoming.compactMap { id in t(id).map { DiscoverPayload.Upcoming(title: $0) } })
+            upcoming: upcoming.enumerated().compactMap { i, id in t(id).map { DiscoverPayload.Upcoming(title: $0, waiting: [12, 5, 1, 0, 3, 2][i]) } },
+            upcomingAlbums: ["showgirl", "nube"].enumerated().compactMap { i, id in
+                t(id).map { DiscoverPayload.Upcoming(title: $0, waiting: [5, 2][i]) }
+            })
+    }
+
+    func discoverCreators() async throws -> DiscoverCreatorsPayload {
+        let picks: [(String, DiscoverCreatorsPayload.Item.Role)] = [("showgirl", .artist), ("odyssey", .director), ("nube", .artist), ("severance", .creator)]
+        return DiscoverCreatorsPayload(items: picks.compactMap { id, role in
+            MockData.titles.first { $0.id == id }.map {
+                DiscoverCreatorsPayload.Item(title: $0, creator: .init(name: $0.creator ?? "alguien", role: role))
+            }
+        })
     }
 
     func discoverFormat(_ format: MediaFormat, time: Int?) async throws -> DiscoverFormatPayload {

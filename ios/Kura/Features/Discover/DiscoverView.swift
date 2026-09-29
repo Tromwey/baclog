@@ -30,7 +30,11 @@ struct DiscoverView: View {
             }
         }
         .onChange(of: searching) { _, s in store.dockHidden = s }
-        .task { await store.loadDiscover() }
+        .task {
+            await store.loadDiscover()
+            // After the page has what it needs: this one is slow and optional.
+            await store.loadDiscoverCreators()
+        }
         .onAppear {
             if let q = store.debugDiscoverQuery {
                 store.debugDiscoverQuery = nil
@@ -101,6 +105,7 @@ struct DiscoverView: View {
                         followedCollections
                         trends
                         upcoming
+                        fromFavorites
                     }
                 }
                 .padding(.top, 32)
@@ -116,9 +121,9 @@ struct DiscoverView: View {
 
     private func inTab(_ t: Title) -> Bool { true }
 
-    /// A section title at 22 with the optional mono note on the right (3a · "ritmo").
-    private func sectionHead(_ text: String, trailing: String? = nil) -> some View {
-        SectionTitle(text: text, trailing: trailing, size: 22).padding(.horizontal, 20)
+    /// A section title at 22 — no trailing aside (founder, 2026-09-29).
+    private func sectionHead(_ text: String) -> some View {
+        SectionTitle(text: text, size: 22).padding(.horizontal, 20)
     }
 
     /// 3a · Cuenta nueva: nothing to recommend yet — explain what lights it up.
@@ -295,28 +300,49 @@ struct DiscoverView: View {
         return t.year.map(String.init) ?? ""
     }
 
-    // "los más esperados" — what is still ahead in your collections.
+    // "los más esperados" — what's still ahead, outside your library, by how many Kura people saved it.
     @ViewBuilder private var upcoming: some View {
-        let list = (store.discover?.upcoming ?? []).map { u -> (Title, String, String?) in
+        let list = (store.discover?.upcoming ?? []).map { u -> CoverRowItem in
             let t = store.title(u.title.id) ?? u.title
-            return (t, upcomingLabel(t, releaseDate: u.releaseDate), u.collection?.name)
-        }.filter { inTab($0.0) }
+            let meta = u.waiting > 0 ? (u.waiting == 1 ? "1 lo espera" : "\(u.waiting) lo esperan") : nil
+            return CoverRowItem(title: t, when: upcomingLabel(t, releaseDate: u.releaseDate), meta: meta)
+        }.filter { inTab($0.title) }
+        coverRow("los más esperados", list)
+    }
+
+    // "lo nuevo de tus favoritos" — the newest / upcoming work of the people behind what you love
+    // (`GET /discover/creators`, loaded after the page; empty or failed = no section).
+    @ViewBuilder private var fromFavorites: some View {
+        let list = (store.discoverCreators?.items ?? []).map { i -> CoverRowItem in
+            let t = store.title(i.title.id) ?? i.title
+            // The date rides on the cover only while it's still ahead.
+            let ahead = (i.releaseDate.map { $0 > store.now } ?? false) || store.isUnreleased(t)
+            return CoverRowItem(title: t, when: ahead ? upcomingLabel(t, releaseDate: i.releaseDate) : "",
+                                meta: "de \(i.creator.name)")
+        }.filter { inTab($0.title) }
+        coverRow("lo nuevo de tus favoritos", list)
+    }
+
+    private struct CoverRowItem { let title: Title; let when: String; let meta: String? }
+
+    /// The horizontal cover row (3a): the date rides on the cover, a mono meta under the title.
+    @ViewBuilder private func coverRow(_ head: String, _ list: [CoverRowItem]) -> some View {
         if !list.isEmpty {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHead("los más esperados")
+            sectionHead(head)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .bottom, spacing: 12) {
-                    ForEach(list, id: \.0.id) { t, when, filed in
+                    ForEach(list, id: \.title.id) { item in
+                        let t = item.title
                         let w = t.format == .album ? 150.0 : 100.0
                         Button { store.push(.title(t.id)) } label: {
                             VStack(alignment: .leading, spacing: 7) {
-                                // 3a: the date rides on the cover; the collection reads under the title.
                                 CoverView(title: t, width: w).zoomSource(ZoomID.title(t.id))
                                     .overlay(alignment: .topLeading) {
-                                        if !when.isEmpty {
+                                        if !item.when.isEmpty {
                                             HStack(spacing: 5) {
                                                 Image(systemName: "clock.fill").font(.system(size: 10)).foregroundStyle(KColor.waiting)
-                                                Text(when).monoLabel(10, tracking: 0.04, color: KColor.text)
+                                                Text(item.when).monoLabel(10, tracking: 0.04, color: KColor.text)
                                             }
                                             .padding(.horizontal, 8).frame(height: 24)
                                             .background(KColor.glassArt, in: Capsule())
@@ -325,9 +351,8 @@ struct DiscoverView: View {
                                     }
                                 Text(t.name).font(.kura.newsItalic(14)).foregroundStyle(KColor.text)
                                     .lineLimit(1).frame(width: w, alignment: .leading)
-                                if let filed {
-                                    Text(filed).font(.kura.news(13)).foregroundStyle(KColor.text2)
-                                        .lineLimit(1).frame(width: w, alignment: .leading)
+                                if let meta = item.meta {
+                                    Text(meta).monoLabel(10).lineLimit(1).frame(width: w, alignment: .leading)
                                 }
                             }
                         }
@@ -855,7 +880,8 @@ enum SearchIndex {
 ///  - 2b Series · maratón: finished miniseries under two lenses; the pill is the whole series'
 ///    hours, the meta its network and episodes; Guardar sits on the poster.
 ///  - 2c Música · por momento: moments read from the chart's genres; the picked one tints the
-///    page. Albums 1:1, then the releases still ahead in your own collections.
+///    page. Albums 1:1, then "próximos discos" (`GET /discover`'s `upcomingAlbums`).
+/// No shelf shows a title already in your library (dropped by the store on load).
 /// Every page closes with Colecciones Kuradas. Twin of the web's `format-pages.tsx`; the data
 /// and the mood vocabularies come from `GET /discover/formats/{format}`.
 private struct DiscoverFormatPage: View {
@@ -1016,9 +1042,13 @@ private struct DiscoverFormatPage: View {
         }
     }
 
-    /// "próximos discos · en tus colecciones" — the library's albums still ahead (`GET /discover`).
+    /// "próximos discos" — `GET /discover`'s `upcomingAlbums` (albums still ahead, ≤ 12); an older
+    /// server without it falls back to the albums of "los más esperados". Like everything in
+    /// Descubrir, outside your library (the store drops library titles on load).
     @ViewBuilder private var soonDiscs: some View {
-        let list = (store.discover?.upcoming ?? []).map { (fresh($0.title), $0.releaseDate) }.filter { $0.0.format == .album }
+        let albums = store.discover?.upcomingAlbums ?? []
+        let source = albums.isEmpty ? (store.discover?.upcoming ?? []) : albums
+        let list = source.map { (fresh($0.title), $0.releaseDate) }.filter { $0.0.format == .album }
         if !list.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
                 SectionTitle(text: "próximos discos", size: 22).padding(.horizontal, 20)
