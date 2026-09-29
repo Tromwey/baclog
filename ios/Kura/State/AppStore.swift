@@ -177,6 +177,8 @@ final class SessionData {
     var feedCursor: String?
     var discover: DiscoverPayload?
     var discoverLoading = false
+    /// Descubrir por formato, by `AppStore.formatKey` ("film:1", "series", "album") — kept for the session.
+    var discoverFormats: [String: DiscoverFormatPayload] = [:]
     var searchQuery = ""
     var searchResults: [SearchResult] = []
     var searchPeople: [Person] = []
@@ -397,6 +399,7 @@ final class AppStore {
     var feedStale: Bool { feedLoaded && (feedDirty || feedFollowingKey != following) }
     var discover: DiscoverPayload? { get { s.discover } set { s.discover = newValue } }
     var discoverLoading: Bool { get { s.discoverLoading } set { s.discoverLoading = newValue } }
+    var discoverFormats: [String: DiscoverFormatPayload] { get { s.discoverFormats } _modify { yield &s.discoverFormats } set { s.discoverFormats = newValue } }
     var searchQuery: String { get { s.searchQuery } set { s.searchQuery = newValue } }
     var searchResults: [SearchResult] { get { s.searchResults } set { s.searchResults = newValue } }
     var searchPeople: [Person] { get { s.searchPeople } _modify { yield &s.searchPeople } set { s.searchPeople = newValue } }

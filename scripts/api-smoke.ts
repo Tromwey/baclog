@@ -690,7 +690,7 @@ const KuradaSchema = z.object({
   handle: z.string().min(1),
   count: z.number().int().positive(),
   palette: z.array(z.string()),
-  covers: z.array(z.object({ coverUrl: z.string().nullable(), format: z.enum(["film", "series", "album"]), palette: z.array(z.string()) })),
+  covers: z.array(TitleSchema).max(3),
 });
 const MoodSchema = z.object({ label: z.string().min(1), palette: z.array(z.string()).length(2) });
 const DiscoverFormatSchemas = {

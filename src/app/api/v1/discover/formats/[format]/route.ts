@@ -46,7 +46,18 @@ const kuradaOut = (k: KuradaCard) => ({
   handle: k.username,
   count: k.count,
   palette: k.hexes,
-  covers: k.fan.map((c) => ({ coverUrl: c.posterUrl, format: c.mediaType, palette: c.paletteHex ?? [] })),
+  covers: k.fan.map((c) =>
+    toTitleSummary({
+      catalogItemId: c.catalogItemId,
+      title: c.title ?? "",
+      mediaType: c.mediaType,
+      year: c.year,
+      byline: c.byline,
+      posterUrl: c.posterUrl,
+      paletteHex: c.paletteHex ? [...c.paletteHex] : null,
+      releaseDate: c.releaseDate,
+    }),
+  ),
 });
 
 export const GET = withApi<{ format: string }>(async (req, { user, params }) => {

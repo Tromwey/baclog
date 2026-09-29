@@ -130,6 +130,8 @@ protocol KuraAPI: Sendable {
     // MARK: Discover
     func search(_ query: String, kind: MediaFormat?) async throws -> [SearchResult]
     func discover() async throws -> DiscoverPayload
+    /// Descubrir por formato (2a–2c). `time` = cine's runtime window 0…2 (nil = the server's default).
+    func discoverFormat(_ format: MediaFormat, time: Int?) async throws -> DiscoverFormatPayload
 
     // MARK: People and feed
     func person(handle: String) async throws -> Person

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Flujo 07 · Descubrir: 19a editorial → 19d recientes → 19e escribiendo →
-/// E5 buscando → 19f resultados (19h guardar en) / 19g sin resultados.
+/// Flujo 07 · Descubrir: 19a editorial (Todo) → 19d recientes → 19e escribiendo →
+/// E5 buscando → 19f resultados (19h guardar en) / 19g sin resultados. Cine, Series y Música en
+/// la pista abren su propia página (`DiscoverFormatPage`, "Descubrir Final – Formatos" 2a–2c).
 struct DiscoverView: View {
     @Environment(AppStore.self) private var store
     @State private var searching = false
@@ -17,6 +18,13 @@ struct DiscoverView: View {
             if searching {
                 SearchMode(query: $query, submitted: $submitted, loading: $loading, focused: $focused,
                            cancel: cancelSearch, submit: submit)
+            } else if let format = tab {
+                // "A cada formato se entra por la pista de arriba" (Descubrir Final – Formatos 2a–2c).
+                DiscoverFormatPage(format: format, tab: $tab) {
+                    withAnimation(KMotion.short) { searching = true }
+                    focused = true
+                }
+                .id(format)
             } else {
                 editorial
             }
@@ -118,7 +126,8 @@ struct DiscoverView: View {
         .ignoresSafeArea(.container, edges: .top)
     }
 
-    private func inTab(_ t: Title) -> Bool { tab == nil || t.format == tab }
+    /// The editorial is Todo's page; the formats have their own (`DiscoverFormatPage`).
+    private func inTab(_ t: Title) -> Bool { true }
 
     /// The subtitle under a recommendation: the creator, or the series length.
     private func recSubtitle(_ t: Title) -> String {
@@ -736,3 +745,383 @@ enum SearchIndex {
         return a.isEmpty ? b.count : prev[b.count]
     }
 }
+
+// MARK: - Descubrir por formato (2a–2c)
+
+/// Claude Design "Descubrir Final – Formatos": one page per format, entered from the track.
+///  - 2a Cine · tiempo y humor: three runtime windows + an OPTIONAL humor (tap it again to
+///    clear it); both filter the 2:3 grid, and a picked humor tints the page.
+///  - 2b Series · maratón: finished miniseries under two lenses; the pill is the whole series'
+///    hours, the meta its network and episodes; Guardar sits on the poster.
+///  - 2c Música · por momento: moments read from the chart's genres; the picked one tints the
+///    page. Albums 1:1, then the releases still ahead in your own collections.
+/// Every page closes with Colecciones Kuradas. Twin of the web's `format-pages.tsx`; the data
+/// and the mood vocabularies come from `GET /discover/formats/{format}`.
+private struct DiscoverFormatPage: View {
+    @Environment(AppStore.self) private var store
+    let format: MediaFormat
+    @Binding var tab: MediaFormat?
+    let openSearch: () -> Void
+    @State private var time = 1
+    @State private var lens = 1
+    @State private var mood: Int?
+
+    private var timeParam: Int? { format == .film ? time : nil }
+    private var payload: DiscoverFormatPayload? { store.discoverFormats[AppStore.formatKey(format, time: timeParam)] }
+    private func fresh(_ t: Title) -> Title { store.title(t.id) ?? t }
+
+    /// Cine: the humor's items (all without one). Series: what fits the lens. Música: the moment's.
+    private var shown: [DiscoverFormatPayload.Item] {
+        guard let p = payload else { return [] }
+        switch format {
+        case .film:
+            return Array(p.titles.filter { mood == nil || $0.moods.contains(mood!) }.prefix(12))
+        case .series:
+            let limit: Int = p.lenses.indices.contains(lens) ? (p.lenses[lens].maxMinutes ?? Int.max) : Int.max
+            return Array(p.titles.filter { ($0.minutes ?? Int.max) <= limit }.prefix(12))
+        case .album:
+            return Array(p.titles.filter { $0.moods.contains(musicMood) }.prefix(8))
+        }
+    }
+
+    /// Música opens on the first moment the chart can fill.
+    private var musicMood: Int {
+        if let mood { return mood }
+        let p = payload
+        return p?.moods.indices.first { i in p?.titles.contains { $0.moods.contains(i) } == true } ?? 0
+    }
+
+    private var hexes: [String] {
+        let moods = payload?.moods ?? []
+        switch format {
+        case .film:
+            if let m = mood, moods.indices.contains(m) { return moods[m].palette }
+            return shown.first.map { fresh($0.title).palette } ?? []
+        case .series:
+            return shown.first.map { fresh($0.title).palette } ?? []
+        case .album:
+            return moods.indices.contains(musicMood) ? moods[musicMood].palette : []
+        }
+    }
+
+    var body: some View {
+        let tint = hexes
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
+                                  selection: $tab, height: 40)
+                    Button(action: openSearch) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(KColor.text)
+                            .frame(width: 50, height: 50)
+                            .background(KColor.glassBg, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Buscar")
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, KSize.chromeTop - 8)
+
+                switch format {
+                case .film: cine
+                case .series: series
+                case .album: music
+                }
+
+                kuradas
+                if format == .album { soonDiscs }
+            }
+            .padding(.bottom, 150)
+            .kFeedSurface(tint, span: 760)
+            .animation(KMotion.tint, value: tint)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .background(Tint.feedTail(tint).ignoresSafeArea())
+        .kFeedDockBand(tint)
+        .task(id: AppStore.formatKey(format, time: timeParam)) {
+            await store.loadDiscoverFormat(format, time: timeParam)
+        }
+    }
+
+    // MARK: 2a
+
+    @ViewBuilder private var cine: some View {
+        Text("¿cuánto tiempo tienes?").font(.kura.news(34)).foregroundStyle(KColor.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 16)
+        FlowChoices(choices: payload?.times ?? Self.fallbackTimes, selection: $time)
+            .padding(.horizontal, 20)
+        Text("¿y de qué humor?").font(.kura.news(22)).foregroundStyle(KColor.text)
+            .padding(.horizontal, 20).padding(.top, 30).padding(.bottom, 14)
+        MoodRow(moods: payload?.moods ?? [], selection: mood) { i in
+            withAnimation(KMotion.short) { mood = mood == i ? nil : i }
+        }
+        grid(empty: payload?.titles.isEmpty == true
+             ? "No pudimos traer películas ahora. Prueba en un rato."
+             : "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor.") { item in
+            let t = fresh(item.title)
+            tile(t, pill: item.runtimeMinutes.map { "\($0) min" }) {
+                if item.inCinemas {
+                    Image(systemName: "ticket.fill").font(.system(size: 9))
+                    Text("En cines").monoLabel(10)
+                } else {
+                    Text([t.year.map(String.init), item.genre].compactMap { $0 }.joined(separator: " · "))
+                        .monoLabel(10).lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private static let fallbackTimes: [DiscoverFormatPayload.Choice] = [
+        .init(label: "una hora y algo", sub: "menos de 100 min"),
+        .init(label: "hasta dos horas", sub: "100 a 130 min"),
+        .init(label: "sin prisa", sub: "más de 130 min"),
+    ]
+
+    // MARK: 2b
+
+    @ViewBuilder private var series: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("para maratonear").font(.kura.news(34)).foregroundStyle(KColor.text)
+            Text("Miniseries completas, sin temporadas por venir.").font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 18)
+        FlowChoices(choices: payload?.lenses ?? [], selection: $lens)
+            .padding(.horizontal, 20)
+        grid(empty: payload?.titles.isEmpty == true
+             ? "No pudimos traer series ahora. Prueba en un rato."
+             : "Nada tan corto por ahora. Prueba con un fin de semana.") { item in
+            let t = fresh(item.title)
+            tile(t, pill: item.minutes.map(Self.hours), save: true) {
+                Image(systemName: "play.fill").font(.system(size: 9))
+                Text([item.network, item.episodes.map { "\($0) ep" }].compactMap { $0 }.joined(separator: " · "))
+                    .monoLabel(10).lineLimit(1)
+            }
+        }
+    }
+
+    /// "3,9 h" / "12 h" — one decimal, Spanish comma (twin of the web's `hoursLabel`).
+    private static func hours(_ minutes: Int) -> String {
+        let h = (Double(minutes) / 60 * 10).rounded() / 10
+        let s = h == h.rounded() ? String(Int(h)) : String(format: "%.1f", h).replacingOccurrences(of: ".", with: ",")
+        return "\(s) h"
+    }
+
+    // MARK: 2c
+
+    @ViewBuilder private var music: some View {
+        Text("¿para qué momento?").font(.kura.news(34)).foregroundStyle(KColor.text)
+            .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 18)
+        MoodRow(moods: payload?.moods ?? [], selection: payload == nil ? nil : musicMood) { i in
+            withAnimation(KMotion.short) { mood = i }
+        }
+        grid(empty: payload?.titles.isEmpty == true
+             ? "No pudimos traer discos ahora. Prueba en un rato."
+             : "Nada para ese momento en lo que más suena hoy. Prueba otro.") { item in
+            let t = fresh(item.title)
+            tile(t, pill: nil) {
+                Text([t.creator, t.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
+                    .monoLabel(10).lineLimit(1)
+            }
+        }
+    }
+
+    /// "próximos discos · en tus colecciones" — the library's albums still ahead (`GET /discover`).
+    @ViewBuilder private var soonDiscs: some View {
+        let list = (store.discover?.upcoming ?? []).map { (fresh($0.title), $0.releaseDate) }.filter { $0.0.format == .album }
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionTitle(text: "próximos discos", trailing: "en tus colecciones", size: 22).padding(.horizontal, 20)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(list, id: \.0.id) { t, date in
+                            Button { store.push(.title(t.id)) } label: {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    CoverView(title: t, width: 150).zoomSource(ZoomID.title(t.id))
+                                    Text(t.name).font(.kura.newsItalic(15)).foregroundStyle(KColor.text)
+                                        .lineLimit(1).frame(width: 150, alignment: .leading)
+                                    if let d = date {
+                                        Text(store.label(for: .day(KuraJSON.dayAtNoon(d)))).monoLabel(10).lineLimit(1)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                }
+                .scrollClipDisabled()
+            }
+            .padding(.top, 40)
+        }
+    }
+
+    // MARK: pieces
+
+    @ViewBuilder
+    private func grid<Cell: View>(empty: String, @ViewBuilder cell: @escaping (DiscoverFormatPayload.Item) -> Cell) -> some View {
+        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        if payload == nil {
+            LazyVGrid(columns: columns, spacing: 24) {
+                ForEach(0..<4, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(KColor.glassBg)
+                        .aspectRatio(format == .album ? 1 : 2.0 / 3.0, contentMode: .fit)
+                }
+            }
+            .padding(.horizontal, 20).padding(.top, 26)
+            .accessibilityHidden(true)
+        } else if shown.isEmpty {
+            Text(empty).font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20).padding(.top, 26)
+        } else {
+            LazyVGrid(columns: columns, spacing: 24) {
+                ForEach(shown) { item in cell(item) }
+            }
+            .padding(.horizontal, 20).padding(.top, 26)
+        }
+    }
+
+    private func tile<Meta: View>(_ t: Title, pill: String?, save: Bool = false,
+                                  @ViewBuilder meta: () -> Meta) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            CoverView(title: t, radius: 14, fluid: true)
+                .zoomSource(ZoomID.title(t.id))
+                .overlay(alignment: .bottomLeading) {
+                    if let pill {
+                        Text(pill).font(.kura.mono(11)).tracking(0.44).foregroundStyle(KColor.text)
+                            .padding(.horizontal, 10).frame(height: 26)
+                            .background(KColor.glassArt, in: Capsule())
+                            .padding(8)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if save { SaveChip(titleID: t.id).padding(6) }
+                }
+            Text(t.name).font(.kura.newsItalic(18)).foregroundStyle(KColor.text).lineLimit(1)
+            HStack(spacing: 6) { meta() }.foregroundStyle(KColor.text2)
+        }
+        .contentShape(Rectangle())
+        .kPressable { store.push(.title(t.id)) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: Colecciones Kuradas
+
+    @ViewBuilder private var kuradas: some View {
+        let cards = payload?.kuradas ?? []
+        if !cards.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Colecciones Kuradas").font(.kura.news(22)).foregroundStyle(KColor.text)
+                    Text("Hechas a mano por nuestros expertos").font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                }
+                .padding(.horizontal, 20)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(cards) { k in kuradaCard(k) }
+                    }
+                    .scrollTargetLayout()
+                    .padding(.horizontal, 12)
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollClipDisabled()
+            }
+            .padding(.top, 44)
+        }
+    }
+
+    private func kuradaCard(_ k: DiscoverFormatPayload.Kurada) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            FanView(covers: k.covers.map(fresh), lead: format == .album ? 118 : 140, label: "Portadas de \(k.name)")
+                .frame(maxWidth: .infinity, minHeight: 150)
+            Text(k.name).font(.kura.news(24)).foregroundStyle(KColor.text).lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Text("k").font(.kura.newsMediumItalic(15)).foregroundStyle(KColor.onAccent)
+                    .frame(width: 26, height: 26).background(KColor.accent, in: Circle())
+                    .accessibilityHidden(true)
+                Text("\(k.curator) · \(format.label.lowercased())").font(.kura.ui(13)).foregroundStyle(KColor.text2).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(k.count == 1 ? "1 título" : "\(k.count) títulos").monoLabel(10)
+            }
+        }
+        .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 20)
+        .frame(width: 300, alignment: .leading)
+        .background(Tint.card(k.palette), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .kPressable { store.push(.publicCollection(handle: k.handle, id: k.id)) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// "¿cuánto tiempo tienes?" · "una tarde" — 52 pt two-line choice pills that wrap.
+private struct FlowChoices: View {
+    let choices: [DiscoverFormatPayload.Choice]
+    @Binding var selection: Int
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { pills }
+            VStack(alignment: .leading, spacing: 8) { pills }
+        }
+    }
+
+    @ViewBuilder private var pills: some View {
+        ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
+            let on = i == selection
+            Button { withAnimation(KMotion.short) { selection = i } } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(c.label).font(.kura.ui(15, .semibold)).foregroundStyle(KColor.text)
+                    Text(c.sub).monoLabel(10, tracking: 0.06)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 6)
+                .frame(minHeight: 52)
+                .background(on ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(on ? .isSelected : [])
+        }
+    }
+}
+
+/// The humor / moment swatches: a 64 pt disc in the mood's two tones, ringed when picked.
+private struct MoodRow: View {
+    let moods: [DiscoverFormatPayload.Mood]
+    let selection: Int?
+    let pick: (Int) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(Array(moods.enumerated()), id: \.offset) { i, m in
+                    let on = selection == i
+                    Button { pick(i) } label: {
+                        VStack(spacing: 9) {
+                            Circle()
+                                .fill(LinearGradient(colors: m.palette.map { Color(hex: $0) },
+                                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 64, height: 64)
+                                .padding(5)
+                                .overlay { if on { Circle().stroke(KColor.text, lineWidth: 2) } }
+                            Text(m.label).font(.kura.ui(13)).foregroundStyle(on ? KColor.text : KColor.text2)
+                                .multilineTextAlignment(.center).lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(width: 76)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal, 15)
+        }
+        .scrollClipDisabled()
+    }
+}
+

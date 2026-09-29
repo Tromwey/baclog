@@ -256,6 +256,58 @@ struct MockAPI: KuraAPI {
             upcoming: upcoming.compactMap { id in t(id).map { DiscoverPayload.Upcoming(title: $0) } })
     }
 
+    func discoverFormat(_ format: MediaFormat, time: Int?) async throws -> DiscoverFormatPayload {
+        let pool = MockData.titles.filter { $0.format == format }
+        let kurada = DiscoverFormatPayload.Kurada(
+            id: "kurada-\(format.rawValue)", name: format == .album ? "discos para cocinar un domingo" : "para ver con tu mamá",
+            curator: "Ana Robles", handle: "ana", count: max(pool.count, 1),
+            palette: pool.first?.palette ?? [], covers: Array(pool.prefix(3)))
+        switch format {
+        case .film:
+            let t = time ?? 1
+            return DiscoverFormatPayload(
+                format: .film, time: t,
+                times: [.init(label: "una hora y algo", sub: "menos de 100 min"),
+                        .init(label: "hasta dos horas", sub: "100 a 130 min"),
+                        .init(label: "sin prisa", sub: "más de 130 min")],
+                moods: MockAPI.cineMoods,
+                titles: pool.enumerated().map { i, title in
+                    DiscoverFormatPayload.Item(title: title, runtimeMinutes: [92, 118, 142][t] + i, inCinemas: i == 0,
+                          genre: "Drama", moods: [i % 5, (i + 2) % 5])
+                },
+                kuradas: [kurada])
+        case .series:
+            return DiscoverFormatPayload(
+                format: .series,
+                lenses: [.init(label: "una tarde", sub: "hasta 5 h", maxMinutes: 300),
+                         .init(label: "un fin de semana", sub: "hasta 12 h", maxMinutes: 720)],
+                titles: pool.enumerated().map { i, title in
+                    DiscoverFormatPayload.Item(title: title, minutes: 234 + i * 90, episodes: 4 + i * 2, network: "Netflix")
+                },
+                kuradas: [kurada])
+        case .album:
+            return DiscoverFormatPayload(
+                format: .album, moods: MockAPI.musicMoods,
+                titles: pool.enumerated().map { i, title in DiscoverFormatPayload.Item(title: title, moods: [i % 5]) },
+                kuradas: [kurada])
+        }
+    }
+
+    private static let cineMoods: [DiscoverFormatPayload.Mood] = [
+        .init(label: "para llorar", palette: ["#5a7aa0", "#101a2a"]),
+        .init(label: "con el corazón en la boca", palette: ["#c7462f", "#3a1a14"]),
+        .init(label: "para reír", palette: ["#e8b23a", "#5a3a10"]),
+        .init(label: "lenta y bonita", palette: ["#8aa05a", "#20301a"]),
+        .init(label: "para pensar", palette: ["#9b4dca", "#2a1440"]),
+    ]
+    private static let musicMoods: [DiscoverFormatPayload.Mood] = [
+        .init(label: "de noche", palette: ["#3a4ab0", "#0e1030"]),
+        .init(label: "para concentrarte", palette: ["#6a9a8a", "#102a22"]),
+        .init(label: "para bailar", palette: ["#e07aa0", "#401a2a"]),
+        .init(label: "domingo lento", palette: ["#d9a86a", "#3a2a16"]),
+        .init(label: "con rabia", palette: ["#c7462f", "#3a1a14"]),
+    ]
+
     // People and feed
     func person(handle: String) async throws -> Person {
         guard var p = MockData.people.first(where: { $0.id == handle }) else { throw KuraAPIError.notFound }

@@ -33,7 +33,14 @@ export interface KuradaCard {
   curator: string;
   username: string;
   count: number;
-  fan: FanCover[];
+  /** The fan's titles, front first — covers for the web, summaries for the API. */
+  fan: (FanCover & {
+    catalogItemId: string;
+    year: number | null;
+    byline: string | null;
+    /** ISO, or null — a string so the card crosses the RSC boundary as-is. */
+    releaseDate: string | null;
+  })[];
   hexes: string[];
 }
 
@@ -80,6 +87,9 @@ export async function getKuradas(viewerId: string): Promise<KuradaShelves> {
       backlogId: backlogItems.backlogId,
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
+      year: catalogItems.year,
+      byline: catalogItems.byline,
+      releaseDate: catalogItems.releaseDate,
       mediaType: catalogItems.mediaType,
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
@@ -108,6 +118,10 @@ export async function getKuradas(viewerId: string): Promise<KuradaShelves> {
       tally[k] > tally[best] ? k : best,
     );
     const fan = fanOf(all, l.coverCatalogItemId).map((c) => ({
+      catalogItemId: c.catalogItemId,
+      year: c.year,
+      byline: c.byline,
+      releaseDate: c.releaseDate ? c.releaseDate.toISOString() : null,
       posterUrl: c.posterUrl,
       paletteHex: c.paletteHex ?? null,
       mediaType: c.mediaType,
