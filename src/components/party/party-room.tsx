@@ -63,6 +63,7 @@ export function PartyRoom({
   viewerHandle,
   welcome,
   openShare,
+  openSearch: openSearchFlag = false,
 }: {
   initial: PartyDetail;
   viewerHandle: string | null;
@@ -70,6 +71,9 @@ export function PartyRoom({
   welcome: "new" | "back" | null;
   /** Just created: open "invita a la fiesta.". */
   openShare: boolean;
+  /** From Tus colecciones' Buscar chip (`?sheet=search`): open the search,
+   *  if this viewer may add (host, or a guest with room). */
+  openSearch?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -82,11 +86,13 @@ export function PartyRoom({
   const [sheet, setSheet] = useState<SheetState | null>(
     welcome ? { k: "welcome", back: welcome === "back" } : openShare && initial.viewer.role === "host" ? { k: "share" } : null,
   );
-  const [searching, setSearching] = useState(false);
+  const [searching, setSearching] = useState(
+    openSearchFlag && !welcome && (initial.viewer.role === "host" || initial.viewer.canAdd),
+  );
   const [iosOff, setIosOff] = useState(true);
   const hexes = usePartyHexes(party.songs);
 
-  // One-shot query flags (?w=, ?sheet=) leave the URL once read.
+  // One-shot query flags (?w=, ?sheet=share|search) leave the URL once read.
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
