@@ -20,6 +20,7 @@ import type { SearchBacklog } from "./descubrir-screen";
 import type { LibraryIndex } from "./library";
 import { RowCover, TriangleGlyph, workMeta } from "./kura-bits";
 import { saveSheetLabel } from "@/modules/backlog/save-label";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 /** Whatever Descubrir can offer to save: a result, a reco, a trend. */
 export interface SaveWork {
@@ -208,7 +209,7 @@ function SaveSheetBody({
               <input
                 ref={newInputRef}
                 value={newName}
-                maxLength={60}
+                maxLength={COLLECTION_NAME_MAX}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Nombre de la colección"
                 aria-label="Nombre de la nueva colección"

@@ -409,14 +409,15 @@ private struct CollectionsCarousel: View {
         }
     }
 
-    // MARK: The names (44 row)
+    // MARK: The names (44 row, 56 for a two-line name)
 
     private func names(_ list: [CarouselEntry]) -> some View {
-        CarouselNames(pos: pos,
-                      names: list.map { CarouselName(id: $0.id, name: $0.name, ghost: $0.id == CarouselEntry.newID) },
-                      widths: nameWidths) { i in go(i, count: list.count) }
-            .frame(height: 44)
-            .clipped()
+        let names = list.map { CarouselName(id: $0.id, name: $0.name, ghost: $0.id == CarouselEntry.newID) }
+        return CarouselNames(pos: pos, names: names, widths: nameWidths) { i in go(i, count: list.count) }
+            .frame(height: CarouselNames.height(pos.value, names: names, widths: nameWidths))
+            // Clipped sideways only: a two-line neighbour (22 × 2) next to a one-line centre is
+            // a few pt taller than the 44 strip and must not lose its top and bottom.
+            .mask(Rectangle().padding(.vertical, -12))
             .onPreferenceChange(NameWidths.self) { nameWidths.merge($0) { $1 } }
     }
 
@@ -510,14 +511,31 @@ private struct CarouselName {
     let ghost: Bool
 }
 
-/// The strip of names, all from the position: the centre in Newsreader 30 (at most 256 wide, then
-/// "…"); a neighbour pinned 142 pt off-centre (its near edge) at 22 and .45; past that it slides
-/// 278 pt more per collection and fades out. Tapping a neighbour goes there.
+/// The strip of names, all from the position: the centre in Newsreader 30; a neighbour pinned
+/// 142 pt off-centre (its near edge) at 22 and .45; past that it slides 278 pt more per
+/// collection and fades out. Tapping a neighbour goes there.
+///
+/// A name that doesn't fit ONE line at 30 in 256 (founder, 2026-09-29) drops to 24 and takes up
+/// to TWO lines, tight, in the same 256, and the strip grows 44 → 56 with the position (so the
+/// body glides instead of jumping). 256 keeps it clear of the neighbours: 2·142 − 2·14 of air.
+/// Names are capped at `AppStore.collectionNameLimit` (40, measured on Newsreader: ~0.42 em per
+/// character → 40 fill ~405 of the 512 two lines give at 24, with room for word breaks), and
+/// anything wider still ends in "…". The full name is on the collection's page and in VoiceOver.
 private struct CarouselNames: View {
-    /// A long name ends in "…" at 256 so it never runs into the neighbours, whose near edge sits
-    /// 142 off-centre (2·142 − 2·14 of air). The full name is on the collection's own page, where
-    /// it wraps, and in the VoiceOver label.
     static let maxName: CGFloat = 256
+    static let oneLineHeight: CGFloat = 44
+    static let twoLineHeight: CGFloat = 56
+
+    /// Whether this name needs the two-line 24 treatment (its natural width at 30 > 256).
+    static func isLong(_ id: String, _ widths: [String: CGFloat]) -> Bool { (widths[id] ?? 0) > maxName }
+
+    /// The strip's height at the position: 44 or 56 per name, crossing with the drag.
+    static func height(_ p: CGFloat, names: [CarouselName], widths: [String: CGFloat]) -> CGFloat {
+        let (lo, hi, t) = between(p, names.count)
+        guard !names.isEmpty else { return oneLineHeight }
+        func h(_ i: Int) -> CGFloat { isLong(names[i].id, widths) ? twoLineHeight : oneLineHeight }
+        return h(lo) + (h(hi) - h(lo)) * t
+    }
 
     let pos: KSpring
     let names: [CarouselName]
@@ -533,8 +551,12 @@ private struct CarouselNames: View {
                 ForEach(Array(names.enumerated()), id: \.element.id) { i, e in
                     let d = CGFloat(i) - p, a = abs(d), cd = max(-1, min(1, d))
                     if a < 2.2 {
-                        let scale = (30 - 8 * min(1, a)) / 30
-                        let w = min(widths[e.id] ?? 0, Self.maxName) * scale
+                        let long = Self.isLong(e.id, widths)
+                        // Centre 30 → neighbour 22; a long name 24 → 22.
+                        let size: CGFloat = long ? 24 : 30
+                        let scale = (size - (size - 22) * min(1, a)) / size
+                        let box = long ? Self.maxName : min(widths[e.id] ?? Self.maxName, Self.maxName)
+                        let w = box * scale
                         // CSS: left 50% + translateX((−50 + 50·cd)% + px) → the centre sits at
                         // mid + px + cd·w/2.
                         let px = 142 * cd + (a > 1 ? (d > 0 ? 1 : -1) * (a - 1) * 278 : 0)
@@ -543,13 +565,16 @@ private struct CarouselNames: View {
                         let op = a <= 1 ? 1 - 0.55 * a : max(0, 0.45 * (2 - a))
                         let neighbour = abs(i - centre) == 1
                         Text(e.name)
-                            .font(.kura.news(30))
+                            .font(.kura.news(size))
+                            .lineSpacing(long ? 2 : 0)
                             .foregroundStyle(KColor.text)
-                            .lineLimit(1)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(long ? 2 : 1)
                             .truncationMode(.tail)
-                            .frame(width: min(widths[e.id] ?? Self.maxName, Self.maxName))
+                            .frame(width: box)
+                            .fixedSize(horizontal: false, vertical: true)
                             .background {
-                                // The natural width, measured unconstrained (the frame caps it).
+                                // The natural width at 30, measured unconstrained (decides `long`).
                                 Text(e.name).font(.kura.news(30)).lineLimit(1).fixedSize().hidden()
                                     .background {
                                         GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
@@ -557,7 +582,9 @@ private struct CarouselNames: View {
                             }
                             .scaleEffect(scale)
                             .opacity(Double(op))
-                            .position(x: mid + px + cd * w / 2, y: 22)
+                            // Vertically centred in the strip: a one-line neighbour sits level
+                            // with the middle of a two-line centre.
+                            .position(x: mid + px + cd * w / 2, y: g.size.height / 2)
                             .onTapGesture { if neighbour { tap(i) } }
                             .allowsHitTesting(neighbour)
                             .accessibilityHidden(i != centre)
@@ -780,6 +807,9 @@ struct NewCollectionSheet: View {
                 GlassField(placeholder: "ponle nombre", text: $name, serif: true, focus: $focused)
                     .submitLabel(.done)
                     .onSubmit(create)
+                    .onChange(of: name) { _, v in
+                        if v.count > AppStore.collectionNameLimit { name = String(v.prefix(AppStore.collectionNameLimit)) }
+                    }
                 if choosingPrivacy {
                     VStack(spacing: 0) {
                         ForEach(Privacy.options) { p in

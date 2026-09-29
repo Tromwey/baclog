@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { feedSurface, feedTail, mixHex } from "@/components/kura/tint";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { isLongCollectionName } from "@/modules/backlog/name-limit";
 import {
   SpringValue,
   VelocityTracker,
@@ -21,7 +22,8 @@ import {
  * move together and 1:1 with the finger:
  *  - fans sit 320 px apart, shrink 8 % and fade out by one step away;
  *  - names travel ±142 px (then 278 px per extra step), 30 → 22 px, dimming
- *    to .35 at one step and to 0 at two;
+ *    to .35 at one step and to 0 at two; a long one is 24 → 22 on two lines
+ *    and the strip grows 44 → 56 with the position;
  *  - the background crosses the two neighbouring feed gradients by the
  *    fraction between them (and the bottom tone under the dock mixes too);
  *  - the body (line, credits, titles) fades out by half the travel, sliding
@@ -52,7 +54,24 @@ const WHEEL_GAP = 450;
 
 export interface CarouselSlide {
   kind: string;
+  name: string;
   hexes: readonly string[];
+}
+
+/** The strip of names: 44 for a one-line name, 56 for a two-line one (see `nameStyle`). */
+export const NAME_STRIP = 44;
+/** Where the strip starts in the drag surface (under the 225 fan's band). */
+export const NAME_TOP = 290;
+export const NAME_STRIP_LONG = 56;
+
+/** The strip's height at `pos`, crossing between the two names it's between. */
+export function nameStripHeight(slides: readonly CarouselSlide[], pos: number): number {
+  const n = slides.length;
+  if (n === 0) return NAME_STRIP;
+  const lo = Math.max(0, Math.min(n - 1, Math.floor(pos)));
+  const hi = Math.min(n - 1, lo + 1);
+  const h = (i: number) => (isLongCollectionName(slides[i].name) ? NAME_STRIP_LONG : NAME_STRIP);
+  return h(lo) + (h(hi) - h(lo)) * clamp01(pos - lo);
 }
 
 export function fanStyle(i: number, pos: number): CSSProperties {
@@ -64,7 +83,13 @@ export function fanStyle(i: number, pos: number): CSSProperties {
   };
 }
 
-export function nameStyle(i: number, pos: number, ghost: boolean): CSSProperties {
+/**
+ * A name that doesn't fit one line at 30 in 256 px (founder, 2026-09-29) is set
+ * at 24 over up to two tight lines in the same 256 (→ 22 as a neighbour), and
+ * everything is centred vertically in the strip, so a one-line neighbour sits
+ * level with the middle of a two-line centre.
+ */
+export function nameStyle(i: number, pos: number, ghost: boolean, long = false): CSSProperties {
   const d = i - pos;
   const a = Math.abs(d);
   const cd = Math.max(-1, Math.min(1, d));
@@ -72,9 +97,10 @@ export function nameStyle(i: number, pos: number, ghost: boolean): CSSProperties
   const op = a <= 1 ? 1 - 0.65 * a : Math.max(0, 0.35 * (2 - a));
   // The ghost "nueva colección" reads quieter in the centre (.6).
   const quiet = ghost ? 0.6 + 0.4 * Math.min(1, a) : 1;
+  const size = long ? 24 - 2 * Math.min(1, a) : 30 - 8 * Math.min(1, a);
   return {
-    transform: `translateX(calc(${(-50 + 50 * cd).toFixed(2)}% + ${px.toFixed(1)}px))`,
-    fontSize: `${(30 - 8 * Math.min(1, a)).toFixed(2)}px`,
+    transform: `translate(calc(${(-50 + 50 * cd).toFixed(2)}% + ${px.toFixed(1)}px), -50%)`,
+    fontSize: `${size.toFixed(2)}px`,
     opacity: op * quiet,
   };
 }
@@ -151,11 +177,18 @@ export function useCarouselMotion(
     const names = els.surface?.querySelectorAll<HTMLElement>("[data-carousel-name]") ?? [];
     for (const el of names) {
       const i = Number(el.dataset.carouselName);
-      const st = nameStyle(i, pos, L.slides[i]?.kind === "ghost");
+      const sl = L.slides[i];
+      const st = nameStyle(i, pos, sl?.kind === "ghost", sl ? isLongCollectionName(sl.name) : false);
       el.style.transform = String(st.transform);
       el.style.fontSize = String(st.fontSize);
       el.style.opacity = String(st.opacity);
     }
+    // The strip grows 44 → 56 with the position (and the surface with it), so
+    // the body glides down under a two-line name instead of jumping.
+    const strip = nameStripHeight(L.slides, pos);
+    if (els.surface) els.surface.style.height = `${(NAME_TOP + strip).toFixed(1)}px`;
+    const stripEl = els.surface?.querySelector<HTMLElement>("[data-carousel-strip]");
+    if (stripEl) stripEl.style.height = `${strip.toFixed(1)}px`;
     if (els.body) {
       const st = bodyStyle(pos, n, L.reduced);
       els.body.style.opacity = String(st.opacity);

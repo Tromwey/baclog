@@ -9,6 +9,7 @@ import { SheetTitleBlock, type SheetWork } from "./sheet-title";
 import { TriangleGlyph } from "./toast";
 import { useItemReaction } from "./reaction-state";
 import { saveSheetLabel } from "@/modules/backlog/save-label";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 /**
  * "Guardar" / "En N colecciones" (Kura 24a–d · §patrones · guardar): the
@@ -131,7 +132,7 @@ function SaveSheetBody({ work }: { work: SheetWork }) {
             <input
               ref={inputRef}
               value={newName}
-              maxLength={60}
+              maxLength={COLLECTION_NAME_MAX}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nombre de la colección"
               aria-label="Nombre de la nueva colección"

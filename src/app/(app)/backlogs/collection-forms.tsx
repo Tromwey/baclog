@@ -18,6 +18,7 @@ import {
   SHEET_SOLID,
   SheetTitle,
 } from "@/components/kura/sheet-parts";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 /**
  * The sheet bodies a collection shares between the list's hold sheet (10 ·
@@ -200,7 +201,7 @@ export function RenameBody({
             <input
               autoFocus
               required
-              maxLength={60}
+              maxLength={COLLECTION_NAME_MAX}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Nombre"

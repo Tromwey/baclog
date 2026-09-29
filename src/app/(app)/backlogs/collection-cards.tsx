@@ -21,11 +21,14 @@ import {
   backgroundAt,
   bodyStyle,
   fanStyle,
+  NAME_TOP,
+  nameStripHeight,
   nameStyle,
   useCarouselMotion,
 } from "./carousel-motion";
 import { CollectionHoldSheet } from "./collection-hold-sheet";
 import { NewBacklogTrigger } from "./new-backlog-button";
+import { isLongCollectionName } from "@/modules/backlog/name-limit";
 
 /**
  * Tus colecciones (Colecciones · una sola página, 2026-09-27 — design 10a).
@@ -258,7 +261,8 @@ export function CollectionCards({
         <div
           ref={bindSurface}
           {...handlers}
-          className="relative h-[334px] cursor-grab touch-pan-y select-none active:cursor-grabbing"
+          className="relative cursor-grab touch-pan-y select-none active:cursor-grabbing"
+          style={{ height: NAME_TOP + nameStripHeight(entries, p) }}
         >
           {entries.map((e, i) => {
             if (Math.abs(i - idx) > 2) return null;
@@ -274,15 +278,22 @@ export function CollectionCards({
             );
           })}
 
-          <div className="absolute inset-x-0 top-[290px] h-11 overflow-hidden">
+          <div
+            data-carousel-strip
+            className="absolute inset-x-0 overflow-x-clip"
+            style={{ top: NAME_TOP, height: nameStripHeight(entries, p) }}
+          >
             {entries.map((e, i) => {
               const d = i - idx;
               if (Math.abs(d) > 3) return null;
-              // Capped at 256 px at 30 (in em, so it scales with the neighbours' 22): a long
-              // name ends in "…" instead of running into the names 142 px off-centre.
-              const cls =
-                "absolute left-1/2 top-0 max-w-[8.533em] overflow-hidden text-ellipsis whitespace-nowrap font-brand leading-[44px]";
-              const style = nameStyle(i, p, e.kind === "ghost");
+              // 256 px wide at most (in em, so it scales with the neighbours' 22) — clear of
+              // the names 142 px off-centre. One line at 30 ("…" past it); a long name
+              // (`isLongCollectionName`) at 24 over two tight lines, then "…".
+              const long = isLongCollectionName(e.name);
+              const cls = long
+                ? "absolute left-1/2 top-1/2 w-[10.667em] line-clamp-2 text-center font-brand leading-[1.08]"
+                : "absolute left-1/2 top-1/2 max-w-[8.533em] overflow-hidden text-ellipsis whitespace-nowrap font-brand leading-[44px]";
+              const style = nameStyle(i, p, e.kind === "ghost", long);
               return d === 0 ? (
                 <h2 key={e.id} data-carousel-name={i} aria-live="polite" className={`${cls} font-normal`} style={style}>
                   {e.name}

@@ -47,6 +47,7 @@ import {
   FirstItemSheet,
   type FirstItemCelebration,
 } from "./first-item-sheet";
+import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
 
 type Target = { id: string; name: string };
 
@@ -486,7 +487,7 @@ export function SearchSheet({
                 <input
                   ref={newInputRef}
                   value={newName}
-                  maxLength={60}
+                  maxLength={COLLECTION_NAME_MAX}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder={options.length === 0 ? "Tu primera colección" : "Nombre de la colección"}
                   aria-label="Nombre de la colección"
