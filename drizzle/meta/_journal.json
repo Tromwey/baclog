@@ -239,6 +239,13 @@
       "when": 1790669842760,
       "tag": "0033_party_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790712899818,
+      "tag": "0034_music_export",
+      "breakpoints": true
     }
   ]
 }

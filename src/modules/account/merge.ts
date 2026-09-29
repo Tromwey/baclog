@@ -45,6 +45,7 @@ export { MERGE_COVERAGE, STATUS_RANK, mergedStatus } from "./merge-coverage";
  * | waitlist_entry            | scrub         | O's entry deleted (as deleteAccount)                           |
  * | verificationToken         | scrub         | O's live codes deleted (as deleteAccount)                      |
  * | session · mobile_session · device_token · follow_push_notice · recap_send | cascade | die with O |
+ * | music_connection · music_oauth_state · party_export (0034)               | cascade | die with O (tokens' AAD names O) |
  *
  * NOT `deleteAccount` for O on purpose: that would revoke O's Apple link,
  * which now belongs to D. It runs the SAME scrubs (`identityScrubStatements`)

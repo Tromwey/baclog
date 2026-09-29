@@ -1072,6 +1072,134 @@ export const partyRsvps = pgTable(
   ],
 );
 
+// ---------- music export ("Llévala a otra app", migration 0034) ----------
+
+/** Streaming services a party can be exported to (TEXT + CHECK, 0034). */
+export const MUSIC_EXPORT_PROVIDERS = ["apple_music", "tidal"] as const;
+export type MusicExportProvider = (typeof MUSIC_EXPORT_PROVIDERS)[number];
+
+/**
+ * A user's OAuth link to a streaming service Kura writes to SERVER-SIDE
+ * (today only TIDAL; Apple Music is done on the client with MusicKit and
+ * stores nothing here). One row per (user, provider). Both tokens are
+ * ENCRYPTED at rest (`src/lib/secret-box.ts`, AES-256-GCM, AAD bound to
+ * user + provider + field — a ciphertext copied to another row doesn't
+ * open). Never selected into a response; only `modules/music-export/
+ * tidal-auth.ts` reads it. Cascades with the user (account deletion) and is
+ * NOT moved by a merge (MERGE_COVERAGE: cascade — the AAD names the user).
+ */
+export const musicConnections = pgTable(
+  "music_connection",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    accessTokenEnc: text("access_token_enc").notNull(),
+    refreshTokenEnc: text("refresh_token_enc"),
+    expiresAt: timestamp("expires_at").notNull(),
+    scope: text("scope"),
+    /** The service's user id (TIDAL `user_id`), when the token response has it. */
+    externalUserId: text("external_user_id"),
+    /** ISO 3166-1 alpha-2 of the service account (catalog availability). */
+    countryCode: text("country_code"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("music_connection_user_provider_unique").on(t.userId, t.provider),
+    check("music_connection_provider_check", sql`${t.provider} in ('tidal')`),
+  ],
+);
+
+/**
+ * One pending OAuth authorization (TIDAL authorization code + PKCE). The PK
+ * is sha256(state) — the raw state only ever lives in the redirect URLs.
+ * Single use: consumed by `DELETE … RETURNING`. Bound to the user who
+ * started it: the web callback requires the SAME cookie session, the iOS
+ * flow requires the SAME bearer on `POST /music/tidal/complete` (the
+ * callback only parks the encrypted code here). 10 minutes of life.
+ */
+export const musicOauthStates = pgTable(
+  "music_oauth_state",
+  {
+    stateHash: text("state_hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    /** "web" (cookie; the callback finishes) | "ios" (bearer; `complete` finishes). */
+    client: text("client").notNull(),
+    codeVerifierEnc: text("code_verifier_enc").notNull(),
+    /** Web only: allow-listed path to land on (`safeMusicReturn`). */
+    returnTo: text("return_to"),
+    /** iOS only: the authorization code parked by the callback (encrypted). */
+    codeEnc: text("code_enc"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (t) => [
+    index("music_oauth_state_user_idx").on(t.userId),
+    check("music_oauth_state_client_check", sql`${t.client} in ('web', 'ios')`),
+  ],
+);
+
+/**
+ * One user's export of one party to one service — what makes "al reintentar
+ * no se duplican canciones" true: the remote playlist is created ONCE
+ * (`remote_playlist_id`) and every song already handled is a
+ * `party_export_item`. `generation` bumps when the remote playlist turned
+ * out to be gone (deleted in the service) so a new one is created with a
+ * fresh idempotency key. `lease_until` = one step at a time per export
+ * (claimed atomically). Cascades with the party and with the user.
+ */
+export const partyExports = pgTable(
+  "party_export",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    backlogId: text("backlog_id")
+      .notNull()
+      .references(() => backlogs.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    remotePlaylistId: text("remote_playlist_id"),
+    remoteUrl: text("remote_url"),
+    generation: integer("generation").notNull().default(0),
+    leaseUntil: timestamp("lease_until"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("party_export_backlog_user_provider_unique").on(t.backlogId, t.userId, t.provider),
+    index("party_export_user_idx").on(t.userId),
+    check("party_export_provider_check", sql`${t.provider} in ('apple_music', 'tidal')`),
+  ],
+);
+
+/** A song already handled by an export: `added` (in the remote playlist) or
+ *  `missing` (not found in the service — retried on the next "start"). */
+export const partyExportItems = pgTable(
+  "party_export_item",
+  {
+    exportId: uuid("export_id")
+      .notNull()
+      .references(() => partyExports.id, { onDelete: "cascade" }),
+    catalogItemId: text("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    outcome: text("outcome").notNull(),
+    remoteTrackId: text("remote_track_id"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.exportId, t.catalogItemId] }),
+    check("party_export_item_outcome_check", sql`${t.outcome} in ('added', 'missing')`),
+  ],
+);
+
 // ---------- backlog module (F3.3 monthly recap idempotency) ----------
 
 export const recapSends = pgTable(

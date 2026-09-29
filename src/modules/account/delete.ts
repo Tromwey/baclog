@@ -34,7 +34,11 @@ import { identityScrubStatements } from "./scrub";
  * (`merge.ts`, phase 4g): the absorbed source's `account` rows MOVE to the
  * destination and its Apple link stays alive, so nothing is revoked — but it
  * runs the very same `identityScrubStatements` before deleting the row.
- * Sessions and device tokens cascade.
+ * Sessions and device tokens cascade. So do the music-export tables (0034):
+ * `music_connection` (encrypted TIDAL tokens — deleted, not revoked at TIDAL:
+ * TIDAL documents no third-party revocation endpoint; the encrypted rows go
+ * with the user row, and the person can also remove Kura in TIDAL's settings),
+ * `music_oauth_state` and `party_export` (+ items).
  */
 export async function deleteAccount(userId: string): Promise<void> {
   const revokeApple = await prepareAppleRevocation(userId);

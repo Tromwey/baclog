@@ -12,6 +12,7 @@ import { apiContext } from "./api-context";
 import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
 import { PartyUnavailableError } from "@/modules/party-collections/errors";
+import { MusicExportError } from "@/modules/music-export/errors";
 
 export { apiContext } from "./api-context";
 
@@ -200,6 +201,13 @@ export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   // Colecciones de fiesta before migration 0033 is live (party-collections/live.ts).
   if (err instanceof PartyUnavailableError) {
     return apiError("unavailable", "Las colecciones de fiesta todavía no están disponibles. Inténtalo más tarde.");
+  }
+  // "Llévala a otra app" (music-export/errors.ts): each carries its code + reason.
+  if (err instanceof MusicExportError) {
+    return apiError(err.code, err.message, {
+      reason: err.reason,
+      ...(err.retryAfterSeconds !== undefined ? { retryAfterSeconds: err.retryAfterSeconds } : {}),
+    });
   }
   if (err instanceof ZodError) {
     const fields: Record<string, string> = {};

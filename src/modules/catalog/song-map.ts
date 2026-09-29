@@ -98,9 +98,12 @@ export function songFactsOf(raw: unknown): {
   previewUrl: string | null;
   durationMs: number | null;
   appleMusicUrl: string | null;
+  /** Apple Music catalog id = the iTunes trackId (music export, 0034). */
+  appleMusicId: string | null;
 } {
   const r = (raw ?? {}) as Partial<SongRaw>;
   return {
+    appleMusicId: typeof r.trackId === "number" && Number.isSafeInteger(r.trackId) && r.trackId > 0 ? String(r.trackId) : null,
     album: typeof r.collectionName === "string" ? r.collectionName : null,
     previewUrl: typeof r.previewUrl === "string" ? r.previewUrl : null,
     durationMs: typeof r.trackTimeMillis === "number" ? r.trackTimeMillis : null,

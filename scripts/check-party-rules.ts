@@ -341,8 +341,9 @@ check("lo que no es canción se descarta; URLs fuera de Apple/http no se guardan
   assert.equal(s.raw.trackViewUrl, null);
 });
 check("songFactsOf tolera raw vacío o ajeno", () => {
-  assert.deepEqual(songFactsOf(null), { album: null, previewUrl: null, durationMs: null, appleMusicUrl: null });
-  assert.deepEqual(songFactsOf({ previewUrl: 3 }), { album: null, previewUrl: null, durationMs: null, appleMusicUrl: null });
+  const empty = { album: null, previewUrl: null, durationMs: null, appleMusicUrl: null, appleMusicId: null };
+  assert.deepEqual(songFactsOf(null), empty);
+  assert.deepEqual(songFactsOf({ previewUrl: 3, trackId: "12" }), empty);
 });
 
 console.log("\nFormatos de biblioteca (el barrido 'track')");
@@ -367,6 +368,7 @@ const song = {
   previewUrl: "https://audio-ssl.itunes.apple.com/a.m4a",
   durationMs: 357000,
   appleMusicUrl: "https://music.apple.com/mx/album/x?i=1",
+  appleMusicId: "1",
   paletteHex: null,
   addedAt: at,
   addedBy: person,
@@ -382,7 +384,7 @@ const detail: PartyDetail = {
   createdAt: at,
   host: { handle: "eric", name: "Eric", avatarUrl: null },
   viewer: { role: "host", blocked: false, mineCount: 1, remaining: null, canAdd: true },
-  songs: [song, { ...song, titleId: "x2", addedBy: null, paletteHex: ["#aabbcc"], previewUrl: null, artworkUrl: null }],
+  songs: [song, { ...song, titleId: "x2", addedBy: null, paletteHex: ["#aabbcc"], previewUrl: null, artworkUrl: null, appleMusicId: null }],
   contributors: [
     { person, isYou: false, songCount: 1 },
     { person: null, isYou: false, songCount: 1 },

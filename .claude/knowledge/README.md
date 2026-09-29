@@ -25,6 +25,7 @@ Separa el conocimiento por su **ciclo de vida**:
 | Build, deploy manual a Vercel, envs, dependencias | `state/infra.md` | — |
 | Cualquier cosa (norte, en progreso, deuda) | `state/overview.md` | — |
 | Colecciones de fiesta (web `/f` `/c`, API `/parties/**` `/invites/**`, iOS) — el contrato compartido | `state/fiesta-contract.md` | `backend` / `frontend` |
+| Exportar una fiesta a Apple Music / TIDAL ("Llévala a otra app": OAuth TIDAL, MusicKit, `/music/**`, `/parties/{id}/exports/**`) — contrato web + iOS | `state/export-contract.md` | `backend` / `frontend` |
 
 Este repo **no tiene** suite de tests ni CI, así que no hay `state/qa.md`. Si se agrega una capa de
 tests, créalo entonces (y sumá su fila a este router).

@@ -79,6 +79,18 @@ export const MERGE_COVERAGE: Record<string, MergeCoverageEntry> = {
     actions: ["merge"],
     note: "Same as follows, both directions, no duplicates, no self-block; O↔D blocks cascade.",
   },
+  music_connection: {
+    actions: ["cascade"],
+    note: "O's streaming links (TIDAL tokens) die with O: the tokens are encrypted with an AAD that names O's user id, so moving the row would make them unreadable anyway. D reconnects in one tap; playlists already created stay in the person's TIDAL. (music export, 0034)",
+  },
+  music_oauth_state: {
+    actions: ["cascade"],
+    note: "Pending OAuth authorizations (10 min, single use) bound to O: they must not finish for D.",
+  },
+  party_export: {
+    actions: ["cascade"],
+    note: "O's export records (remote playlist id, which songs went). Dropping them means D's next export of the same party creates a NEW playlist instead of extending O's — accepted: rare, harmless, and it never writes into a playlist D didn't make from this account. Items cascade with it.",
+  },
   mobile_session: {
     actions: ["cascade"],
     note: "O's app sessions die: its bearers are 401 by the per-request re-read.",

@@ -29,6 +29,7 @@ export function toPartySong(s: PartySong): PartySongWire {
     previewUrl: s.previewUrl,
     durationMs: s.durationMs,
     appleMusicUrl: s.appleMusicUrl,
+    appleMusicId: s.appleMusicId,
     palette: s.paletteHex ?? [],
     addedAt: isoDate(s.addedAt),
     addedBy: s.addedBy,

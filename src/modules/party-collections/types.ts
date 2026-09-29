@@ -34,6 +34,9 @@ export interface PartySong {
   durationMs: number | null;
   /** The song on Apple Music (trackViewUrl). */
   appleMusicUrl: string | null;
+  /** Apple Music CATALOG id (= iTunes trackId, storefront mx) — what MusicKit
+   *  adds to a playlist ("Llévala a Apple Music", export-contract.md). */
+  appleMusicId: string | null;
   /** Shared cover palette (catalog_item.palette_hex); null until extracted. */
   paletteHex: string[] | null;
   addedAt: Date;

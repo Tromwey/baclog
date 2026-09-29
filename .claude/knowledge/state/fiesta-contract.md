@@ -28,7 +28,7 @@
   El resto de la app funciona igual con o sin la migración.
 - Orden: `drizzle-kit migrate` (founder, DB compartida) → poner `MIGRATION_0033_LIVE = true` → deploy. **HECHO 2026-09-29**: 0033 aplicada, switch en `true`, prod + beta desplegados.
   Nunca `true` sin la tabla (Colecciones daría 500 en todas sus pantallas).
-- Exportar a Apple Music/Tidal: **fase 2, NO existe backend**. La UI lo muestra como "próximamente".
+- Exportar a Apple Music/TIDAL ("Llévala a otra app"): **backend listo detrás de `MIGRATION_0034_LIVE = false`** (0034 sin aplicar) — contrato aparte en **`state/export-contract.md`**. Mientras esté apagado todo responde `unavailable` → la UI sigue mostrando "Próximamente". `PartySong` gana `appleMusicId` (aditivo, ya vivo).
 
 ## 1. Modelo de datos
 
@@ -203,6 +203,7 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
   "artworkUrl": "https://is1-ssl.mzstatic.com/…/600x600bb.jpg" | null,
   "previewUrl": "https://audio-ssl.itunes.apple.com/…m4a" | null,   // 30 s
   "durationMs": 357000 | null, "appleMusicUrl": "https://music.apple.com/…" | null,
+  "appleMusicId": "1440833098" | null,   // id de CATÁLOGO de Apple Music (= trackId de iTunes, mx) — export-contract.md
   "palette": ["#211c28", …],            // [] hasta que alguien la extraiga
   "addedAt": "2026-10-20T18:00:00Z",
   "addedBy": PartyPerson | null,        // null → "Puso alguien"
@@ -295,4 +296,4 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 
 - **/party**: `PartyPlaylistCard` ya se monta tras un RSVP de "sí voy" (`showPlaylist` en party-invitation.tsx → party-scene.tsx). Falta `PARTY_PLAYLIST_TOKEN` en Vercel (el token de 16 del link `/f/…` de la fiesta del founder); sin él la tarjeta no se pinta.
 - **URL de la App Store**: la tarjeta "kura para iPhone." no trae "Ver en App Store" hasta tener la URL.
-- Exportar a Apple Music/Tidal: fase 2.
+- Exportar a Apple Music/TIDAL: backend en `state/export-contract.md` (0034 sin aplicar); falta la UI web/iOS.

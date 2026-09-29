@@ -1,0 +1,452 @@
+/**
+ * Guardrail for "Llévala a otra app" (music export, 2026-09-29, migration
+ * 0034): the PURE pieces — token encryption at rest (`lib/secret-box.ts`),
+ * the OAuth state/PKCE (`music-export/pkce.ts`), the web return whitelist
+ * and URLs (`rules.ts`), the export plan (what "no duplicates on retry"
+ * rests on), the track matcher (`match.ts`), the env gates (`config.ts`),
+ * the MusicKit developer token (`apple-token.ts`) and the wire — plus source
+ * greps: the encrypted token columns are only touched by `tidal-auth.ts`,
+ * and the error family is mapped by the API edge.
+ * No DB, no server: `pnpm tsx scripts/check-music-export.ts`. Exits 1 on any failure.
+ */
+import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { decodeProtectedHeader, importSPKI, jwtVerify } from "jose";
+import { openSecret, sealSecret } from "../src/lib/secret-box";
+import { signAppleMusicDeveloperToken } from "../src/modules/music-export/apple-token";
+import { appleMusicKeyConfig, tidalOAuthConfig, TIDAL_SCOPES } from "../src/modules/music-export/config";
+import { MIGRATION_0034_LIVE } from "../src/modules/music-export/live";
+import { isoDurationMs, normalizeIsrc, pickTrackMatch, type TrackCandidate } from "../src/modules/music-export/match";
+import {
+  clientOfState,
+  codeChallengeS256,
+  hashOAuthState,
+  newCodeVerifier,
+  newOAuthState,
+  TIDAL_STATE_RE,
+  tidalAuthorizeUrl,
+} from "../src/modules/music-export/pkce";
+import {
+  APPLE_PLAYLIST_ID_RE,
+  applePlaylistUrl,
+  doneLine,
+  iosAuthorizedUrl,
+  iosFailedUrl,
+  musicLanding,
+  parseProvider,
+  planExport,
+  reportItems,
+  safeMusicReturn,
+  SERVICE_FAILED_MESSAGE,
+  tidalPlaylistUrl,
+  tidalStartPath,
+} from "../src/modules/music-export/rules";
+import type { ExportState } from "../src/modules/music-export/types";
+import { songFactsOf } from "../src/modules/catalog/song-map";
+import { MERGE_COVERAGE } from "../src/modules/account/merge-coverage";
+import {
+  AppleMusicReportBodySchema,
+  ExportStateSchema,
+  MusicServicesSchema,
+  TidalCompleteBodySchema,
+} from "../src/app/api/v1/_lib/schemas";
+import { toExportState } from "../src/app/api/v1/_lib/wire/music";
+
+let failures = 0;
+async function check(name: string, fn: () => void | Promise<void>) {
+  try {
+    await fn();
+    console.log(`ok   ${name}`);
+  } catch (err) {
+    failures++;
+    console.log(`FAIL ${name}\n     ${(err as Error).message}`);
+  }
+}
+
+const ENV = { AUTH_SECRET: "test-auth-secret-0123456789" };
+
+async function main() {
+  // ---------- secret-box ----------
+  await check("cifrado: ida y vuelta con la misma AAD", () => {
+    const sealed = sealSecret("tok-123", "music-token", "music-connection:u1:tidal:access", ENV);
+    assert.match(sealed, /^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{22}$/);
+    assert.ok(!sealed.includes("tok-123"));
+    assert.equal(openSecret(sealed, "music-token", "music-connection:u1:tidal:access", ENV), "tok-123");
+  });
+  await check("cifrado: IV nuevo cada vez (mismo texto → distinto sello)", () => {
+    const a = sealSecret("x", "p", "a", ENV);
+    const b = sealSecret("x", "p", "a", ENV);
+    assert.notEqual(a, b);
+  });
+  await check("cifrado: otra fila (AAD de otro usuario / otro campo) NO abre", () => {
+    const sealed = sealSecret("tok", "music-token", "music-connection:u1:tidal:access", ENV);
+    assert.equal(openSecret(sealed, "music-token", "music-connection:u2:tidal:access", ENV), null);
+    assert.equal(openSecret(sealed, "music-token", "music-connection:u1:tidal:refresh", ENV), null);
+    assert.equal(openSecret(sealed, "other", "music-connection:u1:tidal:access", ENV), null);
+  });
+  await check("cifrado: alterado / truncado / otra llave / basura → null (nunca lanza)", () => {
+    const sealed = sealSecret("tok", "p", "a", ENV);
+    const parts = sealed.split(".");
+    const flip = parts[2][0] === "A" ? "B" : "A";
+    assert.equal(openSecret([parts[0], parts[1], flip + parts[2].slice(1), parts[3]].join("."), "p", "a", ENV), null);
+    assert.equal(openSecret(parts.slice(0, 3).join("."), "p", "a", ENV), null);
+    assert.equal(openSecret(sealed, "p", "a", { ...ENV, MUSIC_TOKEN_KEY: "another" }), null);
+    assert.equal(openSecret("v2.a.b.c", "p", "a", ENV), null);
+    assert.equal(openSecret(null, "p", "a", ENV), null);
+  });
+  await check("cifrado: MUSIC_TOKEN_KEY gana a AUTH_SECRET", () => {
+    const env2 = { ...ENV, MUSIC_TOKEN_KEY: "k2" };
+    const sealed = sealSecret("tok", "p", "a", env2);
+    assert.equal(openSecret(sealed, "p", "a", env2), "tok");
+    assert.equal(openSecret(sealed, "p", "a", ENV), null);
+  });
+
+  // ---------- OAuth state + PKCE ----------
+  await check("PKCE: vector del RFC 7636 (apéndice B)", () => {
+    assert.equal(
+      codeChallengeS256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+      "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    );
+  });
+  await check("PKCE: verifier 43..128 chars del alfabeto del RFC", () => {
+    const v = newCodeVerifier();
+    assert.ok(v.length >= 43 && v.length <= 128 && /^[A-Za-z0-9._~-]+$/.test(v), v);
+  });
+  await check("state: pista de cliente + 43 aleatorios; único; hash estable y distinto al state", () => {
+    const w = newOAuthState("web");
+    const i = newOAuthState("ios");
+    assert.ok(TIDAL_STATE_RE.test(w) && TIDAL_STATE_RE.test(i));
+    assert.equal(clientOfState(w), "web");
+    assert.equal(clientOfState(i), "ios");
+    assert.notEqual(newOAuthState("web"), w);
+    assert.equal(hashOAuthState(w), hashOAuthState(w));
+    assert.notEqual(hashOAuthState(w), w);
+    assert.equal(clientOfState("x" + w.slice(1)), null);
+    assert.equal(clientOfState(w + "a"), null);
+    assert.equal(clientOfState(""), null);
+  });
+  await check("authorize URL: response_type, client_id, redirect, scope, S256, state", () => {
+    const url = new URL(
+      tidalAuthorizeUrl({
+        authorizeUrl: "https://login.tidal.com/authorize",
+        clientId: "cid",
+        redirectUri: "https://get-kura.app/api/music/tidal/callback",
+        scopes: TIDAL_SCOPES,
+        state: "wSTATE",
+        codeChallenge: "CH",
+      }),
+    );
+    assert.equal(url.origin + url.pathname, "https://login.tidal.com/authorize");
+    const q = url.searchParams;
+    assert.equal(q.get("response_type"), "code");
+    assert.equal(q.get("client_id"), "cid");
+    assert.equal(q.get("redirect_uri"), "https://get-kura.app/api/music/tidal/callback");
+    assert.equal(q.get("scope"), "playlists.write user.read");
+    assert.equal(q.get("code_challenge_method"), "S256");
+    assert.equal(q.get("code_challenge"), "CH");
+    assert.equal(q.get("state"), "wSTATE");
+    assert.ok(!q.has("client_secret"));
+  });
+  await check("scopes: solo escribir playlists + país de la cuenta (no lee la biblioteca)", () => {
+    assert.deepEqual(TIDAL_SCOPES.split(" ").sort(), ["playlists.write", "user.read"]);
+  });
+  await check("complete: el body solo acepta un ref de iOS", () => {
+    const i = newOAuthState("ios");
+    assert.ok(TidalCompleteBodySchema.safeParse({ ref: i }).success);
+    assert.ok(!TidalCompleteBodySchema.safeParse({ ref: newOAuthState("web") }).success);
+    assert.ok(!TidalCompleteBodySchema.safeParse({ ref: i, userId: "u" }).data?.hasOwnProperty("userId"));
+  });
+
+  // ---------- return whitelist + URLs ----------
+  await check("return web: solo /c/{uuid}, /settings, /settings/musica — exactos", () => {
+    const party = "/c/7c9e6679-7425-40de-944b-e07fc1f90ae7";
+    assert.equal(safeMusicReturn(party), party);
+    assert.equal(safeMusicReturn("/settings"), "/settings");
+    assert.equal(safeMusicReturn("/settings/musica"), "/settings/musica");
+    for (const bad of [
+      "//evil.com",
+      "https://evil.com",
+      `${party}?x=1`,
+      `${party}/../../x`,
+      "/c/not-a-uuid",
+      "/settings/perfil",
+      "/backlogs",
+      "\\\\evil.com",
+      "/settings#x",
+      null,
+      undefined,
+    ]) {
+      assert.equal(safeMusicReturn(bad as string | null | undefined), null, String(bad));
+    }
+    assert.equal(tidalStartPath("https://evil.com"), "/api/music/tidal/start?return=%2Fsettings%2Fmusica");
+    assert.equal(tidalStartPath(party), `/api/music/tidal/start?return=${encodeURIComponent(party)}`);
+  });
+  await check("aterrizaje: ?music=tidal&connected=1|0&reason", () => {
+    assert.equal(musicLanding("/settings/musica", true), "/settings/musica?music=tidal&connected=1");
+    assert.equal(musicLanding("/settings", false, "denied"), "/settings?music=tidal&connected=0&reason=denied");
+  });
+  await check("iOS: rebote kura:// con ref (autorizado) o ok=0 + razón", () => {
+    const ref = newOAuthState("ios");
+    const u = new URL(iosAuthorizedUrl(ref));
+    assert.equal(u.protocol, "kura:");
+    assert.equal(u.searchParams.get("ref"), ref);
+    assert.equal(iosFailedUrl("denied"), "kura://music/tidal/connected?ok=0&reason=denied");
+  });
+  await check("URLs de playlist: derivadas en servidor, nunca un href ajeno", () => {
+    assert.equal(applePlaylistUrl("p.AbC123"), "https://music.apple.com/library/playlist/p.AbC123");
+    assert.equal(applePlaylistUrl("pl.u-123"), null);
+    assert.equal(applePlaylistUrl("javascript:alert(1)"), null);
+    assert.ok(!APPLE_PLAYLIST_ID_RE.test("p.a/../x"));
+    const id = "550e8400-e29b-41d4-a716-446655440000";
+    assert.equal(tidalPlaylistUrl(id), `https://tidal.com/playlist/${id}`);
+    assert.equal(tidalPlaylistUrl(id, "https://tidal.com/browse/playlist/x"), "https://tidal.com/browse/playlist/x");
+    assert.equal(tidalPlaylistUrl(id, "https://evil.com/tidal.com"), `https://tidal.com/playlist/${id}`);
+    assert.equal(tidalPlaylistUrl(id, "http://tidal.com/x"), `https://tidal.com/playlist/${id}`);
+    assert.equal(tidalPlaylistUrl(id, "https://eviltidal.com/x"), `https://tidal.com/playlist/${id}`);
+  });
+  await check("proveedor: solo apple_music | tidal", () => {
+    assert.equal(parseProvider("tidal"), "tidal");
+    assert.equal(parseProvider("apple_music"), "apple_music");
+    assert.equal(parseProvider("spotify"), null);
+    assert.equal(parseProvider(["tidal"]), null);
+  });
+  await check("copy del diseño", () => {
+    assert.equal(doneLine("tidal", 11, 12), "11 de 12 canciones ya están en tu playlist de TIDAL.");
+    assert.ok(SERVICE_FAILED_MESSAGE("apple_music").endsWith("al reintentar no se duplican canciones."));
+  });
+
+  // ---------- the export plan (idempotence) ----------
+  const songs = ["a", "b", "c", "d"].map((titleId) => ({ titleId }));
+  await check("plan: lo agregado nunca vuelve a mandarse; lo faltante no es pendiente", () => {
+    const p = planExport(songs, [
+      { titleId: "a", outcome: "added" },
+      { titleId: "b", outcome: "missing" },
+    ]);
+    assert.deepEqual(p.pending, ["c", "d"]);
+    assert.equal(p.exported, 1);
+    assert.equal(p.processed, 2);
+    assert.equal(p.total, 4);
+  });
+  await check("plan: reintentar (start borra los missing) re-encola solo esos, en orden", () => {
+    const afterStart = planExport(songs, [{ titleId: "a", outcome: "added" }]);
+    assert.deepEqual(afterStart.pending, ["b", "c", "d"]);
+  });
+  await check("plan: canción quitada de la fiesta no cuenta; canción nueva queda pendiente al final", () => {
+    const p = planExport([{ titleId: "a" }, { titleId: "e" }], [
+      { titleId: "a", outcome: "added" },
+      { titleId: "gone", outcome: "added" },
+    ]);
+    assert.deepEqual(p.pending, ["e"]);
+    assert.equal(p.exported, 1);
+    assert.equal(p.total, 2);
+  });
+  await check("plan: dos pasadas completas → cero pendientes (re-exportar no duplica)", () => {
+    const all = songs.map((s) => ({ titleId: s.titleId, outcome: "added" as const }));
+    assert.deepEqual(planExport(songs, all).pending, []);
+    assert.deepEqual(planExport(songs, [...all, ...all]).pending, []);
+  });
+  await check("reporte Apple: solo ids de la fiesta, sin duplicados, 'added' gana", () => {
+    const items = reportItems(["a", "b", "c"], ["a", "a", "zzz"], ["a", "b", "yyy"]);
+    assert.deepEqual(
+      items.sort((x, y) => x.titleId.localeCompare(y.titleId)),
+      [
+        { titleId: "a", outcome: "added" },
+        { titleId: "b", outcome: "missing" },
+      ],
+    );
+  });
+  await check("reporte Apple: el body no acepta userId ni un playlistId raro", () => {
+    assert.ok(AppleMusicReportBodySchema.safeParse({ playlistId: "p.AbC", added: ["x"] }).success);
+    assert.ok(!AppleMusicReportBodySchema.safeParse({ playlistId: "p.a b" }).success);
+    const parsed = AppleMusicReportBodySchema.parse({ playlistId: "p.A", userId: "u" }) as Record<string, unknown>;
+    assert.ok(!("userId" in parsed));
+    assert.deepEqual(parsed.added, []);
+  });
+
+  // ---------- track matching ----------
+  const cand = (over: Partial<TrackCandidate>): TrackCandidate => ({
+    id: over.id ?? "1",
+    title: over.title ?? "Thriller",
+    version: over.version ?? null,
+    artists: over.artists ?? ["Michael Jackson"],
+    durationMs: over.durationMs === undefined ? 357000 : over.durationMs,
+  });
+  const q = { title: "Thriller", artist: "Michael Jackson", durationMs: 357000 };
+  await check("match: exacto", () => {
+    assert.equal(pickTrackMatch(q, [cand({})])?.id, "1");
+  });
+  await check("match: «Cars» nunca es «Cars 2» (sin contención)", () => {
+    assert.equal(pickTrackMatch({ title: "Cars", artist: "Gary Numan", durationMs: null }, [cand({ title: "Cars 2", artists: ["Gary Numan"] })]), null);
+  });
+  await check("match: versión Remaster sí; Live no; Live contra Live sí", () => {
+    assert.equal(pickTrackMatch(q, [cand({ version: "2008 Remaster" })])?.id, "1");
+    assert.equal(pickTrackMatch(q, [cand({ version: "Live" })]), null);
+    assert.equal(pickTrackMatch({ ...q, title: "Thriller (Live)" }, [cand({ version: "Live" })])?.id, "1");
+    assert.equal(pickTrackMatch({ ...q, title: "Thriller (Live)" }, [cand({ title: "Thriller (Live)", version: "Live" })])?.id, "1");
+  });
+  await check("match: duración > 7 s de diferencia = otra canción; la más cercana gana", () => {
+    assert.equal(pickTrackMatch(q, [cand({ durationMs: 357000 + 8000 })]), null);
+    const pick = pickTrackMatch(q, [cand({ id: "far", durationMs: 351000 }), cand({ id: "near", durationMs: 356500 })]);
+    assert.equal(pick?.id, "near");
+    assert.equal(pickTrackMatch({ ...q, durationMs: null }, [cand({ durationMs: 999999 })])?.id, "1");
+  });
+  await check("match: cada artista acreditado; sin artistas no hay match", () => {
+    assert.equal(pickTrackMatch({ ...q, artist: "Michael Jackson & Paul McCartney" }, [cand({})]), null);
+    assert.equal(
+      pickTrackMatch({ ...q, artist: "Michael Jackson & Paul McCartney" }, [cand({ artists: ["Paul McCartney", "Michael Jackson"] })])?.id,
+      "1",
+    );
+    assert.equal(pickTrackMatch(q, [cand({ artists: [] })]), null);
+    assert.equal(pickTrackMatch({ ...q, artist: null }, [cand({})]), null);
+    assert.equal(pickTrackMatch(q, [cand({ artists: ["Someone Else"] })]), null);
+  });
+  await check("match: feat. en el título (iTunes) vs acreditado (TIDAL); cirílico", () => {
+    assert.equal(
+      pickTrackMatch({ title: "Señorita (feat. Camila Cabello)", artist: "Shawn Mendes", durationMs: 191000 }, [
+        cand({ title: "Señorita", artists: ["Shawn Mendes", "Camila Cabello"], durationMs: 190800 }),
+      ])?.id,
+      "1",
+    );
+    assert.equal(
+      pickTrackMatch({ title: "Там, где рассвет", artist: "Би-2", durationMs: null }, [cand({ title: "Там, где рассвет", artists: ["Би-2"] })])?.id,
+      "1",
+    );
+  });
+  await check("duración ISO 8601 e ISRC", () => {
+    assert.equal(isoDurationMs("PT3M58S"), 238000);
+    assert.equal(isoDurationMs("PT1H2M3.5S"), 3723500);
+    assert.equal(isoDurationMs("PT"), null);
+    assert.equal(isoDurationMs(238), null);
+    assert.equal(normalizeIsrc("usrc17607839"), "USRC17607839");
+    assert.equal(normalizeIsrc("US-RC1-76-07839"), "USRC17607839");
+    assert.equal(normalizeIsrc("nope"), null);
+  });
+
+  // ---------- env gates ----------
+  await check("TIDAL: sin redirect URI = no disponible (aunque existan las llaves del link-out)", () => {
+    const base = { TIDAL_CLIENT_ID: "id", TIDAL_CLIENT_SECRET: "s" };
+    assert.equal(tidalOAuthConfig(base), null);
+    assert.ok(tidalOAuthConfig({ ...base, TIDAL_OAUTH_REDIRECT_URI: "https://get-kura.app/api/music/tidal/callback" }));
+    assert.ok(tidalOAuthConfig({ ...base, TIDAL_OAUTH_REDIRECT_URI: "http://localhost:3010/api/music/tidal/callback" }));
+    assert.equal(tidalOAuthConfig({ ...base, TIDAL_OAUTH_REDIRECT_URI: "http://get-kura.app/cb" }), null);
+    assert.equal(tidalOAuthConfig({ ...base, TIDAL_OAUTH_REDIRECT_URI: "nope" }), null);
+    assert.equal(tidalOAuthConfig({ TIDAL_CLIENT_ID: "id", TIDAL_OAUTH_REDIRECT_URI: "https://x.app/cb" }), null);
+  });
+
+  const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const escaped = pem.replace(/\n/g, "\\n");
+  await check("Apple Music: llave dedicada > compartida; media pareja dedicada = mal configurado", () => {
+    const dedicated = appleMusicKeyConfig({ APPLE_TEAM_ID: "T", APPLE_MUSIC_KEY_ID: "MK", APPLE_MUSIC_PRIVATE_KEY: escaped, APPLE_KEY_ID: "K", APPLE_PRIVATE_KEY: escaped });
+    assert.equal(dedicated?.keyId, "MK");
+    assert.equal(dedicated?.source, "dedicated");
+    const shared = appleMusicKeyConfig({ APPLE_TEAM_ID: "T", APPLE_KEY_ID: "K", APPLE_PRIVATE_KEY: escaped });
+    assert.equal(shared?.keyId, "K");
+    assert.equal(shared?.source, "shared");
+    assert.equal(appleMusicKeyConfig({ APPLE_TEAM_ID: "T", APPLE_MUSIC_KEY_ID: "MK", APPLE_KEY_ID: "K", APPLE_PRIVATE_KEY: escaped }), null);
+    assert.equal(appleMusicKeyConfig({ APPLE_KEY_ID: "K", APPLE_PRIVATE_KEY: escaped }), null);
+    assert.equal(appleMusicKeyConfig({ APPLE_TEAM_ID: "T", APPLE_KEY_ID: "K", APPLE_PRIVATE_KEY: "not a key!" }), null);
+  });
+  await check("Apple Music: developer token ES256, kid, iss = team, exp = iat + 12 h, verificable", async () => {
+    const cfg = appleMusicKeyConfig({ APPLE_TEAM_ID: "TEAM123456", APPLE_MUSIC_KEY_ID: "KEY1234567", APPLE_MUSIC_PRIVATE_KEY: escaped });
+    assert.ok(cfg);
+    const now = 1_790_000_000;
+    const jwt = await signAppleMusicDeveloperToken(cfg, now);
+    const header = decodeProtectedHeader(jwt);
+    assert.equal(header.alg, "ES256");
+    assert.equal(header.kid, "KEY1234567");
+    const spki = await importSPKI(publicKey.export({ type: "spki", format: "pem" }).toString(), "ES256");
+    const { payload } = await jwtVerify(jwt, spki, { currentDate: new Date((now + 60) * 1000) });
+    assert.equal(payload.iss, "TEAM123456");
+    assert.equal(payload.iat, now);
+    assert.equal(payload.exp, now + 12 * 3600);
+    assert.ok(!("sub" in payload) && !("aud" in payload));
+  });
+
+  // ---------- wire ----------
+  await check("canción de fiesta: appleMusicId = trackId (y null si falta)", () => {
+    assert.equal(songFactsOf({ trackId: 1440833098 }).appleMusicId, "1440833098");
+    assert.equal(songFactsOf({}).appleMusicId, null);
+    assert.equal(songFactsOf({ trackId: -1 }).appleMusicId, null);
+  });
+  const person = { handle: "ana", name: "Ana", avatarUrl: null };
+  const song = (titleId: string, state: "pending" | "added" | "missing") => ({
+    titleId,
+    title: "Thriller",
+    artist: "Michael Jackson",
+    album: "Thriller",
+    artworkUrl: "https://is1-ssl.mzstatic.com/a/600x600bb.jpg",
+    durationMs: 357000,
+    appleMusicId: "1440833098",
+    isrc: state === "missing" ? null : "USSM18200530",
+    state,
+    addedBy: titleId === "b" ? null : person,
+    mine: titleId === "a",
+  });
+  const exportState: ExportState = {
+    provider: "tidal",
+    playlistName: "la fiesta de eric",
+    status: "in_progress",
+    total: 3,
+    exported: 1,
+    processed: 2,
+    current: { titleId: "c", title: "Thriller", artist: "Michael Jackson" },
+    playlist: { id: "550e8400-e29b-41d4-a716-446655440000", url: "https://tidal.com/playlist/550e8400-e29b-41d4-a716-446655440000" },
+    missing: [song("b", "missing")],
+    songs: [song("a", "added"), song("b", "missing"), song("c", "pending")],
+    busy: false,
+  };
+  await check("toExportState → ExportStateSchema ('Puso alguien' = addedBy null)", () => {
+    const w = ExportStateSchema.parse(toExportState(exportState));
+    assert.equal(w.missing[0].addedBy, null);
+    assert.equal(w.songs[2].state, "pending");
+  });
+  await check("MusicServicesSchema: forma de la hoja", () => {
+    MusicServicesSchema.parse({ apple_music: { available: false, reason: "not_configured" }, tidal: { available: true, connected: false } });
+    assert.ok(!MusicServicesSchema.safeParse({ apple_music: { available: true } }).success);
+  });
+
+  // ---------- source greps ----------
+  const root = join(__dirname, "..");
+  const src = (p: string) => readFileSync(join(root, p), "utf8");
+  function walk(dir: string): string[] {
+    return readdirSync(dir).flatMap((f) => {
+      const p = join(dir, f);
+      return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(f) ? [p] : [];
+    });
+  }
+  await check("tokens cifrados: solo tidal-auth.ts toca accessTokenEnc/refreshTokenEnc/codeEnc", () => {
+    const offenders = walk(join(root, "src"))
+      .filter((f) => !f.endsWith("modules/music-export/tidal-auth.ts") && !f.endsWith("db/schema.ts"))
+      .filter((f) => /\b(accessTokenEnc|refreshTokenEnc|codeVerifierEnc|codeEnc)\b/.test(readFileSync(f, "utf8")));
+    assert.deepEqual(offenders.map((f) => f.slice(root.length + 1)), []);
+  });
+  await check("ningún console.* del export imprime un token/código/verifier", () => {
+    for (const f of walk(join(root, "src/modules/music-export")).concat(walk(join(root, "src/app/api/music")))) {
+      for (const line of readFileSync(f, "utf8").split("\n")) {
+        if (!/console\.(log|warn|error|info)/.test(line)) continue;
+        assert.ok(!/(accessToken|refreshToken|verifier|params\.code|\bcode\b\)|dev\.token|\.token\b)/.test(line), `${f}: ${line.trim()}`);
+      }
+    }
+  });
+  await check("borde API: MusicExportError mapeado en errorToResponse", () => {
+    const api = src("src/authz/api.ts");
+    assert.ok(/err instanceof MusicExportError/.test(api));
+  });
+  await check("fusión/borrado: las 3 tablas con user_id están decididas (cascade)", () => {
+    for (const t of ["music_connection", "music_oauth_state", "party_export"]) {
+      assert.deepEqual(MERGE_COVERAGE[t]?.actions, ["cascade"], t);
+    }
+  });
+  await check("switch 0034: apagado hasta aplicar la migración (recordatorio)", () => {
+    assert.equal(typeof MIGRATION_0034_LIVE, "boolean");
+    if (MIGRATION_0034_LIVE) console.log("     (MIGRATION_0034_LIVE = true: la 0034 debe estar aplicada)");
+  });
+
+  console.log(failures === 0 ? "\ncheck-music-export ok" : `\n${failures} fallos`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+void main();

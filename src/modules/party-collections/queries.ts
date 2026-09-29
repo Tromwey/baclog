@@ -126,6 +126,7 @@ function toSong(r: SongRow, ctx: SongCtx): PartySong {
     previewUrl: facts.previewUrl,
     durationMs: facts.durationMs,
     appleMusicUrl: facts.appleMusicUrl,
+    appleMusicId: facts.appleMusicId,
     paletteHex: r.paletteHex ?? null,
     addedAt: r.addedAt,
     addedBy: personOf(r),

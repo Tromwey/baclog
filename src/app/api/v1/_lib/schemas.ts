@@ -757,6 +757,9 @@ export const PartySongSchema = z.object({
   previewUrl: z.string().url().nullable(),
   durationMs: z.number().int().nonnegative().nullable(),
   appleMusicUrl: z.string().url().nullable(),
+  /** Apple Music CATALOG id (= iTunes trackId, storefront mx) — the id MusicKit
+   *  adds to a playlist (export-contract.md). Additive 2026-09-29. */
+  appleMusicId: z.string().regex(/^\d+$/).nullable(),
   /** Cover palette; empty until someone extracted it on-device. */
   palette: z.array(HexSchema),
   addedAt: IsoDateSchema,
@@ -893,4 +896,80 @@ export const AddPartySongBodySchema = z.object({
 
 export const PartySongPaletteBodySchema = z.object({
   paletteHex: z.array(HexSchema).min(1).max(6),
+});
+
+// ---------- Music export ("Llévala a otra app", 2026-09-29, migration 0034) ----------
+// Contract: .claude/knowledge/state/export-contract.md. Every route answers
+// 503 `unavailable` (reason `migration`) while MIGRATION_0034_LIVE is false.
+
+export const MusicProviderSchema = z.enum(["apple_music", "tidal"]);
+
+export const MusicServicesSchema = z.object({
+  apple_music: z.object({
+    available: z.boolean(),
+    reason: z.enum(["not_configured", "key_rejected"]).optional(),
+  }),
+  tidal: z.object({
+    available: z.boolean(),
+    connected: z.boolean(),
+    reason: z.enum(["not_configured"]).optional(),
+  }),
+});
+
+/** MusicKit developer token — public by design (MusicKit JS ships it to the browser). */
+export const AppleDeveloperTokenSchema = z.object({
+  token: z.string().min(1),
+  expiresAt: IsoDateSchema,
+});
+
+export const TidalStartSchema = z.object({
+  /** Open in ASWebAuthenticationSession with callbackURLScheme "kura". */
+  authorizeUrl: z.string().url(),
+});
+
+export const TidalCompleteBodySchema = z.object({
+  /** The `ref` of `kura://music/tidal/authorized?ref=…`. */
+  ref: z.string().regex(/^i[A-Za-z0-9_-]{43}$/),
+});
+
+export const ExportSongSchema = z.object({
+  titleId: z.string().min(1),
+  title: z.string().min(1),
+  artist: z.string().nullable(),
+  album: z.string().nullable(),
+  artworkUrl: z.string().url().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  appleMusicId: z.string().regex(/^\d+$/).nullable(),
+  isrc: z.string().regex(/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/).nullable(),
+  state: z.enum(["pending", "added", "missing"]),
+  /** null = "Puso alguien". */
+  addedBy: PartyPersonSchema.nullable(),
+  mine: z.boolean(),
+});
+
+export const ExportStateSchema = z.object({
+  provider: MusicProviderSchema,
+  playlistName: z.string().min(1),
+  status: z.enum(["idle", "in_progress", "done"]),
+  total: z.number().int().nonnegative(),
+  exported: z.number().int().nonnegative(),
+  processed: z.number().int().nonnegative(),
+  current: z
+    .object({ titleId: z.string().min(1), title: z.string().min(1), artist: z.string().nullable() })
+    .nullable(),
+  playlist: z.object({ id: z.string().min(1), url: z.string().url().nullable() }).nullable(),
+  missing: z.array(ExportSongSchema),
+  songs: z.array(ExportSongSchema),
+  busy: z.boolean(),
+});
+export type ExportStateWire = z.infer<typeof ExportStateSchema>;
+
+const TitleIdListSchema = z.array(z.string().min(1).max(64)).max(1000);
+
+/** PUT /parties/{id}/exports/apple_music — what the client did with MusicKit. */
+export const AppleMusicReportBodySchema = z.object({
+  playlistId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
+  replace: z.boolean().optional(),
+  added: TitleIdListSchema.default([]),
+  missing: TitleIdListSchema.default([]),
 });

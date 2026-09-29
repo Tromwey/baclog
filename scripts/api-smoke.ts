@@ -68,7 +68,7 @@ import {
   paginated,
 } from "../src/app/api/v1/_lib/schemas";
 // Colecciones de fiesta (0033)
-import { PartyCardSchema } from "../src/app/api/v1/_lib/schemas";
+import { MusicServicesSchema, PartyCardSchema } from "../src/app/api/v1/_lib/schemas";
 
 loadEnv({ path: ".env.local" });
 
@@ -260,6 +260,13 @@ async function migration0029LiveInSource(): Promise<boolean> {
 
 /** `MIGRATION_0033_LIVE` as written in src/modules/party-collections/live.ts
  *  (colecciones de fiesta), parsed like 0029's. */
+async function migration0034LiveInSource(): Promise<boolean> {
+  const src = await readFile(resolvePath("src/modules/music-export/live.ts"), "utf8");
+  const m = /^export const MIGRATION_0034_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
+  assert.ok(m, "no encuentro `export const MIGRATION_0034_LIVE = true|false;` en src/modules/music-export/live.ts");
+  return m[1] === "true";
+}
+
 async function migration0033LiveInSource(): Promise<boolean> {
   const src = await readFile(resolvePath("src/modules/party-collections/live.ts"), "utf8");
   const m = /^export const MIGRATION_0033_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
@@ -995,6 +1002,31 @@ const reads: Case[] = [
       if (!(await migration0033LiveInSource())) skip("MIGRATION_0033_LIVE = false: /parties/{id} responde 503");
       const res = await call("GET", "/parties/00000000-0000-4000-8000-000000000000", { token: ctx.token });
       expectError(res, 404, "not_found");
+    },
+  },
+  // Exportar una fiesta (0034)
+  {
+    name: "GET /music/services → MusicServices (503 sin la migración 0034)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const res = await call("GET", "/music/services", { token: ctx.token });
+      if (!(await migration0034LiveInSource())) {
+        expectError(res, 503, "unavailable");
+        skip("MIGRATION_0034_LIVE = false: /music/services responde 503 (verificado)");
+      }
+      expectOk(res, 200, MusicServicesSchema);
+    },
+  },
+  {
+    name: "GET /parties/{id}/exports/{provider}: fiesta ajena = 404; proveedor desconocido = 404",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      if (!(await migration0034LiveInSource())) {
+        expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/tidal", { token: ctx.token }), 503, "unavailable");
+        skip("MIGRATION_0034_LIVE = false: /exports responde 503 (verificado)");
+      }
+      expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/tidal", { token: ctx.token }), 404, "not_found");
+      expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/spotify", { token: ctx.token }), 404, "not_found");
     },
   },
   // L1

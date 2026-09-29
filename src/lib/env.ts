@@ -35,6 +35,16 @@ export const env = {
   TIDAL_CLIENT_ID: process.env.TIDAL_CLIENT_ID,
   TIDAL_CLIENT_SECRET: process.env.TIDAL_CLIENT_SECRET,
   /**
+   * Optional (music export, 0034): the EXACT redirect URI registered for the
+   * same TIDAL app (`https://get-kura.app/api/music/tidal/callback`). Absent →
+   * "Llévala a TIDAL" is "Próximamente". Read (with the Apple Music key
+   * vars `APPLE_MUSIC_KEY_ID` / `APPLE_MUSIC_PRIVATE_KEY` and the optional
+   * `MUSIC_TOKEN_KEY`) through `modules/music-export/config.ts` and
+   * `lib/secret-box.ts`, which take `process.env` directly so the check
+   * script can drive them.
+   */
+  TIDAL_OAUTH_REDIRECT_URI: process.env.TIDAL_OAUTH_REDIRECT_URI,
+  /**
    * Optional (Descubrir · Kurada): comma-separated usernames of the TEAM
    * accounts whose public collections show as "Colecciones Kuradas" on the
    * format pages. Absent/empty → the section doesn't render. A list, not
