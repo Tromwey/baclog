@@ -523,7 +523,6 @@ function SoonDiscs({
     <section className="flex flex-col gap-3.5 pt-10">
       <div className="flex items-baseline justify-between gap-3 px-5">
         <h2 className="font-display text-[22px] leading-[1.1] text-text">próximos discos</h2>
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">en tus colecciones</span>
       </div>
       <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5">
         {items.map((u) => (
