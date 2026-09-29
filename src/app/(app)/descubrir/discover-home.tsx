@@ -64,9 +64,9 @@ const REC_GLASS =
  *    title, the mono meta, Guardar.
  *  - **Para empezar** — with no recommendation yet, a card that explains the
  *    flame instead.
- *  - **colecciones para ti · de gente que sigues** — two-column fans.
- *  - **tendencias · esta semana** — rank 1–5.
- *  - **próximos lanzamientos · en tus colecciones** — the date on the cover,
+ *  - **colecciones para ti** (de gente que sigues) — two-column fans.
+ *  - **tendencias** (esta semana) — rank 1–5.
+ *  - **los más esperados** (lo que aún no sale, en tus colecciones) — the date on the cover,
  *    the collection under the title.
  *  - **una conexión** — the Double Feature card.
  *
@@ -200,7 +200,7 @@ export function DiscoverHome({
 
         {followedCollections.length > 0 && (
           <section className="flex flex-col gap-[18px] pt-10">
-            <SectionHead aside="de gente que sigues">colecciones para ti</SectionHead>
+            <SectionHead>colecciones para ti</SectionHead>
             <div className="grid grid-cols-2 gap-x-3 gap-y-7 px-5">
               {followedCollections.map((c) => (
                 <CollectionTile key={c.id} card={c} />
@@ -211,7 +211,7 @@ export function DiscoverHome({
 
         {shownTrend.length > 0 && (
           <section className="flex flex-col gap-2 pt-10">
-            <SectionHead aside="esta semana">tendencias</SectionHead>
+            <SectionHead>tendencias</SectionHead>
             <ol className="flex flex-col">
               {shownTrend.map((t, i) => (
                 <TrendRow
@@ -229,7 +229,7 @@ export function DiscoverHome({
 
         {shownSoon.length > 0 && (
           <section className="flex flex-col gap-3.5 pt-9">
-            <SectionHead aside="en tus colecciones">próximos lanzamientos</SectionHead>
+            <SectionHead>los más esperados</SectionHead>
             <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-4">
               {shownSoon.map((u) => (
                 <SoonTile key={u.catalogItemId} item={u} now={now} onOpen={onOpen} />

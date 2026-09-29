@@ -230,7 +230,7 @@ struct DiscoverView: View {
         let cols = store.discover?.collections ?? []
         if !cols.isEmpty {
             VStack(alignment: .leading, spacing: 18) {
-                sectionHead("colecciones para ti", trailing: "de gente que sigues")
+                sectionHead("colecciones para ti")
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 28) {
                     ForEach(cols) { c in
                         VStack(spacing: 8) {
@@ -261,7 +261,7 @@ struct DiscoverView: View {
         let list = (store.discover?.trending ?? []).map { store.title($0.title.id) ?? $0.title }.filter(inTab).prefix(5)
         if !list.isEmpty {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHead("tendencias", trailing: "esta semana")
+            sectionHead("tendencias")
             VStack(spacing: 0) {
                 ForEach(Array(list.enumerated()), id: \.element.id) { i, t in
                     HStack(spacing: 14) {
@@ -295,7 +295,7 @@ struct DiscoverView: View {
         return t.year.map(String.init) ?? ""
     }
 
-    // "nuevos y próximos lanzamientos"
+    // "los más esperados" — what is still ahead in your collections.
     @ViewBuilder private var upcoming: some View {
         let list = (store.discover?.upcoming ?? []).map { u -> (Title, String, String?) in
             let t = store.title(u.title.id) ?? u.title
@@ -303,7 +303,7 @@ struct DiscoverView: View {
         }.filter { inTab($0.0) }
         if !list.isEmpty {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHead("próximos lanzamientos", trailing: "en tus colecciones")
+            sectionHead("los más esperados")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .bottom, spacing: 12) {
                     ForEach(list, id: \.0.id) { t, when, filed in
@@ -1021,7 +1021,7 @@ private struct DiscoverFormatPage: View {
         let list = (store.discover?.upcoming ?? []).map { (fresh($0.title), $0.releaseDate) }.filter { $0.0.format == .album }
         if !list.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                SectionTitle(text: "próximos discos", trailing: "en tus colecciones", size: 22).padding(.horizontal, 20)
+                SectionTitle(text: "próximos discos", size: 22).padding(.horizontal, 20)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(list, id: \.0.id) { t, date in
