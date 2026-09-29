@@ -13,7 +13,9 @@ import Foundation
 /// The server writes only while its palette is still empty, and answers with the one that won.
 extension AppStore {
     func fillPaletteIfNeeded(_ t: Title) {
-        guard t.palette.isEmpty, titles[t.id]?.palette.isEmpty ?? true,
+        // A party song drawn through `CoverView`/`FanView` is not a catalog title: its palette goes
+        // through `PUT /parties/{id}/songs/{titleId}/palette` (`AppStore+Parties`), never here.
+        guard !PartySong.isArt(t.id), t.palette.isEmpty, titles[t.id]?.palette.isEmpty ?? true,
               let url = t.coverURL, paletteAttempts.insert(t.id).inserted else { return }
         let session = s
         Task { [weak self] in

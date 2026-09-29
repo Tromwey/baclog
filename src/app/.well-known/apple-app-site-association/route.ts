@@ -62,6 +62,12 @@ const association = {
           { "/": "/item/*", comment: "title" },
           // Your own collection (web app route).
           { "/": "/backlogs/*", comment: "own collection" },
+          // Colecciones de fiesta: the invite link and the member page (`DeepLink.invite` /
+          // `DeepLink.party`). Handles are ≥ 3 chars, so /f and /c never shadow a profile;
+          // the bare paths stay on the web.
+          exclude("/f"), exclude("/c"),
+          { "/": "/f/*", comment: "party invite" },
+          { "/": "/c/*", comment: "party" },
           // The public routes the clean URLs rewrite onto.
           { "/": "/u/*", comment: "public profile, collection or title" },
           // Clean public URLs: /{handle}, /{handle}/{collectionId}, /{handle}/item/{titleId}.

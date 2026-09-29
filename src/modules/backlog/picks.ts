@@ -6,6 +6,7 @@ import { backlogs, userItems } from "@/db/schema";
 import { backfillPreorderDate } from "@/modules/catalog/preorder";
 import { ensureUserItemAndMembership } from "./membership";
 import { paletteHexSchema } from "./palette";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 
 /** The first backlog every account gets, born from its three picks. */
 export const FIRST_BACKLOG = {
@@ -60,7 +61,8 @@ export async function completePicks(
   const [newest] = await db
     .select({ id: backlogs.id })
     .from(backlogs)
-    .where(eq(backlogs.userId, userId))
+    // Never a party (colecciones de fiesta): it only takes songs.
+    .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id)))
     .orderBy(desc(backlogs.createdAt))
     .limit(1);
 

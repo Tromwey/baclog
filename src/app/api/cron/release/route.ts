@@ -28,6 +28,7 @@ import { releaseFirstLine, releaseSubject, sendReleaseEmail } from "@/auth/maile
 import { pushToUsers, type PushTarget } from "@/modules/push/apns";
 import { sweepExpiredVerificationTokens } from "@/auth/otp";
 import { pruneStaleDeviceTokens } from "@/modules/push/devices";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 export const maxDuration = 60;
 
@@ -270,7 +271,9 @@ export async function GET(request: Request) {
     .select({
       id: catalogItems.id,
       source: catalogItems.source,
-      mediaType: catalogItems.mediaType,
+      // Library formats only (a party song never has a user_item, so never
+      // an owner to mail); the filter below makes it explicit.
+      mediaType: libraryMediaType(),
       externalId: catalogItems.externalId,
       title: catalogItems.title,
       byline: catalogItems.byline,
@@ -284,6 +287,7 @@ export async function GET(request: Request) {
       and(
         gte(catalogItems.releaseDate, since),
         lte(catalogItems.releaseDate, now),
+        libraryMedia(),
         exists(
           db
             .select({ one: sql`1` })

@@ -65,11 +65,13 @@ struct GlassButton: View {
 }
 
 /// Solid button — text color fill, bg text. The one primary action.
+/// `honey`: the screen's ONE accent action (`KColor.accent` + `onAccent`, fiesta-app-v2's CTAs).
 struct SolidButton: View {
     let title: String
     var systemImage: String? = nil
     var height: CGFloat = 52
     var enabled = true
+    var honey = false
     let action: () -> Void
     @ScaledMetric(relativeTo: .callout) private var iconSize: CGFloat = 17
 
@@ -80,10 +82,10 @@ struct SolidButton: View {
                 Text(title).font(.kura.ui(16, .semibold)).lineLimit(1)
             }
             .padding(.horizontal, 20)
-            .foregroundStyle(enabled ? KColor.bg : KColor.text2)
+            .foregroundStyle(enabled ? (honey ? KColor.onAccent : KColor.bg) : KColor.text2)
             .frame(maxWidth: .infinity)
             .frame(height: height)
-            .background(enabled ? KColor.text : KColor.s2, in: Capsule())
+            .background(enabled ? (honey ? KColor.accent : KColor.text) : KColor.s2, in: Capsule())
             .contentShape(Capsule())
             .animation(KMotion.fade, value: enabled)
         }

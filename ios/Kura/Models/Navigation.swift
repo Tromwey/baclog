@@ -48,6 +48,10 @@ enum Route: Hashable {
     case mergeCode
     /// What moves and what disappears, then `POST /me/merge` (the proof lives in `AppStore.mergeProof`).
     case mergeConfirm
+    /// A party (colección de fiesta, `/c/{id}` on the web): host and members only.
+    case party(String)
+    /// Its song search ("Buscar canción"), full screen with Cancelar.
+    case partySearch(String)
 
     /// The dock stays on these (a title, a collection — yours, automatic or someone else's — and
     /// a person and their seguidores: the same browsing from any tab, crítica 2026-09-27 #15; it

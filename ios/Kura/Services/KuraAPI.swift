@@ -158,6 +158,43 @@ protocol KuraAPI: Sendable {
     // MARK: Recap
     func recapMonths() async throws -> [RecapMonth]
     func recap(era: String) async throws -> RecapPayload
+
+    // MARK: Parties (colecciones de fiesta — `.claude/knowledge/state/fiesta-contract.md` §5)
+    // Every call is `503 unavailable` while the server's `MIGRATION_0033_LIVE` is off: the store
+    // turns that into "Las fiestas llegan muy pronto." and never crashes. Implemented in
+    // `LiveAPI+Parties.swift` and `Mock/MockParties.swift`.
+    /// `GET /parties` → `{ items }`: host and guest, blocked included, newest first.
+    func parties() async throws -> [PartyCard]
+    /// `POST /parties` `{ name, perGuestLimit }` (nil = ilimitadas, sent as `null`).
+    func createParty(name: String, perGuestLimit: Int?) async throws -> Party
+    func party(id: String) async throws -> Party
+    /// `PATCH /parties/{id}` — host only (a guest gets the same 404). `perGuestLimit`: outer nil =
+    /// untouched, `.some(nil)` = ilimitadas.
+    func updateParty(id: String, name: String?, perGuestLimit: Int??) async throws -> Party
+    func deleteParty(id: String) async throws
+    /// `POST /parties/{id}/invite`: a new link; the old one dies.
+    func rotatePartyInvite(id: String) async throws -> Party
+    /// `DELETE /parties/{id}/invite`: nobody else gets in; members stay.
+    func revokePartyInvite(id: String) async throws -> Party
+    /// `GET /parties/{id}/songs?q=` (1…100 chars). `[]` = no results; 503 = iTunes down; 429.
+    func searchPartySongs(id: String, query: String) async throws -> [PartySongHit]
+    /// `PUT /parties/{id}/songs/{titleId}`. 403 `blocked`/`view_only`, 409 `duplicate_mine` /
+    /// `duplicate_other` / `cap_reached` (their `message` is the final copy).
+    func addPartySong(id: String, titleID: String, paletteHex: [String]?) async throws -> Party
+    /// `DELETE /parties/{id}/songs/{titleId}` (idempotent). 403 `not_yours`.
+    func removePartySong(id: String, titleID: String) async throws -> Party
+    /// `POST /parties/{id}/songs/{titleId}/block` — "Quitar y bloquear a @x". 409 `not_blockable`.
+    func removeAndBlockPartyGuest(id: String, titleID: String) async throws -> Party
+    /// `PUT /parties/{id}/songs/{titleId}/palette` `{ paletteHex }` → 204 (first writer wins).
+    func fillPartySongPalette(id: String, titleID: String, hexes: [String]) async throws
+    /// `DELETE /parties/{id}/blocked/{guestRef}`.
+    func unblockPartyGuest(id: String, guestRef: String) async throws -> Party
+    /// `POST /parties/{id}/leave` → 204 — a guest leaves (their songs stay). 404 if you're not a guest.
+    func leaveParty(id: String) async throws
+    /// `GET /invites/{token}` — public; the bearer (if any) fills `viewer`. 404 = "ya no funciona".
+    func invitePreview(token: String) async throws -> InvitePreview
+    /// `POST /invites/{token}/join`. 404 dead link · 403 `onboarding_required`.
+    func joinParty(token: String) async throws -> PartyJoin
 }
 
 /// `PATCH /me` body — only the fields you set are sent.

@@ -13,6 +13,7 @@ import type { MediaType } from "@/modules/catalog/types";
 import { getPublicCollaborators } from "./collaborators";
 import { byManualOrder, fanHexes, fanOf } from "./fan";
 import { dominantHexes, groupDominantHexes } from "./palette";
+import { asLibraryRow, libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * THE deliberate authz exception (see src/authz): these queries run with
@@ -79,7 +80,7 @@ export async function getPublicProfile(username: string) {
             // Kura (2026-09-24): the card draws each cover at its native
             // aspect (disco 1:1, póster 2:3), so the fan carries the kind.
             // Catalog data, not user state — still inside the public list.
-            mediaType: catalogItems.mediaType,
+            mediaType: libraryMediaType(),
             // The owner's manual order (fan.ts `byManualOrder`) — the web fan
             // AND the API's `titleIds`/`fanTitleIds` read it. Rows arrive
             // `addedAt desc` for the legacy covers/fans/palettes below.
@@ -93,9 +94,15 @@ export async function getPublicProfile(username: string) {
             eq(backlogItems.catalogItemId, catalogItems.id),
           )
           .where(
-            inArray(
-              backlogItems.backlogId,
-              lists.map((l) => l.id),
+            and(
+              inArray(
+                backlogItems.backlogId,
+                lists.map((l) => l.id),
+              ),
+              // No join to user_item here, so the library filter is explicit
+              // (a party collection is never public, but a song must not
+              // reach a public fan even if one were).
+              libraryMedia(),
             ),
           )
           .orderBy(desc(backlogItems.addedAt))
@@ -152,7 +159,7 @@ export async function getPublicProfile(username: string) {
     .select({
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
       releaseDate: catalogItems.releaseDate,
@@ -183,7 +190,7 @@ export async function getPublicProfile(username: string) {
     .select({
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
     })
@@ -329,7 +336,7 @@ export async function getPublicBacklog(username: string, backlogId: string) {
       // F3.8 — the countdown replaces the year on a public row too: the wait
       // is catalog data, identical for any visitor, session or not.
       releaseDate: catalogItems.releaseDate,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       // Cover-art colors only (nothing user-identifying) — feeds the backlog's
       // ADN aura on the public page via dominantHexes below. Shared catalog row.
@@ -357,7 +364,8 @@ export async function getPublicCatalogItem(catalogItemId: string) {
   const [item] = await db
     .select()
     .from(catalogItems)
-    .where(eq(catalogItems.id, catalogItemId))
+    // A party song (`track`) has no public item page: same 404 as unknown.
+    .where(and(eq(catalogItems.id, catalogItemId), libraryMedia()))
     .limit(1);
-  return item ?? null;
+  return item ? asLibraryRow(item) : null;
 }

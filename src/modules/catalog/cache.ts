@@ -3,12 +3,25 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
 import type { FilmFactsWrite } from "./film-facts";
+import { libraryMedia } from "./library-media";
 import type { SeriesFactsPatch } from "./series-status";
+import type { MediaType } from "./types";
 
 /** ADR-007: re-fetch horizon ≤3 months (TMDB caps caching at 6). */
 const STALE_MS = 90 * 24 * 60 * 60 * 1000;
 
-export type CatalogItemRow = typeof catalogItems.$inferSelect;
+/** Any `catalog_item` row, songs (`track`, colecciones de fiesta) included —
+ *  only the party module reads these. */
+export type AnyCatalogItemRow = typeof catalogItems.$inferSelect;
+
+/**
+ * A LIBRARY catalog row (film · series · album). Every generic getter below
+ * returns only these: a `track` (a party song, migration 0033) is invisible to
+ * the item pages, the membership/mark/review writes, link resolution and the
+ * API's `Title` — an id of a song behaves exactly like an unknown id there.
+ * Songs are read by `modules/party-collections` with its own queries.
+ */
+export type CatalogItemRow = Omit<AnyCatalogItemRow, "mediaType"> & { mediaType: MediaType };
 
 /**
  * Item reads serve from Postgres; staleness only matters for display
@@ -21,11 +34,11 @@ export async function getCatalogItem(
   const [row] = await db
     .select()
     .from(catalogItems)
-    .where(eq(catalogItems.id, id))
+    .where(and(eq(catalogItems.id, id), libraryMedia()))
     .limit(1);
   if (!row) return null;
   return {
-    ...row,
+    ...(row as CatalogItemRow),
     isStale: Date.now() - row.refreshedAt.getTime() > STALE_MS,
   };
 }
@@ -152,7 +165,11 @@ async function mergeIntoRaw(
  */
 export async function getCatalogItems(ids: string[]): Promise<CatalogItemRow[]> {
   if (ids.length === 0) return [];
-  return db.select().from(catalogItems).where(inArray(catalogItems.id, ids));
+  const rows = await db
+    .select()
+    .from(catalogItems)
+    .where(and(inArray(catalogItems.id, ids), libraryMedia()));
+  return rows as CatalogItemRow[];
 }
 
 /**
@@ -189,7 +206,9 @@ export async function findCatalogItemByRef(
   const [row] = await db
     .select()
     .from(catalogItems)
-    .where(and(eq(catalogItems.source, source), eq(catalogItems.externalId, externalId)))
+    .where(
+      and(eq(catalogItems.source, source), eq(catalogItems.externalId, externalId), libraryMedia()),
+    )
     .limit(1);
-  return row ?? null;
+  return (row as CatalogItemRow | undefined) ?? null;
 }

@@ -67,6 +67,8 @@ import {
   SearchResultSchema,
   paginated,
 } from "../src/app/api/v1/_lib/schemas";
+// Colecciones de fiesta (0033)
+import { PartyCardSchema } from "../src/app/api/v1/_lib/schemas";
 
 loadEnv({ path: ".env.local" });
 
@@ -253,6 +255,15 @@ async function migration0029LiveInSource(): Promise<boolean> {
   const src = await readFile(resolvePath("src/auth/live-0029.ts"), "utf8");
   const m = /^export const MIGRATION_0029_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
   assert.ok(m, "no encuentro `export const MIGRATION_0029_LIVE = true|false;` en src/auth/live-0029.ts");
+  return m[1] === "true";
+}
+
+/** `MIGRATION_0033_LIVE` as written in src/modules/party-collections/live.ts
+ *  (colecciones de fiesta), parsed like 0029's. */
+async function migration0033LiveInSource(): Promise<boolean> {
+  const src = await readFile(resolvePath("src/modules/party-collections/live.ts"), "utf8");
+  const m = /^export const MIGRATION_0033_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
+  assert.ok(m, "no encuentro `export const MIGRATION_0033_LIVE = true|false;` en src/modules/party-collections/live.ts");
   return m[1] === "true";
 }
 
@@ -795,10 +806,15 @@ const SWEEP_SEGMENTS: Record<string, string> = {
   "[apnsToken]": "a".repeat(64),
   // Phase 4g: `me/identities/{provider}` (the sweep only sends it without a bearer).
   "[provider]": "apple",
+  // Colecciones de fiesta: an invite token of the right shape, a guest ref.
+  "[token]": "AAAAAAAAAAAAAAAA",
+  "[guestRef]": "A".repeat(22),
 };
 /** The only v1 routes that are public by design (`withPublicApi`): the OTP
- *  pair and, since phase 4f, the social sign-ins + the provider list. */
-const SWEEP_PUBLIC = /^\/auth\/(otp|apple|google|providers)\//;
+ *  pair and, since phase 4f, the social sign-ins + the provider list, and
+ *  (colecciones de fiesta) the invite landing `GET /invites/{token}` — NOT
+ *  its `/join`, which needs the bearer. */
+const SWEEP_PUBLIC = /^\/(auth\/(otp|apple|google|providers)\/|invites\/[^/]+\/$)/;
 
 /**
  * Every (verb, path) of `src/app/api/v1/**\/route.ts` except `auth/otp/*`,
@@ -937,6 +953,32 @@ const reads: Case[] = [
       for (const bad of ["2026-13", "2026-00", "202608", "agosto", "1999-01"]) {
         expectError(await call("GET", `/recap/${bad}`, { token: ctx.token }), 404, "not_found");
       }
+    },
+  },
+  // Colecciones de fiesta (0033)
+  {
+    name: "GET /parties → { items: [PartyCard] } (503 sin la migración 0033)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const res = await call("GET", "/parties", { token: ctx.token });
+      if (!(await migration0033LiveInSource())) {
+        expectError(res, 503, "unavailable");
+        skip("MIGRATION_0033_LIVE = false: /parties responde 503 (verificado)");
+      }
+      expectOk(res, 200, z.object({ items: z.array(PartyCardSchema) }));
+    },
+  },
+  {
+    name: "GET /parties/{id} inexistente y GET /invites/{token} muerto → 404 (sin oráculo)",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      const dead = await call("GET", "/invites/AAAAAAAAAAAAAAAA", {});
+      expectError(dead, 404, "not_found");
+      const malformed = await call("GET", "/invites/no-es-token", {});
+      expectSameError(dead, malformed, 404, "not_found", "token malformado = token desconocido");
+      if (!(await migration0033LiveInSource())) skip("MIGRATION_0033_LIVE = false: /parties/{id} responde 503");
+      const res = await call("GET", "/parties/00000000-0000-4000-8000-000000000000", { token: ctx.token });
+      expectError(res, 404, "not_found");
     },
   },
   // L1

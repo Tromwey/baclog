@@ -60,7 +60,7 @@ export async function loadBacklogZoom(backlogId: string) {
           )
       : Promise.resolve([] as { backlogId: string; catalogItemId: string }[]),
     // Scoped: `backlog.id` came out of assertOwnsBacklog above.
-    getCollaboratorsForBacklogs([backlog.id]),
+    getCollaboratorsForBacklogs(user.id, [backlog.id]),
     getUserPalette(user.id),
   ]);
 

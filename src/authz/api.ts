@@ -11,6 +11,7 @@ import { afterResponse } from "@/lib/after-response";
 import { apiContext } from "./api-context";
 import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
+import { PartyUnavailableError } from "@/modules/party-collections/errors";
 
 export { apiContext } from "./api-context";
 
@@ -116,6 +117,10 @@ export interface ApiErrorExtra {
    *  follow-lists setting, so the app can say why ("solo seguidores
    *  mutuos" vs "solo su dueño"). */
   visibility?: "public" | "mutuals" | "private";
+  /** `conflict` + reason `duplicate_other` only (colecciones de fiesta): who
+   *  already put that song — `{ handle, name, avatarUrl }`, or null =
+   *  "alguien". Gated like every party identity (publicAuthor + blocks). */
+  addedBy?: { handle: string; name: string | null; avatarUrl: string | null } | null;
   /** HTTP status override — only 422, only for `invalid` + reason
    *  `invalid_proof` (phase 4g): a rejected ownership proof (provider token,
    *  merge code) on an AUTHENTICATED route. Not 401, which the app reads as
@@ -174,6 +179,7 @@ export function apiError(
       ...(extra.mergeToken ? { mergeToken: extra.mergeToken } : {}),
       ...(extra.source !== undefined ? { source: extra.source } : {}),
       ...(extra.visibility ? { visibility: extra.visibility } : {}),
+      ...(extra.addedBy !== undefined ? { addedBy: extra.addedBy } : {}),
     },
   };
   const headers = new Headers({
@@ -191,6 +197,10 @@ export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   if (err instanceof ApiError) return apiError(err.code, err.message, err.extra);
   if (err instanceof UnauthorizedError) return apiError("unauthorized");
   if (err instanceof NotFoundError) return apiError("not_found");
+  // Colecciones de fiesta before migration 0033 is live (party-collections/live.ts).
+  if (err instanceof PartyUnavailableError) {
+    return apiError("unavailable", "Las colecciones de fiesta todavía no están disponibles. Inténtalo más tarde.");
+  }
   if (err instanceof ZodError) {
     const fields: Record<string, string> = {};
     for (const issue of err.issues) {
@@ -484,12 +494,24 @@ function withRequestId(res: Response, rid: string): Response {
   }
 }
 
+/**
+ * The request path for logs, with credentials-in-the-path REDACTED: an
+ * invite token (`/invites/{token}`, colecciones de fiesta) is a 96-bit
+ * bearer secret for its party, and a 500 line must not hand it to whoever
+ * reads the logs (security B4).
+ */
+export function redactPath(path: string): string {
+  return path.replace(/\/invites\/[^/?#]+/g, "/invites/:token");
+}
+
 function pathOf(request: Request): string {
+  let path: string;
   try {
-    return new URL(request.url).pathname;
+    path = new URL(request.url).pathname;
   } catch {
-    return request.url;
+    path = request.url;
   }
+  return redactPath(path);
 }
 
 /**
@@ -536,20 +558,40 @@ export function withApi<P extends ApiParams = ApiParams>(
   };
 }
 
+/** Per-route rate-limit bucket for `withPublicApi` (default: the shared
+ *  `ip:` bucket of `auth/*` at the write limit). */
+export interface PublicApiOptions {
+  /** Key prefix: the limiter keys `${bucket}:${ip}`. */
+  bucket?: string;
+  /** Hits per 60 s window in that bucket. */
+  limit?: number;
+}
+
 /**
  * Unauthenticated wrapper for the public `auth/*` routes only (OTP
- * request/verify, `auth/apple`, `auth/google`, `auth/providers`): no bearer,
- * rate limit by client IP BEFORE anything else runs (write limit — they're
- * all POSTs), same error contract, cache policy and request id. Nothing else
- * in v1 may use it.
+ * request/verify, `auth/apple`, `auth/google`, `auth/providers`) and the
+ * party invite landing `GET invites/{token}` (colecciones de fiesta: the app
+ * opens a universal link before sign-in; the 96-bit token IS the
+ * credential, and the handler reads an OPTIONAL bearer with `readApiUser`):
+ * no bearer required, rate limit by client IP BEFORE anything else runs
+ * (write limit), same error contract, cache policy and request id. Nothing
+ * else in v1 may use it.
+ *
+ * `options.bucket` gives a route its OWN per-IP bucket (security B1): the
+ * invite landing uses `invite-ip`, so someone hammering tokens doesn't
+ * starve that IP's OTP requests, and a busy sign-in doesn't lock the
+ * landing.
  */
 export function withPublicApi<P extends ApiParams = ApiParams>(
   handler: PublicApiHandler<P>,
+  options: PublicApiOptions = {},
 ): RouteHandler<P> {
+  const bucket = options.bucket ?? "ip";
+  const limit = options.limit ?? RATE_LIMIT_WRITES;
   return async (request, context) => {
     const requestId = randomUUID();
     try {
-      const rl = checkRateLimit(`ip:${clientIp(request)}`, RATE_LIMIT_WRITES);
+      const rl = checkRateLimit(`${bucket}:${clientIp(request)}`, limit);
       if (!rl.ok) {
         return withRequestId(
           apiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds }),

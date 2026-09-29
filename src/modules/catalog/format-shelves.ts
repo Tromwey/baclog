@@ -1,5 +1,5 @@
 import "server-only";
-import { inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
 import { getFilmRuntime } from "./display-media";
@@ -17,6 +17,7 @@ import { cacheExternalItems } from "./search";
 import { getSeriesLength } from "./tmdb";
 import { discoverVideo } from "./tmdb-discover";
 import type { CatalogSearchResult, ExternalItem } from "./types";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Descubrir · por formato (Claude Design "Descubrir Final – Formatos", 2a–2c)
@@ -93,12 +94,12 @@ export async function getCineShelf(time: CineTime, now: number): Promise<CineWor
     .select({
       id: catalogItems.id,
       source: catalogItems.source,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       externalId: catalogItems.externalId,
       raw: catalogItems.raw,
     })
     .from(catalogItems)
-    .where(inArray(catalogItems.id, pairs.map((p) => p.row.catalogItemId)));
+    .where(and(inArray(catalogItems.id, pairs.map((p) => p.row.catalogItemId)), libraryMedia()));
   const runtimes = new Map(
     await Promise.all(
       rows.map(async (r) => [r.id, await getFilmRuntime(r).catch(() => null)] as const),

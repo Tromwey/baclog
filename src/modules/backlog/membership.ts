@@ -1,7 +1,10 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { NotFoundError } from "@/authz/errors";
 import { db } from "@/db";
-import { backlogItems, backlogs, userItems } from "@/db/schema";
+import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
+import { libraryMedia } from "@/modules/catalog/library-media";
+import { isPartyBacklogSql } from "@/modules/party-collections/gate";
 import { fillCatalogPalette, getCatalogItem } from "@/modules/catalog/cache";
 import { backfillPreorderDate } from "@/modules/catalog/preorder";
 import { deleteOwnReview } from "@/modules/reviews/write";
@@ -28,6 +31,16 @@ export async function ensureUserItemAndMembership(opts: {
   paletteHex?: string[] | null;
   sourceCrossMediaRecId?: string | null;
 }): Promise<{ membershipId: string | null; userItemId: string }> {
+  // 0. Colecciones de fiesta (0033): a party only takes songs through
+  //    modules/party-collections, and a song (`track`) never gets a
+  //    `user_item` — this is one of the two places one is born (the other is
+  //    `setMark`, which reads the title through the library-only
+  //    `getCatalogItem`). ONE probe: library title AND non-party backlog.
+  //    NotFound, like any id the caller can't write to.
+  if (!(await isLibraryTitleInNormalBacklog(opts.backlogId, opts.catalogItemId))) {
+    throw new NotFoundError("Title or collection not writable here");
+  }
+
   // 1. Persist the cover-derived palette onto the shared catalog row — only if
   //    absent, so one user's extraction fills it for everyone and a CORS-empty
   //    ([]) or a re-add never clobbers a real value.
@@ -96,6 +109,23 @@ export async function ensureUserItemAndMembership(opts: {
   return { membershipId, userItemId: ui.id };
 }
 
+/**
+ * True when `catalogItemId` is a LIBRARY title (film · series · album) and
+ * `backlogId` is not a party collection. One round trip; the party half is a
+ * constant `false` until migration 0033 is live (gate.ts).
+ */
+async function isLibraryTitleInNormalBacklog(
+  backlogId: string,
+  catalogItemId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ party: isPartyBacklogSql(sql`${backlogId}`) })
+    .from(catalogItems)
+    .where(and(eq(catalogItems.id, catalogItemId), libraryMedia()))
+    .limit(1);
+  return Boolean(row) && !row.party;
+}
+
 // ---------- the three membership operations (web actions + API v1) ----------
 
 export type AddTitleResult =
@@ -124,8 +154,13 @@ export async function addTitleToBacklog(
   if (!owned) return { ok: false, error: "backlog_not_found" };
 
   // The FK would reject an unknown title anyway, but as a 500 — say it first.
+  // `getCatalogItem` is library-only: a party song id is "not found" here.
   const item = await getCatalogItem(catalogItemId);
   if (!item) return { ok: false, error: "title_not_found" };
+  // A party collection takes songs only through modules/party-collections.
+  if (!(await isLibraryTitleInNormalBacklog(backlogId, catalogItemId))) {
+    return { ok: false, error: "backlog_not_found" };
+  }
 
   const { membershipId, userItemId } = await ensureUserItemAndMembership({
     userId,

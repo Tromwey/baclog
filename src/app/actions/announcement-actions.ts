@@ -11,6 +11,7 @@ import {
   type FollowSuggestion,
 } from "@/modules/backlog/follow-suggestion";
 import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 
 /**
  * Dismiss the current feature announcement, forever, for this account.
@@ -78,7 +79,8 @@ export async function followSuggestionAction(catalogItemId: string) {
   const [target] = await db
     .select({ id: backlogs.id })
     .from(backlogs)
-    .where(eq(backlogs.userId, user.id))
+    // Never a party (colecciones de fiesta): it only takes songs.
+    .where(and(eq(backlogs.userId, user.id), notPartyBacklog(backlogs.id)))
     .orderBy(desc(backlogs.createdAt))
     .limit(1);
   // No backlog = nowhere to put it. Can't happen from this modal (it only

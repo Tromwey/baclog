@@ -120,8 +120,14 @@ export async function cacheExternalItems(
   // Preserve upstream relevance order (rows come back in insert order, but
   // keep an explicit map in case of dedupe collisions across tabs)
   const byKey = new Map(rows.map((r) => [`${r.source}:${r.externalId}`, r]));
+  // `mediaType` comes from the provider item, not the returned row: the upsert
+  // never rewrites it, and a row keyed by (source, externalId) of a library
+  // provider can't be a party song (`track` rows use their own source).
   return external
-    .map((e) => byKey.get(`${e.source}:${e.externalId}`))
+    .map((e) => {
+      const r = byKey.get(`${e.source}:${e.externalId}`);
+      return r ? { ...r, mediaType: e.mediaType } : null;
+    })
     .filter((r): r is NonNullable<typeof r> => Boolean(r))
     .map((r) => ({
       catalogItemId: r.id,

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import SwiftUI
 import os
 
 // Universal Links: a shared `https://get-kura.app/…` link opens Kura instead of the web (and so
@@ -12,7 +13,7 @@ import os
 // tapped `www.` link is still ours, hence `hosts` lists them.
 
 /// Where a web link points, in the app's terms. Built ONLY from a URL of our own site.
-enum DeepLink: Equatable {
+enum DeepLink: Equatable, Codable {
     /// `/item/{id}`, `/{handle}/item/{id}`, `/u/{handle}/item/{id}`.
     case title(String)
     /// `/{handle}`, `/u/{handle}`.
@@ -23,6 +24,10 @@ enum DeepLink: Equatable {
     case ownCollection(String)
     /// `/recap` (the monthly recap email).
     case recap
+    /// `/f/{token}`: a party invite (16 chars `[A-Za-z0-9_-]`). Works signed out (the landing).
+    case invite(String)
+    /// `/c/{uuid}`: a party page (host + members; anyone else gets the same 404).
+    case party(String)
 
     static let hosts: Set<String> = ["get-kura.app", "www.get-kura.app", "baclog.app", "www.baclog.app"]
 
@@ -53,6 +58,14 @@ enum DeepLink: Equatable {
                 return .ownCollection(id)
             case "recap":
                 return parts.count == 1 ? .recap : nil
+            // Colecciones de fiesta (fiesta-contract §2). Both are 1 char, so no handle can collide
+            // (`USERNAME_RE` needs 3); a malformed piece is nil → Safari, never an API path.
+            case "f":
+                guard parts.count == 2, let t = inviteToken(parts[1]) else { return nil }
+                return .invite(t)
+            case "c":
+                guard parts.count == 2, let id = uuid(parts[1]) else { return nil }
+                return .party(id)
             default:
                 break
             }
@@ -76,6 +89,17 @@ enum DeepLink: Equatable {
         return raw
     }
 
+    /// `^[A-Za-z0-9_-]{16}$` — the server's invite token (96 bits base64url).
+    static func inviteToken(_ raw: String) -> String? {
+        guard raw.count == 16, raw.unicodeScalars.allSatisfy(idChars.contains) else { return nil }
+        return raw
+    }
+
+    /// A party id: a UUID (the server 404s anything else anyway).
+    private static func uuid(_ raw: String) -> String? {
+        UUID(uuidString: raw) != nil ? raw.lowercased() : nil
+    }
+
     /// Same shape as the server's `USERNAME_RE` (`^[a-z0-9_.]{3,30}$`, lowercased, `@` dropped).
     private static func handle(_ raw: String) -> String? {
         var h = raw.lowercased()
@@ -88,9 +112,40 @@ enum DeepLink: Equatable {
 
 /// A link that arrived before the tabs were up (cold start, or signed out): opened by
 /// `AppStore.startIfNeeded` once the library is loaded — after a sign-in too, which is the point.
+///
+/// It is also kept in `UserDefaults` for an hour: a party invite opened signed out has to survive
+/// the person leaving for Mail to get the code (iOS may kill the app meanwhile). Consuming it
+/// (`openPendingLink`) or setting nil clears both; an older one is dropped on read.
 @MainActor
 enum DeepLinkInbox {
-    static var pending: DeepLink?
+    private static let key = "kura.pendingDeepLink"
+    static let ttl: TimeInterval = 60 * 60
+    private struct Saved: Codable { let link: DeepLink; let at: Date }
+    private static var memory: DeepLink?
+
+    static var pending: DeepLink? {
+        get {
+            if let memory { return memory }
+            let d = UserDefaults.standard
+            guard let data = d.data(forKey: key) else { return nil }
+            guard let saved = try? JSONDecoder().decode(Saved.self, from: data),
+                  Date().timeIntervalSince(saved.at) < ttl else {
+                d.removeObject(forKey: key)
+                return nil
+            }
+            memory = saved.link
+            return saved.link
+        }
+        set {
+            memory = newValue
+            if let newValue, let data = try? JSONEncoder().encode(Saved(link: newValue, at: Date())) {
+                UserDefaults.standard.set(data, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
     /// The same link can arrive twice (`onOpenURL` and the browsing-web activity).
     fileprivate static var last: (url: URL, at: Date)?
 }
@@ -101,6 +156,12 @@ extension AppStore {
         let now = Date()
         if let last = DeepLinkInbox.last, last.url == url, now.timeIntervalSince(last.at) < 1 { return }
         DeepLinkInbox.last = (url, now)
+        // A party invite signed out: the landing (public preview + "Entra a kura…") instead of
+        // waiting for a sign-in the person doesn't know they need yet.
+        if case .invite(let token)? = DeepLink.parse(url), !api.hasSession {
+            withAnimation(KMotion.fade) { inviteLanding = token }
+            return
+        }
         guard let link = DeepLink.parse(url) else {
             // The AASA only sends the shapes above; anything else (a malformed id, a route added
             // to the web later) is still a real page — show it there rather than drop the tap.
@@ -136,6 +197,10 @@ extension AppStore {
             else { showToast(ToastModel(text: "No encontramos esa colección.", kind: .info)) }
         case .recap:
             show(.recap())
+        case .invite(let token):
+            Task { await openInvite(token) }
+        case .party(let id):
+            show(.party(id))
         }
         KuraLog.links.info("universal link → \(String(describing: link), privacy: .public) on \(self.tab.rawValue, privacy: .public)")
     }

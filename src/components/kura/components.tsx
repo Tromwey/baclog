@@ -288,7 +288,19 @@ export function Seal({
     <span
       aria-hidden
       className={`kura-seal flex flex-none items-center justify-center overflow-hidden rounded-full ${className}`}
-      style={{ width: size, height: size, background: bg, color: fg, fontSize: Math.round(size * 0.42) }}
+      style={{
+        width: size,
+        height: size,
+        background: bg,
+        color: fg,
+        fontSize: Math.round(size * 0.42),
+        // globals.css has TWO `.kura-seal` rules — the wordmark B (mono KURA:
+        // `display: inline-block`, `padding-left: .24em`) and this seal — and
+        // unlayered CSS beats Tailwind's `flex`, so the initials sat top-left
+        // of the disc. Inline wins over both (fiesta, 2026-09-29).
+        display: "flex",
+        paddingLeft: 0,
+      }}
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- our own /api/avatar route

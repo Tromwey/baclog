@@ -18,7 +18,8 @@ struct MockAPI: KuraAPI {
     private func fold(_ s: String) -> String { s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
 
     // Session — the mock is always signed in; the entrance flow only advances.
-    var hasSession: Bool { true }
+    /// `-kuraMockSignedOut YES`: the mock with no session (the party invite landing signed out).
+    var hasSession: Bool { !UserDefaults.standard.bool(forKey: "kuraMockSignedOut") }
     var needsRefresh: Bool { false }
     func requestCode(email: String) async throws { try await write() }
     func signIn(email: String, code: String) async throws -> Me { try await write(); return Me(person: MockData.me) }

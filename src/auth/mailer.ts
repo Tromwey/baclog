@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { SITE_URL } from "@/lib/site";
-import type { mediaTypeEnum } from "@/db/schema";
+import type { MediaType } from "@/modules/catalog/types";
 import { monthName } from "@/modules/backlog/recap-format";
 
 /**
@@ -140,7 +140,8 @@ export function releaseSubject(title: string): string {
   return `Ya salió ${title}`;
 }
 
-type ReleaseFormat = (typeof mediaTypeEnum.enumValues)[number];
+/** Library formats only: a party song (`track`) never has an owner to mail. */
+type ReleaseFormat = MediaType;
 
 /**
  * The per-format words of the release email. A `switch` with a `never` arm on

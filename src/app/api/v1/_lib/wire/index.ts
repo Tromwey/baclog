@@ -11,3 +11,4 @@ export * from "./collection";
 export * from "./person";
 export * from "./review";
 export * from "./collection-card";
+export * from "./party";

@@ -24,6 +24,7 @@ Separa el conocimiento por su **ciclo de vida**:
 | Recomendaciones cross-media, LLM providers, evals, telemetría de recos | `state/recs.md` | `backend` |
 | Build, deploy manual a Vercel, envs, dependencias | `state/infra.md` | — |
 | Cualquier cosa (norte, en progreso, deuda) | `state/overview.md` | — |
+| Colecciones de fiesta (web `/f` `/c`, API `/parties/**` `/invites/**`, iOS) — el contrato compartido | `state/fiesta-contract.md` | `backend` / `frontend` |
 
 Este repo **no tiene** suite de tests ni CI, así que no hay `state/qa.md`. Si se agrega una capa de
 tests, créalo entonces (y sumá su fila a este router).

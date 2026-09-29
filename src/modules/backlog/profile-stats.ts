@@ -9,6 +9,7 @@ import {
   userItems,
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
+import { libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Own-profile reads (Revamp UI screen 09, 2026-09-03). Every function is
@@ -58,7 +59,7 @@ export async function getObsessions(
     .select({
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
     })

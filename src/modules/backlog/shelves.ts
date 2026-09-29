@@ -2,7 +2,9 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, backlogs, catalogItems, userItems } from "@/db/schema";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 import type { MediaType } from "@/modules/catalog/types";
+import { notPartyBacklog } from "@/modules/party-collections/gate";
 import { getCollaboratorsForBacklogs } from "./collaborators";
 import type { CollectionItem } from "./collection-item";
 import { fanHexes, fanOf, type Collaborator, type FanCover } from "./fan";
@@ -83,7 +85,8 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       coverCatalogItemId: backlogs.coverCatalogItemId,
     })
     .from(backlogs)
-    .where(eq(backlogs.userId, userId))
+    // Party collections (colecciones de fiesta) are listed by their own module.
+    .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id)))
     // The pinned collection leads; the rest newest first (same as the pickers).
     .orderBy(sql`${backlogs.pinnedAt} desc nulls last`, desc(backlogs.createdAt));
 
@@ -97,7 +100,7 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
         byline: catalogItems.byline,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         posterUrl: catalogItems.posterUrl,
         paletteHex: catalogItems.paletteHex,
@@ -120,7 +123,7 @@ export async function getShelvesForUser(userId: string): Promise<Shelf[]> {
       )
       .where(eq(backlogItems.userId, userId))
       .orderBy(...MANUAL_ORDER),
-    getCollaboratorsForBacklogs(rows.map((r) => r.id)),
+    getCollaboratorsForBacklogs(userId, rows.map((r) => r.id)),
   ]);
 
   const shelves = new Map<string, Shelf>(
@@ -192,19 +195,20 @@ export async function getCollectionFans(userId: string): Promise<Record<string, 
     db
       .select({ id: backlogs.id, coverCatalogItemId: backlogs.coverCatalogItemId })
       .from(backlogs)
-      .where(eq(backlogs.userId, userId)),
+      .where(and(eq(backlogs.userId, userId), notPartyBacklog(backlogs.id))),
     db
       .select({
         backlogId: backlogItems.backlogId,
         catalogItemId: backlogItems.catalogItemId,
         posterUrl: catalogItems.posterUrl,
         paletteHex: catalogItems.paletteHex,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         title: catalogItems.title,
       })
       .from(backlogItems)
       .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-      .where(eq(backlogItems.userId, userId))
+      // No user_item join here: party songs are the host's memberships too.
+      .where(and(eq(backlogItems.userId, userId), libraryMedia()))
       .orderBy(...MANUAL_ORDER),
   ]);
   const byBacklog = new Map<string, typeof memberships>();
@@ -281,7 +285,15 @@ export async function getCollectionsWithMemberships(
       updatedAt: backlogs.updatedAt,
     })
     .from(backlogs)
-    .where(and(eq(backlogs.userId, userId), one ? eq(backlogs.id, one) : undefined))
+    .where(
+      and(
+        eq(backlogs.userId, userId),
+        one ? eq(backlogs.id, one) : undefined,
+        // A party is not a `Collection` on the wire (it has guests and songs):
+        // it travels only through /api/v1/parties/**.
+        notPartyBacklog(backlogs.id),
+      ),
+    )
     .orderBy(desc(backlogs.createdAt));
 
   if (rows.length === 0) return [];

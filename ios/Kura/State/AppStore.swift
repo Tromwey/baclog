@@ -48,6 +48,27 @@ enum SheetRoute: Identifiable, Hashable {
     case unlinkIdentity(IdentityProvider)
     /// "¿te avisamos?" — Kura's own ask before iOS's permission prompt (once per install).
     case notificationsAsk
+    // Colecciones de fiesta (`AppStore+Parties`, `Features/Party/PartySheets.swift`).
+    /// "ya estás dentro." after joining by the link (`returning`: the account already existed).
+    case partyWelcome(String, returning: Bool)
+    /// "ya pusiste tus 3." — your songs with Quitar, and Listo.
+    case partyCap(String)
+    /// A song's sheet: Quitar de la colección · Quitar y bloquear a @x.
+    case partySong(partyID: String, titleID: String)
+    /// "invita a la fiesta." — the link, Copiar, Compartir link, Gestionar link.
+    case partyShare(String)
+    /// Opciones — the host's: Gestionar link · Llevar a otra app · Editar · Bloqueados · Borrar;
+    /// a guest's: Salir de la fiesta.
+    case partyOptions(String)
+    /// "el link." — active / desactivado, Crear link nuevo, Desactivar link.
+    case partyLink(String)
+    /// "llévala a otra app." (fase 2: no backend yet, shown as próximamente).
+    case partyExport(String)
+    case partyEdit(String)
+    case partyBlocked(String)
+    case partyDelete(String)
+    /// A guest's "¿salir de la fiesta?" (`POST /parties/{id}/leave`).
+    case partyLeave(String)
 
     var id: String { String(describing: self) }
 
@@ -111,6 +132,10 @@ enum LoadKey: Hashable {
     case blocks
     case sessions
     case identities
+    case party(String)
+    case invite(String)
+    /// `GET /parties` (the "De fiesta" part of Tus colecciones).
+    case parties
 }
 
 /// Everything that belongs to ONE signed-in account (and the entrance that leads to it). Signing
@@ -208,6 +233,16 @@ final class SessionData {
     var mergeError: String?
     var mergeRetryAt: Date?
     var reportedReviews: Set<String> = []
+
+    // Colecciones de fiesta (`AppStore+Parties`): never `collections` — their own maps.
+    var parties: [String: Party] = [:]
+    /// `GET /parties`; nil = not asked yet.
+    var partyCards: [PartyCard]?
+    var missingParties: Set<String> = []
+    /// The server answered `503 unavailable` (migration 0033 not live): "llegan muy pronto".
+    var partiesUnavailable = false
+    var invites: [String: InvitePreview] = [:]
+    var deadInvites: Set<String> = []
     var notifications: [KNotification] = []
     var requestStates: [String: RequestState] = [:]
     var recentSearches: [String] = []
@@ -321,6 +356,12 @@ final class AppStore {
     var sheetLocked: Bool { get { s.sheetLocked } set { s.sheetLocked = newValue } }
     var toast: ToastModel?
     var offline = false
+    /// The party invite landing (`get-kura.app/f/{token}`) over everything: signed out, or a dead
+    /// link signed in (`Features/Party/InviteLandingView.swift`).
+    var inviteLanding: String?
+    /// O1b ran for a new account with a party link waiting: its "ya estás dentro." is the new one,
+    /// not the returning variant.
+    @ObservationIgnored var partyJustOnboarded = false
     var loadState: LoadState { get { s.loadState } set { s.loadState = newValue } }
 
     // MARK: Account / session
@@ -581,7 +622,8 @@ final class AppStore {
         get { UserDefaults.standard.bool(forKey: "kura.welcomeSeen") }
         set { UserDefaults.standard.set(newValue, forKey: "kura.welcomeSeen") }
     }
-    var entryStep: OnboardingStep { welcomeSeen ? .signup : .welcome }
+    /// A party link waiting for a sign-in goes straight to the entrance (the landing was the welcome).
+    var entryStep: OnboardingStep { welcomeSeen || invitePending ? .signup : .welcome }
 
     /// The title a shared web link was about, when the app was installed/opened from it.
     /// O1a only says "Para guardar <título>…" when this is set; nil for everyone else.

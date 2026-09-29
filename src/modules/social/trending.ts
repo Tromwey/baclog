@@ -14,6 +14,7 @@ import { avatarHexesFor } from "@/modules/reviews/queries";
 import { FALLBACK_ADN, WEEK } from "@/modules/reviews/format";
 import { notBlockedWith } from "./block-gate";
 import { publicAuthor } from "./queries";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Descubrir › "tendencias · esta semana" — what's trending ON KURA: the titles
@@ -195,14 +196,14 @@ export async function getKuraTrending(
       .select({
         id: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
         paletteHex: catalogItems.paletteHex,
       })
       .from(catalogItems)
-      .where(inArray(catalogItems.id, titleIds)),
+      .where(and(inArray(catalogItems.id, titleIds), libraryMedia())),
     avatarHexesFor(personIds),
   ]);
   const titleMap = new Map(titles.map((t) => [t.id, t]));

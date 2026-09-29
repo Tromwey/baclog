@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 import { FIELD, GLASS_BUTTON, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
+import { carryReturnTo } from "../return-to-param";
 import { continueWithAppleAction } from "./actions";
 
 /**
@@ -21,7 +22,16 @@ import { continueWithAppleAction } from "./actions";
  * Public surface: wears the `.kura` scope (globals.css) so the shared
  * primitives come out in honey/Newsreader without touching the signed-in app.
  */
-export function LoginForm({ appleEnabled, error }: { appleEnabled: boolean; error: string | null }) {
+export function LoginForm({
+  appleEnabled,
+  error,
+  returnTo,
+}: {
+  appleEnabled: boolean;
+  error: string | null;
+  /** The page's `?to=`, already through `safeReturnTo` (login/page.tsx). */
+  returnTo: string | null;
+}) {
   const router = useRouter();
   const emailRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const [email, setEmail] = useState("");
@@ -38,7 +48,7 @@ export function LoginForm({ appleEnabled, error }: { appleEnabled: boolean; erro
       body: JSON.stringify({ email }),
     });
     if (res.ok) {
-      router.push(`/verify?email=${encodeURIComponent(email)}`);
+      router.push(carryReturnTo(`/verify?email=${encodeURIComponent(email)}`));
       return;
     }
     setStatus(res.status === 429 ? "cooldown" : "error");
@@ -59,6 +69,7 @@ export function LoginForm({ appleEnabled, error }: { appleEnabled: boolean; erro
 
         {appleEnabled && (
           <form action={continueWithAppleAction} className="mt-5 flex flex-col gap-3">
+            {returnTo && <input type="hidden" name="to" value={returnTo} />}
             <button type="submit" className={SOLID_BUTTON}>
               <AppleGlyph />
               Continuar con Apple

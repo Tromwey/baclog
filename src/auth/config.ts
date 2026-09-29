@@ -1,8 +1,10 @@
+import { cookies } from "next/headers";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Apple from "next-auth/providers/apple";
 import Credentials from "next-auth/providers/credentials";
 import { consumeWebHandoff } from "@/authz/handoff";
 import { afterResponse } from "@/lib/after-response";
+import { safeReturnTo } from "@/lib/return-to";
 import { appleWebClientId, appleWebClientSecret, appleWebSignInEnabled } from "./apple-web";
 import { verifyOtp } from "./otp";
 import { linkOwner, saveAppleRefreshToken, signInWithIdentity } from "./social";
@@ -64,6 +66,29 @@ function handoffRid(raw: unknown): string {
  * `users.name` would skip the onboarding age gate (F2.2).
  */
 const APPLE_WEB_ERROR = "/login?error=apple";
+
+/**
+ * Where a refused Apple sign-in lands: /login?error=apple, plus the `to`
+ * the person started from (colecciones de fiesta, contract §3) — read back
+ * from Auth.js's callback-url cookie (set from `continueWithAppleAction`'s
+ * `redirectTo`), path only, and only if it passes `safeReturnTo`. Any
+ * failure → the plain error URL. Other Auth.js errors (`pages.error`) can't
+ * carry it: Auth.js builds that URL itself.
+ */
+async function appleErrorUrl(): Promise<string> {
+  try {
+    const jar = await cookies();
+    const raw = jar.get("__Secure-authjs.callback-url")?.value ?? jar.get("authjs.callback-url")?.value;
+    if (!raw) return APPLE_WEB_ERROR;
+    // Cookie values may arrive percent-encoded ("https%3A%2F%2F…").
+    const value = /^https?%3A/i.test(raw) ? decodeURIComponent(raw) : raw;
+    const to = safeReturnTo(new URL(value, "https://kura.invalid").pathname);
+    return to ? `${APPLE_WEB_ERROR}&to=${encodeURIComponent(to)}` : APPLE_WEB_ERROR;
+  } catch (err) {
+    console.warn("[auth/apple] could not read the callback-url cookie for the error return", err);
+    return APPLE_WEB_ERROR;
+  }
+}
 
 function appleIdentity(profile: Record<string, unknown> | undefined): VerifiedIdentity | null {
   const sub = profile?.sub;
@@ -142,9 +167,9 @@ const baseConfig: Omit<NextAuthConfig, "providers"> = {
     async signIn({ account, profile }) {
       if (account?.provider !== "apple") return true;
       const identity = appleIdentity(profile as Record<string, unknown> | undefined);
-      if (!identity) return APPLE_WEB_ERROR;
+      if (!identity) return appleErrorUrl();
       const kuraAccount = await signInWithIdentity("apple", identity);
-      if (!kuraAccount) return APPLE_WEB_ERROR;
+      if (!kuraAccount) return appleErrorUrl();
       const refreshToken = account.refresh_token;
       if (typeof refreshToken === "string" && refreshToken) {
         afterResponse("auth/apple web refresh token", () =>

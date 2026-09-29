@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { catalogItems, itemReviews, userItems } from "@/db/schema";
 import { supportsSpoiler } from "@/modules/reviews/format";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * F3.9 — the ONE write path for a user's own review, shared by the web's
@@ -87,9 +88,9 @@ export async function saveReview(
   if (!spoiler.success) return { error: "invalid" };
 
   const [catalog] = await db
-    .select({ mediaType: catalogItems.mediaType })
+    .select({ mediaType: libraryMediaType() })
     .from(catalogItems)
-    .where(eq(catalogItems.id, catalogItemId))
+    .where(and(eq(catalogItems.id, catalogItemId), libraryMedia()))
     .limit(1);
   const hasSpoiler = catalog && supportsSpoiler(catalog.mediaType) ? spoiler.data : false;
 

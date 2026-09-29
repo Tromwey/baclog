@@ -7,6 +7,7 @@ import { FALLBACK_ADN } from "@/modules/reviews/format";
 import { avatarHexesFor } from "@/modules/reviews/queries";
 import { notBlockedWith } from "@/modules/social/block-gate";
 import { getFollowSuggestions, publicAuthor } from "@/modules/social/queries";
+import { libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * The reads behind 32b "tu gente" (Kura onboarding, 2026-09-24).
@@ -40,7 +41,7 @@ export async function getOwnPicks(userId: string): Promise<OwnPick[]> {
       catalogItemId: catalogItems.id,
       title: catalogItems.title,
       posterUrl: catalogItems.posterUrl,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       paletteHex: catalogItems.paletteHex,
     })
     .from(userItems)

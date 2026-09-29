@@ -27,7 +27,7 @@ import {
   userItems,
   users,
 } from "@/db/schema";
-import { MEDIA_TYPE_TITLE } from "@/modules/catalog/types";
+import { MEDIA_TYPE_TITLE, type MediaType } from "@/modules/catalog/types";
 import { formatCountdown, isUpcoming } from "@/modules/catalog/release";
 import {
   avatarHexesFor,
@@ -55,6 +55,7 @@ import {
 } from "./types";
 import { BURST_GAP, closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
 import { notBlockedWith } from "./block-gate";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * F3.10 — reads for the social feed and the follow graph.
@@ -228,7 +229,7 @@ interface RawEvent {
   image: string | null;
   catalogItemId: string;
   title: string;
-  mediaType: (typeof catalogItems.$inferSelect)["mediaType"];
+  mediaType: MediaType;
   year: number | null;
   byline: string | null;
   posterUrl: string | null;
@@ -297,7 +298,7 @@ async function fetchFeedChunk(
         image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
@@ -330,6 +331,10 @@ async function fetchFeedChunk(
       .where(
         and(
           inArray(backlogItems.userId, ids),
+          // Colecciones de fiesta: a song is never feed activity (a party is
+          // also always private, so the join above already drops it; this is
+          // the format half of the same rule, valid on either schema).
+          libraryMedia(),
           olderThan(
             backlogItems.addedAt,
             sql`'added:' || ${backlogItems.id}`,
@@ -357,7 +362,7 @@ async function fetchFeedChunk(
         image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
@@ -402,7 +407,7 @@ async function fetchFeedChunk(
         image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
@@ -447,7 +452,7 @@ async function fetchFeedChunk(
         image: users.image,
         catalogItemId: catalogItems.id,
         title: catalogItems.title,
-        mediaType: catalogItems.mediaType,
+        mediaType: libraryMediaType(),
         year: catalogItems.year,
         byline: catalogItems.byline,
         posterUrl: catalogItems.posterUrl,
@@ -665,7 +670,7 @@ export async function getFollowSuggestions(
     .select({
       userId: userItems.userId,
       posterUrl: catalogItems.posterUrl,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType().as("media_type"),
       rn: sql<number>`row_number() over (partition by ${userItems.userId} order by (${catalogItems.posterUrl} is not null) desc, ${userItems.addedAt} desc)`.as(
         "rn",
       ),
@@ -895,7 +900,7 @@ export async function getFeedSuggestion(
         .select({
           catalogItemId: catalogItems.id,
           posterUrl: catalogItems.posterUrl,
-          mediaType: catalogItems.mediaType,
+          mediaType: libraryMediaType(),
           paletteHex: catalogItems.paletteHex,
         })
         .from(userItems)

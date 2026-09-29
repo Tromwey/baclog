@@ -3,6 +3,7 @@ import { requireUser } from "@/auth";
 import { getOnboardingPoolPage } from "@/modules/backlog/onboarding-pool";
 import { OnboardingFlow } from "./onboarding-flow";
 import { getOwnPicks } from "@/modules/social/people";
+import { safeReturnTo } from "@/lib/return-to";
 
 /**
  * Server wrapper for the first two onboarding screens (Kura O1b + 32a).
@@ -14,8 +15,16 @@ import { getOwnPicks } from "@/modules/social/people";
  * (/onboarding/gente, whose own guard is the mirror of this one — obsessions
  * or back here — so the two can't bounce).
  */
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ to?: string | string[] }>;
+}) {
   const user = await requireUser();
+  // Colecciones de fiesta (contract §3): with a `?to=`, the user step is the
+  // only one — once there's a name, back to the party.
+  const to = safeReturnTo((await searchParams).to as string | undefined);
+  if (to && user.name) redirect(to);
   if (user.name && (await getOwnPicks(user.id)).length > 0) {
     redirect("/onboarding/gente");
   }
@@ -25,6 +34,7 @@ export default async function OnboardingPage() {
       initialPool={first.items}
       initialNextPage={first.nextPage}
       initialStep={user.name ? "picks" : "usuario"}
+      returnTo={to}
     />
   );
 }

@@ -22,6 +22,7 @@ import {
   type ReviewFeedPage,
   type ReviewMark,
 } from "./types";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * F3.9 — reads for the review feed.
@@ -487,7 +488,7 @@ export async function getProfileReviews(
       hasSpoiler: itemReviews.hasSpoiler,
       createdAt: itemReviews.createdAt,
       title: catalogItems.title,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       obsessed: userItems.obsessed,
       verdict: userItems.verdict,
     })
@@ -501,7 +502,7 @@ export async function getProfileReviews(
         eq(userItems.catalogItemId, itemReviews.catalogItemId),
       ),
     )
-    .where(and(eq(users.username, username), publicAuthor))
+    .where(and(eq(users.username, username), publicAuthor, libraryMedia()))
     .orderBy(desc(itemReviews.createdAt))
     .limit(limit);
 

@@ -27,7 +27,9 @@ struct CollectionsView: View {
     var body: some View {
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
-            switch (store.loadState, store.collections.isEmpty) {
+            // A party (host or guest) counts: someone who only joined one by its link has no
+            // collection of their own, and the party must still be one swipe away.
+            switch (store.loadState, store.collections.isEmpty && store.partyCards.isEmpty) {
             case (.loading, _):
                 CollectionsSkeleton()
             case (.failed, _):
@@ -39,6 +41,8 @@ struct CollectionsView: View {
                 TitleHeroHost(rootTab: .collections) { CollectionsCarousel() }
             }
         }
+        // "De fiesta" (`GET /parties`): silent when the server doesn't have parties yet (503).
+        .task { await store.loadParties() }
     }
 
     /// The launch read failed (offline, server down): say so and offer Reintentar —
@@ -70,6 +74,9 @@ private enum CarouselEntry: Identifiable {
     case shelf(KCollection)
     case auto([Title])
     case new
+    /// A party (colección de fiesta), yours or one you joined — `GET /parties`. Its page is
+    /// `Route.party`, never `CollectionBody` (a song is not a title).
+    case party(PartyCard)
 
     static let autoID = "no-puedo-esperar"
     static let newID = "nueva-coleccion"
@@ -79,6 +86,7 @@ private enum CarouselEntry: Identifiable {
         case .shelf(let c): return c.id
         case .auto: return Self.autoID
         case .new: return Self.newID
+        case .party(let p): return "party:\(p.id)"
         }
     }
 
@@ -87,6 +95,7 @@ private enum CarouselEntry: Identifiable {
         case .shelf(let c): return c.name
         case .auto: return "no puedo esperar"
         case .new: return "nueva colección"
+        case .party(let p): return p.name
         }
     }
 
@@ -143,6 +152,8 @@ private struct CollectionsCarousel: View {
     /// esperar" LAST.
     private var entries: [CarouselEntry] {
         var list: [CarouselEntry] = [.new]
+        // Parties right after the ghost (fiesta-app-v2 `list`: "la fiesta de eric" first).
+        list += store.partyCards.map(CarouselEntry.party)
         list += store.orderedCollections.map(CarouselEntry.shelf)
         let waiting = store.waitingTitles
         if !waiting.isEmpty { list.append(.auto(waiting)) }
@@ -161,6 +172,7 @@ private struct CollectionsCarousel: View {
         case .shelf(let c): return store.fan(of: c)
         case .auto(let ts): return Array(ts.prefix(3))
         case .new: return []
+        case .party(let p): return p.fan
         }
     }
 
@@ -169,6 +181,7 @@ private struct CollectionsCarousel: View {
         case .shelf(let c): return store.hexes(of: c)
         case .auto(let ts): return AppStore.fanHexes(Array(ts.prefix(3)), ordered: ts)
         case .new: return []
+        case .party(let p): return p.palette
         }
     }
 
@@ -359,6 +372,9 @@ private struct CollectionsCarousel: View {
                 Task { await store.retryLibraryTitles() }
             }
             .padding(.horizontal, 12).padding(.bottom, 16)
+        } else if let e = store.loadError(.parties) {
+            // `GET /parties` failed (not the 503 of "no parties yet", which stays silent).
+            PartiesRetryStrip(error: e).padding(.horizontal, 12).padding(.bottom, 16)
         }
     }
 
@@ -381,7 +397,10 @@ private struct CollectionsCarousel: View {
         // "+" (critica 2026-09-27 #13: 6b used to leave ~250 pt of nothing where the fan goes —
         // the profile's vitrina already drew it). Its one way in is "Agregar títulos" below.
         let isNew: Bool = { if case .new = e { return true }; return false }()
-        let emptyShelf = e.collection?.titleIDs.isEmpty ?? false
+        let emptyShelf: Bool = {
+            if case .party(let p) = e { return p.songCount == 0 }
+            return e.collection?.titleIDs.isEmpty ?? false
+        }()
         let art = FanView(covers: fan(e), lead: 225, ghost: isNew || emptyShelf, plus: isNew)
             .frame(width: 300)
             .contentShape(Rectangle())
@@ -392,7 +411,16 @@ private struct CollectionsCarousel: View {
             @unknown default: break
             }
         }
-        if let c = e.collection {
+        if case .party(let p) = e {
+            // A party's fan opens it (design `list`: the centred party goes to its page).
+            art
+                .kPressable { store.push(.party(p.id)) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(p.name), fiesta, \(PartyCopy.songs(p.songCount))")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Desliza hacia arriba o abajo para cambiar de colección.")
+                .accessibilityAdjustableAction(adjust)
+        } else if let c = e.collection {
             art
                 .kPressable(longPress: { store.present(.collectionQuick(c.id)) }) {}
                 .accessibilityElement(children: .ignore)
@@ -436,6 +464,16 @@ private struct CollectionsCarousel: View {
                 Masonry(titles: ts, badge: { t in store.releaseLabel(t).map(MasonryBadge.wait) ?? .none },
                         onHold: { t in store.present(.titleActions(titleID: t.id, collectionID: nil)) })
             }
+        case .party(let p):
+            VStack(spacing: 8) {
+                VibeLine(text: PartyCopy.heroLine(p.perGuestLimit), size: 15)
+                Text(p.meta).monoLabel(11).multilineTextAlignment(.center)
+                GlassButton(title: "Abrir la fiesta", flat: true) { store.push(.party(p.id)) }
+                    .padding(.top, 10)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.top, 4)
         case .new:
             VStack(spacing: 12) {
                 Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.")
@@ -744,6 +782,18 @@ struct CollectionsSkeleton: View {
 
 /// The ghost fan — three empty slots, the dashed "+" in front, which is the way in — then the
 /// phrase in Newsreader 34, one line of body and the glass "Nueva colección".
+/// "No se cargaron tus fiestas." + Reintentar (`GET /parties` failed; the collections are fine).
+private struct PartiesRetryStrip: View {
+    @Environment(AppStore.self) private var store
+    let error: KuraAPIError
+
+    var body: some View {
+        RetryStrip(error: error, text: error == .offline ? "Sin conexión. No se cargaron tus fiestas." : "No se cargaron tus fiestas.") {
+            Task { await store.loadParties(force: true) }
+        }
+    }
+}
+
 struct NoCollectionsView: View {
     @Environment(AppStore.self) private var store
 
@@ -756,6 +806,11 @@ struct NoCollectionsView: View {
                     }
                 }
                 .padding(.bottom, 18)
+                // Someone whose only "collection" is a party they joined: a failed `GET /parties`
+                // must not read as "you have nothing".
+                if let e = store.loadError(.parties) {
+                    PartiesRetryStrip(error: e).padding(.horizontal, 12).padding(.bottom, 16)
+                }
 
                 VStack(spacing: 14) {
                     FanView(covers: [], lead: 180, ghost: true)
@@ -798,19 +853,33 @@ struct NewCollectionSheet: View {
     @State private var privacy: Privacy = .onlyMe
     @State private var privacySeeded = false
     @State private var choosingPrivacy = false
+    /// Colección | Fiesta (fiesta-app-v2 `create`). Only when creating from scratch: saving a title
+    /// "en una nueva" is always a normal collection (a party holds songs, never a title).
+    @State private var party = false
+    @State private var perGuestLimit: Int? = PartyCopy.defaultLimit
+    @State private var creatingParty = false
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SheetHeader(title: "nueva colección") { store.dismissSheet() }
             VStack(spacing: 14) {
-                GlassField(placeholder: "ponle nombre", text: $name, serif: true, focus: $focused)
+                if addingTitleID == nil {
+                    kindPicker
+                }
+                GlassField(placeholder: party ? "la fiesta de…" : "ponle nombre", text: $name, serif: true, focus: $focused)
                     .submitLabel(.done)
                     .onSubmit(create)
                     .onChange(of: name) { _, v in
-                        if v.count > AppStore.collectionNameLimit { name = String(v.prefix(AppStore.collectionNameLimit)) }
+                        let cap = party ? 60 : AppStore.collectionNameLimit
+                        if v.count > cap { name = String(v.prefix(cap)) }
                     }
-                if choosingPrivacy {
+                if party {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Canciones por invitado").font(.kura.ui(14, .semibold)).foregroundStyle(KColor.text)
+                        PartyLimitStepper(limit: $perGuestLimit)
+                    }
+                } else if choosingPrivacy {
                     VStack(spacing: 0) {
                         ForEach(Privacy.options) { p in
                             PrivacyOptionRow(privacy: p, selected: p == privacy) {
@@ -838,7 +907,8 @@ struct NewCollectionSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                SolidButton(title: "Crear", enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty, action: create)
+                SolidButton(title: party ? "Crear fiesta" : "Crear",
+                            enabled: !creatingParty && !name.trimmingCharacters(in: .whitespaces).isEmpty, action: create)
             }
             .padding(.top, 6)
         }
@@ -846,11 +916,55 @@ struct NewCollectionSheet: View {
         .onAppear {
             focused = true
             if !privacySeeded { privacySeeded = true; privacy = store.defaultPrivacy }
+            #if DEBUG
+            // `-kuraScreen partycreate`: the sheet opens on Fiesta.
+            if UserDefaults.standard.bool(forKey: "kuraNewParty"), addingTitleID == nil {
+                party = true; name = "la fiesta de mariel"; focused = false
+            }
+            #endif
         }
+    }
+
+    /// Colección (series, películas o álbumes) | Fiesta (cada invitado agrega canciones).
+    private var kindPicker: some View {
+        VStack(spacing: 8) {
+            kindRow(false, "Colección", "Agrega series, películas o álbumes.")
+            kindRow(true, "Fiesta", "Cada invitado agrega canciones.")
+        }
+    }
+
+    private func kindRow(_ isParty: Bool, _ title: String, _ note: String) -> some View {
+        let on = party == isParty
+        return Button {
+            withAnimation(KMotion.fade) { party = isParty }
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.kura.ui(16, .semibold)).foregroundStyle(KColor.text)
+                Text(note).font(.kura.ui(14)).foregroundStyle(KColor.text2).multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(on ? KColor.glassSelected : KColor.glassBg,
+                        in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private func create() {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        if party {
+            guard !creatingParty else { return }
+            creatingParty = true
+            Task {
+                // Opens the party with its share sheet (`AppStore.createParty`); a failure says why.
+                await store.createParty(name: name, perGuestLimit: perGuestLimit)
+                creatingParty = false
+            }
+            return
+        }
         let id = store.createCollection(name: name, privacy: privacy, adding: addingTitleID)
         store.dismissSheet()
         if let from = movingFrom, let tid = addingTitleID, let c = store.collection(id) {

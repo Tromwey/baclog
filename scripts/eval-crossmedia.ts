@@ -34,6 +34,7 @@
  * condition — the pnpm script passes --conditions=react-server.
  */
 import { config } from "dotenv";
+import type { CatalogItemRow } from "@/modules/catalog/cache";
 
 config({ path: ".env.local" });
 
@@ -433,7 +434,7 @@ async function runEdgesMode(): Promise<void> {
           .from(catalogItems)
           .where(eq(catalogItems.id, first.catalogItemId))
           .limit(1);
-        const edges = await getOrMaterializeLinkEdges(seedRow);
+        const edges = await getOrMaterializeLinkEdges(seedRow as CatalogItemRow);
         const targetIds = edges.map((e) =>
           seedRow.mediaType === "album" ? e.videoCatalogItemId : e.albumCatalogItemId,
         );

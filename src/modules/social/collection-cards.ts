@@ -1,9 +1,10 @@
 import "server-only";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogItems, catalogItems } from "@/db/schema";
 import { byManualOrder, fanHexes, fanOf, type FanCover } from "@/modules/backlog/fan";
 import type { MediaType } from "@/modules/catalog/types";
+import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
  * Someone else's PUBLIC collection as Descubrir draws it — a fan, the name,
@@ -57,7 +58,7 @@ export async function collectionCards(lists: CollectionRow[]): Promise<Collectio
       year: catalogItems.year,
       byline: catalogItems.byline,
       releaseDate: catalogItems.releaseDate,
-      mediaType: catalogItems.mediaType,
+      mediaType: libraryMediaType(),
       posterUrl: catalogItems.posterUrl,
       paletteHex: catalogItems.paletteHex,
       position: backlogItems.position,
@@ -65,7 +66,7 @@ export async function collectionCards(lists: CollectionRow[]): Promise<Collectio
     })
     .from(backlogItems)
     .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
-    .where(inArray(backlogItems.backlogId, lists.map((l) => l.id)))
+    .where(and(inArray(backlogItems.backlogId, lists.map((l) => l.id)), libraryMedia()))
     .orderBy(asc(backlogItems.backlogId));
 
   const byList = new Map<string, typeof items>();

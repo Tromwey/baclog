@@ -23,7 +23,17 @@ import {
 export const FOLLOW_LISTS_VISIBILITY = ["public", "mutuals", "private"] as const;
 export type FollowListsVisibility = (typeof FOLLOW_LISTS_VISIBILITY)[number];
 
-export const mediaTypeEnum = pgEnum("media_type", ["film", "series", "album"]);
+/**
+ * `track` (colecciones de fiesta, migration 0033) is a SONG from iTunes Search
+ * (`source = "itunes-track"`, `raw.previewUrl` = the 30 s preview). It is NOT a
+ * library format: a track never gets a `user_item` (no state, no review, no
+ * recap), never enters a normal collection and never reaches a generic
+ * `Title` payload — only party collections hold tracks. Readers that
+ * enumerate the catalog by format use `LIBRARY_MEDIA_TYPES`
+ * (modules/party-collections/gate.ts), never "everything but track" spelled
+ * as a literal (a literal `'track'` in SQL is a 22P02 on a DB without 0033).
+ */
+export const mediaTypeEnum = pgEnum("media_type", ["film", "series", "album", "track"]);
 export const itemStatusEnum = pgEnum("item_status", [
   "on_my_radar",
   "in_progress",
@@ -467,11 +477,14 @@ export const backlogItems = pgTable(
  * every write still goes through `assertOwnsBacklog`, and nothing here lets a
  * collaborator read a private collection or touch its titles.
  *
- * NO WRITER YET, on purpose: inviting someone needs their consent (their name
- * would show on a public page) and that flow has no design — the table exists
- * so the readers are built and the credit line renders. Reads that leave the
- * owner's session (`public.ts`) gate each collaborator on `users.isPublic AND
- * username IS NOT NULL`, like any other public identity.
+ * ONE writer: colecciones de fiesta (0033) — `joinParty` inserts the guest who
+ * entered a PARTY through its invite link (there it IS the membership that
+ * `getPartyAccess` reads). Normal collections still have no writer (inviting
+ * someone needs their consent and that flow has no design), and the credit
+ * readers (`modules/backlog/collaborators.ts`) only ever see normal
+ * collections. Reads that leave the owner's session (`public.ts`) gate each
+ * collaborator on `users.isPublic AND username IS NOT NULL`, like any other
+ * public identity.
  */
 export const backlogCollaborators = pgTable(
   "backlog_collaborator",
@@ -483,10 +496,114 @@ export const backlogCollaborators = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    /**
+     * Colecciones de fiesta (0033) — the host's "Quitar y bloquear a @x":
+     * the guest stays a member (keeps SEEING the party) but can no longer add
+     * or remove songs. Null = not blocked. Only meaningful on a party
+     * collection; never cleared by re-joining through the link (only the
+     * host's unblock clears it).
+     */
+    blockedAt: timestamp("blocked_at"),
+    /**
+     * Colecciones de fiesta (0033) — "Salir de la fiesta" by a guest the host
+     * had BLOCKED. A guest who leaves unblocked is simply deleted (and may
+     * re-enter with an active link); a blocked one keeps the row with
+     * `left_at` set, so the block survives: re-entering through the link
+     * clears `left_at` and they come back still blocked (only the host's
+     * "Desbloquear" clears `blocked_at`). Every membership read filters
+     * `left_at IS NULL`.
+     */
+    leftAt: timestamp("left_at"),
   },
   (t) => [
     primaryKey({ columns: [t.backlogId, t.userId] }),
     index("backlog_collaborator_user_idx").on(t.userId),
+  ],
+);
+
+// ---------- party collections (colecciones de fiesta, migration 0033) ----------
+
+/**
+ * A collection of kind Fiesta. The row's EXISTENCE is the kind (no `kind`
+ * column on the hot `backlog` table: adding one would make every
+ * `select()`/`insert(backlogs)` depend on the migration). The backlog itself
+ * stays the container — name, owner (= host), memberships — and is ALWAYS
+ * private (`is_public = show_on_profile = false`): a party is reached through
+ * its invite link or by being a member, never through /u/** or any feed.
+ *
+ * `perGuestLimit`: songs each GUEST may add — 0 = "solo ver", 1..5, null =
+ * ilimitadas. The host has no cap.
+ */
+export const parties = pgTable(
+  "party",
+  {
+    backlogId: text("backlog_id")
+      .primaryKey()
+      .references(() => backlogs.id, { onDelete: "cascade" }),
+    perGuestLimit: smallint("per_guest_limit"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "party_per_guest_limit_check",
+      sql`${t.perGuestLimit} is null or (${t.perGuestLimit} >= 0 and ${t.perGuestLimit} <= 50)`,
+    ),
+  ],
+);
+
+/**
+ * The party's invite link `get-kura.app/f/{token}`. `token` is 16 chars of
+ * base64url (96 random bits) — the link IS the secret. At most ONE active
+ * link per party (partial unique index): "crear link nuevo" revokes the old
+ * row and inserts a new one in one batch; "desactivar" only revokes.
+ * Revoked rows stay (their token stays unique forever, so an old link can
+ * never start working again by collision). Revoking never removes members.
+ */
+export const partyInvites = pgTable(
+  "party_invite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    backlogId: text("backlog_id")
+      .notNull()
+      .references(() => backlogs.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("party_invite_token_unique").on(t.token),
+    uniqueIndex("party_invite_one_active")
+      .on(t.backlogId)
+      .where(sql`${t.revokedAt} is null`),
+  ],
+);
+
+/**
+ * WHO put each song ("Puso @ana"). One row per party membership
+ * (`backlog_item`, which keeps `user_id` = the HOST like every membership —
+ * the owner invariant `assertOwnsBacklogItem` and the merge rely on). A
+ * guest's song creates NO `user_item` for anyone: a party song is not
+ * anybody's per-title state. `added_by_user_id` is SET NULL when the author
+ * deletes the account → the song stays, credited to "alguien".
+ * `backlog_id` is denormalized for the per-guest cap count.
+ */
+export const partySongs = pgTable(
+  "party_song",
+  {
+    backlogItemId: text("backlog_item_id")
+      .primaryKey()
+      .references(() => backlogItems.id, { onDelete: "cascade" }),
+    backlogId: text("backlog_id")
+      .notNull()
+      .references(() => backlogs.id, { onDelete: "cascade" }),
+    addedByUserId: text("added_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("party_song_backlog_adder_idx").on(t.backlogId, t.addedByUserId),
+    index("party_song_added_by_idx").on(t.addedByUserId),
   ],
 );
 
