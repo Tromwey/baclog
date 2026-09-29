@@ -510,10 +510,15 @@ private struct CarouselName {
     let ghost: Bool
 }
 
-/// The strip of names, all from the position: the centre in Newsreader 30; a neighbour pinned
-/// 142 pt off-centre (its near edge) at 22 and .45; past that it slides 278 pt more per
-/// collection and fades out. Tapping a neighbour goes there.
+/// The strip of names, all from the position: the centre in Newsreader 30 (at most 256 wide, then
+/// "…"); a neighbour pinned 142 pt off-centre (its near edge) at 22 and .45; past that it slides
+/// 278 pt more per collection and fades out. Tapping a neighbour goes there.
 private struct CarouselNames: View {
+    /// A long name ends in "…" at 256 so it never runs into the neighbours, whose near edge sits
+    /// 142 off-centre (2·142 − 2·14 of air). The full name is on the collection's own page, where
+    /// it wraps, and in the VoiceOver label.
+    static let maxName: CGFloat = 256
+
     let pos: KSpring
     let names: [CarouselName]
     let widths: [String: CGFloat]
@@ -529,7 +534,7 @@ private struct CarouselNames: View {
                     let d = CGFloat(i) - p, a = abs(d), cd = max(-1, min(1, d))
                     if a < 2.2 {
                         let scale = (30 - 8 * min(1, a)) / 30
-                        let w = (widths[e.id] ?? 0) * scale
+                        let w = min(widths[e.id] ?? 0, Self.maxName) * scale
                         // CSS: left 50% + translateX((−50 + 50·cd)% + px) → the centre sits at
                         // mid + px + cd·w/2.
                         let px = 142 * cd + (a > 1 ? (d > 0 ? 1 : -1) * (a - 1) * 278 : 0)
@@ -541,9 +546,14 @@ private struct CarouselNames: View {
                             .font(.kura.news(30))
                             .foregroundStyle(KColor.text)
                             .lineLimit(1)
-                            .fixedSize()
+                            .truncationMode(.tail)
+                            .frame(width: min(widths[e.id] ?? Self.maxName, Self.maxName))
                             .background {
-                                GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
+                                // The natural width, measured unconstrained (the frame caps it).
+                                Text(e.name).font(.kura.news(30)).lineLimit(1).fixedSize().hidden()
+                                    .background {
+                                        GeometryReader { t in Color.clear.preference(key: NameWidths.self, value: [e.id: t.size.width]) }
+                                    }
                             }
                             .scaleEffect(scale)
                             .opacity(Double(op))
