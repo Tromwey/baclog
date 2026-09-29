@@ -92,17 +92,22 @@ export async function signApnsProviderToken(
 }
 
 /** Sign in with Apple `client_secret` for /auth/token and /auth/revoke.
- *  5 minutes: it is minted per call, never stored. */
+ *  `sub` = the client the token belongs to: the bundle id (iOS, default) or
+ *  the web Services ID (`src/auth/apple-web.ts`). `ttlSeconds` = 5 minutes by
+ *  default (minted per call, never stored); the web one lives longer because
+ *  Auth.js reads it from the config on every request. Apple caps it at 6 months. */
 export async function signAppleClientSecret(
   cfg: AppleKeyConfig,
   nowSeconds = Math.floor(Date.now() / 1000),
+  clientId: string = KURA_BUNDLE_ID,
+  ttlSeconds = 300,
 ): Promise<string> {
   return new SignJWT({})
     .setProtectedHeader({ alg: "ES256", kid: cfg.keyId })
     .setIssuer(cfg.teamId)
-    .setSubject(KURA_BUNDLE_ID)
+    .setSubject(clientId)
     .setAudience(APPLE_ID_AUDIENCE)
     .setIssuedAt(nowSeconds)
-    .setExpirationTime(nowSeconds + 300)
+    .setExpirationTime(nowSeconds + ttlSeconds)
     .sign(await signingKey(cfg));
 }

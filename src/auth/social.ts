@@ -3,6 +3,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
 import { KURA_BUNDLE_ID, appleKeyConfig, signAppleClientSecret } from "./apple-key";
+import { appleWebClientId } from "./apple-web";
 import { findOrCreateUserByVerifiedEmail } from "./otp";
 import type { VerifiedIdentity } from "./social-tokens";
 
@@ -75,7 +76,10 @@ export type LinkOutcome =
   /** `userId` already has a DIFFERENT identity of this provider. */
   | { kind: "provider_already_linked" };
 
-async function linkOwner(provider: SocialProvider, sub: string): Promise<string | null> {
+/** The Kura user linked to (provider, sub), or null. Exported for the web
+ *  Auth.js `jwt` callback (src/auth/config.ts), which needs OUR user id in
+ *  the cookie after `signInWithIdentity` created/linked the account. */
+export async function linkOwner(provider: SocialProvider, sub: string): Promise<string | null> {
   const [row] = await db
     .select({ userId: accounts.userId })
     .from(accounts)
@@ -234,6 +238,21 @@ export async function storeAppleRefreshToken(
     .where(and(eq(accounts.provider, "apple"), eq(accounts.providerAccountId, appleSub)));
 }
 
+/**
+ * The web sign-in (Auth.js, src/auth/config.ts) gets Apple's refresh token
+ * in the token response itself — no second exchange — and keeps it here for
+ * the same reason as `storeAppleRefreshToken`. The (apple, sub) row is one
+ * per person across iOS and web (Apple's `sub` is per team, shared by the
+ * grouped app id and Services ID): the latest token wins, and revocation
+ * tries both clients (`revokeAppleTokens`).
+ */
+export async function saveAppleRefreshToken(appleSub: string, refreshToken: string): Promise<void> {
+  await db
+    .update(accounts)
+    .set({ refresh_token: refreshToken })
+    .where(and(eq(accounts.provider, "apple"), eq(accounts.providerAccountId, appleSub)));
+}
+
 /** The Apple refresh tokens of `userId` (0 or 1 in practice) — read BEFORE
  *  the account is deleted, since the `account` rows cascade with it. */
 export async function appleRefreshTokensOf(userId: string): Promise<string[]> {
@@ -274,27 +293,37 @@ export async function revokeAppleTokens(userId: string, tokens: string[]): Promi
     }
     return;
   }
+  // A refresh token is bound to the client that obtained it: the app's bundle
+  // id (iOS) or the web Services ID. The row doesn't record which (one row
+  // per person, latest token wins — `saveAppleRefreshToken`), so each token
+  // is tried against the app first and, if Apple refuses, against the web.
+  const clientIds = [KURA_BUNDLE_ID, appleWebClientId()].filter((c): c is string => !!c);
   for (const token of tokens) {
-    try {
-      const res = await fetch(APPLE_REVOKE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: KURA_BUNDLE_ID,
-          client_secret: await signAppleClientSecret(cfg),
-          token,
-          token_type_hint: "refresh_token",
-        }),
-        signal: AbortSignal.timeout(APPLE_HTTP_TIMEOUT_MS),
-      });
-      if (!res.ok) {
-        console.error(`[auth/apple] revocación falló para ${userId}: ${res.status} ${(await res.text()).slice(0, 200)}`);
-      } else {
-        console.log(`[auth/apple] vínculo de Apple revocado para ${userId}`);
+    let revoked = false;
+    for (const clientId of clientIds) {
+      try {
+        const res = await fetch(APPLE_REVOKE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: await signAppleClientSecret(cfg, undefined, clientId),
+            token,
+            token_type_hint: "refresh_token",
+          }),
+          signal: AbortSignal.timeout(APPLE_HTTP_TIMEOUT_MS),
+        });
+        if (res.ok) {
+          revoked = true;
+          console.log(`[auth/apple] vínculo de Apple revocado para ${userId} (${clientId})`);
+          break;
+        }
+        console.error(`[auth/apple] revocación falló para ${userId} (${clientId}): ${res.status} ${(await res.text()).slice(0, 200)}`);
+      } catch (err) {
+        console.error(`[auth/apple] revocación falló para ${userId} (${clientId}):`, err);
       }
-    } catch (err) {
-      console.error(`[auth/apple] revocación falló para ${userId}:`, err);
     }
+    if (!revoked) console.error(`[auth/apple] ningún cliente pudo revocar el token de ${userId}`);
   }
 }
 
