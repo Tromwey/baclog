@@ -331,7 +331,7 @@ struct DiscoverView: View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHead(head)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .bottom, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     ForEach(list, id: \.title.id) { item in
                         let t = item.title
                         let w = t.format == .album ? 150.0 : 100.0
@@ -343,6 +343,7 @@ struct DiscoverView: View {
                                             HStack(spacing: 5) {
                                                 Image(systemName: "clock.fill").font(.system(size: 10)).foregroundStyle(KColor.waiting)
                                                 Text(item.when).monoLabel(10, tracking: 0.04, color: KColor.text)
+                                                    .lineLimit(1).minimumScaleFactor(0.75)
                                             }
                                             .padding(.horizontal, 8).frame(height: 24)
                                             .background(KColor.glassArt, in: Capsule())

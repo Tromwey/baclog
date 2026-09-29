@@ -253,7 +253,7 @@ export function DiscoverHome({
         {shownSoon.length > 0 && (
           <section className="flex flex-col gap-3.5 pt-9">
             <SectionHead>los más esperados</SectionHead>
-            <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-4">
+            <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5 pb-4">
               {shownSoon.map((u) => (
                 <SoonTile key={u.catalogItemId} item={u} now={now} onOpen={onOpen} />
               ))}
@@ -267,7 +267,7 @@ export function DiscoverHome({
           shownCreators.length > 0 && (
             <section className="flex flex-col gap-3.5 pt-9">
               <SectionHead>lo nuevo de tus favoritos</SectionHead>
-              <div className="bl-scroll flex items-end gap-3 overflow-x-auto px-5 pb-4">
+              <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5 pb-4">
                 {shownCreators.map((c) => (
                   <CreatorTile key={c.catalogItemId} item={c} now={now} onOpen={onOpen} />
                 ))}
