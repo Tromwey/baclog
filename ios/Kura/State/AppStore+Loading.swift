@@ -209,6 +209,28 @@ extension AppStore {
         }
     }
 
+    static func formatKey(_ format: MediaFormat, time: Int?) -> String {
+        format == .film ? "film:\(time ?? 1)" : format.rawValue
+    }
+
+    /// Descubrir por formato (2a–2c): `GET /discover/formats/{format}`, once per key per session.
+    /// Fail-open like the web: an error leaves an EMPTY shelf (the page words it), never a block.
+    func loadDiscoverFormat(_ format: MediaFormat, time: Int? = nil) async {
+        let key = Self.formatKey(format, time: time)
+        guard discoverFormats[key] == nil else { return }
+        let session = s
+        let payload: DiscoverFormatPayload
+        do {
+            payload = try await api.discoverFormat(format, time: time)
+        } catch {
+            guard s === session, !(error is CancellationError), (error as? KuraAPIError) != .cancelled else { return }
+            payload = DiscoverFormatPayload(format: format, time: time)
+        }
+        guard s === session else { return }
+        for t in payload.allTitles { register(t) }
+        discoverFormats[key] = payload
+    }
+
     /// `GET /search` + `GET /people/search`, in parallel. Stale answers are dropped.
     func runSearch(_ q: String, kind: MediaFormat? = nil) async {
         let query = q.trimmingCharacters(in: .whitespaces)

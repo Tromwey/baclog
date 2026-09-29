@@ -209,6 +209,97 @@ struct DiscoverPayload: Decodable {
     var allTitles: [Title] { recommended.map(\.title) + trending.map(\.title) + upcoming.map(\.title) }
 }
 
+/// `GET /discover/formats/{film|series|album}` — Descubrir por formato (Claude Design
+/// "Descubrir Final – Formatos", 2a–2c). The vocabularies (times, lenses, moods and their
+/// tones) come IN the payload and each item carries its mood indices: the genre mapping
+/// lives once, on the server (`modules/catalog/format-moods.ts`).
+struct DiscoverFormatPayload: Decodable {
+    /// "¿cuánto tiempo tienes?" (cine) / the marathon lenses (series, with `maxMinutes`).
+    struct Choice: Decodable, Hashable {
+        let label: String
+        let sub: String
+        let maxMinutes: Int?
+        init(label: String, sub: String, maxMinutes: Int? = nil) { self.label = label; self.sub = sub; self.maxMinutes = maxMinutes }
+    }
+    /// A humor (cine) or moment (música): its label and the two tones its swatch and the page wear.
+    struct Mood: Decodable, Hashable {
+        let label: String
+        let palette: [String]
+    }
+    struct Item: Decodable, Hashable, Identifiable {
+        let title: Title
+        var id: String { title.id }
+        /// Cine: minutes (nil = unknown, no pill), "En cines", Spanish genre.
+        var runtimeMinutes: Int? = nil
+        var inCinemas = false
+        var genre: String? = nil
+        /// Cine / música: indices into `moods`.
+        var moods: [Int] = []
+        /// Series: the whole series' running time, episodes and network.
+        var minutes: Int? = nil
+        var episodes: Int? = nil
+        var network: String? = nil
+
+        init(title: Title, runtimeMinutes: Int? = nil, inCinemas: Bool = false, genre: String? = nil, moods: [Int] = [],
+             minutes: Int? = nil, episodes: Int? = nil, network: String? = nil) {
+            self.title = title; self.runtimeMinutes = runtimeMinutes; self.inCinemas = inCinemas; self.genre = genre
+            self.moods = moods; self.minutes = minutes; self.episodes = episodes; self.network = network
+        }
+
+        private enum CodingKeys: String, CodingKey { case title, runtimeMinutes, inCinemas, genre, moods, minutes, episodes, network }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = try c.decode(Title.self, forKey: .title)
+            runtimeMinutes = try c.decodeIfPresent(Int.self, forKey: .runtimeMinutes)
+            inCinemas = try c.decodeIfPresent(Bool.self, forKey: .inCinemas) ?? false
+            genre = try c.decodeIfPresent(String.self, forKey: .genre)
+            moods = try c.decodeIfPresent([Int].self, forKey: .moods) ?? []
+            minutes = try c.decodeIfPresent(Int.self, forKey: .minutes)
+            episodes = try c.decodeIfPresent(Int.self, forKey: .episodes)
+            network = try c.decodeIfPresent(String.self, forKey: .network)
+        }
+    }
+    /// Colecciones Kuradas: a team account's public collection, opened as `publicCollection`.
+    struct Kurada: Decodable, Hashable, Identifiable {
+        let id: String
+        let name: String
+        let curator: String
+        let handle: String
+        let count: Int
+        let palette: [String]
+        /// The fan, front first (≤ 3).
+        let covers: [Title]
+    }
+
+    var format: MediaFormat
+    var time: Int? = nil
+    var times: [Choice] = []
+    var lenses: [Choice] = []
+    var moods: [Mood] = []
+    var titles: [Item] = []
+    var kuradas: [Kurada] = []
+
+    init(format: MediaFormat, time: Int? = nil, times: [Choice] = [], lenses: [Choice] = [], moods: [Mood] = [],
+         titles: [Item] = [], kuradas: [Kurada] = []) {
+        self.format = format; self.time = time; self.times = times; self.lenses = lenses
+        self.moods = moods; self.titles = titles; self.kuradas = kuradas
+    }
+
+    private enum CodingKeys: String, CodingKey { case format, time, times, lenses, moods, titles, kuradas }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        format = try c.decode(MediaFormat.self, forKey: .format)
+        time = try c.decodeIfPresent(Int.self, forKey: .time)
+        times = try c.decodeIfPresent([Choice].self, forKey: .times) ?? []
+        lenses = try c.decodeIfPresent([Choice].self, forKey: .lenses) ?? []
+        moods = try c.decodeIfPresent([Mood].self, forKey: .moods) ?? []
+        titles = try c.decodeIfPresent([Item].self, forKey: .titles) ?? []
+        kuradas = try c.decodeIfPresent([Kurada].self, forKey: .kuradas) ?? []
+    }
+
+    var allTitles: [Title] { titles.map(\.title) + kuradas.flatMap(\.covers) }
+}
+
 /// `GET /recap/months` item.
 struct RecapMonth: Hashable, Identifiable, Decodable {
     let era: String

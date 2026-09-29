@@ -9,7 +9,7 @@ import type { ExternalItem, VideoCatalog } from "./types";
 const IMG = "https://image.tmdb.org/t/p/w342";
 
 /** Stable TMDB genre ids — a static map avoids an extra API round trip. */
-const GENRES: Record<number, string> = {
+export const TMDB_GENRES: Record<number, string> = {
   28: "action", 12: "adventure", 16: "animation", 35: "comedy",
   80: "crime", 99: "documentary", 18: "drama", 10751: "family",
   14: "fantasy", 36: "history", 27: "horror", 10402: "music",
@@ -109,7 +109,7 @@ class TmdbApi implements VideoCatalog {
       // `RELEASE_DAY_UTC_HOUR`). "" / garbage → null, and a null never erases
       // a known date in the upsert (search.ts), while a known one corrects it.
       releaseDate: releaseDayInstant(type === "film" ? r.release_date : r.first_air_date),
-      genre: r.genre_ids?.map((g) => GENRES[g]).find(Boolean) ?? null,
+      genre: r.genre_ids?.map((g) => TMDB_GENRES[g]).find(Boolean) ?? null,
       synopsis: r.overview || null,
       posterUrl: r.poster_path ? `${IMG}${r.poster_path}` : null,
       sourceRating: r.vote_average ?? null,
@@ -211,6 +211,62 @@ export async function getSeriesFacts(tmdbId: string): Promise<SeriesFacts | null
     };
   } catch (err) {
     console.error(`[catalog] TMDB /tv/${tmdbId} failed:`, err);
+    return null;
+  }
+}
+
+/** Descubrir · Series · maratón (2b): how long a whole series takes. */
+export interface SeriesLength {
+  episodes: number;
+  /** Whole-series running time, minutes (episodes × the typical episode). */
+  minutes: number;
+  /** First network ("Netflix", "HBO"), when TMDB names one. */
+  network: string | null;
+}
+
+/**
+ * The maratón pill ("3,9 h") — `number_of_episodes` × the episode runtime
+ * TMDB gives (`episode_run_time` average, else the last aired episode's).
+ * NOT persisted to `raw` like `getSeriesFacts`: it only feeds Descubrir's
+ * shelf, and a week of fetch cache covers a pool that barely moves. Null on
+ * no key, an error, or a series TMDB can't size (no episodes / no runtime).
+ */
+export async function getSeriesLength(tmdbId: string): Promise<SeriesLength | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const url = new URL(`https://api.themoviedb.org/3/tv/${tmdbId}`);
+  url.searchParams.set("language", "es-MX");
+  const headers = tmdbAuth(url, env.TMDB_API_KEY);
+  try {
+    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 * 24 * 7 } });
+    if (!res.ok) {
+      console.warn(`[catalog] TMDB /tv/${tmdbId} (length) failed: ${res.status}`);
+      return null;
+    }
+    const d = (await res.json()) as {
+      number_of_episodes?: unknown;
+      episode_run_time?: unknown;
+      last_episode_to_air?: { runtime?: unknown } | null;
+      networks?: { name?: unknown }[];
+    };
+    const episodes = typeof d.number_of_episodes === "number" ? d.number_of_episodes : 0;
+    const runs = Array.isArray(d.episode_run_time)
+      ? d.episode_run_time.filter((n): n is number => typeof n === "number" && n > 0)
+      : [];
+    const last = d.last_episode_to_air?.runtime;
+    const perEpisode = runs.length
+      ? runs.reduce((a, b) => a + b, 0) / runs.length
+      : typeof last === "number" && last > 0
+        ? last
+        : 0;
+    if (episodes <= 0 || perEpisode <= 0) return null;
+    const network = d.networks?.[0]?.name;
+    return {
+      episodes,
+      minutes: Math.round(episodes * perEpisode),
+      network: typeof network === "string" && network ? network : null,
+    };
+  } catch (err) {
+    console.warn(`[catalog] TMDB /tv/${tmdbId} (length) failed:`, err);
     return null;
   }
 }

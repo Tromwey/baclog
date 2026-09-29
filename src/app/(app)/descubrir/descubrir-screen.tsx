@@ -27,6 +27,7 @@ import {
 } from "@/app/(app)/item/[catalogItemId]/cross-media-discovery";
 import { extractPalette } from "@/modules/cards/palette";
 import type { LatestDoubleFeature } from "@/modules/recs/discover-rails";
+import type { KuradaShelves } from "@/modules/social/kurada";
 import type { TrendingTitle } from "@/modules/social/trending";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
 import {
@@ -87,6 +88,7 @@ export function DescubrirScreen({
   upcoming,
   now,
   doubleFeature,
+  kuradas,
 }: {
   username: string;
   backlogs: SearchBacklog[];
@@ -102,6 +104,7 @@ export function DescubrirScreen({
   upcoming: UpcomingItem[];
   now: number;
   doubleFeature: LatestDoubleFeature | null;
+  kuradas: KuradaShelves;
 }) {
   // ?q= is what survives a trip into an item: the search writes it before
   // pushing /item/…, so the item's back lands on the SAME results.
@@ -380,6 +383,7 @@ export function DescubrirScreen({
           hasLoved={hasLoved}
           totalTitles={totalTitles}
           library={library}
+          kuradas={kuradas}
           pending={pending}
           onSearch={openSearch}
           onSave={setSaving}

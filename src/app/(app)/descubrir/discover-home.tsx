@@ -11,18 +11,13 @@ import type {
   LatestDoubleFeature,
   RailWork,
 } from "@/modules/recs/discover-rails";
+import type { KuradaShelves } from "@/modules/social/kurada";
 import type { TrendingTitle } from "@/modules/social/trending";
 import type { LibraryIndex } from "./library";
 import type { SeenWork } from "./recents";
 import type { SaveWork } from "./save-sheet";
-import {
-  KIND_NOUN,
-  KIND_SHORT,
-  KindTrack,
-  SearchGlyph,
-  inKind,
-  type KindTab,
-} from "./kura-bits";
+import { FormatPage } from "./format-pages";
+import { KIND_SHORT, KindTrack, SearchGlyph, type KindTab } from "./kura-bits";
 
 /** One "recomendado para ti" card: a cached reco and the obsession behind it. */
 export interface RecCard {
@@ -47,7 +42,9 @@ export interface RecCard {
  *  - **double feature** — the cross-media engine's card (not in the mock;
  *    the product keeps it), a flat tinted card instead of the old glow.
  *
- * The format track filters every section in place, as in the mock.
+ * Todo is this page. Cine, Series and Música on the format track are pages of
+ * their own (Claude Design "Descubrir Final – Formatos" 2a–2c, `format-pages.tsx`):
+ * "a cada formato se entra por la pista de arriba".
  */
 export function DiscoverHome({
   recs,
@@ -58,6 +55,7 @@ export function DiscoverHome({
   hasLoved,
   totalTitles,
   library,
+  kuradas,
   pending,
   onSearch,
   onSave,
@@ -73,6 +71,8 @@ export function DiscoverHome({
   hasLoved: boolean;
   totalTitles: number;
   library: LibraryIndex;
+  /** The team's collections per format (2a–2c's closing row). */
+  kuradas: KuradaShelves;
   pending: boolean;
   onSearch: () => void;
   onSave: (work: SaveWork) => void;
@@ -81,14 +81,25 @@ export function DiscoverHome({
 }) {
   const [tab, setTab] = useState<KindTab>("all");
 
-  const shownRecs = recs.filter((r) => inKind(tab, r.work.mediaType)).slice(0, 6);
-  const shownTrend = trending.filter((t) => inKind(tab, t.mediaType)).slice(0, 5);
-  const shownSoon = upcoming.filter((u) => inKind(tab, u.mediaType));
-  const nothingForKind =
-    tab !== "all" &&
-    shownRecs.length === 0 &&
-    shownTrend.length === 0 &&
-    shownSoon.length === 0;
+  if (tab !== "all") {
+    return (
+      <FormatPage
+        tab={tab}
+        onTab={setTab}
+        onSearch={onSearch}
+        library={library}
+        kuradas={kuradas[tab]}
+        upcoming={upcoming}
+        now={now}
+        onSave={onSave}
+        onOpen={onOpen}
+      />
+    );
+  }
+
+  const shownRecs = recs.slice(0, 6);
+  const shownTrend = trending.slice(0, 5);
+  const shownSoon = upcoming;
 
   const savedIn = (id: string) => library.byTitle[id]?.length ?? 0;
 
@@ -169,31 +180,19 @@ export function DiscoverHome({
           </section>
         )}
 
-        {nothingForKind && (
-          <div className="flex flex-col gap-3 px-7 pt-6">
-            <p className="font-display text-[32px] leading-[1.1] text-text text-balance">
-              nada de {KIND_NOUN[tab]} por aquí todavía.
-            </p>
-            <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-              Busca un título o vuelve a Todo.
-            </p>
-          </div>
-        )}
 
-        {tab === "all" && (
-          <section className="flex flex-col gap-3.5">
-            <div className="px-5">
-              <SectionTitle>una conexión</SectionTitle>
-            </div>
-            <DoubleFeatureCard
-              pairing={doubleFeature}
-              hasLoved={hasLoved}
-              totalTitles={totalTitles}
-              pending={pending}
-              onRecomendar={onRecomendar}
-            />
-          </section>
-        )}
+        <section className="flex flex-col gap-3.5">
+          <div className="px-5">
+            <SectionTitle>una conexión</SectionTitle>
+          </div>
+          <DoubleFeatureCard
+            pairing={doubleFeature}
+            hasLoved={hasLoved}
+            totalTitles={totalTitles}
+            pending={pending}
+            onRecomendar={onRecomendar}
+          />
+        </section>
       </div>
     </div>
   );

@@ -35,6 +35,13 @@ export const env = {
   TIDAL_CLIENT_ID: process.env.TIDAL_CLIENT_ID,
   TIDAL_CLIENT_SECRET: process.env.TIDAL_CLIENT_SECRET,
   /**
+   * Optional (Descubrir · Kurada): comma-separated usernames of the TEAM
+   * accounts whose public collections show as "Colecciones Kuradas" on the
+   * format pages. Absent/empty → the section doesn't render. A list, not
+   * `isAdmin`: curating must never hand out the Torre de Control.
+   */
+  KURADA_HANDLES: process.env.KURADA_HANDLES,
+  /**
    * Optional (F3.5.5): the cross-media reco engine has three providers behind
    * one interface — deterministic FIXTURE (default, no key: build/test never
    * blocks), Anthropic Claude, and Google Gemini (free tier). Provider is
