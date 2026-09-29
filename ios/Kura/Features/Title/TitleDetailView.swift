@@ -859,8 +859,10 @@ private struct AlbumSections: View {
     }
 
     private func musicURL(_ t: Title) -> URL {
-        // The API resolves the preferred service's link (`watch[].url`); otherwise search it.
-        if let u = t.watch.first?.url { return u }
+        // The API hands back `/api/links/resolve?…&service=<wire>` pinned to the preference AT FETCH
+        // TIME, and the title stays cached after the user switches app in Ajustes — so re-pin
+        // `service` to the CURRENT choice, or the label says Apple Music while the link opens Tidal.
+        if let u = t.watch.first?.url { return repinnedService(u) }
         let q = [t.name, t.creator].compactMap { $0 }.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         switch store.musicApp {
         case "Spotify": return URL(string: "https://open.spotify.com/search/\(q)")!
@@ -868,6 +870,14 @@ private struct AlbumSections: View {
         case "Tidal": return URL(string: "https://listen.tidal.com/search?q=\(q)")!
         default: return URL(string: "https://music.apple.com/mx/search?term=\(q)")!
         }
+    }
+
+    private func repinnedService(_ u: URL) -> URL {
+        guard var c = URLComponents(url: u, resolvingAgainstBaseURL: false),
+              let items = c.queryItems, items.contains(where: { $0.name == "service" }) else { return u }
+        let wire = AppStore.serviceWire(store.musicApp)
+        c.queryItems = items.map { $0.name == "service" ? URLQueryItem(name: "service", value: wire) : $0 }
+        return c.url ?? u
     }
 }
 
