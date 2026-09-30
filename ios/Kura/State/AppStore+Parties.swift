@@ -90,6 +90,7 @@ extension AppStore {
         s.parties[id] = nil
         s.partyCards?.removeAll { $0.id == id }
         if let sh = sheet, sh.partyID == id { dismissSheet() }
+        if s.partyExport?.partyID == id { closePartyExport(force: true) }
         for t in Tab.allCases { paths[t]?.removeAll { $0 == .party(id) || $0 == .partySearch(id) } }
     }
 
@@ -479,7 +480,7 @@ extension SheetRoute {
         switch self {
         case .partyWelcome(let id, _), .partyCap(let id), .partySong(let id, _), .partyShare(let id),
              .partyOptions(let id), .partyLink(let id), .partyExport(let id), .partyEdit(let id),
-             .partyBlocked(let id), .partyDelete(let id), .partyLeave(let id):
+             .partyBlocked(let id), .partyDelete(let id), .partyLeave(let id), .partyExportLeave(let id):
             return id
         default:
             return nil

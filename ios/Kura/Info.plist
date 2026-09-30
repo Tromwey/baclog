@@ -26,6 +26,8 @@
 	<string>$(KURA_API_SCHEME)://$(KURA_API_HOST)/api/v1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Kura crea en tu Apple Music la playlist de la fiesta. No lee ni cambia el resto de tu biblioteca.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Newsreader-Regular.ttf</string>

@@ -6,7 +6,8 @@ import SwiftUI
 /// party (collab, 1 of 3) · partyfull (3 of 3 → "Cambiar una canción") · partywelcome · partyreturning ·
 /// partyblocked · partyblockedremove (blocked, taking your own song out — C4) · partyguestopts ·
 /// partyleave (a guest's "¿salir de la fiesta?" — C3) · partyempty · partyhost · partyhostempty · partyshare · partylink · partylinkoff ·
-/// partyopts · partyremove · partyexport · partyedit · partysearch (`-kuraPartyQuery caifanes|thriller|error`) ·
+/// partyopts · partyremove · partyexport · partyexportguest · partyexportsoon · partyexportconnect ·
+/// partyexportprogress · partyexportdone · partyexportappledone · partyexportfailed · partyexportrun · partyedit · partysearch (`-kuraPartyQuery caifanes|thriller|error`) ·
 /// partycap · partycreate · partylist (guest, centred in the carousel) · partylistmine ·
 /// partylisthost · partylistempty · partyunavailable · invite (signed out) · invitedead · inviteunavailable
 enum PartyDebug {
@@ -66,6 +67,40 @@ enum PartyDebug {
             main([.party(mine)], sheet: .partySong(partyID: mine, titleID: MockPartyServer.catalog["toxic"]!.id))
         case "partyexport":
             main([.party(mine)], sheet: .partyExport(mine))
+        // "Llévala a otra app" (`-kuraMusic off|none|apple|tidal`, `-kuraTidalConnected YES`,
+        // `-kuraExportFail YES`, `-kuraAppleAuth denied`, `-kuraTidalDenied YES` — MockMusicExport.swift).
+        case "partyexportguest":
+            server.seedMine(["afuera"])
+            main([.party(eric)], sheet: .partyExport(eric))
+        case "partyexportsoon":
+            UserDefaults.standard.register(defaults: ["kuraMusic": "off"])
+            main([.party(eric)], sheet: .partyExport(eric))
+        case "partyexportconnect", "partyexportprogress", "partyexportdone", "partyexportfailed", "partyexportappledone":
+            main([.party(eric)])
+            let tidal = screen != "partyexportappledone"
+            let provider: MusicProvider = tidal ? .tidal : .appleMusic
+            var flow = PartyExportFlow(partyID: eric, provider: provider, playlistName: "la fiesta de eric", step: .connect)
+            switch screen {
+            case "partyexportprogress":
+                flow.step = .progress; flow.total = 8; flow.processed = 5; flow.current = "Tusa"
+            case "partyexportdone", "partyexportappledone":
+                MockMusicServer.shared.finish(eric, provider)
+                flow.step = .done; flow.state = MockMusicServer.shared.exportState(eric, provider)
+                flow.total = flow.state?.total ?? 8; flow.processed = flow.total
+            case "partyexportfailed":
+                flow.step = .failed; flow.total = 8; flow.processed = 5; flow.failure = MusicExportCopy.serviceFailed(.tidal)
+            default:
+                break
+            }
+            store.debugPartyExport(flow, services: MusicServices(appleMusic: .init(available: true), tidal: .init(available: true, connected: screen != "partyexportconnect")))
+        case "partyexportrun":
+            // The real flow over the mock: `-kuraExportRun apple|tidal` (default tidal).
+            main([.party(eric)])
+            let p: MusicProvider = UserDefaults.standard.string(forKey: "kuraExportRun") == "apple" ? .appleMusic : .tidal
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                await store.debugRunPartyExport(eric, p)
+            }
         case "partyedit":
             main([.party(mine)], sheet: .partyEdit(mine))
         case "partysearch":

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth";
+import { parseTidalReturn } from "@/components/party/export-copy";
 import { PartyRoom } from "@/components/party/party-room";
 import { PartySoonScreen } from "@/components/party/party-soon";
 import { loginPathFor, safeReturnTo } from "@/lib/return-to";
@@ -24,7 +25,9 @@ import { partyPath } from "@/modules/party-collections/rules";
  * `?w=new|back` (from the join) opens the welcome sheet; `?sheet=share`
  * (from "Crear fiesta") opens "invita a la fiesta."; `?sheet=search` (the
  * Buscar chip of Tus colecciones) opens the search. All leave the URL once
- * read (party-room.tsx).
+ * read (party-room.tsx). `?music=tidal&connected=1|0[&reason=]` is the
+ * landing of the TIDAL OAuth callback (export contract §4.1): 1 reopens the
+ * export, 0 says why in a toast.
  */
 
 export const metadata: Metadata = {
@@ -69,6 +72,7 @@ export default async function PartyPage({
       welcome={w}
       openShare={sp.sheet === "share"}
       openSearch={sp.sheet === "search"}
+      tidalReturn={parseTidalReturn(sp)}
     />
   );
 }

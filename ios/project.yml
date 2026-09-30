@@ -57,6 +57,9 @@ targets:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true
         ITSAppUsesNonExemptEncryption: false
+        # "Llévala a otra app" (MusicKit, contrato export §6.3). Also needs the MusicKit App Service
+        # on the App ID com.tromwey.kura (developer.apple.com) — an App Service, not an entitlement.
+        NSAppleMusicUsageDescription: "Kura crea en tu Apple Music la playlist de la fiesta. No lee ni cambia el resto de tu biblioteca."
         # KURA_API_BASE, split in scheme/host so `//` never lands in a build setting.
         # Debug: http://localhost:3010/api/v1 · Release: https://get-kura.app/api/v1 (see configs below).
         KuraAPIBase: $(KURA_API_SCHEME)://$(KURA_API_HOST)/api/v1

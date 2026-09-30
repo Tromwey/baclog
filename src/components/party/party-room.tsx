@@ -10,17 +10,19 @@ import { feedSurface, feedTail, tintEnds } from "@/components/kura/tint";
 import { Toast, useToast } from "@/components/kura/toast";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { Sheet } from "@/components/ui";
+import type { MusicProvider } from "@/modules/music-export/types";
 import type { PartyDetail, PartySong } from "@/modules/party-collections/types";
 import { logged, PARTY_GONE_MESSAGE } from "./party-errors";
 import { setPartyFlash } from "./party-flash";
 import { handleOf, PartyHero, songsLabel, SongCover, SongRowBody } from "./party-parts";
+import { type TidalReturn, tidalConnectFailed } from "./export-copy";
+import { ExportScreen, ExportSheet } from "./party-export";
 import { PartySearch } from "./party-search";
 import {
   BlockedSheet,
   CapSheet,
   DeleteSheet,
   EditSheet,
-  ExportSheet,
   GuestOptionsSheet,
   LeaveSheet,
   LinkSheet,
@@ -64,6 +66,7 @@ export function PartyRoom({
   welcome,
   openShare,
   openSearch: openSearchFlag = false,
+  tidalReturn = null,
 }: {
   initial: PartyDetail;
   viewerHandle: string | null;
@@ -74,6 +77,8 @@ export function PartyRoom({
   /** From Tus colecciones' Buscar chip (`?sheet=search`): open the search,
    *  if this viewer may add (host, or a guest with room). */
   openSearch?: boolean;
+  /** Back from TIDAL's consent (`?music=tidal&connected=…`): reopen the export, or say why not. */
+  tidalReturn?: TidalReturn | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -89,6 +94,9 @@ export function PartyRoom({
   const [searching, setSearching] = useState(
     openSearchFlag && !welcome && (initial.viewer.role === "host" || initial.viewer.canAdd),
   );
+  const [exporting, setExporting] = useState<{ provider: MusicProvider; start: "connect" | "run" } | null>(
+    tidalReturn?.ok ? { provider: "tidal", start: "run" } : null,
+  );
   const [iosOff, setIosOff] = useState(true);
   const hexes = usePartyHexes(party.songs);
 
@@ -103,6 +111,13 @@ export function PartyRoom({
       setIosOff(false);
     }
   }, [initial.id]);
+
+  // A failed TIDAL connection says why, once (the query already left the URL).
+  const tidalFailed = tidalReturn && !tidalReturn.ok ? tidalConnectFailed(tidalReturn.reason) : null;
+  useEffect(() => {
+    if (tidalFailed) toast.show({ message: tidalFailed, kind: "error" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
 
   const refresh = useCallback(async () => {
     const res = await logged("refresh", party.id, getPartyAction(party.id));
@@ -153,6 +168,8 @@ export function PartyRoom({
       // stays dismissed for this visit
     }
   };
+
+  const closeExport = useCallback(() => setExporting(null), []);
 
   const removeTarget = sheet?.k === "remove" ? party.songs.find((s) => s.titleId === sheet.titleId) : null;
 
@@ -327,6 +344,18 @@ export function PartyRoom({
         />
       )}
 
+      {exporting && (
+        <ExportScreen
+          key={`${exporting.provider}:${exporting.start}`}
+          party={party}
+          provider={exporting.provider}
+          start={exporting.start}
+          toast={toast}
+          style={{ background: feedSurface(hexes), backgroundColor: tail }}
+          onClose={closeExport}
+        />
+      )}
+
       {sheet && (
         <Sheet onClose={() => setSheet(null)} label={SHEET_LABEL[sheet.k]}>
           {sheet.k === "welcome" && (
@@ -361,7 +390,16 @@ export function PartyRoom({
           )}
           {sheet.k === "link" && <LinkSheet party={party} lastUrl={lastUrl} onParty={setParty} toast={toast} />}
           {sheet.k === "opts" && <OptionsSheet party={party} go={(k) => setSheet({ k })} />}
-          {sheet.k === "export" && <ExportSheet party={party} toast={toast} />}
+          {sheet.k === "export" && (
+            <ExportSheet
+              party={party}
+              toast={toast}
+              onPick={(provider, connected) => {
+                setSheet(null);
+                setExporting({ provider, start: provider === "tidal" && !connected ? "connect" : "run" });
+              }}
+            />
+          )}
           {sheet.k === "edit" && (
             <EditSheet
               party={party}
@@ -374,7 +412,13 @@ export function PartyRoom({
             <DeleteSheet party={party} onDeleted={() => router.replace("/backlogs")} toast={toast} />
           )}
           {sheet.k === "blocked" && <BlockedSheet party={party} onChanged={() => void refresh()} toast={toast} />}
-          {sheet.k === "guestOpts" && <GuestOptionsSheet party={party} onLeave={() => setSheet({ k: "leave" })} />}
+          {sheet.k === "guestOpts" && (
+            <GuestOptionsSheet
+              party={party}
+              onExport={() => setSheet({ k: "export" })}
+              onLeave={() => setSheet({ k: "leave" })}
+            />
+          )}
           {sheet.k === "leave" && (
             <LeaveSheet
               party={party}

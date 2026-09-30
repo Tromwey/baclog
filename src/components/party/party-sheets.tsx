@@ -477,7 +477,7 @@ export function OptionsSheet({
       </div>
       <div className="-mx-2 flex flex-col gap-0.5">
         <MenuRow icon="link" label="Gestionar link" aside={party.invite?.active ? "activo" : "desactivado"} onClick={() => go("link")} />
-        <MenuRow icon="arrow" label="Llevar a otra app" onClick={() => go("export")} />
+        <MenuRow icon="music" label="Llevar a otra app" onClick={() => go("export")} />
         <MenuRow icon="pencil" label="Editar" onClick={() => go("edit")} />
         {blocked > 0 && (
           <MenuRow icon="lock" label="Bloqueados" aside={String(blocked)} onClick={() => go("blocked")} />
@@ -487,36 +487,7 @@ export function OptionsSheet({
   );
 }
 
-/* ---------------------------------------------------------------- export */
-
-/** Fase 2: no backend yet — the sheet says so and the rows only answer "Próximamente". */
-export function ExportSheet({ party, toast }: { party: PartyDetail; toast: ToastHost }) {
-  const soon = () => toast.show({ message: "Próximamente. Todavía no se puede llevar a otra app." });
-  const ROW =
-    "flex h-[60px] w-full items-center justify-between rounded-[18px] bg-[var(--glass-bg)] px-[18px] font-sans text-[16px] font-semibold text-text bl-press";
-  return (
-    <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>llévala a otra app.</h2>
-      <p className={BODY}>
-        Creamos una playlist con las {songsLabel(party.songs.length)} en tu cuenta. La colección sigue viva en
-        kura.
-      </p>
-      <div className="mt-[18px] flex flex-col gap-2">
-        <button type="button" onClick={soon} aria-disabled className={ROW}>
-          Llévala a Apple Music
-          <span aria-hidden className="text-text-3">›</span>
-        </button>
-        <button type="button" onClick={soon} aria-disabled className={ROW}>
-          Llévala a Tidal
-          <span aria-hidden className="text-text-3">›</span>
-        </button>
-      </div>
-      <span className="mt-3.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-text-3">
-        Próximamente · fase 2
-      </span>
-    </div>
-  );
-}
+/* export: the sheet body lives in party-export.tsx (ExportSheet). */
 
 /* ------------------------------------------------------------------ edit */
 
@@ -670,8 +641,17 @@ export function BlockedSheet({
 
 /* ------------------------------------------------------- guest options */
 
-/** A guest's "…": for now one row, "Salir de la fiesta" (C3). */
-export function GuestOptionsSheet({ party, onLeave }: { party: PartyDetail; onLeave: () => void }) {
+/** A guest's "…": "Llevar a otra app" and "Salir de la fiesta" (C3). */
+export function GuestOptionsSheet({
+  party,
+  onExport,
+  onLeave,
+}: {
+  party: PartyDetail;
+  /** Guests export too (D2 of the export contract). */
+  onExport: () => void;
+  onLeave: () => void;
+}) {
   return (
     <div className="flex flex-col">
       <div className="flex items-baseline justify-between gap-3 pb-2.5">
@@ -681,6 +661,7 @@ export function GuestOptionsSheet({ party, onLeave }: { party: PartyDetail; onLe
         </span>
       </div>
       <div className="-mx-2 flex flex-col gap-0.5">
+        <MenuRow icon="music" label="Llevar a otra app" onClick={onExport} />
         <MenuRow icon="arrow" label="Salir de la fiesta" onClick={onLeave} />
       </div>
     </div>

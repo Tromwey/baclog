@@ -62,8 +62,11 @@ enum SheetRoute: Identifiable, Hashable {
     case partyOptions(String)
     /// "el link." — active / desactivado, Crear link nuevo, Desactivar link.
     case partyLink(String)
-    /// "llévala a otra app." (fase 2: no backend yet, shown as próximamente).
+    /// "llévala a otra app." — Apple Music · TIDAL (host and guests; "Próximamente" when the
+    /// service isn't on).
     case partyExport(String)
+    /// "¿salir ahora?" — closing the export screen while it's passing the songs.
+    case partyExportLeave(String)
     case partyEdit(String)
     case partyBlocked(String)
     case partyDelete(String)
@@ -247,6 +250,14 @@ final class SessionData {
     var partiesUnavailable = false
     var invites: [String: InvitePreview] = [:]
     var deadInvites: Set<String> = []
+    // "Llévala a otra app" (`AppStore+MusicExport`).
+    /// `GET /music/services`; nil = not asked yet (or asking).
+    var musicServices: MusicServices?
+    /// The last `GET /music/services` failed with something other than a 503.
+    var musicServicesError: KuraAPIError?
+    /// The export screen over everything (`PartyExportView`); nil = closed.
+    var partyExport: PartyExportFlow?
+    @ObservationIgnored var partyExportTask: Task<Void, Never>?
     var notifications: [KNotification] = []
     var requestStates: [String: RequestState] = [:]
     var recentSearches: [String] = []
@@ -315,6 +326,8 @@ final class SessionData {
         for (_, t) in deferredWrites { t.cancel() }
         for (_, c) in writeChains { c.task.cancel() }
         for (_, t) in pendingCollections { t.cancel() }
+        partyExportTask?.cancel()
+        partyExportTask = nil
         deferredWrites = [:]
         writeChains = [:]
         pendingCollections = [:]

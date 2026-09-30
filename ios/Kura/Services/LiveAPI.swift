@@ -481,6 +481,9 @@ final class APIClient: @unchecked Sendable {
         case "conflict": return .conflict(code: envelope?.reason, message: message)
         case "rate_limited": return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init))
         case "unsupported": return .unsupported
+        // The music export's 503s that mean something else than "not live yet" (`migration`).
+        case "unavailable" where ["not_configured", "service_failed"].contains(envelope?.reason ?? ""):
+            return .serviceUnavailable(reason: envelope?.reason ?? "", message: message)
         case "unavailable": return .unavailable
         case "underage": return .forbidden(code: "underage")
         case "not_released", "reaction_required": return .conflict(code: code, message: message)

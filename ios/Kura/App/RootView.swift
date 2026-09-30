@@ -26,11 +26,19 @@ struct RootView: View {
                 }
             }
             // A sheet is modal: VoiceOver never wanders into what's behind it.
-            .accessibilityHidden(store.sheet != nil || store.inviteLanding != nil)
+            .accessibilityHidden(store.sheet != nil || store.inviteLanding != nil || store.partyExport != nil)
 
             // A party link (`get-kura.app/f/{token}`) signed out, or a dead one: over every phase.
             if let token = store.inviteLanding {
                 InviteLandingView(token: token)
+                    .transition(.opacity)
+                    .accessibilityHidden(store.sheet != nil)
+            }
+
+            // "Llévala a otra app" (`PartyExportView`): over the tabs and the dock, under the sheets
+            // (its "¿salir ahora?") and the toasts.
+            if store.partyExport != nil {
+                PartyExportView()
                     .transition(.opacity)
                     .accessibilityHidden(store.sheet != nil)
             }
@@ -253,6 +261,7 @@ struct SheetContent: View {
         case .partyBlocked(let id): PartyBlockedSheet(partyID: id)
         case .partyDelete(let id): PartyDeleteSheet(partyID: id)
         case .partyLeave(let id): PartyLeaveSheet(partyID: id)
+        case .partyExportLeave(let id): PartyExportLeaveSheet(partyID: id)
         }
     }
 }

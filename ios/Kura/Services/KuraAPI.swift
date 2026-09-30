@@ -197,6 +197,29 @@ protocol KuraAPI: Sendable {
     func invitePreview(token: String) async throws -> InvitePreview
     /// `POST /invites/{token}/join`. 404 dead link · 403 `onboarding_required`.
     func joinParty(token: String) async throws -> PartyJoin
+
+    // MARK: Music export ("Llévala a otra app" — `.claude/knowledge/state/export-contract.md`)
+    // Everything is `503 unavailable` (`.unavailable`) while `MIGRATION_0034_LIVE` is off. A 503
+    // with reason `not_configured` / `service_failed` arrives as `.serviceUnavailable`.
+    // `LiveAPI+MusicExport.swift` and `Mock/MockMusicExport.swift`.
+
+    /// `GET /music/services` — which service works on this deploy, and whether TIDAL is linked.
+    func musicServices() async throws -> MusicServices
+    /// `POST /music/tidal/start` → the TIDAL consent page to open in `ASWebAuthenticationSession`.
+    func startTidalAuth() async throws -> URL
+    /// `POST /music/tidal/complete` `{ ref }` (the `ref` of `kura://music/tidal/authorized?ref=…`).
+    /// 409 `auth_expired` = start again.
+    func completeTidalAuth(ref: String) async throws -> MusicServices
+    /// `DELETE /music/tidal`.
+    func disconnectTidal() async throws
+    /// `GET /parties/{id}/exports/{provider}` (`idle` if never started).
+    func partyExport(id: String, provider: MusicProvider) async throws -> ExportState
+    /// `POST /parties/{id}/exports/{provider}` — creates or resumes; re-queues the `missing`.
+    func startPartyExport(id: String, provider: MusicProvider) async throws -> ExportState
+    /// `POST /parties/{id}/exports/tidal/step` — one batch (≤ 10 songs) on the server.
+    func stepTidalExport(id: String) async throws -> ExportState
+    /// `PUT /parties/{id}/exports/apple_music` — what MusicKit did. 409 `playlist_exists`.
+    func reportAppleMusicExport(id: String, report: AppleMusicReport) async throws -> ExportState
 }
 
 /// `PATCH /me` body — only the fields you set are sent.
@@ -235,6 +258,9 @@ enum KuraAPIError: Error, Equatable {
     case rateLimited(retryAfter: Int?)
     case unsupported
     case unavailable
+    /// A `503 unavailable` WITH a reason this client acts on (`not_configured`, `service_failed` —
+    /// only the music export sends them) and the server's `message`, ready to show.
+    case serviceUnavailable(reason: String, message: String)
     case offline
     /// The task was cancelled (a view went away): never retried, never shown.
     case cancelled
@@ -257,6 +283,7 @@ enum KuraAPIError: Error, Equatable {
         // "Completo" alone saves `verdict = null`, so it never unlocks them.
         case .conflict(let code, _) where code == "reaction_required": return "Para reseñar, elige Me gusta o Me obsesiona."
         case .invalid(_, let m) where !m.isEmpty: return m
+        case .serviceUnavailable(_, let m) where !m.isEmpty: return m
         default: return fallback
         }
     }

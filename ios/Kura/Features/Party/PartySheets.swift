@@ -260,7 +260,7 @@ struct PartyShareSheet: View {
 }
 
 /// Opciones. The host's (design `opts`): Gestionar link · Llevar a otra app · Editar, plus
-/// Bloqueados (when there are) and Borrar fiesta. A guest's: Salir de la fiesta.
+/// Bloqueados (when there are) and Borrar fiesta. A guest's: Llevar a otra app · Salir de la fiesta.
 struct PartyOptionsSheet: View {
     @Environment(AppStore.self) private var store
     let partyID: String
@@ -276,6 +276,7 @@ struct PartyOptionsSheet: View {
             .padding(.bottom, 10)
             if p?.isHost == false {
                 VStack(spacing: 2) {
+                    SheetRow(systemImage: "arrow.right", label: "Llevar a otra app") { store.present(.partyExport(partyID)) }
                     SheetRow(systemImage: "rectangle.portrait.and.arrow.right", label: "Salir de la fiesta") {
                         store.present(.partyLeave(partyID))
                     }
@@ -294,9 +295,7 @@ struct PartyOptionsSheet: View {
             SheetRow(systemImage: "link", label: "Gestionar link", action: { store.present(.partyLink(partyID)) }) {
                 Text(p?.invite?.active == true ? "activo" : "desactivado").monoLabel(11, color: KColor.text3)
             }
-            SheetRow(systemImage: "arrow.right", label: "Llevar a otra app", action: { store.present(.partyExport(partyID)) }) {
-                Text("próximamente").monoLabel(11, color: KColor.text3)
-            }
+            SheetRow(systemImage: "arrow.right", label: "Llevar a otra app") { store.present(.partyExport(partyID)) }
             SheetRow(systemImage: "pencil", label: "Editar") { store.present(.partyEdit(partyID)) }
             if let n = p?.blockedGuests.count, n > 0 {
                 SheetRow(systemImage: "hand.raised", label: "Bloqueados", action: { store.present(.partyBlocked(partyID)) }) {
@@ -416,44 +415,65 @@ struct PartyLinkSheet: View {
     }
 }
 
-/// "llévala a otra app." (design `export-pick`). Fase 2: there's no backend yet (fiesta-contract
-/// §0), so both services are drawn and marked "Próximamente · fase 2", not tappable.
+/// "llévala a otra app." (design `shExport`): Apple Music · TIDAL, for the host AND the guests
+/// (founder), each into their own account. `GET /music/services` decides each button: `available:
+/// false` (or the 503 of `MIGRATION_0034_LIVE`) → dimmed with "Próximamente", never a flow that
+/// fails half-way. A linked TIDAL can be unlinked here.
 struct PartyExportSheet: View {
     @Environment(AppStore.self) private var store
     let partyID: String
 
     var body: some View {
         let n = store.party(partyID)?.songs.count ?? 0
+        let sv = store.musicServices
         VStack(alignment: .leading, spacing: 0) {
             PartySheetTitle(text: "llévala a otra app.")
-            PartySheetBody(text: "Creamos una playlist con las \(n) canciones en tu cuenta. La colección sigue viva en kura.")
+            PartySheetBody(text: n == 0
+                           ? "La fiesta todavía no tiene canciones. Cuando tenga, la pasas a tu cuenta."
+                           : "Creamos una playlist con \(n == 1 ? "la canción" : "las \(n) canciones") en tu cuenta. La colección sigue viva en kura.")
                 .padding(.top, 10)
             VStack(spacing: 8) {
-                service("Llévala a Apple Music")
-                service("Llévala a Tidal")
+                ForEach(MusicProvider.allCases, id: \.self) { p in
+                    service(p, state: sv.map { $0[p].available ? (n > 0 ? .ready : .empty) : .soon } ?? (store.musicServicesError == nil ? .loading : .soon))
+                }
             }
             .padding(.top, 18)
-            Text("Próximamente · fase 2")
-                .monoLabel(10, color: KColor.text3)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 14)
+            if let e = store.musicServicesError {
+                RetryStrip(error: e, text: "No pudimos revisar los servicios.") { Task { await store.loadMusicServices() } }
+                    .padding(.top, 12)
+            } else if sv?.tidal.connected == true {
+                PartyFlatButton(title: "Desconectar TIDAL", quiet: true) { Task { await store.disconnectTidal() } }
+                    .padding(.top, 8)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+        .task { await store.loadMusicServices() }
     }
 
-    private func service(_ label: String) -> some View {
-        HStack {
-            Text(label).font(.kura.ui(16, .semibold))
-            Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+    private enum RowState { case loading, ready, soon, empty }
+
+    private func service(_ p: MusicProvider, state: RowState) -> some View {
+        let label = "Llévala a \(p.label)"
+        return Button { store.startPartyExport(partyID, p) } label: {
+            HStack {
+                Text(label).font(.kura.ui(16, .semibold))
+                Spacer()
+                switch state {
+                case .soon: Text("Próximamente").monoLabel(10, color: KColor.text3)
+                case .loading: ProgressView().controlSize(.small).tint(KColor.text3)
+                case .ready, .empty: Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                }
+            }
+            .foregroundStyle(state == .ready ? KColor.text : KColor.text3)
+            .padding(.horizontal, 18)
+            .frame(height: 60)
+            .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
         }
-        .foregroundStyle(KColor.text3)
-        .padding(.horizontal, 18)
-        .frame(height: 60)
-        .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label), próximamente")
+        .kPress()
+        .disabled(state != .ready)
+        .accessibilityLabel(state == .soon ? "\(label), próximamente" : label)
     }
 }
 
