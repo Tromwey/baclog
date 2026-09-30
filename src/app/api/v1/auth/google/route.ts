@@ -3,7 +3,7 @@ import { verifyGoogleIdToken } from "@/auth/social-tokens";
 import { apiError, withPublicApi } from "@/authz/api";
 import { json, readJson } from "../../_lib/http";
 import { completeAppSignIn } from "../../_lib/sign-in";
-import { GOOGLE_401, GOOGLE_UNAVAILABLE, googleIosClientId } from "../../_lib/social";
+import { GOOGLE_401, GOOGLE_UNAVAILABLE, googleAudiences } from "../../_lib/social";
 import { GoogleSignInBodySchema } from "../../_lib/schemas";
 
 /**
@@ -11,23 +11,24 @@ import { GoogleSignInBodySchema } from "../../_lib/schemas";
  * SAME response as `otp/verify` (phase 4f).
  *
  * `idToken` verified against Google's JWKS (`iss` ∈ {https://accounts.google.com,
- * accounts.google.com}, `aud` = GOOGLE_IOS_CLIENT_ID, `exp`) with
+ * accounts.google.com}, `aud` ∈ {GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID} —
+ * iOS, and Android's Credential Manager `serverClientId` —, `exp`) with
  * `email_verified` true REQUIRED and, when the body carries the raw `nonce`,
  * the token's `nonce` = sha256hex(nonce), as Apple (`verifyGoogleIdToken`); then the
  * `account(provider="google", sub)` link or the verified email (link or
  * create), a minor → 403 `underage`, else session + bearer + `Me`. Any
- * token failure → ONE 401. Without GOOGLE_IOS_CLIENT_ID → 503 `unavailable`
+ * token failure → ONE 401. Without either client id → 503 `unavailable`
  * (`auth/providers` already told the app not to paint the button). Public,
  * rate limited by IP.
  */
 export const POST = withPublicApi(async (request) => {
-  const clientId = googleIosClientId();
-  if (!clientId) {
+  const audiences = googleAudiences();
+  if (audiences.length === 0) {
     return apiError("unavailable", GOOGLE_UNAVAILABLE);
   }
   const body = await readJson(request, GoogleSignInBodySchema);
 
-  const identity = await verifyGoogleIdToken(body.idToken, clientId, body.nonce);
+  const identity = await verifyGoogleIdToken(body.idToken, audiences, body.nonce);
   if (!identity) return apiError("unauthorized", GOOGLE_401);
 
   const account = await signInWithIdentity("google", identity);

@@ -90,9 +90,29 @@ export const env = {
    */
   APPLE_WEB_CLIENT_ID: process.env.APPLE_WEB_CLIENT_ID,
   /** Optional (phase 4f): the iOS OAuth client id of Google Sign-In (the
-   *  `aud` of its ID tokens; not a secret). Absent → `auth/google` answers
-   *  503 and `auth/providers` says `google: null`. */
+   *  `aud` of its ID tokens; not a secret). With GOOGLE_WEB_CLIENT_ID below
+   *  also absent → `auth/google` answers 503 and `auth/providers` says
+   *  `google: null`. */
   GOOGLE_IOS_CLIENT_ID: process.env.GOOGLE_IOS_CLIENT_ID,
+  /**
+   * Optional (Android, 2026-09-30): the "Web application" OAuth client id of
+   * the same GCP project (not a secret). The Android app passes it to
+   * Credential Manager as `serverClientId`, so its ID tokens carry `aud` =
+   * this id: `auth/google` and `me/identities/google` accept it next to
+   * GOOGLE_IOS_CLIENT_ID, and `auth/providers` returns it as
+   * `google.androidClientId`. Read through `_lib/social.ts`.
+   */
+  GOOGLE_WEB_CLIENT_ID: process.env.GOOGLE_WEB_CLIENT_ID,
+  /**
+   * Optional + SENSITIVE (Android push, 2026-09-30): the full JSON of a
+   * Google service account of the Firebase project with permission to send
+   * FCM messages (`project_id`, `client_email`, `private_key`). Read ONLY
+   * through `fcmConfig()` in src/modules/push/fcm-transport.ts; never
+   * logged. Absent/unparseable → FCM deliveries are a logged no-op (like
+   * APNs without APPLE_*). Registering FCM tokens also needs migration 0035
+   * (`MIGRATION_0035_LIVE`, src/auth/live-0035.ts).
+   */
+  FCM_SERVICE_ACCOUNT_JSON: process.env.FCM_SERVICE_ACCOUNT_JSON,
   /**
    * Optional (App Review): the demo accounts whose login code is fixed —
    * read through `reviewLoginCode()` in src/auth/otp.ts. `APP_REVIEW_EMAIL`

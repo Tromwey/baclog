@@ -821,7 +821,10 @@ export const apnsEnvironmentEnum = pgEnum("apns_environment", ["sandbox", "produ
  * two people. Tied to the bearer's session when it has one: revoking that
  * session (or logging out everywhere) deletes its tokens, so a signed-out
  * phone stops receiving pushes. APNs 410 / `BadDeviceToken` / `Unregistered`
- * deletes the row (`modules/push/apns.ts`).
+ * deletes the row (`modules/push/apns.ts`). Since 0035 the table also holds
+ * Android FCM registration tokens (`provider = 'fcm'`; `environment` is then
+ * meaningless and stored as 'production'); FCM `UNREGISTERED` / 404 deletes
+ * the row the same way.
  */
 export const deviceTokens = pgTable(
   "device_token",
@@ -834,6 +837,14 @@ export const deviceTokens = pgTable(
       onDelete: "cascade",
     }),
     environment: apnsEnvironmentEnum("environment").notNull(),
+    // Android push (2026-09-30), migración 0035 GENERADA, sin aplicar:
+    // "apns" | "fcm" (`modules/push/devices.ts` `PushProvider`). COMENTADA
+    // hasta aplicar 0035 — Drizzle nombra cada columna declarada en cada
+    // `insert(deviceTokens)` (learning 2026-09-24-columna-declarada-sin-
+    // migrar-rompe-inserts); el código la lee/escribe con SQL crudo detrás de
+    // `MIGRATION_0035_LIVE` (src/auth/live-0035.ts). Con la línea comentada
+    // NADIE corre `drizzle-kit generate` (emitiría un DROP COLUMN).
+    // provider: text("provider").notNull().default("apns"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

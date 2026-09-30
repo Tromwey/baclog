@@ -3,8 +3,9 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } 
 import { KURA_BUNDLE_ID } from "./apple-key";
 
 /**
- * Phase 4f — verification of the identity tokens the iOS app gets from
- * Sign in with Apple and Google Sign-In. Pure (no DB, no env): the routes
+ * Phase 4f — verification of the identity tokens the apps get from
+ * Sign in with Apple (iOS) and Google Sign-In (iOS, and Android since
+ * 2026-09-30). Pure (no DB, no env): the routes
  * pass the audience, and tests pass their own key set.
  *
  * Both return the SAME shape or null. Null is the only failure signal —
@@ -95,11 +96,15 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /**
- * Google ID token (iOS client): RS256 against Google's JWKS, `iss` ∈
- * {https://accounts.google.com, accounts.google.com}, `aud` = the iOS
- * OAuth client id, `exp`/`sub` required, and `email_verified` MUST be true
- * with an email present (a Google identity is only linked or created
- * through a verified address).
+ * Google ID token (iOS or Android client): RS256 against Google's JWKS,
+ * `iss` ∈ {https://accounts.google.com, accounts.google.com}, `aud` ∈
+ * `audiences` (the iOS OAuth client id and/or the web client id Android's
+ * Credential Manager uses as `serverClientId` — `_lib/social.ts`
+ * `googleAudiences()`; an empty list rejects everything), `exp`/`sub`
+ * required, and `email_verified` MUST be true with an email present (a
+ * Google identity is only linked or created through a verified address).
+ * `azp` is not checked: on Android it is the Android client id, which only
+ * says which app asked Google — the `aud` already pins the token to Kura.
  *
  * `rawNonce`: the RAW nonce the app generated for THIS sign-in — the SAME
  * scheme as Apple: the app handed Google `sha256Hex(rawNonce)` (lowercase
@@ -115,15 +120,19 @@ function sameSecret(a: string, b: string): boolean {
  */
 export async function verifyGoogleIdToken(
   idToken: string,
-  clientId: string,
+  audiences: string | readonly string[],
   rawNonce: string | undefined,
   keys: JWTVerifyGetKey = googleKeySet(),
 ): Promise<VerifiedIdentity | null> {
+  const audience = (typeof audiences === "string" ? [audiences] : [...audiences]).filter((a) => a.length > 0);
+  // jose treats an empty audience list as "no audience check": never let that
+  // happen — no configured client = no Google token is ours.
+  if (audience.length === 0) return null;
   try {
     const { payload } = await jwtVerify(idToken, keys, {
       algorithms: ["RS256"],
       issuer: GOOGLE_ISSUERS,
-      audience: clientId,
+      audience,
       requiredClaims: ["exp", "iat", "sub"],
       clockTolerance: 30,
     });

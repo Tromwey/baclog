@@ -107,7 +107,9 @@ export const ErrorBodySchema = z.object({
      *  "not_released", "reaction_required", "taken", "linked_elsewhere",
      *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
      *  422, phase 4g): "invalid_proof" = a rejected provider token / merge
-     *  code on an authenticated route (the ONLY `invalid` that isn't 400). */
+     *  code on an authenticated route (the ONLY `invalid` that isn't 400) ·
+     *  `unavailable`: "fcm_pending" (`PUT /me/devices/{token}` with
+     *  `provider: "fcm"` before migration 0035). */
     reason: z.string().optional(),
     /** `invalid` only: field → message. */
     fields: z.record(z.string(), z.string()).optional(),
@@ -598,10 +600,21 @@ export const GoogleSignInBodySchema = z.object({
 });
 export type GoogleSignInBody = z.infer<typeof GoogleSignInBodySchema>;
 
-/** `GET auth/providers` (public): which social buttons the app may paint. */
+/** `GET auth/providers` (public): which social buttons the app may paint.
+ *  `google.clientId` = the iOS client id, `google.androidClientId` = the web
+ *  client id Android passes as `serverClientId`; each null when not set on
+ *  this deploy, `google` null when neither is. */
 export const AuthProvidersSchema = z.object({
   apple: z.boolean(),
-  google: z.object({ clientId: z.string().min(1) }).nullable(),
+  google: z
+    .object({
+      clientId: z.string().min(1).nullable(),
+      androidClientId: z.string().min(1).nullable(),
+    })
+    .refine((g) => g.clientId !== null || g.androidClientId !== null, {
+      message: "google con los dos ids en null debe ser null",
+    })
+    .nullable(),
 });
 export type AuthProviders = z.infer<typeof AuthProvidersSchema>;
 
@@ -707,9 +720,23 @@ export const MobileSessionSchema = z.object({
 export type MobileSession = z.infer<typeof MobileSessionSchema>;
 
 /** `PUT /me/devices/{apnsToken}` body. */
-export const DeviceTokenBodySchema = z.object({
-  environment: z.enum(["sandbox", "production"]),
-});
+/** `PUT /me/devices/{token}` body. `provider` (default "apns", so every iOS
+ *  build keeps working unchanged): "apns" REQUIRES `environment`; "fcm"
+ *  (Android) ignores it — FCM has no sandbox. */
+export const DeviceTokenBodySchema = z
+  .object({
+    environment: z.enum(["sandbox", "production"]).optional(),
+    provider: z.enum(["apns", "fcm"]).default("apns"),
+  })
+  .superRefine((b, ctx) => {
+    if (b.provider === "apns" && b.environment === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["environment"],
+        message: "Falta el entorno de APNs (sandbox o production).",
+      });
+    }
+  });
 export type DeviceTokenBody = z.infer<typeof DeviceTokenBodySchema>;
 
 /** `POST auth/web-session` body (optional): where the web should land.

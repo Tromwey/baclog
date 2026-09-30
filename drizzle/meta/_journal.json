@@ -246,6 +246,13 @@
       "when": 1790733305381,
       "tag": "0034_music_export",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790758447446,
+      "tag": "0035_device_token_provider",
+      "breakpoints": true
     }
   ]
 }

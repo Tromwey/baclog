@@ -6,21 +6,24 @@ import { sha256Hex, verifyGoogleIdToken } from "./social-tokens";
 // Run: pnpm tsx --test src/modules/push/liveness.test.ts src/auth/social-tokens.test.ts
 
 const CLIENT_ID = "1234-test.apps.googleusercontent.com";
+/** The "Web application" client Android's Credential Manager uses as
+ *  `serverClientId`: its ID tokens carry `aud` = this id. */
+const WEB_CLIENT_ID = "1234-web.apps.googleusercontent.com";
 const KID = "test-key";
 
 async function fixture(): Promise<{
   keys: JWTVerifyGetKey;
-  sign: (claims: Record<string, unknown>) => Promise<string>;
+  sign: (claims: Record<string, unknown>, aud?: string | string[]) => Promise<string>;
 }> {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
   const keys = createLocalJWKSet({ keys: [jwk] });
-  const sign = (claims: Record<string, unknown>) => {
+  const sign = (claims: Record<string, unknown>, aud: string | string[] = CLIENT_ID) => {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ email: "Ana@Example.com", email_verified: true, ...claims })
       .setProtectedHeader({ alg: "RS256", kid: KID })
       .setIssuer("https://accounts.google.com")
-      .setAudience(CLIENT_ID)
+      .setAudience(aud)
       .setSubject("google-sub-1")
       .setIssuedAt(now)
       .setExpirationTime(now + 600)
@@ -71,4 +74,41 @@ test("the existing checks still hold with a matching nonce", async () => {
   );
   assert.equal(await verifyGoogleIdToken(await sign({ nonce: sha256Hex("n") }), "other-client", "n", keys), null);
   assert.equal(await verifyGoogleIdToken("not.a.jwt", CLIENT_ID, "n", keys), null);
+});
+
+test("aud: the iOS client id and the web client id (Android) are both accepted when both are configured", async () => {
+  const { keys, sign } = await fx;
+  const both = [CLIENT_ID, WEB_CLIENT_ID];
+  assert.equal((await verifyGoogleIdToken(await sign({}), both, undefined, keys))?.sub, "google-sub-1");
+  const android = await sign({ azp: "1234-android.apps.googleusercontent.com" }, WEB_CLIENT_ID);
+  assert.equal((await verifyGoogleIdToken(android, both, undefined, keys))?.sub, "google-sub-1");
+  // Android + nonce: same scheme (the app hands `setNonce(sha256hex(raw))`).
+  const androidNonce = await sign({ nonce: sha256Hex("raw-a") }, WEB_CLIENT_ID);
+  assert.equal((await verifyGoogleIdToken(androidNonce, both, "raw-a", keys))?.sub, "google-sub-1");
+});
+
+test("aud: only the configured ids count — a web-client token with only the iOS id configured (and vice versa) → null", async () => {
+  const { keys, sign } = await fx;
+  assert.equal(await verifyGoogleIdToken(await sign({}, WEB_CLIENT_ID), [CLIENT_ID], undefined, keys), null);
+  assert.equal(await verifyGoogleIdToken(await sign({}), [WEB_CLIENT_ID], undefined, keys), null);
+  assert.equal((await verifyGoogleIdToken(await sign({}, WEB_CLIENT_ID), [WEB_CLIENT_ID], undefined, keys))?.sub, "google-sub-1");
+});
+
+test("aud: a foreign client id → null (the route's 401), also inside a multi-aud token", async () => {
+  const { keys, sign } = await fx;
+  const both = [CLIENT_ID, WEB_CLIENT_ID];
+  assert.equal(await verifyGoogleIdToken(await sign({}, "999-other.apps.googleusercontent.com"), both, undefined, keys), null);
+  assert.equal(await verifyGoogleIdToken(await sign({}, []), both, undefined, keys), null);
+  // A token minted for several audiences is ours if ONE of them is (RFC 7519 §4.1.3).
+  assert.equal(
+    (await verifyGoogleIdToken(await sign({}, ["999-other", WEB_CLIENT_ID]), both, undefined, keys))?.sub,
+    "google-sub-1",
+  );
+});
+
+test("aud: no configured client (empty list, or only blanks) → null, never 'no audience check'", async () => {
+  const { keys, sign } = await fx;
+  assert.equal(await verifyGoogleIdToken(await sign({}), [], undefined, keys), null);
+  assert.equal(await verifyGoogleIdToken(await sign({}), [""], undefined, keys), null);
+  assert.equal(await verifyGoogleIdToken(await sign({}), "", undefined, keys), null);
 });

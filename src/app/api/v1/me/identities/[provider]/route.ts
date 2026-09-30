@@ -14,7 +14,7 @@ import {
   APPLE_UNAVAILABLE,
   GOOGLE_UNAVAILABLE,
   appleSignInEnabled,
-  googleIosClientId,
+  googleAudiences,
 } from "../../../_lib/social";
 import {
   AppleLinkBodySchema,
@@ -103,10 +103,12 @@ export const POST = withApi<Params>(async (request, { user, params }) => {
     return answer(user.id, outcome);
   }
 
-  const clientId = googleIosClientId();
-  if (!clientId) throw new ApiError("unavailable", GOOGLE_UNAVAILABLE);
+  // Same audiences as `auth/google`: iOS client id and/or the web client id
+  // (Android's `serverClientId`).
+  const audiences = googleAudiences();
+  if (audiences.length === 0) throw new ApiError("unavailable", GOOGLE_UNAVAILABLE);
   const body = await readJson(request, GoogleLinkBodySchema);
-  const identity = await verifyGoogleIdToken(body.idToken, clientId, body.nonce);
+  const identity = await verifyGoogleIdToken(body.idToken, audiences, body.nonce);
   if (!identity) throw invalidProof(GOOGLE_PROOF_MESSAGE);
   return answer(user.id, await linkIdentity(user.id, "google", identity));
 });

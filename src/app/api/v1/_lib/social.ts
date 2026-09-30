@@ -7,9 +7,27 @@ export function appleSignInEnabled(): boolean {
   return !(v === "1" || v === "true" || v === "yes");
 }
 
-/** The Google iOS OAuth client id, or null when Google is off. */
+/** The Google iOS OAuth client id (`GIDConfiguration`), or null. */
 export function googleIosClientId(): string | null {
   return env.GOOGLE_IOS_CLIENT_ID?.trim() || null;
+}
+
+/** The Google "Web application" OAuth client id, or null. Android's
+ *  Credential Manager passes it as `serverClientId`, so the ID tokens the
+ *  Android app gets carry `aud` = this id (and `azp` = the Android client). */
+export function googleWebClientId(): string | null {
+  return env.GOOGLE_WEB_CLIENT_ID?.trim() || null;
+}
+
+/**
+ * Every `aud` a Google ID token may carry on this deploy: the iOS client id
+ * and the web client id (Android), whichever are set. Empty = Google is off
+ * (`auth/google` and linking answer 503, `auth/providers` says `google: null`,
+ * `GET /me/identities` omits it). One list for sign-in AND linking, so a
+ * phone can never sign in with a token it could not link, or vice versa.
+ */
+export function googleAudiences(): string[] {
+  return [...new Set([googleIosClientId(), googleWebClientId()].filter((c): c is string => !!c))];
 }
 
 /** The ONE 401 copy for a rejected Apple / Google token — sign-in

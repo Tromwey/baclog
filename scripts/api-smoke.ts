@@ -258,6 +258,18 @@ async function migration0029LiveInSource(): Promise<boolean> {
   return m[1] === "true";
 }
 
+/** `MIGRATION_0035_LIVE` as written in src/auth/live-0035.ts
+ *  (`device_token.provider`, push FCM de Android), parsed like 0029's. */
+async function migration0035LiveInSource(): Promise<boolean> {
+  const src = await readFile(resolvePath("src/auth/live-0035.ts"), "utf8");
+  const m = /^export const MIGRATION_0035_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
+  assert.ok(m, "no encuentro `export const MIGRATION_0035_LIVE = true|false;` en src/auth/live-0035.ts");
+  return m[1] === "true";
+}
+
+/** An FCM-shaped registration token (never a real one: FCM would 404 it). */
+const SMOKE_FCM_TOKEN = `smoke-fcm_${"Ab9".repeat(12)}:APA91b${"Zy8-".repeat(10)}`;
+
 /** `MIGRATION_0033_LIVE` as written in src/modules/party-collections/live.ts
  *  (colecciones de fiesta), parsed like 0029's. */
 async function migration0034LiveInSource(): Promise<boolean> {
@@ -527,10 +539,23 @@ const auth: Case[] = [
   // Phase 4f — the public social sign-in surface. Garbage tokens only: a
   // real Apple/Google identity token can't be produced by a script.
   {
-    name: "GET /auth/providers (público) → { apple, google } · auth/apple y auth/google: token basura = 401, body inválido = 400, proveedor apagado = 503",
+    name: "GET /auth/providers (público) → { apple, google: { clientId, androidClientId } } · auth/apple y auth/google: token basura = 401, body inválido = 400, proveedor apagado = 503",
     run: async () => {
       const res = await call("GET", "/auth/providers");
       const providers = expectOk(res, 200, AuthProvidersSchema);
+      // Android (2026-09-30): `google` = { clientId (iOS), androidClientId
+      // (the web client id, Android's serverClientId) }. Against a LOCAL
+      // server the values must be the ones in .env.local (the same file the
+      // server reads); against beta/prod only the shape is checked.
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/)/.test(opts.base)) {
+        const ios = process.env.GOOGLE_IOS_CLIENT_ID?.trim() || null;
+        const web = process.env.GOOGLE_WEB_CLIENT_ID?.trim() || null;
+        if (!ios && !web) assert.equal(providers.google, null, "sin ninguno de los dos ids, google = null");
+        else {
+          assert.equal(providers.google?.clientId ?? null, ios, "google.clientId = GOOGLE_IOS_CLIENT_ID");
+          assert.equal(providers.google?.androidClientId ?? null, web, "google.androidClientId = GOOGLE_WEB_CLIENT_ID");
+        }
+      }
       const device = { platform: "ios", name: "api-smoke", appVersion: "0.0.0" };
       const apple = await call("POST", "/auth/apple", {
         body: { identityToken: "a.b.c", rawNonce: "n", device },
@@ -885,6 +910,42 @@ const reads: Case[] = [
       assert.ok(!("isAdmin" in (res.body as object)), "isAdmin no viaja al cliente");
       if (opts.email) assert.equal(me.email, opts.email);
       ctx.me = me;
+    },
+  },
+  // Android push (0035). Read-only on purpose: with 0035 OFF the FCM PUT is
+  // refused BEFORE any write (503 fcm_pending), and the rejected bodies
+  // below are 400s that write nothing either. With 0035 ON the FCM PUT
+  // would write, so the happy path lives in `writes` (W5).
+  {
+    name: "PUT /me/devices/{token} provider fcm → 503 fcm_pending sin la migración 0035 · apns sin environment / provider inválido = 400",
+    run: async () => {
+      assert.ok(ctx.token, "hace falta un token");
+      if (!(await migration0029LiveInSource())) skip("MIGRATION_0029_LIVE = false: /me/devices entero responde 503");
+      const hex = "cd".repeat(32);
+      const noEnv = expectError(await call("PUT", `/me/devices/${hex}`, { token: ctx.token, body: {} }), 400, "invalid");
+      assert.ok(noEnv.fields?.environment, "apns (el default) exige fields.environment");
+      const badProv = expectError(
+        await call("PUT", `/me/devices/${hex}`, { token: ctx.token, body: { environment: "production", provider: "gcm" } }),
+        400,
+        "invalid",
+      );
+      assert.ok(badProv.fields?.provider, "fields.provider");
+      if (await migration0035LiveInSource()) {
+        skip("MIGRATION_0035_LIVE = true: el registro FCM escribe; su camino feliz está en writes (W5)");
+      }
+      const tables = await smokeSql<{ n: number }>(
+        `select count(*)::int as n from information_schema.columns where table_name = 'device_token' and column_name = 'provider'`,
+      );
+      const fcm = await call("PUT", `/me/devices/${encodeURIComponent(SMOKE_FCM_TOKEN)}`, {
+        token: ctx.token,
+        body: { provider: "fcm" },
+      });
+      const err = expectError(fcm, 503, "unavailable");
+      assert.equal(err.reason, "fcm_pending", "reason: fcm_pending");
+      if (tables !== null) {
+        const n = await smokeSql<{ n: number }>(`select count(*)::int as n from device_token where token = $1`, [SMOKE_FCM_TOKEN]);
+        assert.equal(n?.[0]?.n, 0, "el 503 no escribió nada");
+      }
     },
   },
   {
@@ -3475,6 +3536,50 @@ const writes: Case[] = [
       const after = expectOk(await qaCall("GET", "/me/sessions"), 200, z.object({ items: z.array(MobileSessionSchema) }));
       assert.ok(!after.items.some((i) => i.id === sid), "la sesión revocada ya no aparece");
       assert.ok(after.items.some((i) => i.current && i.id === sidOf(ctx.token!)), "la sesión nueva sí, como current");
+    },
+  },
+  // W5 (Android push, 0035) — FCM registration on the QA account. Without
+  // 0035 it re-checks the 503 contract (nothing written) and skips; with it,
+  // PUT/DELETE of an FCM-shaped token (never a real one) and the row's
+  // provider. E1 DELETE /me cascades whatever is left.
+  {
+    name: "W5 PUT/DELETE /me/devices/{token} provider fcm (0035): 204 idempotente, fila provider=fcm ligada al sid, token mal formado = 400; sin 0035 = 503 fcm_pending",
+    run: async () => {
+      if (!(await migration0029LiveInSource())) skip("MIGRATION_0029_LIVE = false: /me/devices entero responde 503");
+      const live = await migration0035LiveInSource();
+      const column = await smokeSql<{ n: number }>(
+        `select count(*)::int as n from information_schema.columns where table_name = 'device_token' and column_name = 'provider'`,
+      );
+      if (column !== null && column[0]?.n !== 1) {
+        assert.equal(live, false, "MIGRATION_0035_LIVE = true pero falta device_token.provider: aplica 0035 o regresa el switch a false");
+      }
+      const path = `/me/devices/${encodeURIComponent(SMOKE_FCM_TOKEN)}`;
+      if (!live) {
+        const err = expectError(await qaCall("PUT", path, { body: { provider: "fcm" } }), 503, "unavailable");
+        assert.equal(err.reason, "fcm_pending");
+        assert.equal((await qaCall("DELETE", path)).status, 204, "DELETE de un token FCM funciona sin 0035 (no hay fila)");
+        skip("MIGRATION_0035_LIVE = false: contrato 503 fcm_pending verificado; el resto espera a la migración 0035");
+      }
+      const short = expectError(await qaCall("PUT", "/me/devices/abc:def", { body: { provider: "fcm" } }), 400, "invalid");
+      assert.ok(short.fields?.token, "fields.token");
+      for (let i = 0; i < 2; i++) {
+        const put = await qaCall("PUT", path, { body: { provider: "fcm" } });
+        assert.equal(put.status, 204, `PUT fcm: ${put.status} ${put.text}`);
+      }
+      const row = await smokeSql<{ provider: string; environment: string; session_id: string | null }>(
+        `select provider, environment::text as environment, session_id from device_token where token = $1`,
+        [SMOKE_FCM_TOKEN],
+      );
+      if (row !== null) {
+        assert.equal(row.length, 1, "un token, una fila (guardado tal cual, idempotente)");
+        assert.equal(row[0].provider, "fcm");
+        assert.equal(row[0].environment, "production", "FCM guarda el entorno constante");
+        assert.equal(row[0].session_id, sidOf(ctx.token!), "ligado a la sesión del bearer");
+      }
+      assert.equal((await qaCall("DELETE", path)).status, 204);
+      assert.equal((await qaCall("DELETE", path)).status, 204, "DELETE idempotente");
+      const gone = await smokeSql<{ n: number }>(`select count(*)::int as n from device_token where token = $1`, [SMOKE_FCM_TOKEN]);
+      if (gone !== null) assert.equal(gone[0].n, 0, "DELETE borró la fila FCM");
     },
   },
 ];

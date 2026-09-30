@@ -1,0 +1,1 @@
+ALTER TABLE "device_token" ADD COLUMN "provider" text DEFAULT 'apns' NOT NULL;
