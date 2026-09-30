@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -285,6 +284,7 @@ fun KuraSheetScope.EditCollectionSheet(store: AppStore, sheet: SheetRoute.Rename
                 imeAction = ImeAction.Next,
                 focusRequester = nameFocus,
                 keyboardActions = KeyboardActions(onNext = { runCatching { vibeFocus.requestFocus() } }),
+                fill = KColor.glassBg,
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -301,6 +301,7 @@ fun KuraSheetScope.EditCollectionSheet(store: AppStore, sheet: SheetRoute.Rename
                 imeAction = ImeAction.Done,
                 focusRequester = vibeFocus,
                 keyboardActions = KeyboardActions(onDone = { save() }),
+                fill = KColor.glassBg,
             )
         }
         BasicText(
@@ -310,8 +311,6 @@ fun KuraSheetScope.EditCollectionSheet(store: AppStore, sheet: SheetRoute.Rename
         )
         SolidButton("Guardar", { save() }, enabled = valid)
     }
-    // The keyboard lifts the sheet (insets already taken by an ancestor count as consumed).
-    Spacer(Modifier.imePadding())
 }
 
 // MARK: O5 Compartir
@@ -512,6 +511,8 @@ private fun ReactionRows(store: AppStore, t: Title) {
             selected = m?.reaction,
             onSelect = { r -> store.setMark(t.id, r.mark) },
             modifier = Modifier.fillMaxWidth(),
+            // 18c is a compact (s2) sheet: an s2 group would vanish into it.
+            containerColor = KColor.glassBg,
         )
     }
     SheetRow(

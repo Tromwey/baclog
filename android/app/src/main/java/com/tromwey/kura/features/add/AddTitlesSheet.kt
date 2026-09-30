@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -54,8 +53,8 @@ import com.tromwey.kura.designsystem.components.FanView
 import com.tromwey.kura.designsystem.components.GlassButton
 import com.tromwey.kura.designsystem.components.IconChip44
 import com.tromwey.kura.designsystem.components.KuraSheetScope
+import com.tromwey.kura.designsystem.components.SearchPill
 import com.tromwey.kura.designsystem.components.Skeleton
-import com.tromwey.kura.features.onboarding.SearchPill
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.add
@@ -147,8 +146,6 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
         }
         item("tail") { Spacer(Modifier.size(40.dp)) }
     }
-    // The keyboard lifts the sheet (insets already taken by an ancestor count as consumed).
-    Spacer(Modifier.imePadding())
 }
 
 @Composable

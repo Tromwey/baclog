@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -117,7 +116,7 @@ import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.bootstrap
 import com.tromwey.kura.state.createCollection
-import com.tromwey.kura.state.loadCollection
+import com.tromwey.kura.state.refreshLibrary
 import com.tromwey.kura.state.removeSilently
 import com.tromwey.kura.state.waitingTitles
 import kotlinx.coroutines.Job
@@ -303,7 +302,8 @@ private fun CollectionsCarousel(store: AppStore) {
                 onRefresh = {
                     scope.launch {
                         refreshing = true
-                        (cur as? Entry.Shelf)?.let { store.loadCollection(it.c.id, force = true) }
+                        // Every collection and your titles again (no skeleton; local writes win).
+                        store.refreshLibrary()
                         refreshing = false
                     }
                 },
@@ -691,6 +691,7 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
             imeAction = ImeAction.Done,
             focusRequester = focus,
             keyboardActions = KeyboardActions(onDone = { create() }),
+            fill = KColor.glassBg,
         )
         if (choosing) {
             Column {
@@ -704,6 +705,4 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
         }
         SolidButton("Crear", { create() }, enabled = name.isNotBlank())
     }
-    // The keyboard lifts the sheet (insets already taken by an ancestor count as consumed).
-    androidx.compose.foundation.layout.Spacer(Modifier.imePadding())
 }

@@ -1,6 +1,6 @@
 # Kura · Android
 
-App nativa Android de Kura: **Kotlin + Jetpack Compose**, espejo de [`ios/`](../ios/README.md) (SwiftUI) contra la misma API `/api/v1` (especificación en [`ios/API.md`](../ios/API.md), contrato de wire en `src/app/api/v1/_lib/schemas.ts`). Hoy: el marco de la app (splash → entrada → pestañas con dock, pilas por pestaña, hojas, avisos, franja sin conexión) y el flujo 01 completo contra la API real; las demás pantallas son placeholders con su firma final (`app/Screens.kt`). Lo de abajo es el contrato.
+App nativa Android de Kura: **Kotlin + Jetpack Compose**, espejo de [`ios/`](../ios/README.md) (SwiftUI) contra la misma API `/api/v1` (especificación en [`ios/API.md`](../ios/API.md), contrato de wire en `src/app/api/v1/_lib/schemas.ts`). Hoy (fase 1): el marco de la app (splash → entrada → pestañas con barra, pilas por pestaña, hojas, avisos, franja sin conexión) y las pantallas de la fase 1 contra la API real — entrada, colecciones, colección, agregar, ficha, feed + campana, descubrir + búsqueda, gente + perfil, ajustes. Recap, fiestas y exportar música son fase 2 (un solo placeholder, `PhaseTwoScreen`). Lo de abajo es el contrato.
 
 ## Requisitos
 
@@ -51,8 +51,10 @@ adb shell am start -S -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity -
 - `--ez kuraPrintBearer true` loguea (tag `KuraDebugLaunch`) el bearer de ESTA instalación con su `sid` y expiración, para pasarlo a otra con `kuraBearer`. Desinstalar borra la llave del Keystore: saca el token antes. Limpia logcat después (`adb logcat -c`).
 - `--es kuraScreen <nombre>` pone el store REAL (API viva; en Android no hay mock todavía) en una pantalla:
   - entrada: `splash` (se queda, no enruta) · `onboarding` (bienvenida) · `signup` = `login` = `loginemail` ("entra a kura.", una sola puerta como iOS) · `code` (el código; `--es kuraEmail <correo>` es el que se muestra) · `username` · `pick` · `people` (picks = las tres portadas de la bienvenida) · `underage`
-  - pestañas (necesitan sesión, p. ej. `kuraBearer`): `collections` · `discover` · `feed` · `profile` · `settings` (Perfil › Ajustes, sin dock) · `toast` (Colecciones + un aviso con Deshacer sobre el dock) · `sheet` (Colecciones + la hoja "Nueva colección")
+  - pestañas (necesitan sesión, p. ej. `kuraBearer`): `collections` · `discover` · `feed` · `profile` · `settings` (Perfil › Ajustes, sin dock) · `notifications` (Feed › la campana) · `toast` (Colecciones + un aviso con Deshacer sobre el dock) · `sheet` (Colecciones + la hoja "Nueva colección")
+  - una página por id, empujada sobre su pestaña (Volver regresa a la raíz): `title:<id>` (Colecciones › ficha) · `collection:<id>` (Colecciones › colección) · `person:<handle>` (Feed › perfil; con o sin `@`)
   - design system: `gallery` · `gallery-sheet` · `gallery-fan` (cualquier otro nombre abre la galería diciendo que no lo conoce)
+- Estados para capturas (`--ez`, junto a cualquier pantalla de pestañas): `kuraEmptyFeed true` (nadie seguido → E1, feed vacío) · `kuraEmptyLibrary true` (sin colecciones → tus colecciones vacía) · `kuraKeepLoading true` (el arranque nunca termina → los esqueletos). Ejemplo: `adb shell am start -S -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity --es kuraScreen feed --ez kuraEmptyFeed true`.
 
 **Nunca** `POST auth/logout` ni `store.signOut(global = true)` para probar: revoca TODAS las sesiones de la cuenta (el iPhone del founder incluido). Para salir en local: `signOut(global = false)` / `leaveSession`, que solo olvidan el token de este teléfono.
 
@@ -131,8 +133,8 @@ android/
       assets/licenses/OFL-fonts.txt   licencia SIL OFL de las fuentes (viaja con la app, como exige la OFL)
       java/com/tromwey/kura/
         MainActivity.kt      splash (core-splashscreen) + enableEdgeToEdge + DebugLaunch (seed/configure) + setContent { KuraRoot }
-        app/                 KuraApp (store + Coil), KuraRoot, MainTabs, Screens, Pending (placeholders), UiSupport, DeepLinks, LaunchOptions
-        features/            onboarding/ (flujo 01, real) + un placeholder por paquete (collections, collectiondetail, add, title, feed, discover, people, profile, settings)
+        app/                 KuraApp (store + Coil), KuraRoot, MainTabs, Screens, StoreToastHost (el aviso del store, también dentro de la búsqueda), Pending (placeholder de fase 2), UiSupport, DeepLinks, LaunchOptions
+        features/            onboarding/ collections/ collectiondetail/ add/ title/ feed/ discover/ people/ profile/ settings/
       res/
         font/                9 TTF + newsreader.xml / hanken_grotesk.xml / red_hat_mono.xml
         mipmap-*/            ícono adaptativo (foreground por densidad, fondo #0b0b0d)
@@ -184,8 +186,7 @@ Viven en `gradle/libs.versions.toml`, con la razón de cada tope en el encabezad
 
 ## Pendiente
 
-- **Cliente API** (`data/`): modelos del wire, Ktor con bearer + reintentos, sesión guardada (DataStore cifrado con una llave del Android Keystore), `sid`, logout.
-- **Pantallas** (`features/`) según `design/kura/flujos-v2.dc.html`: hoy solo el flujo 01; el resto son placeholders con su firma final.
+- **Fase 2 en pantallas**: recap, fiestas, exportar a TIDAL, inicio de sesión/fusionar cuentas (hoy `PhaseTwoScreen` / `PendingSheet`).
 - **Entrar con Google**: el botón ya está cableado (Credential Manager + `GetGoogleIdOption(serverClientId = auth/providers.google.clientId)` → `POST auth/google`) y sale solo si el servidor anuncia un client id; falta el backend (aceptar el `aud` de Android/Web). Apple no existe en Android.
 - **Push**: FCM (el backend hoy solo habla APNs vía `pushToUsers` en `src/modules/push/apns.ts` — necesita un transporte FCM detrás del mismo punto de entrada).
 - **App Links**: `/.well-known/assetlinks.json` en la web (hoy solo existe el AASA de iOS) + `intent-filter` `autoVerify` para `get-kura.app`.

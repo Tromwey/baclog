@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
+import com.tromwey.kura.app.StoreToastHost
 import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KMotion
@@ -51,7 +52,7 @@ import kotlinx.coroutines.launch
 // DS `KuraSearchBar`: it opens into Material's full-screen search, 19d–19g, see DiscoverSearch.kt)
 // and the format track (Todo / Cine / Series / Música). Todo = DiscoverHome.kt (19a · 3a); a format
 // = DiscoverFormat.kt (2a–2c). The page wears the tint of what's in view (PageTint). Pull to refresh
-// reloads `GET /discover`.
+// reloads what's in view: `GET /discover` on Todo, the format's shelves (`force`) on a format.
 //
 // The expanded search is a separate window (Material draws it in a dialog). Opening a result
 // collapses it and pushes the page; coming back re-opens it with the same query and results
@@ -144,13 +145,27 @@ fun DiscoverScreen(store: AppStore) {
 
     val titleScroll = rememberKuraTitleScroll()
     val scroll = rememberScrollState()
+    var formatRefreshing by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(animatedTintTail(hexes))) {
         PageTint(hexes, scroll, KMotion.tint())
         Column(Modifier.fillMaxSize()) {
             TabTitleBar("descubrir", scroll = titleScroll)
             KuraPullToRefresh(
-                refreshing = store.discoverLoading && store.discover != null,
-                onRefresh = { scope.launch { store.loadDiscover(force = true) } },
+                refreshing = if (format == null) store.discoverLoading && store.discover != null else formatRefreshing,
+                onRefresh = {
+                    scope.launch {
+                        if (format == null) {
+                            store.loadDiscover(force = true)
+                        } else {
+                            formatRefreshing = true
+                            try {
+                                store.loadDiscoverFormat(format, timeParam, force = true)
+                            } finally {
+                                formatRefreshing = false
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 Column(Modifier.fillMaxSize().kuraTitleScroll(titleScroll).verticalScroll(scroll).padding(bottom = 48.dp)) {
@@ -172,6 +187,8 @@ fun DiscoverScreen(store: AppStore) {
                         modifier = Modifier.fillMaxWidth().padding(horizontal = KSize.margin),
                         placeholder = "Películas, series, álbumes y personas",
                         onSearch = { submit(it) },
+                        // The expanded search is its own window: the frame's toast would sit under it.
+                        overlay = { StoreToastHost(store) },
                     ) {
                         // The keyboard lives in the search's own window: hide it from there on submit.
                         val keyboard = LocalSoftwareKeyboardController.current

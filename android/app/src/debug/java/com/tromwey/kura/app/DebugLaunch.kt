@@ -31,9 +31,14 @@ import com.tromwey.kura.state.SheetRoute
  *     shown is `kuraEmail`) · `username` (O1b) · `pick` (32a) · `people` (32b, picks = the welcome's three
  *     covers) · `underage` (13 años)
  *   - tabs (need a session, e.g. `kuraBearer`): `collections` · `discover` · `feed` · `profile` ·
- *     `settings` (Perfil › Ajustes, no dock) · `toast` (Colecciones + an Undo toast over the dock) ·
- *     `sheet` (Colecciones + the "Nueva colección" sheet)
+ *     `settings` (Perfil › Ajustes, no dock) · `notifications` (Feed › la campana) · `toast`
+ *     (Colecciones + an Undo toast over the dock) · `sheet` (Colecciones + the "Nueva colección" sheet)
+ *   - a page by id (pushed over its tab, Volver pops to the root): `title:<id>` (Colecciones › ficha) ·
+ *     `collection:<id>` (Colecciones › colección) · `person:<handle>` (Feed › perfil)
  *   - design system: `gallery` · `gallery-sheet` · `gallery-fan`
+ * - States for captures (`--ez`, with any tab screen): `kuraEmptyFeed true` (nobody followed → E1 feed
+ *   vacío) · `kuraEmptyLibrary true` (no collections → tus colecciones vacía) · `kuraKeepLoading true`
+ *   (the launch never finishes → the skeletons).
  */
 object DebugLaunch {
     private const val TAG = "KuraDebugLaunch"
@@ -70,6 +75,28 @@ object DebugLaunch {
             store.phase = AppPhase.Main
         }
 
+        // Capture states: read by `startIfNeeded` → `bootstrap` when the tabs first appear.
+        store.debugEmptyFollowing = intent.getBooleanExtra("kuraEmptyFeed", false)
+        store.emptyLibrary = intent.getBooleanExtra("kuraEmptyLibrary", false)
+        store.keepLoading = intent.getBooleanExtra("kuraKeepLoading", false)
+
+        // `title:<id>` · `collection:<id>` · `person:<handle>`: a page by id over its tab.
+        val arg = name.substringAfter(':', "").trim()
+        when {
+            name.startsWith("title:") && arg.isNotEmpty() -> {
+                main(Tab.Collections, listOf(Route.TitleRoute(arg)))
+                return LaunchOptions.Normal
+            }
+            name.startsWith("collection:") && arg.isNotEmpty() -> {
+                main(Tab.Collections, listOf(Route.Collection(arg)))
+                return LaunchOptions.Normal
+            }
+            name.startsWith("person:") && arg.isNotEmpty() -> {
+                main(Tab.Feed, listOf(Route.PersonRoute(arg.removePrefix("@"))))
+                return LaunchOptions.Normal
+            }
+        }
+
         when (name) {
             "splash" -> return LaunchOptions(holdSplash = true)
             "onboarding" -> entrance(OnboardingStep.Welcome)
@@ -91,6 +118,7 @@ object DebugLaunch {
             "feed" -> main(Tab.Feed)
             "profile" -> main(Tab.Profile)
             "settings" -> main(Tab.Profile, listOf(Route.Settings))
+            "notifications" -> main(Tab.Feed, listOf(Route.Notifications))
             "toast" -> {
                 main()
                 store.pendingAction = { store.undoToast("Aviso de prueba") {} }

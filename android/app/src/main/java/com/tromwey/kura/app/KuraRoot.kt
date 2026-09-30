@@ -31,17 +31,13 @@ import com.tromwey.kura.designsystem.KuraTheme
 import com.tromwey.kura.designsystem.components.KuraScaffold
 import com.tromwey.kura.designsystem.components.KuraSheet
 import com.tromwey.kura.designsystem.components.KuraSheetStyle
-import com.tromwey.kura.designsystem.components.KuraToastHost
-import com.tromwey.kura.designsystem.components.KuraToastModel
 import com.tromwey.kura.designsystem.components.OfflineStrip
-import com.tromwey.kura.designsystem.components.ToastKind
 import com.tromwey.kura.features.onboarding.OnboardingFlow
 import com.tromwey.kura.features.onboarding.SplashScreen
 import com.tromwey.kura.state.AppPhase
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetStyle
 import com.tromwey.kura.state.StoreEvent
-import com.tromwey.kura.state.ToastModel
 
 /**
  * RootRouter (iOS `RootView`): splash → entrance/onboarding → the tabs, cross-faded, inside the app's
@@ -126,10 +122,8 @@ private fun announce(view: View, text: String) {
 @Composable
 private fun NoticeLayer(store: AppStore, dockVisible: Boolean) {
     Column {
-        val toast = store.toast
-        val model = remember(toast) { toast?.let { toastModel(store, it) } }
         AnimatedVisibility(
-            visible = toast == null && store.offline && store.phase == AppPhase.Main,
+            visible = store.toast == null && store.offline && store.phase == AppPhase.Main,
             enter = fadeIn(KMotion.fastEffects()),
             exit = fadeOut(KMotion.fastEffects()),
             modifier = Modifier.then(if (dockVisible) Modifier else Modifier.navigationBarsPadding())
@@ -137,25 +131,9 @@ private fun NoticeLayer(store: AppStore, dockVisible: Boolean) {
         ) {
             OfflineStrip()
         }
-        KuraToastHost(
-            toast = model,
-            // The store already clears it after `undoWindow`; this only closes a stale pill.
-            onTimeout = { t -> if (store.toast?.id == t.id) store.dismissToast() },
-            dockVisible = dockVisible,
-        )
+        StoreToastHost(store, dockVisible = dockVisible)
     }
 }
-
-private fun toastModel(store: AppStore, t: ToastModel) = KuraToastModel(
-    id = t.id,
-    text = t.text,
-    kind = when (t.kind) {
-        ToastModel.Kind.Undo -> ToastKind.Undo
-        ToastModel.Kind.Retry -> ToastKind.Retry
-        ToastModel.Kind.Info -> ToastKind.Info
-    },
-    action = t.action?.let { { store.tapToastAction(t) } },
-)
 
 /**
  * The sheet host (iOS `SheetHost`): `store.sheet` → one `KuraSheet` with the route's style. A new
@@ -173,6 +151,7 @@ private fun SheetHost(store: AppStore) {
                 if (store.sheet == sheet && !store.dismissSheetInteractively()) reopen++
             },
             style = if (sheet.style == SheetStyle.Tall) KuraSheetStyle.Tall else KuraSheetStyle.Compact,
+            grabber = sheet.showsGrabber,
         ) {
             SheetContent(sheet, store)
         }

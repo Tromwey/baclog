@@ -54,13 +54,15 @@ import kotlinx.coroutines.launch
 @Composable
 fun UsernameScreen(store: AppStore) {
     val account = store.account
-    var handle by rememberSaveable { mutableStateOf(account?.handle.orEmpty()) }
+    // The field keeps exactly what was typed (with its "@"): rebuilding "@$handle" on every key sets a
+    // new value the field didn't produce, and the cursor jumps (same fix as Editar perfil).
+    var handleText by rememberSaveable { mutableStateOf("@" + account?.handle.orEmpty()) }
     var name by rememberSaveable { mutableStateOf(account?.name?.ifEmpty { null } ?: store.suggestedName.orEmpty()) }
     var year by rememberSaveable { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameStatus?>(null) }
     val scope = rememberCoroutineScope()
 
-    val clean = handle.lowercase().filter { it.isLetterOrDigit() || it == '.' || it == '_' }
+    val clean = handleText.lowercase().filter { it.isLetterOrDigit() || it == '.' || it == '_' }
     val birthYear = year.filter(Char::isDigit).toIntOrNull()?.takeIf { it in 1900..2100 }
     val needsYear = account?.onboarded != true
     val canSubmit = clean.length >= 3 && status == UsernameStatus.Free && name.isNotBlank() &&
@@ -86,8 +88,8 @@ fun UsernameScreen(store: AppStore) {
             BasicText("Es tu link: $siteHost/${clean.ifEmpty { "usuario" }}", style = KuraType.ui(14f).copy(color = KColor.text2))
             Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 KuraTextField(
-                    value = "@$handle",
-                    onValueChange = { handle = it.dropWhile { c -> c == '@' } },
+                    value = handleText,
+                    onValueChange = { handleText = it },
                     placeholder = "@usuario",
                     imeAction = ImeAction.Next,
                 ) { Availability(clean, status) }

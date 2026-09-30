@@ -390,13 +390,15 @@ class KuraSheetScope internal constructor(column: ColumnScope, private val onClo
  * (36), no border, no tonal tint. Dismisses by dragging, tapping the scrim or back ([onDismiss] runs
  * once it's gone); the content's `close()` does the same from a button. One at a time: a sheet
  * that opens another replaces it. The content already clears the navigation bar AND the keyboard
- * (`imePadding`): sheet content must not add either.
+ * (`imePadding`): sheet content must not add either. [grabber] false drops the handle (a decision
+ * sheet like "¿borrar la colección?", iOS `showsGrabber`); the content then starts 22 below the edge.
  */
 @Composable
 fun KuraSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     style: KuraSheetStyle = KuraSheetStyle.Compact,
+    grabber: Boolean = true,
     content: @Composable KuraSheetScope.() -> Unit,
 ) {
     val compact = style == KuraSheetStyle.Compact
@@ -422,11 +424,15 @@ fun KuraSheet(
         contentColor = KColor.text,
         tonalElevation = 0.dp,
         scrimColor = BottomSheetDefaults.ScrimColor,
-        dragHandle = { Grabber() },
+        dragHandle = if (grabber) ({ Grabber() }) else null,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         // imePadding HERE: a sheet with a field rises with the keyboard; screens/sheets must not add it.
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = if (compact) 26.dp else 0.dp).navigationBarsPadding().imePadding()) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+                .padding(top = if (grabber) 0.dp else 22.dp, bottom = if (compact) 26.dp else 0.dp)
+                .navigationBarsPadding().imePadding(),
+        ) {
             KuraSheetScope(this, close).content()
         }
     }

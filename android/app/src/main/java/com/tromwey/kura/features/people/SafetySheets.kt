@@ -31,7 +31,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tromwey.kura.app.loadCopy
 import com.tromwey.kura.app.photo
@@ -41,6 +44,7 @@ import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.data.models.PublicLinks
 import com.tromwey.kura.data.models.ReportReason
 import com.tromwey.kura.data.models.ReportTarget
+import com.tromwey.kura.data.models.Review
 import com.tromwey.kura.designsystem.Glyph
 import com.tromwey.kura.designsystem.GlyphIcon
 import com.tromwey.kura.designsystem.KColor
@@ -55,6 +59,9 @@ import com.tromwey.kura.designsystem.components.FollowButton
 import com.tromwey.kura.designsystem.components.FollowState
 import com.tromwey.kura.designsystem.components.GlassButton
 import com.tromwey.kura.designsystem.components.GroupedList
+import com.tromwey.kura.designsystem.components.IconChip44
+import com.tromwey.kura.designsystem.components.KuraMenu
+import com.tromwey.kura.designsystem.components.KuraMenuItem
 import com.tromwey.kura.designsystem.components.KPressFeel
 import com.tromwey.kura.designsystem.components.KuraSheetScope
 import com.tromwey.kura.designsystem.components.KuraTextButton
@@ -122,6 +129,8 @@ fun KuraSheetScope.PersonOptionsSheet(store: AppStore, sheet: SheetRoute.PersonO
                         if (following) closeSheet()
                     },
                     handle = p.handle,
+                    // The options sheet is s2: an s2 button would vanish into it.
+                    fill = KColor.glassBg,
                 )
             }
         }
@@ -232,20 +241,20 @@ fun KuraSheetScope.ReportSheet(store: AppStore, sheet: SheetRoute.Report) {
             }
         }
         if (takesDetails) {
+            // The server's limit (500, `ReportReason.DETAILS_LIMIT`), not a review's 280.
             KuraTextField(
                 details,
-                { details = it.take(ReportReason.DETAILS_LIMIT) },
+                { details = it },
                 placeholder = "Opcional",
                 modifier = Modifier.padding(top = 6.dp),
+                imeAction = ImeAction.Default,
                 label = "Algo más que debamos saber",
+                fill = KColor.glassBg,
+                singleLine = false,
+                minLines = 3,
+                maxLength = ReportReason.DETAILS_LIMIT,
+                prose = true,
             )
-            if (details.length > ReportReason.DETAILS_LIMIT - 100) {
-                BasicText(
-                    "${details.length}/${ReportReason.DETAILS_LIMIT}",
-                    Modifier.align(Alignment.End),
-                    style = KuraType.mono(11f).copy(color = KColor.text3),
-                )
-            }
         }
     }
     SolidButton(
@@ -314,6 +323,49 @@ private fun Point(icon: @Composable () -> Unit, text: String) {
     Row(Modifier.semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.width(22.dp).padding(top = 2.dp).clearAndSetSemantics { }, contentAlignment = Alignment.TopCenter) { icon() }
         BasicText(text, style = KuraType.ui(15f).copy(lineHeight = KuraType.ui(15f).fontSize * 1.35f))
+    }
+}
+
+// MARK: ⋯ de una reseña ajena
+
+/** iOS `ReviewMenu.applies`: only someone else's review with a known author gets the ⋯. */
+fun reviewMenuApplies(review: Review, meId: String): Boolean = review.authorId.isNotEmpty() && review.authorId != meId
+
+/**
+ * "…" on someone else's review (iOS `ReviewMenu`): Reportar reseña (until reported) · Bloquear a @x,
+ * in a [KuraMenu] anchored to the chip — it never covers the text it's about and neither row is red.
+ * [expanded] is hoisted so a long press on the card can open the same menu.
+ */
+@Composable
+fun ReviewMenu(
+    store: AppStore,
+    review: Review,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    chip: Dp = 44.dp,
+) {
+    val items = buildList {
+        if (review.id !in store.reportedReviews) {
+            add(KuraMenuItem("Reportar reseña", KIcon.Flag, destructive = true) {
+                store.present(SheetRoute.Report(ReportTarget.ReviewTarget(review.id, review.authorId, review.titleId)))
+            })
+        }
+        add(KuraMenuItem("Bloquear a @${review.authorId}", KIcon.Block, destructive = true) {
+            store.present(SheetRoute.Block(review.authorId))
+        })
+    }
+    Box(modifier) {
+        IconChip44(
+            KIcon.More,
+            "Opciones de la reseña de @${review.authorId}",
+            { onExpandedChange(true) },
+            size = chip,
+            iconSize = 16.dp,
+            fill = Color.Transparent,
+            iconColor = KColor.text2,
+        )
+        KuraMenu(expanded = expanded, onDismiss = { onExpandedChange(false) }, items = items)
     }
 }
 

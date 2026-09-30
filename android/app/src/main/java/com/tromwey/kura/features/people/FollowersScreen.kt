@@ -79,7 +79,9 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
     val followersCount = maxOf(p?.followers ?: 0, 0)
     val followingCount = if (isMe) maxOf(p?.followingCount ?: 0, store.following.size) else (p?.followingCount ?: 0)
     val loaded = store.peopleLists[key]
-    val meta = if (isMe) null else store.peopleListMeta[key]
+    // Your own lists come whole (no cursor, never denied) but still count who can't be listed.
+    val meta = store.peopleListMeta[key]
+    val anonymous = meta?.anonymous ?: 0
     val denied = meta?.denied
     val handle = p?.handle ?: personId
     val q = fold(query)
@@ -127,9 +129,10 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
                     loaded == null -> repeat(4) { RowSkeleton() }
                     denied != null -> PrivateListNote(denied, showFollowing, Modifier.padding(top = 12.dp))
                     list.isEmpty() && q.isNotEmpty() -> Note("Nadie con ese nombre.")
-                    list.isEmpty() && !isMe && (meta?.anonymous ?: 0) == 0 ->
+                    list.isEmpty() && !isMe && anonymous == 0 ->
                         Note(if (showFollowing) "@$handle todavía no sigue a nadie." else "Todavía nadie sigue a @$handle.")
-                    list.isEmpty() && isMe -> Note(if (showFollowing) "Todavía no sigues a nadie." else "Todavía nadie te sigue.")
+                    list.isEmpty() && isMe && anonymous == 0 ->
+                        Note(if (showFollowing) "Todavía no sigues a nadie." else "Todavía nadie te sigue.")
                 }
                 if (mutual.isNotEmpty()) {
                     MonoLabel("Que también sigues", Modifier.padding(top = 8.dp, bottom = 4.dp), tracking = 0.1f, color = KColor.text3)
@@ -139,13 +142,13 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
                     MonoLabel("Todos", Modifier.padding(top = 16.dp, bottom = 4.dp), tracking = 0.1f, color = KColor.text3)
                     rest.forEach { PersonListRow(store, it) }
                 }
-                val anonymous = meta?.anonymous ?: 0
                 if (meta?.nextCursor != null && q.isEmpty()) {
                     // The end of the rows asks for the next page (one at a time).
                     RowSkeleton()
                     LaunchedEffect(meta.nextCursor) { store.loadMorePeople(personId, showFollowing) }
                 } else if (anonymous > 0 && q.isEmpty() && denied == null) {
-                    // Private accounts, no handle, a block with you: a number, never who.
+                    // Private accounts, no public handle, a block with you: a number, never who (your
+                    // own lists too: the server's `privateCount`).
                     BasicText(
                         if (anonymous == 1) "y 1 persona más" else "y $anonymous personas más",
                         Modifier.padding(top = if (list.isEmpty()) 12.dp else 16.dp),

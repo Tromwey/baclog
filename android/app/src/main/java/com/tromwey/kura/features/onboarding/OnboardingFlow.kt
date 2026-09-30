@@ -83,12 +83,3 @@ internal fun BottomCta(modifier: Modifier = Modifier, content: @Composable Colum
         content = content,
     )
 }
-
-/**
- * MOVED to the design system: `com.tromwey.kura.designsystem.components.SearchPill` (Controls.kt).
- * This forwarder only keeps `features/add/AddTitlesSheet.kt` compiling until that lane imports the
- * design-system one; then delete it (nothing else may call it).
- */
-@Composable
-fun SearchPill(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier, onSearch: () -> Unit = {}) =
-    com.tromwey.kura.designsystem.components.SearchPill(value, onValueChange, placeholder, modifier, onSearch)

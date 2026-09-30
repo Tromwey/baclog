@@ -51,7 +51,6 @@ import com.tromwey.kura.data.api.KuraApiError
 import com.tromwey.kura.data.models.KuraRuntime
 import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.data.models.Release
-import com.tromwey.kura.data.models.ReportTarget
 import com.tromwey.kura.data.models.Review
 import com.tromwey.kura.data.models.Route
 import com.tromwey.kura.data.models.Season
@@ -70,7 +69,6 @@ import com.tromwey.kura.designsystem.UiWeight
 import com.tromwey.kura.designsystem.components.Cover
 import com.tromwey.kura.designsystem.components.FanView
 import com.tromwey.kura.designsystem.components.GlassButton
-import com.tromwey.kura.designsystem.components.IconChip44
 import com.tromwey.kura.designsystem.components.KPressFeel
 import com.tromwey.kura.designsystem.components.KuraTextButton
 import com.tromwey.kura.designsystem.components.MonoSegmented
@@ -83,6 +81,8 @@ import com.tromwey.kura.designsystem.components.kPressable
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.LoadKey
 import com.tromwey.kura.state.SheetRoute
+import com.tromwey.kura.features.people.ReviewMenu
+import com.tromwey.kura.features.people.reviewMenuApplies
 import com.tromwey.kura.state.deleteReview
 import com.tromwey.kura.state.fillPaletteIfNeeded
 import com.tromwey.kura.state.followedMarks
@@ -292,7 +292,7 @@ private fun Reviews(store: AppStore, t: Title) {
 
 /**
  * A review (s1, radius 18). Spoiler = the text blurred under "Contiene spoiler · Mostrar". Someone
- * else's: "…" (or a long press) → Reportar. Yours: Editar (the complete sheet on the text) and
+ * else's: "…" (or a long press) → the review menu (Reportar reseña · Bloquear). Yours: Editar (the complete sheet on the text) and
  * Borrar (with its own Deshacer). A reported one folds in place ("Gracias. La revisamos.").
  */
 @Composable
@@ -306,13 +306,13 @@ private fun ReviewCard(store: AppStore, review: Review) {
         )
         return
     }
-    val mine = review.authorId == store.me.id || review.authorId.isEmpty()
+    val mine = !reviewMenuApplies(review, store.me.id)
     val revealed = !review.spoiler || review.id in store.revealedSpoilers
-    val report = { store.present(SheetRoute.Report(ReportTarget.ReviewTarget(review.id, review.authorId, review.titleId))) }
+    var menu by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth()
             .background(KColor.s1, shape)
-            .then(if (!mine) Modifier.kPressable(KPressFeel.Dim, role = null, onLongClickLabel = "Reportar reseña", onLongPress = report) {} else Modifier)
+            .then(if (!mine) Modifier.kPressable(KPressFeel.Dim, role = null, onLongClickLabel = "Opciones de la reseña", onLongPress = { menu = true }) {} else Modifier)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -328,17 +328,7 @@ private fun ReviewCard(store: AppStore, review: Review) {
             }
             BasicText(who, Modifier.weight(1f), style = KuraType.ui(15f, UiWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
             review.mark?.let { GlyphIcon(it.reaction.glyph, size = 14.dp) }
-            if (!mine) {
-                IconChip44(
-                    KIcon.More,
-                    "Opciones de la reseña de @${review.authorId}",
-                    report,
-                    size = 32.dp,
-                    iconSize = 15.dp,
-                    fill = Color.Transparent,
-                    iconColor = KColor.text2,
-                )
-            }
+            if (!mine) ReviewMenu(store, review, expanded = menu, onExpandedChange = { menu = it }, chip = 32.dp)
         }
         Box(contentAlignment = Alignment.Center) {
             BasicText(

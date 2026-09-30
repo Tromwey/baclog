@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -307,10 +306,8 @@ fun SettingsPrivacyScreen(store: AppStore) {
                 KuraSwitch(store.profilePrivate, { store.profilePrivate = it }, label = "Perfil privado")
             }
             SettingsRow("Mostrar En común contigo", note = "En tu perfil, a quien te visita.") {
-                KuraSwitch(store.showCommon, { on ->
-                    store.showCommon = on
-                    store.saveLocal()
-                }, label = "Mostrar En común contigo")
+                // The store persists it on change (device-local prefs).
+                KuraSwitch(store.showCommon, { store.showCommon = it }, label = "Mostrar En común contigo")
             }
         }
         Section("colecciones nuevas", footer = "Cada colección se puede cambiar en sus opciones.") {
@@ -318,7 +315,6 @@ fun SettingsPrivacyScreen(store: AppStore) {
                 ChoiceRow(p.label, p.note, store.defaultPrivacy == p) {
                     if (store.defaultPrivacy != p) {
                         store.defaultPrivacy = p
-                        store.saveLocal()
                         haptic(KHapticEvent.Selection)
                     }
                 }
@@ -439,17 +435,16 @@ fun SessionsScreen(store: AppStore) {
     }
 }
 
+/** A device of the account: phone or computer (web), its name, "este teléfono" / when it was last seen. */
 @Composable
 private fun SessionRow(store: AppStore, s: DeviceSession) {
-    Row(
-        Modifier.fillMaxWidth().background(KColor.s1).heightIn(min = 72.dp).padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val web = s.platform.equals("web", ignoreCase = true)
+    SettingsRow(
+        s.title,
+        Modifier.heightIn(min = 72.dp),
+        note = sessionDetail(s, store.now),
+        leading = { KIconView(if (web) KIcon.Laptop else KIcon.Phone, size = 20.dp, color = KColor.text2) },
     ) {
-        Column(Modifier.weight(1f).padding(vertical = 10.dp).semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            BasicText(s.title, style = KuraType.ui(16f, UiWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            BasicText(sessionDetail(s, store.now), style = KuraType.mono(11f).copy(color = KColor.text2), maxLines = 2)
-        }
         if (!s.current) {
             GlassButton(
                 "Cerrar sesión",
@@ -556,7 +551,7 @@ fun KuraSheetScope.DeleteAccountSheet(store: AppStore) {
     val ok = typed.trim().removePrefix("@").lowercase() == handle && handle.isNotEmpty()
     val closeSheet = { close() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    Column(Modifier.padding(horizontal = 10.dp).imePadding(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         BasicText("¿borrar tu cuenta?", Modifier.semantics { heading() }, style = KuraType.news(26f))
         BasicText(
             "Se borran tus colecciones, reseñas y seguidores. No se puede deshacer.",
@@ -564,7 +559,7 @@ fun KuraSheetScope.DeleteAccountSheet(store: AppStore) {
             style = KuraType.ui(15f).copy(color = KColor.text2),
         )
         MonoLabel("escribe $handle", Modifier.padding(horizontal = 4.dp).padding(bottom = 4.dp))
-        KuraTextField(typed, { typed = it }, placeholder = handle, focusRequester = focus)
+        KuraTextField(typed, { typed = it }, placeholder = handle, focusRequester = focus, fill = KColor.glassBg)
     }
     Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SolidButton("Borrar cuenta", onClick = {

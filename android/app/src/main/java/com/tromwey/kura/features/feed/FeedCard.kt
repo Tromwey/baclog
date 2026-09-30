@@ -27,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,7 +54,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import androidx.compose.ui.zIndex
 import com.tromwey.kura.app.art
 import com.tromwey.kura.app.photo
@@ -63,34 +61,30 @@ import com.tromwey.kura.data.models.FeedEvent
 import com.tromwey.kura.data.models.FeedKind
 import com.tromwey.kura.data.models.Mark
 import com.tromwey.kura.data.models.Person
-import com.tromwey.kura.data.models.ReportTarget
 import com.tromwey.kura.data.models.Review
 import com.tromwey.kura.data.models.Route
 import com.tromwey.kura.data.models.Title
 import com.tromwey.kura.designsystem.Glyph
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KFixedChrome
-import com.tromwey.kura.designsystem.KIcon
-import com.tromwey.kura.designsystem.KIconView
 import com.tromwey.kura.designsystem.KMotion
-import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
 import com.tromwey.kura.designsystem.components.Cover
 import com.tromwey.kura.designsystem.components.FollowButton
 import com.tromwey.kura.designsystem.components.FollowSize
+import com.tromwey.kura.features.people.ReviewMenu
+import com.tromwey.kura.features.people.reviewMenuApplies
 import com.tromwey.kura.designsystem.components.FollowState
 import com.tromwey.kura.designsystem.components.KPill
 import com.tromwey.kura.designsystem.components.KPressFeel
 import com.tromwey.kura.designsystem.components.Seal
-import com.tromwey.kura.designsystem.components.SheetRow
 import com.tromwey.kura.designsystem.components.StatusPill
 import com.tromwey.kura.designsystem.components.kArtGlass
 import com.tromwey.kura.designsystem.components.kHeroCover
 import com.tromwey.kura.designsystem.components.kPressable
 import com.tromwey.kura.state.AppStore
-import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.fillPaletteIfNeeded
 import com.tromwey.kura.state.isFollowing
 import com.tromwey.kura.state.toggleFollow
@@ -146,7 +140,7 @@ internal fun FeedCard(store: AppStore, event: FeedEvent, height: Dp, topInset: D
                     Spacer(Modifier.weight(1f))
                     // Someone else's review: report it (or block its author) right here.
                     val r = store.review(event.reviewId)
-                    if (r != null && r.authorId.isNotEmpty() && r.authorId != store.me.id) ReviewMenu(store, r)
+                    if (r != null && reviewMenuApplies(r, store.me.id)) FeedReviewMenu(store, r)
                 }
             }
             Box(Modifier.fillMaxWidth().weight(1f)) { FeedArt(store, event, title) }
@@ -177,40 +171,11 @@ private fun AuthorChip(person: Person, age: String, onClick: () -> Unit) {
     }
 }
 
-/** ⋯ on someone else's review: Reportar reseña (until reported) · Bloquear a @x (iOS `ReviewMenu`). */
+/** ⋯ on someone else's review: the shared [com.tromwey.kura.features.people.ReviewMenu] (a `KuraMenu`). */
 @Composable
-private fun ReviewMenu(store: AppStore, review: Review) {
+private fun FeedReviewMenu(store: AppStore, review: Review) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier
-                .size(44.dp)
-                .kPressable(KPressFeel.Dim, onClickLabel = "Opciones de la reseña de @${review.authorId}") { open = true }
-                .semantics { contentDescription = "Opciones de la reseña de @${review.authorId}" },
-            contentAlignment = Alignment.Center,
-        ) {
-            KIconView(KIcon.More, size = 18.dp, color = KColor.text2)
-        }
-        if (open) {
-            Popup(alignment = Alignment.TopEnd, offset = androidx.compose.ui.unit.IntOffset(0, 0), onDismissRequest = { open = false },
-                properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
-                Column(
-                    Modifier.width(300.dp).background(KColor.s2, RoundedCornerShape(KRadius.surface)).padding(6.dp),
-                ) {
-                    if (review.id !in store.reportedReviews) {
-                        SheetRow("Reportar reseña", onClick = {
-                            open = false
-                            store.present(SheetRoute.Report(ReportTarget.ReviewTarget(review.id, review.authorId, review.titleId)))
-                        }, icon = KIcon.Flag)
-                    }
-                    SheetRow("Bloquear a @${review.authorId}", onClick = {
-                        open = false
-                        store.present(SheetRoute.Block(review.authorId))
-                    }, icon = KIcon.Block)
-                }
-            }
-        }
-    }
+    ReviewMenu(store, review, expanded = open, onExpandedChange = { open = it })
 }
 
 // MARK: Art

@@ -1,20 +1,15 @@
 package com.tromwey.kura.features.title
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,17 +21,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.tromwey.kura.app.art
 import com.tromwey.kura.app.mark
 import com.tromwey.kura.app.reaction
@@ -61,6 +53,7 @@ import com.tromwey.kura.designsystem.components.KuraReaction
 import com.tromwey.kura.designsystem.components.KuraSheetScope
 import com.tromwey.kura.designsystem.components.KuraSwitch
 import com.tromwey.kura.designsystem.components.KuraTextButton
+import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.NewCollectionRow
 import com.tromwey.kura.designsystem.components.ReactionGroup
 import com.tromwey.kura.designsystem.components.SheetDivider
@@ -74,6 +67,7 @@ import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.deleteReview
+import com.tromwey.kura.state.removeFromLibrary
 import com.tromwey.kura.state.isReleaseDay
 import com.tromwey.kura.state.isUnreleased
 import com.tromwey.kura.state.publishReview
@@ -82,7 +76,6 @@ import com.tromwey.kura.state.setMarkConfirmed
 import com.tromwey.kura.state.setMembership
 import com.tromwey.kura.state.suggestSaving
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 // The ficha's sheets — twin of ios/Kura/Features/Title/TitleSheets.swift. Completar is the DS
 // `ReactionGroup` (Material's connected toggle group) where iOS has its three-stop slider.
@@ -126,7 +119,8 @@ fun KuraSheetScope.CompleteSheet(store: AppStore, sheet: SheetRoute.Complete) {
     val changed = mine?.let { trimmed != it.text || spoiler != it.spoiler } ?: trimmed.isNotEmpty()
     val blocked = reaction == KuraReaction.Completed && trimmed.isNotEmpty() && changed
 
-    Column(Modifier.imePadding(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // No imePadding here: KuraSheet already lifts its content over the keyboard.
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SheetHeader("¿qué te pareció?", onClose = { if (!saving) dismiss() })
         BasicText(
             t.name,
@@ -143,35 +137,27 @@ fun KuraSheetScope.CompleteSheet(store: AppStore, sheet: SheetRoute.Complete) {
                 haptic(if (it == KuraReaction.Obsessed) KHapticEvent.Firm else KHapticEvent.Tap)
             },
             modifier = Modifier.padding(horizontal = 4.dp),
+            // The compact sheet is s2: an s2 group would vanish into it.
+            containerColor = KColor.glassBg,
         )
 
-        Box(
-            Modifier.padding(horizontal = 4.dp).padding(top = 14.dp).fillMaxWidth()
-                .heightIn(min = 96.dp)
-                .background(KColor.glassBg, RoundedCornerShape(KRadius.surface))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            if (text.isEmpty()) {
-                BasicText("Escribe tu reseña (opcional)", style = KuraType.body.copy(color = KColor.text2))
-            }
-            BasicTextField(
-                value = text,
-                onValueChange = {
-                    text = it.take(REVIEW_LIMIT)
-                    saveError = null
-                },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 132.dp).focusRequester(focus)
-                    .semantics { contentDescription = "Tu reseña, opcional, hasta $REVIEW_LIMIT caracteres" },
-                textStyle = KuraType.body.copy(color = KColor.text, lineHeight = 22.sp),
-                cursorBrush = SolidColor(KColor.text),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            )
-        }
-        if (text.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-                MonoLabel("${text.length}/$REVIEW_LIMIT", color = if (text.length >= REVIEW_LIMIT) KColor.text else KColor.text3)
-            }
-        }
+        KuraTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                saveError = null
+            },
+            placeholder = "Escribe tu reseña (opcional)",
+            modifier = Modifier.padding(horizontal = 4.dp).padding(top = 14.dp).heightIn(max = 180.dp)
+                .semantics { contentDescription = "Tu reseña, opcional, hasta $REVIEW_LIMIT caracteres" },
+            imeAction = ImeAction.Default,
+            focusRequester = focus,
+            fill = KColor.glassBg,
+            singleLine = false,
+            minLines = 3,
+            maxLength = REVIEW_LIMIT,
+            prose = true,
+        )
 
         if (!album) {
             Row(
@@ -259,7 +245,7 @@ private fun saveComplete(
     onError(null)
     store.sheetLocked = true
     // The store's scope, not the sheet's: the write must finish even if the sheet goes away.
-    store.scope.launch {
+    store.launch {
         val failure = store.setMarkConfirmed(t.id, choice, preview)
         onSaving(false)
         store.sheetLocked = false
@@ -460,7 +446,7 @@ fun KuraSheetScope.TitleMoreSheet(store: AppStore, sheet: SheetRoute.TitleMore) 
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         GlassButton("Quitar", {
-                            store.setMembership(t.id, emptySet())
+                            store.removeFromLibrary(t.id)
                             dismiss()
                         }, icon = KIcon.Minus, fill = KColor.glassBg)
                         KuraTextButton("Cancelar", { confirmRemove = false }, color = KColor.text2)
@@ -471,9 +457,13 @@ fun KuraSheetScope.TitleMoreSheet(store: AppStore, sheet: SheetRoute.TitleMore) 
     }
 }
 
-/** What leaving your last collection takes with it (the server GCs the per-title state and the review). */
+/**
+ * What "Quitar de tus colecciones" (`removeFromLibrary`, `DELETE /me/titles/{id}`) takes with it: every
+ * membership, your reaction and your review. The toast's Deshacer puts all of it back.
+ */
 private fun removeNote(collections: Int, marked: Boolean, reviewed: Boolean): String {
     val where = if (collections == 1) "Sale de tu colección" else "Sale de tus $collections colecciones"
     val lost = listOfNotNull(if (marked) "tu reacción" else null, if (reviewed) "tu reseña" else null)
-    return if (lost.isEmpty()) "$where." else "$where y se borra ${lost.joinToString(" y ")}."
+    val body = if (lost.isEmpty()) "$where." else "$where y se quita ${lost.joinToString(" y ")}."
+    return "$body Deshacer lo devuelve todo."
 }

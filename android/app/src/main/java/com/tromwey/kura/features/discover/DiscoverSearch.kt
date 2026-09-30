@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -61,6 +62,8 @@ import com.tromwey.kura.designsystem.components.ChipRow
 import com.tromwey.kura.designsystem.components.FollowButton
 import com.tromwey.kura.designsystem.components.FollowState
 import com.tromwey.kura.designsystem.components.GlassButton
+import com.tromwey.kura.designsystem.components.IconChip44
+import com.tromwey.kura.designsystem.components.KuraTextButton
 import com.tromwey.kura.designsystem.components.KPressFeel
 import com.tromwey.kura.designsystem.components.SaveChip
 import com.tromwey.kura.designsystem.components.Seal
@@ -110,11 +113,23 @@ private fun Recents(store: AppStore, actions: SearchActions) {
     ) {
         if (store.recentSearches.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                BasicText(
-                    "búsquedas recientes",
-                    Modifier.padding(horizontal = KSize.margin).semantics { heading() },
-                    style = KuraType.news(24f),
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(start = KSize.margin, end = KSize.margin - 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicText(
+                        "búsquedas recientes",
+                        Modifier.weight(1f).semantics { heading() },
+                        style = KuraType.news(24f),
+                    )
+                    KuraTextButton(
+                        "Borrar",
+                        { store.clearRecentSearches() },
+                        Modifier.semantics { contentDescription = "Borrar búsquedas recientes" },
+                        mono = true,
+                        color = KColor.text2,
+                    )
+                }
                 Column {
                     store.recentSearches.forEach { r ->
                         Row(
@@ -122,12 +137,21 @@ private fun Recents(store: AppStore, actions: SearchActions) {
                                 .fillMaxWidth()
                                 .heightIn(min = 52.dp)
                                 .kPressable(KPressFeel.Row(), onClickLabel = "Buscar $r") { actions.submit(r) }
-                                .padding(horizontal = KSize.margin),
+                                .padding(start = KSize.margin, end = KSize.margin - 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             KIconView(KIcon.Search, size = 16.dp, color = KColor.text2)
                             BasicText(r, Modifier.weight(1f), style = KuraType.body16, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            IconChip44(
+                                KIcon.Close,
+                                "Quitar “$r” de tus búsquedas recientes",
+                                { store.forgetSearch(r) },
+                                size = 40.dp,
+                                iconSize = 12.dp,
+                                fill = Color.Transparent,
+                                iconColor = KColor.text3,
+                            )
                         }
                     }
                 }

@@ -222,7 +222,8 @@ fun KuraSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label: Stri
  * Kura), optional floating [label] (pizarra when focused), [error] under it in `KColor.fieldError`
  * (Material's `error` role — never red). [serif] = Newsreader 20 (a collection name), otherwise
  * Hanken 16. [clearable] adds the "x". Multiline: `singleLine = false` + [minLines]; [maxLength]
- * caps the text and shows a mono "n/max" counter under it.
+ * caps the text and shows a mono "n/max" counter under it. [prose] = free text a person writes (a
+ * review, a report): sentence capitalization and autocorrect on (names and handles keep them off).
  */
 @Composable
 fun KuraTextField(
@@ -242,6 +243,7 @@ fun KuraTextField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     maxLength: Int? = null,
+    prose: Boolean = false,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val style = if (serif) KuraType.news(20f) else KuraType.ui(16f)
@@ -271,7 +273,12 @@ fun KuraTextField(
         },
         supportingText = supporting,
         isError = error != null,
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = keyboardType, imeAction = imeAction),
+        keyboardOptions = KeyboardOptions(
+            capitalization = if (prose) KeyboardCapitalization.Sentences else KeyboardCapitalization.None,
+            autoCorrectEnabled = prose,
+            keyboardType = keyboardType,
+            imeAction = imeAction,
+        ),
         keyboardActions = keyboardActions,
         singleLine = singleLine,
         minLines = if (singleLine) 1 else minLines,
