@@ -1,10 +1,11 @@
-// Material 3 Expressive (nuevo, no existía en el cromo Kura plano): ReactionGroup/ActionPair = ButtonGroup conectado de ToggleButton · SplitActionButton = SplitButtonLayout · KuraFab = FloatingActionButton · KuraFabMenu = FloatingActionButtonMenu + ToggleFloatingActionButton.
+// Material 3 Expressive (nuevo, no existía en el cromo Kura plano): ReactionGroup/ActionPair = ButtonGroup conectado de ToggleButton · SplitActionButton = SplitButtonLayout · KuraMenu = DropdownMenu · KuraFab = FloatingActionButton · KuraFabMenu = FloatingActionButtonMenu + ToggleFloatingActionButton.
 // Revertir: no hay versión en android-cromo-kura-v1 (git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/ButtonGroups.kt falla): borrar el archivo y volver a Fan/Pills en los call sites.
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.tromwey.kura.designsystem.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +29,7 @@ import androidx.compose.material3.FloatingActionButtonMenu
 import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SplitButtonDefaults
 import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Text
@@ -56,6 +59,7 @@ import com.tromwey.kura.designsystem.GlyphIcon
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KIcon
 import com.tromwey.kura.designsystem.KIconView
+import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.UiWeight
 
@@ -90,9 +94,11 @@ enum class KuraReaction(val glyph: Glyph, val label: String) {
  * `ToggleButton`s (replaces the hand-made reaction slider). The chosen one fills with its state
  * color and shows glyph + text; the other two shrink to the glyph. The group animates the widths
  * with the motion scheme. No haptic here: the store plays the reaction's (`StoreHaptic.Reaction`).
+ * [containerColor] fills the unchosen ones: s2 on a page; on an s2 sheet pass `KColor.glassBg`
+ * (or s1) or they vanish into it.
  */
 @Composable
-fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, modifier: Modifier = Modifier) {
+fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) {
     val entries = KuraReaction.entries
     val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     ButtonGroup(
@@ -119,7 +125,7 @@ fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, mod
                             },
                         shapes = connectedShapes(i, entries.size),
                         colors = ToggleButtonDefaults.colors(
-                            containerColor = KColor.s2,
+                            containerColor = containerColor,
                             contentColor = KColor.text,
                             checkedContainerColor = r.color,
                             checkedContentColor = KColor.bg,
@@ -153,9 +159,10 @@ data class KuraToggle(
 /**
  * The ficha's pair [Me obsesiona | Completar] — a connected `ButtonGroup` of two `ToggleButton`s
  * (2 dp slot). The checked one rounds fully and widens a little while the other gives way.
+ * [containerColor] fills the unchecked side (s2; `KColor.glassBg` on an s2 sheet).
  */
 @Composable
-fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier) {
+fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) {
     val items = listOf(primary, secondary)
     val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     ButtonGroup(
@@ -174,7 +181,7 @@ fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = 
                         modifier = Modifier.weight(weight).animateWidth(source).height(48.dp).semantics { contentDescription = t.label },
                         shapes = connectedShapes(i, items.size),
                         colors = ToggleButtonDefaults.colors(
-                            containerColor = KColor.s2,
+                            containerColor = containerColor,
                             contentColor = KColor.text,
                             checkedContainerColor = t.checkedColor,
                             checkedContentColor = t.checkedContentColor,
@@ -252,6 +259,51 @@ fun SplitActionButton(
         },
         modifier = modifier,
     )
+}
+
+/** One entry of a [KuraMenu]. [destructive] ones go last, after a hairline — never red (Kura has no red). */
+data class KuraMenuItem(
+    val label: String,
+    val icon: KIcon? = null,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/**
+ * A contextual menu (the "…" of a review, options on a row) — Material's `DropdownMenu` themed
+ * Kura: s2, radius 18, no border, no tonal tint, Material's ripple on each row, Hanken 16/500.
+ * It anchors to its parent: put it in the same `Box` as the chip that opens it. Picking an item
+ * closes the menu ([onDismiss]) and then runs it. Destructive items (Reportar, Bloquear) are
+ * grouped last under a hairline and keep the text color, like iOS' `ReviewMenu` (no red role).
+ */
+@Composable
+fun KuraMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<KuraMenuItem>, modifier: Modifier = Modifier) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = modifier,
+        shape = RoundedCornerShape(KRadius.surface),
+        containerColor = KColor.s2,
+        tonalElevation = 0.dp,
+        border = null,
+    ) {
+        val (safe, destructive) = items.partition { !it.destructive }
+        (safe + destructive).forEachIndexed { i, item ->
+            if (item.destructive && i == safe.size && safe.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).height(1.dp).background(KColor.sheetDivider))
+            }
+            DropdownMenuItem(
+                text = { Text(item.label, style = KuraType.row.inherit(), maxLines = 1) },
+                onClick = {
+                    onDismiss()
+                    item.onClick()
+                },
+                leadingIcon = item.icon?.let { icon -> { KIconView(icon, size = 19.dp, color = KColor.text) } },
+                colors = MenuDefaults.itemColors(textColor = KColor.text, leadingIconColor = KColor.text),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            )
+        }
+    }
 }
 
 /**

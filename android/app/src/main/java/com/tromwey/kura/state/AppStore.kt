@@ -190,6 +190,8 @@ sealed interface StoreHaptic {
 /** Someone else's followers / following list, beyond its rows. */
 data class PeopleListMeta(
     val nextCursor: String? = null,
+    /** People counted but not listed ("y N personas más"): someone else's `anonymousCount`, or on YOUR
+     *  lists the server's `privateCount` (followers/followees without a public handle). */
     val anonymous: Int = 0,
     val denied: String? = null,
     val loadingMore: Boolean = false,
@@ -368,6 +370,17 @@ internal class SessionData {
 
     fun inflightCount(titleId: String) = inflight[titleId] ?: 0
 
+    /** Writes ISSUED per title (never goes down). A read captures it when it starts: if it moved by the
+     *  time the answer lands, the read is older than a write and must not overwrite what it wrote. */
+    val writeGen = HashMap<String, Int>()
+
+    fun bumpWriteGen(titleId: String) {
+        writeGen[titleId] = (writeGen[titleId] ?: 0) + 1
+    }
+
+    /** "Quitar de tus colecciones" waiting for its Deshacer window: title id → the toast that offers it. */
+    val libraryRemovalToasts = HashMap<String, Long>()
+
     /** A `sync` key with its collection id made current (`collectionAliases`). */
     fun canonicalWriteKey(key: String): String {
         val bar = key.lastIndexOf('|')
@@ -534,8 +547,23 @@ class AppStore(
     /** ⚠️ Solo mock / no-op en live: aprobar/rechazar una solicitud (ver `setRequest`). */
     val requestStates: Map<String, RequestState> get() = s.requestStates
     val recentSearches: List<String> get() = s.recentSearches
-    var showCommon: Boolean get() = s.showCommon; set(v) { s.showCommon = v }
-    var defaultPrivacy: Privacy get() = s.defaultPrivacy; set(v) { s.defaultPrivacy = v }
+    /** "Mostrar en común" — device-local, persisted on change. */
+    var showCommon: Boolean
+        get() = s.showCommon
+        set(v) {
+            if (s.showCommon == v) return
+            s.showCommon = v
+            saveLocal()
+        }
+
+    /** Privacy a new collection starts with — device-local, persisted on change. */
+    var defaultPrivacy: Privacy
+        get() = s.defaultPrivacy
+        set(v) {
+            if (s.defaultPrivacy == v) return
+            s.defaultPrivacy = v
+            saveLocal()
+        }
     /** "Avísame cuando llegue" (E4) — titles you asked to be told about. */
     val alerts: Set<String> get() = s.alerts
     /** Discover's search mode hides the dock (the keyboard owns the bottom). */
@@ -622,6 +650,36 @@ class AppStore(
         val list = s.recentSearches.filterNot { it.equals(q, ignoreCase = true) }
         s.recentSearches = (listOf(q) + list).take(6)
         saveLocal()
+    }
+
+    /** Forgets one recent search (the ✕ on its row). */
+    fun forgetSearch(q: String) {
+        val list = s.recentSearches.filterNot { it.equals(q, ignoreCase = true) }
+        if (list.size == s.recentSearches.size) return
+        s.recentSearches = list
+        saveLocal()
+    }
+
+    /** "Borrar" on the recent searches. */
+    fun clearRecentSearches() {
+        if (s.recentSearches.isEmpty()) return
+        s.recentSearches = emptyList()
+        saveLocal()
+    }
+
+    /**
+     * Work that must outlive the screen that started it (Completar + reseña keeps going when the sheet
+     * closes): runs on the store's scope, for the life of the process. A failure other than cancellation
+     * goes through `noteError` (401 → entrance, transport → offline strip) instead of crashing; the store's
+     * own functions never throw, so that's only for what the block adds.
+     */
+    fun launch(block: suspend () -> Unit): Job = scope.launch {
+        try {
+            block()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            noteError(e)
+        }
     }
 
     fun noteViewed(id: String) {
@@ -1116,22 +1174,32 @@ class AppStore(
      * `key` serializes writes to the same thing (`WriteKey`): a write with a key waits for the previous
      * one with that key (success or failure) before it goes out. Everything is bound to the session that
      * queued it: once the account changes its late failures and "Reintentar" never surface.
+     *
+     * A write about a title (`titleId`) also bumps its write generation (reads that started before it
+     * don't overwrite it) and, when a "Quitar de tus colecciones" is still inside its Deshacer window,
+     * sends that removal NOW and goes out after it (`commitsLibraryRemoval = false` only for removals).
      */
     fun sync(
         key: String? = null,
         titleId: String? = null,
         onError: ((KuraApiError) -> Boolean)? = null,
+        commitsLibraryRemoval: Boolean = true,
         op: suspend (KuraApi) -> Unit,
-    ) {
+    ): Job {
         val session = s
         val k = key?.let(session::canonicalWriteKey)
-        if (titleId != null) session.inflight[titleId] = session.inflightCount(titleId) + 1
+        val removal = if (titleId != null && commitsLibraryRemoval) commitLibraryRemoval(titleId) else null
+        if (titleId != null) {
+            session.inflight[titleId] = session.inflightCount(titleId) + 1
+            session.bumpWriteGen(titleId)
+        }
         val previous = k?.let { session.writeChains[it]?.job }
         val token = Any()
         val job = scope.launch(start = CoroutineStart.LAZY) {
             var failure: Exception? = null
             try {
                 previous?.join()
+                removal?.join()
                 op(api)
             } catch (e: Exception) {
                 failure = e
@@ -1156,11 +1224,12 @@ class AppStore(
             if (onError?.invoke(e) == true) return@launch
             when (e) {
                 KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> Unit
-                else -> showToast(ToastModel(e.toast, ToastModel.Kind.Retry) { sync(k, titleId, onError, op) })
+                else -> showToast(ToastModel(e.toast, ToastModel.Kind.Retry) { sync(k, titleId, onError, commitsLibraryRemoval, op) })
             }
         }
         if (k != null) session.writeChains[k] = WriteChain(token, job)
         job.start()
+        return job
     }
 
     /** Keys for `sync(key)` — writes that contradict each other share one. */
@@ -1172,6 +1241,8 @@ class AppStore(
         fun mark(titleId: String) = "mark|$titleId"
         fun review(titleId: String) = "review|$titleId"
         fun follow(handle: String) = "follow|$handle"
+        /** "Quitar de tus colecciones" (`DELETE /me/titles/{id}`). */
+        fun library(titleId: String) = "library|$titleId"
         const val USERNAME = "me|username"
         const val ME_PATCH = "me|patch"
     }

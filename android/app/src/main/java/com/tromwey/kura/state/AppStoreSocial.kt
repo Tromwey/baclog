@@ -179,18 +179,23 @@ suspend fun AppStore.loadPublicCollection(handle: String, id: String, force: Boo
 private const val MAX_PEOPLE_PAGES = 50
 
 /** Every page of one of YOUR lists (`GET /me/following` · `/me/followers`), until `nextCursor` is null. */
-suspend fun AppStore.allPeople(kind: PeopleKind): List<Person> {
+suspend fun AppStore.allPeople(kind: PeopleKind): List<Person> = allPeoplePages(kind).first
+
+/** `allPeople` plus page 1's `privateCount` (the ones without a public handle, as a number). */
+private suspend fun AppStore.allPeoplePages(kind: PeopleKind): Pair<List<Person>, Int> {
     val out = ArrayList<Person>()
     val seen = HashSet<String>()
     var cursor: String? = null
-    repeat(MAX_PEOPLE_PAGES) {
+    var hidden = 0
+    repeat(MAX_PEOPLE_PAGES) { i ->
         val page = api.people(kind, cursor)
+        if (i == 0) hidden = page.privateCount
         for (p in page.items) if (seen.add(p.id)) out.add(p)
         val next = page.nextCursor
-        if (next == null || next == cursor) return out
+        if (next == null || next == cursor) return out to hidden
         cursor = next
     }
-    return out
+    return out to hidden
 }
 
 private fun AppStore.setPeopleList(key: String, list: List<Person>, meta: PeopleListMeta? = null) {
@@ -224,8 +229,10 @@ suspend fun AppStore.loadPeopleList(personId: String, following: Boolean) {
             items = page.items
             s.peopleListMeta = s.peopleListMeta + (key to PeopleListMeta(nextCursor = page.nextCursor, anonymous = page.anonymousCount))
         } else {
-            items = allPeople(if (following) PeopleKind.Following else PeopleKind.Followers)
+            val (all, hidden) = allPeoplePages(if (following) PeopleKind.Following else PeopleKind.Followers)
             check(session)
+            items = all
+            s.peopleListMeta = s.peopleListMeta + (key to PeopleListMeta(anonymous = hidden))
             if (following) s.following = s.following + items.map { it.id }
         }
         loaded(LoadKey.PeopleList(key))

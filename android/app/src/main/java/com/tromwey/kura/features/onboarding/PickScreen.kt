@@ -41,6 +41,7 @@ import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.Tint
 import com.tromwey.kura.designsystem.components.GlassButton
+import com.tromwey.kura.designsystem.components.SearchPill
 import com.tromwey.kura.designsystem.components.KuraTextButton
 import com.tromwey.kura.designsystem.components.PickGrid
 import com.tromwey.kura.designsystem.components.Skeleton

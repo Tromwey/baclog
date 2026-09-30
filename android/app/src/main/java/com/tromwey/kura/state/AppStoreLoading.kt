@@ -4,6 +4,7 @@ import com.tromwey.kura.data.api.KuraApiError
 import com.tromwey.kura.data.models.DiscoverCreatorsPayload
 import com.tromwey.kura.data.models.DiscoverFormatPayload
 import com.tromwey.kura.data.models.ExternalRef
+import com.tromwey.kura.data.models.KCollection
 import com.tromwey.kura.data.models.KuraJson
 import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.data.models.PeopleKind
@@ -85,6 +86,94 @@ suspend fun AppStore.bootstrap(emptyLibrary: Boolean = false, keepLoading: Boole
     }
 }
 
+/**
+ * Pull to refresh on Tus colecciones: `GET /collections` + `GET /me/titles` again, in parallel, WITHOUT
+ * touching `loadState` (no skeleton; the tab keeps showing what it has). What the phone is still writing
+ * wins over the answer: a collection with a write in flight keeps its local curation, one with a
+ * membership write in flight keeps its local titles, a removal inside its Deshacer window stays removed,
+ * collections created or deleted here and not yet confirmed stay as they are, and a title written since
+ * the refresh started keeps its local state. New titles are hydrated like at launch. A failure keeps
+ * everything and goes through the usual error path (offline strip / `loadError(LoadKey.Library)`).
+ */
+suspend fun AppStore.refreshLibrary() {
+    val session = s
+    if (!session.libraryLoaded) return // the launch itself is still loading (or failed: `bootstrap`)
+    val gens = HashMap(session.writeGen)
+    fun wroteSince(id: String) = (session.writeGen[id] ?: 0) != (gens[id] ?: 0) || session.inflightCount(id) > 0
+    try {
+        val (library, states) = coroutineScope {
+            val cols = async { api.collections() }
+            val mine = async { api.myTitles() }
+            cols.await() to mine.await()
+        }
+        check(session)
+        s.localLoad?.join()
+        check(session)
+        loaded(LoadKey.Library)
+        registerAll(library.flatMap { it.embeddedTitles })
+
+        val leaving = session.deferredWrites.keys.filter { it.startsWith("library:") }.map { it.removePrefix("library:") }.toSet()
+        val local = s.collections.associateBy { it.id }
+        val serverIds = library.map { it.id }.toSet()
+        val merged = ArrayList<KCollection>()
+        for (server in library) {
+            val cur = local[server.id]
+            val writing = collectionWriteInFlight(server.id)
+            // Deleted here, its DELETE still queued: it doesn't come back.
+            if (cur == null && writing) continue
+            var c = applyLocal(server)
+            if (cur != null) {
+                if (writing) {
+                    c = c.copy(pinned = cur.pinned, chosenCoverTitleId = cur.chosenCoverTitleId, titleIds = cur.titleIds,
+                        name = cur.name, vibe = cur.vibe, privacy = cur.privacy)
+                } else if (pinWriteInFlight) {
+                    c = c.copy(pinned = cur.pinned)
+                }
+                c = if (membershipWriteInFlight(server.id)) {
+                    c.copy(titleIds = cur.titleIds, addedAt = cur.addedAt)
+                } else {
+                    val removing = pendingRemovals(server.id).toSet() + leaving
+                    c.copy(titleIds = c.titleIds.filter { it !in removing })
+                }
+            } else {
+                c = c.copy(titleIds = c.titleIds.filter { it !in leaving })
+            }
+            merged.add(c)
+        }
+        // Created here and not confirmed yet (their POST is out): they stay.
+        for (c in s.collections) if (c.id !in serverIds && session.pendingCollections.containsKey(c.id)) merged.add(c)
+        s.collections = merged
+
+        val inCollections = merged.flatMap { it.titleIds }.toSet()
+        val next = HashMap<String, UserTitleState>()
+        for ((id, st) in states) {
+            if (id in leaving) continue
+            val old = s.userTitles[id]
+            next[id] = if (wroteSince(id) && old != null) old else st.copy(watchedEpisodes = old?.watchedEpisodes ?: emptySet())
+        }
+        for ((id, old) in s.userTitles) {
+            if (next.containsKey(id) || id in leaving) continue
+            // Gone on the server (removed on the web): it goes, unless the phone is still writing it.
+            if (wroteSince(id) || id in inCollections) next[id] = old
+        }
+        s.userTitles = next
+        if (lastUsedCollectionId != null && collection(lastUsedCollectionId!!) == null) {
+            lastUsedCollectionId = s.collections.firstOrNull { it.pinned }?.id
+        }
+        hydrateTitles(libraryIds, LoadKey.Library)
+    } catch (err: Exception) {
+        if (err is CancellationException) throw err
+        if (s !== session) return
+        fail(LoadKey.Library, err)
+    }
+}
+
+/** A membership write (`m|título|colección`) for this collection is queued or in flight. */
+private fun AppStore.membershipWriteInFlight(collectionId: String): Boolean {
+    val suffix = "|${canonicalCollectionId(collectionId)}"
+    return s.writeChains.keys.any { it.startsWith("m|") && it.endsWith(suffix) }
+}
+
 private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
 /** `GET /collections/{id}` — the titles and your states for one collection. */
@@ -138,13 +227,17 @@ suspend fun AppStore.loadTitle(id: String, force: Boolean = false) {
     if ((!force && id in s.loadedTitles) || id in s.loadingTitles) return
     s.loadingTitles = s.loadingTitles + id
     val session = s
+    // A write about this title issued while the GET is out (a review saved right after Completar) makes
+    // this answer OLDER than what the phone shows: its state and YOUR review are not applied.
+    val startedAt = session.writeGen[id] ?: 0
     try {
         val d = api.title(id)
         check(session)
         loaded(LoadKey.TitleKey(id))
         setLoadError(LoadKey.MoreReviews(id), null)
         register(d.title)
-        if (s.inflightCount(id) == 0) {
+        val raced = (session.writeGen[id] ?: 0) != startedAt
+        if (s.inflightCount(id) == 0 && !raced) {
             val st = d.state
             if (st != null) {
                 s.userTitles = s.userTitles + (id to st.copy(watchedEpisodes = s.userTitles[id]?.watchedEpisodes ?: emptySet()))
@@ -155,11 +248,13 @@ suspend fun AppStore.loadTitle(id: String, force: Boolean = false) {
         for (pm in d.following) pm.person?.let { register(it) }
         s.titleActivity = s.titleActivity + (id to d.following)
         for (r in d.reviews) r.author?.let { register(it) }
-        // Your optimistic review survives a read that raced its write; the rest is the server's.
-        val writing = s.inflightCount(id) > 0
-        val kept = reviewList(id).filter { writing && it.authorId == me.id }
+        // Your review, while a write is in flight or after one that this read predates, is the phone's
+        // (edited, published or deleted); everyone else's is the server's.
+        val mineIsLocal = raced || s.inflightCount(id) > 0
+        val kept = if (mineIsLocal) reviewList(id).filter { it.authorId == me.id } else emptyList()
         val keptIds = kept.map { it.id }.toSet()
-        setReviews(id, kept + d.reviews.filter { it.id !in keptIds })
+        val theirs = d.reviews.filter { it.id !in keptIds && !(mineIsLocal && it.authorId == me.id) }
+        setReviews(id, kept + theirs)
         s.reviewCursors = d.reviewsCursor?.let { s.reviewCursors + (id to it) } ?: (s.reviewCursors - id)
         s.missingTitles = s.missingTitles - id
         s.loadedTitles = s.loadedTitles + id
@@ -267,16 +362,22 @@ suspend fun AppStore.loadDiscoverCreators() {
     }
 }
 
-/** Descubrir por formato (2a–2c): `GET /discover/formats/{format}`, once per key per session. Fail-open:
- *  an error leaves an EMPTY shelf (the page words it), never a block. */
-suspend fun AppStore.loadDiscoverFormat(format: MediaFormat, time: Int? = null) {
+/** Descubrir por formato (2a–2c): `GET /discover/formats/{format}`, once per key per session unless
+ *  `force` (pull to refresh on a format page). Fail-open: a first load that fails leaves an EMPTY shelf
+ *  (the page words it), never a block; a forced reload that fails keeps the shelves it had. */
+suspend fun AppStore.loadDiscoverFormat(format: MediaFormat, time: Int? = null, force: Boolean = false) {
     val key = AppStore.formatKey(format, time)
-    if (s.discoverFormats[key] != null) return
+    val had = s.discoverFormats[key]
+    if (had != null && !force) return
     val session = s
     var payload = try {
         api.discoverFormat(format, time)
     } catch (err: Exception) {
         if (err is CancellationException) throw err
+        if (had != null) {
+            if (s === session) noteError(err)
+            return
+        }
         DiscoverFormatPayload(format = format, time = time)
     }
     if (s !== session) return

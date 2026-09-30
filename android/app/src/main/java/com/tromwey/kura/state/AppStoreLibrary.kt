@@ -13,6 +13,7 @@ import com.tromwey.kura.data.models.Title
 import com.tromwey.kura.data.models.TitleRef
 import com.tromwey.kura.data.models.UserTitleState
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -429,7 +430,11 @@ internal fun AppStore.syncAdd(titleId: String, collectionId: String) {
 }
 
 private fun AppStore.syncRemove(titleId: String, collectionId: String) {
-    sync(key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId)), titleId = titleId) { api ->
+    sync(
+        key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId)),
+        titleId = titleId,
+        commitsLibraryRemoval = false,
+    ) { api ->
         api.removeTitleMembership(resolveCollectionId(collectionId), titleId)
     }
 }
@@ -588,4 +593,80 @@ fun AppStore.setMembership(titleId: String, collectionIds: Set<String>) {
         }
         setState(titleId, hadState)
     }
+}
+
+// MARK: Quitar de tus colecciones (`DELETE /me/titles/{id}`)
+
+/** `deferredWrites` key of a library removal (no `|`: `adopt` and `pendingRemovals` never touch it). */
+private fun libraryRemovalKey(titleId: String) = "library:$titleId"
+
+/**
+ * "Quitar de tus colecciones": every membership, your state (mark, episodes) and your review go, with
+ * one Deshacer. Like quitar de una colección, the `DELETE /me/titles/{id}` waits for the Deshacer window
+ * (`undoWindow`): undoing never round-trips. Any other write about this title inside the window (saving
+ * it again, a mark, a review) sends the removal first and closes its Deshacer (`commitLibraryRemoval`),
+ * so the server never sees them in the wrong order.
+ */
+fun AppStore.removeFromLibrary(titleId: String) {
+    if (titleId !in libraryIds) return
+    val session = s
+    val places = s.collections.mapNotNull { c ->
+        val i = c.titleIds.indexOf(titleId)
+        if (i < 0) null else Triple(c.id, i, c.addedAt[titleId])
+    }
+    val state = s.userTitles[titleId]
+    val myReviews = reviewList(titleId).filter { it.authorId == me.id }
+    s.collections = s.collections.map { c -> if (titleId in c.titleIds) c.removing(titleId) else c }
+    setState(titleId, null)
+    removeReviews(titleId) { it.authorId == me.id }
+    haptic(StoreHaptic.Tap)
+
+    val key = libraryRemovalKey(titleId)
+    s.deferredWrites.remove(key)?.cancel()
+    val window = undoWindow
+    val job = scope.launch(start = CoroutineStart.LAZY) {
+        delay(window)
+        if (s !== session) return@launch
+        session.deferredWrites.remove(key)
+        session.libraryRemovalToasts.remove(titleId)
+        sendLibraryRemoval(titleId)
+    }
+    s.deferredWrites[key] = job
+    job.start()
+
+    val single = places.singleOrNull()?.let { collection(it.first)?.name }
+    val t = ToastModel(if (single != null) "Quitado de $single" else "Quitado de tus colecciones", ToastModel.Kind.Undo) {
+        // Still inside the window (nothing reached the server): put everything back where it was.
+        val pending = s.deferredWrites.remove(key) ?: return@ToastModel
+        pending.cancel()
+        s.libraryRemovalToasts.remove(titleId)
+        for ((cid, i, at) in places) {
+            update(cid) { c ->
+                if (titleId in c.titleIds) c else c.inserting(titleId, i).let { r -> if (at != null) r.copy(addedAt = r.addedAt + (titleId to at)) else r }
+            }
+        }
+        if (s.userTitles[titleId] == null) setState(titleId, state)
+        val back = myReviews.filter { review(it.id) == null }
+        if (back.isNotEmpty()) setReviews(titleId, reviewList(titleId) + back)
+        dismissToast()
+    }
+    s.libraryRemovalToasts[titleId] = t.id
+    showToast(t)
+}
+
+private fun AppStore.sendLibraryRemoval(titleId: String): Job =
+    sync(key = AppStore.WriteKey.library(titleId), titleId = titleId, commitsLibraryRemoval = false) { api ->
+        api.removeFromLibrary(titleId)
+    }
+
+/**
+ * A write about `titleId` while its "Quitar de tus colecciones" is still inside the Deshacer window: the
+ * removal goes out NOW (its Deshacer can no longer be honored without a round trip, so its toast closes)
+ * and the caller's write waits for the returned job. null = nothing pending.
+ */
+internal fun AppStore.commitLibraryRemoval(titleId: String): Job? {
+    val pending = s.deferredWrites.remove(libraryRemovalKey(titleId)) ?: return null
+    pending.cancel()
+    s.libraryRemovalToasts.remove(titleId)?.let { id -> if (toast?.id == id) dismissToast() }
+    return sendLibraryRemoval(titleId)
 }

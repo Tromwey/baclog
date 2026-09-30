@@ -99,9 +99,15 @@ class FakeKuraApi : KuraApi {
     var collections: List<KCollection> = decode("collections", Items(KCollection.serializer()))
     var myTitles: Map<String, UserTitleState> = decode("me_titles", Items(MyTitlesRow)).toMap()
     var following: List<Person> = decode("me_following", PeoplePage.serializer()).items
+    /** `GET /me/followers` override (e.g. with a `privateCount`). */
+    var followersPage: PeoplePage? = null
     /** Every title the fake can hand back by id; unknown ids are synthesized when `synthesize`. */
     val catalog = HashMap<String, Title>()
     var synthesize = true
+    /** What `GET /titles/{id}` answers as its reviews block. */
+    val titleReviews = HashMap<String, List<Review>>()
+    /** Counts `discoverFormat` answers (a forced reload must ask again). */
+    var discoverFormatAnswers = 0
     private var serverIds = 0
 
     init {
@@ -227,7 +233,7 @@ class FakeKuraApi : KuraApi {
 
     override suspend fun title(id: String): TitleDetail = call("title", id) {
         val t = catalog[id] ?: throw com.tromwey.kura.data.api.KuraApiError.NotFound
-        TitleDetail(t, myTitles[id], emptyList(), emptyList(), null, emptyList())
+        TitleDetail(t, myTitles[id], emptyList(), titleReviews[id] ?: emptyList(), null, emptyList())
     }
     override suspend fun moreReviews(titleId: String, cursor: String): ReviewPage = call("moreReviews", titleId) { ReviewPage(emptyList()) }
     override suspend fun titles(ids: List<String>): List<Title> = call("titles", ids.size) {
@@ -253,7 +259,10 @@ class FakeKuraApi : KuraApi {
     override suspend fun discoverCreators(): DiscoverCreatorsPayload =
         call("discoverCreators") { decode("discover_creators", DiscoverCreatorsPayload.serializer()) }
     override suspend fun discoverFormat(format: MediaFormat, time: Int?): DiscoverFormatPayload =
-        call("discoverFormat", format.rawValue) { decode("discover_formats_film", DiscoverFormatPayload.serializer()) }
+        call("discoverFormat", format.rawValue) {
+            discoverFormatAnswers += 1
+            decode("discover_formats_film", DiscoverFormatPayload.serializer())
+        }
 
     // MARK: People and feed
 
@@ -265,7 +274,7 @@ class FakeKuraApi : KuraApi {
     override suspend fun people(kind: PeopleKind, cursor: String?): PeoplePage = call("people", kind, cursor) {
         when (kind) {
             PeopleKind.Following -> PeoplePage(following)
-            PeopleKind.Followers -> decode("me_followers", PeoplePage.serializer())
+            PeopleKind.Followers -> followersPage ?: decode("me_followers", PeoplePage.serializer())
             else -> PeoplePage(emptyList())
         }
     }

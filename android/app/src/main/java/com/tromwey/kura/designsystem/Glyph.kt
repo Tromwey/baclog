@@ -143,7 +143,73 @@ enum class KIcon(private val build: () -> ImageVector) {
     /** Sin conexión — `wifi.slash`. */
     WifiSlash({ glyphVector("wifiSlash", "M4 4l16 16", "M2.5 9a14 14 0 015.7-3.2", "M13.6 5.3A14 14 0 0121.5 9", "M5.8 12.4a9.4 9.4 0 016-2.3", "M15.6 11a9.4 9.4 0 012.6 1.4", "M9.2 15.8a4.8 4.8 0 015.6 0", "M12 19.4h.01", stroke = 2f) }),
     /** Chosen check over a cover (heavier than [Glyph.Check] at small sizes). */
-    CheckBold({ glyphVector("checkBold", "M5.5 12.5l4.2 4.2 8.8-9.4", stroke = 2.8f) });
+    CheckBold({ glyphVector("checkBold", "M5.5 12.5l4.2 4.2 8.8-9.4", stroke = 2.8f) }),
+    /** Fijar — `pin`. */
+    Pin({ glyphVector("pin", "M9 3.5h6", "M10 3.5v5.2l-3 3.3v1.5h10V12l-3-3.3V3.5", "M12 13.5v7", stroke = 2f) }),
+    /** Desfijar — `pin.slash`. */
+    PinSlash({ glyphVector("pinSlash", "M9 3.5h6", "M10 3.5v5.2l-3 3.3v1.5h10V12l-3-3.3V3.5", "M12 13.5v7", "M4 4l16 16", stroke = 2f) }),
+    /** Editar / renombrar — `pencil`. */
+    Pencil({ glyphVector("pencil", "M4.5 19.5l1-4.5L15.8 4.7a1.8 1.8 0 012.5 0l1 1a1.8 1.8 0 010 2.5L9 18.5z", "M14 6.5l3.5 3.5", stroke = 2f) }),
+    /** Borrar — `trash`. */
+    Trash({ glyphVector("trash", "M4.5 6.5h15", "M9.5 6.5V4.8a1 1 0 011-1h3a1 1 0 011 1v1.7", "M6.5 6.5l.9 12.2a1.8 1.8 0 001.8 1.7h5.6a1.8 1.8 0 001.8-1.7l.9-12.2", "M10 10.5v6", "M14 10.5v6", stroke = 2f) }),
+    /** Foto / portada — `photo`. */
+    Photo({ glyphVector("photo", "M5 4.5h14a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 18V6A1.5 1.5 0 015 4.5z", "M3.5 16l4.5-4.5 4 4 2.5-2.5 6 6", "M15.5 7.8a1.7 1.7 0 110 3.4 1.7 1.7 0 010-3.4z", stroke = 2f) }),
+    /** Siguiente / ir — `arrow.right`. */
+    ArrowRight({ glyphVector("arrowRight", "M4.5 12h15", "M13.5 6l6 6-6 6", stroke = 2.2f) }),
+    /** Quitar — `minus`. */
+    Minus({ glyphVector("minus", "M5 12h14", stroke = 2.2f) }),
+    /** Vista de lista — `list.bullet`. */
+    ListBullet({ glyphVector("listBullet", "M9 6.5h11", "M9 12h11", "M9 17.5h11", "M4.5 6.5h.01", "M4.5 12h.01", "M4.5 17.5h.01", stroke = 2.2f) }),
+    /** Vista de cuadrícula — `square.grid.2x2`. */
+    Grid({ glyphVector("grid", "M4.5 4.5H10V10H4.5z", "M14 4.5h5.5V10H14z", "M4.5 14H10v5.5H4.5z", "M14 14h5.5v5.5H14z", stroke = 2f) }),
+    /** Ordenar — `arrow.up.arrow.down`. */
+    Sort({ glyphVector("sort", "M8 19V5", "M4.5 8.5L8 5l3.5 3.5", "M16 5v14", "M12.5 15.5L16 19l3.5-3.5", stroke = 2f) }),
+    /** Asa para reordenar — `line.3.horizontal`. */
+    Grip({ glyphVector("grip", "M5 8h14", "M5 12h14", "M5 16h14", stroke = 2f) }),
+    /** Copiar link — `link`. */
+    Link({ glyphVector("link", "M10.2 13.8a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1.4 1.4", "M13.8 10.2a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1.4-1.4", stroke = 2f) }),
+    /** Pública / todos — `globe`. */
+    Globe({ glyphVector("globe", "M12 3a9 9 0 110 18 9 9 0 010-18z", "M3 12h18", "M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z", stroke = 1.9f) }),
+    /** Compartir a historia — vertical frame (`rectangle.portrait`). */
+    Story({ glyphVector("story", "M8 3h8a2 2 0 012 2v14a2 2 0 01-2 2H8a2 2 0 01-2-2V5a2 2 0 012-2z", "M9.5 6h5", stroke = 2f) }),
+    /** Silenciar — `bell.slash`. */
+    Mute({ glyphVector("mute", "M12 3.5a5.5 5.5 0 015.5 5.5v4l1.7 3H4.8l1.7-3V9A5.5 5.5 0 0112 3.5z", "M10 19.5a2.2 2.2 0 004 0", "M4 4l16 16", stroke = 2f) }),
+    /** Reportar — `flag`. */
+    Flag({ glyphVector("flag", "M5.5 21V4", "M5.5 4.5h11l-2.2 4 2.2 4h-11", stroke = 2f) }),
+    /** Bloquear — `nosign`. */
+    Block({ glyphVector("block", "M12 3.5a8.5 8.5 0 110 17 8.5 8.5 0 010-17z", "M6 6l12 12", stroke = 2f) }),
+    /** Copiar — `doc.on.doc`. */
+    Copy({ glyphVector("copy", "M9 8.5h9a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H9A1.5 1.5 0 017.5 19v-9A1.5 1.5 0 019 8.5z", "M15.5 5.5V5A1.5 1.5 0 0014 3.5H5A1.5 1.5 0 003.5 5v9A1.5 1.5 0 005 15.5h.5", stroke = 2f) }),
+    /** Cámara (foto de perfil) — `camera`. */
+    Camera({ glyphVector("camera", "M4.5 7.5h3L9 5h6l1.5 2.5h3A1.5 1.5 0 0121 9v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18V9a1.5 1.5 0 011.5-1.5z", "M12 10a3.2 3.2 0 110 6.4 3.2 3.2 0 010-6.4z", stroke = 2f) }),
+    /** Cerrar sesión — `rectangle.portrait.and.arrow.right`. */
+    Logout({ glyphVector("logout", "M10 4.5H6A1.5 1.5 0 004.5 6v12A1.5 1.5 0 006 19.5h4", "M10.5 12h10", "M16.5 8l4 4-4 4", stroke = 2f) }),
+    /** Desplegar — `chevron.down`. */
+    ChevronDown({ glyphVector("chevronDown", "M5.5 9.5L12 16l6.5-6.5", stroke = 2.4f) }),
+    /** Reproducir — `play.fill`. */
+    Play({ glyphVector("play", "M8 5.2v13.6a1 1 0 001.5.9l10.6-6.8a1 1 0 000-1.8L9.5 4.3A1 1 0 008 5.2z") }),
+    /** Abrir fuera de la app — `arrow.up.right.square`. */
+    ExternalLink({ glyphVector("externalLink", "M13.5 4.5h6v6", "M19.5 4.5L11 13", "M17.5 14v4a1.5 1.5 0 01-1.5 1.5H6A1.5 1.5 0 014.5 18V8A1.5 1.5 0 016 6.5h4", stroke = 2f) }),
+    /** Persona / cuenta — `person`. */
+    Person({ glyphVector("person", "M12 4a3.8 3.8 0 110 7.6 3.8 3.8 0 010-7.6z", "M5 20.5a7 7 0 0114 0", stroke = 2f) }),
+    /** Ajustes — `gearshape`. */
+    Settings({
+        glyphVector(
+            "settings",
+            "M12 9a3 3 0 110 6 3 3 0 010-6z", "M12 5.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z",
+            "M12 2.5v3", "M12 18.5v3", "M2.5 12h3", "M18.5 12h3",
+            "M5.3 5.3l2.1 2.1", "M16.6 16.6l2.1 2.1", "M5.3 18.7l2.1-2.1", "M16.6 7.4l2.1-2.1",
+            stroke = 2f,
+        )
+    }),
+    /** Información — `info.circle`. */
+    Info({ glyphVector("info", "M12 3.5a8.5 8.5 0 110 17 8.5 8.5 0 010-17z", "M12 11v5.5", "M12 7.8h.01", stroke = 2.1f) }),
+    /** Música — `music.note`. */
+    Music({ glyphVector("music", "M9 17.5V5.5l10-2v12", "M6.8 15.3a2.2 2.2 0 110 4.4 2.2 2.2 0 010-4.4z", "M16.8 13.3a2.2 2.2 0 110 4.4 2.2 2.2 0 010-4.4z", stroke = 2f) }),
+    /** Sesión en un teléfono — `iphone`. */
+    Phone({ glyphVector("phone", "M8.5 2.5h7A1.5 1.5 0 0117 4v16a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 017 20V4a1.5 1.5 0 011.5-1.5z", "M11 18.5h2", stroke = 2f) }),
+    /** Sesión en una computadora — `laptopcomputer`. */
+    Laptop({ glyphVector("laptop", "M5.5 5.5h13A1.5 1.5 0 0120 7v9H4V7a1.5 1.5 0 011.5-1.5z", "M2.5 19h19", stroke = 2f) });
 
     val vector: ImageVector by lazy { build() }
 }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.tromwey.kura.designsystem.Glyph
 import com.tromwey.kura.designsystem.GlyphIcon
@@ -47,6 +48,8 @@ import com.tromwey.kura.designsystem.components.KuraFab
 import com.tromwey.kura.designsystem.components.KuraFabItem
 import com.tromwey.kura.designsystem.components.KuraFabMenu
 import com.tromwey.kura.designsystem.components.KuraLoadingIndicator
+import com.tromwey.kura.designsystem.components.KuraMenu
+import com.tromwey.kura.designsystem.components.KuraMenuItem
 import com.tromwey.kura.designsystem.components.KuraPullToRefresh
 import com.tromwey.kura.designsystem.components.KuraReaction
 import com.tromwey.kura.designsystem.components.KuraScaffold
@@ -101,6 +104,7 @@ import com.tromwey.kura.designsystem.components.RetryStrip
 import com.tromwey.kura.designsystem.components.RibbonPill
 import com.tromwey.kura.designsystem.components.RowValue
 import com.tromwey.kura.designsystem.components.SaveChip
+import com.tromwey.kura.designsystem.components.SearchPill
 import com.tromwey.kura.designsystem.components.SaveChipStyle
 import com.tromwey.kura.designsystem.components.Seal
 import com.tromwey.kura.designsystem.components.SealSize
@@ -192,7 +196,10 @@ fun DesignGallery(openSheet: Boolean = false, unknown: String? = null, onlyColle
                     MasonrySection()
                     ControlsSection()
                     ListSection()
-                    SearchSection()
+                    SearchSection(toast, onToast = {
+                        toastSeq += 1
+                        toast = KuraToastModel(toastSeq, "Guardado en con mi hermana", ToastKind.Undo) { toast = null }
+                    }, onTimeout = { t -> if (toast?.id == t.id) toast = null })
                     ChromeSection()
                     SkeletonSection()
                     // Last: its bars are draggable (Material collapses them by dragging too).
@@ -215,7 +222,7 @@ fun DesignGallery(openSheet: Boolean = false, unknown: String? = null, onlyColle
             FanPickRow("música 2026", listOf(Sample.ma, Sample.mindOfMine, Sample.eduardo), 4, on = true, onClick = {})
             FanPickRow("con mi hermana", listOf(Sample.chihiro, Sample.odyssey, Sample.pearl), 12, on = false, onClick = {}, note = "ya está")
             SheetDivider()
-            SheetRow("Compartir", {}, icon = KIcon.Share)
+            SheetRow("Compartir", {}, icon = KIcon.Share, note = "Copiar link, historia o más")
             SheetRow("Me obsesiona", {}, glyph = Glyph.Flame)
             SheetRow("Solo yo", {}, icon = KIcon.Search) { RadioDot(true) }
             SheetRow("Quien tenga el link", {}, icon = KIcon.Share) { RadioDot(false) }
@@ -584,6 +591,40 @@ private fun GroupsSection() = Section("grupos", "conectados · toggle") {
             KuraToggle("Me obsesiona", false, {}, Glyph.Flame, checkedColor = KColor.obsessed),
             KuraToggle("Completar", true, {}, Glyph.Check, checkedColor = KColor.completed),
         )
+        MonoLabel("sobre una hoja s2 · containerColor = glassBg")
+        Column(Modifier.fillMaxWidth().background(KColor.s2, RoundedCornerShape(KRadius.sheet)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ReactionGroup(KuraReaction.Liked, {}, containerColor = KColor.glassBg)
+            ActionPair(
+                KuraToggle("Me obsesiona", true, {}, Glyph.Flame, checkedColor = KColor.obsessed),
+                KuraToggle("Completar", false, {}, Glyph.Check, checkedColor = KColor.completed),
+                containerColor = KColor.glassBg,
+            )
+            var detail by remember { mutableStateOf("") }
+            KuraTextField(detail, { detail = it }, "Cuéntanos qué pasó (opcional)", fill = KColor.glassBg, singleLine = false, minLines = 3, maxLength = 280, imeAction = ImeAction.Default)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                FollowButton(FollowState.Following, {}, handle = "danpix", fill = KColor.glassBg)
+                FollowButton(FollowState.Follow, {}, honey = true)
+            }
+            SolidButton("Enviar", {}, enabled = false)
+            SearchPill("", {}, "Buscar títulos")
+        }
+        MonoLabel("menú contextual")
+        var menu by remember { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BasicText("reseña de @danpix", style = KuraType.body16, modifier = Modifier.weight(1f))
+            Box {
+                IconChip44(KIcon.More, "Opciones de la reseña", { menu = true })
+                KuraMenu(
+                    menu, { menu = false },
+                    listOf(
+                        KuraMenuItem("Copiar texto", KIcon.Copy) {},
+                        KuraMenuItem("Ver perfil", KIcon.Person) {},
+                        KuraMenuItem("Reportar", KIcon.Flag, destructive = true) {},
+                        KuraMenuItem("Bloquear a @danpix", KIcon.Block, destructive = true) {},
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -619,6 +660,8 @@ private fun ListSection() = Section("ajustes", "filas agrupadas") {
             SettingsRow("Quién ve tus seguidores", onClick = {}) { RowValue("Solo yo", icon = KIcon.ChevronUpDown) }
         }
         GroupedList {
+            SettingsRow("Pixel 8 · este teléfono", note = "Activa ahora", leading = { KIconView(KIcon.Phone, size = 20.dp) })
+            SettingsRow("MacBook", note = "Hace 2 días", onClick = {}, leading = { KIconView(KIcon.Laptop, size = 20.dp) }) { RowValue("Cerrar") }
             SettingsRow("Sesiones activas", onClick = {}) { RowValue("2") }
         }
         SettingsRow("Fila suelta (sin grupo)", onClick = {}) { RowValue("Sí") }
@@ -626,16 +669,22 @@ private fun ListSection() = Section("ajustes", "filas agrupadas") {
 }
 
 @Composable
-private fun SearchSection() = Section("búsqueda", "se abre a pantalla completa") {
+private fun SearchSection(toast: KuraToastModel?, onToast: () -> Unit, onTimeout: (KuraToastModel) -> Unit) = Section("búsqueda", "se abre a pantalla completa") {
     var q by remember { mutableStateOf("") }
     var open by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-        KuraSearchBar(q, { q = it }, open, { open = it }, Modifier.fillMaxWidth()) {
+        KuraSearchBar(
+            q, { q = it }, open, { open = it }, Modifier.fillMaxWidth(), onSearch = { q = it.trim() },
+            // The frame's toast, drawn inside the expanded search's window (same model, same timeout).
+            overlay = { KuraToastHost(toast, onTimeout) },
+        ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassButton("Guardar (aviso)", onToast, icon = KIcon.Plus)
                 MonoLabel("recientes")
                 BasicText("chihiro", style = KuraType.body16)
                 BasicText("mind of mine", style = KuraType.body16)
                 if (q.isNotEmpty()) BasicText("resultados para “$q”", style = KuraType.note)
+                MonoLabel("query = [$q]")
             }
         }
     }

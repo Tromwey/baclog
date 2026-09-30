@@ -84,12 +84,15 @@ suspend fun AppStore.setMarkConfirmed(titleId: String, mark: Mark?, preview: Boo
     ensureUserState(titleId)
     updateState(titleId) { it.copy(mark = mark) }
     val session = s
+    val removal = commitLibraryRemoval(titleId)
     session.inflight[titleId] = session.inflightCount(titleId) + 1
+    session.bumpWriteGen(titleId)
     // In line behind any `setMark` still queued for this title, and ahead of whatever comes after it.
     val key = AppStore.WriteKey.mark(titleId)
     val previous = session.writeChains[key]?.job
     val call = scope.async(start = CoroutineStart.LAZY) {
         previous?.join()
+        removal?.join()
         api.setMark(titleId, mark, preview)
     }
     val token = Any()

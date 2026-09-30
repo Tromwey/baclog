@@ -1,4 +1,4 @@
-// Material 3 Expressive detrás de nombres Kura: KuraTopBar = TopAppBar transparente · TabTitleBar = LargeFlexibleTopAppBar · KuraDock = ShortNavigationBar · KuraToast/KuraToastHost = Snackbar/SnackbarHost · KuraSheet = ModalBottomSheet · SheetRow = ListItem · KuraScaffold = Scaffold. TopVeil y OfflineStrip siguen Kura.
+// Material 3 Expressive detrás de nombres Kura: KuraTopBar = TopAppBar transparente · TabTitleBar = TopAppBarScrollBehavior (exitUntilCollapsed) con la barra dibujada Kura · KuraDock = ShortNavigationBar · KuraToast/KuraToastHost = Snackbar/SnackbarHost · KuraSheet = ModalBottomSheet · SheetRow = ListItem · KuraScaffold = Scaffold. TopVeil y OfflineStrip siguen Kura.
 // Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt (y devolver kDockPosition/DockReach a app/MainTabs.kt, app/KuraRoot.kt, app/Pending.kt)
 @file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
@@ -17,9 +17,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
@@ -28,7 +31,6 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +53,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,10 +61,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -182,42 +188,61 @@ fun rememberKuraTitleScroll(): KuraTitleScroll {
 fun Modifier.kuraTitleScroll(scroll: KuraTitleScroll): Modifier = nestedScroll(scroll.behavior.nestedScrollConnection)
 
 /**
- * A tab root's title ("tus colecciones") — `LargeFlexibleTopAppBar`: Newsreader 36 expanded that
- * collapses, as the list scrolls ([scroll] + `Modifier.kuraTitleScroll`), to a short s1 bar with
- * the title at 22 that still says where you are. [trailing] (one chip) sits in the actions.
- * Without [scroll] it simply stays expanded (and isn't draggable). Put it ABOVE the scrolling
- * content, not inside it.
+ * A tab root's title ("tus colecciones") — Newsreader 36 at Kura's place (its top 68 from the
+ * screen's TOP EDGE, like iOS and flujos-v2), driven by Material's `TopAppBarScrollBehavior`
+ * (`exitUntilCollapsed`, with its snap and fling): as the list scrolls ([scroll] +
+ * `Modifier.kuraTitleScroll`) it collapses to a 56 s1 bar under the status bar with the title at
+ * 22. [trailing] (one chip) is centered on the title and never moves it. Without [scroll] it simply
+ * stays expanded. Put it ABOVE the scrolling content, not inside it.
+ *
+ * Why not `LargeFlexibleTopAppBar` drawn by Material: it always reserves its 64 action row ABOVE
+ * the big title, which put "tus colecciones" at ~124 from the edge instead of 68 (2026-09-30,
+ * measured on the emulator). The behavior, nested scroll and motion are still Material's.
  */
 @Composable
 fun TabTitleBar(title: String, modifier: Modifier = Modifier, scroll: KuraTitleScroll? = null, trailing: @Composable BoxScope.() -> Unit = {}) {
-    // Without a scroll it's a plain expanded bar: no behavior, so it doesn't eat drags either.
-    val collapsed = scroll?.behavior?.state?.collapsedFraction ?: 0f
-    val size = 36f + (22f - 36f) * collapsed
-    LargeFlexibleTopAppBar(
-        title = {
+    val density = LocalDensity.current
+    val status = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    // The title line's top lands at KSize.titleTop (68) from the edge whatever the status bar is.
+    val lead = (KSize.titleTop - status).coerceAtLeast(8.dp)
+    val titleRow = 46.dp
+    val expanded = lead + titleRow
+    val collapsed = TabTitleBarCollapsed
+    val state = scroll?.behavior?.state
+    val range = with(density) { (expanded - collapsed).coerceAtLeast(0.dp).toPx() }
+    SideEffect { if (state != null && state.heightOffsetLimit != -range) state.heightOffsetLimit = -range }
+    val f = state?.collapsedFraction?.coerceIn(0f, 1f) ?: 0f
+    val offset = with(density) { (state?.heightOffset ?: 0f).toDp() }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .background(lerp(Color.Transparent, KColor.s1, f))
+            .statusBarsPadding()
+            .height(expanded + offset)
+            .clipToBounds(),
+    ) {
+        Row(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .height(titleRow + (collapsed - titleRow) * f)
+                .padding(start = KSize.margin, end = KSize.chromeSide),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 title,
-                modifier = Modifier.padding(start = KSize.margin - 16.dp).semantics { heading() },
-                style = KuraType.news(size).copy(color = Color.Unspecified),
+                modifier = Modifier.weight(1f).semantics { heading() },
+                style = KuraType.news(36f + (22f - 36f) * f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        },
-        modifier = modifier,
-        actions = { Box(Modifier.padding(end = KSize.chromeSide - 6.dp), content = trailing) },
-        // Material's 120 put "tus colecciones" ~45 lower than Kura's 68-from-the-edge title; 96 (under
-        // the status bar inset) lands it where Kura had it and still collapses to Material's 64.
-        collapsedHeight = 64.dp,
-        expandedHeight = 96.dp,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Transparent,
-            scrolledContainerColor = KColor.s1,
-            titleContentColor = KColor.text,
-            actionIconContentColor = KColor.text,
-        ),
-        scrollBehavior = scroll?.behavior,
-    )
+            Box(content = trailing)
+        }
+    }
 }
+
+/** Height of a collapsed [TabTitleBar] under the status bar. */
+private val TabTitleBarCollapsed = 56.dp
 
 // MARK: Dock ───────────────────────────────────────────────────────────────────────────────
 
@@ -364,7 +389,8 @@ class KuraSheetScope internal constructor(column: ColumnScope, private val onClo
  * Material's scrim and motion (and predictive back), s2 (Compact) / s1 (Tall), `shapes.extraLarge`
  * (36), no border, no tonal tint. Dismisses by dragging, tapping the scrim or back ([onDismiss] runs
  * once it's gone); the content's `close()` does the same from a button. One at a time: a sheet
- * that opens another replaces it.
+ * that opens another replaces it. The content already clears the navigation bar AND the keyboard
+ * (`imePadding`): sheet content must not add either.
  */
 @Composable
 fun KuraSheet(
@@ -399,7 +425,8 @@ fun KuraSheet(
         dragHandle = { Grabber() },
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = if (compact) 26.dp else 0.dp).navigationBarsPadding()) {
+        // imePadding HERE: a sheet with a field rises with the keyboard; screens/sheets must not add it.
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = if (compact) 26.dp else 0.dp).navigationBarsPadding().imePadding()) {
             KuraSheetScope(this, close).content()
         }
     }
@@ -439,7 +466,8 @@ fun SheetDivider(modifier: Modifier = Modifier) {
 
 /**
  * A sheet row — Material's `ListItem` on the sheet's own fill: icon (or a DS glyph) in a 24 slot,
- * label Hanken 16/500, optional trailing. Press = ripple + the row's corners (18).
+ * label Hanken 16/500, optional [note] under it (13, text-2), optional trailing. Press = ripple +
+ * the row's corners (18 → 8).
  */
 @Composable
 fun SheetRow(
@@ -449,6 +477,7 @@ fun SheetRow(
     icon: KIcon? = null,
     glyph: Glyph? = null,
     iconColor: Color = KColor.text,
+    note: String? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     ListItem(
@@ -463,11 +492,12 @@ fun SheetRow(
             }
         },
         trailingContent = { Row(verticalAlignment = Alignment.CenterVertically, content = trailing) },
+        supportingContent = note?.let { { Text(it, style = KuraType.note.inherit()) } },
         shapes = ListItemDefaults.shapes(
             shape = RoundedCornerShape(KRadius.surface),
             pressedShape = RoundedCornerShape(KRadius.coverS),
         ),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent, contentColor = KColor.text),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent, contentColor = KColor.text, supportingContentColor = KColor.text2),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Text(label, style = KuraType.row.inherit(), maxLines = 1, overflow = TextOverflow.Ellipsis)

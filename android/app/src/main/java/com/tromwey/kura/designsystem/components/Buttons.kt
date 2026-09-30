@@ -118,7 +118,8 @@ fun GlassButton(
 
 /**
  * The one primary action — `Button` with `primary` (text) / `onPrimary` (bg), 52 high, full width.
- * [honey] = the screen's ONE accent action: `tertiary` (miel) / `onTertiary`. Disabled = s2, text-2.
+ * [honey] = the screen's ONE accent action: `tertiary` (miel) / `onTertiary`. Disabled = text at
+ * .38 with bg ink at .6.
  */
 @Composable
 fun SolidButton(
@@ -139,8 +140,10 @@ fun SolidButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = if (honey) scheme.tertiary else scheme.primary,
             contentColor = if (honey) scheme.onTertiary else scheme.onPrimary,
-            disabledContainerColor = KColor.s2,
-            disabledContentColor = KColor.text2,
+            // Disabled reads as "the same button, not yet": text at .38 with bg ink at .6 (distinct
+            // from the tonal s2 buttons, and visible on an s2 sheet). No border.
+            disabledContainerColor = KColor.text.copy(alpha = 0.38f),
+            disabledContentColor = KColor.bg.copy(alpha = 0.6f),
         ),
         contentPadding = PaddingValues(horizontal = 20.dp),
     ) {
@@ -229,7 +232,8 @@ enum class FollowSize(val font: Float, val side: Dp, val height: Dp) {
 /**
  * The one Seguir button: `Button` in `tertiary` (miel) where the caller spends the screen's one
  * accent ([honey]), `FilledTonalButton` otherwise; Siguiendo / Solicitado are always tonal.
- * [handle] makes TalkBack say "Dejar de seguir a @handle" on Siguiendo.
+ * [handle] makes TalkBack say "Dejar de seguir a @handle" on Siguiendo. [fill] = the tonal
+ * container (s2; on an s2 sheet pass `KColor.glassBg`).
  */
 @Composable
 fun FollowButton(
@@ -239,6 +243,7 @@ fun FollowButton(
     size: FollowSize = FollowSize.Row,
     honey: Boolean = false,
     handle: String? = null,
+    fill: Color = KColor.s2,
 ) {
     val isHoney = state == FollowState.Follow && honey
     val label = if (state == FollowState.Following) handle?.let { "Dejar de seguir a @$it" } ?: "Dejar de seguir" else state.label
@@ -257,7 +262,13 @@ fun FollowButton(
             contentPadding = padding,
         ) { text() }
     } else {
-        FilledTonalButton(onClick = onClick, shapes = kuraButtonShapes(), modifier = m, contentPadding = padding) { text() }
+        FilledTonalButton(
+            onClick = onClick,
+            shapes = kuraButtonShapes(),
+            modifier = m,
+            colors = ButtonDefaults.filledTonalButtonColors(containerColor = fill, contentColor = KColor.text),
+            contentPadding = padding,
+        ) { text() }
     }
 }
 

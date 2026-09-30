@@ -1,4 +1,4 @@
-// Material 3 Expressive detrás de nombres Kura: MonoSegmented = ButtonGroup conectado de ToggleButton · ChipRow = FilterChip · KuraSwitch = Switch · KuraTextField = TextField (filled, sin línea) · GroupedList/SettingsRow = SegmentedListItem · KuraSearchBar = SearchBar + ExpandedFullScreenSearchBar.
+// Material 3 Expressive detrás de nombres Kura: MonoSegmented = ButtonGroup conectado de ToggleButton · ChipRow = FilterChip · SearchPill = campo propio con FilledTonalIconButton para borrar · KuraSwitch = Switch · KuraTextField = TextField (filled, sin línea) · GroupedList/SettingsRow = SegmentedListItem · KuraSearchBar = SearchBar + ExpandedFullScreenSearchBar.
 // Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Controls.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Controls.kt
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 
@@ -10,17 +10,22 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.rememberTextFieldState
@@ -51,8 +56,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -61,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -79,6 +88,7 @@ import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.rememberKHaptic
+import kotlinx.coroutines.launch
 
 // Twin of ios/Kura/DesignSystem/Components/Controls.swift (+ GlassField from Chrome.swift) in NAME
 // and signature; inside, Material 3 Expressive themed by KuraTheme.
@@ -207,10 +217,12 @@ fun KuraSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, label: Stri
 }
 
 /**
- * Text field — Material's filled `TextField` with no indicator line (no borders): radius 16, s2 at
- * rest, a brighter fill on focus (fill change, like Kura), optional floating [label] (pizarra when
- * focused), [error] under it in `KColor.fieldError` (Material's `error` role — never red).
- * [serif] = Newsreader 20 (a collection name), otherwise Hanken 16. [clearable] adds the "x".
+ * Text field — Material's filled `TextField` with no indicator line (no borders): radius 16, [fill]
+ * at rest (s2; on an s2 sheet pass `KColor.glassBg`), a brighter fill on focus (fill change, like
+ * Kura), optional floating [label] (pizarra when focused), [error] under it in `KColor.fieldError`
+ * (Material's `error` role — never red). [serif] = Newsreader 20 (a collection name), otherwise
+ * Hanken 16. [clearable] adds the "x". Multiline: `singleLine = false` + [minLines]; [maxLength]
+ * caps the text and shows a mono "n/max" counter under it.
  */
 @Composable
 fun KuraTextField(
@@ -226,34 +238,50 @@ fun KuraTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     label: String? = null,
     error: String? = null,
+    fill: Color = KColor.s2,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    maxLength: Int? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val style = if (serif) KuraType.news(20f) else KuraType.ui(16f)
     val clear = clearable && value.isNotEmpty()
+    val supporting: (@Composable () -> Unit)? = if (error != null || maxLength != null) {
+        {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(error.orEmpty(), modifier = Modifier.weight(1f), style = KuraType.ui(13f).inherit())
+                if (maxLength != null) Text("${value.length}/$maxLength", style = KuraType.mono(11f).copy(color = KColor.text3))
+            }
+        }
+    } else {
+        null
+    }
     TextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { new -> onValueChange(if (maxLength != null && new.length > maxLength) new.take(maxLength) else new) },
         modifier = modifier.fillMaxWidth().then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
         textStyle = style,
         label = label?.let { { Text(it, style = KuraType.ui(12f).inherit()) } },
-        placeholder = { Text(placeholder, style = style.inherit(), maxLines = 1) },
+        placeholder = { Text(placeholder, style = style.inherit(), maxLines = if (singleLine) 1 else Int.MAX_VALUE) },
         trailingIcon = {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
                 if (clear) IconChip44(KIcon.Close, "Borrar texto", { onValueChange("") }, size = 32.dp, iconSize = 13.dp, fill = Color.Transparent, iconColor = KColor.text2)
                 trailing()
             }
         },
-        supportingText = error?.let { { Text(it, style = KuraType.ui(13f).inherit()) } },
+        supportingText = supporting,
         isError = error != null,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = keyboardType, imeAction = imeAction),
         keyboardActions = keyboardActions,
-        singleLine = true,
+        singleLine = singleLine,
+        minLines = if (singleLine) 1 else minLines,
+        maxLines = if (singleLine) 1 else Int.MAX_VALUE,
         shape = RoundedCornerShape(KRadius.field),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = KColor.glassFocused,
-            unfocusedContainerColor = KColor.s2,
-            disabledContainerColor = KColor.s2,
-            errorContainerColor = KColor.s2,
+            unfocusedContainerColor = fill,
+            disabledContainerColor = fill,
+            errorContainerColor = fill,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
@@ -268,8 +296,53 @@ fun KuraTextField(
             errorLabelColor = KColor.fieldError,
             errorSupportingTextColor = KColor.fieldError,
             errorCursorColor = KColor.fieldError,
+            focusedSupportingTextColor = KColor.text3,
+            unfocusedSupportingTextColor = KColor.text3,
         ),
     )
+}
+
+/**
+ * Search field, capsule, 48 high (iOS `SearchPill`; moved here from onboarding 2026-09-30): lupa,
+ * the field, and an "x" (a transparent `FilledTonalIconButton`) when there's text. [fill]: glass
+ * by default (it sits on tints and s1 sheets). For Descubrir's expanding search use [KuraSearchBar].
+ */
+@Composable
+fun SearchPill(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onSearch: () -> Unit = {},
+    fill: Color = KColor.glassBg,
+) {
+    val style = KuraType.ui(16f)
+    Row(
+        modifier.fillMaxWidth().height(48.dp).background(fill, CircleShape).padding(start = 16.dp, end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KIconView(KIcon.Search, size = 17.dp, color = KColor.text2)
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            textStyle = style,
+            singleLine = true,
+            cursorBrush = SolidColor(KColor.accent),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Text(placeholder, style = style.copy(color = KColor.text2), maxLines = 1)
+                    inner()
+                }
+            },
+        )
+        if (value.isNotEmpty()) {
+            IconChip44(KIcon.Close, "Borrar búsqueda", { onValueChange("") }, size = 40.dp, iconSize = 14.dp, fill = Color.Transparent, iconColor = KColor.text3)
+        }
+    }
 }
 
 /** Whether a row sits inside a [GroupedList] (its rows become segments; dividers become the 2 dp slot). */
@@ -302,8 +375,8 @@ fun ListDivider(modifier: Modifier = Modifier, inset: Dp = 16.dp) {
 }
 
 /**
- * A settings row — `SegmentedListItem`: title (+ note in 13 text-2), trailing value/chevron or a
- * switch; with [onClick], ripple + the pressed corner morph. On s1 inside a [GroupedList];
+ * A settings row — `SegmentedListItem`: optional [leading] (an icon, a seal), title (+ note in 13
+ * text-2), trailing value/chevron or a switch; with [onClick], ripple + the pressed corner morph. On s1 inside a [GroupedList];
  * transparent on its own.
  */
 @Composable
@@ -312,6 +385,7 @@ fun SettingsRow(
     modifier: Modifier = Modifier,
     note: String? = null,
     onClick: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val grouped = LocalInGroupedList.current
@@ -338,6 +412,7 @@ fun SettingsRow(
             onClick = onClick,
             shapes = shapes,
             modifier = modifier.fillMaxWidth(),
+            leadingContent = leading,
             supportingContent = supporting,
             trailingContent = trail,
             colors = colors,
@@ -347,6 +422,7 @@ fun SettingsRow(
         SegmentedListItem(
             shapes = shapes,
             modifier = modifier.fillMaxWidth(),
+            leadingContent = leading,
             supportingContent = supporting,
             trailingContent = trail,
             colors = colors,
@@ -368,7 +444,16 @@ fun RowValue(text: String, modifier: Modifier = Modifier, icon: KIcon = KIcon.Ch
  * Descubrir's search — Material's `SearchBar` (56 pill on s1) that opens into an
  * `ExpandedFullScreenSearchBar` with Material's transition; [content] fills the expanded page
  * (recientes, resultados). Controlled from outside like a Kura field: [query] / [onQueryChange]
- * and [expanded] / [onExpandedChange] (system back collapses it and reports `false`).
+ * and [expanded] / [onExpandedChange] (system back or the leading arrow collapses it and reports
+ * `false`). The "x" clears the text. Typing never gets overwritten by its own echo; a [query] the
+ * caller changes (trimmed, replaced) is written into the field.
+ *
+ * [overlay] is painted INSIDE the expanded search (its own window), bottom-aligned above the
+ * keyboard: pass the frame's toast there so "Guardado en … · Deshacer" isn't hidden under it —
+ * `overlay = { KuraToastHost(toast, onTimeout, dockVisible = true) }` with the SAME model and
+ * `onTimeout` the frame uses (`dockVisible = true` because this slot already clears the system
+ * bar). Two hosts may show the same toast (the frame's, under the window, and this one): its
+ * `onTimeout` must be idempotent by id — KuraRoot's already is (`store.toast?.id == t.id`).
  */
 @Composable
 fun KuraSearchBar(
@@ -379,15 +464,29 @@ fun KuraSearchBar(
     modifier: Modifier = Modifier,
     placeholder: String = "Busca una película, serie o álbum",
     onSearch: (String) -> Unit = {},
+    overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val state = rememberSearchBarState(initialValue = if (expanded) SearchBarValue.Expanded else SearchBarValue.Collapsed)
     val text = rememberTextFieldState(query)
+    val scope = rememberCoroutineScope()
     val latestQuery by rememberUpdatedState(query)
     val latestOnQuery by rememberUpdatedState(onQueryChange)
     val latestOnExpanded by rememberUpdatedState(onExpandedChange)
-    LaunchedEffect(query) { if (text.text.toString() != query) text.setTextAndPlaceCursorAtEnd(query) }
-    LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect { if (it != latestQuery) latestOnQuery(it) } }
+    // The last value the FIELD itself reported. A `query` equal to it is our own echo coming back
+    // through the caller: pushing it into the field would stomp on keys typed since ("chihiro"
+    // typed fast arrived as "cch"). Only a query from outside (Enviar trims it, "Buscar
+    // “corrección”" replaces it) is written into the field.
+    var fromField by remember { mutableStateOf(query) }
+    LaunchedEffect(query) {
+        if (query != fromField && text.text.toString() != query) text.setTextAndPlaceCursorAtEnd(query)
+    }
+    LaunchedEffect(text) {
+        snapshotFlow { text.text.toString() }.collect {
+            fromField = it
+            if (it != latestQuery) latestOnQuery(it)
+        }
+    }
     LaunchedEffect(expanded) { if (expanded) state.animateToExpanded() else state.animateToCollapsed() }
     LaunchedEffect(state) { snapshotFlow { state.currentValue }.collect { latestOnExpanded(it == SearchBarValue.Expanded) } }
 
@@ -399,15 +498,42 @@ fun KuraSearchBar(
         unfocusedPlaceholderColor = KColor.text3,
         focusedLeadingIconColor = KColor.text2,
         unfocusedLeadingIconColor = KColor.text2,
+        focusedTrailingIconColor = KColor.text2,
+        unfocusedTrailingIconColor = KColor.text2,
     )
     val input: @Composable () -> Unit = {
+        val open = state.currentValue == SearchBarValue.Expanded
         SearchBarDefaults.InputField(
             textFieldState = text,
             searchBarState = state,
             onSearch = onSearch,
             textStyle = KuraType.ui(16f),
             placeholder = { Text(placeholder, style = KuraType.ui(16f).inherit(), maxLines = 1) },
-            leadingIcon = { KIconView(KIcon.Search, size = 18.dp, color = KColor.text2) },
+            // Expanded: Material's back arrow collapses it (like system back); collapsed: the lens.
+            leadingIcon = {
+                if (open) {
+                    IconChip44(
+                        KIcon.Back, "Volver",
+                        onClick = {
+                            scope.launch { state.animateToCollapsed() }
+                            latestOnExpanded(false)
+                        },
+                        size = 40.dp, iconSize = 18.dp, fill = Color.Transparent, iconColor = KColor.text,
+                    )
+                } else {
+                    KIconView(KIcon.Search, size = 18.dp, color = KColor.text2)
+                }
+            },
+            trailingIcon = if (text.text.isNotEmpty()) {
+                {
+                    IconChip44(
+                        KIcon.Close, "Borrar texto", { text.setTextAndPlaceCursorAtEnd("") },
+                        size = 36.dp, iconSize = 13.dp, fill = Color.Transparent, iconColor = KColor.text2,
+                    )
+                }
+            } else {
+                null
+            },
             colors = inputColors,
         )
     }
@@ -421,6 +547,12 @@ fun KuraSearchBar(
         state = state,
         inputField = input,
         colors = SearchBarDefaults.colors(containerColor = KColor.bg, dividerColor = KColor.sheetDivider),
-        content = content,
-    )
+    ) {
+        // The expanded bar is its own window: anything the frame draws (the toast) stays UNDER it.
+        // [overlay] is drawn inside it, at the bottom, above the keyboard and the system bar.
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            Column(Modifier.fillMaxSize(), content = content)
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding(), content = overlay)
+        }
+    }
 }
