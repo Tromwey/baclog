@@ -22,6 +22,20 @@ import com.tromwey.kura.features.collections.NewCollectionSheet
 import com.tromwey.kura.features.discover.DiscoverScreen
 import com.tromwey.kura.features.feed.FeedScreen
 import com.tromwey.kura.features.feed.NotificationsScreen
+import com.tromwey.kura.features.party.PartyBlockedSheet
+import com.tromwey.kura.features.party.PartyCapSheet
+import com.tromwey.kura.features.party.PartyDeleteSheet
+import com.tromwey.kura.features.party.PartyEditSheet
+import com.tromwey.kura.features.party.PartyExportLeaveSheet
+import com.tromwey.kura.features.party.PartyExportSheet
+import com.tromwey.kura.features.party.PartyLeaveSheet
+import com.tromwey.kura.features.party.PartyLinkSheet
+import com.tromwey.kura.features.party.PartyOptionsSheet
+import com.tromwey.kura.features.party.PartyScreen
+import com.tromwey.kura.features.party.PartySearchScreen
+import com.tromwey.kura.features.party.PartyShareSheet
+import com.tromwey.kura.features.party.PartySongSheet
+import com.tromwey.kura.features.party.PartyWelcomeSheet
 import com.tromwey.kura.features.people.BlockSheet
 import com.tromwey.kura.features.people.BlockedAccountsScreen
 import com.tromwey.kura.features.people.CreatorScreen
@@ -33,6 +47,9 @@ import com.tromwey.kura.features.people.PublicCollectionScreen
 import com.tromwey.kura.features.people.ReportSheet
 import com.tromwey.kura.features.profile.EditProfileScreen
 import com.tromwey.kura.features.profile.ProfileScreen
+import com.tromwey.kura.features.recap.RecapHistoryScreen
+import com.tromwey.kura.features.recap.RecapScreen
+import com.tromwey.kura.features.recap.RecapShareScreen
 import com.tromwey.kura.features.settings.DeleteAccountSheet
 import com.tromwey.kura.features.settings.MergeAccountScreen
 import com.tromwey.kura.features.settings.MergeCodeScreen
@@ -95,9 +112,12 @@ fun RouteScreen(route: Route, store: AppStore) {
         Route.MergeAccount -> MergeAccountScreen(store)
         Route.MergeCode -> MergeCodeScreen(store)
         Route.MergeConfirm -> MergeConfirmScreen(store)
-        // Fase 2 on Android: one placeholder until recap and parties land.
-        is Route.Recap, Route.RecapHistory, is Route.RecapShare, is Route.PartyRoute, is Route.PartySearch ->
-            PhaseTwoScreen(store, route)
+        // Fase 2
+        is Route.Recap -> RecapScreen(store, route)
+        Route.RecapHistory -> RecapHistoryScreen(store)
+        is Route.RecapShare -> RecapShareScreen(store, route)
+        is Route.PartyRoute -> PartyScreen(store, route)
+        is Route.PartySearch -> PartySearchScreen(store, route)
     }
 }
 
@@ -127,5 +147,18 @@ fun KuraSheetScope.SheetContent(sheet: SheetRoute, store: AppStore) {
         is SheetRoute.RevokeSession -> RevokeSessionSheet(store, sheet)
         is SheetRoute.UnlinkIdentity -> UnlinkIdentitySheet(store, sheet)
         SheetRoute.NotificationsAsk -> NotificationsAskSheet(store)
+        // Fase 2 · fiestas
+        is SheetRoute.PartyWelcome -> PartyWelcomeSheet(store, sheet)
+        is SheetRoute.PartyCap -> PartyCapSheet(store, sheet)
+        is SheetRoute.PartySong -> PartySongSheet(store, sheet)
+        is SheetRoute.PartyShare -> PartyShareSheet(store, sheet)
+        is SheetRoute.PartyOptions -> PartyOptionsSheet(store, sheet)
+        is SheetRoute.PartyLink -> PartyLinkSheet(store, sheet)
+        is SheetRoute.PartyExport -> PartyExportSheet(store, sheet)
+        is SheetRoute.PartyExportLeave -> PartyExportLeaveSheet(store, sheet)
+        is SheetRoute.PartyEdit -> PartyEditSheet(store, sheet)
+        is SheetRoute.PartyBlocked -> PartyBlockedSheet(store, sheet)
+        is SheetRoute.PartyDelete -> PartyDeleteSheet(store, sheet)
+        is SheetRoute.PartyLeave -> PartyLeaveSheet(store, sheet)
     }
 }

@@ -84,7 +84,7 @@ enum class SheetStyle { Compact, Tall }
 
 /**
  * Every bottom sheet in the app (iOS `SheetRoute`). The screens lane draws them (`KuraSheet`); the store
- * only says which one is up. The party sheets (`partyWelcome`…`partyLeave`) arrive with `+Parties` (fase 2).
+ * only says which one is up. The party sheets (`PartyWelcome`…`PartyLeave`) are drawn by `features/party` (fase 2).
  */
 sealed interface SheetRoute {
     data class NewCollection(val addingTitleId: String?, val movingFrom: String? = null) : SheetRoute
@@ -116,6 +116,29 @@ sealed interface SheetRoute {
     data class UnlinkIdentity(val provider: IdentityProvider) : SheetRoute
     /** "¿te avisamos?" — Kura's own ask before the system permission prompt. */
     data object NotificationsAsk : SheetRoute
+    // Colecciones de fiesta (fase 2: `features/party/PartyScreens.kt`), twins of iOS's party cases.
+    /** "ya estás dentro." after joining by the link (`returning`: the account already existed). */
+    data class PartyWelcome(val id: String, val returning: Boolean) : SheetRoute
+    /** "ya pusiste tus 3." — your songs with Quitar, and Listo. */
+    data class PartyCap(val id: String) : SheetRoute
+    /** A song's sheet: Quitar de la colección · Quitar y bloquear a @x. */
+    data class PartySong(val partyId: String, val titleId: String) : SheetRoute
+    /** "invita a la fiesta." — the link, Copiar, Compartir link, Gestionar link. */
+    data class PartyShare(val id: String) : SheetRoute
+    /** Opciones — the host's: Gestionar link · Llevar a otra app · Editar · Bloqueados · Borrar;
+     *  a guest's: Salir de la fiesta. */
+    data class PartyOptions(val id: String) : SheetRoute
+    /** "el link." — active / desactivado, Crear link nuevo, Desactivar link. */
+    data class PartyLink(val id: String) : SheetRoute
+    /** "llévala a otra app." — Apple Music · TIDAL ("Próximamente" when the service isn't on). */
+    data class PartyExport(val id: String) : SheetRoute
+    /** "¿salir ahora?" — closing the export screen while it's passing the songs. */
+    data class PartyExportLeave(val id: String) : SheetRoute
+    data class PartyEdit(val id: String) : SheetRoute
+    data class PartyBlocked(val id: String) : SheetRoute
+    data class PartyDelete(val id: String) : SheetRoute
+    /** A guest's "¿salir de la fiesta?" (`POST /parties/{id}/leave`). */
+    data class PartyLeave(val id: String) : SheetRoute
 
     val style: SheetStyle get() = if (this is AddTitles) SheetStyle.Tall else SheetStyle.Compact
     val showsGrabber: Boolean get() = this !is DeleteCollection

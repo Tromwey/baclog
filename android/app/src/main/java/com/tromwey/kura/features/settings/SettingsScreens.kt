@@ -48,8 +48,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.tromwey.kura.BuildConfig
-import com.tromwey.kura.app.PendingSheet
-import com.tromwey.kura.app.PhaseTwoScreen
 import com.tromwey.kura.app.loadCopy
 import com.tromwey.kura.app.photo
 import com.tromwey.kura.data.api.KuraApiError
@@ -102,7 +100,7 @@ import java.time.Instant
 
 // Ajustes (30a), privacidad (K1c), app de música (30b), sesiones activas, borrar cuenta (C3) and
 // "¿te avisamos?" — twins of iOS SettingsViews.swift. Inicio de sesión / fusionar cuentas
-// (AccountLinkViews.swift) are fase 2 on Android: their routes keep `PhaseTwoScreen`.
+// (AccountLinkViews.swift) live in AccountLinkScreens.kt (fase 2).
 // The dock hides on all of these (`Route.keepsDock`).
 
 /** The integral privacy notice (public, no session) — the web's `/privacidad`. */
@@ -512,32 +510,6 @@ fun KuraSheetScope.RevokeSessionSheet(store: AppStore, sheet: SheetRoute.RevokeS
         enabled = !busy,
     )
     KuraTextButton("Cancelar", { if (!busy) close() }, Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(top = 4.dp))
-}
-
-// MARK: Fase 2 (inicio de sesión · fusionar cuentas)
-
-/** Ajustes › Fusionar otra cuenta (fase 2). */
-@Composable
-fun MergeAccountScreen(store: AppStore) {
-    PhaseTwoScreen(store, Route.MergeAccount)
-}
-
-/** El código de la otra cuenta (fase 2). */
-@Composable
-fun MergeCodeScreen(store: AppStore) {
-    PhaseTwoScreen(store, Route.MergeCode)
-}
-
-/** Qué se mueve y qué desaparece (fase 2). */
-@Composable
-fun MergeConfirmScreen(store: AppStore) {
-    PhaseTwoScreen(store, Route.MergeConfirm)
-}
-
-/** ¿desconectar …? (fase 2). */
-@Composable
-fun KuraSheetScope.UnlinkIdentitySheet(store: AppStore, sheet: SheetRoute.UnlinkIdentity) {
-    PendingSheet("¿desconectar ${sheet.provider.label}?")
 }
 
 // MARK: C3 Borrar cuenta

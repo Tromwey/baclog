@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon (status bar): Kura's marcador glyph (Glyph.Bookmark, same path), flat
+     white — the system tints and alphas it. The wordmark is unreadable at 24 dp, hence the glyph. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,2.6h10a2.2,2.2 0,0 1,2.2 2.2v16.6L12,17.6l-7.2,3.8V4.8A2.2,2.2 0,0 1,7 2.6z" />
+</vector>

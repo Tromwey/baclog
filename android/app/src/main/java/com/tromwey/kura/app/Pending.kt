@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.tromwey.kura.data.models.Route
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraType
@@ -77,24 +76,4 @@ fun PendingTabRoot(title: String, content: @Composable ColumnScope.() -> Unit = 
 fun KuraSheetScope.PendingSheet(title: String) {
     SheetHeader(title, onClose = { close() })
     MonoLabel("pendiente", Modifier.padding(horizontal = 10.dp, vertical = 12.dp))
-}
-
-/**
- * Recap, parties and the music export are fase 2 on Android (android/BRIEF.md › Fases): one
- * placeholder for all their routes until that phase splits them into `features/recap`,
- * `features/party`…
- */
-@Composable
-fun PhaseTwoScreen(store: AppStore, route: Route) {
-    val name = when (route) {
-        is Route.Recap -> "recap."
-        Route.RecapHistory -> "recaps."
-        is Route.RecapShare -> "compartir recap."
-        is Route.PartyRoute -> "fiesta."
-        is Route.PartySearch -> "buscar canción."
-        else -> "próximamente."
-    }
-    PendingScreen(name, store) {
-        BasicText("Llega en la fase 2 de Android.", style = KuraType.ui(15f).copy(color = KColor.text2))
-    }
 }
