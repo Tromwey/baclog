@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider (`${applicationId}.files`, declared in AndroidManifest.xml): only the recap card
+     PNG that "Compartir" hands to ACTION_SEND. Cache dir, subfolder recap/ — nothing else is shared. -->
+<paths>
+    <cache-path name="recap" path="recap/" />
+</paths>

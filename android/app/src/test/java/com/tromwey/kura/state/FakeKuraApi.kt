@@ -152,7 +152,8 @@ class FakeKuraApi : KuraApi {
 
     override suspend fun sessions(): List<DeviceSession> = call("sessions") { decode("me_sessions", Items(DeviceSession.serializer())) }
     override suspend fun revokeSession(id: String) = call("revokeSession", id) {}
-    override suspend fun registerDevice(pushToken: String, environment: String) = call("registerDevice") {}
+    override suspend fun registerDevice(pushToken: String, environment: String?, provider: String) = call("registerDevice", pushToken, provider) {}
+    override suspend fun unregisterDevice(pushToken: String, bearer: String?) = call("unregisterDevice", pushToken, bearer) {}
     override suspend fun identities(): Identities = call("identities") { decode("me_identities", Identities.serializer()) }
     override suspend fun linkApple(credential: AppleCredential): LinkOutcome = unused()
     override suspend fun linkGoogle(idToken: String): LinkOutcome = unused()

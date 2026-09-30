@@ -191,6 +191,10 @@ sealed interface LoadKey {
     data object Blocks : LoadKey
     data object Sessions : LoadKey
     data object Identities : LoadKey
+    // Fiestas (`AppStoreParties.kt`)
+    data object Parties : LoadKey
+    data class PartyKey(val id: String) : LoadKey
+    data class Invite(val token: String) : LoadKey
 }
 
 /** Side effects the UI plays (the store never touches a `View`): haptics and TalkBack announcements. */
@@ -391,6 +395,9 @@ internal class SessionData {
     val waitingMemo = Memo<List<Title>>()
     val titlesInMemo = HashMap<String, Memo<List<Title>>>()
 
+    /** Fiestas + "llévala a otra app" of this account (`AppStoreParties.kt`, `AppStoreMusicExport.kt`). */
+    val party = PartySession()
+
     fun inflightCount(titleId: String) = inflight[titleId] ?: 0
 
     /** Writes ISSUED per title (never goes down). A read captures it when it starts: if it moved by the
@@ -418,6 +425,7 @@ internal class SessionData {
         writeChains.values.forEach { it.job.cancel() }
         pendingCollections.values.forEach { it.cancel() }
         localLoad?.cancel()
+        party.exportJob?.cancel()
         deferredWrites.clear()
         writeChains.clear()
         pendingCollections.clear()
@@ -719,8 +727,19 @@ class AppStore(
         get() = platform.welcomeSeen
         set(v) { platform.welcomeSeen = v }
 
-    /** Fase 2 (`+Parties`): a party link waiting for a sign-in. Always false until parties land. */
-    val invitePending: Boolean get() = false
+    /** A party link (`/f/{token}`) waiting for the account to be ready (iOS `DeepLinkInbox.pending =
+     *  .invite`). Outside the session on purpose: it outlives the sign-in that it waits for.
+     *  `openPendingInvite()` (AppStoreParties.kt) opens it once the tabs are up. */
+    var pendingInvite: String? = null
+
+    /** The invite landing (`get-kura.app/f/{token}`) over every phase; null = not showing. */
+    var inviteLanding by mutableStateOf<String?>(null)
+
+    /** O1b ran for a new account with a party link waiting: its "ya estás dentro." is the new one. */
+    var partyJustOnboarded = false
+
+    /** A party link waiting for a sign-in: the entrance skips the welcome and O1b skips "elige 3". */
+    val invitePending: Boolean get() = pendingInvite != null
 
     val entryStep: OnboardingStep get() = if (welcomeSeen || invitePending) OnboardingStep.Signup else OnboardingStep.Welcome
 

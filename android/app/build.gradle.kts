@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -21,6 +22,14 @@ val kuraDebugApiHost: String = providers.gradleProperty("kuraApiHost").orNull
 val kuraAppIdSuffix: String? = providers.gradleProperty("kuraAppIdSuffix").orNull
     ?.takeIf { it.isNotBlank() }
     ?.let { if (it.startsWith(".")) it else ".$it" }
+
+// Release signing: the Play UPLOAD key lives OUTSIDE the repo, in ~/.kura/ (kura-upload.jks + upload.properties
+// with storeFile/storePassword/keyAlias/keyPassword; README "Firma y artefactos"). A machine without that file
+// still builds: release just stays unsigned (app-release-unsigned.apk), as before. Never put a password here.
+val kuraUploadProperties: Properties? = File(System.getProperty("user.home"), ".kura/upload.properties")
+    .takeIf { it.isFile }
+    ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+    ?.takeIf { p -> listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all { !p.getProperty(it).isNullOrBlank() } }
 
 android {
     namespace = "com.tromwey.kura"
@@ -46,6 +55,17 @@ android {
         localeFilters += "es"
     }
 
+    signingConfigs {
+        kuraUploadProperties?.let { p ->
+            create("release") {
+                storeFile = file(p.getProperty("storeFile"))
+                storePassword = p.getProperty("storePassword")
+                keyAlias = p.getProperty("keyAlias")
+                keyPassword = p.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE", "\"http://$kuraDebugApiHost/api/v1\"")
@@ -66,7 +86,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Unsigned for now (Play signing is a later lane): assembleRelease → app-release-unsigned.apk
+            // Signed with the upload key when ~/.kura/upload.properties exists (→ app-release.apk / .aab);
+            // otherwise unsigned (→ app-release-unsigned.apk). Play re-signs with its app signing key.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

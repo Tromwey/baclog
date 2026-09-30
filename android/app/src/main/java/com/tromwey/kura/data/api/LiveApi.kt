@@ -128,8 +128,8 @@ class LiveApi(
     override suspend fun logout() {
         // Forget the token FIRST, then tell the server with the token it had. A 401 (already
         // revoked/expired) is not a failure and must not broadcast "session expired"; anything else
-        // (offline, 5xx, 429) propagates — the other devices are still signed in. No push token to
-        // unregister on Android (FCM is fase 2).
+        // (offline, 5xx, 429) propagates — the other devices are still signed in. No `DELETE
+        // me/devices` first: the server's logout deletes every `device_token` of the account.
         val token = session.token
         session.clear()
         if (token == null) return
@@ -140,7 +140,18 @@ class LiveApi(
         }
     }
 
-    override fun forgetSession() = session.clear()
+    /**
+     * Called with the bearer being forgotten, AFTER it's gone from disk (iOS `LiveAPI.forgetSession`):
+     * push uses it to `DELETE /me/devices/{token}` for that session — after the forget, this install's
+     * token can't be removed from the server anymore. Set once by `AppStore.create`.
+     */
+    var onForgetSession: ((bearer: String) -> Unit)? = null
+
+    override fun forgetSession() {
+        val token = session.token
+        session.clear()
+        if (token != null) onForgetSession?.invoke(token)
+    }
 
     override suspend fun webSession(to: String): String {
         val r = client.decode(Endpoint.post(ApiPath("auth/web-session"), buildJsonObject { put("to", to) }), UrlEnvelope)
@@ -210,8 +221,16 @@ class LiveApi(
 
     override suspend fun revokeSession(id: String) = client.send(Endpoint.delete(ApiPath("me/sessions/{}", id)))
 
-    override suspend fun registerDevice(pushToken: String, environment: String) =
-        client.send(Endpoint.put(ApiPath("me/devices/{}", pushToken), buildJsonObject { put("environment", environment) }))
+    override suspend fun registerDevice(pushToken: String, environment: String?, provider: String) =
+        client.send(Endpoint.put(ApiPath("me/devices/{}", pushToken), buildJsonObject {
+            environment?.let { put("environment", it) }
+            put("provider", provider)
+        }))
+
+    override suspend fun unregisterDevice(pushToken: String, bearer: String?) {
+        val e = Endpoint.delete(ApiPath("me/devices/{}", pushToken))
+        client.send(if (bearer != null) e.copy(auth = false, explicitBearer = bearer, suppressExpiry = true) else e.copy(suppressExpiry = true))
+    }
 
     // MARK: Identities and merge (fase 4g)
 

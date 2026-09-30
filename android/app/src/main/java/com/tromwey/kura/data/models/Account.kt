@@ -104,24 +104,32 @@ data class AuthSession(val token: String, val user: Me) {
     }
 }
 
-/** `GET /auth/providers` → `{ apple, google: { clientId } | null }`. The entrance paints ONLY the
- *  buttons that work; if the call fails the entrance is correo only (`EMAIL_ONLY`). Apple never
- *  exists on Android (BRIEF): the flag is read for parity, the UI ignores it. */
+/** `GET /auth/providers` → `{ apple, google: { clientId, androidClientId } | null }`. The entrance
+ *  paints ONLY the buttons that work; if the call fails the entrance is correo only (`EMAIL_ONLY`).
+ *  Apple never exists on Android (BRIEF): the flag is read for parity, the UI ignores it. */
 @Serializable(with = AuthProviders.Serializer::class)
 data class AuthProviders(
     val apple: Boolean,
-    /** The OAuth client id the server announces; null = no Google button. */
+    /** `google.clientId` = the iOS OAuth client (iOS's `GIDConfiguration`). Useless on Android: kept
+     *  for parity only — never gate an Android button on it. */
     val googleClientId: String?,
+    /** `google.androidClientId` = the WEB OAuth client id: Android's `serverClientId` for
+     *  `GetGoogleIdOption` (the id token's `aud`, which the server accepts). null = no Google on Android. */
+    val googleAndroidClientId: String? = null,
 ) {
     companion object {
-        val EMAIL_ONLY = AuthProviders(apple = false, googleClientId = null)
+        val EMAIL_ONLY = AuthProviders(apple = false, googleClientId = null, googleAndroidClientId = null)
     }
 
     internal object Serializer : WireSerializer<AuthProviders>("AuthProviders") {
         override fun read(e: JsonElement): AuthProviders {
             val c = Obj.of(e)
-            val id = c.obj("google")?.string("clientId")?.trim()
-            return AuthProviders(apple = c.bool("apple") ?: false, googleClientId = id?.ifEmpty { null })
+            val google = c.obj("google")
+            return AuthProviders(
+                apple = c.bool("apple") ?: false,
+                googleClientId = google?.string("clientId")?.trim()?.ifEmpty { null },
+                googleAndroidClientId = google?.string("androidClientId")?.trim()?.ifEmpty { null },
+            )
         }
     }
 }

@@ -44,7 +44,13 @@ suspend fun AppStore.submitUsername(handle: String, name: String, birthYear: Int
             m = api.completeOnboarding(name.trim().lowercase(), birthYear)
             check(session)
             applyMe(m)
-            // iOS: a party link waiting (`invitePending`) goes straight to the party (fase 2).
+            if (invitePending) {
+                // A party link brought this account here: "elige 3" and the people are optional
+                // (fiesta-contract §3) — straight to the party (`openPendingInvite` joins it).
+                partyJustOnboarded = true
+                enterMain()
+                return true
+            }
             onboardingStep = OnboardingStep.Pick
             scope.launch { loadOnboardingGrid() }
         } else {

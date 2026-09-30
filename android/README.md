@@ -14,7 +14,7 @@ App nativa Android de Kura: **Kotlin + Jetpack Compose**, espejo de [`ios/`](../
 cd android
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 ./gradlew :app:assembleDebug                  # → app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:assembleRelease                # → app/build/outputs/apk/release/app-release-unsigned.apk (R8 + shrink)
+./gradlew :app:assembleRelease                # → app-release.apk firmado con la llave de subida si existe ~/.kura/upload.properties; si no, app-release-unsigned.apk (R8 + shrink). Ver "Firma y artefactos"
 
 # emulador (AVD de esta Mac: communeo-pixel, Pixel 8, android-36)
 ~/Library/Android/sdk/emulator/emulator -avd communeo-pixel -no-snapshot-load -no-boot-anim &
@@ -66,7 +66,56 @@ adb shell am start -S -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity -
 - `Screens.kt`: los despachadores `TabRootScreen` / `RouteScreen` / `KuraSheetScope.SheetContent` (`when` exhaustivos). Firma de cada pantalla: `XxxScreen(store, route)`; de cada hoja: `KuraSheetScope.XxxSheet(store, sheet)` (`close()` la baja animada).
 - Portada compartida: cada pila es un `KuraHeroLayout` y cada entrada un `HeroDestination`; basta `Modifier.kHeroCover("cover-<titleId>")` en la card y en la ficha.
 - `UiSupport.kt`: `Title.art` (→ `CoverArt`), `Person.photo`, `KuraApiError.loadCopy` (titular + nota de los errores de carga), `siteHost`.
-- `DeepLinks.kt`: solo el mapa de links web → rutas (App Links son fase 2; nada lo llama aún).
+- `DeepLinks.kt`: el mapa de links web → `DeepLink` (lo usa `state/AppStoreLinks.kt`; ver "App Links").
+
+## App Links
+
+Un link compartido `https://get-kura.app/…` (o uno viejo `https://baclog.app/…`) abre kura en vez del navegador. Espejo de los Universal Links de iOS (`ios/Kura/App/DeepLinks.swift`).
+
+- **Manifest** (`MainActivity`, `launchMode="singleTask"` para que un link tocado en otra app llegue por `onNewIntent` a la única instancia): un `intent-filter android:autoVerify="true"` con `https` + `get-kura.app` + `baclog.app` y todo el host (los perfiles son `/{handle}`). Sin `www.*`: redirige al apex, el verificador no sigue redirecciones y antes de Android 12 un host que falla des-verifica a todos. En Android 15+ los `uri-relative-filter-group android:allow="false"` dejan en el navegador lo mismo que excluye el AASA (`/`, estáticos, `/admin`, `/api`, `/settings`, `/privacidad`, `/party`…); el ÚLTIMO grupo es `allow="true"` con `pathPattern=".*"` y no se puede quitar: en Android 15+ una URI que no coincide con ningún grupo se RECHAZA (sin él el filtro no reclama nada; pasó). Antes de 15 esos grupos se ignoran y la app devuelve la página al navegador (`MainActivity.openInBrowser`: resuelve el paquete del navegador y le manda el link con `setPackage`, porque un `ACTION_VIEW` normal volvería a kura; el `<queries>` de VIEW https del manifest hace visibles los navegadores. El selector `CATEGORY_APP_BROWSER` NO sirve: sin visibilidad abre un "Abrir con" con apps al azar).
+- **La lista de rutas solo-web vive en TRES sitios que van juntos**: `EXCLUDED_ROOTS` en `src/app/.well-known/apple-app-site-association/route.ts`, `webOnlyRoots` en `app/DeepLinks.kt` y los grupos del manifest.
+- **Rutas que abre** (`DeepLink.parse`): `/item/{id}`, `/{handle}/item/{id}`, `/u/{handle}/item/{id}` → ficha · `/{handle}`, `/u/{handle}` → perfil (el tuyo → pestaña Perfil) · `/{handle}/{id}`, `/u/{handle}/{id}` → colección pública (una tuya → tu colección, editable) · `/backlogs/{id}` → tu colección (si no está: "No encontramos esa colección.") · `/recap` → recap · `/f/{token}` → invitación a una fiesta (sin sesión: la vista previa `InviteLandingScreen` sobre cualquier fase; con sesión: `openInvite`, se une y abre la fiesta) · `/c/{uuid}` → la fiesta · `/login`, `/verify` → la entrada, y su `?to=` (ruta del mismo sitio) se abre después de entrar. Cada pieza del path se valida como UN segmento (sin `/`, `.`/`..` ni `%`).
+- **Cola**: sin pestañas todavía (arranque en frío, splash, sin sesión) el link espera en `DeepLinkInbox` (memoria, 1 h) y `KuraRoot` lo abre en cuanto `phase == Main` y la biblioteca cargó (también después de entrar). La invitación espera aparte en `pendingInvite` (AppStoreParties).
+- **Avisos**: `MainActivity` lee `PushIntent.target(intent.extras)` (`title:<id>` | `person:<handle>`, las dos formas: el `kuraOpen` de kura y el `data` de FCM que pinta el sistema) → `store.openPushTarget`. El callback de TIDAL (`kura://music/tidal/…`, respaldo sin Auth Tab) va a `store.tidalCallback`. Todo se quita del intent al consumirse, y ni una actividad recreada ni un relanzamiento desde Recientes lo reabren.
+
+Probar en el emulador (un build de carril no está verificado; con el componente explícito `-n` Android lo entrega igual; `-S` + `--es kuraBearer <jwt>` lo prueba en frío con sesión):
+
+```sh
+adb shell am start -a android.intent.action.VIEW -d "https://get-kura.app/item/<id>" -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity
+adb shell am start -a android.intent.action.VIEW -d "https://get-kura.app/u/<handle>" -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity
+adb shell am start -a android.intent.action.VIEW -d "https://get-kura.app/f/<token-de-16>" -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity
+adb shell am start -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity --es kuraOpen person:<handle>
+# qué rutas reclama el filtro (Android 15+: /settings no sale). Android 12+ esconde de la consulta a una app no
+# verificada: primero apruébale los dominios a mano (solo para probar; se borra al desinstalar)
+adb shell pm set-app-links-user-selection --user 0 --package com.tromwey.kura<.lane> true get-kura.app baclog.app
+adb shell pm query-activities -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d "https://get-kura.app/settings"
+```
+
+**Verificación automática** (`adb shell pm get-app-links com.tromwey.kura` → `get-kura.app: verified`) solo pasa con: el paquete real `com.tromwey.kura` (nunca uno de carril), `https://get-kura.app/.well-known/assetlinks.json` desplegado (hoy prod no lo sirve todavía) y la huella SHA-256 del certificado que firmó ESA instalación en `ANDROID_CERT_SHA256` (Vercel). Hoy la lista tiene la debug keystore de la Mac del founder; falta sumar la de la llave de subida (abajo) y, cuando exista la app en Play Console, la de **Play App Signing** (Play Console › Configuración › Integridad de la app): lo que se instala desde Play va firmado con esa, no con la de subida. Forzar una nueva verificación: `adb shell pm verify-app-links --re-verify com.tromwey.kura`.
+
+## Firma y artefactos
+
+- **La llave de subida vive FUERA del repo**: `~/.kura/kura-upload.jks` (PKCS12, alias `kura-upload`, RSA 2048, 10000 días, `CN=Kura, O=Tromwey, C=MX`) y su contraseña SOLO en `~/.kura/upload.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`; `chmod 600`, carpeta `700`). `app/build.gradle.kts` crea `signingConfigs.release` solo si ese archivo existe y está completo; en otra máquina el release sale sin firmar, como antes, y nada se rompe. `*.jks`, `*.keystore`, `upload.properties` y `dist/` están en `.gitignore`.
+- **Respáldala** (el `.jks` + `upload.properties`) en un gestor de contraseñas o disco cifrado. Con Play App Signing, perder la llave de subida se arregla pidiendo a Play un reinicio (días); sin respaldo es la única forma.
+- Huellas de la llave de subida (van a `ANDROID_CERT_SHA256` y, la SHA-1, al cliente OAuth Android de Google para builds firmados con ella):
+  - SHA-1 `37:48:F3:46:C7:DC:F1:6E:03:E3:F1:20:F2:65:E2:ED:7F:14:07:3C`
+  - SHA-256 `DE:71:9C:07:42:C5:FE:5E:22:48:4E:B3:A8:78:B2:5B:5D:01:AE:1D:DE:38:AF:6E:59:88:27:17:2A:90:84:77`
+  - Verlas: `keytool -list -v -keystore ~/.kura/kura-upload.jks -alias kura-upload` (pide la contraseña de `upload.properties`).
+- **Regenerar `dist/`** (gitignoreado):
+
+```sh
+cd android
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+./gradlew :app:bundleRelease :app:assembleRelease :app:assembleDebug
+V=$(grep -m1 'versionName = ' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+mkdir -p dist
+cp app/build/outputs/bundle/release/app-release.aab dist/kura-$V-release.aab
+cp app/build/outputs/apk/release/app-release.apk   dist/kura-$V-release.apk
+cp app/build/outputs/apk/debug/app-debug.apk       dist/kura-$V-debug.apk
+~/Library/Android/sdk/build-tools/36.0.0/apksigner verify --print-certs dist/kura-$V-release.apk
+```
+
+  El `.aab` es lo que se sube a Play; el `-release.apk` se instala directo (`adb install`) con la API de prod; el `-debug.apk` apunta a `10.0.2.2:3010` (el Mac visto desde el emulador) y va firmado con la debug keystore de la Mac. Un `.aab` se verifica con `jarsigner -verify -verbose:summary`, no con apksigner.
 
 ## Design system (`designsystem/`)
 
@@ -189,6 +238,6 @@ Viven en `gradle/libs.versions.toml`, con la razón de cada tope en el encabezad
 - **Fase 2 en pantallas**: recap, fiestas, exportar a TIDAL, inicio de sesión/fusionar cuentas (hoy `PhaseTwoScreen` / `PendingSheet`).
 - **Entrar con Google**: el botón ya está cableado (Credential Manager + `GetGoogleIdOption(serverClientId = auth/providers.google.clientId)` → `POST auth/google`) y sale solo si el servidor anuncia un client id; falta el backend (aceptar el `aud` de Android/Web). Apple no existe en Android.
 - **Push**: FCM (el backend hoy solo habla APNs vía `pushToUsers` en `src/modules/push/apns.ts` — necesita un transporte FCM detrás del mismo punto de entrada).
-- **App Links**: `/.well-known/assetlinks.json` en la web (hoy solo existe el AASA de iOS) + `intent-filter` `autoVerify` para `get-kura.app`.
-- **Firma y Play**: keystore de subida (nunca versionado), Play App Signing, `versionCode` automático (como `archive.sh` con `git rev-list --count HEAD`), ficha en Play Console, aviso de privacidad.
+- **App Links en un teléfono real**: desplegar la web (`/.well-known/assetlinks.json` aún no está en prod) y sumar a `ANDROID_CERT_SHA256` la huella de la llave de subida y la de Play App Signing (ver "App Links").
+- **Play**: crear la app en Play Console y aceptar Play App Signing (solo el founder), `versionCode` automático (como `archive.sh` con `git rev-list --count HEAD`; hoy es `1` fijo y Play rechaza un segundo `.aab` con el mismo), ficha, aviso de privacidad.
 - Ícono temático (capa `monochrome` de Android 13).

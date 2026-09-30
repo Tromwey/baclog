@@ -3,12 +3,15 @@ package com.tromwey.kura.app
 import android.net.Uri
 import com.tromwey.kura.data.models.KuraRuntime
 import com.tromwey.kura.data.models.Route
+import java.net.URI
+import java.net.URISyntaxException
+import java.net.URLDecoder
 
-// Web links → the app (twin of the parser in ios/Kura/App/DeepLinks.swift). ONLY the map for now:
-// App Links (`intent-filter autoVerify` + `/.well-known/assetlinks.json`) are fase 2 (android/BRIEF.md),
-// so nothing calls `DeepLink.parse` yet. When they land: `MainActivity.onNewIntent`/`onCreate` →
-// `DeepLink.parse(intent.data)` → the store's open-link path (iOS `openWebLink`: waits for the tabs,
-// survives a sign-in, invites open signed out).
+// Web links → the app (twin of the parser in ios/Kura/App/DeepLinks.swift). App Links: the
+// `intent-filter autoVerify` of MainActivity (AndroidManifest.xml) + `/.well-known/assetlinks.json`
+// (src/app/.well-known/assetlinks.json/route.ts). `MainActivity` → `AppStore.openWebLink`
+// (state/AppStoreLinks.kt), which waits for the tabs, survives a sign-in, and lets invites open signed out.
+// Parsed from a String with java.net.URI (not android.net.Uri) so the JVM unit tests can run it.
 
 /** Where a web link points, in the app's terms. Built ONLY from a URL of our own site. */
 sealed interface DeepLink {
@@ -22,10 +25,15 @@ sealed interface DeepLink {
     data class OwnCollection(val id: String) : DeepLink
     /** `/recap` (the monthly recap email). */
     data object Recap : DeepLink
-    /** `/f/{token}`: a party invite (16 chars `[A-Za-z0-9_-]`). */
+    /** `/f/{token}`: a party invite (16 chars `[A-Za-z0-9_-]`). Works signed out (the landing). */
     data class Invite(val token: String) : DeepLink
     /** `/c/{uuid}`: a party page. */
     data class Party(val id: String) : DeepLink
+    /**
+     * `/login`, `/verify` (Android only: iOS leaves them to Safari): the app's own entrance. [next] is the
+     * web's `?to=` (a signed-out page redirects to `/login?to=/f/…`), opened once there's a session.
+     */
+    data class Entrance(val next: DeepLink?) : DeepLink
 
     /** The route it opens once the tabs are up (your own handle → the Perfil tab: decided by the caller). */
     val route: Route?
@@ -36,38 +44,104 @@ sealed interface DeepLink {
             is OwnCollection -> Route.Collection(id)
             Recap -> Route.Recap()
             is Party -> Route.PartyRoute(id)
-            is Invite -> null
+            is Invite, is Entrance -> null
         }
 
     companion object {
         /** get-kura.app is the domain; baclog.app is deprecated but its old shared links still count. */
         val hosts = setOf("get-kura.app", "www.get-kura.app", "baclog.app", "www.baclog.app")
 
+        fun parse(uri: Uri?, debug: Boolean = false): DeepLink? = parse(uri?.toString(), debug)
+
         /**
          * Null = not ours or not a shape the app opens. Every path piece is validated as ONE segment
          * (ids `[A-Za-z0-9_-]`, handles like `USERNAME_RE`), so nothing with `/`, `.`/`..` or `%` ever
          * reaches an API path (learning 2026-09-25-ios-urlcomponents-path-deja-pasar-dot-segments).
          */
-        fun parse(uri: Uri?, debug: Boolean = false): DeepLink? {
-            uri ?: return null
-            val scheme = uri.scheme?.lowercase() ?: return null
-            val host = uri.host?.lowercase() ?: return null
-            var ours = scheme == "https" && host in hosts
-            if (debug && !ours) {
-                // Links a debug build made itself point at the dev server (`PublicLinks.base`).
-                val dev = KuraRuntime.apiOrigin?.let(Uri::parse)
-                ours = dev != null && dev.host?.lowercase() == host && dev.scheme == scheme && dev.port == uri.port
+        fun parse(url: String?, debug: Boolean = false): DeepLink? {
+            val u = uriOrNull(url) ?: return null
+            if (!isOurs(u, debug)) return null
+            val parts = segments(u) ?: return null
+            if (parts.size == 1 && (parts[0] == "login" || parts[0] == "verify")) {
+                return Entrance(next(u))
             }
-            if (!ours) return null
-            // `pathSegments` are decoded: a `%2F` can't hide a second segment from the checks below.
-            val parts = uri.pathSegments.filter { it.isNotEmpty() }.toMutableList()
+            return pathLink(parts)
+        }
+
+        /** True for an http(s) link of our own site (the ones the app must not drop on the floor). */
+        fun isOurs(url: String?, debug: Boolean = false): Boolean = uriOrNull(url)?.let { isOurs(it, debug) } == true
+
+        /**
+         * A push's target (`com.tromwey.kura.push.PushIntent.target`): `title:<id>` | `person:<handle>`,
+         * validated with the same rules as a link. Anything else is null.
+         */
+        fun pushTarget(raw: String?): DeepLink? {
+            val kind = raw?.substringBefore(':', "") ?: return null
+            val value = raw.substringAfter(':')
+            return when (kind) {
+                "title" -> id(value)?.let(::TitleLink)
+                "person" -> handle(value)?.let(::Profile)
+                else -> null
+            }
+        }
+
+        private fun uriOrNull(url: String?): URI? = try {
+            url?.takeIf { it.isNotBlank() }?.let(::URI)
+        } catch (_: URISyntaxException) {
+            null
+        }
+
+        private fun isOurs(u: URI, debug: Boolean): Boolean {
+            val scheme = u.scheme?.lowercase() ?: return false
+            val host = u.host?.lowercase() ?: return false
+            if (scheme == "https" && host in hosts) return true
+            if (!debug) return false
+            // Links a debug build made itself point at the dev server (`PublicLinks.base`).
+            val dev = KuraRuntime.apiOrigin?.let(::uriOrNull) ?: return false
+            return dev.host?.lowercase() == host && dev.scheme?.lowercase() == scheme && dev.port == u.port
+        }
+
+        /**
+         * The path split on the RAW `/` first, then each piece decoded: a `%2F` can't hide a second segment
+         * from the checks. A malformed escape (or `+`, which the decoder would turn into a space) → null.
+         */
+        private fun segments(u: URI): List<String>? {
+            val raw = u.rawPath ?: return emptyList()
+            return raw.split('/').filter { it.isNotEmpty() }.map { piece ->
+                if ('+' in piece) return null
+                try {
+                    URLDecoder.decode(piece, "UTF-8")
+                } catch (_: IllegalArgumentException) {
+                    return null
+                }
+            }
+        }
+
+        /**
+         * Top-level web routes that are never a handle, and static files: they stay on the web (the caller
+         * hands them back to the browser). Mirror of `EXCLUDED_ROOTS` in
+         * src/app/.well-known/apple-app-site-association/route.ts and of the manifest's
+         * uri-relative-filter-groups (Android 15+ never even sends them) — keep the three in sync.
+         */
+        private val webOnlyRoots = setOf(
+            "admin", "api", "app", "baclog", "kura", "colecciones", "coleccion", "blocked", "descubrir",
+            "login", "onboarding", "para-ti", "perfil", "prototype", "search", "settings",
+            "verify", "www", "waitlist", "analytics", "cron", "marketing", "feed", "creditos", "privacidad", "party",
+            "_next", ".well-known",
+        )
+        private val staticSuffixes = listOf(".png", ".svg", ".ico", ".webmanifest", ".txt", ".xml", ".json")
+
+        private fun pathLink(path: List<String>): DeepLink? {
+            if (path.firstOrNull() in webOnlyRoots) return null
+            if (staticSuffixes.any { path.lastOrNull()?.lowercase()?.endsWith(it) == true }) return null
+            val parts = path.toMutableList()
             if (parts.firstOrNull() == "u") {
                 parts.removeAt(0)
                 if (parts.isEmpty()) return null
             } else {
                 when (parts.firstOrNull()) {
                     "item" -> return if (parts.size == 2) id(parts[1])?.let(::TitleLink) else null
-                    "backlogs" -> return if (parts.size == 2) id(parts[1])?.let(::OwnCollection) else null
+                    "backlogs" -> return if (parts.size == 2 && parts[1] != "lentes") id(parts[1])?.let(::OwnCollection) else null
                     "recap" -> return if (parts.size == 1) Recap else null
                     "f" -> return if (parts.size == 2) inviteToken(parts[1])?.let(::Invite) else null
                     "c" -> return if (parts.size == 2) uuid(parts[1])?.let(::Party) else null
@@ -80,6 +154,19 @@ sealed interface DeepLink {
                 3 -> if (parts[1] == "item") id(parts[2])?.let(::TitleLink) else null
                 else -> null
             }
+        }
+
+        /** `?to=` of /login and /verify: a same-site path (never `//host` or a scheme), parsed like a link. */
+        private fun next(u: URI): DeepLink? {
+            val to = u.rawQuery?.split('&')
+                ?.firstOrNull { it.startsWith("to=") }
+                ?.removePrefix("to=")
+                ?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+                ?: return null
+            if (!to.startsWith("/") || to.startsWith("//") || '\\' in to) return null
+            val target = uriOrNull("https://${hosts.first()}$to") ?: return null
+            val parts = segments(target) ?: return null
+            return pathLink(parts)
         }
 
         private val idChars = Regex("^[A-Za-z0-9_-]{1,64}$")

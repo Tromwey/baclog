@@ -81,8 +81,14 @@ interface KuraApi {
     suspend fun sessions(): List<DeviceSession>
     /** `DELETE /me/sessions/{id}` → 204. Signs out THAT device only. */
     suspend fun revokeSession(id: String)
-    /** `PUT /me/devices/{token}` `{ environment }` → 204. APNs only on the server today (FCM = fase 2). */
-    suspend fun registerDevice(pushToken: String, environment: String)
+    /** `PUT /me/devices/{token}` `{ environment?, provider }` → 204. iOS: `apns` + `environment`
+     *  (sandbox | production). Android: `provider = "fcm"`, the FCM token as-is, `environment` null
+     *  (the server ignores it for FCM). */
+    suspend fun registerDevice(pushToken: String, environment: String?, provider: String = "apns")
+    /** `DELETE /me/devices/{token}` → 204, idempotent, no body (the token's shape tells the server APNs
+     *  or FCM). `bearer` = one captured BEFORE the session was forgotten (null = the current session).
+     *  Never broadcasts "session expired": a 401 here only means that bearer can't remove it anymore. */
+    suspend fun unregisterDevice(pushToken: String, bearer: String? = null)
 
     // MARK: Identities and merge (fase 4g)
     suspend fun identities(): Identities

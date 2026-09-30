@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The one notification channel (push/PushNotifications.kt), as Ajustes del teléfono shows it. -->
+    <string name="push_channel_name">Avisos</string>
+    <string name="push_channel_description">Cuando alguien empieza a seguirte y cuando sale algo de tu no puedo esperar.</string>
+</resources>

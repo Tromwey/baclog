@@ -58,6 +58,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -119,6 +120,16 @@ import com.tromwey.kura.state.createCollection
 import com.tromwey.kura.state.refreshLibrary
 import com.tromwey.kura.state.removeSilently
 import com.tromwey.kura.state.waitingTitles
+import com.tromwey.kura.state.createParty
+import com.tromwey.kura.state.loadParties
+import com.tromwey.kura.state.party
+import com.tromwey.kura.state.partyCards
+import com.tromwey.kura.data.models.Party
+import com.tromwey.kura.data.models.PartyCard
+import com.tromwey.kura.data.models.PartyCopy
+import com.tromwey.kura.features.party.PartyCarouselBody
+import com.tromwey.kura.features.party.PartyChips
+import com.tromwey.kura.features.party.PartyLimitStepper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -134,10 +145,14 @@ import kotlin.math.roundToInt
 /** Tab root · 02 Tus colecciones (+ 6a sin colecciones, 6c cargando, the failed launch). */
 @Composable
 fun CollectionsScreen(store: AppStore) {
+    // Your parties (`GET /parties`): silent when the server doesn't have parties yet (503).
+    LaunchedEffect(Unit) { store.loadParties() }
     when (store.loadState) {
         LoadState.Loading -> CollectionsSkeleton()
         LoadState.Failed -> CollectionsFailed(store)
-        LoadState.Loaded -> if (store.collections.isEmpty()) NoCollections(store) else CollectionsCarousel(store)
+        // A party counts: someone who only joined one by its link has no collection of their own,
+        // and the party must still be one swipe away.
+        LoadState.Loaded -> if (store.collections.isEmpty() && store.partyCards.isEmpty()) NoCollections(store) else CollectionsCarousel(store)
     }
 }
 
@@ -161,6 +176,13 @@ private sealed interface Entry {
     data object New : Entry {
         override val id get() = NEW_ID
         override val name get() = "nueva colección"
+    }
+
+    /** A party (colección de fiesta), yours or one you joined — `GET /parties`. Its body is
+     *  [PartyCarouselBody] (its songs as a list); its fan opens the party. */
+    data class PartyEntry(val card: PartyCard) : Entry {
+        override val id get() = "party:${card.id}"
+        override val name get() = card.name
     }
 }
 
@@ -208,6 +230,8 @@ private fun CollectionsCarousel(store: AppStore) {
     val waiting = store.waitingTitles
     val list: List<Entry> = buildList {
         add(Entry.New)
+        // Parties right after the ghost (fiesta-app-v2 `list`: "la fiesta de eric" first).
+        store.partyCards.forEach { add(Entry.PartyEntry(it)) }
         store.orderedCollections.forEach { add(Entry.Shelf(it)) }
         if (waiting.isNotEmpty()) add(Entry.Auto(waiting))
     }
@@ -293,8 +317,14 @@ private fun CollectionsCarousel(store: AppStore) {
     ) {
         Column(Modifier.fillMaxSize()) {
             TabTitleBar("tus colecciones", scroll = titleScroll) {
-                AnimatedContent(cur as? Entry.Shelf, transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) }, label = "carouselChips") { e ->
-                    if (e != null) CollectionChips(store, e.c) else Box(Modifier.size(44.dp))
+                // The party's own pair (as on its page) once it's loaded — the sheets read it.
+                val chips: Any? = (cur as? Entry.Shelf) ?: (cur as? Entry.PartyEntry)?.let { store.party(it.card.id) }
+                AnimatedContent(chips, transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) }, label = "carouselChips") { e ->
+                    when (e) {
+                        is Entry.Shelf -> CollectionChips(store, e.c)
+                        is Party -> PartyChips(store, e)
+                        else -> Box(Modifier.size(44.dp))
+                    }
                 }
             }
             KuraPullToRefresh(
@@ -375,12 +405,14 @@ private fun fanOf(store: AppStore, e: Entry): List<CoverArt> = when (e) {
     is Entry.Shelf -> store.fan(e.c).map { it.art }
     is Entry.Auto -> e.titles.take(3).map { it.art }
     Entry.New -> emptyList()
+    is Entry.PartyEntry -> e.card.fan.map { it.art }
 }
 
 private fun hexesOf(store: AppStore, e: Entry): List<String> = when (e) {
     is Entry.Shelf -> store.hexes(e.c)
     is Entry.Auto -> AppStore.fanHexes(e.titles.take(3), e.titles)
     Entry.New -> emptyList()
+    is Entry.PartyEntry -> e.card.palette
 }
 
 /** Offline / "faltan títulos" strips above the fans (the frame draws the offline strip itself). */
@@ -394,7 +426,23 @@ private fun Strips(store: AppStore) {
             { scope.launch { store.retryLibraryTitles() } },
             Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp),
         )
+    } else {
+        PartiesRetryStrip(store)
     }
+}
+
+/** "No se cargaron tus fiestas." + Reintentar (`GET /parties` failed — not the silent 503). */
+@Composable
+private fun PartiesRetryStrip(store: AppStore) {
+    val e = store.loadError(LoadKey.Parties) ?: return
+    val scope = rememberCoroutineScope()
+    val offline = e == com.tromwey.kura.data.api.KuraApiError.Offline
+    RetryStrip(
+        if (offline) "Sin conexión. No se cargaron tus fiestas." else "No se cargaron tus fiestas.",
+        { scope.launch { store.loadParties(force = true) } },
+        Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp),
+        offline = offline,
+    )
 }
 
 /**
@@ -409,11 +457,12 @@ private fun Fans(store: AppStore, list: List<Entry>, pos: MutableFloatState, go:
         for (i in (c - 1)..(c + 1)) {
             if (i !in list.indices) continue
             val e = list[i]
-            val empty = e is Entry.Shelf && e.c.titleIds.isEmpty()
+            val empty = (e is Entry.Shelf && e.c.titleIds.isEmpty()) || (e is Entry.PartyEntry && e.card.songCount == 0)
             val isCentre = i == c
             val count = (e as? Entry.Shelf)?.c?.titleIds?.size ?: (e as? Entry.Auto)?.titles?.size ?: 0
             val a11y = when (e) {
                 is Entry.Shelf -> "${e.name}, $count ${if (count == 1) "título" else "títulos"}"
+                is Entry.PartyEntry -> "${e.name}, fiesta, ${PartyCopy.songs(e.card.songCount)}"
                 else -> e.name
             }
             val actions = buildList {
@@ -436,6 +485,12 @@ private fun Fans(store: AppStore, list: List<Entry>, pos: MutableFloatState, go:
                         .then(
                             when {
                                 !isCentre -> Modifier.clearAndSetSemantics { }
+                                // A party's fan opens it (design `list`: the centred party goes to its page).
+                                e is Entry.PartyEntry -> Modifier.kPressable(onClickLabel = "Abrir ${e.name}") { store.push(Route.PartyRoute(e.card.id)) }
+                                    .clearAndSetSemantics {
+                                        contentDescription = a11y
+                                        customActions = actions
+                                    }
                                 e is Entry.Shelf -> Modifier.kPressable(onLongPress = { store.present(SheetRoute.More(e.c.id)) }, onClickLabel = null) { }
                                     .clearAndSetSemantics {
                                         contentDescription = a11y
@@ -542,6 +597,8 @@ private fun Modifier.semanticsHeading(): Modifier = semantics { heading() }
 private fun Below(store: AppStore, e: Entry) {
     when (e) {
         is Entry.Shelf -> CollectionBody(store, e.c, metaTop = 4.dp)
+        // Its songs, as a list, like any collection shows its titles (founder, 2026-09-29).
+        is Entry.PartyEntry -> PartyCarouselBody(store, e.card)
         is Entry.Auto -> Column {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 32.dp).padding(top = 4.dp, bottom = 22.dp),
@@ -628,6 +685,9 @@ private fun NoCollections(store: AppStore) {
     val open = { store.present(SheetRoute.NewCollection(addingTitleId = null)) }
     Column(Modifier.fillMaxSize().background(KColor.bg)) {
         TabTitleBar("tus colecciones") { IconChip44(KIcon.Plus, "Nueva colección", open) }
+        // Someone whose only "collection" is a party they joined: a failed `GET /parties` must not
+        // read as "you have nothing".
+        PartiesRetryStrip(store)
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp).padding(top = 52.dp, bottom = 140.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -664,9 +724,26 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
     val privacy = Privacy.valueOf(privacyName)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Colección | Fiesta (fiesta-app-v2 `create`). Only from scratch: saving a title "en una nueva"
+    // is always a normal collection (a party holds songs, never a title).
+    var party by rememberSaveable { mutableStateOf(false) }
+    var limitIndex by rememberSaveable { mutableStateOf(PartyCopy.limits.indexOf(PartyCopy.defaultLimit)) }
+    var creatingParty by remember { mutableStateOf(false) }
 
     val create = create@{
         if (name.isBlank()) return@create
+        if (party) {
+            if (creatingParty) return@create
+            creatingParty = true
+            // Opens the party with its share sheet (`createParty`); a failure says why.
+            // On the store's scope: the sheet closes mid-way (and takes its own scope with it),
+            // and the share sheet still has to open over the new party.
+            store.launch {
+                store.createParty(name, PartyCopy.limits[limitIndex])
+                creatingParty = false
+            }
+            return@create
+        }
         val id = store.createCollection(name, privacy, adding = sheet.addingTitleId)
         store.dismissSheet()
         val c = store.collection(id)
@@ -683,17 +760,28 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
 
     SheetHeader("nueva colección", onClose = { dismiss() })
     Column(Modifier.padding(horizontal = 8.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (sheet.addingTitleId == null) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                KindRow(!party, "Colección", "Agrega series, películas o álbumes.") { party = false }
+                KindRow(party, "Fiesta", "Cada invitado agrega canciones.") { party = true }
+            }
+        }
         KuraTextField(
             name,
-            { name = it.take(AppStore.COLLECTION_NAME_LIMIT) },
-            "ponle nombre",
+            { name = it.take(if (party) 60 else AppStore.COLLECTION_NAME_LIMIT) },
+            if (party) "la fiesta de…" else "ponle nombre",
             serif = true,
             imeAction = ImeAction.Done,
             focusRequester = focus,
             keyboardActions = KeyboardActions(onDone = { create() }),
             fill = KColor.glassBg,
         )
-        if (choosing) {
+        if (party) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                BasicText("Canciones por invitado", style = KuraType.ui(14f, com.tromwey.kura.designsystem.UiWeight.SemiBold))
+                PartyLimitStepper(PartyCopy.limits[limitIndex], { l -> limitIndex = PartyCopy.limits.indexOf(l).coerceAtLeast(0) })
+            }
+        } else if (choosing) {
             Column {
                 PrivacyOptions(privacy) { p ->
                     privacyName = p.name
@@ -703,6 +791,22 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
         } else {
             SettingsRow("Quién la ve", onClick = { choosing = true }) { RowValue(privacy.label, icon = KIcon.ChevronUpDown) }
         }
-        SolidButton("Crear", { create() }, enabled = name.isNotBlank())
+        SolidButton(if (party) "Crear fiesta" else "Crear", { create() }, enabled = name.isNotBlank() && !creatingParty)
+    }
+}
+
+/** Colección | Fiesta: a flat choice card, the selected one on the brighter fill (no border). */
+@Composable
+private fun KindRow(on: Boolean, title: String, note: String, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .background(if (on) KColor.glassSelected else KColor.glassBg, androidx.compose.foundation.shape.RoundedCornerShape(KRadius.surface))
+            .kPressable(feel = KPressFeel.Dim, role = androidx.compose.ui.semantics.Role.RadioButton, onClickLabel = title, onClick = onClick)
+            .semantics { selected = on }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        BasicText(title, style = KuraType.ui(16f, com.tromwey.kura.designsystem.UiWeight.SemiBold))
+        BasicText(note, style = KuraType.ui(14f).copy(color = KColor.text2))
     }
 }

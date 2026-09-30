@@ -87,6 +87,7 @@ import com.tromwey.kura.features.people.TintedPage
 import com.tromwey.kura.features.people.myObsessions
 import com.tromwey.kura.features.people.myProfileHexes
 import com.tromwey.kura.features.people.shareLink
+import com.tromwey.kura.features.recap.RecapEntryButton
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.AvatarEncoder
 import com.tromwey.kura.state.LoadKey
@@ -185,6 +186,7 @@ private fun FullProfile(store: AppStore) {
             val obsessed = store.count(Mark.Obsessed)
             val liked = store.count(Mark.Liked)
             StatRibbon(obsessed, store.count(Mark.Completed) + liked + obsessed, liked, store.reviewCount)
+            RecapEntryButton(store)
         }
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(30.dp)) {
             if (obsessions.isNotEmpty()) {

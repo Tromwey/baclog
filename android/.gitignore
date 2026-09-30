@@ -18,8 +18,10 @@ captures/
 *.keystore
 *.jks
 keystore.properties
+upload.properties
 *.p12
 
-# Outputs dropped by hand
+# Outputs dropped by hand, and the signed artifacts (README "Firma y artefactos")
 *.apk
 *.aab
+/dist/

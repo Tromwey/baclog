@@ -91,6 +91,7 @@ import com.tromwey.kura.state.LoadKey
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.deleteAccount
 import com.tromwey.kura.state.deviceSessions
+import com.tromwey.kura.state.loadIdentities
 import com.tromwey.kura.state.loadSessions
 import com.tromwey.kura.state.revokeSession
 import com.tromwey.kura.state.saveLocal
@@ -100,7 +101,7 @@ import java.time.Instant
 
 // Ajustes (30a), privacidad (K1c), app de música (30b), sesiones activas, borrar cuenta (C3) and
 // "¿te avisamos?" — twins of iOS SettingsViews.swift. Inicio de sesión / fusionar cuentas
-// (AccountLinkViews.swift) live in AccountLinkScreens.kt (fase 2).
+// (AccountLinkViews.swift) live in AccountLinkScreens.kt.
 // The dock hides on all of these (`Route.keepsDock`).
 
 /** The integral privacy notice (public, no session) — the web's `/privacidad`. */
@@ -144,21 +145,22 @@ fun SettingsScreen(store: AppStore) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { notificationsAllowed = notificationsGranted(context) }
     // The sheet may have just granted it: re-read when it closes.
     LaunchedEffect(store.sheet) { notificationsAllowed = notificationsGranted(context) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { store.loadIdentities() }
 
     SettingsPage(store, "ajustes") {
         GroupedList {
             ProfileRow(store)
-            store.account?.email?.let { email ->
-                SettingsRow("Correo") {
-                    BasicText(email, Modifier.padding(start = 12.dp), style = KuraType.ui(15f).copy(color = KColor.text2), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
             SettingsRow("Sesiones activas", onClick = { store.push(Route.Sessions) }) {
                 RowValue(store.deviceSessions?.size?.toString() ?: "")
             }
-            // Inicio de sesión / fusionar cuentas: fase 2 on Android.
-            SettingsRow("Inicio de sesión", note = "Correo. Conectar otra cuenta llega pronto a Android.", onClick = { store.push(Route.MergeAccount) }) {
-                RowValue("")
+        }
+
+        // Correo (always a way in), Google when this deploy offers it, Fusionar otra cuenta.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Section("inicio de sesión") { IdentityRows(store) }
+            store.loadError(LoadKey.Identities)?.let { e ->
+                RetryStrip("No se pudo cargar cómo entras.", onRetry = { scope.launch { store.loadIdentities() } }, offline = e == KuraApiError.Offline)
             }
         }
 

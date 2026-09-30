@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -17,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -33,11 +35,14 @@ import com.tromwey.kura.designsystem.components.KuraSheet
 import com.tromwey.kura.designsystem.components.KuraSheetStyle
 import com.tromwey.kura.designsystem.components.OfflineStrip
 import com.tromwey.kura.features.onboarding.OnboardingFlow
+import com.tromwey.kura.features.party.InviteLandingScreen
 import com.tromwey.kura.features.onboarding.SplashScreen
 import com.tromwey.kura.state.AppPhase
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.LoadState
 import com.tromwey.kura.state.SheetStyle
 import com.tromwey.kura.state.StoreEvent
+import com.tromwey.kura.state.openPendingLink
 
 /**
  * RootRouter (iOS `RootView`): splash → entrance/onboarding → the tabs, cross-faded, inside the app's
@@ -56,7 +61,8 @@ fun KuraRoot(store: AppStore, options: LaunchOptions = LaunchOptions.Normal) {
             return@KuraTheme
         }
         StoreEffects(store)
-        val dock = store.phase == AppPhase.Main && store.dockVisible(store.tab)
+        // The invite landing covers the tabs whole (a dead link seen signed in): no bar under it.
+        val dock = store.phase == AppPhase.Main && store.dockVisible(store.tab) && store.inviteLanding == null
         val barSpec = KMotion.defaultSpatial<IntSize>()
         val fade = KMotion.defaultEffects<Float>()
         KuraScaffold(
@@ -71,20 +77,45 @@ fun KuraRoot(store: AppStore, options: LaunchOptions = LaunchOptions.Normal) {
             },
             notices = { NoticeLayer(store, dock) },
         ) { padding ->
-            AnimatedContent(
-                targetState = store.phase,
-                modifier = Modifier.fillMaxSize().padding(padding),
-                transitionSpec = { fadeIn(fade) togetherWith fadeOut(fade) },
-                label = "phase",
-            ) { phase ->
-                when (phase) {
-                    AppPhase.Splash -> SplashScreen(store, hold = options.holdSplash)
-                    AppPhase.Onboarding -> OnboardingFlow(store)
-                    AppPhase.Main -> MainTabs(store)
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                AnimatedContent(
+                    targetState = store.phase,
+                    modifier = Modifier.fillMaxSize(),
+                    transitionSpec = { fadeIn(fade) togetherWith fadeOut(fade) },
+                    label = "phase",
+                ) { phase ->
+                    when (phase) {
+                        AppPhase.Splash -> SplashScreen(store, hold = options.holdSplash)
+                        AppPhase.Onboarding -> OnboardingFlow(store)
+                        AppPhase.Main -> MainTabs(store)
+                    }
+                }
+                // A party invite opened signed out (`/f/{token}`, AppStoreLinks → AppStoreParties): over
+                // every phase, under the sheets and the toast.
+                val landing = store.inviteLanding
+                var shownLanding by remember { mutableStateOf(landing) }
+                if (landing != null && shownLanding != landing) shownLanding = landing
+                AnimatedVisibility(visible = landing != null, enter = fadeIn(fade), exit = fadeOut(fade)) {
+                    // The last token stays drawn while it fades out.
+                    shownLanding?.let { InviteLandingScreen(store, it) }
                 }
             }
         }
+        PendingLinks(store)
         SheetHost(store)
+    }
+}
+
+/**
+ * A link or notice that arrived before the tabs (cold start, the splash, signed out): opened once they're
+ * up and the library read landed (iOS `startIfNeeded` → `openPendingLink`). A sign-in brings the tabs
+ * back, so it opens after it too.
+ */
+@Composable
+private fun PendingLinks(store: AppStore) {
+    val ready = store.phase == AppPhase.Main && store.loadState != LoadState.Loading
+    LaunchedEffect(store, ready) {
+        if (ready) store.openPendingLink()
     }
 }
 

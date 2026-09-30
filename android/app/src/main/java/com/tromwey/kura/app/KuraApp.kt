@@ -1,15 +1,22 @@
 package com.tromwey.kura.app
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.tromwey.kura.data.models.KuraRuntime
 import com.tromwey.kura.designsystem.KHaptic
+import com.tromwey.kura.push.FirebaseBoot
+import com.tromwey.kura.push.PushNotifications
+import com.tromwey.kura.state.AppPhase
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.create
+import com.tromwey.kura.state.refreshNotificationStatus
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 /**
@@ -32,6 +39,24 @@ class KuraApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         // Ajustes › Vibraciones (a device preference): read once, before the first haptic.
         KHaptic.init(this)
+        // Push: Firebase by hand (no FirebaseInitProvider) and the "kura" channel before FCM or a
+        // release notice draws anything in it.
+        FirebaseBoot.start(this)
+        PushNotifications.ensureChannel(this)
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            // Back to the front — also right after the system's permission prompt ("¿te avisamos?"
+            // → Sí), which pauses the activity: allowed → the token goes up; taken away → it comes off.
+            override fun onActivityResumed(activity: Activity) {
+                val s = store
+                if (s.phase == AppPhase.Main) s.scope.launch { s.refreshNotificationStatus() }
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader = imageLoader(context)

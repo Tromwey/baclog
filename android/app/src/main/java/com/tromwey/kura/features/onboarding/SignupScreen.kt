@@ -46,6 +46,7 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import com.tromwey.kura.app.art
+import com.tromwey.kura.data.api.GoogleNonce
 import com.tromwey.kura.data.models.OnboardingStep
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KRadius
@@ -78,8 +79,10 @@ fun SignupScreen(store: AppStore) {
     // Volver only when the welcome is part of this entrance (first launch).
     val back: (() -> Unit)? = if (store.welcomeSeen) null else { { store.onboardingStep = OnboardingStep.Welcome } }
     BackHandler(enabled = back != null) { back?.invoke() }
-    val google = store.authProviders?.googleClientId
-    val social = store.hasSocialSignIn
+    // Android's Google = the WEB client id as `serverClientId` (`google.androidClientId`); the iOS
+    // `clientId` means nothing here. null → no button (never a button that doesn't work).
+    val google = store.authProviders?.googleAndroidClientId
+    val social = google != null
 
     fun send() {
         if (store.authBusy) return
@@ -154,9 +157,8 @@ fun SignupScreen(store: AppStore) {
 
 /**
  * "Continuar con Google" (glass pill 52). Credential Manager + Sign in with Google hands back an ID
- * token whose `aud` is the server client id (`authProviders.google.clientId`); `POST /auth/google`
- * verifies it. Fase 2 on the server side (it checks `aud` = the iOS client today), so locally
- * `auth/providers` has no Google and this never shows.
+ * token whose `aud` is the server client id (`authProviders.google.androidClientId`, the web client);
+ * `POST /auth/google` verifies it, and the raw `nonce` against the token's `sha256hex` claim.
  */
 @Composable
 private fun GoogleButton(store: AppStore, clientId: String) {
@@ -179,9 +181,13 @@ private fun GoogleButton(store: AppStore, clientId: String) {
 }
 
 private suspend fun googleSignIn(context: Context, clientId: String, store: AppStore) {
+    // Apple's scheme (API.md §2.2): Google gets sha256hex(nonce) and copies it into the token's
+    // `nonce` claim; the server gets the raw one (`GoogleNonce`, looked up by `LiveApi`).
+    val nonce = GoogleNonce.make()
     val option = GetGoogleIdOption.Builder()
         .setServerClientId(clientId)
         .setFilterByAuthorizedAccounts(false)
+        .setNonce(GoogleNonce.sha256(nonce))
         .build()
     val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
     val failed = "No se pudo entrar con Google. Inténtalo de nuevo."
@@ -206,5 +212,6 @@ private suspend fun googleSignIn(context: Context, clientId: String, store: AppS
         store.showToast(ToastModel(failed, ToastModel.Kind.Info))
         return
     }
+    GoogleNonce.remember(nonce, token)
     store.signInWithGoogle(token)
 }

@@ -5,9 +5,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- The offline strip coming back on its own (AppStoreFactory's ConnectivityManager callback). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Local release notices ("Ya salió X", ReleaseNotifier). Asked only after Kura's own
-         "¿te avisamos?" sheet, never at launch (Android 13+ runtime permission). -->
+    <!-- Push (FCM) and local release notices ("Ya salió X", push/ReleaseNotifier.kt). Asked only after
+         kura's own "¿te avisamos?" sheet, never at launch (Android 13+ runtime permission). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- MainActivity.openInBrowser: a get-kura.app page the app doesn't have goes back to the browser, by
+         package (a plain VIEW would resolve to kura, the verified handler). Needs the browsers visible. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
 
     <!-- networkSecurityConfig comes from the build type (app/build.gradle.kts):
          debug = generated, cleartext only for the dev hosts · release = no cleartext. -->
@@ -27,6 +37,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Kura.Starting"
@@ -35,6 +46,141 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Links (state/AppStoreLinks.kt + app/DeepLinks.kt): a tapped https://get-kura.app/… (or a
+                 legacy baclog.app/…) link opens kura. Both hosts serve /.well-known/assetlinks.json
+                 (src/app/.well-known/assetlinks.json/route.ts). www.* is NOT declared: it 308s to the apex,
+                 the verifier doesn't follow redirects, and before Android 12 one failing host un-verifies all.
+                 The whole host is claimed (profiles are /{handle}); the uri-relative-filter-groups below
+                 (Android 15+, ignored before) leave the web-only pages to the browser — mirror of
+                 EXCLUDED_ROOTS in src/app/.well-known/apple-app-site-association/route.ts (/login and /verify
+                 are NOT excluded: the app opens its entrance, and `?to=` after it). Older Android, or a
+                 shape the parser doesn't know: the app hands the link back to the browser. -->
+            <intent-filter android:autoVerify="true" tools:targetApi="35">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="get-kura.app" />
+                <data android:host="baclog.app" />
+                <uri-relative-filter-group android:allow="false"><data android:path="/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".png" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".svg" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".ico" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".webmanifest" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".txt" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".xml" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathSuffix=".json" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/admin" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/admin/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/api" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/api/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/app" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/app/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/baclog" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/baclog/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/kura" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/kura/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/colecciones" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/colecciones/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/coleccion" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/coleccion/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/blocked" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/blocked/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/descubrir" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/descubrir/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/onboarding" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/onboarding/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/para-ti" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/para-ti/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/perfil" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/perfil/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/prototype" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/prototype/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/search" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/search/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/settings" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/settings/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/www" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/www/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/waitlist" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/waitlist/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/analytics" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/analytics/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/cron" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/cron/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/marketing" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/marketing/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/feed" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/feed/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/creditos" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/creditos/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/privacidad" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/privacidad/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/party" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/party/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/_next" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/_next/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/.well-known" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/.well-known/" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/item" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/backlogs" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/u" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/f" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:path="/c" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPattern="/item/.*/.*" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPattern="/backlogs/.*/.*" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/backlogs/lentes" /></uri-relative-filter-group>
+                <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/recap/" /></uri-relative-filter-group>
+                <!-- Everything not excluded above is ours: on Android 15+ a URI that matches no group is REJECTED. -->
+                <uri-relative-filter-group android:allow="true"><data android:pathPattern=".*" /></uri-relative-filter-group>
+            </intent-filter>
+
+            <!-- TIDAL connect fallback (Custom Tab without Auth Tab): kura://music/tidal/authorized?ref=…&claim=…
+                 and kura://music/tidal/connected?ok=0&reason=… come back here; MainActivity hands them to
+                 store.tidalCallback (state/AppStoreMusicExport.kt), which ignores them unless a TIDAL connect
+                 is in flight in this process. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kura" android:host="music" android:pathPrefix="/tidal/" />
+            </intent-filter>
         </activity>
+
+        <!-- Push (FCM, API.md §2.4). Firebase starts by hand in KuraApp (push/FirebaseBoot.kt), so its
+             auto-init provider goes; auto-init stays OFF until notices are allowed (no token before). -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove" />
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <!-- A push with the app in the background is drawn by the system: same channel and icon as kura's. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="kura" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_kura" />
+        <service
+            android:name=".push.KuraMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Sharing the recap card as a PNG (ACTION_SEND): cache/recap/ only (res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>
