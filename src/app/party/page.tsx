@@ -22,6 +22,20 @@ const sans = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"],
 const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--pt-mono", display: "swap" });
 const creep = Creepster({ subsets: ["latin"], weight: "400", variable: "--pt-creep", display: "swap" });
 
+/**
+ * The link preview (WhatsApp & co.): a capture of the landing itself — chained
+ * gate + MUY PRONTO while `PARTY_EVENT.locked`, the open gate after. Both are
+ * static files in public/party, captured at 1200×630 from `/party?og`
+ * (`&abrir` for the open one) with headless Chrome; redo them if the landing
+ * changes. Messaging apps cache previews per URL for a while.
+ */
+const OG_IMAGE = {
+  url: PARTY_EVENT.locked ? "/party/og-teaser.jpg" : "/party/og.jpg",
+  width: 1200,
+  height: 630,
+  alt: PARTY_EVENT.locked ? "La reja del cementerio encadenada: muy pronto." : "La reja del cementerio: entra si te atreves.",
+};
+
 export const metadata: Metadata = {
   title: `${PARTY_EVENT.title} · Entra si te atreves`,
   description: "Estás invitado. Cruza la reja, encuentra los 5 secretos entre las tumbas y confirma.",
@@ -30,7 +44,9 @@ export const metadata: Metadata = {
     title: `${PARTY_EVENT.title} — entra si te atreves`,
     description: "Estás invitado. Cruza la reja y encuentra los 5 secretos entre las tumbas.",
     url: "/party",
+    images: [OG_IMAGE],
   },
+  twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
 };
 
 /** Safari's bars take the invitation's black instead of Kura's. */

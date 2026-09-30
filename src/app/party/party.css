@@ -46,3 +46,11 @@ html:has(.party), body:has(.party) { background: #050404; }
 @keyframes pt-catblink{0%,86%,92%,100%{transform:scaleY(1)}88%,90%{transform:scaleY(.1)}}
 @keyframes pt-scare{0%{transform:scale(.35) rotate(-6deg);opacity:0}12%{transform:scale(1.12) rotate(3deg);opacity:1}20%{transform:scale(1) rotate(-2deg)}28%{transform:scale(1.04) translate(-6px,4px) rotate(1deg)}36%{transform:scale(1) translate(5px,-3px)}44%,100%{transform:scale(1.02) translate(0,0)}}
 @keyframes pt-scareflash{0%{opacity:.9}100%{opacity:0}}
+
+/* `?og`: the landing frozen on a good frame (no flicker, no controls), laid out
+   for a 1200×630 link-preview capture — regenerate public/party/og*.jpg with it. */
+html[data-party-og] .party * { animation-delay: -2s !important; animation-play-state: paused !important; transition: none !important; }
+html[data-party-og] .party [aria-label="Audio"], html[data-party-og] nextjs-portal { display: none !important; }
+html[data-party-og] .party section[data-screen-label="01 Portada"] { padding-top: 26px !important; padding-bottom: 0 !important; gap: 6px !important; justify-content: flex-start !important; }
+html[data-party-og] .party section[data-screen-label="01 Portada"] > div[style*="width: 300px"] { zoom: .82; }
+html[data-party-og] .party section[data-screen-label="01 Portada"] > div[style*="blur("] { opacity: .35; }

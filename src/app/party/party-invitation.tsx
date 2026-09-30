@@ -201,6 +201,8 @@ export default class PartyInvitation extends Component<object, State> {
     // Preload the jumpscare so it hits instantly, not after a network fetch.
     new Image().src = "/party/cat-jumpscare.jpg";
     if (params.has("abrir")) this.setState({ bypassLock: true });
+    // `?og` freezes the landing for the link-preview capture (public/party/og*.jpg, see party.css).
+    if (params.has("og")) document.documentElement.dataset.partyOg = "1";
     if (window.matchMedia("(hover: none)").matches) this.setState({ fixedLight: true });
     this.measureLamp();
     setTimeout(this.measureLamp, 400);
