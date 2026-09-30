@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,14 +38,17 @@ import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.KuraTopBar
 import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.codeResendWait
 import com.tromwey.kura.state.requestCode
 import com.tromwey.kura.state.verifyCode
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * 07 · O1c el código: "tu código." + where it went, six digits (entering the sixth sends it), Entrar,
- * "Enviar otro código". Errors inline, in the voice, without a wink (`authText`: "El código no
- * coincide o ya caducó.", "Espera N s antes de pedir otro código." on a 429).
+ * "Enviar otro código" (counting down the server's minute per code). Errors inline, in the voice,
+ * without a wink (`authText`: "El código no coincide o ya caducó."). Opened by a 429 too
+ * (`codeAlreadySent`): the code that already went out is the one to type.
  */
 @Composable
 fun CodeScreen(store: AppStore) {
@@ -68,6 +72,17 @@ fun CodeScreen(store: AppStore) {
 
     LaunchedEffect(Unit) { requester.requestFocus() }
 
+    // "Enviar otro código en N s": the server takes one code per email per minute; the button counts
+    // down instead of answering a 429 (a code that already went out is still valid for 10 minutes).
+    var wait by remember { mutableIntStateOf(store.codeResendWait()) }
+    LaunchedEffect(store.codeResendAt) {
+        while (true) {
+            wait = store.codeResendWait()
+            if (wait <= 0) break
+            delay(250)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 170.dp),
@@ -79,9 +94,16 @@ fun CodeScreen(store: AppStore) {
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Lo mandamos a ") }
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text)) { append(store.authEmail) }
                 },
-                modifier = Modifier.padding(bottom = 20.dp),
+                modifier = Modifier.padding(bottom = if (store.codeAlreadySent) 0.dp else 20.dp),
                 style = KuraType.ui(15f),
             )
+            if (store.codeAlreadySent) {
+                BasicText(
+                    "Ya te enviamos un código hace poco y sigue sirviendo. Búscalo en tu correo.",
+                    modifier = Modifier.padding(bottom = 20.dp),
+                    style = KuraType.ui(15f).copy(color = KColor.text2),
+                )
+            }
             KuraTextField(
                 value = code,
                 onValueChange = { new ->
@@ -104,16 +126,16 @@ fun CodeScreen(store: AppStore) {
             )
             InlineError(store.authError)
             KuraTextButton(
-                "Enviar otro código",
+                if (wait > 0) "Enviar otro código en $wait s" else "Enviar otro código",
                 onClick = {
-                    if (!store.authBusy) {
+                    if (!store.authBusy && wait <= 0) {
                         scope.launch {
-                            store.requestCode(store.authEmail)
-                            code = ""
+                            if (store.requestCode(store.authEmail)) code = ""
                         }
                     }
                 },
                 color = KColor.text2,
+                enabled = wait <= 0 && !store.authBusy,
             )
         }
         KuraTopBar(onBack = back)

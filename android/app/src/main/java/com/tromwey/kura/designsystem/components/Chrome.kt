@@ -1,10 +1,15 @@
 // Material 3 Expressive detrás de nombres Kura: KuraTopBar = TopAppBar transparente · TabTitleBar = TopAppBarScrollBehavior (exitUntilCollapsed) con la barra dibujada Kura · KuraDock = ShortNavigationBar · KuraToast/KuraToastHost = Snackbar/SnackbarHost · KuraSheet = ModalBottomSheet · SheetRow = ListItem · KuraScaffold = Scaffold. TopVeil y OfflineStrip siguen Kura.
 // Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt (y devolver kDockPosition/DockReach a app/MainTabs.kt, app/KuraRoot.kt, app/Pending.kt)
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
 
 package com.tromwey.kura.designsystem.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.interaction.InteractionSource
@@ -96,6 +101,7 @@ import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -304,15 +310,28 @@ fun KuraDock(selected: KuraTab, onSelect: (KuraTab) -> Unit, modifier: Modifier 
 /** What a toast offers: nothing ([Info]), Deshacer ([Undo]) or Reintentar with the triangle ([Retry]). */
 enum class ToastKind { Info, Undo, Retry }
 
-/** One toast. [id] must change for every new toast (the timer and the animation key on it). */
-data class KuraToastModel(val id: Long, val text: String, val kind: ToastKind = ToastKind.Undo, val action: (() -> Unit)? = null)
+/** One toast. [id] must change for every new toast (the timer and the animation key on it). A
+ *  [ToastKind.Retry] never times out; [onDismiss] gives it a ✕ (the only way to put it away). */
+data class KuraToastModel(
+    val id: Long,
+    val text: String,
+    val kind: ToastKind = ToastKind.Undo,
+    val action: (() -> Unit)? = null,
+    val onDismiss: (() -> Unit)? = null,
+)
 
 /**
  * The toast — Material's `Snackbar`: s2, full width, radius 8 (`shapes.extraSmall`), Hanken 15,
  * the action (DESHACER / REINTENTAR, mono) in miel on the right, the triangle leading a Retry.
  */
 @Composable
-fun KuraToast(text: String, modifier: Modifier = Modifier, kind: ToastKind = ToastKind.Undo, onAction: (() -> Unit)? = null) {
+fun KuraToast(
+    text: String,
+    modifier: Modifier = Modifier,
+    kind: ToastKind = ToastKind.Undo,
+    onAction: (() -> Unit)? = null,
+    onDismiss: (() -> Unit)? = null,
+) {
     KFixedChrome {
         Snackbar(
             modifier = modifier.semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
@@ -320,6 +339,9 @@ fun KuraToast(text: String, modifier: Modifier = Modifier, kind: ToastKind = Toa
                 { KuraTextButton(if (kind == ToastKind.Retry) "Reintentar" else "Deshacer", onAction, mono = true, color = MaterialTheme.colorScheme.tertiary) }
             } else {
                 null
+            },
+            dismissAction = onDismiss?.let { close ->
+                { IconChip44(KIcon.Close, "Cerrar aviso", close, size = 36.dp, iconSize = 13.dp, fill = Color.Transparent, iconColor = KColor.text2) }
             },
             shape = MaterialTheme.shapes.extraSmall,
             containerColor = KColor.s2,
@@ -363,6 +385,8 @@ fun KuraToastHost(toast: KuraToastModel?, onTimeout: (KuraToastModel) -> Unit, m
         coroutineScope {
             // Suspends while shown; a new id cancels this coroutine, which takes the old one down.
             launch { host.showSnackbar(KuraSnackbarVisuals(toast)) }
+            // A Reintentar stays until it's tapped, closed or replaced (the phone and the server disagree).
+            if (toast.kind == ToastKind.Retry) awaitCancellation()
             delay(KMotion.undoWindowMs(context))
             host.currentSnackbarData?.dismiss()
             timeout(toast)
@@ -373,7 +397,7 @@ fun KuraToastHost(toast: KuraToastModel?, onTimeout: (KuraToastModel) -> Unit, m
         modifier = modifier.then(if (dockVisible) Modifier else Modifier.navigationBarsPadding()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
     ) { data ->
         val model = (data.visuals as? KuraSnackbarVisuals)?.model ?: return@SnackbarHost
-        KuraToast(model.text, kind = model.kind, onAction = model.action)
+        KuraToast(model.text, kind = model.kind, onAction = model.action, onDismiss = model.onDismiss)
     }
 }
 
@@ -446,6 +470,15 @@ fun KuraSheet(
             properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !locked),
         ) {
             // imePadding HERE: a sheet with a field rises with the keyboard; screens/sheets must not add it.
+            // Back with the keyboard up only puts the keyboard away (a half-typed name or review is not
+            // a reason to lose the sheet); the next Back closes it.
+            val imeVisible = WindowInsets.isImeVisible
+            val keyboard = LocalSoftwareKeyboardController.current
+            val focus = LocalFocusManager.current
+            BackHandler(enabled = imeVisible) {
+                keyboard?.hide()
+                focus.clearFocus()
+            }
             CompositionLocalProvider(LocalIndication provides indication) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp)

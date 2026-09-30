@@ -70,12 +70,12 @@ private fun AppStore.claimHandle(newHandle: String, oldHandle: String) {
             is KuraApiError.Invalid -> e.fields["username"] ?: e.message.ifEmpty { "Ese @ no se puede usar." }
             KuraApiError.NotFound, KuraApiError.Unsupported -> e.toast
             else -> {
-                showToast(ToastModel(e.toast("No se pudo cambiar tu @."), ToastModel.Kind.Retry) {
-                    if (me.handle != oldHandle) return@ToastModel
+                retryToast(e.toast("No se pudo cambiar tu @."), AppStore.WriteKey.USERNAME) {
+                    if (me.handle != oldHandle) return@retryToast
                     dismissToast()
                     applyHandle(newHandle, oldHandle)
                     claimHandle(newHandle, oldHandle)
-                })
+                }
                 return@err true
             }
         }

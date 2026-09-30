@@ -1,6 +1,7 @@
 package com.tromwey.kura.features.onboarding
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -80,7 +81,12 @@ fun SignupScreen(store: AppStore) {
     val focus = LocalFocusManager.current
     // Volver only when the welcome is part of this entrance (first launch).
     val back: (() -> Unit)? = if (store.welcomeSeen) null else { { store.onboardingStep = OnboardingStep.Welcome } }
-    BackHandler(enabled = back != null) { back?.invoke() }
+    // The system Back never leaves the app from the door (after a sign-out the welcome was already
+    // seen, so there's no Volver chip): it goes back to the welcome.
+    BackHandler {
+        store.authError = null
+        store.onboardingStep = OnboardingStep.Welcome
+    }
     // Android's Google = the WEB client id as `serverClientId` (`google.androidClientId`); the iOS
     // `clientId` means nothing here. null → no button (never a button that doesn't work).
     val google = store.authProviders?.googleAndroidClientId
@@ -193,6 +199,7 @@ private suspend fun googleSignIn(context: Context, clientId: String, store: AppS
         .build()
     val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
     val failed = "No se pudo entrar con Google. Inténtalo de nuevo."
+    val started = SystemClock.elapsedRealtime()
     val token = try {
         val credential = CredentialManager.create(context).getCredential(context, request).credential
         if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
@@ -200,8 +207,13 @@ private suspend fun googleSignIn(context: Context, clientId: String, store: AppS
         } else {
             null
         }
-    } catch (_: GetCredentialCancellationException) {
-        return // closing Google's sheet is not an error
+    } catch (e: GetCredentialCancellationException) {
+        // Closing Google's sheet is not an error — but a "cancel" before any sheet rose is Play
+        // services saying there's no account (`googleFailureText`).
+        val elapsed = SystemClock.elapsedRealtime() - started
+        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
+        store.googleFailureText(e.type, e.errorMessage?.toString(), elapsed)?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
+        return
     } catch (_: NoCredentialException) {
         store.showToast(ToastModel("No hay una cuenta de Google en este teléfono. Entra con tu correo.", ToastModel.Kind.Info))
         return
@@ -210,8 +222,9 @@ private suspend fun googleSignIn(context: Context, clientId: String, store: AppS
     } catch (e: GetCredentialException) {
         // The type says why (a misconfigured client, no Play services, an interrupted sheet…): it goes
         // to the log for us, and the user reads the store's words for it — none when it's a cancel.
-        KuraLog.w("Google", "${e.type}: ${e.errorMessage}")
-        store.googleFailureText(e.type, e.errorMessage?.toString())?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
+        val elapsed = SystemClock.elapsedRealtime() - started
+        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
+        store.googleFailureText(e.type, e.errorMessage?.toString(), elapsed)?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
         return
     }
     if (token == null) {

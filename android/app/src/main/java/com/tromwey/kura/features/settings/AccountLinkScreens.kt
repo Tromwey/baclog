@@ -1,6 +1,7 @@
 package com.tromwey.kura.features.settings
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -99,6 +100,7 @@ import com.tromwey.kura.state.cancelMerge
 import com.tromwey.kura.state.confirmMerge
 import com.tromwey.kura.state.connectGoogle
 import com.tromwey.kura.state.disconnect
+import com.tromwey.kura.state.GOOGLE_SILENT_CANCEL_MS
 import com.tromwey.kura.state.googleFailureText
 import com.tromwey.kura.state.googleLinkClientId
 import com.tromwey.kura.state.identities
@@ -212,6 +214,7 @@ private suspend fun googleCredential(context: Context, store: AppStore, clientId
         .setNonce(GoogleNonce.sha256(nonce))
         .build()
     val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+    val started = SystemClock.elapsedRealtime()
     return try {
         val credential = CredentialManager.create(context).getCredential(context, request).credential
         if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
@@ -221,8 +224,11 @@ private suspend fun googleCredential(context: Context, store: AppStore, clientId
         } else {
             GoogleCredential.Failed
         }
-    } catch (_: GetCredentialCancellationException) {
-        GoogleCredential.Cancelled
+    } catch (e: GetCredentialCancellationException) {
+        // A "cancel" before Google's sheet could even rise = no account on this phone (`googleFailureText`).
+        val elapsed = SystemClock.elapsedRealtime() - started
+        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
+        if (elapsed < GOOGLE_SILENT_CANCEL_MS) GoogleCredential.NoAccount else GoogleCredential.Cancelled
     } catch (_: NoCredentialException) {
         GoogleCredential.NoAccount
     } catch (_: GoogleIdTokenParsingException) {
@@ -230,8 +236,9 @@ private suspend fun googleCredential(context: Context, store: AppStore, clientId
     } catch (e: GetCredentialException) {
         // The type says why: to the log for us; the user reads the store's words for it (none for a
         // cancel), so the store is told "Cancelled" and adds no second, vaguer toast.
-        KuraLog.w("Google", "${e.type}: ${e.errorMessage}")
-        store.googleFailureText(e.type, e.errorMessage?.toString())?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
+        val elapsed = SystemClock.elapsedRealtime() - started
+        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
+        store.googleFailureText(e.type, e.errorMessage?.toString(), elapsed)?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
         GoogleCredential.Cancelled
     }
 }

@@ -345,10 +345,10 @@ private fun AppStore.setFollow(id: String, on: Boolean) {
             else -> {
                 val who = person(id)?.let { "@${it.handle}" } ?: "este perfil"
                 val text = e.toast(if (on) "No se pudo seguir a $who." else "No se pudo dejar de seguir a $who.")
-                showToast(ToastModel(text, ToastModel.Kind.Retry) {
+                retryToast(text, AppStore.WriteKey.follow(id)) {
                     dismissToast()
                     setFollow(id, on)
-                })
+                }
             }
         }
         true

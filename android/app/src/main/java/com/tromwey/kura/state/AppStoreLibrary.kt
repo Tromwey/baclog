@@ -102,9 +102,10 @@ fun AppStore.createCollection(name: String, privacy: Privacy, adding: String? = 
             s.collections = s.collections.filter { it.id != localId }
             if (adding != null) gcUserState(adding)
             if (e == null || e == KuraApiError.Unauthorized) return@launch
-            showToast(ToastModel(e.toast("No se pudo crear la colección."), ToastModel.Kind.Retry) {
+            retryToast(e.toast("No se pudo crear la colección."), "create|$localId") {
+                dismissToast()
                 createCollection(finalName, privacy, adding)
-            })
+            }
         }
     }
     return c.id
@@ -138,8 +139,8 @@ private fun AppStore.syncCollection(id: String, name: String? = null, vibe: Stri
         when (e) {
             KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> return@err true
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> showToast(ToastModel(e.toast("No se guardaron los cambios de la colección."), ToastModel.Kind.Retry) {
-                if (collection(id) == null) return@ToastModel
+            else -> retryToast(e.toast("No se guardaron los cambios de la colección."), AppStore.WriteKey.collection(canonicalCollectionId(id))) {
+                if (collection(id) == null) return@retryToast
                 dismissToast()
                 update(id) { c ->
                     var out = c
@@ -149,7 +150,7 @@ private fun AppStore.syncCollection(id: String, name: String? = null, vibe: Stri
                     out
                 }
                 syncCollection(id, name, vibe, privacy, was)
-            })
+            }
         }
         true
     }) { api ->
@@ -232,11 +233,11 @@ private fun AppStore.syncCuration(
         when (e) {
             KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> return@err true
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> showToast(ToastModel(e.toast, ToastModel.Kind.Retry) {
-                if (collection(id) == null) return@ToastModel
+            else -> retryToast(e.toast, key) {
+                if (collection(id) == null) return@retryToast
                 dismissToast()
                 reapply()
-            })
+            }
         }
         true
     }) { api ->
@@ -340,10 +341,29 @@ fun AppStore.toggleLayout(id: String) {
 
 fun AppStore.deleteCollection(id: String) {
     val cid = canonicalCollectionId(id)
+    val index = s.collections.indexOfFirst { it.id == cid }
+    val gone = s.collections.getOrNull(index)
     s.collections = s.collections.filter { it.id != cid }
     s.paths = s.paths.mapValues { (_, routes) -> routes.filterNot { it is Route.Collection && it.id == cid } }
     for (key in s.deferredWrites.keys.filter { it.endsWith("|$cid") }) s.deferredWrites.remove(key)?.cancel()
-    sync(key = AppStore.WriteKey.collection(cid)) { api ->
+    val session = s
+    val key = AppStore.WriteKey.collection(cid)
+    sync(key = key, onError = err@{ e ->
+        if (e == KuraApiError.NotFound) return@err true // already gone on the server
+        // The server still has it: it comes back where it was, and Reintentar deletes it again.
+        if (gone != null && s.collections.none { it.id == cid }) {
+            s.collections = s.collections.toMutableList().also { it.add(index.coerceIn(0, it.size), gone) }
+            saveLocal()
+        }
+        when (e) {
+            KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+            else -> retryToast(e.toast("No se borró la colección."), session.canonicalWriteKey(key)) {
+                dismissToast()
+                deleteCollection(cid)
+            }
+        }
+        true
+    }) { api ->
         api.deleteCollection(resolveCollectionId(cid))
     }
     saveLocal()
@@ -419,29 +439,86 @@ private fun AppStore.remapExternal(localId: String, real: Title) {
 
 internal fun AppStore.syncAdd(titleId: String, collectionId: String) {
     val session = s
-    sync(key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId)), titleId = titleId) { api ->
+    val key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId))
+    sync(key = key, titleId = titleId, onError = err@{ e ->
+        // The server never saved it: it leaves the collection on screen too (only while it still shows
+        // there and nothing newer about this membership is queued), and Reintentar saves it again.
+        val cid = canonicalCollectionId(collectionId)
+        val newer = session.writeChains[session.canonicalWriteKey(key)] != null || hasPendingRemove(titleId, cid)
+        if (!newer && collection(cid)?.titleIds?.contains(titleId) == true) {
+            update(cid) { it.removing(titleId) }
+            gcUserState(titleId)
+        }
+        when (e) {
+            KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> Unit
+            is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+            else -> retryToast(e.toast("No se guardó en ${collection(cid)?.name ?: "la colección"}."), key) {
+                if (collection(cid) == null) return@retryToast
+                dismissToast()
+                add(titleId, cid, toast = false)
+            }
+        }
+        true
+    }) { api ->
         val cid = resolveCollectionId(collectionId)
         val palette = unsentPalettes[titleId]
         val r = api.createTitleMembership(cid, TitleRef.from(titleId), palette)
         // The server now has a palette (ours, or the one that beat it): nothing left to send.
         if (palette != null) unsentPalettes.remove(titleId)
-        on(session) { absorb(r, titleId) }
+        on(session) {
+            absorb(r, titleId)
+            // The ficha's "guardados" is a server count: re-read it once the save landed.
+            refreshCountsIfOpen(r.title.id)
+        }
     }
 }
 
-private fun AppStore.syncRemove(titleId: String, collectionId: String) {
+/** `state` = the title's state before it left (restored with it if the DELETE fails and it had none). */
+private fun AppStore.syncRemove(titleId: String, collectionId: String, state: UserTitleState? = null) {
+    val session = s
+    val key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId))
     sync(
-        key = AppStore.WriteKey.membership(titleId, canonicalCollectionId(collectionId)),
+        key = key,
         titleId = titleId,
         commitsLibraryRemoval = false,
+        onError = err@{ e ->
+            if (e == KuraApiError.NotFound) return@err true // not there on the server either
+            // The server still has it in the collection: back on screen (unless it's already back or
+            // something newer is queued), with its state; Reintentar takes it out again.
+            val cid = canonicalCollectionId(collectionId)
+            val newer = session.writeChains[session.canonicalWriteKey(key)] != null
+            if (!newer && collection(cid)?.titleIds?.contains(titleId) == false) {
+                val restored = s.userTitles[titleId] ?: state
+                update(cid) { it.inserting(titleId, null as java.time.Instant?) }
+                if (s.userTitles[titleId] == null) setState(titleId, restored ?: UserTitleState(savedAt = now))
+            }
+            when (e) {
+                KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+                else -> retryToast(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}."), key) {
+                    if (collection(cid)?.titleIds?.contains(titleId) != true) return@retryToast
+                    dismissToast()
+                    val before = s.userTitles[titleId]
+                    update(cid) { it.removing(titleId) }
+                    gcUserState(titleId)
+                    syncRemove(titleId, cid, before)
+                }
+            }
+            true
+        },
     ) { api ->
         api.removeTitleMembership(resolveCollectionId(collectionId), titleId)
+        on(session) { refreshCountsIfOpen(titleId) }
     }
+}
+
+/** A loaded ficha's counts (guardados, completos…) are server aggregates: re-read after a write moved them. */
+private fun AppStore.refreshCountsIfOpen(titleId: String) {
+    if (titleId in s.loadedTitles) scope.launch { loadTitle(titleId, force = true) }
 }
 
 /** Removals wait for the Deshacer window (`undoWindow`): undoing never round-trips, and the server keeps
  *  the title's state until the window closes. */
-private fun AppStore.deferRemove(titleId: String, collectionId: String) {
+private fun AppStore.deferRemove(titleId: String, collectionId: String, state: UserTitleState? = null) {
     val key = removalKey(titleId, collectionId)
     s.deferredWrites.remove(key)?.cancel()
     val window = undoWindow
@@ -451,7 +528,7 @@ private fun AppStore.deferRemove(titleId: String, collectionId: String) {
         if (s !== session) return@launch
         // Recomputed: `adopt` may have moved the entry to the server id meanwhile.
         session.deferredWrites.remove(removalKey(titleId, collectionId))
-        syncRemove(titleId, collectionId)
+        syncRemove(titleId, collectionId, state)
     }
     s.deferredWrites[key] = job
     job.start()
@@ -506,8 +583,9 @@ fun AppStore.add(titleId: String, collectionId: String, toast: Boolean = true) {
 /** Silent inverse used by the add sheet's ✓ → + toggle. */
 fun AppStore.removeSilently(titleId: String, collectionId: String) {
     val cid = canonicalCollectionId(collectionId)
+    val state = s.userTitles[titleId]
     update(cid) { it.removing(titleId) }
-    syncRemove(titleId, cid)
+    syncRemove(titleId, cid, state)
     gcUserState(titleId)
 }
 
@@ -520,7 +598,7 @@ fun AppStore.remove(titleId: String, collectionId: String) {
     val myReviews = reviewList(titleId).filter { it.authorId == me.id }
     update(cid) { col -> col.copy(titleIds = col.titleIds.toMutableList().also { it.removeAt(idx) }) }
     gcUserState(titleId)
-    deferRemove(titleId, cid)
+    deferRemove(titleId, cid, state)
     undoToast("Quitado de ${c.name}") {
         // The window closed (the DELETE already went): nothing to put back without a round trip.
         if (!cancelRemove(titleId, cid)) return@undoToast
@@ -573,7 +651,7 @@ fun AppStore.setMembership(titleId: String, collectionIds: Set<String>) {
     }
     for (id in removed) {
         update(id) { it.removing(titleId) }
-        deferRemove(titleId, id)
+        deferRemove(titleId, id, hadState)
     }
     added.firstOrNull()?.let { lastUsedCollectionId = it }
     haptic(StoreHaptic.Tap)
@@ -641,12 +719,8 @@ fun AppStore.removeFromLibrary(titleId: String) {
     s.deferredWrites[key] = job
     job.start()
 
-    val single = places.singleOrNull()?.let { collection(it.first)?.name }
-    val t = ToastModel(if (single != null) "Quitado de $single" else "Quitado de tus colecciones", ToastModel.Kind.Undo) {
-        // Still inside the window (nothing reached the server): put everything back where it was.
-        val pending = s.deferredWrites.remove(key) ?: return@ToastModel
-        pending.cancel()
-        s.libraryRemovalToasts.remove(titleId)
+    // Everything back where it was: the Deshacer, and a DELETE that never reached the server.
+    val putBack: () -> Unit = {
         for ((cid, i, at) in places) {
             update(cid) { c ->
                 if (titleId in c.titleIds) c else c.inserting(titleId, i).let { r -> if (at != null) r.copy(addedAt = r.addedAt + (titleId to at)) else r }
@@ -655,16 +729,43 @@ fun AppStore.removeFromLibrary(titleId: String) {
         if (s.userTitles[titleId] == null) setState(titleId, state)
         val back = myReviews.filter { review(it.id) == null }
         if (back.isNotEmpty()) setReviews(titleId, reviewList(titleId) + back)
+    }
+    s.libraryRemovals[titleId] = putBack
+    val single = places.singleOrNull()?.let { collection(it.first)?.name }
+    val t = ToastModel(if (single != null) "Quitado de $single" else "Quitado de tus colecciones", ToastModel.Kind.Undo) {
+        // Still inside the window (nothing reached the server): put everything back where it was.
+        val pending = s.deferredWrites.remove(key) ?: return@ToastModel
+        pending.cancel()
+        s.libraryRemovalToasts.remove(titleId)
+        s.libraryRemovals.remove(titleId)
+        putBack()
         dismissToast()
     }
     s.libraryRemovalToasts[titleId] = t.id
     showToast(t)
 }
 
-private fun AppStore.sendLibraryRemoval(titleId: String): Job =
-    sync(key = AppStore.WriteKey.library(titleId), titleId = titleId, commitsLibraryRemoval = false) { api ->
+private fun AppStore.sendLibraryRemoval(titleId: String): Job {
+    val session = s
+    val key = AppStore.WriteKey.library(titleId)
+    val putBack = session.libraryRemovals.remove(titleId)
+    return sync(key = key, titleId = titleId, commitsLibraryRemoval = false, onError = err@{ e ->
+        if (e == KuraApiError.NotFound) return@err true // nothing of it on the server either
+        // The server kept it all: back on screen (unless it was saved again meanwhile), and
+        // Reintentar quits it again (with its own Deshacer).
+        if (titleId !in libraryIds && session.writeChains[session.canonicalWriteKey(key)] == null) putBack?.invoke()
+        when (e) {
+            KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+            else -> retryToast(e.toast("No se quitó de tus colecciones."), key) {
+                dismissToast()
+                removeFromLibrary(titleId)
+            }
+        }
+        true
+    }) { api ->
         api.removeFromLibrary(titleId)
     }
+}
 
 /**
  * A write about `titleId` while its "Quitar de tus colecciones" is still inside the Deshacer window: the

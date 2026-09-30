@@ -159,7 +159,10 @@ private fun NoticeLayer(store: AppStore, dockVisible: Boolean) {
             modifier = Modifier.then(if (dockVisible) Modifier else Modifier.navigationBarsPadding())
                 .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
         ) {
-            OfflineStrip()
+            // Nothing of the library arrived yet (an offline launch): there's nothing "saved on the
+            // phone" to look at, so say what will happen instead.
+            if (store.loadState == LoadState.Loaded) OfflineStrip()
+            else OfflineStrip(text = "Sin conexión. Cuando vuelva la red cargamos tus colecciones.")
         }
         StoreToastHost(store, dockVisible = dockVisible)
     }

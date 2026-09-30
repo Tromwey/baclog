@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.style.TextAlign
+import com.tromwey.kura.designsystem.KFixedChrome
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -162,7 +164,13 @@ data class KuraToggle(
  * [containerColor] fills the unchecked side (s2; `KColor.glassBg` on an s2 sheet).
  */
 @Composable
-fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) {
+fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) =
+    // Two halves of a phone's width: past 1.3× the labels ("Me obsesiona", "Tu reseña") would be cut,
+    // so the pair tops out there and wraps to two lines (at word breaks) before cutting.
+    KFixedChrome(maxFontScale = 1.3f) { ActionPairBody(primary, secondary, modifier, containerColor) }
+
+@Composable
+private fun ActionPairBody(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier, containerColor: Color) {
     val items = listOf(primary, secondary)
     val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     ButtonGroup(
@@ -178,7 +186,7 @@ fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = 
                     ToggleButton(
                         checked = t.checked,
                         onCheckedChange = t.onCheckedChange,
-                        modifier = Modifier.weight(weight).animateWidth(source).height(48.dp).semantics { contentDescription = t.label },
+                        modifier = Modifier.weight(weight).animateWidth(source).heightIn(min = 48.dp).semantics { contentDescription = t.label },
                         shapes = connectedShapes(i, items.size),
                         colors = ToggleButtonDefaults.colors(
                             containerColor = containerColor,
@@ -193,7 +201,11 @@ fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = 
                             GlyphIcon(t.glyph, size = 16.dp, color = if (t.checked) t.checkedContentColor else null)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(t.label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
+                        Text(
+                            t.label,
+                            style = KuraType.ui(15f, UiWeight.SemiBold).inherit().copy(textAlign = TextAlign.Center),
+                            maxLines = 2,
+                        )
                     }
                 },
                 menuContent = { },

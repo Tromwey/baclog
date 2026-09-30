@@ -325,8 +325,13 @@ internal fun PartyEmpty(isHost: Boolean, limit: Int?, big: Boolean) {
             style = KuraType.news(if (big) 28f else 22f).copy(color = if (big) KColor.text else KColor.text2, textAlign = TextAlign.Center),
         )
         BasicText(
-            if (isHost) "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga ${PartyCopy.theirs(limit)}."
-            else "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.",
+            when {
+                // Cupo 0: guests only watch and listen — nobody else is going to put anything.
+                limit == 0 && isHost -> "Esta fiesta es solo para ver y escuchar: las canciones las pones tú."
+                limit == 0 -> "Esta fiesta es solo para ver y escuchar. Todavía no hay canciones."
+                isHost -> "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga ${PartyCopy.theirs(limit)}."
+                else -> "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista."
+            },
             Modifier.widthIn(max = 290.dp),
             style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),
         )

@@ -1,6 +1,7 @@
 package com.tromwey.kura.state
 
 import com.tromwey.kura.data.api.KuraApiError
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.data.models.DiscoverCreatorsPayload
 import com.tromwey.kura.data.models.DiscoverFormatPayload
 import com.tromwey.kura.data.models.ExternalRef
@@ -8,6 +9,7 @@ import com.tromwey.kura.data.models.KCollection
 import com.tromwey.kura.data.models.KuraJson
 import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.data.models.PeopleKind
+import com.tromwey.kura.data.models.PeoplePage
 import com.tromwey.kura.data.models.RecapPayload
 import com.tromwey.kura.data.models.Release
 import com.tromwey.kura.data.models.Route
@@ -38,6 +40,12 @@ suspend fun AppStore.bootstrap(emptyLibrary: Boolean = false, keepLoading: Boole
             Quad(m.await(), cols.await(), states.await(), fol.await())
         }
         check(session)
+        // The splash couldn't ask (offline launch): an account that never finished O1b goes there now,
+        // not to tabs with an empty "@".
+        if (!route(account)) {
+            applyMe(account)
+            return
+        }
         // `LocalPrefs` loads asynchronously (DataStore): sort/layout/episodes must be in memory first.
         s.localLoad?.join()
         check(session)
@@ -406,8 +414,10 @@ suspend fun AppStore.runSearch(q: String, kind: MediaFormat? = null) {
     val session = s
     try {
         val (results, page) = coroutineScope {
-            val t = async { api.search(query, kind) }
-            val p = async { api.people(PeopleKind.Search(query), null) }
+            // Each endpoint's own cap (`search` 100, `people/search` 60): a longer paste still finds
+            // what its start names instead of a silent 400.
+            val t = async { api.search(query.take(SEARCH_MAX), kind) }
+            val p = async { searchPeopleOrNone(query.take(PEOPLE_SEARCH_MAX)) }
             t.await() to p.await()
         }
         check(session)
@@ -426,6 +436,23 @@ suspend fun AppStore.runSearch(q: String, kind: MediaFormat? = null) {
     } finally {
         if (session.searchQuery == query) session.searchLoading = false
     }
+}
+
+/** `search` accepts up to 100 characters, `people/search` up to 60 (`schemas`/routes on the server). */
+internal const val SEARCH_MAX = 100
+internal const val PEOPLE_SEARCH_MAX = 60
+
+/**
+ * The people half of a search. Its failure never takes the titles down with it: a transport error
+ * still fails the whole search (the titles failed too), anything else — a 400, a 5xx — is logged and
+ * the search shows its titles without people.
+ */
+private suspend fun AppStore.searchPeopleOrNone(q: String): PeoplePage = try {
+    api.people(PeopleKind.Search(q), null)
+} catch (e: Exception) {
+    if (e is CancellationException || e == KuraApiError.Offline || e == KuraApiError.Unauthorized) throw e
+    KuraLog.w("KuraStore", "people/search falló (${q.length} caracteres): $e")
+    PeoplePage(items = emptyList())
 }
 
 fun AppStore.clearSearch() {

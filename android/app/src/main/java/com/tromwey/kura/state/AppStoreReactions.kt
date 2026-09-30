@@ -27,24 +27,35 @@ fun AppStore.setMark(titleId: String, mark: Mark?, haptic: Boolean = true, previ
     updateState(titleId) { it.copy(mark = mark) }
     if (haptic) haptic(StoreHaptic.Reaction(mark))
     val session = s
-    sync(key = AppStore.WriteKey.mark(titleId), titleId = titleId, onError = err@{ e ->
-        // Neither is retryable. The optimistic state goes: an unsaved title leaves the library it had
-        // just entered; a saved one gets its previous mark back.
+    val key = AppStore.WriteKey.mark(titleId)
+    sync(key = key, titleId = titleId, onError = err@{ e ->
+        // On ANY failure the optimistic state goes (the server never changed): an unsaved title leaves
+        // the library it had just entered; a saved one gets its previous mark back. Only while the
+        // phone still shows THIS mark and no newer one is queued (that one decides).
         val revert = {
-            if (hadState) updateState(titleId) { it.copy(mark = previous) } else if (!isSaved(titleId)) setState(titleId, null)
+            val newer = session.writeChains[session.canonicalWriteKey(key)] != null
+            if (!newer && s.userTitles[titleId]?.mark == mark) {
+                when {
+                    hadState -> updateState(titleId) { it.copy(mark = previous) }
+                    !isSaved(titleId) -> setState(titleId, null)
+                    else -> updateState(titleId) { it.copy(mark = null) }
+                }
+            }
         }
-        if (e is KuraApiError.Conflict && e.code == "not_released") {
-            revert()
-            showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            return@err true
+        revert()
+        when {
+            e is KuraApiError.Conflict && e.code == "not_released" -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+            // A mark on an unsaved title CREATES your state, so a 404 means the title itself is gone.
+            e == KuraApiError.NotFound -> showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
+            e == KuraApiError.Unauthorized || e == KuraApiError.Unsupported -> Unit
+            e is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+            // Offline, 5xx, 429: Reintentar (and the network coming back) puts the mark back and sends it.
+            else -> retryToast(e.toast("No se guardó tu reacción."), key) {
+                dismissToast()
+                setMark(titleId, mark, haptic = false, preview = preview)
+            }
         }
-        // A mark on an unsaved title CREATES your state, so a 404 means the title itself is gone.
-        if (e == KuraApiError.NotFound) {
-            revert()
-            showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
-            return@err true
-        }
-        false
+        true
     }) { api ->
         val ack = api.setMark(titleId, mark, preview)
         if (s !== session || s.userTitles[titleId]?.mark != mark) return@sync
@@ -145,18 +156,28 @@ fun AppStore.publishReview(titleId: String, text: String, spoiler: Boolean) {
     }
     setReviews(titleId, list)
     val session = s
-    sync(key = AppStore.WriteKey.review(titleId), titleId = titleId, onError = err@{ e ->
-        // No reaction on the server: the review never existed there. Put back what was before and say
-        // the real rule — never a "Reintentar" that can only fail again.
-        if (!(e is KuraApiError.Conflict && e.code == "reaction_required")) return@err false
+    val key = AppStore.WriteKey.review(titleId)
+    sync(key = key, titleId = titleId, onError = err@{ e ->
+        // The server kept what it had: put back what was before (only while the phone still shows THIS
+        // text and nothing newer about the review is queued). No reaction on the server says the real
+        // rule — never a "Reintentar" that can only fail again; offline / 5xx offer it.
+        val newer = session.writeChains[session.canonicalWriteKey(key)] != null
         val cur = reviewList(titleId).toMutableList()
         val j = cur.indexOfFirst { it.id == localId }
-        if (j >= 0) {
+        if (!newer && j >= 0 && cur[j].text == trimmed) {
             if (previous != null) cur[j] = previous else cur.removeAt(j)
             setReviews(titleId, cur)
+            updateState(titleId) { it.copy(reviewId = previousReviewId) }
         }
-        updateState(titleId) { it.copy(reviewId = previousReviewId) }
-        showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+        when {
+            e is KuraApiError.Conflict && e.code == "reaction_required" -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+            e == KuraApiError.Unauthorized || e == KuraApiError.NotFound || e == KuraApiError.Unsupported -> Unit
+            e is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+            else -> retryToast(e.toast("Tu reseña no se guardó."), key) {
+                dismissToast()
+                publishReview(titleId, trimmed, spoiler)
+            }
+        }
         true
     }) { api ->
         val saved = api.saveReview(titleId, trimmed, spoiler)
@@ -176,9 +197,29 @@ fun AppStore.deleteReview(titleId: String) {
     val meId = me.id
     val mine = reviewList(titleId).filter { it.authorId == meId }
     if (mine.isEmpty()) return
+    val reviewId = s.userTitles[titleId]?.reviewId
     removeReviews(titleId) { it.authorId == meId }
     updateState(titleId) { it.copy(reviewId = null) }
-    sync(key = AppStore.WriteKey.review(titleId), titleId = titleId) { api -> api.deleteReview(titleId) }
+    val session = s
+    val key = AppStore.WriteKey.review(titleId)
+    sync(key = key, titleId = titleId, onError = err@{ e ->
+        if (e == KuraApiError.NotFound) return@err true // already gone on the server: the phone agrees
+        // The review is still on the server: it comes back on screen (unless something newer about it
+        // is queued, or it's already back), and Reintentar deletes it again.
+        val newer = session.writeChains[session.canonicalWriteKey(key)] != null
+        if (!newer && reviewList(titleId).none { it.authorId == meId }) {
+            setReviews(titleId, reviewList(titleId) + mine)
+            if (reviewId != null) updateState(titleId) { it.copy(reviewId = reviewId) }
+        }
+        when (e) {
+            KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+            else -> retryToast(e.toast("No se borró tu reseña."), key) {
+                dismissToast()
+                deleteReview(titleId)
+            }
+        }
+        true
+    }) { api -> api.deleteReview(titleId) }
     undoToast("Reseña borrada") {
         setReviews(titleId, reviewList(titleId) + mine.filter { review(it.id) == null })
         mine.firstOrNull()?.let { r -> publishReview(titleId, r.text, r.spoiler) }

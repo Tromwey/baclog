@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.add
 
+import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,6 +82,19 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
     var formatRaw by rememberSaveable { mutableStateOf<String?>(null) }
     val format = MediaFormat.from(formatRaw)
     val q = query.trim()
+    // What the collection had when the sheet opened: the suggestions rank by THAT, so a title you just
+    // added keeps its row (+ turns ✓ in place) instead of sinking under your finger — the list only
+    // re-sorts the next time the sheet opens.
+    val openedWith = remember(c.id) { c.titleIds.toSet() }
+    // One toggle per row per beat: a quick double tap on + is one add, not an add and its undo.
+    val lastToggle = remember { HashMap<String, Long>() }
+    val toggle: (Title, Boolean) -> Unit = { t, added ->
+        val at = SystemClock.uptimeMillis()
+        if (at - (lastToggle[t.id] ?: 0L) >= TOGGLE_GUARD_MS) {
+            lastToggle[t.id] = at
+            if (added) store.removeSilently(t.id, c.id) else store.add(t.id, c.id)
+        }
+    }
 
     LaunchedEffect(q, formatRaw) {
         if (q.isEmpty()) {
@@ -128,7 +143,7 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
                     MonoLabel("por lo que ya tiene")
                 }
             }
-            items(suggestions(store, c, format), key = { "s-" + it.id }) { t -> AddRow(store, t, c, "") }
+            items(suggestions(store, c, format, openedWith), key = { "s-" + it.id }) { t -> AddRow(t, c, "", toggle) }
         } else {
             val results = store.searchResults.map { store.title(it.id) ?: it.title }.filter { format == null || it.format == format }
             val error = store.searchError
@@ -142,7 +157,7 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
                 }
                 results.isEmpty() -> item("empty") { Message("nada con “$q”.", "Revisa cómo se escribe o busca por persona o año.") }
             }
-            items(results, key = { "r-" + it.id }) { t -> AddRow(store, t, c, q) }
+            items(results, key = { "r-" + it.id }) { t -> AddRow(t, c, q, toggle) }
         }
         item("tail") { Spacer(Modifier.size(40.dp)) }
     }
@@ -173,7 +188,7 @@ private fun RowSkeleton() {
 
 /** One title: the cover in a 44 slot, the name (match highlighted), the meta in mono, + / ✓. */
 @Composable
-private fun AddRow(store: AppStore, t: Title, c: KCollection, query: String) {
+private fun AddRow(t: Title, c: KCollection, query: String, toggle: (Title, Boolean) -> Unit) {
     val added = t.id in c.titleIds
     val reduce = LocalReduceMotion.current
     val scale by animateFloatAsState(if (added || reduce) 1f else 0.94f, KMotion.snappy(), label = "addScale")
@@ -194,7 +209,7 @@ private fun AddRow(store: AppStore, t: Title, c: KCollection, query: String) {
         IconChip44(
             if (added) KIcon.CheckBold else KIcon.Plus,
             if (added) "Quitar ${t.name}" else "Agregar ${t.name}",
-            { if (added) store.removeSilently(t.id, c.id) else store.add(t.id, c.id) },
+            { toggle(t, added) },
             Modifier.graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -219,14 +234,18 @@ private fun highlighted(name: String, query: String): AnnotatedString {
     }
 }
 
+/** Two taps on the same + closer than this are one tap (a double tap, or a finger that bounced). */
+private const val TOGGLE_GUARD_MS = 500L
+
 /** Lowercase without accents, one char per char (so indices line up with the original). */
 private fun fold(s: String): String = buildString(s.length) {
     for (ch in s) append(Normalizer.normalize(ch.toString(), Normalizer.Form.NFD).firstOrNull()?.lowercaseChar() ?: ch)
 }
 
-/** Same creators / formats as what the collection already has, not in it yet — the catalog you know. */
-private fun suggestions(store: AppStore, c: KCollection, format: MediaFormat?): List<Title> {
-    val inside = store.titlesIn(c)
+/** Same creators / formats as what the collection already has, not in it yet — the catalog you know.
+ *  Ranked by what it had when the sheet opened ([openedWith]): adding here never reorders the list. */
+private fun suggestions(store: AppStore, c: KCollection, format: MediaFormat?, openedWith: Set<String>): List<Title> {
+    val inside = openedWith.mapNotNull { store.title(it) }
     val creators = inside.mapNotNull { it.creator }.toSet()
     val formats = inside.map { it.format }.toSet()
     val pool = store.catalogOrder.mapNotNull { store.title(it) }.filter { format == null || it.format == format }
@@ -234,7 +253,7 @@ private fun suggestions(store: AppStore, c: KCollection, format: MediaFormat?): 
         var s = 0
         if (t.creator != null && t.creator in creators) s += 2
         if (t.format in formats) s += 1
-        if (t.id in c.titleIds) s -= 1
+        if (t.id in openedWith) s -= 1
         t to s
     }.sortedByDescending { it.second }.take(8).map { it.first }
 }

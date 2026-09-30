@@ -51,6 +51,7 @@ import com.tromwey.kura.data.models.TitleCounts
 import com.tromwey.kura.designsystem.Glyph
 import com.tromwey.kura.designsystem.GlyphIcon
 import com.tromwey.kura.designsystem.KColor
+import com.tromwey.kura.designsystem.KFixedChrome
 import com.tromwey.kura.designsystem.KIcon
 import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KSize
@@ -261,15 +262,16 @@ private fun Ribbon(counts: TitleCounts?) {
 
 /** Only what the API has: a missing count ("—") is neither drawn nor read aloud. */
 private fun legendRows(c: TitleCounts): List<Triple<Glyph, String, String>> = buildList {
-    if (c.obsessed != "—") add(Triple(Glyph.Flame, c.obsessed, "les obsesiona"))
-    if (c.liked != "—") add(Triple(Glyph.Thumb, c.liked, "les gusta"))
-    if (c.completed != "—") add(Triple(Glyph.Check, c.completed, "completos"))
-    c.waiting?.let { add(Triple(Glyph.Clock, it, "no pueden esperar")) }
-    if (c.saved != "—") add(Triple(Glyph.Bookmark, c.saved, "guardados"))
+    fun one(n: String, singular: String, plural: String) = if (n == "1") singular else plural
+    if (c.obsessed != "—") add(Triple(Glyph.Flame, c.obsessed, one(c.obsessed, "le obsesiona", "les obsesiona")))
+    if (c.liked != "—") add(Triple(Glyph.Thumb, c.liked, one(c.liked, "le gusta", "les gusta")))
+    if (c.completed != "—") add(Triple(Glyph.Check, c.completed, one(c.completed, "completo", "completos")))
+    c.waiting?.let { add(Triple(Glyph.Clock, it, one(it, "no puede esperar", "no pueden esperar"))) }
+    if (c.saved != "—") add(Triple(Glyph.Bookmark, c.saved, one(c.saved, "guardado", "guardados")))
 }
 
 private fun ribbonA11y(n: String, label: String): String = when (label) {
-    "les obsesiona", "les gusta" -> "a $n $label"
+    "les obsesiona", "les gusta", "le obsesiona", "le gusta" -> "a $n $label"
     else -> "$n $label"
 }
 
@@ -322,16 +324,20 @@ private fun Actions(store: AppStore, t: Title, unreleased: Boolean, today: Boole
         ),
         modifier = Modifier.padding(top = 8.dp),
     )
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        save()
-        GlassButton(
-            title = if (store.myReview(t.id) == null) "Reseñar" else "Tu reseña",
-            onClick = { store.present(SheetRoute.Complete(t.id, focusReview = true)) },
-            glyph = Glyph.Review,
-        )
+    // Guardar + Reseñar share one line: past 1.3× ("Tu reseña" at 1.6×) they'd be cut, so the row tops
+    // out there, like the pair above.
+    KFixedChrome(maxFontScale = 1.3f) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            save()
+            GlassButton(
+                title = if (store.myReview(t.id) == null) "Reseñar" else "Tu reseña",
+                onClick = { store.present(SheetRoute.Complete(t.id, focusReview = true)) },
+                glyph = Glyph.Review,
+            )
+        }
     }
 }
 

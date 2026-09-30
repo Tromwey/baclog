@@ -149,8 +149,11 @@ sealed interface SheetRoute {
     val isHold: Boolean get() = this is TitleActions || this is CollectionQuick
 }
 
-/** A toast over the dock. Equality is identity (`id`), like iOS. */
-class ToastModel(val text: String, val kind: Kind, val action: (() -> Unit)? = null) {
+/**
+ * A toast over the dock. Equality is identity (`id`), like iOS. A [Kind.Retry] toast never times out:
+ * it stays until Reintentar, its ✕, a newer toast, or the same write (`retryKey`) going through.
+ */
+class ToastModel(val text: String, val kind: Kind, val retryKey: String? = null, val action: (() -> Unit)? = null) {
     enum class Kind { Undo, Retry, Info }
 
     val id: Long = ids.incrementAndGet()
@@ -413,6 +416,18 @@ internal class SessionData {
         writeGen[titleId] = (writeGen[titleId] ?: 0) + 1
     }
 
+    /**
+     * Failed writes waiting for the network (`AppStore.retryToast`): write key → what re-applies the
+     * change on screen and sends it again. Run once each when the connection comes back
+     * (`connectivityChanged`), dropped by Reintentar (it runs it), by the toast's ✕ (the change was
+     * already reverted on screen) and by a later success of the same key.
+     */
+    val pendingRetries = LinkedHashMap<String, () -> Unit>()
+
+    /** "Quitar de tus colecciones" not confirmed yet: title id → what puts it all back (Deshacer, or a
+     *  DELETE that failed). */
+    val libraryRemovals = HashMap<String, () -> Unit>()
+
     /** "Quitar de tus colecciones" waiting for its Deshacer window: title id → the toast that offers it. */
     val libraryRemovalToasts = HashMap<String, Long>()
 
@@ -506,6 +521,16 @@ class AppStore(
     var authBusy by mutableStateOf(false)
         internal set
     var authError: String? get() = s.authError; set(v) { s.authError = v }
+    /** When "Enviar otro código" works again (the server allows one code per email every 60 s). */
+    var codeResendAt by mutableStateOf<Instant?>(null)
+        internal set
+    /** O1c was opened by a `429` on `auth/otp/request`: the code that already went out (valid 10 min) is
+     *  the one to type — after Volver, or after the process died on the code screen. */
+    var codeAlreadySent by mutableStateOf(false)
+        internal set
+
+    /** The real clock, for second-by-second countdowns (`now` only moves each minute). */
+    fun realNow(): Instant = clock()
     /** `GET /auth/providers`. null = not asked yet; a failure is `EMAIL_ONLY`. */
     var authProviders by mutableStateOf<AuthProviders?>(null)
         internal set
@@ -800,6 +825,9 @@ class AppStore(
         offline = false
         // A sign-out that didn't reach the server (this phone or everywhere): now it can.
         retryPendingRevokesSoon()
+        // Writes that failed offline (already reverted on screen, their Reintentar still up): re-applied
+        // and sent again, as if Reintentar had been tapped.
+        if (phase == AppPhase.Main) resendPendingRetries()
         val wasOffline = s.loadErrors.filterValues { it is KuraApiError.Offline }.keys
         s.loadErrors = s.loadErrors - wasOffline
         if (phase != AppPhase.Main) return
@@ -1196,17 +1224,62 @@ class AppStore(
      *  2026-09-24-ios-deshacer-y-aviso-comparten-ventana). */
     val undoWindow: Duration get() = if (platform.screenReaderOn) 15.seconds else 5.seconds
 
+    /** The beat between "the network is back" and resending the writes that failed without it. */
+    internal val retryAfterReconnect: Duration = 1.seconds
+
     fun showToast(t: ToastModel) {
         toastJob?.cancel()
+        toastJob = null
         if (t.kind == ToastModel.Kind.Retry) haptic(StoreHaptic.Error)
         toast = t
         val verb = if (t.kind == ToastModel.Kind.Retry) "Reintentar" else "Deshacer"
         _events.tryEmit(StoreEvent.Announce(if (t.action == null) t.text else "${t.text}. $verb disponible"))
+        // A failed write's Reintentar never closes by itself: the phone and the server disagree until
+        // it's retried (or its ✕ accepts the revert).
+        if (t.kind == ToastModel.Kind.Retry) return
         val window = undoWindow
         toastJob = scope.launch {
             delay(window)
             if (toast?.id == t.id) toast = null
         }
+    }
+
+    /**
+     * The Reintentar of an optimistic write that was ALREADY reverted on screen: [redo] re-applies the
+     * change and sends it again. Kept under [key] (the write's `WriteKey`) so it's also re-run when the
+     * network comes back, and dropped when a later write with that key succeeds.
+     */
+    fun retryToast(text: String, key: String?, redo: () -> Unit) {
+        val session = s
+        val k = key?.let(session::canonicalWriteKey) ?: "toast|${System.nanoTime()}"
+        session.pendingRetries[k] = redo
+        showToast(ToastModel(text, ToastModel.Kind.Retry, retryKey = k) {
+            session.pendingRetries.remove(k)
+            if (s === session) redo()
+        })
+    }
+
+    /** The network is back: every write waiting in `pendingRetries` goes again (once), after a beat
+     *  for DNS/TLS to settle — a resend that still fails just brings its Reintentar back. */
+    private fun resendPendingRetries() {
+        val session = s
+        if (session.pendingRetries.isEmpty()) return
+        scope.launch {
+            delay(retryAfterReconnect)
+            if (s !== session || !pathSatisfied) return@launch
+            val pending = session.pendingRetries.values.toList()
+            session.pendingRetries.clear()
+            if (toast?.kind == ToastModel.Kind.Retry && toast?.retryKey != null) toast = null
+            for (redo in pending) redo()
+        }
+    }
+
+    /** A write under [key] went through: its old Reintentar (if any) has nothing left to do. */
+    private fun settleRetry(session: SessionData, key: String?) {
+        key ?: return
+        session.pendingRetries.remove(key)
+        val t = toast
+        if (t != null && t.kind == ToastModel.Kind.Retry && t.retryKey == key) toast = null
     }
 
     fun undoToast(text: String, undo: () -> Unit) {
@@ -1217,6 +1290,14 @@ class AppStore(
     }
 
     fun dismissToast() {
+        toast = null
+    }
+
+    /** The toast's ✕ (only a Reintentar has one): the change it offers stays reverted, and it's not
+     *  resent when the network comes back. */
+    fun closeToast(t: ToastModel) {
+        if (toast?.id != t.id) return
+        t.retryKey?.let { s.pendingRetries.remove(it) }
         toast = null
     }
 
@@ -1280,13 +1361,17 @@ class AppStore(
             val f = failure
             if (f == null) {
                 online()
+                // Only when nothing newer with this key is queued (that one decides).
+                if (k != null && session.writeChains[session.canonicalWriteKey(k)] == null) settleRetry(session, session.canonicalWriteKey(k))
                 return@launch
             }
             val e = noteError(f) ?: return@launch
             if (onError?.invoke(e) == true) return@launch
             when (e) {
                 KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> Unit
-                else -> showToast(ToastModel(e.toast, ToastModel.Kind.Retry) { sync(k, titleId, onError, commitsLibraryRemoval, op) })
+                // A write without its own revert: the screen still shows it, so Reintentar (and the
+                // network coming back) sends exactly the same op again.
+                else -> retryToast(e.toast, k) { sync(k, titleId, onError, commitsLibraryRemoval, op) }
             }
         }
         if (k != null) session.writeChains[k] = WriteChain(token, job)

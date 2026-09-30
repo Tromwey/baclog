@@ -14,8 +14,9 @@ import kotlin.time.Duration
 // on Android (BRIEF); Google is wired but OFF until fase 2 (the server checks `aud` = the iOS client).
 
 /**
- * After the splash: a stored token skips the entrance (refreshing it when it's about to expire); no
- * token → entrance. `minimumHold` is the splash's brand beat: it runs CONCURRENTLY with the refresh
+ * After the splash: a stored token skips the entrance (refreshing it when it's about to expire, else
+ * `GET /me`) and goes where `route(me)` says — O1b for an account that never finished it; no token →
+ * entrance. `minimumHold` is the splash's brand beat: it runs CONCURRENTLY with the refresh
  * (never added on top of it); nothing leaves the splash before it's over.
  */
 suspend fun AppStore.finishSplash(minimumHold: Duration = Duration.ZERO) {
@@ -30,25 +31,26 @@ suspend fun AppStore.finishSplash(minimumHold: Duration = Duration.ZERO) {
             phase = AppPhase.Onboarding
             return@coroutineScope
         }
-        if (api.needsRefresh) {
-            val result: Result<Me> = try {
-                Result.success(api.refresh())
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Result.failure(e)
-            }
-            hold.join()
-            val m = result.getOrNull()
-            if (m != null) {
-                applyMe(m)
-                if (!route(m)) return@coroutineScope
-            } else {
-                val e = noteError(result.exceptionOrNull()!!)
-                if (e == KuraApiError.Unauthorized) return@coroutineScope
-                // Transport trouble: keep the token, try the library anyway.
-            }
+        // ALWAYS who this is before the tabs (a refresh already answers it): an account killed half-way
+        // through the onboarding (no handle, no name/year) must land back on O1b, never on tabs with an
+        // empty "@" (iOS `finishSplash` still skips this without a refresh — not ported).
+        val result: Result<Me> = try {
+            Result.success(if (api.needsRefresh) api.refresh() else api.me())
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Result.failure(e)
         }
         hold.join()
+        val m = result.getOrNull()
+        if (m != null) {
+            applyMe(m)
+            if (!route(m)) return@coroutineScope
+        } else {
+            val e = noteError(result.exceptionOrNull()!!)
+            if (e == KuraApiError.Unauthorized) return@coroutineScope
+            // Transport trouble: keep the token, try the library anyway (`bootstrap` routes once `GET /me`
+            // answers).
+        }
         phase = AppPhase.Main
     }
 }
@@ -65,14 +67,37 @@ suspend fun AppStore.requestCode(email: String): Boolean {
     try {
         api.requestCode(e)
         authEmail = e
+        codeAlreadySent = false
+        codeResendAt = realNow().plusSeconds(CODE_RESEND_SECONDS)
         return true
     } catch (err: Exception) {
         if (err is CancellationException) throw err
-        authError = noteError(err)?.authText
+        val k = noteError(err)
+        if (k is KuraApiError.RateLimited) {
+            // A code for this email went out less than a minute ago (Volver, or the process died on
+            // O1c): it's still valid for 10 minutes, so the code screen opens to type it, with the
+            // wait before another on its Reenviar. Never stuck on "Espera 60 s" with no way forward.
+            val known = codeResendAt?.takeIf { authEmail == e && it.isAfter(realNow()) }
+            authEmail = e
+            codeAlreadySent = true
+            codeResendAt = known ?: realNow().plusSeconds((k.retryAfter ?: CODE_RESEND_SECONDS.toInt()).coerceIn(1, 600).toLong())
+            return true
+        }
+        authError = k?.authText
         return false
     } finally {
         authBusy = false
     }
+}
+
+/** The server's cooldown between two codes for one email (`auth/otp/request`, `COOLDOWN_SECONDS`). */
+const val CODE_RESEND_SECONDS = 60L
+
+/** Whole seconds until "Enviar otro código" works again (0 = now). Rounded up: never "0 s" while waiting. */
+fun AppStore.codeResendWait(at: java.time.Instant = realNow()): Int {
+    val until = codeResendAt ?: return 0
+    val ms = java.time.Duration.between(at, until).toMillis()
+    return if (ms <= 0) 0 else ((ms + 999) / 1000).toInt()
 }
 
 /** `POST auth/otp/verify` — stores the token and routes: username → picks → main. */
@@ -85,7 +110,14 @@ suspend fun AppStore.verifyCode(code: String): Boolean {
         return true
     } catch (err: Exception) {
         if (err is CancellationException) throw err
-        authError = noteError(err)?.authText
+        val e = noteError(err)
+        // A minor already blocked (their birth year is on file) coming back through the door: the same
+        // 13 años screen as the onboarding and Google, never "No se pudo entrar".
+        if (e is KuraApiError.Forbidden && e.code == "underage") {
+            onboardingStep = OnboardingStep.Underage
+            return false
+        }
+        authError = e?.authText
         return false
     } finally {
         authBusy = false
@@ -157,11 +189,16 @@ fun AppStore.socialSignInFailed(error: Throwable, provider: String) {
  * Google's sheet). The raw type/message go to the log on the screen's side, never to the toast.
  */
 @Suppress("UnusedReceiverParameter")
-fun AppStore.googleFailureText(type: String?, message: String?): String? {
+fun AppStore.googleFailureText(type: String?, message: String?, elapsedMs: Long? = null): String? {
     val t = type.orEmpty()
     val m = message.orEmpty()
     fun has(vararg keys: String) = keys.any { t.contains(it, ignoreCase = true) }
     return when {
+        // Some Play services builds answer "no account on this phone" as a CANCEL (logcat: `status:
+        // CANCELED, source: REMOTE_PROVIDER`) before any sheet was drawn. Nobody closes a sheet that
+        // fast: a cancel under `GOOGLE_SILENT_CANCEL_MS` is that, and it gets its words.
+        has("USER_CANCELED", "CANCELLATION", "CANCELED") && elapsedMs != null && elapsedMs < GOOGLE_SILENT_CANCEL_MS ->
+            "No hay una cuenta de Google en este teléfono."
         has("USER_CANCELED", "CANCELLATION", "CANCELED") -> null
         has("NO_CREDENTIAL", "NoCredential") -> "No hay una cuenta de Google en este teléfono."
         // A client id / SHA-1 that doesn't match this build: Play services says 10 (DEVELOPER_ERROR) or
@@ -172,5 +209,8 @@ fun AppStore.googleFailureText(type: String?, message: String?): String? {
         else -> "No se pudo entrar con Google."
     }
 }
+
+/** Faster than any person can close Google's sheet (it takes ~300 ms just to rise): see `googleFailureText`. */
+const val GOOGLE_SILENT_CANCEL_MS = 700L
 
 private val GOOGLE_CONFIG_CODE = Regex("""\[(10|16)]|\b(10|16):""")

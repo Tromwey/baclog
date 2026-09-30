@@ -69,7 +69,9 @@ fun PickScreen(store: AppStore) {
     val grid = if (q.isEmpty()) store.onboardingGrid else store.searchResults.map { it.title }
 
     val back = { if (store.account?.onboarded == true) store.finishOnboarding() else store.onboardingStep = OnboardingStep.Username }
-    BackHandler(onBack = back)
+    // The system Back never walks INTO the app (that's Volver's "skip", as on iOS): with the account
+    // already created there's nothing behind this screen, so it stays; before that, back to O1b.
+    BackHandler { if (store.account?.onboarded != true) store.onboardingStep = OnboardingStep.Username }
 
     LaunchedEffect(Unit) { store.loadOnboardingGrid() }
     LaunchedEffect(q) {

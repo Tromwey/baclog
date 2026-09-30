@@ -433,8 +433,8 @@ fun KuraSheetScope.DeleteCollectionSheet(store: AppStore, sheet: SheetRoute.Dele
             if (n == 0) {
                 "Está vacía. Solo se borra esta colección. No se puede deshacer."
             } else {
-                (if (n == 1) "El título conserva su estado" else "Los $n títulos conservan su estado") +
-                    " y siguen en tus otras colecciones. Solo se borra esta. No se puede deshacer."
+                (if (n == 1) "El título conserva su estado y sigue" else "Los $n títulos conservan su estado y siguen") +
+                    " en tus otras colecciones. Solo se borra esta. No se puede deshacer."
             },
             Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 14.dp),
             style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 21.sp),

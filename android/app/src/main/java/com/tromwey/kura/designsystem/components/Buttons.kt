@@ -193,7 +193,7 @@ fun BackChip(onClick: () -> Unit, modifier: Modifier = Modifier) =
 
 /**
  * A text button — `TextButton`: literal Hanken 15/600 (or [mono] 11 uppercase, like Deshacer /
- * Reintentar in a toast), no fill, 44 touch. [color] text by default.
+ * Reintentar in a toast), no fill, 44 touch. [color] text by default; [enabled] false dims it to 45 %.
  */
 @Composable
 fun KuraTextButton(
@@ -202,15 +202,18 @@ fun KuraTextButton(
     modifier: Modifier = Modifier,
     mono: Boolean = false,
     color: Color = KColor.text,
+    enabled: Boolean = true,
 ) {
+    val tint = if (enabled) color else color.copy(alpha = 0.45f)
     TextButton(
         onClick = onClick,
         shapes = kuraButtonShapes(),
         modifier = modifier.heightIn(min = KSize.touch),
-        colors = ButtonDefaults.textButtonColors(contentColor = color),
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(contentColor = color, disabledContentColor = tint),
         contentPadding = PaddingValues(horizontal = 12.dp),
     ) {
-        if (mono) MonoLabel(title, color = color) else Text(title, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
+        if (mono) MonoLabel(title, color = tint) else Text(title, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
     }
 }
 

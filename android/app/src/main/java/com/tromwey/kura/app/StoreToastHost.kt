@@ -22,7 +22,7 @@ fun StoreToastHost(store: AppStore, dockVisible: Boolean = true, modifier: Modif
     val model = remember(toast) { toast?.let { toastModel(store, it) } }
     KuraToastHost(
         toast = model,
-        // The store already clears it after `undoWindow`; this only closes a stale pill.
+        // The store already clears it after `undoWindow` (never a Reintentar); this only closes a stale pill.
         onTimeout = { t -> if (store.toast?.id == t.id) store.dismissToast() },
         modifier = modifier,
         dockVisible = dockVisible,
@@ -38,4 +38,6 @@ private fun toastModel(store: AppStore, t: ToastModel) = KuraToastModel(
         ToastModel.Kind.Info -> ToastKind.Info
     },
     action = t.action?.let { { store.tapToastAction(t) } },
+    // A Reintentar never times out: its ✕ accepts that the change stays undone.
+    onDismiss = if (t.kind == ToastModel.Kind.Retry) ({ store.closeToast(t) }) else null,
 )
