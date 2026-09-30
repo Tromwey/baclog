@@ -46,12 +46,24 @@ La app nativa Android de Kura (`android/`, Kotlin + Jetpack Compose, minSdk 26),
 - **Push por FCM en fase 2**: Firebase `kura-a1f94`, `FCM_SERVICE_ACCOUNT_JSON` (sensitive) en Vercel y `.env.local`. Hasta entonces, avisos de estreno locales.
 - **Apple sign-in no existe en Android**; los botones de entrada salen de `GET auth/providers`.
 
+## Pantallas (fase 1 hecha, 2026-09-30, commits `b0dc345`…`0354499`)
+Todas verificadas en el emulador contra la API local con la cuenta QA `@qa_android` (privada, desechable):
+- `features/onboarding/` splash, bienvenida, entrar/crear cuenta (una sola puerta "entra a kura." como iOS), código, usuario (gate 13 años), elige 3, tu gente.
+- `features/collections/` Tus colecciones = carrusel de abanicos con snap, fantasma "nueva colección" primero y "no puedo esperar" al final, `KuraFabMenu`, pull-to-refresh (`refreshLibrary`). `features/collectiondetail/` cabecera con abanico + tinte, filtros `ChipRow`, columnas/lista, 13 hojas (Opciones, Ordenar, Editar orden arrastrable, Editar, Quién la ve, Compartir con `SplitActionButton`, Borrar sin asa, 18c con `ReactionGroup`, Mover a…). `features/add/` Agregar (sugerencias + búsqueda con resaltado, +→✓).
+- `features/title/` ficha película/serie/álbum (fondo `TintStyle.Feed`, `ActionPair` [Me obsesiona | Completar], `SaveChip` → `SaveToSheet` único, dónde ver, sinopsis, gente que sigues, reseñas con spoiler borroso y `ReviewMenu`), Completar (`ReactionGroup` + reseña 280 con contador), Opciones (Copiar link ▾ Compartir, Quitar = `removeFromLibrary`).
+- `features/feed/` pila de cards teñidas con snap por card y golpe háptico (`FeedHits`), sugerencia con Seguir en miel, spoiler, paginación, pull-to-refresh, E1; notificaciones 31a/31b (leídas al salir, como iOS). El header del feed NO colapsa (la card se fija bajo él).
+- `features/discover/` Todo / Cine / Series / Música (`MonoSegmented`), `KuraSearchBar` expandible con recientes ("x" y Borrar), resultados, sin resultados, guardar desde resultado con el aviso en `overlay`; "recomendado para ti" es card teñida (no glass).
+- `features/people|profile|settings/` persona (espera su propia lectura; 20a/20d/bloqueado), colección pública, seguidores/siguiendo con "y N personas más", creador, así te ven, cuentas bloqueadas, Opciones/Reportar/Bloquear; perfil propio (un gradiente de página, vitrina `FanCollectionTile`), editar (foto vía `AvatarEncoder`, @ con `checkUsername`); ajustes (`SegmentedListItem`), privacidad, app de música, sesiones activas (`state/AppStoreAccountLink.kt` mínimo), borrar cuenta, "¿te avisamos?". **Cerrar sesión = solo este teléfono** (`signOut(global=false)`; iOS cierra todas — pendiente de confirmar con el founder).
+- Marco: `app/StoreToastHost.kt` (el aviso, reutilizable dentro de la búsqueda), `KuraSheet(grabber)`, `KuraTextField(prose, fill, singleLine, minLines, maxLength)`, `ReviewMenu` compartido en `features/people/SafetySheets.kt`. Debug: `kuraScreen notifications|title:<id>|collection:<id>|person:<handle>` y `--ez kuraEmptyFeed|kuraEmptyLibrary|kuraKeepLoading`.
+
 ## En progreso
-- **Fase 1, ronda de pantallas (2026-09-30)**: marco (`app/`, flujo 01) → luego colecciones/colección/agregar, ficha, feed, descubrir, gente+perfil+ajustes en paralelo.
+- **Fase 2 en la app (2026-09-30)**: andamiaje de rutas/deps → en paralelo: Google sign-in + FCM (`push/`, `state/AppStorePush.kt`), recap + inicio de sesión/fusionar (`features/recap`, `AccountLinkScreens`, `+AccountLink` completo), fiestas + exportar a TIDAL (`features/party`, `+Parties`, `+MusicExport`), App Links + firma de release. Servidor: listo (`auth/providers.google.androidClientId`, `aud` web aceptado, `device_token.provider` con migración 0035 aplicada, FCM HTTP v1, `/.well-known/assetlinks.json`).
 
 ## Deuda conocida
-- Sin FCM (el servidor solo habla APNs), sin App Links (`assetlinks.json` no existe en la web; necesita el SHA-256 de la firma de Play), sin firma de release ni Play Console (la cuenta ya existe; falta crear la app "kura" y aceptar Play App Signing).
-- `+Parties`, `+MusicExport`, `+AccountLink` del store no están portados (fase 2); sesiones activas e inicio de sesión/fusionar dependen de `+AccountLink`.
+- Play Console: falta crear la app "kura" y aceptar Play App Signing (solo el founder); hasta entonces `ANDROID_CERT_SHA256` solo lleva la huella de la debug keystore de la Mac del founder.
+- El título de pestaña ya no es `LargeFlexibleTopAppBar` (Material reservaba 64 dp de acciones): es una barra propia movida por el `TopAppBarScrollBehavior` de Material. Filas y campos miden 56 (mínimos Material), no 52.
+- Sin `grouped/shelved` en colección: el modelo solo tiene `Covers | List`.
+- Menor: en Ajustes la fila "Activar avisos" alinea el chevrón arriba.
 - `migrateLegacyCuration` no se portó (ninguna build Android guardó curaduría local).
 - No hay tests instrumentados: `SecureStore` (Keystore real), `CoverPalette` sobre `Bitmap` y DataStore se verifican a mano en el emulador.
 - Hoja con animaciones de Material (no `sheetIn/sheetOut`); Wordmark C con la serif CJK del sistema.

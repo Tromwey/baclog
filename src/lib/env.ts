@@ -114,6 +114,15 @@ export const env = {
    */
   FCM_SERVICE_ACCOUNT_JSON: process.env.FCM_SERVICE_ACCOUNT_JSON,
   /**
+   * Optional (Android App Links, 2026-09-30): comma-separated SHA-256
+   * fingerprints (`AA:BB:…`, uppercase) of the certificates that sign the
+   * Android app — served by `/.well-known/assetlinks.json`. Today the debug
+   * keystore of the founder's Mac; the Play App Signing one is added when it
+   * exists. Absent/empty → the file still answers 200 with an empty list
+   * (never 404: Google caches it), so App Links just don't verify.
+   */
+  ANDROID_CERT_SHA256: process.env.ANDROID_CERT_SHA256,
+  /**
    * Optional (App Review): the demo accounts whose login code is fixed —
    * read through `reviewLoginCode()` in src/auth/otp.ts. `APP_REVIEW_EMAIL`
    * is one address or several comma-separated, all sharing the one code.
