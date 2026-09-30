@@ -422,6 +422,9 @@ fun SettingsRow(
             leadingContent = leading,
             supportingContent = supporting,
             trailingContent = trail,
+            // Material tops a three-line item's trailing content (and pads it to 88): a row whose
+            // note wraps ("Activar avisos") would hang its chevron off the top. Kura centres them all.
+            verticalAlignment = Alignment.CenterVertically,
             colors = colors,
             contentPadding = padding,
         ) { Text(title, style = KuraType.body16.inherit()) }
@@ -432,6 +435,9 @@ fun SettingsRow(
             leadingContent = leading,
             supportingContent = supporting,
             trailingContent = trail,
+            // Material tops a three-line item's trailing content (and pads it to 88): a row whose
+            // note wraps ("Activar avisos") would hang its chevron off the top. Kura centres them all.
+            verticalAlignment = Alignment.CenterVertically,
             colors = colors,
             contentPadding = padding,
         ) { Text(title, style = KuraType.body16.inherit()) }

@@ -1,5 +1,7 @@
 package com.tromwey.kura.state
 
+import com.tromwey.kura.data.api.KuraApiError
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.data.models.ExternalRef
 import com.tromwey.kura.data.models.PartySong
 import com.tromwey.kura.data.models.Title
@@ -29,7 +31,13 @@ fun AppStore.fillPaletteIfNeeded(t: Title) {
             if (e is CancellationException) throw e
             emptyList()
         }
-        if (hexes.isEmpty() || s !== session) return@launch
+        if (hexes.isEmpty()) {
+            // The cover didn't load (Coil's ErrorResult, offline) or couldn't be read: not a verdict
+            // on the title — the next time it's drawn it tries again.
+            paletteAttempts.remove(t.id)
+            return@launch
+        }
+        if (s !== session) return@launch
         applyLocalPalette(hexes, t)
         enqueuePaletteSend(hexes, t, session)
     }
@@ -72,7 +80,14 @@ private suspend fun AppStore.sendPalette(hexes: List<String>, t: Title, session:
         }
     } catch (e: Exception) {
         if (e is CancellationException) throw e
-        // A cosmetic cache fill: silent. The palette stays local (and in `unsentPalettes`).
+        // A cosmetic cache fill: nothing to show the person. The palette stays local (and in
+        // `unsentPalettes`) — but a refusal leaves a trace (429 = the write budget; 4xx = contract).
+        val why = when (e) {
+            is KuraApiError.RateLimited -> "429 (retryAfter=${e.retryAfter ?: "-"})"
+            is KuraApiError -> e.javaClass.simpleName
+            else -> "bug ${e.javaClass.simpleName}"
+        }
+        KuraLog.w("KuraPalette", "PUT titles/:id/palette falló: $why")
     }
     return true
 }

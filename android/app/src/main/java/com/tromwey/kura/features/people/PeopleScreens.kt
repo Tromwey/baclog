@@ -175,9 +175,9 @@ internal fun PersonProfile(store: AppStore, p: Person, preview: Boolean) {
                     onClick = {
                         if (!busy) {
                             busy = true
-                            scope.launch {
-                                store.unblock(p.handle, p.handle)
-                                busy = false
+                            // The store's scope: leaving the profile mid-write must not cancel it.
+                            store.launch {
+                                try { store.unblock(p.handle, p.handle) } finally { busy = false }
                             }
                         }
                     },

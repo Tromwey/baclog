@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import coil3.ImageLoader
+import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
@@ -35,7 +36,13 @@ object CoverPalette {
     /** Loads through Coil (a cover already drawn comes from its cache), off the main thread. */
     suspend fun extract(context: Context, imageLoader: ImageLoader, url: String): List<String> {
         val request = ImageRequest.Builder(context).data(url).size(SIDE * 4).allowHardware(false).build()
-        val result = imageLoader.execute(request) as? SuccessResult ?: return emptyList()
+        val result = when (val r = imageLoader.execute(request)) {
+            is SuccessResult -> r
+            is ErrorResult -> {
+                Log.w("KuraPalette", "La portada no cargó para la paleta (${r.throwable.javaClass.simpleName})")
+                return emptyList()
+            }
+        }
         return withContext(Dispatchers.Default) {
             try {
                 extract(result.image.toBitmap())

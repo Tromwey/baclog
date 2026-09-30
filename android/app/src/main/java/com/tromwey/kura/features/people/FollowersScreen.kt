@@ -34,7 +34,9 @@ import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
+import com.tromwey.kura.data.api.KuraApiError
 import com.tromwey.kura.designsystem.components.BackChip
+import com.tromwey.kura.designsystem.components.RetryStrip
 import com.tromwey.kura.designsystem.components.FollowButton
 import com.tromwey.kura.designsystem.components.FollowSize
 import com.tromwey.kura.designsystem.components.FollowState
@@ -143,9 +145,21 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
                     rest.forEach { PersonListRow(store, it) }
                 }
                 if (meta?.nextCursor != null && q.isEmpty()) {
-                    // The end of the rows asks for the next page (one at a time).
-                    RowSkeleton()
-                    LaunchedEffect(meta.nextCursor) { store.loadMorePeople(personId, showFollowing) }
+                    val moreError = store.loadError(LoadKey.PeopleMore(personId, showFollowing))
+                    if (moreError != null) {
+                        // The next page failed: say so and let it be asked again, instead of a
+                        // skeleton that would wait forever.
+                        RetryStrip(
+                            "No se cargaron más personas.",
+                            onRetry = { scope.launch { store.loadMorePeople(personId, showFollowing) } },
+                            Modifier.padding(top = 12.dp),
+                            offline = moreError == KuraApiError.Offline,
+                        )
+                    } else {
+                        // The end of the rows asks for the next page (one at a time).
+                        RowSkeleton()
+                        LaunchedEffect(meta.nextCursor) { store.loadMorePeople(personId, showFollowing) }
+                    }
                 } else if (anonymous > 0 && q.isEmpty() && denied == null) {
                     // Private accounts, no public handle, a block with you: a number, never who (your
                     // own lists too: the server's `privateCount`).

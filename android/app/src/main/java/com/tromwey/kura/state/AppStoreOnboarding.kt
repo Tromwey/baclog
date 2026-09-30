@@ -68,7 +68,7 @@ suspend fun AppStore.submitUsername(handle: String, name: String, birthYear: Int
             e is KuraApiError.Conflict -> authError = "Ese usuario ya está tomado."
             e is KuraApiError.Invalid -> authError = e.fields["username"] ?: e.fields["name"] ?: e.fields["birthYear"]
                 ?: e.message.ifEmpty { "No se creó tu cuenta. Revisa el usuario y el año." }
-            else -> authError = e.authText
+            else -> authError = onboardingText(e, "No se creó tu cuenta. Inténtalo de nuevo.")
         }
         return false
     } finally {
@@ -76,11 +76,39 @@ suspend fun AppStore.submitUsername(handle: String, name: String, birthYear: Int
     }
 }
 
-suspend fun AppStore.checkUsername(handle: String): UsernameStatus? = try {
-    api.checkUsername(handle)
+/** What `GET /me/username/check` said about a handle — `Unknown` when it couldn't be asked (offline,
+ *  5xx, 429…): the screen must NOT read that as free. */
+sealed interface UsernameCheck {
+    data object Free : UsernameCheck
+    data object Taken : UsernameCheck
+    data class Invalid(val message: String) : UsernameCheck
+    data object Unknown : UsernameCheck
+}
+
+/** The server's rule for a handle, in the voice (it answers `invalid` without words). */
+const val USERNAME_RULE_TEXT = "Usa de 3 a 30 letras sin acento, números, punto o guion bajo."
+
+suspend fun AppStore.checkUsername(handle: String): UsernameCheck = try {
+    when (api.checkUsername(handle)) {
+        UsernameStatus.Free -> UsernameCheck.Free
+        UsernameStatus.Taken -> UsernameCheck.Taken
+        UsernameStatus.Invalid -> UsernameCheck.Invalid(USERNAME_RULE_TEXT)
+    }
 } catch (e: Exception) {
     if (e is CancellationException) throw e
-    null
+    when (val err = noteError(e)) {
+        is KuraApiError.Invalid -> UsernameCheck.Invalid(err.fields["u"] ?: err.fields["username"] ?: err.message.ifEmpty { USERNAME_RULE_TEXT })
+        else -> UsernameCheck.Unknown
+    }
+}
+
+/** Inline text for a failed onboarding step: the network's words when it's the network, else the
+ *  step's own (never the code screen's "El código no coincide"). */
+private fun onboardingText(e: KuraApiError, fallback: String): String = when (e) {
+    KuraApiError.Offline -> "Sin conexión. Revisa tu red e inténtalo de nuevo."
+    is KuraApiError.RateLimited -> "Demasiados intentos. Espera un momento."
+    is KuraApiError.Invalid -> e.message.ifEmpty { fallback }
+    else -> fallback
 }
 
 suspend fun AppStore.loadOnboardingGrid() {
@@ -123,7 +151,7 @@ suspend fun AppStore.submitPicks(): Boolean {
     } catch (err: Exception) {
         if (err is CancellationException) throw err
         if (s !== session) return false
-        authError = noteError(err)?.authText
+        authError = noteError(err)?.let { onboardingText(it, "No se guardaron tus 3. Inténtalo de nuevo.") }
         return false
     } finally {
         authBusy = false

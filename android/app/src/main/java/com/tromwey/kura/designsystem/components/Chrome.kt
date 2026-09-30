@@ -5,6 +5,11 @@
 package com.tromwey.kura.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -35,6 +40,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
@@ -392,6 +398,9 @@ class KuraSheetScope internal constructor(column: ColumnScope, private val onClo
  * that opens another replaces it. The content already clears the navigation bar AND the keyboard
  * (`imePadding`): sheet content must not add either. [grabber] false drops the handle (a decision
  * sheet like "¿borrar la colección?", iOS `showsGrabber`); the content then starts 22 below the edge.
+ * [locked] (a write in flight, `AppStore.sheetLocked`) makes the sheet refuse to hide: a drag springs
+ * back, the scrim and back do nothing — the same sheet stays mounted, so the write that runs under it
+ * is never torn down. Content buttons that write disable themselves meanwhile.
  */
 @Composable
 fun KuraSheet(
@@ -399,9 +408,11 @@ fun KuraSheet(
     modifier: Modifier = Modifier,
     style: KuraSheetStyle = KuraSheetStyle.Compact,
     grabber: Boolean = true,
+    locked: Boolean = false,
     content: @Composable KuraSheetScope.() -> Unit,
 ) {
     val compact = style == KuraSheetStyle.Compact
+    val lockedNow by rememberUpdatedState(locked)
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = if (compact) {
@@ -409,33 +420,50 @@ fun KuraSheet(
         } else {
             setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded)
         },
+        confirmValueChange = { it != SheetValue.Hidden || !lockedNow },
     )
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
         scope.launch { sheetState.hide() }.invokeOnCompletion { if (!sheetState.isVisible) onDismiss() }
     }
     val radius = MaterialTheme.shapes.extraLarge
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        modifier = if (compact) modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp) else modifier,
-        sheetState = sheetState,
-        shape = if (compact) radius else RoundedCornerShape(topStart = KRadius.sheet, topEnd = KRadius.sheet),
-        containerColor = if (compact) KColor.s2 else KColor.s1,
-        contentColor = KColor.text,
-        tonalElevation = 0.dp,
-        scrimColor = BottomSheetDefaults.ScrimColor,
-        dragHandle = if (grabber) ({ Grabber() }) else null,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        // imePadding HERE: a sheet with a field rises with the keyboard; screens/sheets must not add it.
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp)
-                .padding(top = if (grabber) 0.dp else 22.dp, bottom = if (compact) 26.dp else 0.dp)
-                .navigationBarsPadding().imePadding(),
+    // Material wraps the handle slot in a clickable (tap cycles the detents) that paints the theme's
+    // press layer: a grey box behind the grabber while it's held or dragged. No indication reaches that
+    // wrapper; the content gets the app's back (its rows and buttons keep their ripple).
+    val indication = LocalIndication.current
+    CompositionLocalProvider(LocalIndication provides NoIndication) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            modifier = if (compact) modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp) else modifier,
+            sheetState = sheetState,
+            shape = if (compact) radius else RoundedCornerShape(topStart = KRadius.sheet, topEnd = KRadius.sheet),
+            containerColor = if (compact) KColor.s2 else KColor.s1,
+            contentColor = KColor.text,
+            tonalElevation = 0.dp,
+            scrimColor = BottomSheetDefaults.ScrimColor,
+            dragHandle = if (grabber) ({ Grabber() }) else null,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !locked),
         ) {
-            KuraSheetScope(this, close).content()
+            // imePadding HERE: a sheet with a field rises with the keyboard; screens/sheets must not add it.
+            CompositionLocalProvider(LocalIndication provides indication) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+                        .padding(top = if (grabber) 0.dp else 22.dp, bottom = if (compact) 26.dp else 0.dp)
+                        .navigationBarsPadding().imePadding(),
+                ) {
+                    KuraSheetScope(this, close).content()
+                }
+            }
         }
     }
+}
+
+/** An indication that draws nothing (the sheet handle's wrapper; see [KuraSheet]). */
+private object NoIndication : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode = object : Modifier.Node() {}
+    override fun equals(other: Any?): Boolean = other === this
+    override fun hashCode(): Int = -1
 }
 
 /** The sheet grabber — Material's `BottomSheetDefaults.DragHandle` at Kura's 36×5, white .18. */

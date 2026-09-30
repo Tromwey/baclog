@@ -22,7 +22,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +56,7 @@ import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.designsystem.rememberKHaptic
 import com.tromwey.kura.designsystem.KHapticEvent
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.features.sheetWrite
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.deleteParty
@@ -119,8 +119,9 @@ private fun welcomeMessage(host: String, limit: Int?, returning: Boolean): Strin
 @Composable
 fun KuraSheetScope.PartyCapSheet(store: AppStore, sheet: SheetRoute.PartyCap) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf<String?>(null) }
+    // Which song is going (the label); the lock is what disables them all, and outlives a remount.
+    var removing by remember { mutableStateOf<String?>(null) }
+    val busy = store.sheetLocked
     LaunchedEffect(sheet.id) { store.loadParty(sheet.id) }
     val p = store.party(sheet.id)
     val mine = p?.mySongs.orEmpty()
@@ -137,16 +138,14 @@ fun KuraSheetScope.PartyCapSheet(store: AppStore, sheet: SheetRoute.PartyCap) {
                         BasicText(s.title, style = KuraType.newsItalic(17f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         s.artist?.let { BasicText(it, style = KuraType.ui(13f).copy(color = KColor.text2), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
-                    GlassButton(if (busy == s.titleId) "Quitando…" else "Quitar", {
-                        scope.launch {
-                            busy = s.titleId
+                    GlassButton(if (busy && removing == s.titleId) "Quitando…" else "Quitar", {
+                        removing = s.titleId
+                        store.sheetWrite {
                             val ok = store.removePartySong(sheet.id, s)
-                            busy = null
-                            if (!ok) return@launch
-                            store.dismissSheet()
-                            if (store.path(store.tab).lastOrNull() != search) store.push(search)
+                            if (ok && store.path(store.tab).lastOrNull() != search) store.push(search)
+                            ok
                         }
-                    }, fontSize = 14f, fill = KColor.glassBg, enabled = busy == null)
+                    }, fontSize = 14f, fill = KColor.glassBg, enabled = !busy)
                 }
             }
         }
@@ -161,8 +160,7 @@ fun KuraSheetScope.PartyCapSheet(store: AppStore, sheet: SheetRoute.PartyCap) {
 @Composable
 fun KuraSheetScope.PartySongSheet(store: AppStore, sheet: SheetRoute.PartySong) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     val s: PartySong? = store.party(sheet.partyId)?.songs?.firstOrNull { it.titleId == sheet.titleId }
     if (s == null) {
         // Gone meanwhile (someone else removed it): nothing left to do here.
@@ -170,14 +168,8 @@ fun KuraSheetScope.PartySongSheet(store: AppStore, sheet: SheetRoute.PartySong) 
         Box(Modifier.height(40.dp))
         return
     }
-    fun run(op: suspend () -> Boolean) {
-        busy = true
-        scope.launch {
-            val ok = op()
-            busy = false
-            if (ok) store.dismissSheet()
-        }
-    }
+    // Closes once it's done; a failure keeps the sheet up to try again.
+    fun run(op: suspend () -> Boolean) = store.sheetWrite(op)
     Column(SheetPad) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             SongCover(s.artworkUrl, s.palette, size = 64.dp, radius = 8.dp)
@@ -196,7 +188,7 @@ fun KuraSheetScope.PartySongSheet(store: AppStore, sheet: SheetRoute.PartySong) 
             if (s.canBlockAuthor && by != null) {
                 PartyFlatButton("Quitar y bloquear a ${by.at}", { run { store.removeAndBlockPartyGuest(sheet.partyId, s) } }, enabled = !busy)
             }
-            PartyFlatButton("Cancelar", dismiss, quiet = true)
+            PartyFlatButton("Cancelar", { if (!busy) dismiss() }, quiet = true)
         }
         BasicText(
             if (s.canBlockAuthor && s.addedBy != null) "${s.addedBy.atOrSomeone} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones."
@@ -211,7 +203,6 @@ fun KuraSheetScope.PartySongSheet(store: AppStore, sheet: SheetRoute.PartySong) 
 @Composable
 fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val haptic = rememberKHaptic()
     var copied by rememberSaveable { mutableStateOf(false) }
@@ -245,7 +236,14 @@ fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare
                 Modifier.padding(top = 16.dp),
                 style = KuraType.ui(14f).copy(color = KColor.text2),
             )
-            HoneyButton("Crear link nuevo", { scope.launch { store.rotatePartyInvite(sheet.id) } }, Modifier.padding(top = 18.dp), height = 56.dp)
+            // A new link closes the sheet (the store does it on success).
+            HoneyButton(
+                "Crear link nuevo",
+                { if (!store.sheetLocked) store.sheetWrite { store.rotatePartyInvite(sheet.id) } },
+                Modifier.padding(top = 18.dp),
+                height = 56.dp,
+                enabled = !store.sheetLocked,
+            )
         }
     }
 }
@@ -310,8 +308,7 @@ fun KuraSheetScope.PartyOptionsSheet(store: AppStore, sheet: SheetRoute.PartyOpt
 @Composable
 fun KuraSheetScope.PartyLeaveSheet(store: AppStore, sheet: SheetRoute.PartyLeave) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     val p = store.party(sheet.id)
     val host = p?.host.atOrSomeone
     val mine = p?.mySongs?.size ?: 0
@@ -324,11 +321,11 @@ fun KuraSheetScope.PartyLeaveSheet(store: AppStore, sheet: SheetRoute.PartyLeave
         PartySheetTitle("¿salir de la fiesta?")
         PartySheetBody("Deja de aparecer en tus colecciones.$songs Para volver, pídele el link a $host.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Leaving closes the sheet (the store does it); a failure keeps it up to try again.
             PartyFlatButton("Salir de la fiesta", {
-                busy = true
-                scope.launch { store.leaveParty(sheet.id); busy = false }
+                if (!busy) store.sheetWrite { store.leaveParty(sheet.id) }
             }, enabled = !busy)
-            PartyFlatButton("Cancelar", dismiss, quiet = true)
+            PartyFlatButton("Cancelar", { if (!busy) dismiss() }, quiet = true)
         }
     }
 }
@@ -339,13 +336,12 @@ private val dayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", 
 @Composable
 fun KuraSheetScope.PartyLinkSheet(store: AppStore, sheet: SheetRoute.PartyLink) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     val invite = store.party(sheet.id)?.invite
     val active = invite?.active == true
+    // Crear link nuevo closes the sheet itself (the store, on success); Desactivar stays to show it.
     fun run(op: suspend () -> Unit) {
-        busy = true
-        scope.launch { op(); busy = false }
+        if (!busy) store.sheetWrite { op(); false }
     }
     Column(SheetPad) {
         PartySheetTitle("el link.")
@@ -381,7 +377,7 @@ fun KuraSheetScope.PartyLinkSheet(store: AppStore, sheet: SheetRoute.PartyLink) 
             } else {
                 HoneyButton("Crear link nuevo", { run { store.rotatePartyInvite(sheet.id) } }, height = 56.dp, enabled = !busy)
             }
-            PartyFlatButton("Cerrar", dismiss, quiet = true)
+            PartyFlatButton("Cerrar", { if (!busy) dismiss() }, quiet = true)
         }
     }
 }
@@ -396,11 +392,10 @@ private fun linkStatus(i: PartyInvite?): String {
 @Composable
 fun KuraSheetScope.PartyEditSheet(store: AppStore, sheet: SheetRoute.PartyEdit) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
     val p = store.party(sheet.id)
     var name by rememberSaveable { mutableStateOf(p?.name.orEmpty()) }
     var limitIndex by rememberSaveable { mutableStateOf(PartyCopy.limits.indexOf(p?.perGuestLimit).coerceAtLeast(0)) }
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     val limit = PartyCopy.limits[limitIndex]
     Column(SheetPad) {
         PartySheetTitle("editar fiesta.")
@@ -410,16 +405,15 @@ fun KuraSheetScope.PartyEditSheet(store: AppStore, sheet: SheetRoute.PartyEdit) 
         PartyLimitStepper(limit, { l -> limitIndex = PartyCopy.limits.indexOf(l).coerceAtLeast(0) }, Modifier.padding(top = 8.dp))
         SolidButton("Guardar", {
             val cur = store.party(sheet.id) ?: return@SolidButton
-            busy = true
-            scope.launch {
-                val n = name.trim()
-                val ok = store.updateParty(
+            if (busy) return@SolidButton
+            val n = name.trim()
+            // Saved = the sheet closes; a failure keeps it (and what was typed) up.
+            store.sheetWrite {
+                store.updateParty(
                     sheet.id,
                     name = if (n == cur.name) null else n,
                     perGuestLimit = if (limit == cur.perGuestLimit) null else Change(limit),
                 )
-                busy = false
-                if (ok) store.dismissSheet()
             }
         }, Modifier.padding(top = 20.dp), height = 56.dp, enabled = !busy && name.isNotBlank())
     }
@@ -429,7 +423,6 @@ fun KuraSheetScope.PartyEditSheet(store: AppStore, sheet: SheetRoute.PartyEdit) 
 @Composable
 fun KuraSheetScope.PartyBlockedSheet(store: AppStore, sheet: SheetRoute.PartyBlocked) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
     val list = store.party(sheet.id)?.blockedGuests.orEmpty()
     Column(SheetPad) {
         PartySheetTitle("bloqueados.")
@@ -439,7 +432,14 @@ fun KuraSheetScope.PartyBlockedSheet(store: AppStore, sheet: SheetRoute.PartyBlo
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     PartySeal(g.person, 36.dp)
                     BasicText(g.person.atOrSomeone, Modifier.weight(1f), style = KuraType.ui(16f, UiWeight.Medium))
-                    GlassButton("Desbloquear", { scope.launch { store.unblockPartyGuest(sheet.id, g.guestRef) } }, fontSize = 14f, fill = KColor.glassBg)
+                    GlassButton(
+                        "Desbloquear",
+                        // Stays up: the next one may be unblocked too.
+                        { if (!store.sheetLocked) store.sheetWrite { store.unblockPartyGuest(sheet.id, g.guestRef); false } },
+                        fontSize = 14f,
+                        fill = KColor.glassBg,
+                        enabled = !store.sheetLocked,
+                    )
                 }
             }
             if (list.isEmpty()) BasicText("Nadie bloqueado.", Modifier.padding(vertical = 12.dp), style = KuraType.ui(15f).copy(color = KColor.text2))
@@ -451,17 +451,16 @@ fun KuraSheetScope.PartyBlockedSheet(store: AppStore, sheet: SheetRoute.PartyBlo
 @Composable
 fun KuraSheetScope.PartyDeleteSheet(store: AppStore, sheet: SheetRoute.PartyDelete) {
     val dismiss: () -> Unit = this::close
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     Column(SheetPad) {
         PartySheetTitle("¿borrar la fiesta?")
         PartySheetBody("Se borra para todos: las canciones y quién puso cuál. El link deja de funcionar.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Deleted closes the sheet (the store does it); a failure keeps it up to try again.
             PartyFlatButton("Borrar fiesta", {
-                busy = true
-                scope.launch { store.deleteParty(sheet.id); busy = false }
+                if (!busy) store.sheetWrite { store.deleteParty(sheet.id) }
             }, enabled = !busy)
-            PartyFlatButton("Cancelar", dismiss, quiet = true)
+            PartyFlatButton("Cancelar", { if (!busy) dismiss() }, quiet = true)
         }
     }
 }

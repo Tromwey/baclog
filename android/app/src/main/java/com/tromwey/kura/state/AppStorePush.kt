@@ -32,6 +32,9 @@ interface PushPlatform {
     fun markPushUnregistered()
     /** Asks FCM for this install's token (null = none: no Play services, offline, Firebase off). */
     suspend fun fetchPushToken(): String?
+    /** Signing out on this phone: FCM forgets this install's token (a new one is minted on the next
+     *  sign-in) and the stored copy goes. Default: nothing (tests, previews). */
+    suspend fun deletePushToken() {}
 }
 
 private val AppStore.push: PushPlatform? get() = platform as? PushPlatform
@@ -127,15 +130,47 @@ fun AppStore.didReceivePushToken(token: String) {
 fun AppStore.unregisterPush(bearer: String? = null) {
     val p = push ?: return
     val token = p.pushToken
-    p.markPushUnregistered()
-    if (token == null) return
+    if (token == null) {
+        p.markPushUnregistered()
+        return
+    }
     scope.launch {
         try {
             api.unregisterDevice(token, bearer)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             KuraLog.api("push: DELETE me/devices/:id falló (${e.javaClass.simpleName})")
+        } finally {
+            // AFTER the DELETE (either way): while it's out, the server may still send, and the flag
+            // must not turn local notices on under a push that's still coming.
+            p.markPushUnregistered()
         }
+    }
+}
+
+/**
+ * Signing out: this install's token comes off the server with `bearer` (the session being left, sent
+ * explicitly — it's about to be forgotten or revoked), THEN it's marked unregistered (so release notices
+ * fall back to local ones) and FCM forgets it. Awaited, best effort: a failure is logged, never shown
+ * (revoking the session on the server drops its device tokens too).
+ */
+internal suspend fun AppStore.releasePushToken(bearer: String) {
+    val p = push ?: return
+    val token = p.pushToken
+    if (token != null) {
+        try {
+            api.unregisterDevice(token, bearer)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            KuraLog.api("push: DELETE me/devices/:id al salir falló (${e.javaClass.simpleName})")
+        }
+    }
+    p.markPushUnregistered()
+    try {
+        p.deletePushToken()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        KuraLog.api("push: deleteToken falló (${e.javaClass.simpleName})")
     }
 }
 

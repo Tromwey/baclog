@@ -95,6 +95,8 @@ import com.tromwey.kura.state.loadIdentities
 import com.tromwey.kura.state.loadSessions
 import com.tromwey.kura.state.revokeSession
 import com.tromwey.kura.state.saveLocal
+import com.tromwey.kura.state.signOutThisDevice
+import com.tromwey.kura.features.sheetWrite
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
@@ -227,12 +229,17 @@ fun SettingsScreen(store: AppStore) {
             // (Sesiones activas closes the others one by one).
             Column(
                 Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                    .kPressable(feel = KPressFeel.Row(), onClickLabel = "Cerrar sesión en este teléfono") { store.signOut(global = false) }
+                    // Revokes this session on the server (`DELETE /me/sessions/{sid}`), on the store's
+                    // scope: this page goes away with the session. If the server didn't confirm, the
+                    // store's toast says it will retry (the revocation is queued).
+                    .kPressable(feel = KPressFeel.Row(), enabled = !store.signingOut, onClickLabel = "Cerrar sesión en este teléfono") {
+                        store.launch { store.signOutThisDevice() }
+                    }
                     .semantics(mergeDescendants = true) {},
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                BasicText("Cerrar sesión", style = KuraType.ui(16f, UiWeight.Medium))
+                BasicText(if (store.signingOut) "Cerrando sesión…" else "Cerrar sesión", style = KuraType.ui(16f, UiWeight.Medium))
                 BasicText("En este teléfono.", style = KuraType.ui(13f).copy(color = KColor.text2))
             }
             KuraTextButton("Borrar cuenta", { store.present(SheetRoute.DeleteAccount) }, color = KColor.text2)
@@ -487,8 +494,8 @@ private fun ago(d: Instant, now: Instant): String {
 /** "¿cerrar sesión en …?" — the one confirmation before `DELETE /me/sessions/{id}`. */
 @Composable
 fun KuraSheetScope.RevokeSessionSheet(store: AppStore, sheet: SheetRoute.RevokeSession) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    // The lock IS "busy": it outlives a remount of this sheet, a local flag wouldn't.
+    val busy = store.sheetLocked
     val device = sheet.device
     BasicText("¿cerrar sesión en ${device.title}?", Modifier.padding(horizontal = 10.dp).semantics { heading() }, style = KuraType.news(26f))
     BasicText(
@@ -500,14 +507,7 @@ fun KuraSheetScope.RevokeSessionSheet(store: AppStore, sheet: SheetRoute.RevokeS
         if (busy) "Cerrando…" else "Cerrar sesión",
         onClick = {
             if (busy) return@SolidButton
-            busy = true
-            store.sheetLocked = true
-            scope.launch {
-                store.revokeSession(device)
-                busy = false
-                store.sheetLocked = false
-                store.dismissSheet()
-            }
+            store.sheetWrite { store.revokeSession(device); true }
         },
         enabled = !busy,
     )

@@ -8,8 +8,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import com.tromwey.kura.data.api.KuraLog
 import java.time.Instant
-import java.util.UUID
 
 // Titles: formats, marks, releases, the title and its parts, your state per title, reviews and
 // the ficha payloads — the twin of `ios/Kura/Models/Title.swift`.
@@ -79,11 +79,18 @@ sealed interface Release {
         internal fun read(o: Obj): Release {
             val date = o.instant("date")
             val utc = date?.let { KuraJson.utcDate(it) }
-            return when (o.string("kind") ?: "unknown") {
-                "day" -> date?.let { Day(KuraJson.dayAtNoon(it)) } ?: Unknown
-                "month" -> utc?.let { Month(it.year, it.monthValue) } ?: Unknown
-                "year" -> utc?.let { Year(it.year) } ?: Unknown
-                else -> Unknown
+            // A shape this client doesn't know still reads as "sin fecha" (the title stays usable),
+            // but it's contract drift: it leaves a trace (the kind only, never the payload).
+            fun drift(what: String): Release {
+                KuraLog.w("KuraModels", "release: $what → Unknown")
+                return Unknown
+            }
+            return when (val kind = o.string("kind") ?: "unknown") {
+                "day" -> date?.let { Day(KuraJson.dayAtNoon(it)) } ?: drift("kind=day sin date")
+                "month" -> utc?.let { Month(it.year, it.monthValue) } ?: drift("kind=month sin date")
+                "year" -> utc?.let { Year(it.year) } ?: drift("kind=year sin date")
+                "unknown" -> Unknown
+                else -> drift("kind desconocido ($kind)")
             }
         }
     }
@@ -251,10 +258,12 @@ data class Title(
                 detail = if (seriesStatus.seasons == 1) "1 temporada" else "${seriesStatus.seasons} temporadas"
             }
             return Title(
-                id = c.string("id") ?: externalRef?.localId ?: UUID.randomUUID().toString(),
+                // Never an invented id: a random one would be a title nobody can save, open or match.
+                id = c.string("id") ?: externalRef?.localId ?: Obj.missing("id"),
                 name = c.string("name") ?: c.string("title") ?: "",
+                // Never a guessed format: a song drawn as a film is a wrong cover shape and a wrong verb.
                 format = formatRaw?.let { MediaFormat.from(it) ?: throw SerializationException("format desconocido: $it") }
-                    ?: MediaFormat.Film,
+                    ?: Obj.missing("format"),
                 year = c.int("year"),
                 creator = byline?.takeUnless { it.isBlank() },
                 detail = detail,
@@ -348,7 +357,8 @@ data class Review(
             val c = Obj.of(e)
             val a = c.decode("author", Person.serializer())
             return Review(
-                id = c.string("id") ?: UUID.randomUUID().toString(),
+                // An invented id would be a review nobody can report, edit or delete.
+                id = c.string("id") ?: Obj.missing("id"),
                 authorId = c.string("authorHandle") ?: a?.handle ?: "",
                 titleId = c.string("titleId") ?: c.string("catalogItemId") ?: "",
                 text = c.string("body") ?: c.string("text") ?: "",

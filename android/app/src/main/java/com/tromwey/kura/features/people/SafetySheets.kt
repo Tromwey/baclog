@@ -88,6 +88,7 @@ import com.tromwey.kura.state.isFollowing
 import com.tromwey.kura.state.loadBlocks
 import com.tromwey.kura.state.report
 import com.tromwey.kura.state.toggleMute
+import com.tromwey.kura.features.sheetWrite
 import com.tromwey.kura.state.unblock
 import kotlinx.coroutines.launch
 
@@ -105,7 +106,6 @@ import kotlinx.coroutines.launch
 fun KuraSheetScope.PersonOptionsSheet(store: AppStore, sheet: SheetRoute.PersonOptions) {
     val p = store.person(sheet.handle) ?: return
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val blocked = store.isBlocked(p.id)
     val following = store.isFollowing(p.id)
     val closeSheet = { close() }
@@ -137,7 +137,8 @@ fun KuraSheetScope.PersonOptionsSheet(store: AppStore, sheet: SheetRoute.PersonO
         if (blocked) {
             OptionRow(KIcon.Block, "Desbloquear", "Vuelves a ver su actividad y sus reseñas.") {
                 closeSheet()
-                scope.launch { store.unblock(p.handle, p.handle) }
+                // The store's scope: the sheet (and its scope) is gone before the write lands.
+                store.launch { store.unblock(p.handle, p.handle) }
             }
         } else {
             val link = PublicLinks.profile(p.handle)
@@ -195,11 +196,11 @@ private fun OptionRow(icon: KIcon, title: String, note: String? = null, onClick:
 @Composable
 fun KuraSheetScope.ReportSheet(store: AppStore, sheet: SheetRoute.Report) {
     val target = sheet.target
-    val scope = rememberCoroutineScope()
     val haptic = rememberKHaptic()
     var reason by remember { mutableStateOf<String?>(null) }
     var details by remember { mutableStateOf("") }
-    var sending by remember { mutableStateOf(false) }
+    // The lock IS "sending": it outlives a remount of this sheet, a local flag wouldn't.
+    val sending = store.sheetLocked
     val handle = when (target) {
         is ReportTarget.PersonTarget -> target.handle
         is ReportTarget.ReviewTarget -> target.authorHandle
@@ -262,17 +263,10 @@ fun KuraSheetScope.ReportSheet(store: AppStore, sheet: SheetRoute.Report) {
         onClick = {
             val chosen = reason ?: return@SolidButton
             if (sending) return@SolidButton
-            sending = true
-            store.sheetLocked = true
             val note = details.trim()
             val out = if (takesDetails && note.isNotEmpty()) note else null
-            scope.launch {
-                store.report(target, chosen, out)
-                sending = false
-                store.sheetLocked = false
-                // Success says "Gracias"; a failure already left a Reintentar toast with this reason.
-                store.dismissSheet()
-            }
+            // Success says "Gracias"; a failure already left a Reintentar toast with this reason.
+            store.sheetWrite { store.report(target, chosen, out); true }
         },
         modifier = Modifier.padding(top = 12.dp).semantics { if (reason == null) contentDescription = "Enviar reporte. Elige una razón primero" },
         enabled = reason != null && !sending,
@@ -285,8 +279,7 @@ fun KuraSheetScope.ReportSheet(store: AppStore, sheet: SheetRoute.Report) {
 @Composable
 fun KuraSheetScope.BlockSheet(store: AppStore, sheet: SheetRoute.Block) {
     val handle = sheet.handle
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    val busy = store.sheetLocked
     BasicText(
         "¿bloquear a @$handle?",
         Modifier.padding(horizontal = 10.dp).semantics { heading() },
@@ -304,14 +297,7 @@ fun KuraSheetScope.BlockSheet(store: AppStore, sheet: SheetRoute.Block) {
         if (busy) "Bloqueando…" else "Bloquear",
         onClick = {
             if (busy) return@SolidButton
-            busy = true
-            store.sheetLocked = true
-            scope.launch {
-                store.block(handle)
-                busy = false
-                store.sheetLocked = false
-                store.dismissSheet()
-            }
+            store.sheetWrite { store.block(handle); true }
         },
         enabled = !busy,
     )
@@ -434,7 +420,6 @@ fun BlockedAccountsScreen(store: AppStore) {
 
 @Composable
 private fun BlockedRow(store: AppStore, a: BlockedAccount) {
-    val scope = rememberCoroutineScope()
     var working by remember(a.id) { mutableStateOf(false) }
     val who = a.handle?.let { "@$it" } ?: a.name
     Row(
@@ -453,9 +438,8 @@ private fun BlockedRow(store: AppStore, a: BlockedAccount) {
             onClick = {
                 if (working) return@GlassButton
                 working = true
-                scope.launch {
-                    store.unblock(a.id, a.handle)
-                    working = false
+                store.launch {
+                    try { store.unblock(a.id, a.handle) } finally { working = false }
                 }
             },
             modifier = Modifier.semantics { contentDescription = if (working) "Desbloqueando" else "Desbloquear a $who" },

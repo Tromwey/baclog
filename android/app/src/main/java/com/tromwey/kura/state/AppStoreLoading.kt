@@ -181,6 +181,9 @@ suspend fun AppStore.loadCollection(id: String, force: Boolean = false) {
     val cid = canonicalCollectionId(id)
     if ((!force && cid in s.loadedCollections) || s.pendingCollections.containsKey(cid)) return
     val session = s
+    // Like `refreshLibrary`: a title written since this read started keeps the phone's state.
+    val gens = HashMap(session.writeGen)
+    fun wroteSince(id: String) = (session.writeGen[id] ?: 0) != (gens[id] ?: 0) || session.inflightCount(id) > 0
     try {
         val d = api.collection(cid)
         check(session)
@@ -188,7 +191,7 @@ suspend fun AppStore.loadCollection(id: String, force: Boolean = false) {
         registerAll(d.titles)
         val states = s.userTitles.toMutableMap()
         for ((tid, st) in d.states) {
-            if (s.inflightCount(tid) != 0) continue
+            if (wroteSince(tid)) continue
             states[tid] = st.copy(watchedEpisodes = s.userTitles[tid]?.watchedEpisodes ?: emptySet())
         }
         s.userTitles = states
@@ -205,6 +208,8 @@ suspend fun AppStore.loadCollection(id: String, force: Boolean = false) {
             } else if (current.pinned != c.pinned && pinWriteInFlight) {
                 c = c.copy(pinned = current.pinned)
             }
+            // An add / remove on its way to THIS collection: the read predates it, the phone's titles win.
+            if (membershipWriteInFlight(cid)) c = c.copy(titleIds = current.titleIds, addedAt = current.addedAt)
             val next = if (pendingRemovals(cid).isEmpty()) c else current.copy(
                 name = c.name, vibe = c.vibe, privacy = c.privacy, pinned = c.pinned, chosenCoverTitleId = c.chosenCoverTitleId,
             )

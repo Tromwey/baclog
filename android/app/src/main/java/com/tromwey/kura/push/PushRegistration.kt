@@ -1,6 +1,7 @@
 package com.tromwey.kura.push
 
 import android.content.Context
+import androidx.core.content.edit
 import com.tromwey.kura.data.api.GoogleNonce
 
 /**
@@ -32,6 +33,11 @@ class PushRegistration(context: Context) {
             .putString(LAST_FP, fingerprint(token, account))
             .putLong(LAST_AT, nowMs)
             .apply()
+    }
+
+    /** Signing out on this phone: FCM forgets the token, so the stored copy (and its flags) go too. */
+    fun clearToken() {
+        prefs.edit { remove(TOKEN).putBoolean(REGISTERED, false).remove(LAST_FP).remove(LAST_AT) }
     }
 
     /** This install's token is NOT (or no longer) on the server for the current account: sign-out,

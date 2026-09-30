@@ -263,10 +263,14 @@ suspend fun AppStore.loadMorePeople(personId: String, following: Boolean) {
     val cursor = meta.nextCursor ?: return
     if (meta.loadingMore) return
     val session = s
+    val errorKey = LoadKey.PeopleMore(personId, following)
+    // A retry clears the strip at once (the rows' end shows it's loading again).
+    setLoadError(errorKey, null)
     s.peopleListMeta = s.peopleListMeta + (key to meta.copy(loadingMore = true))
     try {
         val page = api.people(if (following) PeopleKind.FollowingOf(personId) else PeopleKind.FollowersOf(personId), cursor)
         check(session)
+        loaded(errorKey)
         for (p in page.items) register(p)
         val list = s.peopleLists[key] ?: emptyList()
         val seen = list.map { it.id }.toSet()
@@ -280,7 +284,8 @@ suspend fun AppStore.loadMorePeople(personId: String, following: Boolean) {
         }
         if (err is CancellationException) throw err
         if (s !== session) return
-        noteError(err)
+        // The list says it stopped short (`RetryStrip`) instead of just ending there.
+        fail(errorKey, err)
     }
 }
 

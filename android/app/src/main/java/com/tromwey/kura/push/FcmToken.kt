@@ -3,6 +3,7 @@ package com.tromwey.kura.push
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 /**
@@ -26,4 +27,25 @@ internal suspend fun fetchFcmToken(): String? {
             if (c.isActive) c.resume(if (task.isSuccessful) task.result else null)
         }
     }
+}
+
+/**
+ * Signing out on this phone: FCM forgets this install's token (a sign-in mints a new one) and stops
+ * minting one on its own (`isAutoInitEnabled = false`; `fetchFcmToken` turns it back on). Bounded: a
+ * sign-out never waits on Play services for more than a few seconds.
+ */
+@Suppress("DEPRECATION") // same scheme as `fetchFcmToken`: `deleteToken` pairs with `getToken`
+internal suspend fun deleteFcmToken() {
+    if (!FirebaseBoot.isStarted) return
+    val messaging = FirebaseMessaging.getInstance()
+    messaging.isAutoInitEnabled = false
+    val answered = withTimeoutOrNull(5_000) {
+        suspendCancellableCoroutine<Boolean> { c ->
+            messaging.deleteToken().addOnCompleteListener { task ->
+                if (!task.isSuccessful) Log.w(PushLog.TAG, "deleteToken falló (${task.exception?.javaClass?.simpleName})")
+                if (c.isActive) c.resume(true)
+            }
+        }
+    }
+    if (answered == null) Log.w(PushLog.TAG, "deleteToken no respondió a tiempo")
 }

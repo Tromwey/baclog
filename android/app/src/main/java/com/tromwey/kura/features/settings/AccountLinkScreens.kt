@@ -87,16 +87,19 @@ import com.tromwey.kura.designsystem.components.Skeleton
 import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.designsystem.components.TopVeil
 import com.tromwey.kura.designsystem.components.kPressable
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.GoogleCredential
 import com.tromwey.kura.state.LAST_WAY_IN_TEXT
 import com.tromwey.kura.state.LoadKey
 import com.tromwey.kura.state.SheetRoute
+import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.canRun
 import com.tromwey.kura.state.cancelMerge
 import com.tromwey.kura.state.confirmMerge
 import com.tromwey.kura.state.connectGoogle
 import com.tromwey.kura.state.disconnect
+import com.tromwey.kura.state.googleFailureText
 import com.tromwey.kura.state.googleLinkClientId
 import com.tromwey.kura.state.identities
 import com.tromwey.kura.state.identityBusy
@@ -110,6 +113,7 @@ import com.tromwey.kura.state.mergeRetryAt
 import com.tromwey.kura.state.mergeWaitLabel
 import com.tromwey.kura.state.requestMergeCode
 import com.tromwey.kura.state.verifyMergeCode
+import com.tromwey.kura.features.sheetWrite
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -176,7 +180,7 @@ private fun GoogleRow(store: AppStore, linked: Boolean) {
             )
             else -> GlassButton(
                 "Conectar",
-                onClick = { scope.launch { store.connectGoogle { googleCredential(context, store.googleLinkClientId) } } },
+                onClick = { scope.launch { store.connectGoogle { googleCredential(context, store, store.googleLinkClientId) } } },
                 modifier = Modifier.semantics { contentDescription = "Conectar ${p.label}" },
                 height = 36.dp, fontSize = 14f, fill = KColor.glassBg,
                 enabled = store.identityBusy == null && store.canRun(p),
@@ -199,7 +203,7 @@ private fun ProviderMark() {
  * gets `sha256hex(nonce)`, `GoogleNonce` keeps the raw one for `LiveApi.linkGoogle`. Same recipe as
  * the entrance's `SignupScreen` (copied, not shared: onboarding is its own lane).
  */
-private suspend fun googleCredential(context: Context, clientId: String?): GoogleCredential {
+private suspend fun googleCredential(context: Context, store: AppStore, clientId: String?): GoogleCredential {
     if (clientId == null) return GoogleCredential.Failed
     val nonce = GoogleNonce.make()
     val option = GetGoogleIdOption.Builder()
@@ -223,16 +227,20 @@ private suspend fun googleCredential(context: Context, clientId: String?): Googl
         GoogleCredential.NoAccount
     } catch (_: GoogleIdTokenParsingException) {
         GoogleCredential.Failed
-    } catch (_: GetCredentialException) {
-        GoogleCredential.Failed
+    } catch (e: GetCredentialException) {
+        // The type says why: to the log for us; the user reads the store's words for it (none for a
+        // cancel), so the store is told "Cancelled" and adds no second, vaguer toast.
+        KuraLog.w("Google", "${e.type}: ${e.errorMessage}")
+        store.googleFailureText(e.type, e.errorMessage?.toString())?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
+        GoogleCredential.Cancelled
     }
 }
 
 /** "¿desconectar Google?" — the one confirmation before `DELETE /me/identities/{provider}`. */
 @Composable
 fun KuraSheetScope.UnlinkIdentitySheet(store: AppStore, sheet: SheetRoute.UnlinkIdentity) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
+    // The lock IS "busy": it outlives a remount of this sheet, a local flag wouldn't.
+    val busy = store.sheetLocked
     val p = sheet.provider
     // Apple is the only real way in (relay email): never reached from Android's rows, but if it is,
     // it explains instead of offering what the server would refuse.
@@ -257,14 +265,7 @@ fun KuraSheetScope.UnlinkIdentitySheet(store: AppStore, sheet: SheetRoute.Unlink
             if (busy) "Desconectando…" else "Desconectar",
             onClick = {
                 if (busy) return@SolidButton
-                busy = true
-                store.sheetLocked = true
-                scope.launch {
-                    store.disconnect(p)
-                    busy = false
-                    store.sheetLocked = false
-                    store.dismissSheet()
-                }
+                store.sheetWrite { store.disconnect(p); true }
             },
             enabled = !busy,
         )
@@ -338,7 +339,7 @@ fun MergeAccountScreen(store: AppStore) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 GoogleWideButton(enabled = !busy, dim = store.identityBusy == IdentityProvider.Google) {
                     focus.clearFocus()
-                    scope.launch { store.connectGoogle(fromMerge = true) { googleCredential(context, store.googleLinkClientId) } }
+                    scope.launch { store.connectGoogle(fromMerge = true) { googleCredential(context, store, store.googleLinkClientId) } }
                 }
                 Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) { MonoLabel("o con su correo") }
             }
@@ -464,7 +465,6 @@ fun MergeCodeScreen(store: AppStore) {
 /** What the other account is, what happens to it, and the one destructive button. */
 @Composable
 fun MergeConfirmScreen(store: AppStore) {
-    val scope = rememberCoroutineScope()
     val proof = store.mergeProof
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
         if (proof == null) {
@@ -523,7 +523,9 @@ fun MergeConfirmScreen(store: AppStore) {
             ) {
                 SolidButton(
                     if (store.mergeBusy) "Fusionando…" else "Fusionar cuentas",
-                    { scope.launch { store.confirmMerge() } },
+                    // The store's scope: leaving this page mid-merge must not cancel it (and strand
+                    // the lock `confirmMerge` holds on the sheets).
+                    { store.launch { store.confirmMerge() } },
                     enabled = !store.mergeBusy,
                 )
                 KuraTextButton("Cancelar", { if (!store.mergeBusy) store.cancelMerge() }, Modifier.fillMaxWidth().heightIn(min = 52.dp))

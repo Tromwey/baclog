@@ -48,6 +48,16 @@ internal object KuraLog {
     fun api(msg: String) {
         try { Log.e("KuraApi", msg) } catch (_: RuntimeException) { System.err.println("KuraApi: $msg") } // JVM tests
     }
+
+    /** Something the app tolerated but shouldn't have seen (a model's fallback, a dropped push). */
+    fun w(tag: String, msg: String) {
+        try { Log.w(tag, msg) } catch (_: RuntimeException) { System.err.println("$tag: $msg") } // JVM tests
+    }
+
+    /** A bug: an error the app didn't map. Same rule: never a body, never a token. */
+    fun e(tag: String, msg: String, error: Throwable? = null) {
+        try { Log.e(tag, msg, error) } catch (_: RuntimeException) { System.err.println("$tag: $msg ${error?.javaClass?.name ?: ""}") } // JVM tests
+    }
 }
 
 /** One HTTP call under `/api/v1`. */
@@ -141,7 +151,9 @@ class ApiClient(
             KuraJson.json.decodeFromString(strategy, r.data.toString(Charsets.UTF_8))
         } catch (x: IllegalArgumentException) { // SerializationException included
             // A contract change must leave a trace: where it broke, never the payload.
-            KuraLog.api("decode ${e.method} ${e.path.template} as ${strategy.descriptor.serialName} rid=${r.requestId ?: "-"}: ${x.javaClass.simpleName} ${x.message?.take(200)}")
+            // Only the exception's class: kotlinx's message quotes the offending JSON (it can carry a
+            // name, an email, a review…).
+            KuraLog.api("decode ${e.method} ${e.path.template} as ${strategy.descriptor.serialName} rid=${r.requestId ?: "-"}: ${x.javaClass.simpleName}")
             throw KuraApiError.Server("Respuesta inesperada del servidor")
         }
     }
@@ -235,7 +247,9 @@ class ApiClient(
         val retryAfterHeader = resp.headers[HttpHeaders.RetryAfter]
         val err = map(status, env, retryAfterHeader)
         if (err is KuraApiError.Unauthorized) {
-            if (e.auth && !e.suppressExpiry && e.explicitBearer == null) {
+            // Only when THIS request carried the stored bearer: a 401 answering an older bearer (signed
+            // out and back in while it was in flight) must not end the session that replaced it.
+            if (e.auth && !e.suppressExpiry && e.explicitBearer == null && token != null && token == session.token) {
                 session.clear()
                 expired.tryEmit(Unit)
             }

@@ -81,6 +81,13 @@ interface KuraApi {
     suspend fun sessions(): List<DeviceSession>
     /** `DELETE /me/sessions/{id}` → 204. Signs out THAT device only. */
     suspend fun revokeSession(id: String)
+    /** `DELETE /me/sessions/{sid}` for THIS install's own session, sent with `bearer` (captured before
+     *  the session is forgotten, or queued from an earlier sign-out). A 401/404 = already dead: done.
+     *  Never broadcasts "session expired". The default (fakes) goes through `revokeSession`. */
+    suspend fun revokeOwnSession(sid: String, bearer: String) = revokeSession(sid)
+    /** `POST auth/logout` with an explicit `bearer` (a global sign-out that didn't reach the server,
+     *  retried). A 401 = already revoked: done. The default (fakes) goes through `logout`. */
+    suspend fun logoutBearer(bearer: String) = logout()
     /** `PUT /me/devices/{token}` `{ environment?, provider }` → 204. iOS: `apns` + `environment`
      *  (sandbox | production). Android: `provider = "fcm"`, the FCM token as-is, `environment` null
      *  (the server ignores it for FCM). */

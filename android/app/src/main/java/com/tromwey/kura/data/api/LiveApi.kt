@@ -133,11 +133,7 @@ class LiveApi(
         val token = session.token
         session.clear()
         if (token == null) return
-        try {
-            client.send(Endpoint.post(ApiPath("auth/logout")).copy(auth = false, explicitBearer = token, suppressExpiry = true))
-        } catch (_: KuraApiError.Unauthorized) {
-            return
-        }
+        logoutBearer(token)
     }
 
     /**
@@ -220,6 +216,22 @@ class LiveApi(
         client.decode(Endpoint.get(ApiPath("me/sessions")), Items(DeviceSession.serializer()))
 
     override suspend fun revokeSession(id: String) = client.send(Endpoint.delete(ApiPath("me/sessions/{}", id)))
+
+    override suspend fun revokeOwnSession(sid: String, bearer: String) {
+        try {
+            client.send(Endpoint.delete(ApiPath("me/sessions/{}", sid)).copy(auth = false, explicitBearer = bearer, suppressExpiry = true))
+        } catch (_: KuraApiError.Unauthorized) {
+            return // that bearer is already dead: nothing left to revoke
+        }
+    }
+
+    override suspend fun logoutBearer(bearer: String) {
+        try {
+            client.send(Endpoint.post(ApiPath("auth/logout")).copy(auth = false, explicitBearer = bearer, suppressExpiry = true))
+        } catch (_: KuraApiError.Unauthorized) {
+            return
+        }
+    }
 
     override suspend fun registerDevice(pushToken: String, environment: String?, provider: String) =
         client.send(Endpoint.put(ApiPath("me/devices/{}", pushToken), buildJsonObject {

@@ -7,6 +7,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.tromwey.kura.BuildConfig
 import com.tromwey.kura.app.KuraApp
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.state.didReceivePushToken
 
 /**
@@ -27,7 +28,13 @@ class KuraMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val title = message.notification?.title ?: message.data["title"] ?: return
+        val title = message.notification?.title ?: message.data["title"]
+        if (title.isNullOrBlank()) {
+            // Nothing to draw (a data-only message this build doesn't know): dropped, but never silently —
+            // it's contract drift between the server's payload and this client. The type only, no data.
+            KuraLog.w(PushLog.TAG, "push sin título: no se muestra (type=${message.data["type"] ?: "-"})")
+            return
+        }
         val body = message.notification?.body ?: message.data["body"]
         val target = PushIntent.target(message.data)
         PushNotifications.show(this, id = (target ?: message.messageId ?: title).hashCode(), title = title, body = body, target = target)

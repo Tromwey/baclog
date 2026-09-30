@@ -3,10 +3,13 @@ package com.tromwey.kura.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tromwey.kura.data.InMemoryTokenStore
 import com.tromwey.kura.data.LocalPrefs
+import com.tromwey.kura.data.PendingRevokes
 import com.tromwey.kura.data.Session
 import com.tromwey.kura.data.api.KuraApi
 import com.tromwey.kura.data.api.KuraApiError
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.data.api.MePatch
 import com.tromwey.kura.data.models.AuthProviders
 import com.tromwey.kura.data.models.BlockedAccount
@@ -184,6 +187,8 @@ sealed interface LoadKey {
     data object Discover : LoadKey
     data class PersonKey(val handle: String) : LoadKey
     data class PeopleList(val key: String) : LoadKey
+    /** The next page of someone's followers / following failed (the list shows a Reintentar strip). */
+    data class PeopleMore(val personId: String, val following: Boolean) : LoadKey
     data object Recap : LoadKey
     data object OnboardingPeople : LoadKey
     data class PublicCollection(val key: String) : LoadKey
@@ -438,6 +443,8 @@ internal class SessionData {
  *
  * @param expiries `ApiClient.sessionExpired` (a 401 on any call): the store goes back to the entrance.
  * @param seed debug/mock only: fills a fresh session (also after a sign-out), like iOS `seedMock()`.
+ * @param pendingRevokes sign-outs the server never confirmed (encrypted on the device), retried on the
+ *   next launch and when the network comes back (`AppStoreSignOut.kt`).
  */
 class AppStore(
     val api: KuraApi,
@@ -448,6 +455,7 @@ class AppStore(
     val platform: StorePlatform = InMemoryStorePlatform(),
     private val expiries: Flow<Unit> = emptyFlow(),
     private val seed: (AppStore.() -> Unit)? = null,
+    val pendingRevokes: PendingRevokes = PendingRevokes(InMemoryTokenStore()),
 ) {
     /** A supervisor child of the given scope: one failed write never cancels the store. */
     internal val scope: CoroutineScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
@@ -504,8 +512,9 @@ class AppStore(
     internal var authProvidersStale = true
     /** Pre-fills O1b's name (Apple sends it once; nothing on Android fills it today). */
     var suggestedName: String? get() = s.suggestedName; set(v) { s.suggestedName = v }
-    /** True when the entrance paints Google. Apple never exists on Android (BRIEF). */
-    val hasSocialSignIn: Boolean get() = authProviders?.googleClientId != null
+    /** True when the entrance paints Google: the server announced ANDROID's client id (the iOS one
+     *  can't sign in from here). Apple never exists on Android (BRIEF). */
+    val hasSocialSignIn: Boolean get() = authProviders?.googleAndroidClientId != null
 
     // MARK: Data
     val people: Map<String, Person> get() = s.people
@@ -612,31 +621,40 @@ class AppStore(
     var pendingAction: (() -> Unit)? = null
     internal var didBootstrap = false
 
-    // Settings the API owns (`PATCH /me`) — stored in the session, patched on change.
+    // Settings the API owns (`PATCH /me`) — stored in the session, patched on change. Optimistic: a
+    // refused PATCH puts this write's old value back (only if it's still showing, see `patchSetting`).
     var profilePrivate: Boolean
         get() = s.profilePrivate
         set(v) {
-            if (s.profilePrivate == v) return
+            val old = s.profilePrivate
+            if (old == v) return
             s.profilePrivate = v
-            patchMe(MePatch(isPublic = !v))
+            patchSetting(MePatch(isPublic = !v), "No se pudo cambiar la privacidad de tu perfil.",
+                stillMine = { s.profilePrivate == v }, revert = { s.profilePrivate = old })
         }
 
     var notifyReleases: Boolean
         get() = s.notifyReleases
         set(v) {
-            if (s.notifyReleases == v) return
+            val old = s.notifyReleases
+            if (old == v) return
             s.notifyReleases = v
-            patchMe(MePatch(notifyReleases = v))
-            // iOS also asks for notification permission here (`askNotificationsIfNeeded`, +AccountLink, fase 2).
+            patchSetting(MePatch(notifyReleases = v), "No se pudo cambiar el aviso de estrenos.",
+                stillMine = { s.notifyReleases == v }, revert = { s.notifyReleases = old })
+            // Turning a notice on is the moment to ask the phone for permission (iOS does the same).
+            if (v) askNotificationsIfNeeded()
         }
 
     /** "Nuevos seguidores" — push when someone new follows you (`PATCH /me { notifyFollowers }`). */
     var notifyFollowers: Boolean
         get() = s.notifyFollowers
         set(v) {
-            if (s.notifyFollowers == v) return
+            val old = s.notifyFollowers
+            if (old == v) return
             s.notifyFollowers = v
-            patchMe(MePatch(notifyFollowers = v))
+            patchSetting(MePatch(notifyFollowers = v), "No se pudo cambiar el aviso de seguidores.",
+                stillMine = { s.notifyFollowers == v }, revert = { s.notifyFollowers = old })
+            if (v) askNotificationsIfNeeded()
         }
 
     /** "Quién ve tus seguidores y seguidos". Optimistic; a refusal puts the old value back. */
@@ -646,35 +664,29 @@ class AppStore(
             val old = s.followListsVisibility
             if (old == v) return
             s.followListsVisibility = v
-            val session = s
-            sync(key = WriteKey.ME_PATCH, onError = err@{ e ->
-                if (s !== session) return@err true
-                // Only this write's own value goes back (a newer choice already replaced it).
-                if (s.followListsVisibility == v) s.followListsVisibility = old
-                if (e is KuraApiError.Unauthorized) return@err true
-                showToast(ToastModel(e.toast("No se pudo cambiar quién ve tus listas."), ToastModel.Kind.Info))
-                true
-            }) { api ->
-                val m = api.updateMe(MePatch(followListsVisibility = v.rawValue))
-                on(session) { account = m }
-            }
+            patchSetting(MePatch(followListsVisibility = v.rawValue), "No se pudo cambiar quién ve tus listas.",
+                stillMine = { s.followListsVisibility == v }, revert = { s.followListsVisibility = old })
         }
 
     /** "Correo del recap mensual" (`notify_recap`), off = unsubscribed. */
     var notifyRecap: Boolean
         get() = s.notifyRecap
         set(v) {
-            if (s.notifyRecap == v) return
+            val old = s.notifyRecap
+            if (old == v) return
             s.notifyRecap = v
-            patchMe(MePatch(notifyRecap = v))
+            patchSetting(MePatch(notifyRecap = v), "No se pudo cambiar el correo del recap.",
+                stillMine = { s.notifyRecap == v }, revert = { s.notifyRecap = old })
         }
 
     var musicApp: String
         get() = s.musicApp
         set(v) {
-            if (s.musicApp == v) return
+            val old = s.musicApp
+            if (old == v) return
             s.musicApp = v
-            patchMe(MePatch(preferredService = serviceWire(v)))
+            patchSetting(MePatch(preferredService = serviceWire(v)), "No se pudo cambiar tu app de música.",
+                stillMine = { s.musicApp == v }, revert = { s.musicApp = old })
         }
 
     fun noteSearch(q: String) {
@@ -743,7 +755,7 @@ class AppStore(
 
     val entryStep: OnboardingStep get() = if (welcomeSeen || invitePending) OnboardingStep.Signup else OnboardingStep.Welcome
 
-    /** The title a shared web link was about (nothing sets it yet: App Links are fase 2). */
+    /** The title a shared web link was about (iOS `pendingSaveTitle`; no Android path sets it yet). */
     var pendingSaveTitle: Title? get() = s.pendingSaveTitle; set(v) { s.pendingSaveTitle = v }
 
     /** A notification tapped before the tabs were up: opened once the library has loaded. */
@@ -786,6 +798,8 @@ class AppStore(
         pathSatisfied = satisfied
         if (!satisfied || was) return
         offline = false
+        // A sign-out that didn't reach the server (this phone or everywhere): now it can.
+        retryPendingRevokesSoon()
         val wasOffline = s.loadErrors.filterValues { it is KuraApiError.Offline }.keys
         s.loadErrors = s.loadErrors - wasOffline
         if (phase != AppPhase.Main) return
@@ -985,6 +999,9 @@ class AppStore(
      */
     fun noteError(error: Throwable): KuraApiError? {
         if (error is CancellationException) return null
+        // Anything that isn't a mapped API error is a bug in the app (a NPE in an op, a bad cast…): the
+        // person sees the generic failure, the log gets the stack.
+        if (error !is KuraApiError) KuraLog.e("KuraStore", "bug no mapeado", error)
         val e = error as? KuraApiError ?: KuraApiError.Server(error.toString())
         when (e) {
             KuraApiError.Unauthorized -> sessionExpired()
@@ -1203,8 +1220,11 @@ class AppStore(
         toast = null
     }
 
-    /** The toast's button (Deshacer / Reintentar): runs its action and closes it if it's still up. */
+    /** The toast's button (Deshacer / Reintentar): runs its action and closes it — only while THAT toast
+     *  is the one up. A stale pill (another toast replaced it, its window closed) does nothing: its
+     *  Deshacer can no longer be honored. */
     fun tapToastAction(t: ToastModel) {
+        if (toast?.id != t.id) return
         t.action?.invoke()
         if (toast?.id == t.id) toast = null
     }
@@ -1297,13 +1317,36 @@ class AppStore(
         }
     }
 
+    /**
+     * `PATCH /me` for a setting already applied locally. On failure `revert` runs only when
+     * `stillMine()` (this write's value is still the one showing: a newer choice isn't undone by an
+     * older failure), and a toast says what didn't change. Serialized with every `PATCH /me`.
+     */
+    internal fun patchSetting(patch: MePatch, failText: String, stillMine: () -> Boolean, revert: () -> Unit) {
+        val session = s
+        sync(key = WriteKey.ME_PATCH, onError = err@{ e ->
+            if (s !== session) return@err true
+            if (stillMine()) revert()
+            if (e is KuraApiError.Unauthorized) return@err true
+            showToast(ToastModel(e.toast(failText), ToastModel.Kind.Info))
+            true
+        }) { api ->
+            val m = api.updateMe(patch)
+            on(session) { account = m }
+        }
+    }
+
     // MARK: Sheets & navigation
 
+    /** A new sheet never inherits the lock of the one it replaces. */
     fun present(route: SheetRoute) {
+        sheetLocked = false
         sheet = route
     }
 
+    /** Any close (a button, the write that finished, a sign-out) also drops the lock. */
     fun dismissSheet() {
+        sheetLocked = false
         sheet = null
     }
 
@@ -1341,7 +1384,7 @@ class AppStore(
     }
 
     fun enterMain() {
-        sheet = null
+        dismissSheet()
         s.paths = emptyMap()
         tab = Tab.Collections
         didBootstrap = false
@@ -1358,12 +1401,14 @@ class AppStore(
         if (didBootstrap) return
         didBootstrap = true
         bootstrap(emptyLibrary = emptyLibrary, keepLoading = keepLoading)
-        // iOS: `refreshPushRegistration()` + `offerNotificationsIfNeeded()` (+AccountLink, fase 2).
+        // Push (iOS `refreshPushRegistration()` + `offerNotificationsIfNeeded()`) runs from
+        // `watchPushOnMain` (AppStorePush.kt), wired by `AppStore.create`, once this bootstrap is done.
         pendingPush?.let { route ->
             pendingPush = null
             if (path(tab).lastOrNull() != route) push(route)
         }
-        // iOS: `openPendingLink()` — App Links are fase 2.
+        // Links that arrived before the tabs open from `KuraRoot.PendingLinks` → `openPendingLink()`
+        // (AppStoreLinks.kt) once this bootstrap landed.
         if (debugEmptyFollowing) {
             s.following = emptySet()
             me = me.copy(followingCount = 0)
@@ -1385,18 +1430,25 @@ class AppStore(
 
     /**
      * Cerrar sesión. `global` (Ajustes) = `POST auth/logout`, which revokes every bearer of the account:
-     * AWAITED before leaving; if the server didn't confirm it, the local session ends anyway but the user
-     * is told the other devices may still be in. `global = false` only forgets this device's token (an
-     * account just created here: Volver in onboarding, underage).
+     * AWAITED before leaving; if the server didn't confirm it, the local session ends anyway, this
+     * install's push token comes off with the old bearer (best effort) and the logout is queued
+     * (`pendingRevokes`) until the network is back. `global = false` (an account just created here:
+     * Volver in onboarding, underage) leaves at once and revokes THIS session on the server in the
+     * background (`AppStoreSignOut.kt`); "Cerrar sesión en este teléfono" awaits it:
+     * `signOutThisDevice()`.
      */
     fun signOut(global: Boolean = true, message: String? = null) {
         if (signingOut) return
         if (!global) {
+            val bearer = session.token
+            val sid = session.sid
             api.forgetSession()
             leaveSession(message)
+            if (bearer != null) scope.launch { revokeInBackground(bearer, sid) }
             return
         }
         signingOut = true
+        val bearer = session.token
         scope.launch {
             val confirmed = try {
                 api.logout()
@@ -1405,8 +1457,12 @@ class AppStore(
                 if (e is CancellationException) throw e
                 false
             }
+            if (!confirmed && bearer != null) {
+                releasePushToken(bearer)
+                pendingRevokes.add(com.tromwey.kura.data.PendingRevoke(bearer = bearer, global = true))
+            }
             signingOut = false
-            leaveSession(if (confirmed) message else "No pudimos cerrar tu sesión en otros dispositivos. Vuelve a entrar y prueba de nuevo.")
+            leaveSession(if (confirmed) message else GLOBAL_SIGN_OUT_QUEUED)
         }
     }
 
@@ -1435,7 +1491,7 @@ class AppStore(
         resetData()
         disk { prefs.clear() }
         platform.clearWebSession()
-        // iOS also `PushRegistration.markUnregistered()` (fase 2: FCM).
+        // Also marks this install's push token unregistered (`AndroidStorePlatform`), like iOS.
         platform.cancelReleaseNotices()
     }
 
@@ -1467,7 +1523,8 @@ class AppStore(
                 op()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                // A disk failure is silent: memory stays the truth, the next save tries again.
+                // Memory stays the truth and the next save tries again — but it leaves a trace.
+                KuraLog.w("KuraPrefs", "disco: ${e.javaClass.simpleName}")
             }
         }
         diskTail = job
@@ -1485,6 +1542,12 @@ class AppStore(
     companion object {
         /** Said instead of a link while your profile is private: every public URL would 404. */
         const val PRIVATE_PROFILE_SHARE_NOTE = "Tu perfil es privado. Hazlo público en Ajustes para compartirlo."
+
+        /** A global sign-out the server didn't confirm: queued, retried when the network is back. */
+        const val GLOBAL_SIGN_OUT_QUEUED = "No pudimos cerrar tu sesión en otros dispositivos; lo intentamos al reconectar."
+
+        /** "Cerrar sesión en este teléfono" the server didn't confirm: same queue. */
+        const val DEVICE_SIGN_OUT_QUEUED = "No pudimos cerrar tu sesión en el servidor; lo intentamos al reconectar."
 
         /** "No encontramos este título": `PUT mark` answered 404 for a catalog id. */
         const val UNKNOWN_TITLE_NOTE = "No encontramos este título. Búscalo de nuevo."

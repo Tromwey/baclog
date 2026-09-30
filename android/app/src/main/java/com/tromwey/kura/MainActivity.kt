@@ -38,9 +38,10 @@ class MainActivity : ComponentActivity() {
         // DEBUG (src/debug/…/app/DebugLaunch.kt): `--es kuraBearer <jwt>` goes to the Keystore BEFORE the
         // store exists; `--es kuraScreen <name>` then puts the store on that screen (first launch only:
         // a recreated activity keeps whatever the store says now). Release: both are no-ops.
-        DebugLaunch.seedSession(app, intent)
+        // Both honor their extras only from `adb shell` (`DebugLaunch.fromShell`): the activity is exported.
+        DebugLaunch.seedSession(this, intent)
         val store = app.store
-        val options = DebugLaunch.configure(store, intent, firstLaunch = savedInstanceState == null)
+        val options = DebugLaunch.configure(this, store, intent, firstLaunch = savedInstanceState == null)
         setContent { KuraRoot(store, options) }
         // A link / notice tap that launched us. Not on a recreation (the store already acted on it) nor on
         // a relaunch from Recents (the intent is the old one).

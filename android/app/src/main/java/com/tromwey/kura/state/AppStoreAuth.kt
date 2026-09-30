@@ -150,3 +150,27 @@ fun AppStore.socialSignInFailed(error: Throwable, provider: String) {
     }
     showToast(ToastModel(text, ToastModel.Kind.Info))
 }
+
+/**
+ * What to tell the person when Credential Manager threw (the screen passes `GetCredentialException.type`
+ * and its message; the store never touches Credential Manager). null = say nothing (they closed
+ * Google's sheet). The raw type/message go to the log on the screen's side, never to the toast.
+ */
+@Suppress("UnusedReceiverParameter")
+fun AppStore.googleFailureText(type: String?, message: String?): String? {
+    val t = type.orEmpty()
+    val m = message.orEmpty()
+    fun has(vararg keys: String) = keys.any { t.contains(it, ignoreCase = true) }
+    return when {
+        has("USER_CANCELED", "CANCELLATION", "CANCELED") -> null
+        has("NO_CREDENTIAL", "NoCredential") -> "No hay una cuenta de Google en este teléfono."
+        // A client id / SHA-1 that doesn't match this build: Play services says 10 (DEVELOPER_ERROR) or
+        // 16 in brackets, or the provider isn't configured at all.
+        has("PROVIDER_CONFIGURATION", "ProviderConfiguration", "DEVELOPER_ERROR") ||
+            GOOGLE_CONFIG_CODE.containsMatchIn(m) || GOOGLE_CONFIG_CODE.containsMatchIn(t) || m.contains("DEVELOPER_ERROR") ->
+            "Google no está configurado para esta versión de la app."
+        else -> "No se pudo entrar con Google."
+    }
+}
+
+private val GOOGLE_CONFIG_CODE = Regex("""\[(10|16)]|\b(10|16):""")

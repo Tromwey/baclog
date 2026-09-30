@@ -6,8 +6,10 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
+import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
+import java.security.ProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -37,7 +39,7 @@ class InMemoryTokenStore(private var value: String? = null) : TokenStore {
  * is no `InstallMarker` here. A value that no longer decrypts (key invalidated, data corrupted) is
  * dropped and logged — the person just signs in again.
  */
-class SecureStore(context: Context) : TokenStore {
+class SecureStore(context: Context, private val slot: String = KEY) : TokenStore {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private var cached: String? = null
@@ -46,7 +48,7 @@ class SecureStore(context: Context) : TokenStore {
     @Synchronized
     override fun get(): String? {
         if (!loaded) {
-            cached = prefs.getString(KEY, null)?.let(::decrypt)
+            cached = prefs.getString(slot, null)?.let(::decrypt)
             loaded = true
         }
         return cached
@@ -56,21 +58,22 @@ class SecureStore(context: Context) : TokenStore {
     override fun set(value: String) {
         val sealed = try {
             encrypt(value)
-        } catch (e: GeneralSecurityException) {
-            // Never fall back to plaintext: without the Keystore the session lives in memory only.
-            Log.e(TAG, "No se pudo cifrar el bearer; la sesión no se guarda en disco", e)
-            prefs.edit().remove(KEY).apply()
+        } catch (e: Exception) {
+            if (!isKeystoreFailure(e)) throw e
+            // Never fall back to plaintext: without the Keystore the value lives in memory only.
+            Log.e(TAG, "No se pudo cifrar [$slot]; no se guarda en disco (${e.javaClass.simpleName})")
+            prefs.edit().remove(slot).apply()
             cached = value; loaded = true
             return
         }
-        prefs.edit().putString(KEY, sealed).apply()
+        prefs.edit().putString(slot, sealed).apply()
         cached = value
         loaded = true
     }
 
     @Synchronized
     override fun clear() {
-        prefs.edit().remove(KEY).apply()
+        prefs.edit().remove(slot).apply()
         cached = null
         loaded = true
     }
@@ -104,18 +107,22 @@ class SecureStore(context: Context) : TokenStore {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, unb64(parts[0])))
             String(cipher.doFinal(unb64(parts[1])), Charsets.UTF_8)
-        } catch (e: GeneralSecurityException) {
-            dropUnreadable(e)
-        } catch (e: IllegalArgumentException) {
+        } catch (e: Exception) {
+            if (!isKeystoreFailure(e) && e !is IllegalArgumentException) throw e
             dropUnreadable(e)
         }
     }
 
     private fun dropUnreadable(e: Exception): String? {
-        Log.w(TAG, "El bearer guardado ya no se puede descifrar; se descarta (${e.javaClass.simpleName})")
-        prefs.edit().remove(KEY).apply()
+        Log.w(TAG, "El valor guardado [$slot] ya no se puede descifrar; se descarta (${e.javaClass.simpleName})")
+        prefs.edit().remove(slot).apply()
         return null
     }
+
+    /** What the Keystore throws when it can't serve: a crypto error, a keystore daemon failure
+     *  (`ProviderException`, unchecked) or the keystore file unreadable (`IOException` from `load`). */
+    private fun isKeystoreFailure(e: Exception) =
+        e is GeneralSecurityException || e is ProviderException || e is IOException
 
     private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
     private fun unb64(s: String) = Base64.decode(s, Base64.NO_WRAP)
@@ -125,6 +132,7 @@ class SecureStore(context: Context) : TokenStore {
         const val KEYSTORE = "AndroidKeyStore"
         const val ALIAS = "com.tromwey.kura.bearer"
         const val PREFS = "com.tromwey.kura.secure"
+        /** The bearer's slot (the default); other slots share the key and the file. */
         const val KEY = "bearer"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }

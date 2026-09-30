@@ -7,12 +7,14 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.data.models.CollectionLayout
 import com.tromwey.kura.data.models.KuraJson
 import com.tromwey.kura.data.models.SortMode
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.io.IOException
 
 /**
  * What the API marks `unsupported` (API.md §3/§4) stays on the device, with no sync UI: sort,
@@ -50,19 +52,41 @@ class LocalPrefs(private val store: DataStore<Preferences>?, val enabled: Boolea
         val defaultPrivacy: String? = null,
     )
 
-    /** An unreadable payload (older/newer shape) reads as the empty one, like iOS's `try?`. */
+    /** The last `load` couldn't read what's on disk: saves are held until one reads it fine, so an
+     *  empty in-memory payload never overwrites prefs a newer build (or a hiccup) left there. */
+    @Volatile var writesHeld = false
+        private set
+
+    /** An unreadable payload (older/newer shape, a corrupt file) reads as the empty one, like iOS's
+     *  `try?` — but it's logged, and nothing is written over it until a load reads it fine. */
     suspend fun load(): Payload {
         if (!enabled || store == null) return Payload()
-        val raw = store.data.first()[PAYLOAD] ?: return Payload()
+        val raw = try {
+            store.data.first()[PAYLOAD]
+        } catch (e: IOException) { // DataStore's CorruptionException included
+            KuraLog.w(TAG, "prefs ilegibles en disco (${e.javaClass.simpleName}); no se escriben hasta leerlas bien")
+            writesHeld = true
+            return Payload()
+        }
+        if (raw == null) {
+            writesHeld = false
+            return Payload()
+        }
         return try {
-            KuraJson.json.decodeFromString(Payload.serializer(), raw)
-        } catch (_: IllegalArgumentException) {
+            KuraJson.json.decodeFromString(Payload.serializer(), raw).also { writesHeld = false }
+        } catch (e: IllegalArgumentException) {
+            KuraLog.w(TAG, "payload de prefs ilegible (${e.javaClass.simpleName}); no se escribe encima hasta leerlo bien")
+            writesHeld = true
             Payload()
         }
     }
 
     suspend fun save(p: Payload) {
         if (!enabled || store == null) return
+        if (writesHeld) {
+            KuraLog.w(TAG, "guardado de prefs omitido: la última carga no pudo leerlas")
+            return
+        }
         val raw = KuraJson.json.encodeToString(Payload.serializer(), p)
         store.edit { it[PAYLOAD] = raw }
     }
@@ -78,13 +102,16 @@ class LocalPrefs(private val store: DataStore<Preferences>?, val enabled: Boolea
         store.edit { it[MIGRATED] = value }
     }
 
+    /** Every way out of a session: what's on disk goes, readable or not (a fresh start can write). */
     suspend fun clear() {
         if (!enabled || store == null) return
         store.edit { it.remove(PAYLOAD) }
+        writesHeld = false
     }
 
     companion object {
         const val KEY = "com.tromwey.kura.local"
+        private const val TAG = "KuraPrefs"
         private val PAYLOAD = stringPreferencesKey(KEY)
         private val MIGRATED = booleanPreferencesKey("$KEY.curationMigrated")
 

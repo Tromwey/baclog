@@ -27,6 +27,7 @@ fun AppStore.saveProfile(name: String, handle: String, featured: String?, isPriv
     val cleanName = name.trim().lowercase()
     val cleanHandle = handle.lowercase().filter { it.isLetter() || it.isDigit() || it == '.' || it == '_' }
     val oldName = me.name
+    val oldInitials = me.initials
     val oldHandle = me.handle
     var updated = me
     if (cleanName.isNotEmpty()) updated = updated.copy(name = cleanName, initials = Person.initials(cleanName))
@@ -45,7 +46,14 @@ fun AppStore.saveProfile(name: String, handle: String, featured: String?, isPriv
     profilePrivate = isPrivate
     this.showCommon = showCommon
     saveLocal()
-    if (cleanName.isNotEmpty() && cleanName != oldName) patchMe(MePatch(name = cleanName))
+    if (cleanName.isNotEmpty() && cleanName != oldName) {
+        patchSetting(MePatch(name = cleanName), "No se pudo cambiar tu nombre.",
+            stillMine = { me.name == cleanName },
+            revert = {
+                me = me.copy(name = oldName, initials = oldInitials)
+                if (me.id.isNotEmpty()) s.people = s.people + (me.id to me)
+            })
+    }
     if (handleChanged) claimHandle(newHandle, oldHandle)
     showToast(ToastModel("Perfil actualizado", ToastModel.Kind.Info))
 }

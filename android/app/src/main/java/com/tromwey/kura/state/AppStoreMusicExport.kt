@@ -255,12 +255,18 @@ private fun AppStore.connectFailed(error: Throwable) {
 
 // MARK: TIDAL (server, in steps)
 
+/** Steps before giving up on an export the server keeps calling "in progress". */
+internal const val TIDAL_MAX_ROUNDS = 2_000
+
+/** The export ran out of rounds: what's passed stays in the playlist, Reintentar resumes. */
+internal const val TIDAL_UNFINISHED = "La exportación no terminó. Lo que ya pasó sigue en TIDAL: vuelve a intentarlo para seguir."
+
 private suspend fun AppStore.runTidal(partyId: String) {
     try {
         var st = exportCall { api.startPartyExport(partyId, MusicProvider.Tidal) }
         applyExportState(st)
         var rounds = 0
-        while (currentCoroutineContext().isActive && rounds < 2_000) {
+        while (currentCoroutineContext().isActive && rounds < TIDAL_MAX_ROUNDS) {
             rounds++
             if (st.status == ExportState.Status.Done || (st.status == ExportState.Status.Idle && !st.busy)) break
             if (st.busy) delay(1.seconds)
@@ -274,7 +280,14 @@ private suspend fun AppStore.runTidal(partyId: String) {
                 delay(((e.retryAfter ?: 3).coerceIn(1, 120)).seconds)
             }
         }
-        finishExport(st)
+        val finished = st.status == ExportState.Status.Done || (st.status == ExportState.Status.Idle && !st.busy)
+        if (finished) {
+            finishExport(st)
+        } else if (currentCoroutineContext().isActive) {
+            // Out of rounds with the server still "in progress": never "Listo" over a playlist that isn't.
+            logError("export tidal: sin terminar tras $TIDAL_MAX_ROUNDS rondas (${st.processed}/${st.total})")
+            updateExport { it.copy(step = PartyExportFlow.Step.Failed, pause = null, current = null, failure = TIDAL_UNFINISHED) }
+        }
     } catch (e: Exception) {
         if (e is CancellationException) return
         exportFailed(e)

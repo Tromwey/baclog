@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityManager
 import coil3.SingletonImageLoader
 import com.tromwey.kura.data.CoverPalette
 import com.tromwey.kura.data.LocalPrefs
+import com.tromwey.kura.data.PendingRevokes
 import com.tromwey.kura.data.SecureStore
 import com.tromwey.kura.data.Session
 import com.tromwey.kura.data.api.ApiClient
@@ -20,6 +21,7 @@ import com.tromwey.kura.data.models.Title
 import com.tromwey.kura.push.PushNotifications
 import com.tromwey.kura.push.PushRegistration
 import com.tromwey.kura.push.ReleaseNotifier
+import com.tromwey.kura.push.deleteFcmToken
 import com.tromwey.kura.push.fetchFcmToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +54,7 @@ fun AppStore.Companion.create(context: Context): AppStore {
         scope = scope,
         platform = AndroidStorePlatform(app),
         expiries = client.sessionExpired,
+        pendingRevokes = PendingRevokes(SecureStore(app, PendingRevokes.SLOT)),
     )
     // Signing out on THIS phone: the push token comes off the server with the bearer being forgotten
     // (after the forget nothing could remove it). A global logout doesn't need it: the server's
@@ -59,6 +62,8 @@ fun AppStore.Companion.create(context: Context): AppStore {
     api.onForgetSession = { bearer -> store.unregisterPush(bearer) }
     store.watchPushOnMain()
     watchConnectivity(app, store, scope)
+    // A sign-out an earlier run couldn't confirm on the server: try it now.
+    store.retryPendingRevokesSoon()
     return store
 }
 
@@ -106,6 +111,10 @@ open class AndroidStorePlatform(private val context: Context) : StorePlatform, P
     }
     override fun markPushUnregistered() = registration.markUnregistered()
     override suspend fun fetchPushToken(): String? = fetchFcmToken()
+    override suspend fun deletePushToken() {
+        registration.clearToken()
+        deleteFcmToken()
+    }
 }
 
 private fun watchConnectivity(context: Context, store: AppStore, scope: CoroutineScope) {

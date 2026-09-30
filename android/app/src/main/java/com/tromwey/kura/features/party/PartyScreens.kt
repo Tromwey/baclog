@@ -475,10 +475,10 @@ fun PartySearchScreen(store: AppStore, route: Route.PartySearch) {
                                         ),
                                     )
                                 } else {
-                                    scope.launch {
-                                        adding = adding + h.titleId
-                                        store.addPartySong(id, h)
-                                        adding = adding - h.titleId
+                                    // The store's scope: leaving the search mid-add must not cancel it.
+                                    adding = adding + h.titleId
+                                    store.launch {
+                                        try { store.addPartySong(id, h) } finally { adding = adding - h.titleId }
                                     }
                                 }
                             }

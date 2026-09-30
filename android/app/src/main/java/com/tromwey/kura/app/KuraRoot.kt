@@ -17,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -168,21 +167,20 @@ private fun NoticeLayer(store: AppStore, dockVisible: Boolean) {
 
 /**
  * The sheet host (iOS `SheetHost`): `store.sheet` → one `KuraSheet` with the route's style. A new
- * route replaces the old sheet. Scrim tap / drag / system back go through
- * `dismissSheetInteractively()`: while `sheetLocked` (a write in flight) the sheet refuses and comes
- * back up — Material's sheet has already hidden itself by then, so the host re-mounts it.
+ * route replaces the old sheet. While `sheetLocked` (a write in flight) the sheet itself refuses to
+ * hide — drag, scrim and back are off (`KuraSheet(locked)`) — so nothing is ever re-mounted: the content,
+ * its state and whatever it's writing stay exactly as they are. A dismissal that still arrives while
+ * locked can only be the content's own `close()`, and that is honored.
  */
 @Composable
 private fun SheetHost(store: AppStore) {
     val sheet = store.sheet ?: return
-    var reopen by remember { mutableIntStateOf(0) }
-    key(sheet, reopen) {
+    key(sheet) {
         KuraSheet(
-            onDismiss = {
-                if (store.sheet == sheet && !store.dismissSheetInteractively()) reopen++
-            },
+            onDismiss = { if (store.sheet == sheet) store.dismissSheet() },
             style = if (sheet.style == SheetStyle.Tall) KuraSheetStyle.Tall else KuraSheetStyle.Compact,
             grabber = sheet.showsGrabber,
+            locked = store.sheetLocked,
         ) {
             SheetContent(sheet, store)
         }

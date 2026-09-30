@@ -59,8 +59,10 @@ import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.KuraTopBar
 import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.designsystem.components.kPressable
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.ToastModel
+import com.tromwey.kura.state.googleFailureText
 import com.tromwey.kura.state.requestCode
 import com.tromwey.kura.state.signInWithGoogle
 import kotlinx.coroutines.launch
@@ -205,8 +207,12 @@ private suspend fun googleSignIn(context: Context, clientId: String, store: AppS
         return
     } catch (_: GoogleIdTokenParsingException) {
         null
-    } catch (_: GetCredentialException) {
-        null
+    } catch (e: GetCredentialException) {
+        // The type says why (a misconfigured client, no Play services, an interrupted sheet…): it goes
+        // to the log for us, and the user reads the store's words for it — none when it's a cancel.
+        KuraLog.w("Google", "${e.type}: ${e.errorMessage}")
+        store.googleFailureText(e.type, e.errorMessage?.toString())?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
+        return
     }
     if (token == null) {
         store.showToast(ToastModel(failed, ToastModel.Kind.Info))

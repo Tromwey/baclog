@@ -30,7 +30,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tromwey.kura.app.siteHost
 import com.tromwey.kura.data.models.OnboardingStep
-import com.tromwey.kura.data.models.UsernameStatus
 import com.tromwey.kura.designsystem.Glyph
 import com.tromwey.kura.designsystem.GlyphIcon
 import com.tromwey.kura.designsystem.KColor
@@ -40,6 +39,7 @@ import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.KuraTopBar
 import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.UsernameCheck
 import com.tromwey.kura.state.checkUsername
 import com.tromwey.kura.state.submitUsername
 import kotlinx.coroutines.delay
@@ -59,13 +59,16 @@ fun UsernameScreen(store: AppStore) {
     var handleText by rememberSaveable { mutableStateOf("@" + account?.handle.orEmpty()) }
     var name by rememberSaveable { mutableStateOf(account?.name?.ifEmpty { null } ?: store.suggestedName.orEmpty()) }
     var year by rememberSaveable { mutableStateOf("") }
-    var status by remember { mutableStateOf<UsernameStatus?>(null) }
+    var status by remember { mutableStateOf<UsernameCheck?>(null) }
     val scope = rememberCoroutineScope()
 
     val clean = handleText.lowercase().filter { it.isLetterOrDigit() || it == '.' || it == '_' }
     val birthYear = year.filter(Char::isDigit).toIntOrNull()?.takeIf { it in 1900..2100 }
     val needsYear = account?.onboarded != true
-    val canSubmit = clean.length >= 3 && status == UsernameStatus.Free && name.isNotBlank() &&
+    // Unknown (the check itself failed) is no verdict, not a no: Crear cuenta asks the server, which
+    // answers "ya está tomado" if it is.
+    val available = status == UsernameCheck.Free || status == UsernameCheck.Unknown
+    val canSubmit = clean.length >= 3 && available && name.isNotBlank() &&
         (!needsYear || birthYear != null) && !store.authBusy
 
     val back = { if (store.account == null) store.onboardingStep = OnboardingStep.Signup else store.signOut(global = false) }
@@ -75,7 +78,7 @@ fun UsernameScreen(store: AppStore) {
         status = null
         if (clean.length < 3) return@LaunchedEffect
         delay(350)
-        status = store.checkUsername(clean) ?: UsernameStatus.Free
+        status = store.checkUsername(clean)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -103,10 +106,10 @@ fun UsernameScreen(store: AppStore) {
                     )
                 }
             }
-            // "no válido" is short on purpose (a mono tag in the field): the rule goes here.
-            if (status == UsernameStatus.Invalid) {
+            // "no válido" is short on purpose (a mono tag in the field): the server's reason goes here.
+            (status as? UsernameCheck.Invalid)?.let { invalid ->
                 BasicText(
-                    "Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados.",
+                    invalid.message.ifBlank { "Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados." },
                     style = KuraType.ui(13f),
                 )
             }
@@ -135,21 +138,22 @@ fun UsernameScreen(store: AppStore) {
 
 /** The field's trailing tag: "mín. 3" (1–2 chars), then the server's answer. */
 @Composable
-private fun Availability(clean: String, status: UsernameStatus?) {
+private fun Availability(clean: String, status: UsernameCheck?) {
     when {
         clean.length in 1..2 -> MonoLabel("mín. 3")
-        clean.length >= 3 && status != null -> Row(
+        // Unknown: the check didn't answer — say nothing rather than "libre" or "ocupado".
+        clean.length >= 3 && status != null && status != UsernameCheck.Unknown -> Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(end = 6.dp),
         ) {
-            val free = status == UsernameStatus.Free
+            val free = status == UsernameCheck.Free
             if (free) GlyphIcon(Glyph.Check, size = 13.dp)
             MonoLabel(
                 when (status) {
-                    UsernameStatus.Free -> "libre"
-                    UsernameStatus.Taken -> "ocupado"
-                    UsernameStatus.Invalid -> "no válido"
+                    UsernameCheck.Free -> "libre"
+                    UsernameCheck.Taken -> "ocupado"
+                    else -> "no válido"
                 },
                 color = if (free) KColor.completed else KColor.text2,
             )

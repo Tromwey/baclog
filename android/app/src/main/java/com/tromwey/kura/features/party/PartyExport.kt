@@ -123,7 +123,8 @@ fun KuraSheetScope.PartyExportSheet(store: AppStore, sheet: SheetRoute.PartyExpo
         if (error != null) {
             RetryStrip("No pudimos revisar los servicios.", { scope.launch { store.loadMusicServices() } }, Modifier.padding(top = 12.dp))
         } else if (sv?.tidal?.connected == true) {
-            PartyFlatButton("Desconectar TIDAL", { scope.launch { store.disconnectTidal() } }, Modifier.padding(top = 8.dp), quiet = true)
+            // The store's scope: closing the sheet mid-way must not cancel the write.
+            PartyFlatButton("Desconectar TIDAL", { store.launch { store.disconnectTidal() } }, Modifier.padding(top = 8.dp), quiet = true)
         }
     }
 }

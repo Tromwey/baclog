@@ -467,6 +467,9 @@ private fun AppStore.cancelRemove(titleId: String, collectionId: String): Boolea
     return true
 }
 
+private fun AppStore.hasPendingRemove(titleId: String, collectionId: String): Boolean =
+    s.deferredWrites.containsKey(removalKey(titleId, collectionId))
+
 /** Titles whose removal from this collection is still inside its Deshacer window. */
 fun AppStore.pendingRemovals(collectionId: String): List<String> {
     val cid = canonicalCollectionId(collectionId)
@@ -519,7 +522,8 @@ fun AppStore.remove(titleId: String, collectionId: String) {
     gcUserState(titleId)
     deferRemove(titleId, cid)
     undoToast("Quitado de ${c.name}") {
-        cancelRemove(titleId, cid)
+        // The window closed (the DELETE already went): nothing to put back without a round trip.
+        if (!cancelRemove(titleId, cid)) return@undoToast
         update(cid) { it.inserting(titleId, idx) }
         if (s.userTitles[titleId] == null) setState(titleId, state)
         val back = myReviews.filter { review(it.id) == null }
@@ -545,7 +549,7 @@ fun AppStore.move(titleId: String, fromId: String, toId: String) {
     lastUsedCollectionId = to
     haptic(StoreHaptic.Tap)
     undoToast("Movido a ${toC.name}") {
-        cancelRemove(titleId, from)
+        if (!cancelRemove(titleId, from)) return@undoToast
         if (!alreadyThere) {
             update(to) { it.removing(titleId) }
             syncRemove(titleId, to)
@@ -583,6 +587,9 @@ fun AppStore.setMembership(titleId: String, collectionIds: Set<String>) {
         else -> "Guardado en ${ids.size} colecciones"
     }
     undoToast(text) {
+        // A removal whose window already closed can't be undone locally: the whole Deshacer stands down
+        // (half an undo would leave the phone and the server disagreeing).
+        if (removed.any { !hasPendingRemove(titleId, it) }) return@undoToast
         for (id in added) {
             update(id) { it.removing(titleId) }
             syncRemove(titleId, id)

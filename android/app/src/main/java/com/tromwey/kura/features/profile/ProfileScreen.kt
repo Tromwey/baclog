@@ -47,7 +47,6 @@ import com.tromwey.kura.data.models.Mark
 import com.tromwey.kura.data.models.Person
 import com.tromwey.kura.data.models.Route
 import com.tromwey.kura.data.models.Tab
-import com.tromwey.kura.data.models.UsernameStatus
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KHapticEvent
 import com.tromwey.kura.designsystem.KIcon
@@ -95,6 +94,7 @@ import com.tromwey.kura.state.LoadState
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.bootstrap
+import com.tromwey.kura.state.UsernameCheck
 import com.tromwey.kura.state.checkUsername
 import com.tromwey.kura.state.count
 import com.tromwey.kura.state.removeAvatar
@@ -309,7 +309,7 @@ fun EditProfileScreen(store: AppStore) {
     var featured by rememberSaveable { mutableStateOf(me.featuredTitleId?.takeIf { it in ids } ?: ids.firstOrNull()) }
     var isPrivate by rememberSaveable { mutableStateOf(store.profilePrivate) }
     var showCommon by rememberSaveable { mutableStateOf(store.showCommon) }
-    var status by remember { mutableStateOf<UsernameStatus?>(null) }
+    var status by remember { mutableStateOf<UsernameCheck?>(null) }
 
     val clean = handleText.lowercase().filter { it.isLetterOrDigit() || it == '.' || it == '_' }
     val handleChanged = clean != me.handle
@@ -322,14 +322,17 @@ fun EditProfileScreen(store: AppStore) {
     val handleError = when {
         !handleChanged -> null
         clean.length < 3 -> "Mínimo 3 caracteres."
-        status == UsernameStatus.Taken -> "@$clean ya está tomado."
-        status == UsernameStatus.Invalid -> "Usa de 3 a 30 letras sin acento, números, punto o guion bajo."
+        status == UsernameCheck.Taken -> "@$clean ya está tomado."
+        status is UsernameCheck.Invalid -> (status as UsernameCheck.Invalid).message.ifBlank { "Usa de 3 a 30 letras sin acento, números, punto o guion bajo." }
+        // Unknown (the check failed) is no verdict: Guardar lets the server answer.
         else -> null
     }
-    val canSave = name.isNotBlank() && handleError == null && (!handleChanged || status == UsernameStatus.Free || status == null)
+    val canSave = name.isNotBlank() && handleError == null
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) scope.launch { store.uploadAvatar(AvatarEncoder.encode(context, uri)) }
+        // The store's scope: Guardar (or Cancelar) pops this page, and the upload must outlive it.
+        val app = context.applicationContext
+        if (uri != null) store.launch { store.uploadAvatar(AvatarEncoder.encode(app, uri)) }
     }
 
     val palette = featured?.let { store.title(it)?.palette } ?: emptyList()
@@ -372,7 +375,7 @@ fun EditProfileScreen(store: AppStore) {
                             },
                         )
                         if (me.avatarUrl != null && !store.avatarBusy) {
-                            KuraTextButton("Quitar foto", { scope.launch { store.removeAvatar() } }, color = KColor.text2)
+                            KuraTextButton("Quitar foto", { store.launch { store.removeAvatar() } }, color = KColor.text2)
                         }
                     }
                 }

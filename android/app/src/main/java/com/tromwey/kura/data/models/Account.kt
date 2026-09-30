@@ -72,7 +72,9 @@ data class Me(
                 notifyReleases = c.bool("notifyReleases") ?: true,
                 notifyRecap = c.bool("notifyRecap") ?: true,
                 notifyFollowers = c.bool("notifyFollowers") ?: true,
-                isPublic = c.bool("isPublic") ?: true,
+                // Absent → PRIVATE: never tell someone their profile is public (and hand out links)
+                // on a guess.
+                isPublic = c.bool("isPublic") ?: false,
                 followListsVisibility = FollowListsVisibility.from(c.lenientString("followListsVisibility"))
                     ?: FollowListsVisibility.Private,
                 avatarUrl = KuraRuntime.resolve(c.string("avatarUrl")),
