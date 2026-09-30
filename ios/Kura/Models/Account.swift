@@ -246,6 +246,7 @@ struct DeviceSession: Identifiable, Hashable, Decodable, Sendable {
         if !deviceName.isEmpty { return deviceName }
         switch platform.lowercased() {
         case "ios": return "iPhone"
+        case "android": return "Android"
         case "web": return "Navegador"
         default: return platform
         }

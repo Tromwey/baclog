@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "744452121919",
+    "project_id": "kura-a1f94",
+    "storage_bucket": "kura-a1f94.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:744452121919:android:f64698eed2d188cf0a9f8a",
+        "android_client_info": {
+          "package_name": "com.tromwey.kura"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0Habj1OzTGfEXbdZixbS5ATtQPTqVv3U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

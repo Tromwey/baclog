@@ -530,7 +530,7 @@ export type SearchResult = z.infer<typeof SearchResultSchema>;
 // ---------- auth (§2.1) ----------
 
 export const DeviceSchema = z.object({
-  platform: z.enum(["ios"]),
+  platform: z.enum(["ios", "android"]),
   name: z.string().trim().min(1).max(120),
   appVersion: z.string().trim().min(1).max(40),
 });

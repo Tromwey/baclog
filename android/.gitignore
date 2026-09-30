@@ -1,0 +1,25 @@
+# Gradle / Kotlin local state
+.gradle/
+.kotlin/
+build/
+
+# SDK path of this machine (see README; ANDROID_HOME also works)
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing material — never versioned
+*.keystore
+*.jks
+keystore.properties
+*.p12
+
+# Outputs dropped by hand
+*.apk
+*.aab

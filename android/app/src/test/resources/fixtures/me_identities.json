@@ -1,0 +1,10 @@
+{
+ "email": "redacted@example.com",
+ "emailIsRelay": false,
+ "providers": [
+  {
+   "provider": "apple",
+   "linked": true
+  }
+ ]
+}

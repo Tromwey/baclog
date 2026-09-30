@@ -1,0 +1,31 @@
+{
+ "id": "4bcce597-6c6d-40ff-a971-d311a0c54568",
+ "handle": "ericbriseno",
+ "name": "Eric",
+ "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616",
+ "isPublic": true,
+ "preferredService": "apple_music",
+ "notifyReleases": true,
+ "notifyRecap": true,
+ "notifyFollowers": true,
+ "followListsVisibility": "private",
+ "isFounder": true,
+ "onboardingComplete": true,
+ "hexes": [
+  "#8f766a",
+  "#8d3037",
+  "#b04b51",
+  "#6d574d",
+  "#4d342b"
+ ],
+ "featuredTitleId": "a634be4b-5d0d-4d81-8ea9-632d80edaee2",
+ "followers": 3,
+ "followingCount": 6,
+ "stats": {
+  "obsessed": 5,
+  "liked": 4,
+  "completed": 7,
+  "reviews": 1
+ },
+ "createdAt": "2026-07-05T23:20:45Z"
+}

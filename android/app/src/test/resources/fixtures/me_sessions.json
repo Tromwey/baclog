@@ -1,0 +1,94 @@
+{
+ "items": [
+  {
+   "id": "dfd9cdc7-89b8-4139-bdfc-23aaad2bd002",
+   "platform": "ios",
+   "deviceName": "Teléfono 1",
+   "appVersion": "0.0-fixtures",
+   "createdAt": "2026-09-30T05:18:24Z",
+   "lastSeenAt": "2026-09-30T05:18:24Z",
+   "current": true
+  },
+  {
+   "id": "3950b130-62d7-4c85-818b-63b0e04ff940",
+   "platform": "ios",
+   "deviceName": "Teléfono 2",
+   "appVersion": "1.0.0",
+   "createdAt": "2026-09-29T16:13:12Z",
+   "lastSeenAt": "2026-09-30T05:11:37Z",
+   "current": false
+  },
+  {
+   "id": "f5ded756-6686-471a-b858-5a0134e3843a",
+   "platform": "ios",
+   "deviceName": "Teléfono 3",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T19:04:40Z",
+   "lastSeenAt": "2026-09-29T19:04:40Z",
+   "current": false
+  },
+  {
+   "id": "9eee030d-61c1-4fde-9f7a-5f38d6294501",
+   "platform": "ios",
+   "deviceName": "Teléfono 4",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T19:03:38Z",
+   "lastSeenAt": "2026-09-29T19:03:38Z",
+   "current": false
+  },
+  {
+   "id": "747bbcf8-cf1d-4c10-8f20-dd9b443b3937",
+   "platform": "ios",
+   "deviceName": "Teléfono 5",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T19:03:01Z",
+   "lastSeenAt": "2026-09-29T19:03:01Z",
+   "current": false
+  },
+  {
+   "id": "fca192cb-6b50-4e80-82c1-be5325a77296",
+   "platform": "ios",
+   "deviceName": "Teléfono 6",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T19:02:44Z",
+   "lastSeenAt": "2026-09-29T19:02:44Z",
+   "current": false
+  },
+  {
+   "id": "dbe33f05-fbe4-451c-800b-ebced475ee00",
+   "platform": "ios",
+   "deviceName": "Teléfono 7",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T19:02:37Z",
+   "lastSeenAt": "2026-09-29T19:02:37Z",
+   "current": false
+  },
+  {
+   "id": "d37cf233-8dc4-45ba-b1c4-63680aebf114",
+   "platform": "ios",
+   "deviceName": "Teléfono 8",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T17:57:30Z",
+   "lastSeenAt": "2026-09-29T17:57:30Z",
+   "current": false
+  },
+  {
+   "id": "7ac16cc5-96df-435d-b725-b55f1a283f43",
+   "platform": "ios",
+   "deviceName": "Teléfono 9",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T17:56:03Z",
+   "lastSeenAt": "2026-09-29T17:56:03Z",
+   "current": false
+  },
+  {
+   "id": "fd970d06-dd2a-451b-9498-faa7640802d2",
+   "platform": "ios",
+   "deviceName": "Teléfono 10",
+   "appVersion": "0.0.0",
+   "createdAt": "2026-09-29T17:54:56Z",
+   "lastSeenAt": "2026-09-29T17:54:56Z",
+   "current": false
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Root theme: platform NoActionBar (always dark), no AppCompat, no Material look.
+         Everything visible is drawn by Compose with Kura's own tokens. System bars are
+         transparent with light icons; MainActivity.enableEdgeToEdge() finishes the job. -->
+    <style name="Base.Theme.Kura" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kura_bg</item>
+        <item name="android:colorBackground">@color/kura_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- API 29+ adds the contrast/force-dark switches (values-v29/themes.xml). -->
+    <style name="Theme.Kura" parent="Base.Theme.Kura" />
+
+    <!-- Launch: color only, like iOS's LaunchBackground — the wordmark is drawn by KuraRoot, so
+         the splash icon is transparent (no two different marks in a row). -->
+    <style name="Theme.Kura.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/kura_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_none</item>
+        <item name="postSplashScreenTheme">@style/Theme.Kura</item>
+    </style>
+</resources>
