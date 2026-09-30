@@ -844,7 +844,7 @@ export const deviceTokens = pgTable(
     // migrar-rompe-inserts); el código la lee/escribe con SQL crudo detrás de
     // `MIGRATION_0035_LIVE` (src/auth/live-0035.ts). Con la línea comentada
     // NADIE corre `drizzle-kit generate` (emitiría un DROP COLUMN).
-    // provider: text("provider").notNull().default("apns"),
+    provider: text("provider").notNull().default("apns"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

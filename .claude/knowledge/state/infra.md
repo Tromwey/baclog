@@ -4,7 +4,7 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-30 (Android: `GOOGLE_WEB_CLIENT_ID`, `FCM_SERVICE_ACCOUNT_JSON`; migración 0035 generada, sin aplicar) · 2026-09-29 (dominio get-kura.app)
+> Actualizado: 2026-09-30 (Android: `GOOGLE_WEB_CLIENT_ID`, `FCM_SERVICE_ACCOUNT_JSON`; migración 0035 aplicada el 2026-09-30) · 2026-09-29 (dominio get-kura.app)
 
 ## Qué cubre este dominio
 <!-- Build, deploy, entornos, variables de entorno y dependencias.

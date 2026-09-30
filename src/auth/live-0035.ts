@@ -22,4 +22,4 @@
  *
  * No `server-only` on purpose: pure constant, the smoke reads it as text.
  */
-export const MIGRATION_0035_LIVE = false;
+export const MIGRATION_0035_LIVE = true;
