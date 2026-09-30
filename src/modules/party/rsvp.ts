@@ -78,6 +78,20 @@ export async function isCostumeTaken(costume: string, guestToken: string): Promi
   return rows.some((r) => r.costume && costumeKey(r.costume) === key);
 }
 
+/**
+ * The crypt's "sacrifices" (founder, 2026-09-30): every person going — each
+ * attending RSVP plus its +1 — counts once, for the whole party. A bare
+ * number, never who: it's what everyone sees at the crypt, and it gates the
+ * party info collectively (host → dónde → vestimenta → qué llevar → cuándo).
+ */
+export async function countSacrifices(): Promise<number> {
+  const [{ n }] = await db
+    .select({ n: sql<number>`coalesce(sum(1 + ${partyRsvps.plusOne}::int), 0)::int` })
+    .from(partyRsvps)
+    .where(and(eq(partyRsvps.eventSlug, PARTY_EVENT.slug), eq(partyRsvps.attending, true)));
+  return n;
+}
+
 /** Admin-only read (Torre › /admin/party). Callers gate with requireAdmin(). */
 export async function listRsvps() {
   return db

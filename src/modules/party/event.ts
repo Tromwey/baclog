@@ -20,6 +20,18 @@ export const PARTY_EVENT = {
   locked: true,
 } as const;
 
+/**
+ * What the crypt reveals, in order, as the party collects sacrifices (people
+ * going, counted party-wide — see countSacrifices). `at` = sacrifices needed.
+ */
+export const CRYPT_REVEALS = [
+  { key: "host", label: "El anfitrión", at: 1 },
+  { key: "place", label: "Dónde", at: 2 },
+  { key: "theme", label: "Vestimenta", at: 3 },
+  { key: "bring", label: "Qué llevar", at: 4 },
+  { key: "date", label: "Cuándo", at: 5 },
+] as const;
+
 export const PARTY_DIETS = [
   "Vegetariano",
   "Vegano",

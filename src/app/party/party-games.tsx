@@ -63,7 +63,7 @@ export function GameSheet({ game, onWin, onClose }: { game: GameKey; onWin: () =
         <div style={{ alignSelf: "center", width: "40px", height: "4px", borderRadius: "2px", background: "rgba(236,230,220,.2)" }} />
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={eyebrow}>{label}</div>
-          <div style={title}>{won ? "La vela se enciende." : prompt}</div>
+          <div style={title}>{won ? "Encontraste una llave." : prompt}</div>
         </div>
         <div style={{ position: "relative", opacity: won ? 0.35 : 1, pointerEvents: won ? "none" : "auto", transition: "opacity .4s" }}>
           <Game

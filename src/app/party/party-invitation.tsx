@@ -1,8 +1,8 @@
 "use client";
 
 import { Component, createElement, createRef, type FormEvent } from "react";
-import { checkPartyCostumeAction, submitPartyRsvpAction } from "@/app/actions/party-actions";
-import { PARTY_EVENT } from "@/modules/party/event";
+import { checkPartyCostumeAction, getPartySacrificesAction, submitPartyRsvpAction } from "@/app/actions/party-actions";
+import { CRYPT_REVEALS, PARTY_EVENT } from "@/modules/party/event";
 import { PUMPKINS } from "./party-decor-data";
 import { GameSheet, type GameKey } from "./party-games";
 import { PartyScene } from "./party-scene";
@@ -64,6 +64,9 @@ type State = {
   /** `/party?abrir` — the host walks past the teaser chains. */
   bypassLock: boolean;
   rattleKey: number;
+  /** People going, party-wide — the crypt's sacrifices (null until fetched). */
+  sacrifices: number | null;
+  shareLabel: string;
   /** The white cat's jumpscare is on screen. */
   scare: boolean;
   /** The minigame guarding a not-yet-found secret. */
@@ -136,6 +139,8 @@ export default class PartyInvitation extends Component<object, State> {
     open: null,
     playing: null,
     scare: false,
+    sacrifices: null,
+    shareLabel: "Trae más almas",
     bypassLock: false,
     rattleKey: 0,
     seen: {},
@@ -307,28 +312,57 @@ export default class PartyInvitation extends Component<object, State> {
       this.wasDrag = false;
       return;
     }
-    if (k === "rsvp" && !SECRETS.every((x) => this.state.seen[x])) {
-      this.flash("Sellada. Descubre los 5 secretos primero.", 2600);
+    if (k === "rsvp") {
+      if (!SECRETS.every((x) => this.state.seen[x])) {
+        this.flash("Sellada. Necesitas las 5 llaves.", 2600);
+        return;
+      }
+      // The crypt: the sheet with the sacrifices and whatever they've revealed.
+      this.setState((s) => ({ open: "rsvp", seen: { ...s.seen, rsvp: true }, ...focus("rsvp", true) }));
+      this.loadSacrifices();
       return;
     }
-    if (k !== "rsvp" && k !== "start" && !this.state.seen[k]) {
-      this.setState({ playing: k, ...focus(k, true) });
+    if (k === "start") return;
+    if (this.state.seen[k]) {
+      this.flash("Esta tumba ya te dio su llave.", 2200);
       return;
     }
-    this.reveal(k);
+    this.setState({ playing: k, ...focus(k, true) });
   }
 
-  /** Mark a secret found (lights its candle, persists) and open its sheet. */
+  /** A tomb's game was won: it gives its key (no info — the crypt reveals that). */
   reveal(k: AnchorKey) {
     this.setState(
-      (s) => ({ open: k, playing: null, seen: { ...s.seen, [k]: true }, ...focus(k, true) }),
+      (s) => ({ playing: null, seen: { ...s.seen, [k]: true }, py: s.py + window.innerHeight * 0.26 - 40 }),
       () => {
         try {
           localStorage.setItem(SEEN_KEY, JSON.stringify(this.state.seen));
         } catch {}
+        const n = SECRETS.filter((x) => this.state.seen[x]).length;
+        this.flash(n === 5 ? "Tienes las 5 llaves. La cripta te espera." : `Una llave. Llevas ${n} de 5.`, 2800);
       },
     );
   }
+
+  loadSacrifices = () => {
+    getPartySacrificesAction()
+      .then((n) => this.setState({ sacrifices: n }))
+      .catch(() => {});
+  };
+
+  shareInvite = async () => {
+    const url = `${window.location.origin}/party`;
+    const text = "La cripta exige sacrificios. Entra si te atreves.";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: PARTY_EVENT.title, text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text} ${url}`);
+      this.setState({ shareLabel: "Liga copiada" });
+      setTimeout(() => this.setState({ shareLabel: "Trae más almas" }), 2200);
+    } catch {}
+  };
 
   closeGame = () => {
     this.setState({ playing: null, py: this.state.py + window.innerHeight * 0.26 - 40 });
@@ -366,6 +400,7 @@ export default class PartyInvitation extends Component<object, State> {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(f));
     } catch {}
     this.setState({ submitted: true, sending: false });
+    this.loadSacrifices(); // your sacrifice may reveal the next secret right away
   }
 
   renderVals() {
@@ -585,8 +620,8 @@ export default class PartyInvitation extends Component<object, State> {
       rsvpShadow: foundCount === 5 ? "0 0 50px 10px rgba(217,87,59,.6)" : "none",
       rsvpInk: foundCount === 5 ? "#fff1e8" : "#4a433c",
       openBring: () => this.openKey("bring"),
-      hintText: foundCount === 5 ? "La cripta se ha abierto" : "Busca los 5 secretos escondidos entre las tumbas",
-      isBring: open === "bring",
+      hintText: foundCount === 5 ? "La cripta se ha abierto" : "Busca las 5 llaves escondidas entre las tumbas",
+      isBring: open === "rsvp" && (this.state.sacrifices ?? 0) >= 4,
       dateBig: d.toLocaleDateString("es", { day: "numeric", month: "long" }),
       glow: createElement("div", {
         style: {
@@ -610,10 +645,16 @@ export default class PartyInvitation extends Component<object, State> {
       foundCount,
       candles: SECRETS.map((_, i) => ({ lit: i < foundCount })),
       sheetOpen: !!open,
-      isDate: open === "date",
-      isHost: open === "host",
-      isTheme: open === "theme",
-      isPlace: open === "place",
+      // The crypt reveals the party piece by piece as the whole party offers sacrifices.
+      isCrypt: open === "rsvp",
+      sacrifices: this.state.sacrifices,
+      cryptLocked: CRYPT_REVEALS.filter((r) => (this.state.sacrifices ?? 0) < r.at).map((r) => ({ key: r.key, label: r.label, at: r.at })),
+      shareInvite: this.shareInvite,
+      shareLabel: this.state.shareLabel,
+      isHost: open === "rsvp" && (this.state.sacrifices ?? 0) >= 1,
+      isPlace: open === "rsvp" && (this.state.sacrifices ?? 0) >= 2,
+      isTheme: open === "rsvp" && (this.state.sacrifices ?? 0) >= 3,
+      isDate: open === "rsvp" && (this.state.sacrifices ?? 0) >= 5,
       isRsvp: open === "rsvp",
       close: () => {
         this.setState({ open: null, py: this.state.py + window.innerHeight * 0.26 - 40 });
@@ -654,7 +695,7 @@ export default class PartyInvitation extends Component<object, State> {
       dupName: f.costume.trim(),
       submit: (e: FormEvent) => void this.submit(e),
       sending: this.state.sending,
-      submitLabel: this.state.sending ? "Enviando…" : "Enviar confirmación",
+      submitLabel: this.state.sending ? "Enviando…" : "Ofrecerme en sacrificio",
       hasError: !!this.state.error,
       error: this.state.error,
       editRsvp: () => this.setState({ submitted: false }),

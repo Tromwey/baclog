@@ -38,11 +38,11 @@ const OG_IMAGE = {
 
 export const metadata: Metadata = {
   title: `${PARTY_EVENT.title} · Entra si te atreves`,
-  description: "Estás invitado. Cruza la reja, encuentra los 5 secretos entre las tumbas y confirma.",
+  description: "Estás invitado. Cruza la reja, encuentra las 5 llaves entre las tumbas y confirma.",
   robots: { index: false, follow: false },
   openGraph: {
     title: `${PARTY_EVENT.title} — entra si te atreves`,
-    description: "Estás invitado. Cruza la reja y encuentra los 5 secretos entre las tumbas.",
+    description: "Estás invitado. Cruza la reja y encuentra las 5 llaves entre las tumbas.",
     url: "/party",
     images: [OG_IMAGE],
   },

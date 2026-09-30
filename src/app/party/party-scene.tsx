@@ -9,11 +9,13 @@
  * the landing's path behind the gate is <PartyPath /> (./party-path.tsx); the
  * secret tombs show <SealedFace/> until found; decor from ./party-decor.tsx;
  * teaser mode (PARTY_EVENT.locked) chains the gate and swaps the sign to MUY PRONTO;
- * the secrets bar spans the full screen (no 440 cap), inset by the safe areas. Keyframes are prefixed "pt-" (./party.css).
+ * the secrets bar spans the full screen (no 440 cap), inset by the safe areas;
+ * keys + sacrifices (2026-09-30): tombs give a key (no engraving), the crypt's
+ * sheet orders host → dónde → vestimenta → qué llevar → cuándo by sacrifices. Keyframes are prefixed "pt-" (./party.css).
  */
 import { Fragment, type RefObject } from "react";
 import type { SceneVals } from "./party-invitation";
-import { GateChains, LandingSky, LandingTree, SealedFace, WorldDecor } from "./party-decor";
+import { CryptPanel, GateChains, KeyIcon, LandingSky, LandingTree, SealedFace, WorldDecor } from "./party-decor";
 import { PartyPath } from "./party-path";
 import { PartyPlaylistCard } from "./party-playlist-card";
 
@@ -480,14 +482,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                       </div>
                     </div>
                     <div style={{ position: "absolute", left: "0", top: "-8px", width: "104px", height: "72px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "radial-gradient(ellipse at 50% 0,rgba(120,220,90,.25),transparent 60%),linear-gradient(180deg,#2a2725,#0f0e0d)", borderRadius: "4px 4px 52px 52px / 4px 4px 40px 40px", borderTop: "7px solid #3a3633", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", paddingTop: "6px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cBring ? 1 : 0, filter: v.cBring ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a" }}>
-                          BREBAJES
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".3em", color: "#9fd77a", marginTop: "2px" }}>
-                          Y GOLOSINAS
-                        </div>
-                      </div>
                       <SealedFace kind="bring" size={30} label={false} broken={!!v.cBring} />
                     </div>
                     <div style={{ position: "absolute", left: "32px", top: "0", width: "72px", height: "64px", transformOrigin: "right", transform: "rotateY(90deg)", background: "linear-gradient(180deg,#1a1817,#0a0908)", borderRadius: "0 0 30px 30px" }} />
@@ -714,23 +708,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     <div style={{ position: "absolute", left: "0", top: "-137px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-132px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-128px", width: "124px", height: "150px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", borderRadius: "62px 62px 0 0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", paddingTop: "30px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cPlace ? 1 : 0, filter: v.cPlace ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".3em" }}>
-                          ¿DÓNDE?
-                        </div>
-                        <div style={{ position: "relative", width: "78px", height: "46px", margin: "6px 0", border: "1px solid #6a6158", borderRadius: "3px", background: "#2c2824" }}>
-                          <div style={{ position: "absolute", left: "8px", top: "32px", width: "44px", height: "1px", borderTop: "2px dashed #8a7f73", transform: "rotate(-24deg)", transformOrigin: "left" }} />
-                          <div style={{ position: "absolute", left: "50px", top: "8px", width: "14px", height: "14px", fontFamily: "var(--pt-serif)", fontSize: "18px", lineHeight: "14px", fontWeight: "700", color: "#d9573b" }}>
-                            ✕
-                          </div>
-                          <div style={{ position: "absolute", right: "4px", bottom: "2px", fontFamily: "var(--pt-serif)", fontSize: "9px", color: "#8a7f73" }}>
-                            N↑
-                          </div>
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "18px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba" }}>
-                          {v.venue}
-                        </div>
-                      </div>
                       <SealedFace kind="place" size={58} broken={!!v.cPlace} />
                     </div>
                     <div style={{ position: "absolute", left: "20px", top: "0", width: "104px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815", borderRadius: "11px 0 0 11px" }} />
@@ -738,17 +715,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div onClick={v.openTheme} role="button" aria-label="Obelisco" style={{ position: "absolute", left: "1284px", top: "348px", width: "44px", height: "44px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(240px)", background: "#4d463f" }} />
                     <div style={{ position: "absolute", left: "0", top: "-196px", width: "44px", height: "240px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "26px", gap: "40px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cTheme ? 1 : 0, filter: v.cTheme ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <svg width="40" height="18" viewBox="0 0 56 22">
-                          <path d="M2 6 Q14 0 28 6 Q42 0 54 6 Q54 18 40 18 Q32 18 28 12 Q24 18 16 18 Q2 18 2 6Z" fill="#b8ad9f" />
-                          <ellipse cx="16" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
-                          <ellipse cx="40" cy="10" rx="6" ry="3.5" fill="#1d1a17" />
-                        </svg>
-                        <div style={{ width: "26px", height: "34px", borderRadius: "50% 50% 45% 45%", border: "2px solid #8a7f73", display: "flex", justifyContent: "center", gap: "5px", paddingTop: "9px" }}>
-                          <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
-                          <div style={{ width: "6px", height: "5px", borderRadius: "50%", background: "#8a7f73" }} />
-                        </div>
-                      </div>
                       <SealedFace kind="theme" size={30} label={false} broken={!!v.cTheme} />
                     </div>
                     <div style={{ position: "absolute", left: "-196px", top: "0", width: "240px", height: "44px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
@@ -756,14 +722,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div onClick={v.openTheme} role="button" aria-label="Obelisco" style={{ position: "absolute", left: "1240px", top: "400px", width: "134px", height: "20px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(64px)", background: "#48423b" }} />
                     <div style={{ position: "absolute", left: "0", top: "-44px", width: "134px", height: "64px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "4px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cTheme ? 1 : 0, filter: v.cTheme ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "16px", fontWeight: "600", color: "#d2c7ba" }}>
-                          Disfrazado
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "9px", letterSpacing: ".15em" }}>
-                          NO SEAS AGUAFIESTAS
-                        </div>
-                      </div>
                       <SealedFace kind="theme" size={30} label={false} broken={!!v.cTheme} />
                     </div>
                     <div style={{ position: "absolute", left: "70px", top: "0", width: "64px", height: "20px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
@@ -776,26 +734,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     <div style={{ position: "absolute", left: "0", top: "-138px", width: "124px", height: "156px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "#1b1815", borderRadius: "62px 62px 0 0", pointerEvents: "none" }} />
                     <div style={{ position: "absolute", left: "0", top: "-134px", width: "124px", height: "156px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", padding: "10px", borderRadius: "62px 62px 0 0", borderTop: "4px solid #5a524a" }}>
                       <div style={{ width: "34px", height: "42px", borderRadius: "50%", border: "2px solid #9a8f82", marginBottom: "8px", background: "radial-gradient(circle at 50% 36%,#7a7066 0 7px,transparent 8px),radial-gradient(ellipse 15px 11px at 50% 100%,#7a7066 0 99%,transparent),#1d1a17", boxShadow: "0 0 0 3px #2c2824" }} />
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cHost ? 1 : 0, filter: v.cHost ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "10px", letterSpacing: ".3em" }}>
-                          AQUÍ YACE
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "25px", fontWeight: "600", lineHeight: "1.05", color: "#d2c7ba", margin: "4px 0" }}>
-                          {v.host}
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontStyle: "italic", fontSize: "12px" }}>
-                          anfitrión
-                        </div>
-                        <div style={{ display: "flex", gap: "3px", alignItems: "center", marginTop: "4px", fontFamily: "var(--pt-mono)", fontSize: "7px", color: "#aa9f93" }}>
-                          <span>
-                            20·XI·1994 —
-                          </span>
-                          <span style={{ position: "relative", color: "#8a7f73", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
-                            20·XI·??
-                            <span style={{ position: "absolute", left: "-1px", right: "-1px", top: "50%", height: "1px", background: "#b3140f" }} />
-                          </span>
-                        </div>
-                      </div>
                       <SealedFace kind="host" size={50} broken={!!v.cHost} />
                     </div>
                     <div style={{ position: "absolute", left: "14px", top: "0", width: "110px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815", borderRadius: "11px 0 0 11px" }} />
@@ -803,22 +741,6 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   <div onClick={v.openDate} role="button" aria-label="Lápida" style={{ position: "absolute", left: "1010px", top: "1230px", width: "130px", height: "22px", transformStyle: "preserve-3d", cursor: "pointer" }}>
                     <div style={{ position: "absolute", inset: "0", transform: "translateZ(176px)", background: "#48423b" }} />
                     <div style={{ position: "absolute", left: "0", top: "-154px", width: "130px", height: "176px", transformOrigin: "bottom", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#3e3934,#25221e)", borderRadius: "6px 6px 0 0", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", color: "#aa9f93", textShadow: "0 1px 0 rgba(0,0,0,.7)", justifyContent: "flex-start", padding: "0 0 10px" }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "inherit", gap: "inherit", width: "100%", opacity: v.cDate ? 1 : 0, filter: v.cDate ? "none" : "blur(5px)", transition: "opacity 1.3s ease .9s, filter 1.3s ease .9s" }}>
-                        <div style={{ position: "relative", alignSelf: "stretch", height: "30px", background: "#6e1e14", borderRadius: "6px 6px 0 0", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--pt-serif)", fontSize: "13px", fontWeight: "700", letterSpacing: ".3em", color: "#f0d9cc" }}>
-                          <div style={{ position: "absolute", left: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
-                          <div style={{ position: "absolute", right: "24px", top: "-8px", width: "8px", height: "16px", borderRadius: "4px", background: "#1b1815" }} />
-                          OCTUBRE
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "72px", fontWeight: "700", lineHeight: "1", color: "#d2c7ba", margin: "10px 0 2px" }}>
-                          31
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".2em" }}>
-                          FALTAN {v.cdDays} NOCHES
-                        </div>
-                        <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", marginTop: "4px" }}>
-                          {v.cdClock}
-                        </div>
-                      </div>
                       <SealedFace kind="date" size={64} broken={!!v.cDate} />
                     </div>
                     <div style={{ position: "absolute", left: "-46px", top: "0", width: "176px", height: "22px", transformOrigin: "right", transform: "rotateY(90deg)", background: "#1b1815" }} />
@@ -896,20 +818,13 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
           <div style={{ position: "fixed", left: "0", right: "0", bottom: "0", zIndex: "50", padding: "16px max(clamp(20px, 4vw, 48px), env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(clamp(20px, 4vw, 48px), env(safe-area-inset-left))", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "linear-gradient(180deg,transparent,rgba(7,6,5,.85) 40%)", pointerEvents: "none" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: "#a79d92" }}>
-                Secretos {v.foundCount}/5
+                Llaves {v.foundCount}/5
               </div>
-              {/* One candle per secret (replaces the design's progress bars):
-                  unlit wax until found, then the flame catches and flickers. */}
-              <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", height: "34px" }}>
+              {/* One key per sealed tomb (founder, 2026-09-30): dark iron until
+                  its tomb's game is won, then gold. */}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", height: "30px" }}>
                 {v.candles.map((c, i) => (
-                  <div key={i} style={{ position: "relative", width: "12px", height: "34px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
-                    <div style={{ position: "absolute", left: "50%", top: "2px", width: "34px", height: "34px", marginLeft: "-17px", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,170,90,.4), rgba(255,140,60,.1) 45%, transparent 70%)", opacity: c.lit ? 1 : 0, transition: "opacity .8s ease .15s", pointerEvents: "none" }} />
-                    <div style={{ width: "7px", height: "12px", transformOrigin: "50% 100%", transform: c.lit ? "scale(1)" : "scale(0)", opacity: c.lit ? 1 : 0, transition: "transform .45s cubic-bezier(.3,1.7,.5,1), opacity .2s" }}>
-                      <div style={{ width: "100%", height: "100%", borderRadius: "50% 50% 40% 40%", background: "radial-gradient(ellipse at 50% 70%, #fff4d6 0 25%, #ffcf8a 50%, #e8785d 100%)", boxShadow: "0 0 10px 3px rgba(255,170,90,.55)", transformOrigin: "50% 100%", animation: "pt-candle 1.4s ease-in-out infinite", animationDelay: `${i * 0.23}s` }} />
-                    </div>
-                    <div style={{ width: "1.5px", height: "4px", background: c.lit ? "#2a1a10" : "#3a332d" }} />
-                    <div style={{ width: "10px", height: "16px", borderRadius: "2px 2px 1px 1px", background: c.lit ? "linear-gradient(180deg,#fff1dc,#d9d0c0 35%,#b8ad9f)" : "linear-gradient(180deg,#4a433c,#2e2925)", transition: "background .6s" }} />
-                  </div>
+                  <KeyIcon key={i} lit={c.lit} />
                 ))}
               </div>
             </div>
@@ -926,8 +841,9 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
           <div onClick={v.close} style={{ position: "fixed", inset: "0", zIndex: "55", background: "rgba(0,0,0,.45)" }} />
           <div data-screen-label="03 Lápida abierta" style={{ position: "fixed", left: "0", right: "0", bottom: "0", maxWidth: "440px", margin: "0 auto", zIndex: "60", maxHeight: "86vh", overflowY: "auto", background: "#15120f", borderTop: "1px solid rgba(236,230,220,.12)", borderRadius: "24px 24px 0 0", padding: "12px 24px calc(28px + env(safe-area-inset-bottom))", animation: "pt-sheetUp .35s cubic-bezier(.2,.8,.2,1) both", display: "flex", flexDirection: "column", gap: "20px" }}>
             <div style={{ alignSelf: "center", width: "40px", height: "4px", borderRadius: "2px", background: "rgba(236,230,220,.2)" }} />
+            {v.isCrypt ? <CryptPanel sacrifices={v.sacrifices} locked={v.cryptLocked} onShare={v.shareInvite} shareLabel={v.shareLabel} /> : null}
             {v.isDate ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                <div style={{ order: 6, display: "flex", flexDirection: "column", gap: "18px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
                     Aquí yace la espera
                   </div>
@@ -967,7 +883,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                 </div>
             ) : null}
             {v.isHost ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ order: 2, display: "flex", flexDirection: "column", gap: "14px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
                     Host
                   </div>
@@ -990,7 +906,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                 </div>
             ) : null}
             {v.isTheme ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ order: 4, display: "flex", flexDirection: "column", gap: "14px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
                     Vestimenta
                   </div>
@@ -1003,7 +919,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                 </div>
             ) : null}
             {v.isBring ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ order: 5, display: "flex", flexDirection: "column", gap: "14px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
                     Qué llevar
                   </div>
@@ -1016,7 +932,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                 </div>
             ) : null}
             {v.isPlace ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ order: 3, display: "flex", flexDirection: "column", gap: "14px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
                     ¿Dónde?
                   </div>
@@ -1039,12 +955,12 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                 </div>
             ) : null}
             {v.isRsvp ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div style={{ order: 10, display: "flex", flexDirection: "column", gap: "20px" }}>
                   <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" }}>
-                    Confirmación
+                    Tu sacrificio
                   </div>
                   <div style={{ fontFamily: "var(--pt-serif)", fontSize: "40px", lineHeight: "1" }}>
-                    ¿Cruzarás la puerta?
+                    ¿Te ofreces?
                   </div>
                   {v.notSubmitted ? (
                       <form onSubmit={v.submit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -1134,7 +1050,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                   {v.showPlaylist ? <PartyPlaylistCard className="mt-3" /> : null}
                 </div>
             ) : null}
-            <button onClick={v.close} style={{ height: "52px", borderRadius: "999px", border: "1px solid rgba(236,230,220,.25)", background: "transparent", color: "#ece6dc", fontWeight: "600", fontSize: "15px", cursor: "pointer" }}>
+            <button onClick={v.close} style={{ order: 20, height: "52px", borderRadius: "999px", border: "1px solid rgba(236,230,220,.25)", background: "transparent", color: "#ece6dc", fontWeight: "600", fontSize: "15px", cursor: "pointer" }}>
               {v.closeLabel}
             </button>
           </div>

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { PARTY_DIETS, PARTY_DRINKS } from "@/modules/party/event";
-import { isCostumeTaken, saveRsvp } from "@/modules/party/rsvp";
+import { countSacrifices, isCostumeTaken, saveRsvp } from "@/modules/party/rsvp";
 
 /*
  * The /party invitation's writes. Anonymous by design (guests don't sign in):
@@ -37,4 +37,9 @@ export async function checkPartyCostumeAction(costume: unknown, guestToken: unkn
   const t = token.safeParse(guestToken);
   if (!c.success || !t.success) return false;
   return isCostumeTaken(c.data, t.data);
+}
+
+/** The crypt's sacrifice count: how many people are going, party-wide (a number, no identities). */
+export async function getPartySacrificesAction(): Promise<number> {
+  return countSacrifices();
 }

@@ -378,6 +378,10 @@ export function SealedFace({ kind, size, label = true, broken = false }: { kind:
           SELLADA
         </div>
       ) : null}
+      {/* Once broken, the tomb gave its key: a carved key-shaped hollow is all that's left (no party info). */}
+      <svg viewBox="0 0 40 40" width={size * 0.8} height={size * 0.8} style={{ position: "absolute", display: "block", opacity: broken ? 1 : 0, transition: "opacity 1s ease 1s" }} aria-hidden>
+        <path d={KEY_PATH} fill="#0c0a09" stroke="#4a433c" strokeWidth="1" />
+      </svg>
     </div>
   );
 }
@@ -446,5 +450,87 @@ export function GateChains({ rattle }: { rattle: number }) {
         </g>
       </svg>
     </div>
+  );
+}
+
+// ---------- keys & the crypt's sacrifices (founder, 2026-09-30) ----------
+
+/** An old skeleton key, 40×40 box, bow up-left, bit down-right. */
+const KEY_PATH =
+  "M11 4 a7 7 0 1 1 0 14 a7 7 0 1 1 0 -14 Z M11 8 a3 3 0 1 0 0 6 a3 3 0 1 0 0 -6 Z M15.5 15.5 L34 34 L31 37 L28.5 34.5 L26 37 L23.5 34.5 L26 32 L13 19 Z";
+
+/** The bottom bar's key: dark iron until its tomb's game is won, then gold. */
+export function KeyIcon({ lit }: { lit: boolean }) {
+  return (
+    <svg viewBox="0 0 40 40" width="26" height="26" style={{ display: "block", overflow: "visible", transform: lit ? "rotate(0deg) scale(1)" : "rotate(-12deg) scale(.9)", transition: "transform .5s cubic-bezier(.3,1.7,.5,1), filter .6s", filter: lit ? "drop-shadow(0 0 5px rgba(255,190,90,.75))" : "none" }} aria-hidden>
+      <defs>
+        <linearGradient id="pt-keygold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ffe3a0" />
+          <stop offset=".5" stopColor="#d9a441" />
+          <stop offset="1" stopColor="#8a5a1c" />
+        </linearGradient>
+      </defs>
+      <path d={KEY_PATH} fillRule="evenodd" fill={lit ? "url(#pt-keygold)" : "#3a332d"} stroke={lit ? "#6b4515" : "#1a1714"} strokeWidth="1.2" style={{ transition: "fill .6s" }} />
+    </svg>
+  );
+}
+
+const ORDER: Record<string, number> = { host: 2, place: 3, theme: 4, bring: 5, date: 6 };
+
+/**
+ * The crypt's sheet (with 5 keys): "exige sacrificios". The count is every
+ * person going, party-wide; each one reveals the next piece of the party for
+ * EVERYONE. Rendered as flex children of the sheet so CSS `order` interleaves
+ * the locked rows with the revealed blocks of party-scene.tsx
+ * (host 2 · dónde 3 · vestimenta 4 · qué llevar 5 · cuándo 6 · tu sacrificio 10).
+ */
+export function CryptPanel({
+  sacrifices,
+  locked,
+  onShare,
+  shareLabel,
+}: {
+  sacrifices: number | null;
+  locked: { key: string; label: string; at: number }[];
+  onShare: () => void;
+  shareLabel: string;
+}) {
+  const n = sacrifices ?? 0;
+  const eyebrowSt: CSSProperties = { fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: "#e8785d" };
+  return (
+    <>
+      <div style={{ order: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={eyebrowSt}>La cripta</div>
+        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "40px", lineHeight: 1 }}>Exige sacrificios.</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{ fontFamily: "var(--pt-creep)", fontSize: "54px", lineHeight: 1, color: "#b3140f", textShadow: "0 2px 0 #2a0303" }}>{sacrifices === null ? "…" : n}</div>
+          <div style={{ fontSize: "14px", lineHeight: 1.45, color: "#bdb3a8" }}>
+            {n === 1 ? "alma ofrecida" : "almas ofrecidas"}
+            <br />
+            Cada una revela un secreto más de la fiesta, para todos.
+          </div>
+        </div>
+        <button type="button" onClick={onShare} style={{ height: "48px", borderRadius: "999px", border: "1px solid rgba(232,120,93,.5)", background: "rgba(217,87,59,.12)", color: "#e8785d", fontWeight: 600, fontSize: "15px", cursor: "pointer" }}>
+          {shareLabel}
+        </button>
+      </div>
+      {locked.map((r) => {
+        const missing = r.at - n;
+        return (
+          <div key={r.key} style={{ order: ORDER[r.key], display: "flex", alignItems: "center", gap: "14px", padding: "16px", borderRadius: "16px", background: "repeating-linear-gradient(45deg,#1b1815 0 8px,#171411 8px 16px)", border: "1px solid rgba(236,230,220,.08)" }}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+              <path d="M7 10 V7 a5 5 0 0 1 10 0 V10" fill="none" stroke="#6a6158" strokeWidth="2" />
+              <rect x="5" y="10" width="14" height="11" rx="2" fill="#3a332d" />
+            </svg>
+            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+              <div style={{ ...eyebrowSt, color: "#8a7f73" }}>{r.label}</div>
+              <div style={{ fontFamily: "var(--pt-serif)", fontStyle: "italic", fontSize: "17px", color: "#bdb3a8" }}>
+                {missing === 1 ? "Falta un sacrificio." : `Faltan ${missing} sacrificios.`}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
