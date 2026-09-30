@@ -59,6 +59,10 @@ protocol AppleMusicLibrary: Sendable {
     /// Creates an empty library playlist and returns its library id (`p.…`).
     func createPlaylist(name: String, description: String) async throws -> String
     func add(_ catalogIDs: [String], to playlistID: String) async throws
+    /// A link the Music APP opens for a library playlist: its shareable `pl.u-…` id
+    /// (`playParams.globalId`) as `music.apple.com/playlist/…`. The library URL
+    /// (`/library/playlist/p.…`) only works in the web player — in the app it's "Item Not Available".
+    func openURL(forLibraryPlaylist playlistID: String) async -> URL?
 }
 
 struct LiveAppleMusicLibrary: AppleMusicLibrary {
@@ -178,7 +182,26 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
         do { _ = try await send(req) } catch AppleMusicHTTP.notFound { throw AppleMusicFailure.playlistGone }
     }
 
-    private enum AppleMusicHTTP: Error { case notFound }
+    private struct PlaylistAttributes: Decodable {
+        struct Item: Decodable {
+            struct Attributes: Decodable {
+                struct PlayParams: Decodable { let globalId: String? }
+                let playParams: PlayParams?
+            }
+            let attributes: Attributes?
+        }
+        let data: [Item]?
+    }
+
+    func openURL(forLibraryPlaylist playlistID: String) async -> URL? {
+        guard let data = try? await send(URLRequest(url: Self.base.appendingPathComponent(playlistID))),
+              let global = (try? JSONDecoder().decode(PlaylistAttributes.self, from: data))?.data?.first?.attributes?.playParams?.globalId,
+              global.range(of: "^pl\\.[A-Za-z0-9._-]+$", options: .regularExpression) != nil
+        else { return nil }
+        return URL(string: "https://music.apple.com/playlist/\(global)")
+    }
+
+        private enum AppleMusicHTTP: Error { case notFound }
 
     /// One call to the Apple Music API, signed by MusicKit. 404 is its own case; anything else
     /// that fails is `.service` (never the body in a log).

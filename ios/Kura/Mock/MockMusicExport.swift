@@ -238,6 +238,7 @@ final class MockAppleMusicLibrary: AppleMusicLibrary, @unchecked Sendable {
         try? await Task.sleep(for: .milliseconds(250))
         lock.withLock { playlists[playlistID, default: []].formUnion(catalogIDs) }
     }
+    func openURL(forLibraryPlaylist playlistID: String) async -> URL? { nil }
 }
 
 /// TIDAL's consent sheet, played: yes (or `-kuraTidalDenied YES`) after a beat.

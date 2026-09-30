@@ -172,7 +172,18 @@ struct PartyExportView: View {
                 }
             case .done:
                 if let url = f.state?.playlist?.url {
-                    SolidButton(title: "Abrir en \(f.provider.label)", height: 56, honey: true) { openURL(url) }
+                    SolidButton(title: "Abrir en \(f.provider.label)", height: 56, honey: true) {
+                        if f.provider == .appleMusic, let pid = f.state?.playlist?.id {
+                            // The app can't open `/library/playlist/p.…` (web player only): its `pl.u-…`
+                            // link if Apple already gave one, the Música app itself otherwise.
+                            Task {
+                                let target = await store.appleMusic.openURL(forLibraryPlaylist: pid) ?? URL(string: "music://")!
+                                openURL(target)
+                            }
+                        } else {
+                            openURL(url)
+                        }
+                    }
                 }
             case .failed:
                 SolidButton(title: "Reintentar", height: 56, honey: true) { store.retryPartyExport() }
