@@ -64,6 +64,8 @@ type State = {
   /** `/party?abrir` — the host walks past the teaser chains. */
   bypassLock: boolean;
   rattleKey: number;
+  /** The white cat's jumpscare is on screen. */
+  scare: boolean;
   /** The minigame guarding a not-yet-found secret. */
   playing: GameKey | null;
   seen: Partial<Record<AnchorKey, boolean>>;
@@ -129,10 +131,11 @@ export default class PartyInvitation extends Component<object, State> {
     ly: null,
     fixedLight: false,
     now: Date.now(),
-    audio: false,
+    audio: true, // SONIDO ON by default (founder); it actually starts on the first tap
     dragging: false,
     open: null,
     playing: null,
+    scare: false,
     bypassLock: false,
     rattleKey: 0,
     seen: {},
@@ -147,9 +150,13 @@ export default class PartyInvitation extends Component<object, State> {
 
   lampRef = createRef<HTMLDivElement>();
   ctx: AudioContext | null = null;
+  droneOn = false;
+  /** The guest turned SONIDO OFF themselves: taps stop waking the sound up. */
+  userMuted = false;
   drag: { x: number; y: number; px: number; py: number; moved: boolean } | null = null;
   wasDrag = false;
   mt: ReturnType<typeof setTimeout> | undefined;
+  scareT: ReturnType<typeof setTimeout> | undefined;
   dupT: ReturnType<typeof setTimeout> | undefined;
   t: ReturnType<typeof setInterval> | undefined;
   token = "";
@@ -187,6 +194,12 @@ export default class PartyInvitation extends Component<object, State> {
       window.history.replaceState(null, "", window.location.pathname + (q ? `?${q}` : ""));
     }
     this.token = guestToken();
+    this.ensureCtx();
+    // Browsers only let sound start inside a tap: the first one anywhere wakes it.
+    window.addEventListener("click", this.unlockAudio, true);
+    window.addEventListener("touchend", this.unlockAudio, true);
+    // Preload the jumpscare so it hits instantly, not after a network fetch.
+    new Image().src = "/party/cat-jumpscare.jpg";
     if (params.has("abrir")) this.setState({ bypassLock: true });
     if (window.matchMedia("(hover: none)").matches) this.setState({ fixedLight: true });
     this.measureLamp();
@@ -212,18 +225,46 @@ export default class PartyInvitation extends Component<object, State> {
     clearInterval(this.t);
     clearTimeout(this.mt);
     clearTimeout(this.dupT);
+    clearTimeout(this.scareT);
+    window.removeEventListener("click", this.unlockAudio, true);
+    window.removeEventListener("touchend", this.unlockAudio, true);
     setSfxContext(null);
+    // Drop the closed context: React (StrictMode in dev) remounts this same
+    // instance, and a closed AudioContext left in `this.ctx` silenced everything.
     this.ctx?.close();
+    this.ctx = null;
+    this.droneOn = false;
   }
 
-  startAudio() {
+  /**
+   * The AudioContext exists from page load (suspended until a tap resumes it):
+   * the recorded effects need that time to download and decode — created on
+   * the entering tap, the gate's own sound wasn't ready yet and never played.
+   */
+  ensureCtx(): AudioContext {
     if (!this.ctx) {
       const C =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new C();
-      this.ctx = ctx;
-      setSfxContext(ctx); // effects no-op while it's suspended (SONIDO OFF)
+      this.ctx = new C();
+      setSfxContext(this.ctx); // starts loading the samples; effects no-op while suspended
+    }
+    return this.ctx;
+  }
+
+  unlockAudio = (e: Event) => {
+    // The SONIDO button handles itself (it may be turning sound OFF).
+    if ((e.target as Element | null)?.closest?.('[aria-label="Audio"]')) return;
+    if (!this.userMuted) this.startAudio();
+    window.removeEventListener("click", this.unlockAudio, true);
+    window.removeEventListener("touchend", this.unlockAudio, true);
+  };
+
+  /** Resume sound (must run inside a tap) and start the ambient drone once. */
+  startAudio(): Promise<void> {
+    const ctx = this.ensureCtx();
+    if (!this.droneOn) {
+      this.droneOn = true;
       const g = ctx.createGain();
       g.gain.value = 0.07;
       const lp = ctx.createBiquadFilter();
@@ -245,7 +286,8 @@ export default class PartyInvitation extends Component<object, State> {
       lfo.start();
       lp.connect(g);
       g.connect(ctx.destination);
-    } else this.ctx.resume();
+    }
+    return ctx.resume().catch(() => {});
   }
 
   setF(p: Partial<Form>) {
@@ -404,16 +446,15 @@ export default class PartyInvitation extends Component<object, State> {
       revealR: this.state.revealed ? "70%" : "0%",
       enter: () => {
         if (locked) {
-          sfx.rattle();
+          // The tap is a user gesture: wake the effects (not the drone) so the chains are heard.
+          if (!this.userMuted) this.ensureCtx().resume().then(() => sfx.rattle()).catch(() => {});
           // No toast: the sign already says MUY PRONTO — the chains answer the tap.
           this.setState((st) => ({ rattleKey: st.rattleKey + 1 }));
           return;
         }
         if (this.state.opening) return;
         this.setState({ opening: true });
-        this.startAudio();
-        sfx.gateOpen();
-        this.setState({ audio: true });
+        if (!this.userMuted) this.startAudio().then(() => sfx.gateOpen());
         setTimeout(() => {
           this.setState({ entered: true });
           setTimeout(() => this.setState({ revealed: true }), 60);
@@ -430,8 +471,13 @@ export default class PartyInvitation extends Component<object, State> {
       copyOp: this.state.opening ? 0 : 1,
       fadeOp: this.state.opening ? 1 : 0,
       toggleAudio: () => {
-        if (this.state.audio) this.ctx?.suspend();
-        else this.startAudio();
+        if (this.state.audio) {
+          this.ctx?.suspend();
+          this.userMuted = true;
+        } else {
+          this.startAudio();
+          this.userMuted = false;
+        }
         this.setState({ audio: !this.state.audio });
       },
       audioLabel: this.state.audio ? "SONIDO ON" : "SONIDO OFF",
@@ -495,6 +541,20 @@ export default class PartyInvitation extends Component<object, State> {
       hintKey: foundCount === 5 ? "h5" : "h0",
       hasMsg: !!this.state.msg,
       msg: this.state.msg,
+      scareCat: () => {
+        if (this.wasDrag) {
+          this.wasDrag = false;
+          return;
+        }
+        if (this.state.scare) return;
+        sfx.hiss();
+        try {
+          navigator.vibrate?.([80, 40, 160]);
+        } catch {}
+        clearTimeout(this.scareT);
+        this.setState({ scare: true });
+        this.scareT = setTimeout(() => this.setState({ scare: false }), 2300); // = the screech's length
+      },
       decoy: () => {
         if (this.wasDrag) {
           this.wasDrag = false;
@@ -604,10 +664,20 @@ export default class PartyInvitation extends Component<object, State> {
   }
 
   render() {
-    const { playing } = this.state;
+    const { playing, scare } = this.state;
     return (
       <>
         <PartyScene v={this.renderVals()} lampRef={this.lampRef} />
+        {scare ? (
+          <div
+            onClick={() => this.setState({ scare: false })}
+            style={{ position: "fixed", inset: 0, zIndex: 100, background: "#000", overflow: "hidden", cursor: "pointer" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- preloaded static jumpscare, must paint instantly */}
+            <img src="/party/cat-jumpscare.jpg" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", animation: "pt-scare .7s cubic-bezier(.2,1.4,.4,1) both" }} />
+            <div style={{ position: "absolute", inset: 0, background: "#fff", animation: "pt-scareflash .25s ease-out both", pointerEvents: "none" }} />
+          </div>
+        ) : null}
         {playing ? (
           <GameSheet key={playing} game={playing} onWin={() => this.reveal(playing)} onClose={this.closeGame} />
         ) : null}

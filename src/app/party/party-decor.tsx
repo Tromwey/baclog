@@ -151,7 +151,47 @@ const FOG: [number, number, number][] = [
   [1450, 650, 27], [350, 1150, 30], [850, 1150, 22], [1250, 1050, 28], [600, 1450, 34], [1150, 1450, 25],
 ];
 
-export function WorldDecor() {
+/**
+ * The white cat by the crypt (founder, 2026-09-29): sits there blinking, and
+ * a tap springs the jumpscare (PartyInvitation renders the photo). It's the
+ * only clickable decor — its billboard turns pointer events back on.
+ */
+export const CAT_AT: [number, number] = [335, 305];
+
+function WhiteCat() {
+  return (
+    <svg viewBox="0 0 48 50" width="48" height="50" style={{ display: "block", overflow: "visible" }} aria-hidden>
+      <defs>
+        <radialGradient id="pt-cat-fur" cx="40%" cy="35%" r="75%">
+          <stop offset="0" stopColor="#f6f2ea" />
+          <stop offset=".7" stopColor="#d9d2c6" />
+          <stop offset="1" stopColor="#a39b8f" />
+        </radialGradient>
+      </defs>
+      {/* tail, curling round the paws, swishing */}
+      <path d="M33 46 C 44 46, 46 36, 41 30" fill="none" stroke="#d9d2c6" strokeWidth="4.5" strokeLinecap="round" style={{ transformOrigin: "33px 46px", animation: "pt-sway 2.6s ease-in-out infinite" }} />
+      {/* body */}
+      <path d="M12 49 C 9 38, 12 26, 20 22 L 30 22 C 37 26, 39 38, 36 49Z" fill="url(#pt-cat-fur)" />
+      {/* head + ears */}
+      <path d="M14 10 L 15 0 L 21 6 L 27 6 L 33 0 L 34 10 C 36 17, 31 23, 24 23 C 17 23, 12 17, 14 10Z" fill="url(#pt-cat-fur)" />
+      <path d="M16 3 L 16.5 7.5 L 19.5 6Z M32 3 L 31.5 7.5 L 28.5 6Z" fill="#e8b4ae" />
+      {/* eyes: glow, and blink now and then */}
+      <g style={{ transformOrigin: "24px 13px", animation: "pt-catblink 5s steps(1) infinite" }}>
+        <ellipse cx="19.5" cy="13" rx="2.4" ry="2.1" fill="#c8f25a" style={{ filter: "drop-shadow(0 0 2px rgba(200,242,90,.9))" }} />
+        <ellipse cx="28.5" cy="13" rx="2.4" ry="2.1" fill="#c8f25a" style={{ filter: "drop-shadow(0 0 2px rgba(200,242,90,.9))" }} />
+        <ellipse cx="19.5" cy="13" rx=".7" ry="1.8" fill="#10140a" />
+        <ellipse cx="28.5" cy="13" rx=".7" ry="1.8" fill="#10140a" />
+      </g>
+      <path d="M23 17 L 25 17 L 24 18.3Z" fill="#d99a94" />
+      <path d="M12 18 L 3 16 M12 19.5 L 3 21 M36 18 L 45 16 M36 19.5 L 45 21" stroke="rgba(255,255,255,.55)" strokeWidth=".5" />
+      {/* paws */}
+      <ellipse cx="20" cy="48.5" rx="3.6" ry="1.8" fill="#efe9df" />
+      <ellipse cx="28" cy="48.5" rx="3.6" ry="1.8" fill="#efe9df" />
+    </svg>
+  );
+}
+
+export function WorldDecor({ onCat }: { onCat?: () => void }) {
   return (
     <>
       <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
@@ -194,6 +234,12 @@ export function WorldDecor() {
           <Pumpkin />
         </Billboard>
       ))}
+      <div style={{ ...flat, left: CAT_AT[0] - 20, top: CAT_AT[1] - 4, width: 40, height: 46, background: "radial-gradient(ellipse 50% 100% at 50% 0%, rgba(0,0,0,.55), transparent 80%)" }} />
+      <Billboard x={CAT_AT[0]} y={CAT_AT[1]} w={48} h={50} style={{ pointerEvents: "auto", cursor: "pointer" }}>
+        <div role="button" aria-label="Gato blanco" onClick={onCat} style={{ width: "100%", height: "100%" }}>
+          <WhiteCat />
+        </div>
+      </Billboard>
       {/* Low fog: translucent banks standing in the yard, drifting sideways. */}
       {FOG.map(([x, y, dur], i) => (
         <Billboard key={`f${i}`} x={x} y={y} w={380} h={80}>

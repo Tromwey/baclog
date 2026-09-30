@@ -1,7 +1,8 @@
 /*
  * Sound effects for /party. Real recordings where we have them — all CC0:
  * Kenney's "Impact Sounds" + "RPG Audio", and from Freesound a real chain
- * (nettimato), a church bell (Audeption) and an iron gate (qubodup), trimmed
+ * (nettimato), a church bell (Audeption), an iron gate (qubodup) and the
+ * jumpscare screech ("Jumpscare Sound 2", Kierham), trimmed
  * into /public/party/sfx (sources in its LICENSE.txt),
  * several variants per sound, picked at random and pitch-jittered so repeats
  * don't sound canned — and WebAudio synthesis as the fallback while they load
@@ -15,17 +16,21 @@ let ctx: AudioContext | null = null;
 
 /** Sample name → variant count in /public/party/sfx/{name}-{i}.m4a */
 const SAMPLES = {
-  chain: 8, bell: 1, toll: 1, gateswing: 1, gateclang: 1, gatelock: 1,
+  scream: 1, chain: 8, bell: 1, toll: 1, gateswing: 1, gateclang: 1, gatelock: 1,
   gate: 5, link: 5, stone: 5, thud: 3, tink: 3, flip: 3, latch: 2, creak: 2,
 } as const;
 type SampleName = keyof typeof SAMPLES;
 const buffers: Partial<Record<SampleName, AudioBuffer[]>> = {};
-let loading = false;
+let loadingFor: AudioContext | null = null;
 
+/** Decode every sample once. AudioBuffers aren't tied to a context, so a new
+ *  context (remount) only fetches what isn't loaded yet. */
 function loadSamples(c: AudioContext) {
-  if (loading) return;
-  loading = true;
+  if (loadingFor === c) return;
+  loadingFor = c;
   for (const [name, n] of Object.entries(SAMPLES) as [SampleName, number][]) {
+    if ((buffers[name]?.length ?? 0) >= n) continue;
+    buffers[name] = [];
     for (let i = 0; i < n; i++) {
       fetch(`/party/sfx/${name}-${i}.m4a`)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
@@ -171,6 +176,13 @@ export const sfx = {
     if (sample("tink", 0.6, 0, 1.2)) return;
     tone(660, 0.5, 0.18, "triangle");
     tone(990, 0.6, 0.12, "triangle", undefined, 0.08);
+  },
+  /** The cat's jumpscare: a harsh animatronic-style screech (recording), a synthesized hiss as fallback. */
+  hiss() {
+    if (sample("scream", 1)) return;
+    noise(0.9, 0.8, "bandpass", 3200, 6500);
+    tone(95, 0.8, 0.45, "sawtooth", 60);
+    tone(1300, 0.45, 0.22, "sawtooth", 2800, 0.05);
   },
   /** The gate swinging open (entering the cemetery). */
   gateOpen() {

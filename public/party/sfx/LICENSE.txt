@@ -6,4 +6,5 @@ http://creativecommons.org/publicdomain/zero/1.0/ — trimmed/normalized and con
 - chain-*: "chain" by nettimato — https://freesound.org/people/nettimato/sounds/387240/
 - bell-0, toll-0: "Church bell.wav" by Audeption — https://freesound.org/people/Audeption/sounds/425172/
 - gateswing-0, gateclang-0, gatelock-0: "Epic Metal Gate" by qubodup — https://freesound.org/people/qubodup/sounds/184935/
+- scream-0: "Jumpscare Sound 2" by Kierham — https://freesound.org/people/Kierham/sounds/570457/
 (CC0 needs no attribution; credited anyway, with thanks.)

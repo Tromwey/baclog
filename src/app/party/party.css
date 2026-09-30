@@ -41,3 +41,8 @@ html:has(.party), body:has(.party) { background: #050404; }
 .party [data-screen-label="03 Lápida abierta"], .party [role="dialog"] { scrollbar-width: none; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .party [data-screen-label="03 Lápida abierta"]::-webkit-scrollbar, .party [role="dialog"]::-webkit-scrollbar { display: none; }
 @keyframes pt-rattle{0%{transform:translate(0,0) rotate(0)}15%{transform:translate(-3px,1px) rotate(-1.4deg)}30%{transform:translate(3px,-1px) rotate(1.2deg)}45%{transform:translate(-2px,1px) rotate(-.8deg)}60%{transform:translate(2px,0) rotate(.5deg)}80%{transform:translate(-1px,0) rotate(-.2deg)}100%{transform:translate(0,0) rotate(0)}}
+
+/* The white cat's blink + the jumpscare. */
+@keyframes pt-catblink{0%,86%,92%,100%{transform:scaleY(1)}88%,90%{transform:scaleY(.1)}}
+@keyframes pt-scare{0%{transform:scale(.35) rotate(-6deg);opacity:0}12%{transform:scale(1.12) rotate(3deg);opacity:1}20%{transform:scale(1) rotate(-2deg)}28%{transform:scale(1.04) translate(-6px,4px) rotate(1deg)}36%{transform:scale(1) translate(5px,-3px)}44%,100%{transform:scale(1.02) translate(0,0)}}
+@keyframes pt-scareflash{0%{opacity:.9}100%{opacity:0}}

@@ -8,7 +8,8 @@
  * cauldron (+ its candies and candle) moved -296,-483, away from the map tomb;
  * the landing's path behind the gate is <PartyPath /> (./party-path.tsx); the
  * secret tombs show <SealedFace/> until found; decor from ./party-decor.tsx;
- * teaser mode (PARTY_EVENT.locked) chains the gate and swaps the sign to MUY PRONTO. Keyframes are prefixed "pt-" (./party.css).
+ * teaser mode (PARTY_EVENT.locked) chains the gate and swaps the sign to MUY PRONTO;
+ * the secrets bar spans the full screen (no 440 cap), inset by the safe areas. Keyframes are prefixed "pt-" (./party.css).
  */
 import { Fragment, type RefObject } from "react";
 import type { SceneVals } from "./party-invitation";
@@ -267,7 +268,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
             <div onPointerDown={v.onPD} onPointerMove={v.onPM} onPointerUp={v.onPU} onPointerLeave={v.onPU} style={{ position: "absolute", inset: "0", touchAction: "none", cursor: "grab", userSelect: "none" }}>
               <div style={{ position: "absolute", left: "50%", top: "50%", width: "0", height: "0", transform: v.camTransform, transition: v.camTrans }}>
                 <div style={{ position: "absolute", left: "-800px", top: "-800px", width: "1600px", height: "1600px", transform: "rotateX(60deg) rotateZ(45deg)", transformStyle: "preserve-3d", background: "radial-gradient(circle at 30% 70%,#1f1b16,transparent 30%),radial-gradient(circle at 75% 30%,#1c1915,transparent 30%),radial-gradient(circle at 50% 50%,#1a1713,transparent 40%),repeating-linear-gradient(0deg,rgba(236,230,220,.022) 0 1px,transparent 1px 110px),repeating-linear-gradient(90deg,rgba(236,230,220,.022) 0 1px,transparent 1px 110px),#14110e" }}>
-                  <WorldDecor />
+                  <WorldDecor onCat={v.scareCat} />
                   <div style={{ position: "absolute", left: "0", top: "1600px", width: "1600px", height: "60px", transformOrigin: "top", transform: "rotateX(-90deg)", background: "linear-gradient(180deg,#221d18,#0a0908)" }} />
                   <div style={{ position: "absolute", left: "1600px", top: "0", width: "60px", height: "1600px", transformOrigin: "left", transform: "rotateY(90deg)", background: "linear-gradient(90deg,#17130f,#070605)" }} />
                   <div style={{ position: "absolute", left: "1524px", top: "1524px", width: "32px", height: "32px", borderRadius: "6px", background: "#221e1a", transform: "rotate(8deg)" }} />
@@ -892,7 +893,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
           {v.darkOn ? (
               <div style={{ position: "fixed", inset: "0", zIndex: "40", pointerEvents: "none", background: "rgba(6,5,4,.96)", WebkitMaskImage: v.darkMask, maskImage: v.darkMask, WebkitMaskComposite: "source-in", maskComposite: "intersect" }} />
           ) : null}
-          <div style={{ position: "fixed", left: "0", right: "0", bottom: "0", maxWidth: "440px", margin: "0 auto", zIndex: "50", padding: "16px 20px calc(20px + env(safe-area-inset-bottom))", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "linear-gradient(180deg,transparent,rgba(7,6,5,.85) 40%)", pointerEvents: "none" }}>
+          <div style={{ position: "fixed", left: "0", right: "0", bottom: "0", zIndex: "50", padding: "16px max(clamp(20px, 4vw, 48px), env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(clamp(20px, 4vw, 48px), env(safe-area-inset-left))", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "linear-gradient(180deg,transparent,rgba(7,6,5,.85) 40%)", pointerEvents: "none" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: "#a79d92" }}>
                 Secretos {v.foundCount}/5
