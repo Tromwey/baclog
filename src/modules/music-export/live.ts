@@ -18,4 +18,4 @@
  * Order: `drizzle-kit migrate` (applies 0034) → flip to `true` → deploy.
  * No `server-only`: pure constant (scripts read it).
  */
-export const MIGRATION_0034_LIVE = false;
+export const MIGRATION_0034_LIVE = true;
