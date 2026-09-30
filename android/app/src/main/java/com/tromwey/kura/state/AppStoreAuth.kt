@@ -33,7 +33,7 @@ suspend fun AppStore.finishSplash(minimumHold: Duration = Duration.ZERO) {
         }
         // ALWAYS who this is before the tabs (a refresh already answers it): an account killed half-way
         // through the onboarding (no handle, no name/year) must land back on O1b, never on tabs with an
-        // empty "@" (iOS `finishSplash` still skips this without a refresh — not ported).
+        // empty "@" (iOS `finishSplash` got the same fix on 2026-09-30).
         val result: Result<Me> = try {
             Result.success(if (api.needsRefresh) api.refresh() else api.me())
         } catch (e: Exception) {

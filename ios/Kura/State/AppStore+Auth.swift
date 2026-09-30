@@ -9,7 +9,8 @@ extension AppStore {
     // MARK: Session
 
     /// After the splash: a stored token skips the entrance (refreshing it when
-    /// it's about to expire); no token → entrance.
+    /// it's about to expire, else `GET /me`) and goes where `route(after:)` says — O1b
+    /// for an account that never finished it; no token → entrance.
     /// `minimumHold`: the splash's brand beat. It runs concurrently with the refresh
     /// (never added on top of it); nothing leaves the splash before it's over.
     func finishSplash(minimumHold: Duration = .zero) async {
@@ -26,21 +27,22 @@ extension AppStore {
             withAnimation(KMotion.fade) { phase = .onboarding }
             return
         }
-        if api.needsRefresh {
-            let result: Result<Me, Error>
-            do { result = .success(try await api.refresh()) } catch { result = .failure(error) }
-            await hold()
-            switch result {
-            case .success(let m):
-                applyMe(m)
-                if !route(after: m) { return }
-            case .failure(let error):
-                let e = noteError(error)
-                if e == .unauthorized { return }
-                // Transport trouble: keep the token, try the library anyway.
-            }
-        }
+        // ALWAYS who this is before the tabs (a refresh already answers it): an account killed
+        // half-way through the onboarding (no handle, no name/year) must land back on O1b, never
+        // on tabs with an empty "@".
+        let result: Result<Me, Error>
+        do { result = .success(try await api.needsRefresh ? api.refresh() : api.me()) } catch { result = .failure(error) }
         await hold()
+        switch result {
+        case .success(let m):
+            applyMe(m)
+            if !route(after: m) { return }
+        case .failure(let error):
+            let e = noteError(error)
+            if e == .unauthorized { return }
+            // Transport trouble: keep the token, try the library anyway (`bootstrap` routes
+            // once `GET /me` answers).
+        }
         withAnimation(KMotion.fade) { phase = .main }
     }
 

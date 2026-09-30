@@ -20,6 +20,12 @@ extension AppStore {
             async let fol = allPeople(.following)
             let (account, library, myStates, followed) = try await (m, cols, states, fol)
             try check(session)
+            // The splash couldn't ask (offline launch): an account that never finished O1b goes
+            // there now, not to tabs with an empty "@".
+            if !route(after: account) {
+                applyMe(account)
+                return
+            }
             loaded(.library)
             for p in followed { register(p) }
             following = Set(followed.map(\.id)).union(following)
