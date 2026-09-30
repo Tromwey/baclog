@@ -43,7 +43,13 @@ android {
         applicationId = "com.tromwey.kura" // same id as the iOS bundle
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        // Como iOS (KURA_BUILD_NUMBER): el número de commits de main siempre crece, así Play acepta cada
+        // .aab nuevo sin tocar este archivo. -PkuraVersionCode=N lo fija a mano.
+        versionCode = (project.findProperty("kuraVersionCode") as String?)?.toInt()
+            ?: runCatching {
+                ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).start()
+                    .inputStream.bufferedReader().readText().trim().toInt()
+            }.getOrDefault(1)
         versionName = "1.0"
 
         // Shared links always point at the public site, in every build type.
