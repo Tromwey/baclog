@@ -1,7 +1,12 @@
 package com.tromwey.kura.designsystem
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.os.Build
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -489,8 +494,15 @@ sealed interface KHapticEvent {
 /**
  * The app's ONE haptic entry point (iOS `KHaptic`). Nothing else calls
  * `performHapticFeedback` or a `Vibrator`. Honors Ajustes › Vibraciones ([enabled], a DEVICE
- * preference, default ON, kept across sign-out) and the system's own touch-feedback switch
- * (`performHapticFeedback` checks it). The same event within 40 ms is one haptic.
+ * preference, default ON, kept across sign-out) and the system's touch-feedback switch (applied
+ * by the system to USAGE_TOUCH from API 33; read by hand before).
+ * The same event within 40 ms is one haptic.
+ *
+ * API 29+ plays the system's predefined effects through the [Vibrator] (usage TOUCH), NOT
+ * `View.performHapticFeedback`: on a Pixel 4 / Android 13 the view path returned `false` for the
+ * carousel's tick (measured 2026-09-30, `dumpsys vibrator_manager` empty), and when it did vibrate
+ * `CLOCK_TICK` became `EFFECT_TEXTURE_TICK` (10 ms), which a hand can't feel. Before 29 (no
+ * predefined effects) it falls back to `performHapticFeedback`.
  */
 object KHaptic {
     /** Same key as iOS' `UserDefaults` (`kura.haptics`); plain device prefs, nothing sensitive. */
@@ -505,9 +517,13 @@ object KHaptic {
     private var lastKind: Int = -1
     private var lastAt: Long = 0
 
+    @Volatile
+    private var vibrator: Vibrator? = null
+
     /** Reads the Vibraciones preference once (call from `KuraApp.onCreate` or `KuraTheme`). */
     fun init(context: Context) {
         enabled = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).getBoolean(enabledKey, true)
+        if (vibrator == null) vibrator = systemVibrator(context.applicationContext)
     }
 
     /** Ajustes › Vibraciones. Turning it on confirms with a [KHapticEvent.Tap] (iOS does the same). */
@@ -534,19 +550,67 @@ object KHaptic {
         if (kind == lastKind && now - lastAt < burstMs) return
         lastKind = kind
         lastAt = now
-        view.performHapticFeedback(constant(event))
+        val v = vibrator ?: systemVibrator(view.context.applicationContext).also { vibrator = it }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && v != null && v.hasVibrator()) {
+            if (!systemTouchFeedbackOn(view.context)) return
+            vibrate(v, VibrationEffect.createPredefined(predefined(event)))
+        } else {
+            view.performHapticFeedback(constant(event))
+        }
     }
 
-    private fun constant(e: KHapticEvent): Int {
-        val r = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        return when (e) {
-            KHapticEvent.Selection -> if (r) HapticFeedbackConstants.SEGMENT_TICK else HapticFeedbackConstants.CLOCK_TICK
-            KHapticEvent.Tap -> HapticFeedbackConstants.CLOCK_TICK
-            KHapticEvent.Firm -> HapticFeedbackConstants.CONTEXT_CLICK
-            KHapticEvent.Success -> if (r) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.CONTEXT_CLICK
-            KHapticEvent.Warning, KHapticEvent.Error -> if (r) HapticFeedbackConstants.REJECT else HapticFeedbackConstants.LONG_PRESS
-            is KHapticEvent.Hit -> if (e.intensity > 0.5f) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK
-            is KHapticEvent.Pull -> HapticFeedbackConstants.CLOCK_TICK
+    /** What each meaning feels like (API 29+). Hit / Pull scale with how hard the card landed. */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    internal fun predefined(e: KHapticEvent): Int = when (e) {
+        KHapticEvent.Selection -> VibrationEffect.EFFECT_TICK
+        KHapticEvent.Tap -> VibrationEffect.EFFECT_CLICK
+        KHapticEvent.Firm -> VibrationEffect.EFFECT_HEAVY_CLICK
+        KHapticEvent.Success -> VibrationEffect.EFFECT_DOUBLE_CLICK
+        KHapticEvent.Warning, KHapticEvent.Error -> VibrationEffect.EFFECT_HEAVY_CLICK
+        is KHapticEvent.Hit -> if (e.intensity >= 0.7f) VibrationEffect.EFFECT_HEAVY_CLICK else VibrationEffect.EFFECT_CLICK
+        // Lighter than a Hit of the same force: the opposite gesture settling, never a second Hit.
+        is KHapticEvent.Pull -> if (e.intensity >= 0.7f) VibrationEffect.EFFECT_CLICK else VibrationEffect.EFFECT_TICK
+    }
+
+    private fun vibrate(v: Vibrator, effect: VibrationEffect) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            v.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
+        } else {
+            // Before 33 the TOUCH usage is spelled as sonification audio attributes.
+            @Suppress("DEPRECATION")
+            v.vibrate(
+                effect,
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
         }
+    }
+
+    /**
+     * Settings › Sonido y vibración › Respuesta táctil (default on). From 33 the system applies it to
+     * every USAGE_TOUCH vibration itself (that's why the setting is deprecated there); before, we read it.
+     */
+    private fun systemTouchFeedbackOn(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return true
+        @Suppress("DEPRECATION")
+        return Settings.System.getInt(context.contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0
+    }
+
+    private fun systemVibrator(context: Context): Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+    /** API 26–28 (no predefined effects): the view's own haptic, which checks the system switch. */
+    private fun constant(e: KHapticEvent): Int = when (e) {
+        KHapticEvent.Selection, KHapticEvent.Tap, is KHapticEvent.Pull -> HapticFeedbackConstants.CLOCK_TICK
+        KHapticEvent.Firm, KHapticEvent.Success -> HapticFeedbackConstants.CONTEXT_CLICK
+        KHapticEvent.Warning, KHapticEvent.Error -> HapticFeedbackConstants.LONG_PRESS
+        is KHapticEvent.Hit -> if (e.intensity > 0.5f) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK
     }
 }

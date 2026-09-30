@@ -8,6 +8,9 @@
     <!-- Push (FCM) and local release notices ("Ya salió X", push/ReleaseNotifier.kt). Asked only after
          kura's own "¿te avisamos?" sheet, never at launch (Android 13+ runtime permission). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- KHaptic (designsystem/Tokens.kt) plays predefined effects through the Vibrator: the view's
+         performHapticFeedback was dropped or too faint on a Pixel 4 / Android 13. Normal permission. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- MainActivity.openInBrowser: a get-kura.app page the app doesn't have goes back to the browser, by
          package (a plain VIEW would resolve to kura, the verified handler). Needs the browsers visible. -->

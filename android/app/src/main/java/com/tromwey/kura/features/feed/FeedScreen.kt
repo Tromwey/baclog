@@ -44,6 +44,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
@@ -431,7 +436,7 @@ private fun FeedStack(store: AppStore, events: List<FeedEvent>, hdr: Dp, base: D
 
 /**
  * One card of the stack: it pins under the header (card 0 at the top) and, in its last 140 before
- * pinning, raises a band of its own top colour over the header, its upward shadow fading as it
+ * pinning, raises its own surface (the band) over the header, its upward shadow fading as it
  * goes. Everything that follows the scroll is read in the layer (no recomposition per frame).
  */
 @Composable
@@ -457,16 +462,44 @@ private fun StackCard(store: AppStore, row: StackRow, hdr: Dp, hdrPx: Float, off
         if (!first) {
             val bandShape = RoundedCornerShape(topStart = KRadius.screen, topEnd = KRadius.screen)
             val band = Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(lift + KRadius.screen * 2)
-            // The stack's shadow casts UPWARD; it fades out as the band finishes rising.
-            Box(band.graphicsLayer { val p = progress(); translationY = -rise(p); alpha = 1f - p }.kShadow(KShadow.Stack, bandShape))
-            Box(band.graphicsLayer { translationY = -rise(progress()) }.background(Tint.ends(row.palette).first.color, bandShape))
+            // The stack's shadow casts UPWARD, rides with the band (same shape, same rise) and fades
+            // over the whole way up. ModulateAlpha, NOT the default: with alpha < 1 the default layer
+            // renders offscreen at the box's size and clips the blur that falls above it — the shadow
+            // vanished the instant the band started rising (founder, Pixel 4, 2026-09-30).
+            Box(
+                band.graphicsLayer {
+                    val p = progress()
+                    translationY = -rise(p)
+                    alpha = 1f - p
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }.kShadow(KShadow.Stack, bandShape),
+            )
         }
+        val brush = remember(row.palette) { Tint.card(row.palette) }
+        val surface = remember { Path() }
         Box(
             Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(Alignment.Top, unbounded = true)
                 .height(slot + Ext)
-                .background(Tint.card(row.palette), shape),
+                .then(
+                    if (first) {
+                        Modifier.background(brush, shape)
+                    } else {
+                        // The band IS the card: one path from the risen top to the bottom, painted with the
+                        // card's own brush in the card's coordinates (the shader is sized to this box, so above
+                        // its top the 168° gradient simply continues). A separate flat band left the card's
+                        // rounded corners readable against it once pinned (founder, Pixel 4, 2026-09-30).
+                        Modifier.drawBehind {
+                            val r = KRadius.screen.toPx()
+                            surface.rewind()
+                            surface.addRoundRect(
+                                RoundRect(0f, -rise(progress()), size.width, size.height, topLeftCornerRadius = CornerRadius(r), topRightCornerRadius = CornerRadius(r)),
+                            )
+                            drawPath(surface, brush)
+                        }
+                    },
+                ),
         ) {
             FeedCard(store, row.event, row.height, if (first) hdr else 0.dp)
         }

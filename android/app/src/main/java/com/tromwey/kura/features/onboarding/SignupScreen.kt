@@ -5,6 +5,13 @@ import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -98,9 +105,15 @@ fun SignupScreen(store: AppStore) {
         scope.launch { if (store.requestCode(email)) store.onboardingStep = OnboardingStep.Code }
     }
 
+    // With the keyboard up a phone this size has no room for the header AND the whole bottom block:
+    // the header slides up and the Google row and the note step aside until the keyboard goes.
+    @OptIn(ExperimentalLayoutApi::class)
+    val imeUp = WindowInsets.isImeVisible
+    val headerTop by animateDpAsState(if (imeUp) 72.dp else 170.dp, label = "signupHeaderTop")
+
     Box(Modifier.fillMaxSize()) {
         Column(
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 170.dp),
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = headerTop),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Only for someone who arrived from a title shared on the web (App Links: fase 2).
@@ -132,9 +145,11 @@ fun SignupScreen(store: AppStore) {
                 .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (google != null) GoogleButton(store, google)
-            if (social) {
-                Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) { MonoLabel("o con correo") }
+            AnimatedVisibility(visible = social && !imeUp, enter = fadeIn(), exit = fadeOut()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (google != null) GoogleButton(store, google)
+                    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) { MonoLabel("o con correo") }
+                }
             }
             KuraTextField(
                 value = email,
@@ -152,11 +167,13 @@ fun SignupScreen(store: AppStore) {
                 SolidButton(title, onClick = ::send, enabled = !store.authBusy)
             }
             InlineError(store.authError)
-            BasicText(
-                "Sin contraseña: te mandamos un código de seis dígitos.",
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                style = KuraType.ui(13f).copy(color = KColor.text2, textAlign = TextAlign.Center),
-            )
+            AnimatedVisibility(visible = !imeUp, enter = fadeIn(), exit = fadeOut()) {
+                BasicText(
+                    "Sin contraseña: te mandamos un código de seis dígitos.",
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    style = KuraType.ui(13f).copy(color = KColor.text2, textAlign = TextAlign.Center),
+                )
+            }
         }
 
         KuraTopBar(onBack = back)

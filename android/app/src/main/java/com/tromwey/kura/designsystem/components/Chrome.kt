@@ -73,8 +73,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -196,15 +201,45 @@ fun rememberKuraTitleScroll(): KuraTitleScroll {
     return remember(behavior) { KuraTitleScroll(behavior) }
 }
 
-/** Connects a scrolling container to its [TabTitleBar] (a `nestedScroll`). */
-fun Modifier.kuraTitleScroll(scroll: KuraTitleScroll): Modifier = nestedScroll(scroll.behavior.nestedScrollConnection)
+/**
+ * Connects a scrolling container to its [TabTitleBar] (a `nestedScroll`) and, once its content has
+ * scrolled, fades that content out over its top [TitleFade] — the veil under a transparent bar: what
+ * passes under the title dissolves into the PAGE's own surface (a tint gradient that scrolls, bg…)
+ * instead of being cut by an edge or covered by a band of another colour. Put it BEFORE
+ * `verticalScroll` so it acts on the viewport. (Not a glow: it only removes content.)
+ */
+fun Modifier.kuraTitleScroll(scroll: KuraTitleScroll): Modifier =
+    nestedScroll(scroll.behavior.nestedScrollConnection)
+        .graphicsLayer {
+            // The offscreen buffer only while the veil has something to fade.
+            compositingStrategy = if (scroll.behavior.state.contentOffset < 0f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+        }
+        .drawWithContent {
+            drawContent()
+            val fade = TitleFade.toPx()
+            val t = (-scroll.behavior.state.contentOffset / fade).coerceIn(0f, 1f)
+            if (t > 0f) {
+                drawRect(
+                    Brush.verticalGradient(0f to Color.Black.copy(alpha = 1f - t), 1f to Color.Black, startY = 0f, endY = fade),
+                    size = Size(size.width, fade),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+
+/** How tall the veil under a collapsed [TabTitleBar] is (content dissolves over it). */
+private val TitleFade = 40.dp
 
 /**
  * A tab root's title ("tus colecciones") — Newsreader 36 at Kura's place (its top 68 from the
  * screen's TOP EDGE, like iOS and flujos-v2), driven by Material's `TopAppBarScrollBehavior`
  * (`exitUntilCollapsed`, with its snap and fling): as the list scrolls ([scroll] +
- * `Modifier.kuraTitleScroll`) it collapses to a 56 s1 bar under the status bar with the title at
- * 22. [trailing] (one chip) is centered on the title and never moves it. Without [scroll] it simply
+ * `Modifier.kuraTitleScroll`) it collapses to a 56 bar under the status bar with the title at 22.
+ * The collapsed bar is TRANSPARENT by default: the page's own surface (its cover tint, which scrolls
+ * with the content) shows behind the title and `kuraTitleScroll`'s veil dissolves the content under
+ * it. A solid [containerColor] is opt-in and only for a page that is one flat colour — a fixed colour
+ * over a tint that scrolls reads as a band (the grey s1 band founder saw on a Pixel 4, 2026-09-30).
+ * [trailing] (one chip) is centered on the title and never moves it. Without [scroll] it simply
  * stays expanded. Put it ABOVE the scrolling content, not inside it.
  *
  * Why not `LargeFlexibleTopAppBar` drawn by Material: it always reserves its 64 action row ABOVE
@@ -212,7 +247,13 @@ fun Modifier.kuraTitleScroll(scroll: KuraTitleScroll): Modifier = nestedScroll(s
  * measured on the emulator). The behavior, nested scroll and motion are still Material's.
  */
 @Composable
-fun TabTitleBar(title: String, modifier: Modifier = Modifier, scroll: KuraTitleScroll? = null, trailing: @Composable BoxScope.() -> Unit = {}) {
+fun TabTitleBar(
+    title: String,
+    modifier: Modifier = Modifier,
+    scroll: KuraTitleScroll? = null,
+    containerColor: Color? = null,
+    trailing: @Composable BoxScope.() -> Unit = {},
+) {
     val density = LocalDensity.current
     val status = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     // The title line's top lands at KSize.titleTop (68) from the edge whatever the status bar is.
@@ -228,7 +269,7 @@ fun TabTitleBar(title: String, modifier: Modifier = Modifier, scroll: KuraTitleS
     Box(
         modifier
             .fillMaxWidth()
-            .background(lerp(Color.Transparent, KColor.s1, f))
+            .then(if (containerColor != null) Modifier.background(lerp(Color.Transparent, containerColor, f)) else Modifier)
             .statusBarsPadding()
             .height(expanded + offset)
             .clipToBounds(),
