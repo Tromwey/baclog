@@ -82,9 +82,9 @@ internal fun connectedShapes(i: Int, n: Int): ToggleButtonShapes = when {
  * design system never depends on `data/`: `app/UiSupport.kt` maps `Mark` ↔ [KuraReaction].
  */
 enum class KuraReaction(val glyph: Glyph, val label: String) {
+    Completed(Glyph.Check, "Solo completo"),
     Liked(Glyph.Thumb, "Me gusta"),
     Obsessed(Glyph.Flame, "Me obsesiona"),
-    Completed(Glyph.Check, "Solo completo"),
     ;
 
     /** The state color (pizarra / coral / salvia) — the glyph's own. */
@@ -92,7 +92,7 @@ enum class KuraReaction(val glyph: Glyph, val label: String) {
 }
 
 /**
- * Me gusta / Me obsesiona / Solo completo — a connected `ButtonGroup` of three single-choice
+ * Solo completo / Me gusta / Me obsesiona (founder's order, like iOS) — a connected `ButtonGroup` of three single-choice
  * `ToggleButton`s (replaces the hand-made reaction slider). The chosen one fills with its state
  * color and shows glyph + text; the other two shrink to the glyph. The group animates the widths
  * with the motion scheme. No haptic here: the store plays the reaction's (`StoreHaptic.Reaction`).
@@ -159,7 +159,7 @@ data class KuraToggle(
 )
 
 /**
- * The ficha's pair [Me obsesiona | Completar] — a connected `ButtonGroup` of two `ToggleButton`s
+ * The ficha's pair [Completar | Me obsesiona] — a connected `ButtonGroup` of two `ToggleButton`s
  * (2 dp slot). The checked one rounds fully and widens a little while the other gives way.
  * [containerColor] fills the unchecked side (s2; `KColor.glassBg` on an s2 sheet).
  */

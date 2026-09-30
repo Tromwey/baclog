@@ -302,14 +302,8 @@ private fun Actions(store: AppStore, t: Title, unreleased: Boolean, today: Boole
     // Release day: the server still says "upcoming" for a few hours (album instants at 07/08/12Z).
     val preview = today || store.isReleaseDay(t)
     ActionPair(
+        // Founder's order, everywhere: Completar before Me obsesiona.
         primary = KuraToggle(
-            label = "Me obsesiona",
-            checked = mark == Mark.Obsessed,
-            onCheckedChange = { on -> toggleObsessed(store, t, on, mark, preview) },
-            glyph = Glyph.Flame,
-            checkedColor = KColor.obsessed,
-        ),
-        secondary = KuraToggle(
             // Completar → your reaction. Obsessed implies completed: that side reads "Completo".
             label = when (mark) {
                 null -> "Completar"
@@ -321,6 +315,13 @@ private fun Actions(store: AppStore, t: Title, unreleased: Boolean, today: Boole
             onCheckedChange = { store.present(SheetRoute.Complete(t.id, focusReview = false)) },
             glyph = if (mark == null || mark == Mark.Obsessed) Glyph.Check else mark.reaction.glyph,
             checkedColor = if (mark == Mark.Liked) KColor.liked else KColor.completed,
+        ),
+        secondary = KuraToggle(
+            label = "Me obsesiona",
+            checked = mark == Mark.Obsessed,
+            onCheckedChange = { on -> toggleObsessed(store, t, on, mark, preview) },
+            glyph = Glyph.Flame,
+            checkedColor = KColor.obsessed,
         ),
         modifier = Modifier.padding(top = 8.dp),
     )

@@ -74,7 +74,9 @@ function watchOf(
     url.searchParams.set("service", service);
     return { short: "escuchar", name: SERVICE_LABEL[service], kind: service, url: url.toString() };
   }
-  return { short: "ver", name: "Dónde verla", kind: "justwatch", url: url.toString() };
+  // The section is already "dónde ver": the row says what's behind the link, not "ver" again
+  // (founder, 2026-09-30). Clients draw a play glyph for `justwatch` instead of `short`.
+  return { short: "ver", name: "Streaming, renta o compra", kind: "justwatch", url: url.toString() };
 }
 
 export const GET = withApi<{ id: string }>(async (req, { user, params }) => {

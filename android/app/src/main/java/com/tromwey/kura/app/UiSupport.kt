@@ -58,7 +58,7 @@ val StoreHaptic.event: KHapticEvent?
         }
     }
 
-/** A mark as the reaction group draws it (`ReactionGroup`): Me gusta / Me obsesiona / Solo completo. */
+/** A mark as the reaction group draws it (`ReactionGroup`): Solo completo / Me gusta / Me obsesiona. */
 val Mark.reaction: KuraReaction
     get() = when (this) {
         Mark.Liked -> KuraReaction.Liked

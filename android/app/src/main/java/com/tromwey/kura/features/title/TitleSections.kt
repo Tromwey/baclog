@@ -135,7 +135,14 @@ private fun WhereToWatch(store: AppStore, t: Title) {
             }
             ServiceRow(
                 name = w.name,
-                logo = { if (w.isCinema) GlyphIcon(Glyph.Clock, size = 16.dp, color = KColor.text) else BasicText(w.short, style = KuraType.mono(12f, medium = true)) },
+                logo = {
+                    when {
+                        w.isCinema -> GlyphIcon(Glyph.Clock, size = 16.dp, color = KColor.text)
+                        // A glyph, not the word "ver": the section title already says it.
+                        w.kind == "justwatch" -> KIconView(KIcon.Play, size = 15.dp, color = KColor.text)
+                        else -> BasicText(w.short, style = KuraType.mono(12f, medium = true))
+                    }
+                },
                 trailing = kind,
                 trailingColor = if (w.isCinema && label == "hoy") KColor.waiting else KColor.text2,
                 external = label != "hoy" || !w.isCinema,

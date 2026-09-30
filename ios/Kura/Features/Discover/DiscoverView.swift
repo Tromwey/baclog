@@ -965,7 +965,6 @@ private struct DiscoverFormatPage: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 16)
         FlowChoices(choices: payload?.times ?? Self.fallbackTimes, selection: $time)
-            .padding(.horizontal, 20)
         Text("¿y de qué humor?").font(.kura.news(22)).foregroundStyle(KColor.text)
             .padding(.horizontal, 20).padding(.top, 30).padding(.bottom, 14)
         MoodRow(moods: payload?.moods ?? [], selection: mood) { i in
@@ -1003,7 +1002,6 @@ private struct DiscoverFormatPage: View {
         }
         .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 18)
         FlowChoices(choices: payload?.lenses ?? [], selection: $lens)
-            .padding(.horizontal, 20)
         grid(empty: payload?.titles.isEmpty == true
              ? "No pudimos traer series ahora. Prueba en un rato."
              : "Nada tan corto por ahora. Prueba con un fin de semana.") { item in
@@ -1178,32 +1176,45 @@ private struct DiscoverFormatPage: View {
     }
 }
 
-/// "¿cuánto tiempo tienes?" · "una tarde" — 52 pt two-line choice pills that wrap.
+/// "¿cuánto tiempo tienes?" · "una tarde" — one horizontal row of one-line pills; the chosen one's
+/// range ("100 a 130 min") reads as a caption under the row (founder, 2026-09-30: like Android, not
+/// the stacked two-line pills that wrapped vertically on a phone).
 private struct FlowChoices: View {
     let choices: [DiscoverFormatPayload.Choice]
     @Binding var selection: Int
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { pills }
-            VStack(alignment: .leading, spacing: 8) { pills }
-        }
-    }
-
-    @ViewBuilder private var pills: some View {
-        ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
-            let on = i == selection
-            Button { withAnimation(KMotion.short) { selection = i } } label: {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(c.label).font(.kura.ui(15, .semibold)).foregroundStyle(KColor.text)
-                    Text(c.sub).monoLabel(10, tracking: 0.06)
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
+                        let on = i == selection
+                        Button {
+                            withAnimation(KMotion.short) { selection = i }
+                            KHaptic.play(.selection)
+                        } label: {
+                            Text(c.label).font(.kura.ui(15, .semibold))
+                                .foregroundStyle(on ? KColor.text : KColor.text2)
+                                .lineLimit(1).fixedSize()
+                                .padding(.horizontal, 18)
+                                .frame(height: 44)
+                                .background(on ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(c.label), \(c.sub)")
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
                 }
-                .padding(.horizontal, 18).padding(.vertical, 6)
-                .frame(minHeight: 52)
-                .background(on ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+                .padding(.horizontal, 20)
             }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(on ? .isSelected : [])
+            .scrollClipDisabled()
+            if let c = choices.indices.contains(selection) ? choices[selection] : nil {
+                Text(c.sub).monoLabel(10, tracking: 0.06)
+                    .padding(.horizontal, 20)
+                    .contentTransition(.interpolate)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

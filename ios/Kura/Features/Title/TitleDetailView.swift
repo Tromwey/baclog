@@ -341,6 +341,9 @@ private struct TitleSections: View {
                         Group {
                             if w.isCinema {
                                 Image(systemName: "ticket").font(.system(size: 16))
+                            } else if w.kind == "justwatch" {
+                                // A glyph, not the word "ver": the section title already says it.
+                                Image(systemName: "play.fill").font(.system(size: 14))
                             } else {
                                 Text(w.short).font(.kura.mono(12, medium: true))
                             }

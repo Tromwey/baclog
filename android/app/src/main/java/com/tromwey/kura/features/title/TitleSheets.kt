@@ -88,7 +88,7 @@ private const val REACTION_NEEDED = "Para reseñar, elige Me gusta o Me obsesion
 // MARK: 26a · Completar (+ reseña) ────────────────────────────────────────────────────────
 
 /**
- * "¿qué te pareció?": Me gusta / Me obsesiona / Solo completo, the optional review (280, mono
+ * "¿qué te pareció?": Solo completo / Me gusta / Me obsesiona, the optional review (280, mono
  * counter), "Contiene spoilers" (not on albums: the report reasons don't know spoilers there
  * either), then Publicar (with text) / Guardar. Solo completo can't carry a NEW or edited review
  * (`409 reaction_required`): nothing is sent and the sheet says why. With a review the mark is

@@ -205,7 +205,7 @@ private fun PageQuestion(text: String, bottom: androidx.compose.ui.unit.Dp = 16.
 /**
  * "¿cuánto tiempo tienes?" · "una tarde" — the DS `ChipRow` (Material `FilterChip`, the chrome that
  * operates the app), with the chosen window's range under it in mono ("100 A 130 MIN"). iOS draws
- * two-line glass pills; Android keeps the label on the chip and the range as a caption.
+ * the same since 2026-09-30 (one row of one-line pills + the range as a caption).
  */
 @Composable
 private fun Choices(choices: List<DiscoverFormatPayload.Choice>, selection: Int, onSelect: (Int) -> Unit) {
