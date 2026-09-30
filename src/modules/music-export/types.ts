@@ -12,7 +12,12 @@ export const MUSIC_PROVIDERS: readonly MusicProvider[] = ["apple_music", "tidal"
 
 /** `GET /api/v1/music/services` — what the export sheet can offer. */
 export interface MusicServices {
-  apple_music: { available: boolean; reason?: "not_configured" | "key_rejected" };
+  /**
+   * `available` = iOS (native MusicKit) may offer it; `webAvailable` = the web
+   * (MusicKit JS) may — it also needs the dedicated web key. `reason` explains
+   * `available: false`.
+   */
+  apple_music: { available: boolean; webAvailable: boolean; reason?: "not_configured" | "key_rejected" };
   tidal: { available: boolean; connected: boolean; reason?: "not_configured" };
 }
 

@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * OAuth 2.1 authorization code + PKCE (RFC 7636, S256) pieces for TIDAL.
+ * OAuth 2.1 authorization code + PKCE (RFC 7636, S256) pieces for TIDAL, and
+ * the other small hashes of the export (iOS claim, TIDAL idempotency key).
  * Pure (`node:crypto` only, no DB, no `server-only`) so
  * `scripts/check-music-export.ts` runs them. Server code only.
  */
@@ -38,6 +39,35 @@ export function hashOAuthState(state: string): string {
   return createHash("sha256").update(`music-oauth:${state}`, "utf8").digest("base64url");
 }
 
+// ---------- iOS claim (anti OAuth-CSRF) ----------
+
+/**
+ * The iOS `claim`: 32 random bytes (43 chars base64url) minted by the
+ * CALLBACK and only ever sent in the `kura://…/authorized?ref&claim` bounce
+ * — i.e. to whoever's browser actually came back from TIDAL's consent. The
+ * `ref` (= the state) is not enough to finish: the STARTER knows it from his
+ * own authorize URL, so an attacker who sends that URL to a victim could
+ * otherwise complete it with his bearer and get the victim's TIDAL linked to
+ * HIS Kura account. Only the claim's hash is stored.
+ */
+export function newClaim(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export const TIDAL_CLAIM_RE = /^[A-Za-z0-9_-]{43}$/;
+
+export function hashClaim(claim: string): string {
+  return createHash("sha256").update(`music-oauth-claim:${claim}`, "utf8").digest("base64url");
+}
+
+/** Constant-time: does `claim` hash to `storedHash`? Malformed / null → false. */
+export function claimMatches(claim: string, storedHash: string | null | undefined): boolean {
+  if (!storedHash || !TIDAL_CLAIM_RE.test(claim)) return false;
+  const a = Buffer.from(hashClaim(claim), "utf8");
+  const b = Buffer.from(storedHash, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export interface TidalAuthorizeParams {
   authorizeUrl: string;
   clientId: string;
@@ -57,4 +87,17 @@ export function tidalAuthorizeUrl(p: TidalAuthorizeParams): string {
   u.searchParams.set("code_challenge", p.codeChallenge);
   u.searchParams.set("state", p.state);
   return u.toString();
+}
+
+// ---------- TIDAL create-playlist idempotency key ----------
+
+/**
+ * `Idempotency-Key` of `POST /playlists`: export + generation + a hash of the
+ * NAME. TIDAL answers 422 (payload mismatch) when a key comes back with a
+ * different body — so without the name in it, renaming the party between a
+ * failed create and its retry would wedge that export for good.
+ */
+export function tidalIdempotencyKey(exportId: string, generation: number, name: string): string {
+  const n = createHash("sha256").update(name, "utf8").digest("base64url").slice(0, 16);
+  return `kura-export-${exportId}-g${generation}-${n}`;
 }

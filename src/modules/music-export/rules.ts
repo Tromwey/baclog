@@ -60,8 +60,9 @@ export function tidalStartPath(returnTo: string): string {
 
 /** iOS: where the callback bounces (ASWebAuthenticationSession, scheme `kura`). */
 export const IOS_CALLBACK_SCHEME = "kura";
-export function iosAuthorizedUrl(ref: string): string {
-  return `kura://music/tidal/authorized?ref=${encodeURIComponent(ref)}`;
+/** `ref` = the state; `claim` = the callback's one-time proof (see pkce.ts `newClaim`). */
+export function iosAuthorizedUrl(ref: string, claim: string): string {
+  return `kura://music/tidal/authorized?ref=${encodeURIComponent(ref)}&claim=${encodeURIComponent(claim)}`;
 }
 export function iosFailedUrl(reason: string): string {
   return `kura://music/tidal/connected?ok=0&reason=${encodeURIComponent(reason)}`;
@@ -136,6 +137,32 @@ export function reportItems(
   for (const id of missing) if (inParty.has(id)) out.set(id, "missing");
   for (const id of added) if (inParty.has(id)) out.set(id, "added");
   return [...out].map(([titleId, outcome]) => ({ titleId, outcome }));
+}
+
+// ---------- TIDAL 403: auth/scope vs. everything else ----------
+
+const TIDAL_AUTH_CODE_RE = /SCOPE|AUTH|TOKEN|CREDENTIAL|PERMISSION|INSUFFICIENT/i;
+
+/**
+ * Is a TIDAL 403 about OUR access (→ drop the link, "Conectar TIDAL" again)?
+ * Yes when a JSON:API `errors[].code` names scope/auth, or when the link's
+ * granted scopes (known) lack `playlists.write`. Anything else (terms not
+ * accepted, quota, entitlement, an unexplained 403) is NOT a reason to throw
+ * the person's link away → `service_failed` with `tidalForbiddenMessage`.
+ */
+export function isTidalAuthRefusal(codes: readonly string[], grantedScope: string | null): boolean {
+  if (codes.some((c) => TIDAL_AUTH_CODE_RE.test(c))) return true;
+  return grantedScope !== null && !grantedScope.split(/\s+/).includes("playlists.write");
+}
+
+export function tidalForbiddenMessage(codes: readonly string[]): string {
+  if (codes.includes("REQUIRED_TERMS_NOT_ACCEPTED")) {
+    return "TIDAL pide que aceptes sus términos nuevos. Ábrelo, acéptalos y vuelve a intentarlo; tu colección sigue intacta en kura.";
+  }
+  if (codes.includes("QUOTA_EXCEEDED")) {
+    return "Tu cuenta de TIDAL llegó a su límite. Libera espacio en TIDAL y vuelve a intentarlo; tu colección sigue intacta en kura.";
+  }
+  return "TIDAL no dejó escribir en tu cuenta. Vuelve a intentarlo; si sigue pasando, desconecta TIDAL y conéctalo otra vez.";
 }
 
 /** Songs per TIDAL step (one ISRC call + at most this many fallback searches). */

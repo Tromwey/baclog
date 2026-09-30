@@ -207,9 +207,9 @@ protocol KuraAPI: Sendable {
     func musicServices() async throws -> MusicServices
     /// `POST /music/tidal/start` → the TIDAL consent page to open in `ASWebAuthenticationSession`.
     func startTidalAuth() async throws -> URL
-    /// `POST /music/tidal/complete` `{ ref }` (the `ref` of `kura://music/tidal/authorized?ref=…`).
-    /// 409 `auth_expired` = start again.
-    func completeTidalAuth(ref: String) async throws -> MusicServices
+    /// `POST /music/tidal/complete` `{ ref, claim }` (both from
+    /// `kura://music/tidal/authorized?ref=…&claim=…`). 409 `auth_expired` = start again.
+    func completeTidalAuth(ref: String, claim: String) async throws -> MusicServices
     /// `DELETE /music/tidal`.
     func disconnectTidal() async throws
     /// `GET /parties/{id}/exports/{provider}` (`idle` if never started).

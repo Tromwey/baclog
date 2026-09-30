@@ -1,64 +1,108 @@
 import "server-only";
 import { signAppleMusicDeveloperToken } from "./apple-token";
-import { APPLE_DEVELOPER_TOKEN_TTL_SECONDS, appleMusicKeyConfig, CATALOG_STOREFRONT } from "./config";
+import {
+  APPLE_DEVELOPER_TOKEN_TTL_SECONDS,
+  APPLE_WEB_TOKEN_TTL_SECONDS,
+  appleMusicServerKeyConfig,
+  appleMusicWebKeyConfig,
+  appleMusicWebOrigins,
+  CATALOG_STOREFRONT,
+  type AppleMusicKeyConfig,
+} from "./config";
+import { notConfigured } from "./errors";
 import { normalizeIsrc } from "./match";
+import type { MusicServices } from "./types";
 
 /**
  * Apple Music — the SERVER half (the playlist itself is created by the
  * client: MusicKit JS on the web, MusicKit on iOS; contract §Apple Music).
+ * Two key roles (config.ts): the SERVER key (dedicated, else the shared
+ * APNs/SIWA key) and the WEB key (dedicated only).
  *
- *  - `appleDeveloperToken()`: the MusicKit developer token (ES256 JWT,
- *    `iss` = team, `kid` = a key with MusicKit, `iat`, `exp` = +12 h).
- *    Public by design (MusicKit JS ships it to the browser), so it is the
- *    one credential a response may carry. Cached per instance, re-minted
- *    with ≥ 1 h left.
+ *  - `appleServerToken()` (private): the developer token for the server's
+ *    OWN calls to Apple (ISRC lookup, probe) — SERVER key, 12 h, no
+ *    `origin`. Never returned to a client (it may be signed by the shared
+ *    key).
+ *  - `appleWebDeveloperToken()`: the one a response may carry (MusicKit JS
+ *    ships it to the browser): WEB key only, 1 h, `origin`-bound to our web
+ *    origins, and only while Apple accepts that key.
  *  - `appleCatalogIsrcs(ids)`: ISRC of catalog songs (`GET /v1/catalog/mx/
  *    songs?ids=…`, ≤ 300 ids per call) — the key that finds the same
  *    recording on TIDAL.
- *  - `appleMusicProbe()`: is the key accepted by Apple? (services endpoint;
- *    cached 1 h so the sheet never costs an Apple call per open).
+ *  - `appleMusicProbe()`: `{ available, webAvailable, reason? }` for the
+ *    services endpoint — each key probed against Apple, cached 1 h per key
+ *    so the sheet never costs an Apple call per open.
  */
 
 const API = "https://api.music.apple.com/v1";
 const TIMEOUT_MS = 6000;
 const IDS_PER_CALL = 300;
 
-let tokenCache: { value: string; expiresAt: number; keyId: string } | null = null;
+type Minted = { value: string; expiresAt: number };
+/** Per key id (server) / key id + origins (web). */
+const serverTokens = new Map<string, Minted>();
+const webTokens = new Map<string, Minted>();
 
-/** `{ token, expiresAt }` or null when the deploy has no MusicKit key. */
-export async function appleDeveloperToken(): Promise<{ token: string; expiresAt: Date } | null> {
-  const cfg = appleMusicKeyConfig();
-  if (!cfg) return null;
+async function mint(
+  cache: Map<string, Minted>,
+  cacheKey: string,
+  cfg: AppleMusicKeyConfig,
+  ttlSeconds: number,
+  minLeftMs: number,
+  origins?: readonly string[],
+): Promise<{ token: string; expiresAt: Date }> {
   const now = Date.now();
-  if (tokenCache && tokenCache.keyId === cfg.keyId && tokenCache.expiresAt - now > 60 * 60 * 1000) {
-    return { token: tokenCache.value, expiresAt: new Date(tokenCache.expiresAt) };
-  }
+  const hit = cache.get(cacheKey);
+  if (hit && hit.expiresAt - now > minLeftMs) return { token: hit.value, expiresAt: new Date(hit.expiresAt) };
   const nowSeconds = Math.floor(now / 1000);
-  const value = await signAppleMusicDeveloperToken(cfg, nowSeconds);
-  const expiresAt = (nowSeconds + APPLE_DEVELOPER_TOKEN_TTL_SECONDS) * 1000;
-  tokenCache = { value, expiresAt, keyId: cfg.keyId };
+  const value = await signAppleMusicDeveloperToken(cfg, nowSeconds, ttlSeconds, origins);
+  const expiresAt = (nowSeconds + ttlSeconds) * 1000;
+  cache.set(cacheKey, { value, expiresAt });
   return { token: value, expiresAt: new Date(expiresAt) };
 }
 
-let probeCache: { ok: boolean; at: number; keyId: string } | null = null;
+/** Server→Apple only (may be signed by the SHARED key): never hand it to a client. */
+async function appleServerToken(cfg = appleMusicServerKeyConfig()): Promise<{ token: string; expiresAt: Date } | null> {
+  if (!cfg) return null;
+  return mint(serverTokens, cfg.keyId, cfg, APPLE_DEVELOPER_TOKEN_TTL_SECONDS, 60 * 60 * 1000);
+}
+
+/**
+ * The browser's MusicKit developer token (GET /music/apple/developer-token,
+ * `getAppleMusicDeveloperTokenAction`): the dedicated WEB key only, 1 h,
+ * `origin` = our web origins. No web key, or Apple rejected it →
+ * `not_configured` (the web sheet already says "Próximamente" from
+ * `webAvailable: false`; a token Apple refuses would only fail mid-flow).
+ * Cached per instance, re-minted with < 30 min left.
+ */
+export async function appleWebDeveloperToken(): Promise<{ token: string; expiresAt: Date }> {
+  const cfg = appleMusicWebKeyConfig();
+  if (!cfg || cfg.source !== "dedicated") throw notConfigured("apple_music");
+  if ((await probeKey(cfg)) === "rejected") throw notConfigured("apple_music");
+  const origins = appleMusicWebOrigins();
+  return mint(webTokens, `${cfg.keyId} ${origins.join(" ")}`, cfg, APPLE_WEB_TOKEN_TTL_SECONDS, 30 * 60 * 1000, origins);
+}
+
+function forgetTokens(keyId: string): void {
+  serverTokens.delete(keyId);
+  for (const k of [...webTokens.keys()]) if (k.startsWith(`${keyId} `)) webTokens.delete(k);
+}
+
+const probeCache = new Map<string, { ok: boolean; at: number }>();
 const PROBE_TTL_MS = 60 * 60 * 1000;
 
 /**
- * "available" for Apple Music: configured AND (last we checked) Apple
- * accepted the token. A 401/403 = the key has no MusicKit → `key_rejected`.
- * A network error/5xx is NOT a verdict (stays available; the export itself
- * reports failures) and isn't cached.
+ * Does Apple accept this key for MusicKit? A 401/403 (or a key that doesn't
+ * import) = "rejected", cached 1 h. A network error/5xx is NOT a verdict
+ * ("unknown", not cached: stays available; the export reports failures).
  */
-export async function appleMusicProbe(): Promise<{ available: boolean; reason?: "not_configured" | "key_rejected" }> {
-  const cfg = appleMusicKeyConfig();
-  if (!cfg) return { available: false, reason: "not_configured" };
+async function probeKey(cfg: AppleMusicKeyConfig): Promise<"ok" | "rejected" | "unknown"> {
   const now = Date.now();
-  if (probeCache && probeCache.keyId === cfg.keyId && now - probeCache.at < PROBE_TTL_MS) {
-    return probeCache.ok ? { available: true } : { available: false, reason: "key_rejected" };
-  }
+  const hit = probeCache.get(cfg.keyId);
+  if (hit && now - hit.at < PROBE_TTL_MS) return hit.ok ? "ok" : "rejected";
   try {
-    const dev = await appleDeveloperToken();
-    if (!dev) return { available: false, reason: "not_configured" };
+    const dev = await appleServerToken(cfg);
+    if (!dev) return "unknown";
     const res = await fetch(`${API}/storefronts/${CATALOG_STOREFRONT}`, {
       headers: { Authorization: `Bearer ${dev.token}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -66,21 +110,40 @@ export async function appleMusicProbe(): Promise<{ available: boolean; reason?: 
     });
     if (res.status === 401 || res.status === 403) {
       console.warn(`[music-export] apple probe rejected status=${res.status} key=${cfg.source}`);
-      probeCache = { ok: false, at: now, keyId: cfg.keyId };
-      tokenCache = null;
-      return { available: false, reason: "key_rejected" };
+      probeCache.set(cfg.keyId, { ok: false, at: now });
+      forgetTokens(cfg.keyId);
+      return "rejected";
     }
-    if (res.ok) probeCache = { ok: true, at: now, keyId: cfg.keyId };
-    return { available: true };
+    if (res.ok) probeCache.set(cfg.keyId, { ok: true, at: now });
+    return res.ok ? "ok" : "unknown";
   } catch (err) {
     // A key that doesn't import (bad PEM) is a verdict; a timeout is not.
     if (err instanceof Error && /key|pkcs8|asn1/i.test(err.message)) {
       console.warn(`[music-export] apple key unusable key=${cfg.source}: ${err.name}`);
-      probeCache = { ok: false, at: now, keyId: cfg.keyId };
-      return { available: false, reason: "key_rejected" };
+      probeCache.set(cfg.keyId, { ok: false, at: now });
+      return "rejected";
     }
-    return { available: true };
+    return "unknown";
   }
+}
+
+/**
+ * `services.apple_music`:
+ *   - `available` — iOS reads THIS: the server has a MusicKit key Apple
+ *     accepts (dedicated or shared; iOS itself uses native MusicKit, the key
+ *     is what the ISRC lookup and the founder's on/off rest on);
+ *   - `webAvailable` — the web reads THIS: `available` AND the dedicated web
+ *     key exists and Apple accepts it (only it may sign the browser token);
+ *   - `reason` — why `available` is false (`not_configured` | `key_rejected`).
+ */
+export async function appleMusicProbe(): Promise<MusicServices["apple_music"]> {
+  const server = appleMusicServerKeyConfig();
+  if (!server) return { available: false, webAvailable: false, reason: "not_configured" };
+  const serverVerdict = await probeKey(server);
+  if (serverVerdict === "rejected") return { available: false, webAvailable: false, reason: "key_rejected" };
+  const web = appleMusicWebKeyConfig();
+  const webVerdict = !web ? "rejected" : web.keyId === server.keyId ? serverVerdict : await probeKey(web);
+  return { available: true, webAvailable: webVerdict !== "rejected" };
 }
 
 /**
@@ -90,7 +153,7 @@ export async function appleMusicProbe(): Promise<{ available: boolean; reason?: 
  * back to title+artist search). Null when the deploy has no key.
  */
 export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<string, string> | null> {
-  const dev = await appleDeveloperToken();
+  const dev = await appleServerToken();
   if (!dev) return null;
   const out = new Map<string, string>();
   const clean = [...new Set(ids.filter((id) => /^\d{1,20}$/.test(id)))];
@@ -104,8 +167,11 @@ export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<str
       cache: "no-store",
     });
     if (res.status === 401 || res.status === 403) {
-      tokenCache = null;
-      probeCache = null;
+      const cfg = appleMusicServerKeyConfig();
+      if (cfg) {
+        forgetTokens(cfg.keyId);
+        probeCache.delete(cfg.keyId);
+      }
       throw new Error(`apple catalog: ${res.status}`);
     }
     if (!res.ok) throw new Error(`apple catalog: ${res.status}`);

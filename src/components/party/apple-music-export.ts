@@ -49,7 +49,7 @@ export interface AppleExportDeps {
   mk: MusicKitInstance;
   state: ExportState;
   /** `reportAppleMusicExportAction` → the new state, or throws `ActionRefused`. */
-  report: (input: { playlistId: string; replace?: boolean; added: string[]; missing: string[] }) => Promise<ExportState>;
+  report: (input: { playlistId: string | null; replace?: boolean; added: string[]; missing: string[] }) => Promise<ExportState>;
   onProgress: (p: AppleProgress) => void;
   /** False once the screen closed or a retry started: stop quietly. */
   alive: () => boolean;
@@ -162,9 +162,10 @@ async function resolveInStorefront(mk: MusicKitInstance, sf: string, songs: read
 }
 
 /**
- * Runs the export. Returns the final state: the server's, or — when nothing
- * could be found at all and there is no playlist to report against — a local
- * "done" with every song missing (nothing to open, nothing recorded).
+ * Runs the export. Returns the final state (always the server's). When
+ * nothing could be found at all and there is no playlist to add to, it
+ * reports `playlistId: null` (+ `replace` if the recorded one was deleted),
+ * so the server forgets a dead playlist and "Abrir" never points at it.
  * Returns null when `alive()` turned false mid-way.
  */
 export async function runAppleMusicExport(deps: AppleExportDeps): Promise<ExportState | null> {
@@ -198,22 +199,14 @@ export async function runAppleMusicExport(deps: AppleExportDeps): Promise<Export
 
   if (!playlistId && toSend.length === 0) {
     // Nothing of the party exists in their storefront: no playlist to make.
-    const lost = new Set(work.map((s) => s.titleId));
-    const songs = state.songs.map((s) => (lost.has(s.titleId) ? { ...s, state: "missing" as const } : s));
-    return {
-      ...state,
-      status: "done",
-      processed: total,
-      current: null,
-      songs,
-      missing: songs.filter((s) => s.state === "missing"),
-    };
+    // Tell the server anyway — with `replace` it retires the one they deleted.
+    return deps.report({ playlistId: null, ...(replace ? { replace: true } : {}), added: [], missing });
   }
 
   let missingReported = false;
   const report = async (added: string[]) => {
     state = await deps.report({
-      playlistId: playlistId!,
+      playlistId,
       ...(replace ? { replace: true } : {}),
       added,
       missing: missingReported ? [] : missing,

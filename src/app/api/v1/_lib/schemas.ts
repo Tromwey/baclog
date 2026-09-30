@@ -906,7 +906,10 @@ export const MusicProviderSchema = z.enum(["apple_music", "tidal"]);
 
 export const MusicServicesSchema = z.object({
   apple_music: z.object({
+    /** iOS reads this (native MusicKit). */
     available: z.boolean(),
+    /** The web reads this (MusicKit JS; needs the dedicated web key too). Additive, 2026-09-29. */
+    webAvailable: z.boolean(),
     reason: z.enum(["not_configured", "key_rejected"]).optional(),
   }),
   tidal: z.object({
@@ -928,8 +931,14 @@ export const TidalStartSchema = z.object({
 });
 
 export const TidalCompleteBodySchema = z.object({
-  /** The `ref` of `kura://music/tidal/authorized?ref=…`. */
+  /** The `ref` of `kura://music/tidal/authorized?ref=…&claim=…`. */
   ref: z.string().regex(/^i[A-Za-z0-9_-]{43}$/),
+  /**
+   * The `claim` of that same bounce. Required by the server — but a missing
+   * or malformed one answers the 409 `auth_expired` of a wrong one (the
+   * module checks it), never a 400 that would tell "this ref exists".
+   */
+  claim: z.string().max(256).optional(),
 });
 
 export const ExportSongSchema = z.object({
@@ -966,9 +975,14 @@ export type ExportStateWire = z.infer<typeof ExportStateSchema>;
 
 const TitleIdListSchema = z.array(z.string().min(1).max(64)).max(1000);
 
-/** PUT /parties/{id}/exports/apple_music — what the client did with MusicKit. */
+/**
+ * PUT /parties/{id}/exports/apple_music — what the client did with MusicKit.
+ * `playlistId: null` (additive, 2026-09-29) = "there is no playlist": none of
+ * the party exists in their storefront; with `replace: true` it also retires
+ * the recorded one they deleted (so no "Abrir" to a dead playlist).
+ */
 export const AppleMusicReportBodySchema = z.object({
-  playlistId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
+  playlistId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/).nullable(),
   replace: z.boolean().optional(),
   added: TitleIdListSchema.default([]),
   missing: TitleIdListSchema.default([]),

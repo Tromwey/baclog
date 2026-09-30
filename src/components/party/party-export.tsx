@@ -117,10 +117,12 @@ export function ExportSheet({
     "flex h-[60px] w-full items-center justify-between gap-3 rounded-[18px] bg-[var(--glass-bg)] px-[18px] font-sans text-[16px] font-semibold text-text bl-press aria-disabled:text-text-2";
 
   const row = (p: MusicProvider) => {
-    const s = services && services !== "off" ? services[p] : null;
+    const all = services && services !== "off" ? services : null;
     const loading = services === null;
-    const soon = !loading && (!s || !s.available);
-    const connected = p === "tidal" && !!services && services !== "off" && services.tidal.connected;
+    // Apple Music on the WEB reads `webAvailable` (it also needs the dedicated web key).
+    const usable = !!all && (p === "apple_music" ? all.apple_music.webAvailable : all.tidal.available);
+    const soon = !loading && !usable;
+    const connected = p === "tidal" && !!all && all.tidal.connected;
     const aside = soon ? "Próximamente" : connected ? "Conectado" : null;
     const off = loading || soon || n === 0;
     return (
@@ -203,9 +205,13 @@ export function ExportScreen({
       : { k: "connect", ready: provider === "tidal" },
   );
   const [mk, setMk] = useState<MusicKitInstance | null>(null);
+  /** "¿salir ahora?" — ✕/Escape while songs are passing (same copy as iOS). */
+  const [leaving, setLeaving] = useState(false);
   const run = useRef(0);
   const panel = useRef<HTMLDivElement>(null);
-  useDialogFocus(panel);
+  // The panel only exists once hydrated (portal to <body>): focus it THEN.
+  const hydrated = useHydrated();
+  useDialogFocus(panel, hydrated);
 
   /** A non-ok action result → the right step (or navigation). */
   const settleFailure = useCallback(
@@ -285,7 +291,7 @@ export function ExportScreen({
       setStep({ k: "progress", processed: 0, total: total0, current: null });
       let state = await call("start apple export", () => startPartyExportAction(party.id, "apple_music"), alive);
       if (!state) return;
-      const report = async (input: { playlistId: string; replace?: boolean; added: string[]; missing: string[] }) => {
+      const report = async (input: { playlistId: string | null; replace?: boolean; added: string[]; missing: string[] }) => {
         for (let attempt = 0; attempt < 10; attempt++) {
           const res = await logged("apple export report", party.id, reportAppleMusicExportAction(party.id, input));
           const s = stateOf(res);
@@ -376,6 +382,7 @@ export function ExportScreen({
   }, [provider, start]);
 
   const connect = () => {
+    setLeaving(false);
     if (provider === "tidal") {
       window.location.assign(tidalStartPath(partyPath(party.id)));
       return;
@@ -392,6 +399,7 @@ export function ExportScreen({
   };
 
   const retry = () => {
+    setLeaving(false);
     if (provider === "tidal") {
       setStep({ k: "progress", processed: 0, total: total0, current: null });
       void runTidal();
@@ -415,11 +423,19 @@ export function ExportScreen({
     return () => window.removeEventListener("beforeunload", onLeave);
   }, [running]);
 
+  // ✕ / Escape: straight out, except mid-export → "¿salir ahora?" first.
+  // The question only exists while it runs; a finished/failed export closes directly.
+  const askLeave = leaving && running;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (askLeave) setLeaving(false); // Escape on the question = keep going
+      else if (running) setLeaving(true);
+      else onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [askLeave, running, onClose]);
 
   const title =
     step.k === "connect"
@@ -445,7 +461,6 @@ export function ExportScreen({
     body = step.message;
   }
 
-  const hydrated = useHydrated();
   if (!hydrated) return null;
 
   const pct = step.k === "progress" && step.total > 0 ? Math.min(100, (step.processed / step.total) * 100) : 0;
@@ -465,8 +480,8 @@ export function ExportScreen({
         <div className="-mx-2 flex h-14 items-center">
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
+            onClick={() => (running ? setLeaving(true) : onClose())}
+            aria-label={running ? "Salir" : "Cerrar"}
             className="flex h-11 w-11 items-center justify-center rounded-full text-text transition-colors active:bg-white/[0.06]"
           >
             <KIcon name="close" size={16} />
@@ -549,6 +564,35 @@ export function ExportScreen({
           )}
         </div>
       </div>
+      {askLeave && (
+        <div className="fixed inset-0 z-10 flex items-end justify-center bg-black/50" onClick={() => setLeaving(false)}>
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="export-leave-title"
+            aria-describedby="export-leave-body"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-t-[28px] bg-bg px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-6 shadow-[0_-12px_40px_rgba(0,0,0,0.45)]"
+            style={style}
+          >
+            <h2 id="export-leave-title" className="font-brand text-[30px] font-normal leading-[1.05] tracking-[-0.015em]">
+              ¿salir ahora?
+            </h2>
+            <p id="export-leave-body" className="mt-2.5 font-sans text-[15px] leading-[1.45] text-text-2 [text-wrap:pretty]">
+              Las canciones que ya pasaron se quedan en tu playlist de {svc}. Si vuelves a exportar, seguimos donde
+              quedamos.
+            </p>
+            <div className="mt-[22px] flex flex-col gap-2">
+              <button type="button" autoFocus onClick={() => setLeaving(false)} className={HONEY}>
+                Seguir pasándola
+              </button>
+              <button type="button" onClick={onClose} className={QUIET_52}>
+                Salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );

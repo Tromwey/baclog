@@ -1136,11 +1136,21 @@ export const musicOauthStates = pgTable(
     returnTo: text("return_to"),
     /** iOS only: the authorization code parked by the callback (encrypted). */
     codeEnc: text("code_enc"),
+    /**
+     * iOS only: sha256 of the one-time `claim` the callback put in the
+     * `kura://…/authorized?ref&claim` bounce. `complete` needs it besides
+     * ref + the starter's bearer: the ref alone is the `state`, which the
+     * STARTER already knows — without the claim, an attacker who got a
+     * victim to consent on his authorize URL could complete it himself.
+     */
+    claimHash: text("claim_hash"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     expiresAt: timestamp("expires_at").notNull(),
   },
   (t) => [
     index("music_oauth_state_user_idx").on(t.userId),
+    /** Global GC of dead attempts (`startTidalAuth` / the callback). */
+    index("music_oauth_state_expires_idx").on(t.expiresAt),
     check("music_oauth_state_client_check", sql`${t.client} in ('web', 'ios')`),
   ],
 );
@@ -1168,6 +1178,9 @@ export const partyExports = pgTable(
     remotePlaylistId: text("remote_playlist_id"),
     remoteUrl: text("remote_url"),
     generation: integer("generation").notNull().default(0),
+    /** When `generation` last went up (TIDAL: at most once per 10 min — a
+     *  playlist that keeps "disappearing" fails instead of looping). */
+    generationBumpedAt: timestamp("generation_bumped_at"),
     leaseUntil: timestamp("lease_until"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),

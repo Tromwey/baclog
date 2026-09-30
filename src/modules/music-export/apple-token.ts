@@ -2,10 +2,11 @@ import { SignJWT, importPKCS8 } from "jose";
 import { APPLE_DEVELOPER_TOKEN_TTL_SECONDS, type AppleMusicKeyConfig } from "./config";
 
 /**
- * The MusicKit developer token: ES256 JWT, header `kid` = a key with
- * MusicKit enabled, claims `iss` = team id, `iat`, `exp` (Apple allows ≤ 6
- * months; we mint 12 h). No `origin` claim: the same token serves the
- * server-side catalog calls, which send no Origin header.
+ * The MusicKit developer token: ES256 JWT, header `kid` = the dedicated
+ * MusicKit key, claims `iss` = team id, `iat`, `exp` (Apple allows ≤ 6
+ * months). Two flavours (apple-music.ts): the SERVER's (12 h, no `origin`,
+ * never leaves the server — catalog ISRC calls send no Origin header) and the
+ * BROWSER's (1 h, `origin` = our web origins, so Apple refuses it elsewhere).
  * Pure (jose only, no `server-only`) so `scripts/check-music-export.ts`
  * verifies it with a throwaway key. Server code only.
  */
@@ -28,8 +29,9 @@ export async function signAppleMusicDeveloperToken(
   cfg: AppleMusicKeyConfig,
   nowSeconds = Math.floor(Date.now() / 1000),
   ttlSeconds = APPLE_DEVELOPER_TOKEN_TTL_SECONDS,
+  origins?: readonly string[],
 ): Promise<string> {
-  return new SignJWT({})
+  return new SignJWT(origins && origins.length > 0 ? { origin: [...origins] } : {})
     .setProtectedHeader({ alg: "ES256", kid: cfg.keyId })
     .setIssuer(cfg.teamId)
     .setIssuedAt(nowSeconds)

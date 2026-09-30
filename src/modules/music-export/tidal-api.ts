@@ -36,11 +36,29 @@ const TIMEOUT_MS = 6000;
 export class TidalHttpError extends Error {
   readonly status: number;
   readonly retryAfterSeconds: number | null;
-  constructor(what: string, status: number, retryAfterSeconds: number | null = null) {
-    super(`tidal ${what}: ${status}`);
+  /** JSON:API `errors[].code` of a 4xx (sanitized; never `detail`, never the body). */
+  readonly codes: readonly string[];
+  constructor(what: string, status: number, retryAfterSeconds: number | null = null, codes: readonly string[] = []) {
+    super(`tidal ${what}: ${status}${codes.length ? ` [${codes.join(",")}]` : ""}`);
     this.name = "TidalHttpError";
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.codes = codes;
+  }
+}
+
+const CODE_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** The `errors[].code` list of a JSON:API error body — codes only, max 5. */
+async function errorCodes(res: Response): Promise<string[]> {
+  try {
+    const doc = (await res.json()) as { errors?: { code?: unknown }[] };
+    return (Array.isArray(doc?.errors) ? doc.errors : [])
+      .map((e) => e?.code)
+      .filter((c): c is string => typeof c === "string" && CODE_RE.test(c))
+      .slice(0, 5);
+  } catch {
+    return [];
   }
 }
 
@@ -53,7 +71,10 @@ function retryAfterOf(res: Response): number | null {
 
 async function call(what: string, url: URL | string, init: RequestInit): Promise<Response> {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
-  if (!res.ok) throw new TidalHttpError(what, res.status, retryAfterOf(res));
+  if (!res.ok) {
+    const codes = res.status >= 400 && res.status < 500 && res.status !== 429 ? await errorCodes(res) : [];
+    throw new TidalHttpError(what, res.status, retryAfterOf(res), codes);
+  }
   return res;
 }
 
@@ -287,6 +308,24 @@ export async function tidalCreatePlaylist(
   const links = (pl.attributes?.externalLinks ?? []) as { href?: string }[];
   const href = links.find((l) => typeof l.href === "string")?.href ?? null;
   return { id: pl.id, url: tidalPlaylistUrl(pl.id, href) };
+}
+
+/**
+ * Does the playlist still exist for this user? `GET /playlists/{id}` (user
+ * token): 404 → false; anything else not-ok THROWS (the caller decides).
+ * A 404 on ADD doesn't prove the playlist is gone (a track id can 404 too):
+ * this is the confirmation before starting a new generation.
+ */
+export async function tidalPlaylistExists(accessToken: string, playlistId: string): Promise<boolean> {
+  try {
+    await call("get_playlist", `${TIDAL_API_BASE}/playlists/${encodeURIComponent(playlistId)}`, {
+      headers: jsonApi(accessToken),
+    });
+    return true;
+  } catch (err) {
+    if (err instanceof TidalHttpError && err.status === 404) return false;
+    throw err;
+  }
 }
 
 /** Appends `trackIds` in order; duplicates already in the playlist are skipped by TIDAL. */

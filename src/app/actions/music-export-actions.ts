@@ -4,8 +4,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/auth";
 import type { CurrentUser } from "@/auth/session";
 import { loginPathFor } from "@/lib/return-to";
-import { appleDeveloperToken } from "@/modules/music-export/apple-music";
-import { assertMusicExportLive, MusicExportError, notConfigured } from "@/modules/music-export/errors";
+import { appleWebDeveloperToken } from "@/modules/music-export/apple-music";
+import { assertMusicExportLive, MusicExportError } from "@/modules/music-export/errors";
 import {
   getExportState,
   reportAppleMusicExport,
@@ -77,7 +77,7 @@ export async function getMusicServicesAction() {
   return guarded(async () => ({ ok: true as const, services: await musicServicesFor(user.id) }));
 }
 
-/** MusicKit JS developer token (public by design); 30/min per user. */
+/** MusicKit JS developer token (public by design; 1 h, origin-bound); 30/min per user. */
 export async function getAppleMusicDeveloperTokenAction() {
   const user = await sessionOr();
   if (!isUser(user)) return user;
@@ -85,8 +85,7 @@ export async function getAppleMusicDeveloperTokenAction() {
   if (!rl.ok) return { error: "rate_limited" as const, retryAfterSeconds: rl.retryAfterSeconds };
   return guarded(async () => {
     assertMusicExportLive();
-    const dev = await appleDeveloperToken();
-    if (!dev) throw notConfigured("apple_music");
+    const dev = await appleWebDeveloperToken();
     return { ok: true as const, token: dev.token, expiresAt: dev.expiresAt.toISOString() };
   });
 }
@@ -123,14 +122,14 @@ export async function stepTidalExportAction(backlogId: string) {
 /** Apple Music: what MusicKit JS did (playlist created/extended). */
 export async function reportAppleMusicExportAction(
   backlogId: string,
-  input: { playlistId: string; replace?: boolean; added?: string[]; missing?: string[] },
+  input: { playlistId: string | null; replace?: boolean; added?: string[]; missing?: string[] },
 ) {
   const user = await sessionOr(backlogId);
   if (!isUser(user)) return user;
   const parsed = z
     .object({
       id: idSchema,
-      playlistId: z.string().regex(APPLE_PLAYLIST_ID_RE),
+      playlistId: z.string().regex(APPLE_PLAYLIST_ID_RE).nullable(),
       replace: z.boolean().optional(),
       added: z.array(idSchema).max(1000).default([]),
       missing: z.array(idSchema).max(1000).default([]),

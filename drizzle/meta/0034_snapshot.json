@@ -1,5 +1,5 @@
 {
-  "id": "4f36f3cf-0d9f-4026-b3c8-3fd22d6e45c1",
+  "id": "f882fb5f-9e57-45d6-98a9-deb3b86af30c",
   "prevId": "3e0a431d-458b-4e9a-8351-5358cd19037b",
   "version": "7",
   "dialect": "postgresql",
@@ -2262,6 +2262,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "claim_hash": {
+          "name": "claim_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -2282,6 +2288,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "music_oauth_state_expires_idx": {
+          "name": "music_oauth_state_expires_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2501,6 +2522,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "generation_bumped_at": {
+          "name": "generation_bumped_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "lease_until": {
           "name": "lease_until",

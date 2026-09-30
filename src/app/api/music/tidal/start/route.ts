@@ -15,6 +15,14 @@ import { startTidalAuth } from "@/modules/music-export/tidal-auth";
  * is one); switch off / not configured / too many → 302 to
  * `{return}?music=tidal&connected=0&reason=unavailable|rate_limited`.
  * `return` outside the whitelist → `/settings/musica`.
+ *
+ * Only a navigation that starts ON kura (or typed / bookmarked) may begin
+ * the dance: `Sec-Fetch-Site` must be `same-origin` or `none`. A cross-site
+ * link or auto-submitted form lands back on `return` without starting
+ * anything (no state row, no TIDAL redirect). Browsers that don't send the
+ * header (old Safari) pass — the state is bound to the cookie user either way.
+ * It stays a GET: the "Conectar TIDAL" button is a plain navigation, and a
+ * POST form would change nothing this check doesn't already give.
  */
 function redirect(request: NextRequest, to: string): NextResponse {
   const res = NextResponse.redirect(to.startsWith("https://") ? to : new URL(to, request.url), 302);
@@ -23,8 +31,15 @@ function redirect(request: NextRequest, to: string): NextResponse {
   return res;
 }
 
+const ALLOWED_FETCH_SITES = new Set(["same-origin", "none"]);
+
 export async function GET(request: NextRequest) {
   const returnTo = safeMusicReturn(request.nextUrl.searchParams.get("return")) ?? MUSIC_RETURN_FALLBACK;
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && !ALLOWED_FETCH_SITES.has(site)) {
+    console.warn(`[music-export] tidal web start refused: sec-fetch-site=${site.slice(0, 20)}`);
+    return redirect(request, returnTo);
+  }
   const user = await getCurrentUser();
   if (!user) return redirect(request, loginPathFor(returnTo));
   try {

@@ -14,7 +14,9 @@ enum MusicProvider: String, Codable, Hashable, CaseIterable, Sendable {
     var label: String { self == .tidal ? "TIDAL" : "Apple Music" }
 }
 
-/// `GET /music/services`: which button works on this deploy. `available: false` → "Próximamente".
+/// `GET /music/services`: which button works on this deploy. `available: false` → "Próximamente",
+/// except Apple Music with `reason: "web_key_missing"` (iOS doesn't need the web's key). Unknown
+/// fields (e.g. a future `webAvailable`) are ignored.
 struct MusicServices: Hashable, Decodable, Sendable {
     struct Service: Hashable, Decodable, Sendable {
         var available: Bool
@@ -44,9 +46,16 @@ struct MusicServices: Hashable, Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        appleMusic = try c.decodeIfPresent(Service.self, forKey: .apple_music) ?? Service(available: false)
+        var apple = try c.decodeIfPresent(Service.self, forKey: .apple_music) ?? Service(available: false)
+        // The server's Apple Music key only matters to the web (MusicKit JS needs a developer
+        // token); iOS uses native MusicKit, so a missing WEB key still leaves it available here.
+        if apple.reason == Self.webKeyMissing { apple.available = true }
+        appleMusic = apple
         tidal = try c.decodeIfPresent(Service.self, forKey: .tidal) ?? Service(available: false)
     }
+
+    /// `apple_music.reason` when only the web lacks the MusicKit key (backend, 2026-09-29).
+    static let webKeyMissing = "web_key_missing"
 
     subscript(_ p: MusicProvider) -> Service { p == .tidal ? tidal : appleMusic }
 

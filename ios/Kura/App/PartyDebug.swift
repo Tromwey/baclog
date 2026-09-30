@@ -67,8 +67,9 @@ enum PartyDebug {
             main([.party(mine)], sheet: .partySong(partyID: mine, titleID: MockPartyServer.catalog["toxic"]!.id))
         case "partyexport":
             main([.party(mine)], sheet: .partyExport(mine))
-        // "Llévala a otra app" (`-kuraMusic off|none|apple|tidal`, `-kuraTidalConnected YES`,
-        // `-kuraExportFail YES`, `-kuraAppleAuth denied`, `-kuraTidalDenied YES` — MockMusicExport.swift).
+        // "Llévala a otra app" (`-kuraMusic off|none|apple|tidal|rejected`, `-kuraTidalConnected YES`,
+        // `-kuraExportFail YES`, `-kuraAppleAuth denied`, `-kuraTidalDenied YES`, `-kuraTidalNoClaim YES`
+        // — MockMusicExport.swift).
         case "partyexportguest":
             server.seedMine(["afuera"])
             main([.party(eric)], sheet: .partyExport(eric))

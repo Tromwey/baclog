@@ -7,9 +7,12 @@ import { openSecret, sealSecret } from "@/lib/secret-box";
 import { TIDAL_AUTHORIZE_URL, TIDAL_SCOPES, tidalOAuthConfig, type TidalOAuthConfig } from "./config";
 import { assertMusicExportLive, MusicExportError, notConfigured, notConnected, serviceFailed } from "./errors";
 import {
+  claimMatches,
   clientOfState,
   codeChallengeS256,
+  hashClaim,
   hashOAuthState,
+  newClaim,
   newCodeVerifier,
   newOAuthState,
   tidalAuthorizeUrl,
@@ -26,10 +29,16 @@ import { exchangeTidalCode, refreshTidalToken, TidalHttpError, tidalMeCountry, t
  * ATTACKER's Kura account (then write playlists into it). So:
  *   - web: the callback only finishes when the browser's cookie session is
  *     the user who started (`client = "web"`);
- *   - iOS: the callback only PARKS the code (encrypted) and bounces to
- *     `kura://music/tidal/authorized?ref=<state>`; the app finishes with
- *     `POST /api/v1/music/tidal/complete { ref }` and ITS bearer must be the
- *     user who started (`client = "ios"`).
+ *   - iOS: the callback only PARKS the code (encrypted) with the hash of a
+ *     fresh one-time `claim`, and bounces to
+ *     `kura://music/tidal/authorized?ref=<state>&claim=<claim>`; the app
+ *     finishes with `POST /api/v1/music/tidal/complete { ref, claim }` and
+ *     ITS bearer must be the user who started (`client = "ios"`). The claim
+ *     is what the bearer check alone can't give: the ref IS the state, which
+ *     the starter already has in his authorize URL — so an attacker who got
+ *     a victim to consent on it could otherwise complete it himself (learning
+ *     2026-09-29-oauth-codigo-estacionado-csrf). The claim only travels in
+ *     the bounce, to the browser that actually came back from TIDAL.
  * The state is 1 letter of client hint (`w`/`i`, so the callback knows where
  * to bounce even for a dead state) + 43 chars of randomness; only its sha256
  * is stored; single use (DELETE … RETURNING); 10 minutes of life.
@@ -71,8 +80,9 @@ export async function startTidalAuth(userId: string, client: OAuthClient, return
   const hash = hashOAuthState(state);
   const verifier = newCodeVerifier();
   await db.batch([
-    // Housekeeping: this user's dead attempts.
-    db.delete(musicOauthStates).where(and(eq(musicOauthStates.userId, userId), lt(musicOauthStates.expiresAt, new Date()))),
+    // Housekeeping: EVERY dead attempt, not just this user's (an abandoned
+    // consent would otherwise sit there forever; `expires_idx` makes it cheap).
+    db.delete(musicOauthStates).where(lt(musicOauthStates.expiresAt, new Date())),
     db.insert(musicOauthStates).values({
       stateHash: hash,
       userId,
@@ -98,7 +108,7 @@ export async function startTidalAuth(userId: string, client: OAuthClient, return
 export type CallbackOutcome =
   | { client: "web"; ok: true; returnTo: string | null }
   | { client: "web"; ok: false; returnTo: string | null; reason: CallbackFailure }
-  | { client: "ios"; ok: true; ref: string }
+  | { client: "ios"; ok: true; ref: string; claim: string }
   | { client: "ios"; ok: false; reason: CallbackFailure };
 
 export type CallbackFailure = "denied" | "expired" | "session" | "exchange" | "unavailable";
@@ -122,9 +132,13 @@ export async function handleTidalCallback(
       await db.delete(musicOauthStates).where(eq(musicOauthStates.stateHash, hash));
       return { client, ok: false, reason: params.error ? "denied" : "expired" };
     }
+    const claim = newClaim();
     const parked = await db
       .update(musicOauthStates)
-      .set({ codeEnc: sealSecret(params.code.slice(0, 2048), PURPOSE, aadState(hash, "code")) })
+      .set({
+        codeEnc: sealSecret(params.code.slice(0, 2048), PURPOSE, aadState(hash, "code")),
+        claimHash: hashClaim(claim),
+      })
       .where(
         and(
           eq(musicOauthStates.stateHash, hash),
@@ -134,7 +148,7 @@ export async function handleTidalCallback(
         ),
       )
       .returning({ userId: musicOauthStates.userId });
-    return parked.length > 0 ? { client, ok: true, ref: state } : { client, ok: false, reason: "expired" };
+    return parked.length > 0 ? { client, ok: true, ref: state, claim } : { client, ok: false, reason: "expired" };
   }
 
   // Web: consume first (single use whatever happens next), then judge.
@@ -159,8 +173,15 @@ export async function handleTidalCallback(
 
 // ---------- iOS complete ----------
 
-/** `POST /api/v1/music/tidal/complete { ref }` — the bearer must be the starter. */
-export async function completeTidalAuth(userId: string, ref: string): Promise<void> {
+/**
+ * `POST /api/v1/music/tidal/complete { ref, claim }` — needs all three: the
+ * ref, the claim the callback bounced (constant-time hash compare) and the
+ * starter's bearer. Any miss is the SAME `auth_expired` and burns nothing:
+ * the row is only consumed (DELETE … RETURNING, guarded by the claim hash we
+ * just matched) once everything checked out, so a stranger's attempt never
+ * spends the owner's parked code.
+ */
+export async function completeTidalAuth(userId: string, ref: string, claim: string): Promise<void> {
   assertMusicExportLive();
   requireConfig();
   const expired = new MusicExportError(
@@ -170,17 +191,23 @@ export async function completeTidalAuth(userId: string, ref: string): Promise<vo
   );
   if (clientOfState(ref) !== "ios") throw expired;
   const hash = hashOAuthState(ref);
+  const live = and(
+    eq(musicOauthStates.stateHash, hash),
+    eq(musicOauthStates.userId, userId),
+    eq(musicOauthStates.client, "ios"),
+    isNotNull(musicOauthStates.codeEnc),
+    isNotNull(musicOauthStates.claimHash),
+    gt(musicOauthStates.expiresAt, new Date()),
+  );
+  const [pending] = await db
+    .select({ claimHash: musicOauthStates.claimHash })
+    .from(musicOauthStates)
+    .where(live)
+    .limit(1);
+  if (!pending || !claimMatches(claim, pending.claimHash)) throw expired;
   const [row] = await db
     .delete(musicOauthStates)
-    .where(
-      and(
-        eq(musicOauthStates.stateHash, hash),
-        eq(musicOauthStates.userId, userId),
-        eq(musicOauthStates.client, "ios"),
-        isNotNull(musicOauthStates.codeEnc),
-        gt(musicOauthStates.expiresAt, new Date()),
-      ),
-    )
+    .where(and(live, eq(musicOauthStates.claimHash, pending.claimHash as string)))
     .returning();
   if (!row) throw expired;
   const verifier = openSecret(row.codeVerifierEnc, PURPOSE, aadState(hash, "verifier"));
@@ -229,7 +256,12 @@ async function saveConnection(userId: string, set: TidalTokenSet, previousRefres
     .values({ userId, provider: "tidal", ...values, countryCode: country })
     .onConflictDoUpdate({
       target: [musicConnections.userId, musicConnections.provider],
-      set: { ...values, countryCode: country ? country : sql`${musicConnections.countryCode}` },
+      set: {
+        ...values,
+        // A refresh that doesn't echo these keeps what we knew.
+        scope: set.scope ? set.scope : sql`${musicConnections.scope}`,
+        countryCode: country ? country : sql`${musicConnections.countryCode}`,
+      },
     });
 }
 
@@ -252,6 +284,8 @@ export async function disconnectTidal(userId: string): Promise<void> {
 export interface TidalAccess {
   accessToken: string;
   countryCode: string | null;
+  /** The granted scopes as TIDAL reported them (null = unknown). */
+  scope: string | null;
 }
 
 /**
@@ -267,7 +301,7 @@ export async function getTidalAccess(userId: string, force = false): Promise<Tid
   if (!row) throw notConnected("tidal");
   const access = openSecret(row.accessTokenEnc, PURPOSE, aadConn(userId, "access"));
   if (access && !force && row.expiresAt.getTime() - Date.now() > 2 * 60 * 1000) {
-    return { accessToken: access, countryCode: row.countryCode };
+    return { accessToken: access, countryCode: row.countryCode, scope: row.scope };
   }
   const refresh = openSecret(row.refreshTokenEnc, PURPOSE, aadConn(userId, "refresh"));
   if (!refresh) {
@@ -277,13 +311,13 @@ export async function getTidalAccess(userId: string, force = false): Promise<Tid
   try {
     const set = await refreshTidalToken(cfg, refresh);
     await saveConnection(userId, { ...set, countryCode: set.countryCode ?? row.countryCode }, row.refreshTokenEnc);
-    return { accessToken: set.accessToken, countryCode: set.countryCode ?? row.countryCode };
+    return { accessToken: set.accessToken, countryCode: set.countryCode ?? row.countryCode, scope: set.scope ?? row.scope };
   } catch (err) {
     if (err instanceof TidalHttpError && err.status >= 400 && err.status < 500 && err.status !== 429) {
       const fresh = await loadConnection(userId);
       if (fresh && fresh.updatedAt.getTime() !== row.updatedAt.getTime()) {
         const token = openSecret(fresh.accessTokenEnc, PURPOSE, aadConn(userId, "access"));
-        if (token) return { accessToken: token, countryCode: fresh.countryCode };
+        if (token) return { accessToken: token, countryCode: fresh.countryCode, scope: fresh.scope };
       }
       console.warn(`[music-export] tidal refresh refused (${err.status}): link dropped`);
       await dropConnection(userId, row.updatedAt);
@@ -301,6 +335,7 @@ async function loadConnection(userId: string) {
       refreshTokenEnc: musicConnections.refreshTokenEnc,
       expiresAt: musicConnections.expiresAt,
       countryCode: musicConnections.countryCode,
+      scope: musicConnections.scope,
       updatedAt: musicConnections.updatedAt,
     })
     .from(musicConnections)

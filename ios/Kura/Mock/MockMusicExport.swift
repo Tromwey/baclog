@@ -4,12 +4,15 @@ import Foundation
 // (export-contract §5–§8) over the mock parties; `MockAppleMusicLibrary` plays MusicKit and
 // `MockTidalAuthorizer` the TIDAL consent sheet. Knobs (launch arguments):
 //
-//   -kuraMusic off|none|apple|tidal   off = the 503 of MIGRATION_0034_LIVE · none = both
+//   -kuraMusic off|none|apple|tidal|rejected
+//                                     off = the 503 of MIGRATION_0034_LIVE · none = both
 //                                     "Próximamente" · apple / tidal = only that one on (default both)
+//                                     · rejected = Apple Music `key_rejected` ("Próximamente"), TIDAL on
 //   -kuraTidalConnected YES           TIDAL already linked (default: "conecta tidal.")
 //   -kuraExportFail YES               the 2nd TIDAL step / Apple Music chunk fails once (503 service_failed)
 //   -kuraAppleAuth denied             MusicKit permission denied ("Abrir Ajustes")
 //   -kuraTidalDenied YES              TIDAL answers kura://music/tidal/connected?ok=0&reason=denied
+//   -kuraTidalNoClaim YES             the authorized callback comes back without `claim` (= failed)
 //
 // "Somebody's Watching Me" has no Apple Music id in the mock (missing there); "Oye mi amor" isn't
 // in TIDAL.
@@ -27,6 +30,9 @@ final class MockMusicServer: @unchecked Sendable {
     private var exports: [String: Export] = [:]
     private var tidalLinked = UserDefaults.standard.bool(forKey: "kuraTidalConnected")
     private var steps = 0
+    /// The pending link, like the server's `music_link_state` row: `start` mints `ref` + `claim`,
+    /// the callback carries both, `complete` consumes them once.
+    private var pendingLink: (ref: String, claim: String)?
 
     private var mode: String { UserDefaults.standard.string(forKey: "kuraMusic") ?? "all" }
 
@@ -41,14 +47,39 @@ final class MockMusicServer: @unchecked Sendable {
 
     func services() throws -> MusicServices {
         try check()
-        let apple = mode == "all" || mode == "apple", tidal = mode == "all" || mode == "tidal"
+        let apple = mode == "all" || mode == "apple", tidal = mode == "all" || mode == "tidal" || mode == "rejected"
+        let appleReason = apple ? nil : (mode == "rejected" ? "key_rejected" : "not_configured")
         return lock.withLock {
-            MusicServices(appleMusic: .init(available: apple, reason: apple ? nil : "not_configured"),
+            MusicServices(appleMusic: .init(available: apple, reason: appleReason),
                           tidal: .init(available: tidal, connected: tidalLinked && tidal, reason: tidal ? nil : "not_configured"))
         }
     }
 
-    func link() throws -> MusicServices { try check(); lock.withLock { tidalLinked = true }; return try services() }
+    func beginLink() -> (ref: String, claim: String) {
+        func token(_ n: Int) -> String {
+            let abc = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+            return String((0..<n).map { _ in abc.randomElement()! })
+        }
+        let l = (ref: "i" + token(43), claim: token(43))
+        lock.withLock { pendingLink = l }
+        return l
+    }
+
+    func pendingCallback() -> (ref: String, claim: String)? { lock.withLock { pendingLink } }
+
+    /// `complete` needs the exact pair `start` minted; anything else is the server's 409 `auth_expired`.
+    func link(ref: String, claim: String) throws -> MusicServices {
+        try check()
+        try lock.withLock {
+            guard let p = pendingLink, p.ref == ref, p.claim == claim else {
+                throw KuraAPIError.conflict(code: "auth_expired", message: "")
+            }
+            pendingLink = nil
+            tidalLinked = true
+        }
+        return try services()
+    }
+
     func unlink() throws { try check(); lock.withLock { tidalLinked = false } }
 
     private func key(_ id: String, _ p: MusicProvider) -> String { id + "|" + p.rawValue }
@@ -216,7 +247,15 @@ struct MockTidalAuthorizer: TidalAuthorizer {
         if UserDefaults.standard.bool(forKey: "kuraTidalDenied") {
             return URL(string: "kura://music/tidal/connected?ok=0&reason=denied")!
         }
-        return URL(string: "kura://music/tidal/authorized?ref=i" + String(repeating: "a", count: 43))!
+        guard let l = MockMusicServer.shared.pendingCallback() else {
+            return URL(string: "kura://music/tidal/connected?ok=0&reason=expired")!
+        }
+        var c = URLComponents(string: "kura://music/tidal/authorized")!
+        c.queryItems = [URLQueryItem(name: "ref", value: l.ref)]
+        if !UserDefaults.standard.bool(forKey: "kuraTidalNoClaim") {
+            c.queryItems?.append(URLQueryItem(name: "claim", value: l.claim))
+        }
+        return c.url!
     }
 }
 
@@ -227,9 +266,12 @@ extension MockAPI {
     func musicServices() async throws -> MusicServices { await musicWait(); return try music.services() }
     func startTidalAuth() async throws -> URL {
         await musicWait(); _ = try music.services()
+        _ = music.beginLink()
         return URL(string: "https://login.tidal.com/authorize?mock=1")!
     }
-    func completeTidalAuth(ref: String) async throws -> MusicServices { await musicWait(); return try music.link() }
+    func completeTidalAuth(ref: String, claim: String) async throws -> MusicServices {
+        await musicWait(); return try music.link(ref: ref, claim: claim)
+    }
     func disconnectTidal() async throws { await musicWait(); try music.unlink() }
     func partyExport(id: String, provider: MusicProvider) async throws -> ExportState { await musicWait(); return try music.get(id, provider) }
     func startPartyExport(id: String, provider: MusicProvider) async throws -> ExportState {

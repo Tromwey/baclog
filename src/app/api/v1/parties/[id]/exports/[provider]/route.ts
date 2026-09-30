@@ -15,9 +15,10 @@ import { toExportState } from "../../../../_lib/wire";
  *   GET  → ExportState (no work; `status: "idle"` when never started)
  *   POST → ExportState: create/resume the export, re-queue the `missing`
  *          (TIDAL: 409 `not_connected` without a link)
- *   PUT  → (apple_music only) the client's report: `{ playlistId, replace?,
- *          added[], missing[] }` → ExportState; 409 `playlist_exists` when
- *          another playlist is on record and `replace` isn't set.
+ *   PUT  → (apple_music only) the client's report: `{ playlistId | null,
+ *          replace?, added[], missing[] }` → ExportState; 409
+ *          `playlist_exists` when another playlist is on record and `replace`
+ *          isn't set; 429 after 30 reports/min.
  * Party not visible = the party 404. Unknown provider = 404.
  */
 

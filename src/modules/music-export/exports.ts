@@ -18,15 +18,25 @@ import {
   serviceRateLimited,
 } from "./errors";
 import { normalizeIsrc, pickTrackMatch } from "./match";
+import { tidalIdempotencyKey } from "./pkce";
 import {
   applePlaylistUrl,
+  isTidalAuthRefusal,
   PARTY_NOT_FOUND_MESSAGE,
   planExport,
   reportItems,
   TIDAL_STEP_BATCH,
+  tidalForbiddenMessage,
   type PlanItem,
 } from "./rules";
-import { tidalAddTracks, tidalCreatePlaylist, TidalHttpError, tidalSearchTracks, tidalTracksByIsrc } from "./tidal-api";
+import {
+  tidalAddTracks,
+  tidalCreatePlaylist,
+  TidalHttpError,
+  tidalPlaylistExists,
+  tidalSearchTracks,
+  tidalTracksByIsrc,
+} from "./tidal-api";
 import { describe, disconnectTidal, getTidalAccess, isTidalConnected, type TidalAccess } from "./tidal-auth";
 import type { ExportSong, ExportState, MusicProvider } from "./types";
 
@@ -49,6 +59,11 @@ import type { ExportSong, ExportState, MusicProvider } from "./types";
  * TIDAL runs HERE, one batch per `stepTidalExport` call (the client loops
  * and draws the progress). Apple Music runs on the CLIENT (MusicKit) and
  * reports back with `reportAppleMusicExport`.
+ *
+ * "The remote playlist is gone" is only ever concluded from a `GET
+ * /playlists/{id}` 404 (an add can 404 because of ONE track id), and the
+ * new generation it triggers is capped at one per 10 minutes
+ * (`restartGeneration`) so a flaky TIDAL can't make us spray playlists.
  */
 
 const LEASE_MS = 120_000;
@@ -56,6 +71,10 @@ const LEASE_MS = 120_000;
  *  ~20 upstream calls, a start one Apple call. Frena un bucle desbocado. */
 const STEPS_PER_MINUTE = 30;
 const STARTS_PER_MINUTE = 20;
+/** Apple Music reports: the web client reports every ~5 songs and backs off on 429. */
+const REPORTS_PER_MINUTE = 30;
+/** A new TIDAL generation (new playlist) at most this often per export. */
+const REGEN_COOLDOWN_MS = 10 * 60 * 1000;
 
 function limit(key: string, perMinute: number): void {
   const rl = checkRateLimit(key, perMinute);
@@ -272,12 +291,73 @@ export async function startExport(userId: string, backlogId: string, provider: M
     if (!(await isTidalConnected(userId))) throw notConnected("tidal");
   }
   const party = await partyFor(userId, backlogId);
-  const row = await upsertExport(userId, backlogId, provider);
+  let row = await upsertExport(userId, backlogId, provider);
   await db
     .delete(partyExportItems)
     .where(and(eq(partyExportItems.exportId, row.id), eq(partyExportItems.outcome, "missing")));
   if (provider === "apple_music") await ensureIsrcs(party.songs);
+  if (provider === "tidal" && row.remotePlaylistId) row = await confirmTidalPlaylist(userId, party, row);
   return stateOf(provider, party, row);
+}
+
+/**
+ * TIDAL "done" with a playlist on record: before answering `done` + "Abrir
+ * en TIDAL", check the playlist still exists (GET). Gone → new generation
+ * NOW, so the answer is `in_progress` (the client steps and rebuilds it)
+ * instead of a dead link. Only when nothing is pending (otherwise the next
+ * step finds out by itself). TIDAL flaky → answer what we have (logged);
+ * a dropped link (`not_connected`) or the regen cap DO propagate.
+ */
+async function confirmTidalPlaylist(userId: string, party: PartyForExport, row: ExportRow): Promise<ExportRow> {
+  const playlistId = row.remotePlaylistId;
+  if (!playlistId) return row;
+  if (planExport(party.songs, await loadItems(row.id)).pending.length > 0) return row;
+  let exists: boolean;
+  try {
+    const access = await getTidalAccess(userId);
+    exists = await withUserToken(userId, access, (token) => tidalPlaylistExists(token, playlistId));
+  } catch (err) {
+    if (err instanceof MusicExportError) throw err;
+    console.warn(`[music-export] tidal playlist check failed: ${describe(err)}`);
+    return row;
+  }
+  return exists ? row : restartGeneration(row.id);
+}
+
+/**
+ * The remote TIDAL playlist is CONFIRMED gone (GET 404): forget it, clear
+ * the items (the new one gets the whole party) and bump `generation` (new
+ * idempotency key) — in ONE statement, and at most once per
+ * `REGEN_COOLDOWN_MS`: a second "gone" within 10 minutes fails with
+ * `service_failed` instead of creating playlist after playlist.
+ */
+async function restartGeneration(exportId: string): Promise<ExportRow> {
+  // Both sides of the cooldown are the DB clock (`now()`): never compare a
+  // `timestamp without time zone` written by SQL with one serialized from JS.
+  const cooldown = `${Math.round(REGEN_COOLDOWN_MS / 1000)} seconds`;
+  const res = await db.execute<{ n: number }>(sql`
+    with bumped as (
+      update party_export
+         set remote_playlist_id = null, remote_url = null, generation = generation + 1,
+             generation_bumped_at = now(), updated_at = now()
+       where id = ${exportId}
+         and (generation_bumped_at is null or generation_bumped_at < now() - ${cooldown}::interval)
+      returning id
+    ), cleared as (
+      delete from party_export_item where export_id in (select id from bumped)
+    )
+    select count(*)::int as n from bumped`);
+  if (Number(res.rows[0]?.n ?? 0) === 0) {
+    console.warn("[music-export] tidal playlist vanished twice within 10 min: not recreating");
+    throw new MusicExportError(
+      "unavailable",
+      "service_failed",
+      "TIDAL no encuentra la playlist que acabamos de crear. Espera unos minutos y vuelve a intentarlo; tu colección sigue intacta en kura.",
+    );
+  }
+  const [fresh] = await db.select().from(partyExports).where(eq(partyExports.id, exportId)).limit(1);
+  if (!fresh) throw new MusicExportError("not_found", "not_found", PARTY_NOT_FOUND_MESSAGE);
+  return fresh;
 }
 
 // ---------- TIDAL (server-side) ----------
@@ -346,24 +426,44 @@ async function matchOnTidal(
   return out;
 }
 
-/** Runs `fn` with the user's token; one forced refresh on 401; 403 = the
- *  link lacks the write scope → dropped, "Conectar TIDAL" again. */
+/**
+ * Runs `fn` with the user's token. 401 → one forced refresh (and `access` is
+ * updated in place, so the rest of the step uses the fresh token); 401 again
+ * → the link is dead: dropped, "Conectar TIDAL". 403 → dropped ONLY when it
+ * is about our access (`isTidalAuthRefusal`: an auth/scope `errors[].code`,
+ * or the granted scopes lack `playlists.write`); any other 403 (terms,
+ * quota…) keeps the link and fails the step with a message that says why.
+ */
 async function withUserToken<T>(userId: string, access: TidalAccess, fn: (token: string) => Promise<T>): Promise<T> {
+  let err: unknown;
   try {
     return await fn(access.accessToken);
-  } catch (err) {
-    if (!(err instanceof TidalHttpError) || (err.status !== 401 && err.status !== 403)) throw err;
-    if (err.status === 401) {
-      const fresh = await getTidalAccess(userId, true);
-      try {
-        return await fn(fresh.accessToken);
-      } catch (again) {
-        if (!(again instanceof TidalHttpError) || (again.status !== 401 && again.status !== 403)) throw again;
-      }
-    }
-    await disconnectTidal(userId);
-    throw notConnected("tidal");
+  } catch (first) {
+    err = first;
   }
+  if (err instanceof TidalHttpError && err.status === 401) {
+    const fresh = await getTidalAccess(userId, true);
+    Object.assign(access, fresh);
+    try {
+      return await fn(access.accessToken);
+    } catch (again) {
+      err = again;
+    }
+    if (err instanceof TidalHttpError && err.status === 401) {
+      await disconnectTidal(userId);
+      throw notConnected("tidal");
+    }
+  }
+  if (err instanceof TidalHttpError && err.status === 403) {
+    if (isTidalAuthRefusal(err.codes, access.scope)) {
+      console.warn(`[music-export] tidal refused our access: ${describe(err)}`);
+      await disconnectTidal(userId);
+      throw notConnected("tidal");
+    }
+    console.warn(`[music-export] tidal forbade the write: ${describe(err)}`);
+    throw new MusicExportError("unavailable", "service_failed", tidalForbiddenMessage(err.codes));
+  }
+  throw err;
 }
 
 /**
@@ -372,8 +472,10 @@ async function withUserToken<T>(userId: string, access: TidalAccess, fn: (token:
  * concurrent calls: a lease makes a second concurrent step answer
  * `busy: true` without doing anything; a failure after TIDAL accepted the
  * tracks but before we recorded them is harmless (`onDuplicates: SKIP`).
- * A playlist the person deleted in TIDAL (404 on add) is recreated on the
- * next step (new generation) with the whole party.
+ * A 404 on add is checked with `GET /playlists/{id}`: gone (the person
+ * deleted it) → new generation (`restartGeneration`, capped), the next step
+ * rebuilds it with the whole party; still there → one of the TRACKS 404'd:
+ * the batch is re-sent song by song and the ones TIDAL refuses are `missing`.
  */
 export async function stepTidalExport(userId: string, backlogId: string): Promise<ExportState> {
   assertMusicExportLive();
@@ -408,7 +510,7 @@ export async function stepTidalExport(userId: string, backlogId: string): Promis
         tidalCreatePlaylist(token, {
           name: party.name,
           description: `La colección de fiesta «${party.name}», desde kura.`,
-          idempotencyKey: `kura-export-${row.id}-g${row.generation}`,
+          idempotencyKey: tidalIdempotencyKey(row.id, row.generation, party.name),
         }),
       ).catch(upstream);
       const [saved] = await db
@@ -419,31 +521,35 @@ export async function stepTidalExport(userId: string, backlogId: string): Promis
       current = saved ?? { ...current, remotePlaylistId: created.id, remoteUrl: created.url };
     }
 
+    /** Track ids TIDAL refused one by one (404) while the playlist exists. */
+    const refused = new Set<string>();
     if (trackIds.length > 0 && current.remotePlaylistId) {
       const playlistId = current.remotePlaylistId;
       try {
         await withUserToken(userId, access, (token) => tidalAddTracks(token, playlistId, trackIds));
       } catch (err) {
-        if (err instanceof TidalHttpError && err.status === 404) {
+        if (!(err instanceof TidalHttpError && err.status === 404)) upstream(err);
+        const exists = await withUserToken(userId, access, (token) => tidalPlaylistExists(token, playlistId)).catch(upstream);
+        if (!exists) {
           // Deleted in TIDAL: start over with a new playlist (new idempotency key).
-          await db.batch([
-            db
-              .update(partyExports)
-              .set({ remotePlaylistId: null, remoteUrl: null, generation: sql`${partyExports.generation} + 1`, updatedAt: new Date() })
-              .where(eq(partyExports.id, row.id)),
-            db.delete(partyExportItems).where(eq(partyExportItems.exportId, row.id)),
-          ]);
-          const [reset] = await db.select().from(partyExports).where(eq(partyExports.id, row.id)).limit(1);
-          return await stateOf("tidal", party, reset ?? null);
+          return await stateOf("tidal", party, await restartGeneration(row.id));
         }
-        upstream(err);
+        for (const id of trackIds) {
+          try {
+            await withUserToken(userId, access, (token) => tidalAddTracks(token, playlistId, [id]));
+          } catch (one) {
+            if (one instanceof TidalHttpError && one.status === 404) refused.add(id);
+            else upstream(one);
+          }
+        }
       }
     }
 
     await writeItems(
       row.id,
       batch.map((s) => {
-        const id = matches.get(s.titleId) ?? null;
+        const found = matches.get(s.titleId) ?? null;
+        const id = found && !refused.has(found) ? found : null;
         return { titleId: s.titleId, outcome: id ? ("added" as const) : ("missing" as const), remoteTrackId: id };
       }),
     );
@@ -456,7 +562,13 @@ export async function stepTidalExport(userId: string, backlogId: string): Promis
 // ---------- Apple Music (client-side, reported) ----------
 
 export interface AppleMusicReport {
-  playlistId: string;
+  /**
+   * The library playlist the client created/extended — or null: "there is
+   * no playlist" (nothing of the party exists in their storefront). With
+   * `replace` that also retires the recorded one (they deleted it), so the
+   * state stops pointing "Abrir en Apple Music" at a dead playlist.
+   */
+  playlistId: string | null;
   /** The client created a NEW playlist because the recorded one is gone. */
   replace?: boolean;
   added: string[];
@@ -468,7 +580,8 @@ export interface AppleMusicReport {
  * happened. The first report records the playlist; a report naming ANOTHER
  * playlist is `playlist_exists` (409) unless `replace` (the recorded one
  * 404'd in the person's library), which starts the item list over.
- * Only titleIds that are in the party count; `added` wins over `missing`.
+ * Only titleIds that are in the party count; `added` wins over `missing`
+ * (with `playlistId: null` nothing can be `added`). 30 reports/min per user.
  */
 export async function reportAppleMusicExport(
   userId: string,
@@ -476,6 +589,7 @@ export async function reportAppleMusicExport(
   report: AppleMusicReport,
 ): Promise<ExportState> {
   assertMusicExportLive();
+  limit(`music-export-report:${userId}`, REPORTS_PER_MINUTE);
   const party = await partyFor(userId, backlogId);
   const row = (await findExport(userId, backlogId, "apple_music")) ?? (await upsertExport(userId, backlogId, "apple_music"));
   let current = row;
@@ -485,7 +599,7 @@ export async function reportAppleMusicExport(
       .update(partyExports)
       .set({
         remotePlaylistId: report.playlistId,
-        remoteUrl: applePlaylistUrl(report.playlistId),
+        remoteUrl: report.playlistId ? applePlaylistUrl(report.playlistId) : null,
         generation: row.remotePlaylistId ? sql`${partyExports.generation} + 1` : sql`${partyExports.generation}`,
         updatedAt: new Date(),
       })
@@ -504,7 +618,7 @@ export async function reportAppleMusicExport(
     row.id,
     reportItems(
       party.songs.map((s) => s.titleId),
-      report.added,
+      report.playlistId ? report.added : [],
       report.missing,
     ),
   );

@@ -197,8 +197,8 @@ extension AppStore {
             let callback = try await authorizer.authorize(url)
             guard !Task.isCancelled else { return }
             switch TidalCallback(callback) {
-            case .authorized(let ref):
-                let sv = try await exportCall { try await api.completeTidalAuth(ref: ref) }
+            case .authorized(let ref, let claim):
+                let sv = try await exportCall { try await api.completeTidalAuth(ref: ref, claim: claim) }
                 s.musicServices = sv
                 updateExport { $0.busy = false }
                 launchExport()
@@ -391,9 +391,13 @@ extension AppStore {
     }
 
     /// `-kuraExportRun`: the real flow over the mock (services first, like the sheet).
+    /// `-kuraExportAutoConnect YES` taps "Conectar …" by itself when the flow lands on connect.
     func debugRunPartyExport(_ partyID: String, _ provider: MusicProvider) async {
         await loadMusicServices()
         startPartyExport(partyID, provider)
+        guard UserDefaults.standard.bool(forKey: "kuraExportAutoConnect") else { return }
+        try? await Task.sleep(for: .seconds(1))
+        connectPartyExport()
     }
 }
 #endif

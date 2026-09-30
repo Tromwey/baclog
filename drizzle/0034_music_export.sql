@@ -21,6 +21,7 @@ CREATE TABLE "music_oauth_state" (
 	"code_verifier_enc" text NOT NULL,
 	"return_to" text,
 	"code_enc" text,
+	"claim_hash" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"expires_at" timestamp NOT NULL,
 	CONSTRAINT "music_oauth_state_client_check" CHECK ("music_oauth_state"."client" in ('web', 'ios'))
@@ -44,6 +45,7 @@ CREATE TABLE "party_export" (
 	"remote_playlist_id" text,
 	"remote_url" text,
 	"generation" integer DEFAULT 0 NOT NULL,
+	"generation_bumped_at" timestamp,
 	"lease_until" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -58,5 +60,6 @@ ALTER TABLE "party_export" ADD CONSTRAINT "party_export_backlog_id_backlog_id_fk
 ALTER TABLE "party_export" ADD CONSTRAINT "party_export_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "music_connection_user_provider_unique" ON "music_connection" USING btree ("user_id","provider");--> statement-breakpoint
 CREATE INDEX "music_oauth_state_user_idx" ON "music_oauth_state" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "music_oauth_state_expires_idx" ON "music_oauth_state" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "party_export_backlog_user_provider_unique" ON "party_export" USING btree ("backlog_id","user_id","provider");--> statement-breakpoint
 CREATE INDEX "party_export_user_idx" ON "party_export" USING btree ("user_id");

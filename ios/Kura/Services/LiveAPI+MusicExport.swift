@@ -6,7 +6,7 @@ import Foundation
 
 extension LiveAPI {
     private struct TidalStart: Decodable { let authorizeUrl: String }
-    private struct TidalComplete: Encodable { let ref: String }
+    private struct TidalComplete: Encodable { let ref: String; let claim: String }
 
     func musicServices() async throws -> MusicServices {
         try await client.decode(.get("music/services"))
@@ -22,8 +22,8 @@ extension LiveAPI {
         return url
     }
 
-    func completeTidalAuth(ref: String) async throws -> MusicServices {
-        try await client.decode(try .post("music/tidal/complete", TidalComplete(ref: ref)))
+    func completeTidalAuth(ref: String, claim: String) async throws -> MusicServices {
+        try await client.decode(try .post("music/tidal/complete", TidalComplete(ref: ref, claim: claim)))
     }
 
     func disconnectTidal() async throws {

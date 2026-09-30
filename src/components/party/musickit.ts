@@ -72,7 +72,7 @@ let configured: { instance: MusicKitInstance; expiresAt: number } | null = null;
 
 /**
  * The configured instance. `devToken` is only called when there is none yet
- * or the one it was configured with has expired (12 h).
+ * or the one it was configured with has expired (1 h, origin-bound).
  */
 export async function musicKit(
   devToken: () => Promise<{ token: string; expiresAt: string }>,

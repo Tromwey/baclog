@@ -1,4 +1,5 @@
 import { normalizeP8 } from "@/auth/apple-key";
+import { SITE_HOST, SITE_URL } from "@/lib/site";
 
 /**
  * Which export services this deploy can offer, from env ONLY (pure; the
@@ -14,13 +15,21 @@ import { normalizeP8 } from "@/auth/apple-key";
  * configured" switch: without it the service stays "Próximamente" even
  * though the link-out keys exist.
  *
- * Apple Music: the MusicKit developer token is an ES256 JWT signed with a
- * key that has **MusicKit** enabled. `APPLE_MUSIC_KEY_ID` +
- * `APPLE_MUSIC_PRIVATE_KEY` when the founder made a dedicated key; if they
- * are absent it falls back to `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (the APNs
- * / Sign in with Apple key — valid only if MusicKit was enabled on it too;
- * the services endpoint probes Apple once an hour and reports
- * `reason: "key_rejected"` when it wasn't). `APPLE_TEAM_ID` always.
+ * Apple Music: MusicKit developer tokens are ES256 JWTs; TWO key roles
+ * (founder + security review, 2026-09-29):
+ *   - SERVER key (`appleMusicServerKeyConfig`): signs the token the server
+ *     uses for its OWN calls to Apple (ISRC lookup for TIDAL, the probe).
+ *     The dedicated `APPLE_MUSIC_KEY_ID` + `APPLE_MUSIC_PRIVATE_KEY` when
+ *     present, else the SHARED `APPLE_KEY_ID` + `APPLE_PRIVATE_KEY` (the
+ *     APNs / Sign in with Apple key; the founder enabled MusicKit on it). A
+ *     token signed with the shared key NEVER leaves the server.
+ *   - WEB key (`appleMusicWebKeyConfig`): signs the token handed to the
+ *     BROWSER (MusicKit JS) — ONLY the dedicated pair, never the shared key
+ *     (one key, one job: the key behind APNs/SIWA must not sign something
+ *     every browser carries). Without it the web shows "Próximamente" for
+ *     Apple Music while iOS (native MusicKit, no developer token) stays on:
+ *     `services.apple_music.webAvailable: false`.
+ * Both are probed against Apple (`key_rejected` = the key lacks MusicKit).
  */
 
 export const TIDAL_AUTHORIZE_URL = "https://login.tidal.com/authorize";
@@ -57,31 +66,56 @@ export interface AppleMusicKeyConfig {
   teamId: string;
   keyId: string;
   privateKeyPem: string;
-  /** Which env pair it came from (logs only). */
+  /** Which env pair it came from: only a `dedicated` key may sign a web token. */
   source: "dedicated" | "shared";
 }
 
-export function appleMusicKeyConfig(
+function keyPair(
+  teamId: string,
+  keyId: string | undefined,
+  raw: string | undefined,
+  source: AppleMusicKeyConfig["source"],
+): AppleMusicKeyConfig | null {
+  const id = keyId?.trim();
+  if (!id || !raw) return null;
+  const pem = normalizeP8(raw);
+  return pem ? { teamId, keyId: id, privateKeyPem: pem, source } : null;
+}
+
+/** The dedicated MusicKit key — the ONLY one that may sign a token for the browser. */
+export function appleMusicWebKeyConfig(
   env: Record<string, string | undefined> = process.env,
 ): AppleMusicKeyConfig | null {
   const teamId = env.APPLE_TEAM_ID?.trim();
   if (!teamId) return null;
-  const dedicatedId = env.APPLE_MUSIC_KEY_ID?.trim();
-  const dedicatedKey = env.APPLE_MUSIC_PRIVATE_KEY;
-  if (dedicatedId && dedicatedKey) {
-    const pem = normalizeP8(dedicatedKey);
-    return pem ? { teamId, keyId: dedicatedId, privateKeyPem: pem, source: "dedicated" } : null;
-  }
-  // Half a dedicated pair is a misconfiguration, not a fallback trigger.
-  if (dedicatedId || dedicatedKey) return null;
-  const keyId = env.APPLE_KEY_ID?.trim();
-  const raw = env.APPLE_PRIVATE_KEY;
-  if (!keyId || !raw) return null;
-  const pem = normalizeP8(raw);
-  return pem ? { teamId, keyId, privateKeyPem: pem, source: "shared" } : null;
+  return keyPair(teamId, env.APPLE_MUSIC_KEY_ID, env.APPLE_MUSIC_PRIVATE_KEY, "dedicated");
+}
+
+/** Server→Apple calls only: the dedicated key, else the shared APNs/SIWA key. */
+export function appleMusicServerKeyConfig(
+  env: Record<string, string | undefined> = process.env,
+): AppleMusicKeyConfig | null {
+  const teamId = env.APPLE_TEAM_ID?.trim();
+  if (!teamId) return null;
+  return appleMusicWebKeyConfig(env) ?? keyPair(teamId, env.APPLE_KEY_ID, env.APPLE_PRIVATE_KEY, "shared");
+}
+
+/**
+ * The `origin` claim of the developer token handed to BROWSERS: Apple then
+ * refuses it from any other page, so a token lifted off our site can't run
+ * someone else's MusicKit app on our quota. Prod + beta (from `lib/site.ts`),
+ * plus localhost outside production. The token the server keeps for its own
+ * catalog calls (ISRC) carries no origin (server fetches send none).
+ */
+export function appleMusicWebOrigins(env: Record<string, string | undefined> = process.env): string[] {
+  const out = [SITE_URL, `https://beta.${SITE_HOST}`];
+  if (env.NODE_ENV !== "production") out.push("http://localhost:3010", "http://localhost:3000");
+  return out;
 }
 
 /** Storefront of the song catalog (iTunes search runs with `country=mx`). */
 export const CATALOG_STOREFRONT = "mx";
-/** Developer token lifetime (Apple allows ≤ 6 months; short = less to leak). */
+/** Server-only developer token lifetime (Apple allows ≤ 6 months; short = less to leak). */
 export const APPLE_DEVELOPER_TOKEN_TTL_SECONDS = 12 * 60 * 60;
+/** The browser's token (origin-bound): 1 h; MusicKit JS asks for another after. */
+export const APPLE_WEB_TOKEN_TTL_SECONDS = 60 * 60;

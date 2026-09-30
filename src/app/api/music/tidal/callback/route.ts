@@ -18,9 +18,10 @@ import { handleTidalCallback } from "@/modules/music-export/tidal-auth";
  *   - web state (`w…`): finishes only for the cookie session that started
  *     it → `{return}?music=tidal&connected=1`, else `connected=0&reason=
  *     denied|expired|session|exchange|unavailable`;
- *   - iOS state (`i…`): parks the code (encrypted) and bounces to
- *     `kura://music/tidal/authorized?ref=…` (the app finishes with its
- *     bearer), or `kura://music/tidal/connected?ok=0&reason=…`.
+ *   - iOS state (`i…`): parks the code (encrypted) + the hash of a fresh
+ *     one-time claim and bounces to `kura://music/tidal/authorized?ref=…&claim=…`
+ *     (the app finishes with ref + claim + its bearer), or
+ *     `kura://music/tidal/connected?ok=0&reason=…`.
  * The URL carries a one-time code: `no-store` + `Referrer-Policy:
  * no-referrer`, and the code/state never reach a log line.
  */
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
       sessionUser?.id ?? null,
     );
     if (out.client === "ios") {
-      return redirect(request, out.ok ? iosAuthorizedUrl(out.ref) : iosFailedUrl(out.reason));
+      return redirect(request, out.ok ? iosAuthorizedUrl(out.ref, out.claim) : iosFailedUrl(out.reason));
     }
     const path = out.returnTo ?? MUSIC_RETURN_FALLBACK;
     return redirect(request, out.ok ? musicLanding(path, true) : musicLanding(path, false, out.reason));
