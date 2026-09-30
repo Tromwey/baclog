@@ -270,8 +270,10 @@ extension AppStore {
             if let pid = playlistID {
                 if let ids = try await lib.playlistCatalogIDs(pid) { present = ids } else { playlistID = nil; replace = true }
             }
-            // A deleted playlist starts a new generation: the whole party goes into the new one.
-            let pending = replace ? st.songs : st.songs.filter { $0.state == .pending }
+            // Every song is checked against what is REALLY in the playlist (`present`), not only the
+            // server's "pending": a playlist deleted in Música can still answer as if it existed, and
+            // songs removed from it by hand come back. `present` keeps a retry from adding twice.
+            let pending = st.songs
             if playlistID == nil {
                 let pid = try await lib.createPlaylist(name: st.playlistName, description: MusicExportCopy.description(st.playlistName))
                 do {
@@ -288,7 +290,7 @@ extension AppStore {
                     present = try await lib.playlistCatalogIDs(other) ?? []
                 }
             }
-            guard let pid = playlistID else { throw AppleMusicFailure.service }
+            guard var pid = playlistID else { throw AppleMusicFailure.service }
             let total = max(st.total, st.songs.count)
             updateExport { $0.total = total; $0.processed = max(0, total - pending.count); $0.current = pending.first?.title }
 
@@ -308,7 +310,19 @@ extension AppStore {
                         missing.append(song.titleID)
                     }
                 }
-                try await lib.add(toAdd, to: pid)
+                do {
+                    try await lib.add(toAdd, to: pid)
+                } catch AppleMusicFailure.playlistGone where !replace {
+                    // The playlist on record is gone after all: a new one, recorded as a new
+                    // generation, and the whole party again from the first song.
+                    let fresh = try await lib.createPlaylist(name: st.playlistName, description: MusicExportCopy.description(st.playlistName))
+                    st = try await exportCall {
+                        try await api.reportAppleMusicExport(id: partyID, report: AppleMusicReport(playlistId: fresh, replace: true, added: [], missing: []))
+                    }
+                    pid = fresh; replace = true; present = []; added = []; missing = []; unreported = 0; i = 0
+                    updateExport { $0.processed = 0; $0.current = pending.first?.title }
+                    continue
+                }
                 present.formUnion(toAdd)
                 i += chunk.count
                 unreported += chunk.count
@@ -344,7 +358,7 @@ extension AppStore {
             case .restricted: updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleRestricted }
             case .noSubscription: updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleNoSubscription }
             case .libraryOff: updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleLibraryOff }
-            case .service: updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p) }
+            case .service, .playlistGone: updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p) }
             case .token(let issue): updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleToken(issue) }
             case .failed(let stage, let detail):
                 updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p, stage: stage, detail: detail) }

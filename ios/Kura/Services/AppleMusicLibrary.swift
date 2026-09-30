@@ -21,6 +21,9 @@ enum AppleMusicFailure: Error, Equatable {
     case libraryOff
     /// Apple answered something else (5xx, timeout, bad JSON): "no se pudo exportar."
     case service
+    /// Adding to the playlist on record answered 404: it was deleted in Música (the library API
+    /// can keep answering the playlist itself for a while after a delete, so this is the real test).
+    case playlistGone
     /// MusicKit couldn't get a token, so nothing reached Apple Music at all.
     case token(AppleMusicTokenIssue)
     /// Any other failure, with WHERE it happened and what MusicKit said — shown as a short
@@ -172,7 +175,7 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(Tracks(data: catalogIDs.map { Tracks.Ref(id: $0) }))
-        do { _ = try await send(req) } catch AppleMusicHTTP.notFound { throw AppleMusicFailure.service }
+        do { _ = try await send(req) } catch AppleMusicHTTP.notFound { throw AppleMusicFailure.playlistGone }
     }
 
     private enum AppleMusicHTTP: Error { case notFound }
