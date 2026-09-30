@@ -101,7 +101,10 @@ struct PartyExportView: View {
             return f.current.map { MusicExportCopy.searching($0, f.provider) } ?? "Preparando la playlist…"
         case .done:
             let st = f.state
-            return MusicExportCopy.done(f.provider, exported: st?.exported ?? f.total, total: st?.total ?? f.total)
+            let line = MusicExportCopy.done(f.provider, exported: st?.exported ?? f.total, total: st?.total ?? f.total)
+            // A private library playlist has no link the Música app opens: say where it is.
+            guard f.provider == .appleMusic, let name = st?.playlistName else { return line }
+            return line + "\n\n" + MusicExportCopy.appleWhere(name)
         case .failed: return f.failure ?? MusicExportCopy.serviceFailed(f.provider)
         }
     }
@@ -172,7 +175,7 @@ struct PartyExportView: View {
                 }
             case .done:
                 if let url = f.state?.playlist?.url {
-                    SolidButton(title: "Abrir en \(f.provider.label)", height: 56, honey: true) {
+                    SolidButton(title: f.provider == .appleMusic ? "Abrir Apple Music" : "Abrir en \(f.provider.label)", height: 56, honey: true) {
                         if f.provider == .appleMusic, let pid = f.state?.playlist?.id {
                             // The app can't open `/library/playlist/p.…` (web player only): its `pl.u-…`
                             // link if Apple already gave one, the Música app itself otherwise.

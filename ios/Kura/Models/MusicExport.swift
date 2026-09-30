@@ -257,6 +257,9 @@ enum MusicExportCopy {
         "No pudimos terminar en \(p.label). Tu colección sigue intacta en kura; al reintentar no se duplican canciones.\n\nDetalle: \(stage) · \(detail)"
     }
 
+    /// Where the playlist lives: Apple gives a private library playlist no link the app can open.
+    static func appleWhere(_ name: String) -> String { "Está en tu Biblioteca › Playlists como «\(name)»." }
+
     /// MusicKit had no token, so Apple Music never saw the request.
     static func appleToken(_ issue: AppleMusicTokenIssue) -> String {
         switch issue {
