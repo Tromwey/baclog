@@ -5,8 +5,10 @@ import { KURA_BUNDLE_ID } from "./apple-key";
 /**
  * Phase 4f — verification of the identity tokens the apps get from
  * Sign in with Apple (iOS) and Google Sign-In (iOS, and Android since
- * 2026-09-30). Pure (no DB, no env): the routes
- * pass the audience, and tests pass their own key set.
+ * 2026-09-30). Pure (no DB) and env-free except ONE default: the routes
+ * pass the audience, tests pass their own key set, and the Google
+ * audiences that require a nonce default to `GOOGLE_WEB_CLIENT_ID`
+ * (`googleNonceRequiredAudiences`).
  *
  * Both return the SAME shape or null. Null is the only failure signal —
  * bad signature, wrong `iss`/`aud`, expired, missing claims, nonce mismatch —
@@ -96,6 +98,18 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /**
+ * The Google audiences whose ID tokens MUST come with the raw nonce: the web
+ * client id Android passes as `serverClientId` (every Android build sends the
+ * nonce; no legacy build to spare). Read straight from `process.env` with the
+ * same trim as `googleWebClientId()` in `app/api/v1/_lib/social.ts` — that
+ * module is `server-only` and can't be imported here (tests run under tsx).
+ */
+export function googleNonceRequiredAudiences(): string[] {
+  const web = process.env.GOOGLE_WEB_CLIENT_ID?.trim();
+  return web ? [web] : [];
+}
+
+/**
  * Google ID token (iOS or Android client): RS256 against Google's JWKS,
  * `iss` ∈ {https://accounts.google.com, accounts.google.com}, `aud` ∈
  * `audiences` (the iOS OAuth client id and/or the web client id Android's
@@ -112,17 +126,22 @@ function sameSecret(a: string, b: string): boolean {
  * token's `nonce` claim must equal `sha256Hex(rawNonce)` (constant-time) — the
  * replay guard: whoever steals an ID token can read its `nonce` claim, but
  * cannot invert the hash to the raw value the body must carry. A mismatch or
- * a token without the claim is the same null. When absent the token is
- * accepted without it (legacy builds).
- * TODO(nonce): make `nonce` required (here and in the zod bodies) once every
- * iOS build in TestFlight/App Store sends it — until then old builds would
- * be locked out of Google sign-in.
+ * a token without the claim is the same null.
+ *
+ * When absent: a token whose `aud` names one of `nonceRequiredAudiences`
+ * (default: the web client id — only Android uses it, and every Android build
+ * sends the nonce) → null. Any other audience (iOS) is accepted without it:
+ * legacy iOS builds, accepted risk.
+ * TODO(nonce): make `nonce` required for every audience (here and in the zod
+ * bodies) once every iOS build in TestFlight/App Store sends it — until then
+ * old builds would be locked out of Google sign-in.
  */
 export async function verifyGoogleIdToken(
   idToken: string,
   audiences: string | readonly string[],
   rawNonce: string | undefined,
   keys: JWTVerifyGetKey = googleKeySet(),
+  nonceRequiredAudiences: readonly string[] = googleNonceRequiredAudiences(),
 ): Promise<VerifiedIdentity | null> {
   const audience = (typeof audiences === "string" ? [audiences] : [...audiences]).filter((a) => a.length > 0);
   // jose treats an empty audience list as "no audience check": never let that
@@ -137,10 +156,14 @@ export async function verifyGoogleIdToken(
       clockTolerance: 30,
     });
     if (typeof payload.sub !== "string" || !payload.sub) return null;
-    if (rawNonce !== undefined) {
-      if (typeof payload.nonce !== "string" || !sameSecret(payload.nonce, sha256Hex(rawNonce))) {
-        return null;
-      }
+    if (rawNonce === undefined) {
+      // Fail closed: a token minted for several audiences needs the nonce if
+      // ANY of them requires it.
+      const tokenAud = typeof payload.aud === "string" ? [payload.aud] : (payload.aud ?? []);
+      const required = nonceRequiredAudiences.filter((a) => a.length > 0);
+      if (tokenAud.some((a) => required.includes(a))) return null;
+    } else if (typeof payload.nonce !== "string" || !sameSecret(payload.nonce, sha256Hex(rawNonce))) {
+      return null;
     }
     const email = emailOf(payload);
     if (!email || !truthyClaim(payload.email_verified)) return null;

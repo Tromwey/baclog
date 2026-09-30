@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, type JWTVerifyGetKey } from "jose";
-import { sha256Hex, verifyGoogleIdToken } from "./social-tokens";
+import { googleNonceRequiredAudiences, sha256Hex, verifyGoogleIdToken } from "./social-tokens";
 
 // Run: pnpm tsx --test src/modules/push/liveness.test.ts src/auth/social-tokens.test.ts
 
@@ -10,6 +10,10 @@ const CLIENT_ID = "1234-test.apps.googleusercontent.com";
  *  `serverClientId`: its ID tokens carry `aud` = this id. */
 const WEB_CLIENT_ID = "1234-web.apps.googleusercontent.com";
 const KID = "test-key";
+
+// Hermetic: the default `nonceRequiredAudiences` reads GOOGLE_WEB_CLIENT_ID;
+// tests that exercise it pass the list explicitly (or set the var themselves).
+delete process.env.GOOGLE_WEB_CLIENT_ID;
 
 async function fixture(): Promise<{
   keys: JWTVerifyGetKey;
@@ -80,11 +84,60 @@ test("aud: the iOS client id and the web client id (Android) are both accepted w
   const { keys, sign } = await fx;
   const both = [CLIENT_ID, WEB_CLIENT_ID];
   assert.equal((await verifyGoogleIdToken(await sign({}), both, undefined, keys))?.sub, "google-sub-1");
-  const android = await sign({ azp: "1234-android.apps.googleusercontent.com" }, WEB_CLIENT_ID);
-  assert.equal((await verifyGoogleIdToken(android, both, undefined, keys))?.sub, "google-sub-1");
   // Android + nonce: same scheme (the app hands `setNonce(sha256hex(raw))`).
-  const androidNonce = await sign({ nonce: sha256Hex("raw-a") }, WEB_CLIENT_ID);
-  assert.equal((await verifyGoogleIdToken(androidNonce, both, "raw-a", keys))?.sub, "google-sub-1");
+  const androidNonce = await sign({ nonce: sha256Hex("raw-a"), azp: "1234-android.apps.googleusercontent.com" }, WEB_CLIENT_ID);
+  assert.equal((await verifyGoogleIdToken(androidNonce, both, "raw-a", keys, [WEB_CLIENT_ID]))?.sub, "google-sub-1");
+});
+
+test("nonce: aud web (Android) without nonce in the body → null (Android always sends it; no legacy to spare)", async () => {
+  const { keys, sign } = await fx;
+  const both = [CLIENT_ID, WEB_CLIENT_ID];
+  assert.equal(await verifyGoogleIdToken(await sign({}, WEB_CLIENT_ID), both, undefined, keys, [WEB_CLIENT_ID]), null);
+  // Even when the token carries a claim: without the raw value there is no proof.
+  const withClaim = await sign({ nonce: sha256Hex("raw-a") }, WEB_CLIENT_ID);
+  assert.equal(await verifyGoogleIdToken(withClaim, both, undefined, keys, [WEB_CLIENT_ID]), null);
+  // Fail closed: a multi-aud token that names the web client needs it too.
+  assert.equal(await verifyGoogleIdToken(await sign({}, [CLIENT_ID, WEB_CLIENT_ID]), both, undefined, keys, [WEB_CLIENT_ID]), null);
+});
+
+test("nonce: aud web with the correct raw nonce → identity", async () => {
+  const { keys, sign } = await fx;
+  const token = await sign({ nonce: sha256Hex("raw-w") }, WEB_CLIENT_ID);
+  assert.deepEqual(await verifyGoogleIdToken(token, [CLIENT_ID, WEB_CLIENT_ID], "raw-w", keys, [WEB_CLIENT_ID]), {
+    sub: "google-sub-1",
+    email: "ana@example.com",
+    emailVerified: true,
+  });
+});
+
+test("nonce: aud web with a wrong raw nonce (or the claim replayed as the raw value) → null", async () => {
+  const { keys, sign } = await fx;
+  const claim = sha256Hex("raw-w");
+  const token = await sign({ nonce: claim }, WEB_CLIENT_ID);
+  assert.equal(await verifyGoogleIdToken(token, [WEB_CLIENT_ID], "raw-x", keys, [WEB_CLIENT_ID]), null);
+  assert.equal(await verifyGoogleIdToken(token, [WEB_CLIENT_ID], claim, keys, [WEB_CLIENT_ID]), null);
+});
+
+test("nonce: aud iOS without nonce in the body → still accepted (legacy iOS builds, accepted risk)", async () => {
+  const { keys, sign } = await fx;
+  const both = [CLIENT_ID, WEB_CLIENT_ID];
+  assert.equal((await verifyGoogleIdToken(await sign({}), both, undefined, keys, [WEB_CLIENT_ID]))?.sub, "google-sub-1");
+  // …but a raw nonce that is sent is still enforced for iOS.
+  assert.equal(await verifyGoogleIdToken(await sign({ nonce: sha256Hex("a") }), both, "b", keys, [WEB_CLIENT_ID]), null);
+});
+
+test("nonce: the default required list is GOOGLE_WEB_CLIENT_ID (trimmed), empty when unset", async () => {
+  const { keys, sign } = await fx;
+  assert.deepEqual(googleNonceRequiredAudiences(), []);
+  process.env.GOOGLE_WEB_CLIENT_ID = `  ${WEB_CLIENT_ID} `;
+  try {
+    assert.deepEqual(googleNonceRequiredAudiences(), [WEB_CLIENT_ID]);
+    // No 5th argument = the routes' call: the env default applies.
+    assert.equal(await verifyGoogleIdToken(await sign({}, WEB_CLIENT_ID), [CLIENT_ID, WEB_CLIENT_ID], undefined, keys), null);
+    assert.equal((await verifyGoogleIdToken(await sign({}), [CLIENT_ID, WEB_CLIENT_ID], undefined, keys))?.sub, "google-sub-1");
+  } finally {
+    delete process.env.GOOGLE_WEB_CLIENT_ID;
+  }
 });
 
 test("aud: only the configured ids count — a web-client token with only the iOS id configured (and vice versa) → null", async () => {
