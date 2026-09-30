@@ -21,11 +21,12 @@ import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
-import com.tromwey.kura.designsystem.components.DockReach
 import com.tromwey.kura.designsystem.components.KuraSheetScope
 import com.tromwey.kura.designsystem.components.KuraTopBar
 import com.tromwey.kura.designsystem.components.SheetHeader
 import com.tromwey.kura.designsystem.components.TabTitleBar
+import com.tromwey.kura.designsystem.components.kuraTitleScroll
+import com.tromwey.kura.designsystem.components.rememberKuraTitleScroll
 import com.tromwey.kura.state.AppStore
 
 // The body every placeholder screen/sheet draws until its lane replaces the file. Temporary by
@@ -40,7 +41,7 @@ fun PendingScreen(title: String, store: AppStore, content: @Composable ColumnSco
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, top = KSize.pushedTitleTop, bottom = DockReach + 48.dp),
+                .padding(start = 24.dp, end = 24.dp, top = KSize.pushedTitleTop, bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             BasicText(title, modifier = Modifier.semantics { heading() }, style = KuraType.news(32f))
@@ -51,19 +52,22 @@ fun PendingScreen(title: String, store: AppStore, content: @Composable ColumnSco
     }
 }
 
-/** A tab root not built yet: the tab's title row ("tus colecciones") and "pendiente". */
+/**
+ * A tab root not built yet: the tab's big title ("tus colecciones", collapses as it scrolls) and
+ * "pendiente". The navigation bar's room comes from the frame's padding (KuraRoot).
+ */
 @Composable
 fun PendingTabRoot(title: String, content: @Composable ColumnScope.() -> Unit = {}) {
-    Box(Modifier.fillMaxSize().background(KColor.bg)) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = DockReach + 48.dp)) {
-            TabTitleBar(title)
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = KSize.margin).padding(top = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                MonoLabel("pendiente")
-                content()
-            }
+    val scroll = rememberKuraTitleScroll()
+    Column(Modifier.fillMaxSize().background(KColor.bg)) {
+        TabTitleBar(title, scroll = scroll)
+        Column(
+            Modifier.fillMaxWidth().weight(1f).kuraTitleScroll(scroll).verticalScroll(rememberScrollState())
+                .padding(horizontal = KSize.margin).padding(top = 18.dp, bottom = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            MonoLabel("pendiente")
+            content()
         }
     }
 }

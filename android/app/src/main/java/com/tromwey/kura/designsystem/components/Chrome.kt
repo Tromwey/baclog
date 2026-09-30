@@ -1,54 +1,71 @@
+// Material 3 Expressive detrás de nombres Kura: KuraTopBar = TopAppBar transparente · TabTitleBar = LargeFlexibleTopAppBar · KuraDock = ShortNavigationBar · KuraToast/KuraToastHost = Snackbar/SnackbarHost · KuraSheet = ModalBottomSheet · SheetRow = ListItem · KuraScaffold = Scaffold. TopVeil y OfflineStrip siguen Kura.
+// Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Chrome.kt (y devolver kDockPosition/DockReach a app/MainTabs.kt, app/KuraRoot.kt, app/Pending.kt)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.tromwey.kura.designsystem.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.NavigationBarDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.ShortNavigationBarItemDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarVisuals
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -61,38 +78,70 @@ import com.tromwey.kura.designsystem.KIcon
 import com.tromwey.kura.designsystem.KIconView
 import com.tromwey.kura.designsystem.KMotion
 import com.tromwey.kura.designsystem.KRadius
-import com.tromwey.kura.designsystem.KShadow
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraTab
 import com.tromwey.kura.designsystem.KuraType
-import com.tromwey.kura.designsystem.LocalReduceMotion
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
-import com.tromwey.kura.designsystem.kShadow
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Twin of ios/Kura/DesignSystem/Components/Chrome.swift, always the iOS 17–25 flat fallback.
+// Twin of ios/Kura/DesignSystem/Components/Chrome.swift in NAME and signature. The chrome that
+// operates the app is Material 3 Expressive themed by KuraTheme; TopVeil and OfflineStrip stay Kura.
+
+// MARK: Frame ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The app's frame — Material's `Scaffold` on bg: [bottomBar] (the [KuraDock]) glued to the bottom
+ * edge, [notices] (the toast host, the offline strip) placed by Material right above it, and the
+ * content gets the bar's height as bottom padding. No content insets of its own: screens stay
+ * edge-to-edge under the status bar, as they were.
+ */
+@Composable
+fun KuraScaffold(
+    modifier: Modifier = Modifier,
+    bottomBar: @Composable () -> Unit = {},
+    notices: @Composable () -> Unit = {},
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    Scaffold(
+        modifier = modifier,
+        bottomBar = bottomBar,
+        snackbarHost = notices,
+        containerColor = KColor.bg,
+        contentColor = KColor.text,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        content = content,
+    )
+}
 
 // MARK: Top chrome ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Top chrome of a pushed screen: Volver (left) and [right] (Opciones, compartir…) as 44 chips at
- * 64 from the screen's TOP EDGE (not the status bar inset — edge-to-edge, like iOS) and 24 from
- * the sides. Overlay it on the screen (a `Box` sibling above the scroll content).
+ * Top chrome of a pushed screen — a transparent `TopAppBar` (no title) with Volver (left) and
+ * [right] (Opciones, compartir…) as 44 tonal icon buttons, still floating over the content (tinted
+ * headers show through) at Kura's place: chips at 64 from the screen's TOP EDGE and 24 from the
+ * sides. Overlay it on the screen (a `Box` sibling above the scroll content).
  */
 @Composable
 fun KuraTopBar(onBack: (() -> Unit)?, modifier: Modifier = Modifier, right: @Composable RowScope.() -> Unit = {}) {
+    // TopAppBar keeps 4 at each side; the 44 chip sits in Material's 48 touch (measured on device:
+    // 4 + 20 lands the chip's edge at Kura's 24).
+    val side = KSize.chromeSide - 4.dp
     KFixedChrome {
-        Row(
-            modifier.fillMaxWidth().padding(top = KSize.chromeTop, start = KSize.chromeSide, end = KSize.chromeSide),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (onBack != null) BackChip(onBack)
-            Spacer(Modifier.weight(1f))
-            right()
-        }
+        TopAppBar(
+            title = {},
+            // 64 high, the 44 chips centered in it: its top 10 above the chips' 64.
+            modifier = modifier.padding(top = KSize.chromeTop - 10.dp),
+            navigationIcon = { if (onBack != null) BackChip(onBack, Modifier.padding(start = side)) },
+            actions = {
+                Row(Modifier.padding(end = side), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = right)
+            },
+            expandedHeight = 64.dp,
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
+        )
     }
 }
 
@@ -101,7 +150,7 @@ fun KuraTopBar(onBack: (() -> Unit)?, modifier: Modifier = Modifier, right: @Com
  * out (iOS `TopVeil`): the page's OWN surface, solid to [solid] and clear by [end] — at rest it
  * paints what's already there; scrolled, it separates chrome from content. Not a glow, not glass.
  * Defaults = fixed Volver/Opciones (solid to 64, clear by 124); chips that scroll away: 46 / 64.
- * Put it in the root `Box` above the scroll content and below [KuraTopBar].
+ * Put it in the root `Box` above the scroll content and below [KuraTopBar]. (Kura, not Material.)
  */
 @Composable
 fun TopVeil(modifier: Modifier = Modifier, color: Color = KColor.bg, solid: Dp = KSize.chromeTop, end: Dp = KSize.pushedTitleTop) {
@@ -116,55 +165,104 @@ fun TopVeil(modifier: Modifier = Modifier, color: Color = KColor.bg, solid: Dp =
 }
 
 /**
- * A tab root's title row ("tus colecciones"): Newsreader 36 at [KSize.titleTop] on the 20 margin;
- * the trailing chip is centered on the title at 24 from the side and never moves it.
+ * How a tab root's big title collapses as its list scrolls (Material's
+ * `exitUntilCollapsedScrollBehavior`). Hand it to [TabTitleBar] and put
+ * `Modifier.kuraTitleScroll(it)` on the scrolling container (screens never see Material types).
+ */
+@Stable
+class KuraTitleScroll internal constructor(internal val behavior: TopAppBarScrollBehavior)
+
+@Composable
+fun rememberKuraTitleScroll(): KuraTitleScroll {
+    val behavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    return remember(behavior) { KuraTitleScroll(behavior) }
+}
+
+/** Connects a scrolling container to its [TabTitleBar] (a `nestedScroll`). */
+fun Modifier.kuraTitleScroll(scroll: KuraTitleScroll): Modifier = nestedScroll(scroll.behavior.nestedScrollConnection)
+
+/**
+ * A tab root's title ("tus colecciones") — `LargeFlexibleTopAppBar`: Newsreader 36 expanded that
+ * collapses, as the list scrolls ([scroll] + `Modifier.kuraTitleScroll`), to a short s1 bar with
+ * the title at 22 that still says where you are. [trailing] (one chip) sits in the actions.
+ * Without [scroll] it simply stays expanded (and isn't draggable). Put it ABOVE the scrolling
+ * content, not inside it.
  */
 @Composable
-fun TabTitleBar(title: String, modifier: Modifier = Modifier, trailing: @Composable BoxScope.() -> Unit = {}) {
-    Box(modifier.fillMaxWidth().padding(top = KSize.titleTop, start = KSize.margin, end = KSize.chromeSide)) {
-        BasicText(title, modifier = Modifier.align(Alignment.CenterStart).semantics { heading() }, style = KuraType.screenTitle)
-        Box(Modifier.align(Alignment.CenterEnd), content = trailing)
-    }
+fun TabTitleBar(title: String, modifier: Modifier = Modifier, scroll: KuraTitleScroll? = null, trailing: @Composable BoxScope.() -> Unit = {}) {
+    // Without a scroll it's a plain expanded bar: no behavior, so it doesn't eat drags either.
+    val collapsed = scroll?.behavior?.state?.collapsedFraction ?: 0f
+    val size = 36f + (22f - 36f) * collapsed
+    LargeFlexibleTopAppBar(
+        title = {
+            Text(
+                title,
+                modifier = Modifier.padding(start = KSize.margin - 16.dp).semantics { heading() },
+                style = KuraType.news(size).copy(color = Color.Unspecified),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        modifier = modifier,
+        actions = { Box(Modifier.padding(end = KSize.chromeSide - 6.dp), content = trailing) },
+        // Material's 120 put "tus colecciones" ~45 lower than Kura's 68-from-the-edge title; 96 (under
+        // the status bar inset) lands it where Kura had it and still collapses to Material's 64.
+        collapsedHeight = 64.dp,
+        expandedHeight = 96.dp,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            scrolledContainerColor = KColor.s1,
+            titleContentColor = KColor.text,
+            actionIconContentColor = KColor.text,
+        ),
+        scrollBehavior = scroll?.behavior,
+    )
 }
 
 // MARK: Dock ───────────────────────────────────────────────────────────────────────────────
 
+/** The navigation bar's geometry, for whoever reserves room for it (the frame's padding). */
+object KuraDockDefaults {
+    /** Height of the bar above the system navigation inset (Material's short navigation bar, 64). */
+    val height: Dp = 64.dp
+}
+
 /**
- * The floating dock: 4 tabs, `#14141a` at 92 % (flat, no backdrop blur on Android), capsule,
- * float shadow. Selected tab = white .14 fill, text; the rest text-2. Tab change is instant (0 ms,
- * no haptic). [feedDot]: new notifications. Position it at the bottom center, [KSize.dockBottom]
- * above the navigation bar.
+ * The 4 tabs — Material's `ShortNavigationBar`, glued to the bottom edge (founder, 2026-09-30):
+ * s1 container, the active tab's icon on an s2 pill indicator, label Hanken 600 in text; the rest
+ * text-2. Tab change is instant (0 ms, no haptic). [feedDot]: new notifications, as a `Badge`.
+ * Pass it as [KuraScaffold]'s `bottomBar`.
  */
 @Composable
 fun KuraDock(selected: KuraTab, onSelect: (KuraTab) -> Unit, modifier: Modifier = Modifier, feedDot: Boolean = false) {
     KFixedChrome {
-        Row(
-            modifier
-                .kShadow(KShadow.Float, CircleShape)
-                .background(KColor.dock, CircleShape)
-                .padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ShortNavigationBar(
+            modifier = modifier,
+            containerColor = KColor.s1,
+            contentColor = KColor.text,
+            windowInsets = NavigationBarDefaults.windowInsets,
         ) {
             KuraTab.entries.forEach { tab ->
                 val on = tab == selected
-                val ink = if (on) KColor.text else KColor.text2
-                Column(
-                    Modifier
-                        .kPressable(feel = KPressFeel.Dim, onClickLabel = tab.label) { onSelect(tab) }
-                        .semantics(mergeDescendants = true) { this.selected = on }
-                        .background(if (on) KColor.dockActive else Color.Transparent, CircleShape)
-                        .padding(vertical = 10.dp, horizontal = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Box {
-                        Image(tab.icon, contentDescription = null, modifier = Modifier.size(21.dp), colorFilter = ColorFilter.tint(ink))
-                        if (feedDot && tab == KuraTab.Feed) {
-                            Box(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-1).dp).size(7.dp).background(KColor.text, CircleShape))
+                ShortNavigationBarItem(
+                    selected = on,
+                    onClick = { onSelect(tab) },
+                    icon = {
+                        BadgedBox(badge = { if (feedDot && tab == KuraTab.Feed) Badge(containerColor = KColor.text) }) {
+                            Icon(tab.icon, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
-                    }
-                    BasicText(tab.label, style = KuraType.ui(10f, UiWeight.Medium).copy(fontSize = KuraType.fixed(10f), color = ink), maxLines = 1)
-                }
+                    },
+                    label = {
+                        Text(tab.label, style = KuraType.ui(12f, if (on) UiWeight.SemiBold else UiWeight.Medium).inherit(), maxLines = 1)
+                    },
+                    colors = ShortNavigationBarItemDefaults.colors(
+                        selectedIconColor = KColor.text,
+                        selectedTextColorTopIconPosition = KColor.text,
+                        selectedIndicatorColor = KColor.s2,
+                        unselectedIconColor = KColor.text2,
+                        unselectedTextColor = KColor.text2,
+                    ),
+                )
             }
         }
     }
@@ -178,61 +276,82 @@ enum class ToastKind { Info, Undo, Retry }
 /** One toast. [id] must change for every new toast (the timer and the animation key on it). */
 data class KuraToastModel(val id: Long, val text: String, val kind: ToastKind = ToastKind.Undo, val action: (() -> Unit)? = null)
 
-/** The toast pill: s2 capsule, min 52, Hanken 15, action in mono, float shadow. */
+/**
+ * The toast — Material's `Snackbar`: s2, full width, radius 8 (`shapes.extraSmall`), Hanken 15,
+ * the action (DESHACER / REINTENTAR, mono) in miel on the right, the triangle leading a Retry.
+ */
 @Composable
 fun KuraToast(text: String, modifier: Modifier = Modifier, kind: ToastKind = ToastKind.Undo, onAction: (() -> Unit)? = null) {
     KFixedChrome {
-        Row(
-            modifier
-                .fillMaxWidth()
-                .kShadow(KShadow.Float, CircleShape)
-                .background(KColor.s2, CircleShape)
-                .heightIn(min = 52.dp)
-                .padding(start = 18.dp, end = 8.dp)
-                .semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Snackbar(
+            modifier = modifier.semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
+            action = if (onAction != null && kind != ToastKind.Info) {
+                { KuraTextButton(if (kind == ToastKind.Retry) "Reintentar" else "Deshacer", onAction, mono = true, color = MaterialTheme.colorScheme.tertiary) }
+            } else {
+                null
+            },
+            shape = MaterialTheme.shapes.extraSmall,
+            containerColor = KColor.s2,
+            contentColor = KColor.text,
+            actionContentColor = MaterialTheme.colorScheme.tertiary,
         ) {
-            if (kind == ToastKind.Retry) GlyphIcon(Glyph.Warn, size = 15.dp)
-            BasicText(text, modifier = Modifier.weight(1f).padding(vertical = 8.dp), style = KuraType.ui(15f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (onAction != null && kind != ToastKind.Info) {
-                KuraTextButton(if (kind == ToastKind.Retry) "Reintentar" else "Deshacer", onAction, mono = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (kind == ToastKind.Retry) GlyphIcon(Glyph.Warn, size = 15.dp)
+                Text(text, style = KuraType.ui(15f).inherit(), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
 
+/** A Kura toast riding Material's snackbar queue (the host renders it with [KuraToast]). */
+private class KuraSnackbarVisuals(val model: KuraToastModel) : SnackbarVisuals {
+    override val message: String get() = model.text
+    override val actionLabel: String? get() = null
+    override val withDismissAction: Boolean get() = false
+    // Kura's undo window governs, not Material's durations: the host dismisses it itself.
+    override val duration: SnackbarDuration get() = SnackbarDuration.Indefinite
+}
+
 /**
- * Hosts the one toast over the dock (iOS `ToastHost`): slides up + fades in (a fade with reduce
- * motion), stays [KMotion.undoWindowMs] (15 s with TalkBack), then calls [onTimeout] — the store
- * commits a deferred write there. [dockVisible] lifts it above the dock. Put it at the bottom of
- * the root `Box`.
+ * Hosts the one toast (iOS `ToastHost`) — Material's `SnackbarHost` (its fade + scale in/out).
+ * The snackbar is `Indefinite`; the host closes it after [KMotion.undoWindowMs] (15 s with
+ * TalkBack) and calls [onTimeout] — the store commits a deferred write there. A new [toast] id
+ * replaces the one on screen; `null` closes it. Give it to [KuraScaffold]'s `notices`, which puts
+ * it above the bar; [dockVisible] false lifts it over the system navigation bar instead.
  */
 @Composable
 fun KuraToastHost(toast: KuraToastModel?, onTimeout: (KuraToastModel) -> Unit, modifier: Modifier = Modifier, dockVisible: Boolean = true) {
-    val reduce = LocalReduceMotion.current
+    val host = remember { SnackbarHostState() }
     val context = LocalContext.current
-    var shown by remember { mutableStateOf(toast) }
-    if (toast != null) shown = toast
-    if (toast != null) {
-        LaunchedEffect(toast.id) {
+    val timeout by rememberUpdatedState(onTimeout)
+    LaunchedEffect(toast?.id) {
+        if (toast == null) {
+            host.currentSnackbarData?.dismiss()
+            return@LaunchedEffect
+        }
+        coroutineScope {
+            // Suspends while shown; a new id cancels this coroutine, which takes the old one down.
+            launch { host.showSnackbar(KuraSnackbarVisuals(toast)) }
             delay(KMotion.undoWindowMs(context))
-            onTimeout(toast)
+            host.currentSnackbarData?.dismiss()
+            timeout(toast)
         }
     }
-    AnimatedVisibility(
-        visible = toast != null,
-        modifier = modifier.navigationBarsPadding().padding(horizontal = 16.dp).padding(bottom = if (dockVisible) KSize.toastOverDock else 12.dp),
-        enter = if (reduce) fadeIn(KMotion.fade()) else slideInVertically(KMotion.snappy()) { it } + fadeIn(KMotion.fade()),
-        exit = if (reduce) fadeOut(KMotion.fade()) else slideOutVertically(KMotion.snappy()) { it } + fadeOut(KMotion.fade()),
-    ) {
-        shown?.let { t -> KuraToast(t.text, kind = t.kind, onAction = t.action) }
+    SnackbarHost(
+        hostState = host,
+        modifier = modifier.then(if (dockVisible) Modifier else Modifier.navigationBarsPadding()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+    ) { data ->
+        val model = (data.visuals as? KuraSnackbarVisuals)?.model ?: return@SnackbarHost
+        KuraToast(model.text, kind = model.kind, onAction = model.action)
     }
 }
 
 // MARK: Sheets ─────────────────────────────────────────────────────────────────────────────
 
-/** Compact = floating s2 card inset 8, radius 36 all round; Tall = s1, radius 36 on top (Agregar). */
+/**
+ * Compact = floating s2 card inset 8, radius 36 all round, Hidden ↔ Expanded; Tall = s1, radius 36
+ * on top (Agregar), Hidden ↔ PartiallyExpanded ↔ Expanded.
+ */
 enum class KuraSheetStyle { Compact, Tall }
 
 /** What a sheet's content can do besides laying out a column: [close] slides it down, then dismisses. */
@@ -241,12 +360,12 @@ class KuraSheetScope internal constructor(column: ColumnScope, private val onClo
 }
 
 /**
- * A Kura sheet on Material's `ModalBottomSheet` (technical base only — nothing Material shows):
- * s2/s1 fill, own 36×5 grabber, radius 36, scrim `rgba(4,4,6,.32)`, no border, no tonal tint.
- * Dismisses by dragging or tapping the scrim ([onDismiss] runs once it's gone); the content's
- * `close()` does the same from a button. One at a time: a sheet that opens another replaces it.
+ * A sheet — Material's `ModalBottomSheet`: `BottomSheetDefaults.DragHandle` (36×5, white .18),
+ * Material's scrim and motion (and predictive back), s2 (Compact) / s1 (Tall), `shapes.extraLarge`
+ * (36), no border, no tonal tint. Dismisses by dragging, tapping the scrim or back ([onDismiss] runs
+ * once it's gone); the content's `close()` does the same from a button. One at a time: a sheet
+ * that opens another replaces it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KuraSheet(
     onDismiss: () -> Unit,
@@ -255,21 +374,29 @@ fun KuraSheet(
     content: @Composable KuraSheetScope.() -> Unit,
 ) {
     val compact = style == KuraSheetStyle.Compact
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = if (compact) {
+            setOf(SheetValue.Hidden, SheetValue.Expanded)
+        } else {
+            setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded)
+        },
+    )
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
         scope.launch { sheetState.hide() }.invokeOnCompletion { if (!sheetState.isVisible) onDismiss() }
     }
+    val radius = MaterialTheme.shapes.extraLarge
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = if (compact) modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp) else modifier,
         sheetState = sheetState,
-        shape = if (compact) RoundedCornerShape(KRadius.sheet) else RoundedCornerShape(topStart = KRadius.sheet, topEnd = KRadius.sheet),
+        shape = if (compact) radius else RoundedCornerShape(topStart = KRadius.sheet, topEnd = KRadius.sheet),
         containerColor = if (compact) KColor.s2 else KColor.s1,
         contentColor = KColor.text,
         tonalElevation = 0.dp,
-        scrimColor = KColor.scrim,
-        dragHandle = { Grabber(Modifier.padding(top = 10.dp, bottom = 8.dp)) },
+        scrimColor = BottomSheetDefaults.ScrimColor,
+        dragHandle = { Grabber() },
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = if (compact) 26.dp else 0.dp).navigationBarsPadding()) {
@@ -278,10 +405,10 @@ fun KuraSheet(
     }
 }
 
-/** The sheet grabber, 36×5, white .18. */
+/** The sheet grabber — Material's `BottomSheetDefaults.DragHandle` at Kura's 36×5, white .18. */
 @Composable
 fun Grabber(modifier: Modifier = Modifier) {
-    Box(modifier.clearAndSetSemantics { }.size(36.dp, 5.dp).background(KColor.grabber, CircleShape))
+    BottomSheetDefaults.DragHandle(modifier.clearAndSetSemantics { }, width = 36.dp, height = 5.dp, color = KColor.grabber)
 }
 
 /** Header row of a sheet: Newsreader 26 (or italic 22) + optional mono trailing + 36 close chip. */
@@ -292,14 +419,15 @@ fun SheetHeader(title: String, modifier: Modifier = Modifier, italic: Boolean = 
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(
+        Text(
             title,
             modifier = Modifier.weight(1f).semantics { heading() },
             style = if (italic) KuraType.newsItalic(22f) else KuraType.news(26f),
             maxLines = 2,
         )
         if (trailing != null) MonoLabel(trailing)
-        if (onClose != null) IconChip44(KIcon.Close, "Cerrar", onClose, size = 36.dp, iconSize = 14.dp)
+        // glassBg, not s2: the chip sits ON the s2 sheet and must still read as a control.
+        if (onClose != null) IconChip44(KIcon.Close, "Cerrar", onClose, size = 36.dp, iconSize = 14.dp, fill = KColor.glassBg)
     }
 }
 
@@ -309,7 +437,10 @@ fun SheetDivider(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(1.dp).background(KColor.sheetDivider))
 }
 
-/** 54 sheet row: icon (or a DS glyph) in a 24 slot, label Hanken 16/500, optional trailing. Row press = fill. */
+/**
+ * A sheet row — Material's `ListItem` on the sheet's own fill: icon (or a DS glyph) in a 24 slot,
+ * label Hanken 16/500, optional trailing. Press = ripple + the row's corners (18).
+ */
 @Composable
 fun SheetRow(
     label: String,
@@ -320,29 +451,32 @@ fun SheetRow(
     iconColor: Color = KColor.text,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .kPressable(feel = KPressFeel.Row(0.dp), onClick = onClick)
-            .heightIn(min = 54.dp)
-            .padding(horizontal = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) {
-            when {
-                glyph != null -> GlyphIcon(glyph, size = 16.dp)
-                icon != null -> KIconView(icon, size = 19.dp, color = iconColor)
+    ListItem(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        leadingContent = {
+            Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+                when {
+                    glyph != null -> GlyphIcon(glyph, size = 16.dp)
+                    icon != null -> KIconView(icon, size = 19.dp, color = iconColor)
+                }
             }
-        }
-        BasicText(label, modifier = Modifier.weight(1f), style = KuraType.row, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        trailing()
+        },
+        trailingContent = { Row(verticalAlignment = Alignment.CenterVertically, content = trailing) },
+        shapes = ListItemDefaults.shapes(
+            shape = RoundedCornerShape(KRadius.surface),
+            pressedShape = RoundedCornerShape(KRadius.coverS),
+        ),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent, contentColor = KColor.text),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(label, style = KuraType.row.inherit(), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 // MARK: Offline strip ──────────────────────────────────────────────────────────────────────
 
-/** "Sin conexión. Ves lo guardado en tu teléfono." — s1, radius 18, above the content. */
+/** "Sin conexión. Ves lo guardado en tu teléfono." — s1, radius 18, above the bar. (Kura.) */
 @Composable
 fun OfflineStrip(modifier: Modifier = Modifier, text: String = "Sin conexión. Ves lo guardado en tu teléfono.") {
     Row(
@@ -351,15 +485,6 @@ fun OfflineStrip(modifier: Modifier = Modifier, text: String = "Sin conexión. V
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KIconView(KIcon.WifiSlash, size = 17.dp)
-        BasicText(text, modifier = Modifier.weight(1f).padding(vertical = 10.dp), style = KuraType.ui(14f).copy(color = KColor.text2))
+        Text(text, modifier = Modifier.weight(1f).padding(vertical = 10.dp), style = KuraType.ui(14f).copy(color = KColor.text2))
     }
 }
-
-/**
- * Where the dock floats: bottom center, 10 above the navigation bar inset (= the DS's 34 from the
- * screen edge on a gesture-nav phone, whose inset is 24). `KuraDock(…, Modifier.align(BottomCenter).kDockPosition())`.
- */
-fun Modifier.kDockPosition(): Modifier = navigationBarsPadding().padding(bottom = 10.dp)
-
-/** How far the dock reaches above the navigation bar (its ~70 height + 10): pad scroll content with it (+ the nav inset). */
-val DockReach: Dp = 80.dp

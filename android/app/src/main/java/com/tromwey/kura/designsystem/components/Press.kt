@@ -28,11 +28,18 @@ import com.tromwey.kura.designsystem.KMotion
 import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.LocalReduceMotion
 
+// CONTENT ONLY since 2026-09-30 (android/BRIEF.md › "El cromo es Material 3 Expressive"): every
+// button, chip, tab, field and chrome row is a Material component with its own ripple + shape
+// morph (designsystem/components/Buttons.kt, Controls.kt, Chrome.kt, ButtonGroups.kt). `kPressable`
+// stays for what SHOWS content and isn't Material — covers, cards, the fan, masonry tiles, content
+// rows (FanPickRow) — and there it keeps Kura's no-ripple press. Never put it on a new button:
+// use `GlassButton` / `SolidButton` / `IconChip44` / `KuraTextButton`.
+
 /**
- * How a pressed view reads (iOS `KPressFeel`): covers, cards and buttons dim + shrink
- * ([Scale]); full-width rows get the row fill instead ([Row]) — a shrinking row looks broken.
- * [Row.inset]: how far the fill sits inside the row's bounds (negative bleeds past them).
- * [Dim]: dim only (glass controls whose shape must not move, e.g. the dock).
+ * How a pressed piece of content reads (iOS `KPressFeel`): covers and cards dim + shrink
+ * ([Scale]); full-width content rows get the row fill instead ([Row]) — a shrinking row looks
+ * broken. [Row.inset]: how far the fill sits inside the row's bounds (negative bleeds past them).
+ * [Dim]: dim only (content whose shape must not move).
  */
 sealed interface KPressFeel {
     data object Scale : KPressFeel
@@ -41,7 +48,7 @@ sealed interface KPressFeel {
 }
 
 /**
- * Tap (and optional long press) with touch-down feedback and no ripple (iOS `kPressable`):
+ * Tap (and optional long press) on CONTENT with touch-down feedback and no ripple (iOS `kPressable`):
  * press-in is instant, release springs back with `KMotion.release`; with reduce motion only the
  * dim stays. Scrolling still wins (the press cancels once the finger travels). A long press
  * that fires plays `KHapticEvent.Firm` through `KHaptic`. TalkBack gets a button with

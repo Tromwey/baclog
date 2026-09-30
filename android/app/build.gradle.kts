@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // No kotlin-android: AGP 9 builds Kotlin itself (built-in Kotlin). These two are compiler plugins.
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -24,7 +24,11 @@ val kuraAppIdSuffix: String? = providers.gradleProperty("kuraAppIdSuffix").orNul
 
 android {
     namespace = "com.tromwey.kura"
-    compileSdk = 36
+    // 37 because material3 1.5 (Expressive), Compose 1.12, core 1.19 and okhttp 5.5 demand it
+    // (aar-metadata minCompileSdk=37). targetSdk stays 36: targeting 37 is its own lane.
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.tromwey.kura" // same id as the iOS bundle
@@ -74,6 +78,8 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // AGP 9 turned resValues off by default; app_name is a resValue per build type (lane name).
+        resValues = true
     }
 
     packaging {
@@ -85,6 +91,8 @@ android {
     }
 }
 
+// Built-in Kotlin: jvmTarget follows compileOptions.targetCompatibility (17); kept explicit so the
+// bytecode level never drifts silently if the Java side changes.
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
@@ -121,7 +129,7 @@ abstract class DebugNetworkSecurityConfigTask : DefaultTask() {
     }
 }
 
-val generateDebugNetworkSecurityConfig by tasks.registering(DebugNetworkSecurityConfigTask::class) {
+val generateDebugNetworkSecurityConfig = tasks.register<DebugNetworkSecurityConfigTask>("generateDebugNetworkSecurityConfig") {
     hosts.set(setOf("10.0.2.2", "localhost", "127.0.0.1", kuraDebugApiHost.substringBefore(':')))
     outputDir.set(layout.buildDirectory.dir("generated/kura/debugNetworkSecurityConfig"))
 }

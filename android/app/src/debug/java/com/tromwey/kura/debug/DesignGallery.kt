@@ -41,7 +41,26 @@ import com.tromwey.kura.designsystem.Tint
 import com.tromwey.kura.designsystem.UiWeight
 import com.tromwey.kura.designsystem.Wordmark
 import com.tromwey.kura.designsystem.WordmarkVariant
+import com.tromwey.kura.designsystem.components.ActionPair
 import com.tromwey.kura.designsystem.components.AutoPill
+import com.tromwey.kura.designsystem.components.KuraFab
+import com.tromwey.kura.designsystem.components.KuraFabItem
+import com.tromwey.kura.designsystem.components.KuraFabMenu
+import com.tromwey.kura.designsystem.components.KuraLoadingIndicator
+import com.tromwey.kura.designsystem.components.KuraPullToRefresh
+import com.tromwey.kura.designsystem.components.KuraReaction
+import com.tromwey.kura.designsystem.components.KuraScaffold
+import com.tromwey.kura.designsystem.components.KuraSearchBar
+import com.tromwey.kura.designsystem.components.KuraToggle
+import com.tromwey.kura.designsystem.components.KuraWavyProgress
+import com.tromwey.kura.designsystem.components.LoadingScreen
+import com.tromwey.kura.designsystem.components.RadioDot
+import com.tromwey.kura.designsystem.components.RadioMark
+import com.tromwey.kura.designsystem.components.ReactionGroup
+import com.tromwey.kura.designsystem.components.SplitActionButton
+import com.tromwey.kura.designsystem.components.TabTitleBar
+import com.tromwey.kura.designsystem.components.kuraTitleScroll
+import com.tromwey.kura.designsystem.components.rememberKuraTitleScroll
 import com.tromwey.kura.designsystem.components.ChipRow
 import com.tromwey.kura.designsystem.components.FanCollectionTile
 import com.tromwey.kura.designsystem.components.FanHeader
@@ -96,7 +115,6 @@ import com.tromwey.kura.designsystem.components.StatusPill
 import com.tromwey.kura.designsystem.components.TintStyle
 import com.tromwey.kura.designsystem.components.TintedSurface
 import com.tromwey.kura.designsystem.components.ToastKind
-import com.tromwey.kura.designsystem.components.kDockPosition
 import com.tromwey.kura.designsystem.components.TopVeil
 import com.tromwey.kura.designsystem.components.WaitingPill
 
@@ -136,51 +154,58 @@ fun DesignGallery(openSheet: Boolean = false, unknown: String? = null, onlyColle
     var toastSeq by remember { mutableLongStateOf(0L) }
     var tab by remember { mutableStateOf(KuraTab.Collections) }
 
-    Box(Modifier.fillMaxSize().background(KColor.bg)) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(top = 124.dp, bottom = 180.dp),
-            verticalArrangement = Arrangement.spacedBy(36.dp),
-        ) {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                BasicText("sistema de diseño.", style = KuraType.screenTitle)
-                BasicText("Galería de verificación (solo debug).", style = KuraType.note)
-                if (unknown != null) MonoLabel("kuraScreen desconocido: $unknown", color = KColor.text3)
+    KuraScaffold(
+        bottomBar = { KuraDock(tab, { tab = it }, feedDot = true) },
+        notices = { KuraToastHost(toast, onTimeout = { t -> if (toast?.id == t.id) toast = null }) },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 124.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(36.dp),
+            ) {
+                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BasicText("sistema de diseño.", style = KuraType.screenTitle)
+                    BasicText("Galería de verificación (solo debug).", style = KuraType.note)
+                    if (unknown != null) MonoLabel("kuraScreen desconocido: $unknown", color = KColor.text3)
+                }
+                if (onlyCollections) {
+                    CardsSection()
+                } else {
+                    TypeSection()
+                    ColorsSection()
+                    GlyphsSection()
+                    ButtonsSection(onToast = { kind ->
+                        toastSeq += 1
+                        toast = KuraToastModel(toastSeq, if (kind == ToastKind.Retry) "No se pudo guardar" else "Quitado de con mi hermana", kind) { toast = null }
+                    }, onSheet = { sheet = true })
+                    GroupsSection()
+                    CreateSection()
+                    PillsSection()
+                    CoversSection()
+                    CardsSection()
+                    TintSection()
+                    SealSection()
+                    FanSection()
+                    MasonrySection()
+                    ControlsSection()
+                    ListSection()
+                    SearchSection()
+                    ChromeSection()
+                    SkeletonSection()
+                    // Last: its bars are draggable (Material collapses them by dragging too).
+                    TitleBarSection()
+                }
             }
-            if (onlyCollections) {
-                CardsSection()
-            } else {
-                TypeSection()
-                ColorsSection()
-                GlyphsSection()
-                ButtonsSection(onToast = { kind ->
-                    toastSeq += 1
-                    toast = KuraToastModel(toastSeq, if (kind == ToastKind.Retry) "No se pudo guardar" else "Quitado de con mi hermana", kind) { toast = null }
-                }, onSheet = { sheet = true })
-                PillsSection()
-                CoversSection()
-                CardsSection()
-                TintSection()
-                SealSection()
-                FanSection()
-                MasonrySection()
-                ControlsSection()
-                ChromeSection()
-                SkeletonSection()
+
+            TopVeil()
+            KuraTopBar(onBack = {}) {
+                IconChip44(KIcon.Share, "Compartir", {})
+                IconChip44(KIcon.More, "Opciones", {})
             }
         }
-
-        TopVeil()
-        KuraTopBar(onBack = {}) {
-            IconChip44(KIcon.Share, "Compartir", {})
-            IconChip44(KIcon.More, "Opciones", {})
-        }
-
-        KuraToastHost(toast, onTimeout = { t -> if (toast?.id == t.id) toast = null }, Modifier.align(Alignment.BottomCenter))
-
-        KuraDock(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).kDockPosition(), feedDot = true)
     }
 
     if (sheet) {
@@ -192,6 +217,8 @@ fun DesignGallery(openSheet: Boolean = false, unknown: String? = null, onlyColle
             SheetDivider()
             SheetRow("Compartir", {}, icon = KIcon.Share)
             SheetRow("Me obsesiona", {}, glyph = Glyph.Flame)
+            SheetRow("Solo yo", {}, icon = KIcon.Search) { RadioDot(true) }
+            SheetRow("Quien tenga el link", {}, icon = KIcon.Share) { RadioDot(false) }
             Box(Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) { SolidButton("Guardar", { this@KuraSheet.close() }) }
         }
     }
@@ -265,7 +292,7 @@ private fun GlyphsSection() = Section("glifos", "un glifo, un significado") {
 }
 
 @Composable
-private fun ButtonsSection(onToast: (ToastKind) -> Unit, onSheet: () -> Unit) = Section("botones", "vidrio · sólido · miel") {
+private fun ButtonsSection(onToast: (ToastKind) -> Unit, onSheet: () -> Unit) = Section("botones", "tonal · sólido · miel · material") {
     HRow {
         GlassButton("Abrir hoja", onSheet, icon = KIcon.Plus)
         GlassButton("Aviso: deshacer", { onToast(ToastKind.Undo) })
@@ -463,7 +490,7 @@ private fun MasonrySection() = Section("columnas", "títulos · elige 3") {
 }
 
 @Composable
-private fun ControlsSection() = Section("controles", "segmentado · chips · switch · campo") {
+private fun ControlsSection() = Section("controles", "grupo · filtros · campo") {
     var fmt by remember { mutableStateOf("all") }
     var chip by remember { mutableStateOf("all") }
     var on by remember { mutableStateOf(true) }
@@ -478,13 +505,15 @@ private fun ControlsSection() = Section("controles", "segmentado · chips · swi
     Padded {
         KuraTextField(name, { name = it }, "Nombre de usuario")
         KuraTextField(search, { search = it }, "Buscar", clearable = true, trailing = { KIconView(KIcon.Search, size = 18.dp, color = KColor.text2) })
-        KuraTextField(serif, { serif = it }, "Nombre de la colección", serif = true)
-        GroupedList {
-            SettingsRow("Perfil privado", note = "Apruebas a quien te sigue.") { KuraSwitch(on, { on = it }, "Perfil privado") }
-            ListDivider()
-            SettingsRow("Vibraciones") { KuraSwitch(off, { off = it }, "Vibraciones") }
-            ListDivider()
-            SettingsRow("Abrir música en", onClick = {}) { RowValue("Apple Music") }
+        KuraTextField(serif, { serif = it }, "Nombre de la colección", serif = true, label = "Nombre")
+        KuraTextField("dan pix", {}, "@usuario", label = "Usuario", error = "Usa letras sin acento, números, punto o guion bajo.")
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            KuraSwitch(on, { on = it }, "Encendido")
+            KuraSwitch(off, { off = it }, "Apagado")
+            RadioMark(true)
+            RadioMark(false)
+            RadioDot(true)
+            RadioDot(false)
         }
         OfflineStrip()
         RetryStrip("No se pudo actualizar.", {})
@@ -492,19 +521,18 @@ private fun ControlsSection() = Section("controles", "segmentado · chips · swi
 }
 
 @Composable
-private fun ChromeSection() = Section("avisos y dock", "s2 · 5 s · 92 %") {
+private fun ChromeSection() = Section("avisos y barra", "snackbar · navegación") {
     Padded {
         KuraToast("Quitado de con mi hermana", onAction = {})
         KuraToast("No se pudo guardar", kind = ToastKind.Retry, onAction = {})
         KuraToast("Nombre cambiado", kind = ToastKind.Info)
     }
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        KuraDock(KuraTab.Feed, {})
-    }
+    KuraDock(KuraTab.Feed, {}, feedDot = true)
+    KuraDock(KuraTab.Collections, {})
 }
 
 @Composable
-private fun SkeletonSection() = Section("cargando", "pulso 1.6 s") {
+private fun SkeletonSection() = Section("cargando", "indicador · progreso · esqueleto") {
     HRow(12) {
         Skeleton(Modifier.size(100.dp, 150.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -516,5 +544,113 @@ private fun SkeletonSection() = Section("cargando", "pulso 1.6 s") {
             }
         }
         Skeleton(Modifier.width(100.dp).height(100.dp))
+    }
+    HRow(24) {
+        KuraLoadingIndicator()
+        KuraLoadingIndicator(size = 36.dp)
+        Box(Modifier.size(width = 150.dp, height = 110.dp).background(KColor.s1, RoundedCornerShape(KRadius.surface))) {
+            KuraPullToRefresh(refreshing = true, onRefresh = {}, modifier = Modifier.fillMaxSize()) {
+                MonoLabel("recargando", Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp))
+            }
+        }
+    }
+    Padded {
+        KuraWavyProgress(0.62f)
+        KuraWavyProgress(0.2f)
+    }
+    Box(Modifier.fillMaxWidth().height(420.dp)) { LoadingScreen(onBack = {}) }
+}
+
+@Composable
+private fun GroupsSection() = Section("grupos", "conectados · toggle") {
+    Padded {
+        MonoLabel("reacción · sin elegir")
+        ReactionGroup(null, {})
+        MonoLabel("me gusta · me obsesiona · solo completo")
+        ReactionGroup(KuraReaction.Liked, {})
+        ReactionGroup(KuraReaction.Obsessed, {})
+        ReactionGroup(KuraReaction.Completed, {})
+        MonoLabel("interactivo")
+        var r by remember { mutableStateOf<KuraReaction?>(KuraReaction.Obsessed) }
+        ReactionGroup(r, { r = it })
+        MonoLabel("par de acción")
+        var obsessed by remember { mutableStateOf(true) }
+        var done by remember { mutableStateOf(false) }
+        ActionPair(
+            KuraToggle("Me obsesiona", obsessed, { obsessed = it }, Glyph.Flame, checkedColor = KColor.obsessed),
+            KuraToggle("Completar", done, { done = it }, Glyph.Check, checkedColor = KColor.completed),
+        )
+        ActionPair(
+            KuraToggle("Me obsesiona", false, {}, Glyph.Flame, checkedColor = KColor.obsessed),
+            KuraToggle("Completar", true, {}, Glyph.Check, checkedColor = KColor.completed),
+        )
+    }
+}
+
+@Composable
+private fun CreateSection() = Section("crear y compartir", "split · fab · menú") {
+    HRow {
+        SplitActionButton("Copiar link", {}, listOf("Historia" to {}, "Más" to {}), icon = KIcon.Share)
+        SplitActionButton("música 2026", {}, listOf("con mi hermana" to {}, "ghibli completo" to {}))
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        KuraFab({})
+        KuraFabMenu(listOf(KuraFabItem("Agregar títulos", KIcon.Search) {}, KuraFabItem("Nueva colección", KIcon.Plus) {}))
+        KuraFabMenu(listOf(KuraFabItem("Agregar títulos", KIcon.Search) {}, KuraFabItem("Nueva colección", KIcon.Plus) {}), startExpanded = true)
+    }
+}
+
+@Composable
+private fun ListSection() = Section("ajustes", "filas agrupadas") {
+    var on by remember { mutableStateOf(true) }
+    var off by remember { mutableStateOf(false) }
+    Padded {
+        GroupedList {
+            SettingsRow("Perfil privado", note = "Apruebas a quien te sigue.") { KuraSwitch(on, { on = it }, "Perfil privado") }
+            ListDivider()
+            SettingsRow("Vibraciones") { KuraSwitch(off, { off = it }, "Vibraciones") }
+            ListDivider()
+            SettingsRow("Abrir música en", onClick = {}) { RowValue("Apple Music") }
+            ListDivider()
+            SettingsRow("Quién ve tus seguidores", onClick = {}) { RowValue("Solo yo", icon = KIcon.ChevronUpDown) }
+        }
+        GroupedList {
+            SettingsRow("Sesiones activas", onClick = {}) { RowValue("2") }
+        }
+        SettingsRow("Fila suelta (sin grupo)", onClick = {}) { RowValue("Sí") }
+    }
+}
+
+@Composable
+private fun SearchSection() = Section("búsqueda", "se abre a pantalla completa") {
+    var q by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+        KuraSearchBar(q, { q = it }, open, { open = it }, Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                MonoLabel("recientes")
+                BasicText("chihiro", style = KuraType.body16)
+                BasicText("mind of mine", style = KuraType.body16)
+                if (q.isNotEmpty()) BasicText("resultados para “$q”", style = KuraType.note)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TitleBarSection() = Section("título de pantalla", "grande · se contrae al deslizar") {
+    MonoLabel("expandido", Modifier.padding(horizontal = 20.dp))
+    TabTitleBar("tu feed") { IconChip44(KIcon.Bell, "Avisos", {}) }
+    MonoLabel("desliza la lista", Modifier.padding(horizontal = 20.dp))
+    val live = rememberKuraTitleScroll()
+    Column(Modifier.fillMaxWidth().height(520.dp).background(KColor.bg)) {
+        TabTitleBar("descubrir", scroll = live)
+        Column(Modifier.fillMaxWidth().weight(1f).kuraTitleScroll(live).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(30) { BasicText("fila ${it + 1}", style = KuraType.body16) }
+        }
     }
 }

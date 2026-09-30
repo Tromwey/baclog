@@ -42,9 +42,29 @@ App nativa Android (Kotlin + Jetpack Compose, minSdk 26) que implementa el siste
   Mientras tanto, los avisos de estreno son locales (`ReleaseNotifier` → `AlarmManager` + canal de
   notificación), igual que iOS sin push.
 - **Links**: App Links (`/.well-known/assetlinks.json`) son fase 2 (necesitan el SHA-256 de la firma).
-- **Sin Liquid Glass.** En Android todo el cromo es el fallback plano de iOS 17–25: dock, chips 44,
-  botones vidrio = relleno plano `glassBg`. El dock es `#14141a` al 92 % **sin blur de fondo** (Compose no
-  tiene backdrop blur barato; se anota como desviación intencional en `state/`).
+- **El cromo es Material 3 Expressive (founder, 2026-09-30).** Nada de vidrio ni de imitar iOS/web: la
+  capa de *interacción* (navegación, botones, hojas, barras, carga, movimiento, ripple, formas) son los
+  componentes de Material 3 Expressive tematizados con los tokens Kura vía `MaterialExpressiveTheme`;
+  la *identidad* (paleta, Newsreader/Hanken/Mono, portadas, abanico, sello, superficie teñida, ribbon,
+  pills mono de estado, glifos, wordmark, voz) sigue siendo Kura. Regla: lo que muestra contenido es
+  Kura; lo que opera la app es Material. Propuesta aprobada con la tabla de sustitución completa:
+  https://claude.ai/artifact/RpBxBwRBN5tPCVzT4nX2DH. Decisiones: versión completa (no la intermedia) ·
+  dock = `ShortNavigationBar` pegada al borde · rol `error` = coral desaturado `#d9a08c` solo para
+  validación de campos · sin color dinámico · `primary` = text (botón sólido), `tertiary` = miel (una
+  acción por pantalla), `secondaryContainer` = s2 (tonal), `outline` transparente.
+- **Precedente para echar atrás un componente (founder, 2026-09-30).** El cromo Kura plano anterior
+  quedó en el tag `android-cromo-kura-v1` (commit `de7ea4a`): cualquier componente se recupera por
+  archivo desde ahí. Y cada componente Material vive DETRÁS de su envoltorio Kura del mismo nombre
+  (`GlassButton`, `KuraDock`, `KuraToastHost`, `KuraSheet`, `KuraSwitch`, `KuraTextField`,
+  `MonoSegmented`, …): las pantallas nunca llaman a Material directamente, así que revertir uno es
+  cambiar el cuerpo de un solo archivo en `designsystem/components/`. Registrar en `state/android.md`
+  cualquier componente que se revierta y por qué.
+- **Envolvente de compilación**: Gradle 9.8 · AGP 9.4.1 · compileSdk 37 (targetSdk 36) · Compose BOM
+  2026.09.00 (ui 1.12.1) · material3 **1.5.0-alpha27 fijado explícito** (el BOM trae 1.4.0, que NO tiene
+  los componentes Expressive; alpha28/29 declaran Compose 1.13.0-alpha01 y arrastrarían todo Compose a
+  alpha — founder, 2026-09-30: "prefiero Compose estable"; alpha27 tiene todos los componentes y declara
+  1.12.0-beta01). No subir de alpha sin un carril propio. AGP 9 = Kotlin integrado (sin plugin
+  `kotlin-android`).
 - **Vocabulario**: colección, tus colecciones, completar, guardar, tu gente, recap, crear cuenta. Nunca
   "backlog", "lista" ni "estante" en texto visible.
 - **Las colecciones son el abanico, nunca la card con lomo (founder, 2026-09-29).** La card horizontal

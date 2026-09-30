@@ -1,6 +1,21 @@
+// Material 3 Expressive detrás de nombres Kura: LoadingScreen/KuraLoadingIndicator = LoadingIndicator (fallback CircularProgressIndicator en UN sitio) · KuraPullToRefresh = PullToRefreshBox + PullToRefreshDefaults.LoadingIndicator · KuraWavyProgress = LinearWavyProgressIndicator · RetryStrip usa KuraTextButton (TextButton).
+// Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/LoadingScreen.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/LoadingScreen.kt
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+
 package com.tromwey.kura.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,34 +40,88 @@ import com.tromwey.kura.designsystem.KIcon
 import com.tromwey.kura.designsystem.KIconView
 import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KuraType
-import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.Tint
 
-// Twin of ios/Kura/DesignSystem/Components/LoadingScreen.swift: loading, gone and error shapes.
+// Twin of ios/Kura/DesignSystem/Components/LoadingScreen.swift: loading, gone and error shapes (+ the
+// Material loading family: indicator, pull-to-refresh, wavy progress).
 
 /**
- * A pushed screen still arriving from the API (ficha, perfil ajeno): neutral header (s1 → bg),
- * the cover's shape (200×300, or 200×200 for [square]), two text bars and two button pills, and
- * Volver. The layout never changes when the content lands.
+ * A pushed screen still arriving from the API (ficha, perfil ajeno) — Material's `LoadingIndicator`
+ * (the shape-morphing one) centered in the cover's place, under the neutral header (s1 → bg), and
+ * Volver. [square] keeps the album's slot (200×200) instead of the poster's (200×300), so the
+ * indicator sits where the cover will land.
  */
 @Composable
 fun LoadingScreen(onBack: (() -> Unit)?, modifier: Modifier = Modifier, square: Boolean = false) {
     Box(modifier.fillMaxSize().background(KColor.bg).clearAndSetSemantics { contentDescription = "Cargando" }) {
-        Column(
+        Box(
             Modifier.fillMaxWidth().background(Tint.neutralHeader).padding(top = 124.dp, bottom = 30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Skeleton(Modifier.size(200.dp, if (square) 200.dp else 300.dp))
-            Skeleton(Modifier.padding(top = 8.dp).size(190.dp, 26.dp), radius = 6.dp)
-            Skeleton(Modifier.size(120.dp, 12.dp), radius = 5.dp)
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Skeleton(Modifier.size(110.dp, 44.dp), radius = 999.dp)
-                Skeleton(Modifier.size(96.dp, 44.dp), radius = 999.dp)
+            Box(Modifier.size(200.dp, if (square) 200.dp else 300.dp), contentAlignment = Alignment.Center) {
+                KuraLoadingIndicator()
             }
         }
         KuraTopBar(onBack)
     }
+}
+
+/**
+ * THE loading indicator — Material 3 Expressive's `LoadingIndicator` (experimental) in text on
+ * bg. The ONE place that knows it's experimental: if Material withdraws it, flip
+ * [expressiveLoading] and every screen falls back to `CircularProgressIndicator` untouched.
+ * For whole-screen waits and pull-to-refresh; grids of covers keep the [Skeleton].
+ */
+@Composable
+fun KuraLoadingIndicator(modifier: Modifier = Modifier, size: Dp = 48.dp) {
+    if (expressiveLoading) {
+        LoadingIndicator(modifier.size(size), color = KColor.text)
+    } else {
+        CircularProgressIndicator(modifier.size(size * 0.75f), color = KColor.text, trackColor = KColor.s2)
+    }
+}
+
+/** Switch for [KuraLoadingIndicator]'s fallback (see there). */
+private const val expressiveLoading = true
+
+/**
+ * Pull-to-refresh (feed, colecciones) — Material's `PullToRefreshBox` with
+ * `PullToRefreshDefaults.LoadingIndicator` (s2 container, text indicator). iOS has it from the
+ * system; Android needs it put there.
+ */
+@Composable
+fun KuraPullToRefresh(refreshing: Boolean, onRefresh: () -> Unit, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val state = rememberPullToRefreshState()
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = onRefresh,
+        modifier = modifier,
+        state = state,
+        indicator = {
+            PullToRefreshDefaults.LoadingIndicator(
+                state = state,
+                isRefreshing = refreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+                containerColor = KColor.s2,
+                color = KColor.text,
+            )
+        },
+        content = content,
+    )
+}
+
+/**
+ * Determinate progress (fase 2: "llévala a otra app") — Material's `LinearWavyProgressIndicator`,
+ * text on an s2 track. [progress] 0…1.
+ */
+@Composable
+fun KuraWavyProgress(progress: Float, modifier: Modifier = Modifier) {
+    LinearWavyProgressIndicator(
+        progress = { progress.coerceIn(0f, 1f) },
+        modifier = modifier.fillMaxWidth().height(10.dp),
+        color = KColor.text,
+        trackColor = KColor.s2,
+    )
 }
 
 /** The 404 shape: something that was here is gone (collection, title, person). */
@@ -105,8 +174,6 @@ fun RetryStrip(text: String, onRetry: () -> Unit, modifier: Modifier = Modifier,
     ) {
         KIconView(if (offline) KIcon.WifiSlash else KIcon.Retry, size = 16.dp)
         BasicText(text, modifier = Modifier.weight(1f).padding(vertical = 10.dp), style = KuraType.ui(14f).copy(color = KColor.text2))
-        Box(Modifier.kPressable(feel = KPressFeel.Dim, onClick = onRetry).heightIn(min = 44.dp).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-            MonoLabel("Reintentar", color = KColor.text)
-        }
+        KuraTextButton("Reintentar", onRetry, mono = true)
     }
 }

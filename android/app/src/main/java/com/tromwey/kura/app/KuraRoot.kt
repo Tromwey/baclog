@@ -3,11 +3,12 @@ package com.tromwey.kura.app
 import android.view.View
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -18,17 +19,16 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KHaptic
 import com.tromwey.kura.designsystem.KMotion
-import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraTheme
+import com.tromwey.kura.designsystem.components.KuraScaffold
 import com.tromwey.kura.designsystem.components.KuraSheet
 import com.tromwey.kura.designsystem.components.KuraSheetStyle
 import com.tromwey.kura.designsystem.components.KuraToastHost
@@ -44,9 +44,11 @@ import com.tromwey.kura.state.StoreEvent
 import com.tromwey.kura.state.ToastModel
 
 /**
- * RootRouter (iOS `RootView`): splash → entrance/onboarding → the tabs, cross-faded. Above every phase:
- * the one toast (over the dock when it shows), the offline strip and the sheet host. Also where the
- * store's side effects play (haptics, TalkBack announcements) and where the app's foreground/background
+ * RootRouter (iOS `RootView`): splash → entrance/onboarding → the tabs, cross-faded, inside the app's
+ * frame (`KuraScaffold` = Material's `Scaffold`): the navigation bar ([MainDock]) glued to the bottom
+ * edge while the tabs want it, the one toast and the offline strip right above it (Material places
+ * them), the content padded by the bar, and the sheet host over everything. Also where the store's
+ * side effects play (haptics, TalkBack announcements) and where the app's foreground/background
  * reaches the store (the clock, the disk flush).
  */
 @Composable
@@ -58,10 +60,25 @@ fun KuraRoot(store: AppStore, options: LaunchOptions = LaunchOptions.Normal) {
             return@KuraTheme
         }
         StoreEffects(store)
-        Box(Modifier.fillMaxSize().background(KColor.bg)) {
+        val dock = store.phase == AppPhase.Main && store.dockVisible(store.tab)
+        val barSpec = KMotion.defaultSpatial<IntSize>()
+        val fade = KMotion.defaultEffects<Float>()
+        KuraScaffold(
+            bottomBar = {
+                // The bar leaves a pushed page (Ajustes, a ficha…) by shrinking, so the page grows into
+                // its room instead of jumping when it's gone.
+                AnimatedVisibility(
+                    visible = dock,
+                    enter = expandVertically(barSpec) + fadeIn(fade),
+                    exit = shrinkVertically(barSpec) + fadeOut(fade),
+                ) { MainDock(store) }
+            },
+            notices = { NoticeLayer(store, dock) },
+        ) { padding ->
             AnimatedContent(
                 targetState = store.phase,
-                transitionSpec = { fadeIn(KMotion.fade()) togetherWith fadeOut(KMotion.fade()) },
+                modifier = Modifier.fillMaxSize().padding(padding),
+                transitionSpec = { fadeIn(fade) togetherWith fadeOut(fade) },
                 label = "phase",
             ) { phase ->
                 when (phase) {
@@ -70,10 +87,8 @@ fun KuraRoot(store: AppStore, options: LaunchOptions = LaunchOptions.Normal) {
                     AppPhase.Main -> MainTabs(store)
                 }
             }
-            val dock = store.phase == AppPhase.Main && store.dockVisible(store.tab)
-            NoticeLayer(store, dock, Modifier.align(Alignment.BottomCenter))
-            SheetHost(store)
         }
+        SheetHost(store)
     }
 }
 
@@ -104,20 +119,21 @@ private fun announce(view: View, text: String) {
 }
 
 /**
- * The one toast (iOS `ToastHost`) and, while nothing is being said, the offline strip in the same
- * slot: over the dock when it shows, 12 above the navigation bar when it doesn't. One notice at a time.
+ * The one toast (iOS `ToastHost`, a Material snackbar) and, while nothing is being said, the offline
+ * strip in the same slot: the scaffold puts them right above the bar when it shows; without it they
+ * sit 12 above the system navigation bar. One notice at a time.
  */
 @Composable
-private fun NoticeLayer(store: AppStore, dockVisible: Boolean, modifier: Modifier) {
-    Box(modifier) {
+private fun NoticeLayer(store: AppStore, dockVisible: Boolean) {
+    Column {
         val toast = store.toast
         val model = remember(toast) { toast?.let { toastModel(store, it) } }
         AnimatedVisibility(
             visible = toast == null && store.offline && store.phase == AppPhase.Main,
-            enter = fadeIn(KMotion.fade()),
-            exit = fadeOut(KMotion.fade()),
-            modifier = Modifier.navigationBarsPadding().padding(horizontal = 12.dp)
-                .padding(bottom = if (dockVisible) KSize.toastOverDock else 12.dp),
+            enter = fadeIn(KMotion.fastEffects()),
+            exit = fadeOut(KMotion.fastEffects()),
+            modifier = Modifier.then(if (dockVisible) Modifier else Modifier.navigationBarsPadding())
+                .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
         ) {
             OfflineStrip()
         }

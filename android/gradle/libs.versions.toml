@@ -1,29 +1,49 @@
 # Kura Android — version catalog. Every dependency the app will use is declared here, even the
 # ones the scaffold doesn't use yet (design system, API client, sign-in lanes build on it).
 #
-# Compatibility envelope (why these and not newer), verified 2026-09-29:
-#   • Gradle 8.14.3 caps AGP at 8.13.x (AGP 9 needs Gradle 9).
-#   • AGP 8.13 caps compileSdk at 36 in practice, and several 2026 AndroidX releases ship
-#     aar-metadata minCompileSdk=37 + minAGP=9.1 (core 1.19, compose-ui 1.12 → BOM ≥ 2026.08).
-#     So: core 1.18.0, Compose BOM 2026.06.01 (ui 1.11.4, minCompileSdk 35).
-#   • Ktor 3.5.2, not 3.6: Ktor 3.6 pulls OkHttp 5.5.0, whose okhttp-android AAR demands
-#     compileSdk 37 (checkDebugAarMetadata fails). 3.5.2 brings OkHttp 5.3.2 (no minCompileSdk).
-#   • Kotlin 2.3.21: Ktor 3.5 and kotlinx-serialization 1.11 are built on Kotlin 2.3.2x (the
-#     serialization runtime refuses an older compiler plugin); a 2.2 compiler would pin Ktor 3.3.
-#     Coil stays on 3.4.0 because Coil ≥ 3.5 pulls kotlin-stdlib 2.4.x.
-#   Re-check all of this the day the project moves to Gradle 9 / AGP 9 / compileSdk 37.
+# Compatibility envelope (why these and not newer), verified 2026-09-30 — the Material 3
+# Expressive lane (android/BRIEF.md › "Envolvente de compilación"):
+#   • Gradle 9.8.0 → AGP 9.4.1 (latest stable; AGP 9.x needs Gradle ≥ 9.1 and JDK ≥ 17 to RUN
+#     Gradle). AGP 9 brings Kotlin built in: there is NO `org.jetbrains.kotlin.android` plugin any
+#     more (applying it fails). The compose + serialization compiler plugins stay.
+#   • compileSdk 37 (AGP 9.4 knows it; `platforms;android-37.0`), targetSdk stays 36 on purpose
+#     (targeting 37 is a behavior change, its own lane). Why 37: material3 1.5.0-alpha27,
+#     core 1.19, Ktor 3.6 (→ okhttp-android 5.5.0) and Coil 3.5 ship aar-metadata
+#     minCompileSdk=37 + minAGP=9.1 (learnings/2026-09-29-android-compilesdk-37-transitivo.md).
+#   • material3 1.5.0-alpha27, PINNED EXPLICITLY (outside the BOM): the BOM 2026.09.00 brings
+#     material3 1.4.0, which only has the Expressive theme/MotionScheme — not ButtonGroup,
+#     ToggleButton, SplitButton, FloatingToolbar, LoadingIndicator, FloatingActionButtonMenu,
+#     ShortNavigationBar, Large/MediumFlexibleTopAppBar, expressive ListItem (checked in the AAR).
+#     alpha27 and not alpha28/29: from alpha28 material3 declares Compose foundation/ui/runtime
+#     1.13.0-alpha01, which would drag ALL of Compose onto an alpha; alpha27 declares
+#     1.12.0-beta01, so the BOM's stable 1.12.1 wins with no `strictly`. alpha29 only adds
+#     ComponentStylesKt (the styles API) — nothing the chrome needs. Founder, 2026-09-30:
+#     "prefiero Compose estable". Don't move off alpha27 without its own lane (and never force
+#     Compose down with `strictly`: material3 is compiled against its declared Compose).
+#   • Compose BOM 2026.09.00 (ui/foundation 1.12.1): 1.12 needs compileSdk 37 + AGP ≥ 9.1.
+#   • Kotlin 2.3.21 — put on the build classpath through `buildscript` in the root build file
+#     (AGP 9.4 only has a runtime dependency on KGP 2.2.10, which Gradle upgrades to ours). Ktor
+#     3.6 and kotlinx-serialization 1.11 are built with 2.3.21 (the serialization runtime refuses
+#     an older compiler plugin). Coil 3.5+ pulls kotlin-stdlib 2.4.x: a 2.3 compiler reads 2.4
+#     metadata (Kotlin's one-version-ahead rule), so no bump needed; move Kotlin to 2.4 in a lane
+#     of its own if a library ever needs 2.5 metadata.
+#   • Ktor 3.6.0 (okhttp 5.5.0), Coil 3.5.0, core-ktx 1.19.1, lifecycle 2.11.0, navigation
+#     2.10.2, activity 1.13.0: latest stable on 2026-09-30; none has a tope below that.
+#   Re-check all of this (aar-metadata minCompileSdk/minAGP) before bumping anything.
 
 [versions]
-agp = "8.13.2"
+agp = "9.4.1"
 kotlin = "2.3.21"
-coreKtx = "1.18.0"
+coreKtx = "1.19.1"
 coreSplashscreen = "1.2.0"
 activityCompose = "1.13.0"
-lifecycle = "2.10.0"
-navigationCompose = "2.9.8"
-composeBom = "2026.06.01"
-coil = "3.4.0"
-ktor = "3.5.2"
+lifecycle = "2.11.0"
+navigationCompose = "2.10.2"
+composeBom = "2026.09.00"
+# Outside the BOM on purpose (see the envelope above): the Expressive components.
+material3 = "1.5.0-alpha27"
+coil = "3.5.0"
+ktor = "3.6.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
 palette = "1.0.0"
@@ -51,8 +71,10 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation" }
-# Base for ModalBottomSheet & co. only — the root theme is Kura's own, never MaterialTheme's look.
-androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+# Material 3 Expressive = the chrome (android/BRIEF.md): themed with Kura tokens via
+# MaterialExpressiveTheme, always behind a Kura wrapper in designsystem/components/. Explicit
+# version: an explicit version beats the BOM's recommendation (1.4.0) in conflict resolution.
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 
 # Images
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
@@ -71,6 +93,9 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 
+# Build classpath (root `buildscript`): AGP 9's built-in Kotlin runs on this KGP, not its bundled 2.2.10.
+kotlin-gradle-plugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+
 # Tests (JVM)
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 ktor-client-mock = { group = "io.ktor", name = "ktor-client-mock", version.ref = "ktor" }
@@ -85,6 +110,5 @@ credentials = ["androidx-credentials", "androidx-credentials-play-services-auth"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

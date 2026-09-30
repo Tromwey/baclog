@@ -1,0 +1,324 @@
+// Material 3 Expressive (nuevo, no existía en el cromo Kura plano): ReactionGroup/ActionPair = ButtonGroup conectado de ToggleButton · SplitActionButton = SplitButtonLayout · KuraFab = FloatingActionButton · KuraFabMenu = FloatingActionButtonMenu + ToggleFloatingActionButton.
+// Revertir: no hay versión en android-cromo-kura-v1 (git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/ButtonGroups.kt falla): borrar el archivo y volver a Fan/Pills en los call sites.
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
+package com.tromwey.kura.designsystem.components
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.FloatingActionButtonMenu
+import androidx.compose.material3.FloatingActionButtonMenuItem
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SplitButtonDefaults
+import androidx.compose.material3.SplitButtonLayout
+import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
+import androidx.compose.material3.ToggleFloatingActionButton
+import androidx.compose.material3.ToggleFloatingActionButtonDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.dp
+import com.tromwey.kura.designsystem.Glyph
+import com.tromwey.kura.designsystem.GlyphIcon
+import com.tromwey.kura.designsystem.KColor
+import com.tromwey.kura.designsystem.KIcon
+import com.tromwey.kura.designsystem.KIconView
+import com.tromwey.kura.designsystem.KuraType
+import com.tromwey.kura.designsystem.UiWeight
+
+// Groups and the "create" family. Each is the Material 3 Expressive component, themed by KuraTheme;
+// state colors stay Kura (pizarra / coral / salvia) and the one accent stays miel.
+
+/** Connected-group shape for item [i] of [n]: leading · middle · trailing (checked = full round). */
+@Composable
+internal fun connectedShapes(i: Int, n: Int): ToggleButtonShapes = when {
+    n == 1 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+    i == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+    i == n - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+}
+
+/**
+ * The three exclusive reactions of "Completar" (iOS `ReactionSlider`'s stops), in their order. The
+ * design system never depends on `data/`: `app/UiSupport.kt` maps `Mark` ↔ [KuraReaction].
+ */
+enum class KuraReaction(val glyph: Glyph, val label: String) {
+    Liked(Glyph.Thumb, "Me gusta"),
+    Obsessed(Glyph.Flame, "Me obsesiona"),
+    Completed(Glyph.Check, "Solo completo"),
+    ;
+
+    /** The state color (pizarra / coral / salvia) — the glyph's own. */
+    val color: Color get() = glyph.color
+}
+
+/**
+ * Me gusta / Me obsesiona / Solo completo — a connected `ButtonGroup` of three single-choice
+ * `ToggleButton`s (replaces the hand-made reaction slider). The chosen one fills with its state
+ * color and shows glyph + text; the other two shrink to the glyph. The group animates the widths
+ * with the motion scheme. No haptic here: the store plays the reaction's (`StoreHaptic.Reaction`).
+ */
+@Composable
+fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, modifier: Modifier = Modifier) {
+    val entries = KuraReaction.entries
+    val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    ButtonGroup(
+        overflowIndicator = { },
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    ) {
+        entries.forEachIndexed { i, r ->
+            customItem(
+                buttonGroupContent = {
+                    val on = r == selected
+                    val weight by animateFloatAsState(if (on) 2.4f else 1f, spec, label = "reactionWeight")
+                    val source = remember { MutableInteractionSource() }
+                    ToggleButton(
+                        checked = on,
+                        onCheckedChange = { if (!on) onSelect(r) },
+                        modifier = Modifier
+                            .weight(weight)
+                            .animateWidth(source)
+                            .height(48.dp)
+                            .semantics {
+                                role = Role.RadioButton
+                                contentDescription = r.label
+                            },
+                        shapes = connectedShapes(i, entries.size),
+                        colors = ToggleButtonDefaults.colors(
+                            containerColor = KColor.s2,
+                            contentColor = KColor.text,
+                            checkedContainerColor = r.color,
+                            checkedContentColor = KColor.bg,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        interactionSource = source,
+                    ) {
+                        GlyphIcon(r.glyph, size = 17.dp, color = if (on) KColor.bg else null)
+                        if (on) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(r.label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
+                        }
+                    }
+                },
+                menuContent = { },
+            )
+        }
+    }
+}
+
+/** One side of an [ActionPair]: its label, glyph and whether it's on. [checkedColor] fills it when on. */
+data class KuraToggle(
+    val label: String,
+    val checked: Boolean,
+    val onCheckedChange: (Boolean) -> Unit,
+    val glyph: Glyph? = null,
+    val checkedColor: Color = KColor.text,
+    val checkedContentColor: Color = KColor.bg,
+)
+
+/**
+ * The ficha's pair [Me obsesiona | Completar] — a connected `ButtonGroup` of two `ToggleButton`s
+ * (2 dp slot). The checked one rounds fully and widens a little while the other gives way.
+ */
+@Composable
+fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier) {
+    val items = listOf(primary, secondary)
+    val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    ButtonGroup(
+        overflowIndicator = { },
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    ) {
+        items.forEachIndexed { i, t ->
+            customItem(
+                buttonGroupContent = {
+                    val weight by animateFloatAsState(if (t.checked) 1.18f else 1f, spec, label = "pairWeight")
+                    val source = remember { MutableInteractionSource() }
+                    ToggleButton(
+                        checked = t.checked,
+                        onCheckedChange = t.onCheckedChange,
+                        modifier = Modifier.weight(weight).animateWidth(source).height(48.dp).semantics { contentDescription = t.label },
+                        shapes = connectedShapes(i, items.size),
+                        colors = ToggleButtonDefaults.colors(
+                            containerColor = KColor.s2,
+                            contentColor = KColor.text,
+                            checkedContainerColor = t.checkedColor,
+                            checkedContentColor = t.checkedContentColor,
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        interactionSource = source,
+                    ) {
+                        if (t.glyph != null) {
+                            GlyphIcon(t.glyph, size = 16.dp, color = if (t.checked) t.checkedContentColor else null)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(t.label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
+                    }
+                },
+                menuContent = { },
+            )
+        }
+    }
+}
+
+/**
+ * The most frequent action a tap away and the rest behind the arrow — `SplitButtonLayout` with
+ * `SplitButtonDefaults.LeadingButton` / `TrailingButton` (solid: `primary`), the arrow turns when
+ * the menu opens. Compartir ("Copiar link" ▾ Historia, Más) and "Guardar en" (last collection ▾ others).
+ */
+@Composable
+fun SplitActionButton(
+    label: String,
+    onClick: () -> Unit,
+    menu: List<Pair<String, () -> Unit>>,
+    modifier: Modifier = Modifier,
+    icon: KIcon? = null,
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 270f else 90f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "splitArrow")
+    SplitButtonLayout(
+        leadingButton = {
+            SplitButtonDefaults.LeadingButton(onClick = onClick, modifier = Modifier.heightIn(min = 44.dp)) {
+                if (icon != null) {
+                    KIconView(icon, size = 17.dp, color = LocalContentColor.current)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
+            }
+        },
+        trailingButton = {
+            Box {
+                SplitButtonDefaults.TrailingButton(
+                    checked = open,
+                    onCheckedChange = { open = it },
+                    modifier = Modifier.heightIn(min = 44.dp).semantics {
+                        contentDescription = "Más opciones"
+                        stateDescription = if (open) "Abierto" else "Cerrado"
+                    },
+                ) {
+                    KIconView(KIcon.ChevronRight, Modifier.graphicsLayer { rotationZ = turn }, size = 16.dp, color = LocalContentColor.current)
+                }
+                DropdownMenu(
+                    expanded = open,
+                    onDismissRequest = { open = false },
+                    shape = MaterialTheme.shapes.medium,
+                    containerColor = KColor.s2,
+                ) {
+                    menu.forEach { (text, action) ->
+                        DropdownMenuItem(
+                            text = { Text(text, style = KuraType.row.inherit()) },
+                            onClick = {
+                                open = false
+                                action()
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+/**
+ * Android's canonical "create" — `FloatingActionButton`, 16 corners, solid (`primary` = text on
+ * bg). Inside a collection: "Agregar". [label] is what TalkBack reads.
+ */
+@Composable
+fun KuraFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon = KIcon.Plus, label: String = "Agregar") {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier = modifier.semantics { contentDescription = label },
+        shape = RoundedCornerShape(16.dp),
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+    ) {
+        KIconView(icon, size = 24.dp, color = LocalContentColor.current)
+    }
+}
+
+/** One action of a [KuraFabMenu]. */
+data class KuraFabItem(val label: String, val icon: KIcon, val onClick: () -> Unit)
+
+/**
+ * Tus colecciones' "+" — `FloatingActionButtonMenu` with a `ToggleFloatingActionButton`: closed it's
+ * the solid 16-corner FAB with "+"; open it turns into an s2 pill, the "+" rotates to a close, and
+ * the [items] (Agregar títulos, Nueva colección) unfold above it as tonal pills.
+ */
+@Composable
+fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startExpanded: Boolean = false) {
+    var open by rememberSaveable { mutableStateOf(startExpanded) }
+    FloatingActionButtonMenu(
+        expanded = open,
+        button = {
+            ToggleFloatingActionButton(
+                checked = open,
+                onCheckedChange = { open = it },
+                modifier = Modifier.semantics {
+                    contentDescription = if (open) "Cerrar" else "Crear"
+                },
+                containerColor = ToggleFloatingActionButtonDefaults.containerColor(
+                    initialColor = MaterialTheme.colorScheme.primary,
+                    finalColor = KColor.s2,
+                ),
+            ) {
+                val p = checkedProgress
+                KIconView(
+                    KIcon.Plus,
+                    Modifier.graphicsLayer { rotationZ = 45f * p },
+                    size = 24.dp,
+                    color = lerp(MaterialTheme.colorScheme.onPrimary, KColor.text, p),
+                )
+            }
+        },
+        modifier = modifier,
+    ) {
+        items.forEach { item ->
+            FloatingActionButtonMenuItem(
+                onClick = {
+                    open = false
+                    item.onClick()
+                },
+                text = { Text(item.label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit()) },
+                icon = { KIconView(item.icon, Modifier.size(20.dp), size = 20.dp, color = LocalContentColor.current) },
+                containerColor = KColor.s2,
+                contentColor = KColor.text,
+            )
+        }
+    }
+}

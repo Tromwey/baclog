@@ -10,6 +10,7 @@ import com.tromwey.kura.data.models.Title
 import com.tromwey.kura.designsystem.KHapticEvent
 import com.tromwey.kura.designsystem.components.CoverArt
 import com.tromwey.kura.designsystem.components.CoverShape
+import com.tromwey.kura.designsystem.components.KuraReaction
 import com.tromwey.kura.state.StoreHaptic
 import java.net.URI
 
@@ -55,6 +56,22 @@ val StoreHaptic.event: KHapticEvent?
             Mark.Liked, Mark.Completed -> KHapticEvent.Tap
             null -> null
         }
+    }
+
+/** A mark as the reaction group draws it (`ReactionGroup`): Me gusta / Me obsesiona / Solo completo. */
+val Mark.reaction: KuraReaction
+    get() = when (this) {
+        Mark.Liked -> KuraReaction.Liked
+        Mark.Obsessed -> KuraReaction.Obsessed
+        Mark.Completed -> KuraReaction.Completed
+    }
+
+/** The reaction group's choice back as the store's [Mark]. */
+val KuraReaction.mark: Mark
+    get() = when (this) {
+        KuraReaction.Liked -> Mark.Liked
+        KuraReaction.Obsessed -> Mark.Obsessed
+        KuraReaction.Completed -> Mark.Completed
     }
 
 /** The public host as people read it ("get-kura.app"): from `BuildConfig.SITE_URL`, never spelled out. */

@@ -4,9 +4,9 @@ App nativa Android de Kura: **Kotlin + Jetpack Compose**, espejo de [`ios/`](../
 
 ## Requisitos
 
-- **JDK 17+ para correr Gradle** (el de Homebrew: `export JAVA_HOME=/opt/homebrew/opt/openjdk@21`; también sirve el JBR de Android Studio). El código compila a JVM 17.
-- **Android SDK** con `platforms;android-36` y `build-tools;36.0.0`. Gradle lo encuentra por `ANDROID_HOME` o por `local.properties` (`sdk.dir=/Users/<tú>/Library/Android/sdk`, gitignoreado; créalo si no existe).
-- No hace falta `gradle` instalado: se usa el wrapper versionado (`./gradlew`, Gradle 8.14.3, con checksum fijado).
+- **JDK 17+ para correr Gradle** (AGP 9 lo exige; el de Homebrew: `export JAVA_HOME=/opt/homebrew/opt/openjdk@21`; también sirve el JBR de Android Studio). El código compila a JVM 17.
+- **Android SDK** con `platforms;android-37.0` (compileSdk 37) y `build-tools;36.0.0` (el default de AGP 9.4). El emulador puede seguir en android-36: targetSdk es 36. Gradle lo encuentra por `ANDROID_HOME` o por `local.properties` (`sdk.dir=/Users/<tú>/Library/Android/sdk`, gitignoreado; créalo si no existe).
+- No hace falta `gradle` instalado: se usa el wrapper versionado (`./gradlew`, Gradle 9.8.0, con checksum fijado).
 
 ## Generar y correr
 
@@ -59,12 +59,30 @@ adb shell am start -S -n com.tromwey.kura<.lane>/com.tromwey.kura.MainActivity -
 ## El marco (`app/`)
 
 - `KuraApp` (Application) tiene el ÚNICO `AppStore` del proceso (`val store by lazy { AppStore.create(this) }`), lee Vibraciones (`KHaptic.init`) y es el `SingletonImageLoader.Factory` de Coil (el bearer va solo a `<API>/api/avatar/…`).
-- `KuraRoot`: router por `store.phase` (splash → `OnboardingFlow` → `MainTabs`, fundido), el aviso sobre el dock (y la franja sin conexión en el mismo hueco cuando no hay aviso), el host de hojas (`store.sheet` → `KuraSheet`, estilo por `SheetRoute.style`; con `sheetLocked` la hoja se niega a cerrar y vuelve a subir), los efectos del store (`events` → `KHaptic` / `announceForAccessibility`) y el ciclo de vida (`ON_RESUME` → `sceneBecameActive`, `ON_PAUSE` → `sceneWentInactive`).
-- `MainTabs`: dock de 4 (`store.select`, punto del feed = `hasUnread`), una pila por pestaña (`store.paths[tab]`), cambio de pestaña 0 ms, solo la pestaña visible se compone (su estado `rememberSaveable` sobrevive). Atrás del sistema: `pop()`; en la raíz de otra pestaña → Colecciones; en la raíz de Colecciones sale de la app.
+- `KuraRoot`: router por `store.phase` (splash → `OnboardingFlow` → `MainTabs`, fundido) dentro del marco `KuraScaffold` (= `Scaffold` de Material): `bottomBar` = `MainDock` (la `ShortNavigationBar`, pegada al borde, visible donde `store.dockVisible(tab)`; entra/sale encogiéndose para que la página no brinque), `notices` = el aviso (`KuraToastHost`, snackbar) o, sin aviso, la franja sin conexión, que Material coloca justo encima de la barra; el contenido recibe el alto de la barra como padding. Encima de todo, el host de hojas (`store.sheet` → `KuraSheet`, estilo por `SheetRoute.style`; con `sheetLocked` la hoja se niega a cerrar y vuelve a subir), los efectos del store (`events` → `KHaptic` / `announceForAccessibility`) y el ciclo de vida (`ON_RESUME` → `sceneBecameActive`, `ON_PAUSE` → `sceneWentInactive`).
+- `MainTabs`: una pila por pestaña (la barra de 4 = `MainDock`: `store.select`, `Badge` del feed = `hasUnread`) (`store.paths[tab]`), cambio de pestaña 0 ms, solo la pestaña visible se compone (su estado `rememberSaveable` sobrevive). Atrás del sistema: `pop()`; en la raíz de otra pestaña → Colecciones; en la raíz de Colecciones sale de la app.
 - `Screens.kt`: los despachadores `TabRootScreen` / `RouteScreen` / `KuraSheetScope.SheetContent` (`when` exhaustivos). Firma de cada pantalla: `XxxScreen(store, route)`; de cada hoja: `KuraSheetScope.XxxSheet(store, sheet)` (`close()` la baja animada).
 - Portada compartida: cada pila es un `KuraHeroLayout` y cada entrada un `HeroDestination`; basta `Modifier.kHeroCover("cover-<titleId>")` en la card y en la ficha.
 - `UiSupport.kt`: `Title.art` (→ `CoverArt`), `Person.photo`, `KuraApiError.loadCopy` (titular + nota de los errores de carga), `siteHost`.
 - `DeepLinks.kt`: solo el mapa de links web → rutas (App Links son fase 2; nada lo llama aún).
+
+## Design system (`designsystem/`)
+
+Regla (founder, 2026-09-30): **lo que opera la app es Material 3 Expressive; lo que muestra contenido es Kura.** Cada componente Material vive DETRÁS del envoltorio Kura del mismo nombre: `app/` y `features/` nunca importan `androidx.compose.material3` (`grep -rn "androidx.compose.material3" app/src/main/java/com/tromwey/kura/app app/src/main/java/com/tromwey/kura/features` debe salir vacío).
+
+| Envoltorio Kura (archivo) | Material por dentro |
+|---|---|
+| `GlassButton` · `SolidButton` / `HoneyButton` · `IconChip44` / `BackChip` · `KuraTextButton` · `FollowButton` · `SaveChip` · `RadioDot` · `RadioMark` (`Buttons.kt`) | `FilledTonalButton` (s2) · `Button` (`primary` = text / `tertiary` = miel) · `FilledTonalIconButton` · `TextButton` · `Button` tertiary / `FilledTonalButton` · `FilledTonalButton` / `FilledTonalIconButton` · `RadioButton` · `Checkbox`. Todos: píldora en reposo, esquina 14 (`shapes.small`) al presionar + ripple |
+| `ReactionGroup` (+ `KuraReaction`) · `ActionPair` (+ `KuraToggle`) · `SplitActionButton` · `KuraFab` · `KuraFabMenu` (+ `KuraFabItem`) (`ButtonGroups.kt`) | `ButtonGroup` conectado de `ToggleButton` · ídem de 2 · `SplitButtonLayout` + `DropdownMenu` · `FloatingActionButton` · `FloatingActionButtonMenu` + `ToggleFloatingActionButton` |
+| `MonoSegmented` · `ChipRow` · `KuraSwitch` · `KuraTextField` (`label`, `error` nuevos) · `GroupedList` / `SettingsRow` / `ListDivider` · `KuraSearchBar` (`Controls.kt`) | `ButtonGroup` conectado · `FilterChip` · `Switch` salvia · `TextField` filled sin línea · `SegmentedListItem` (el grupo recorta las esquinas; `ListDivider` no pinta dentro de un grupo) · `SearchBar` + `ExpandedFullScreenSearchBar` |
+| `KuraScaffold` · `KuraTopBar` · `TabTitleBar` (+ `rememberKuraTitleScroll` / `Modifier.kuraTitleScroll`) · `KuraDock` (+ `KuraDockDefaults.height`) · `KuraToast` / `KuraToastHost` · `KuraSheet` / `Grabber` / `SheetRow` (`Chrome.kt`) | `Scaffold` · `TopAppBar` transparente · `LargeFlexibleTopAppBar` (36 → 22 al deslizar) · `ShortNavigationBar` + `Badge` · `Snackbar` / `SnackbarHost` (`Indefinite`; la ventana es `KMotion.undoWindowMs`) · `ModalBottomSheet` + `BottomSheetDefaults.DragHandle` · `ListItem` |
+| `LoadingScreen` / `KuraLoadingIndicator` · `KuraPullToRefresh` · `KuraWavyProgress` (`LoadingScreen.kt`) | `LoadingIndicator` (experimental; el fallback a `CircularProgressIndicator` es UN `const` en ese archivo) · `PullToRefreshBox` + `PullToRefreshDefaults.LoadingIndicator` · `LinearWavyProgressIndicator` |
+
+Se quedan Kura: `Cover`, `Fan`, `Seal`, `TintedSurface`, `Pills`, `Glyph`, `Typography`, `Masonry`, `SectionTitle`, `HeroMotion`, `Skeleton`, `TopVeil`, `OfflineStrip`. `Modifier.kPressable` es SOLO para contenido (portadas, cards, abanico, filas de contenido), sin ripple; ningún botón lo usa. El movimiento de componente es el de Material (`KMotion.fastSpatial/defaultSpatial/fastEffects/defaultEffects` leen `MaterialTheme.motionScheme`); los `spring` propios quedan para la portada compartida (y el deslizamiento de la pila que viaja con ella), el tinte y la presión de contenido.
+
+**Revertir un componente**: cada archivo trae arriba un comentario de dos líneas con el Material que envuelve y el comando, p. ej. `git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Buttons.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Buttons.kt` (tag del cromo plano, `de7ea4a`). Revertir `Chrome.kt` exige devolver `kDockPosition`/`DockReach` a `app/`. Anotar en `.claude/knowledge/state/android.md` cualquier reversión.
+
+La galería (`--es kuraScreen gallery`) muestra cada componente y estado; `gallery-sheet` abre la hoja y `gallery-fan` solo las colecciones.
 
 ## Carriles en paralelo
 
@@ -103,9 +121,9 @@ android/
   build.gradle.kts           plugins (apply false) + -PkuraBuildDir
   gradle.properties          AndroidX, R no transitivo, caché de build; documenta las -P de carriles
   gradle/libs.versions.toml  catálogo: TODAS las dependencias (también las que aún no se usan) y por qué esas versiones
-  gradle/wrapper/            wrapper 8.14.3 (jar versionado, checksum fijado)
+  gradle/wrapper/            wrapper 9.8.0 (jar versionado, checksum fijado)
   app/
-    build.gradle.kts         namespace/applicationId com.tromwey.kura, min 26 · compile/target 36, API_BASE por build
+    build.gradle.kts         namespace/applicationId com.tromwey.kura, min 26 · compile 37 / target 36, API_BASE por build
                              type, sufijo de carril, tarea del network security config de debug, R8 en release
     proguard-rules.pro       kotlinx.serialization + Ktor (OkHttp) + coroutines
     src/main/
@@ -157,11 +175,15 @@ Las familias XML (`R.font.newsreader`, `hanken_grotesk`, `red_hat_mono`) son par
 
 ## Versiones
 
-Viven en `gradle/libs.versions.toml`, con la razón de cada tope en el encabezado. Resumen: **Gradle 8.14.3 · AGP 8.13.2 · Kotlin 2.3.21 · compileSdk/targetSdk 36 · Compose BOM 2026.06.01 · Ktor 3.5.2 · Coil 3.4.0**. Lo que manda es la pareja Gradle 8 / AGP 8.13 → compileSdk 36: varias librerías de 2026 ya exigen compileSdk 37 + AGP 9.1 en su `aar-metadata` (core 1.19, compose-ui 1.12, okhttp-android 5.5) y `checkDebugAarMetadata` falla. Antes de subir cualquier versión, revisa esa tabla; el día que se pase a Gradle 9 / AGP 9 / compileSdk 37 se levantan todos los topes juntos.
+Viven en `gradle/libs.versions.toml`, con la razón de cada tope en el encabezado. Resumen: **Gradle 9.8.0 · AGP 9.4.1 · Kotlin 2.3.21 · compileSdk 37 / targetSdk 36 · Compose BOM 2026.09.00 (ui 1.12.1) · material3 1.5.0-alpha27 (fijado fuera del BOM) · Ktor 3.6.0 · Coil 3.5.0**.
+
+- **AGP 9 trae Kotlin integrado**: no hay plugin `org.jetbrains.kotlin.android` (aplicarlo falla); el KGP 2.3.21 entra por el `buildscript` del `build.gradle.kts` raíz. Los plugins de compilador `kotlin.plugin.compose` y `kotlin.plugin.serialization` siguen.
+- **material3 1.5.0-alpha27, no alpha28/29**: desde alpha28 material3 declara Compose 1.13.0-alpha01 y arrastraría todo Compose a alpha; alpha27 tiene todos los componentes Expressive y declara 1.12.0-beta01, así que manda el 1.12.1 estable del BOM. Nunca fuerces Compose con `strictly`.
+- **Material 3 Expressive**: tema en `designsystem/Theme.kt` (`KuraTheme` → `MaterialExpressiveTheme` con `KuraColorScheme`, `KuraShapes`, `kuraTypography` y `MotionScheme.expressive()`); los componentes viven detrás de su envoltorio Kura en `designsystem/components/` (ver "Design system" abajo).
+- Antes de subir cualquier versión, lee `aar-metadata.properties` (minCompileSdk / minAGP) del AAR y de sus transitivas (`learnings/2026-09-29-android-compilesdk-37-transitivo.md`).
 
 ## Pendiente
 
-- **Design system** (`designsystem/`): tokens, tipografía, glifos, componentes Kura; nada de Material visible (Material 3 queda solo como base de `ModalBottomSheet` si hace falta).
 - **Cliente API** (`data/`): modelos del wire, Ktor con bearer + reintentos, sesión guardada (DataStore cifrado con una llave del Android Keystore), `sid`, logout.
 - **Pantallas** (`features/`) según `design/kura/flujos-v2.dc.html`: hoy solo el flujo 01; el resto son placeholders con su firma final.
 - **Entrar con Google**: el botón ya está cableado (Credential Manager + `GetGoogleIdOption(serverClientId = auth/providers.google.clientId)` → `POST auth/google`) y sale solo si el servidor anuncia un client id; falta el backend (aceptar el `aud` de Android/Web). Apple no existe en Android.

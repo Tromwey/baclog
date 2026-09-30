@@ -11,6 +11,9 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.spring as composeSpring
 import androidx.compose.animation.core.tween
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
@@ -135,6 +138,8 @@ object KColor {
     val glassFocused = Color.White.copy(alpha = 0.12f)
     val accent = Color(0xFFEFCE8D)
     val onAccent = Color(0xFF0B0B0D)
+    /** Field validation only (Material's `error` role) — desaturated coral, never red (founder, 2026-09-30). */
+    val fieldError = Color(0xFFD9A08C)
 
     const val obsessedHex = "#ec8e76"
     const val likedHex = "#9cbae1"
@@ -149,15 +154,6 @@ object KColor {
     /** lavanda — aviso de estreno (clock + date), only that. */
     val waiting = Color(0xFFB9A6E8)
 
-    /**
-     * Dock: `#14141a` at 92 %, flat. iOS 17–25 draws `rgba(20,20,26,.5)` over a blur; Compose has
-     * no cheap backdrop blur, so Android raises the fill's opacity instead (android/BRIEF.md).
-     */
-    val dock = Color(20, 20, 26).copy(alpha = 0.92f)
-    /** The dock's selected tab / the segmented control's selected segment. */
-    val dockActive = Color.White.copy(alpha = 0.14f)
-    /** Sheet scrim `rgba(4,4,6,.32)` (android/BRIEF.md). */
-    val scrim = Color(4, 4, 6).copy(alpha = 0.32f)
     /** Sheet grabber `rgba(255,255,255,.18)`. */
     val grabber = Color.White.copy(alpha = 0.18f)
     /** Radio ring `rgba(244,243,238,.24)`. */
@@ -215,12 +211,6 @@ object KSize {
     val rowPeople = 72.dp
     /** Title row in a list. */
     val rowTitle = 80.dp
-    /** Room a page leaves at its end for the floating dock (on top of its own 56). */
-    val dockClearance = 44.dp
-    /** The dock floats this far from the bottom edge (DS: 34). */
-    val dockBottom = 34.dp
-    /** Extra bottom room of a toast above the dock (iOS ToastHost). */
-    val toastOverDock = 78.dp
 }
 
 // MARK: Shadows (dark depth only — no glows) ────────────────────────────────────────────────
@@ -234,10 +224,6 @@ enum class KShadow(val blur: Dp, val spread: Dp, val y: Dp, val color: Color) {
     Cover(36.dp, (-16).dp, 18.dp, Color.Black.copy(alpha = 0.88f)),
     /** `0 -8px 18px rgba(0,0,0,.42)` — a card riding on another (feed). */
     Stack(18.dp, 0.dp, (-8).dp, Color.Black.copy(alpha = 0.42f)),
-    /** `0 14px 44px rgba(0,0,0,.55)` — dock, sheets, toasts. */
-    Float(44.dp, 0.dp, 14.dp, Color.Black.copy(alpha = 0.55f)),
-    /** A draggable knob lifted off its track (the reaction slider). */
-    Control(16.dp, 0.dp, 6.dp, Color.Black.copy(alpha = 0.5f)),
 }
 
 /** Draws [s] behind the content, shaped like [shape]. Put it BEFORE the clip/background. */
@@ -398,7 +384,8 @@ fun cssGradientLine(deg: Double, size: Size): Pair<Offset, Offset> {
 // MARK: Motion ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * Every curve in the app comes from here (DS "movimiento"; iOS `KMotion`). SwiftUI's
+ * Every Kura curve comes from here (DS "movimiento"; iOS `KMotion`); component motion is
+ * Material's scheme ([fastSpatial] / [defaultSpatial] / [fastEffects] / [defaultEffects]). SwiftUI's
  * `spring(response:dampingFraction:)` maps to Compose as `stiffness = (2π / response)²`,
  * `dampingRatio = dampingFraction`. Rules:
  * - Tap-driven state changes are critically damped springs (no bounce): [snappy].
@@ -423,9 +410,26 @@ object KMotion {
     fun <T> tint(): FiniteAnimationSpec<T> = tween(durationMillis = 240, easing = EaseInOut)
     /** Opacity / color fades, 200 ms. */
     fun <T> fade(): FiniteAnimationSpec<T> = tween(durationMillis = 200, easing = EaseInOut)
-    /** Sheet up / down: critically damped springs (retargetable mid-flight), like SwiftUI `.smooth`. */
-    fun <T> sheetIn(): FiniteAnimationSpec<T> = composeSpring(dampingRatio = 1f, stiffness = stiffness(0.34))
-    fun <T> sheetOut(): FiniteAnimationSpec<T> = composeSpring(dampingRatio = 1f, stiffness = stiffness(0.26))
+    // Component motion (since 2026-09-30) is Material's `MotionScheme.expressive()` (KuraTheme):
+    // buttons, groups, bar, sheet, snackbar, search, FAB animate themselves; the frame's own fades
+    // read the scheme through these. Kura's springs above stay for the shared cover (and the stack
+    // slide that rides with it), the tint, content presses and the masonry pick.
+    /** Material's fast spatial spring (small components moving). */
+    @Composable
+    @ReadOnlyComposable
+    fun <T> fastSpatial(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.fastSpatialSpec()
+    /** Material's default spatial spring (a panel, a bar). */
+    @Composable
+    @ReadOnlyComposable
+    fun <T> defaultSpatial(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.defaultSpatialSpec()
+    /** Material's fast effects spring (opacity/color of a small piece). */
+    @Composable
+    @ReadOnlyComposable
+    fun <T> fastEffects(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.fastEffectsSpec()
+    /** Material's default effects spring (a screen-sized fade). */
+    @Composable
+    @ReadOnlyComposable
+    fun <T> defaultEffects(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.defaultEffectsSpec()
 
     /** Skeleton pulse: one leg of the 1.6 s cycle (autoreverses). */
     const val pulseLegMs = 800

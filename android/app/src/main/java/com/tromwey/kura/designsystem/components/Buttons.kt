@@ -1,27 +1,43 @@
+// Material 3 Expressive detrás de nombres Kura: GlassButton = FilledTonalButton · SolidButton/HoneyButton = Button (primary / tertiary) · IconChip44/BackChip = FilledTonalIconButton · KuraTextButton = TextButton · FollowButton = Button tertiary / FilledTonalButton · SaveChip = FilledTonalButton / FilledTonalIconButton · RadioDot = RadioButton · RadioMark = Checkbox.
+// Revertir: git show android-cromo-kura-v1:android/app/src/main/java/com/tromwey/kura/designsystem/components/Buttons.kt > android/app/src/main/java/com/tromwey/kura/designsystem/components/Buttons.kt
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.tromwey.kura.designsystem.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonShapes
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconButtonShapes
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -30,18 +46,31 @@ import com.tromwey.kura.designsystem.GlyphIcon
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KIcon
 import com.tromwey.kura.designsystem.KIconView
-import com.tromwey.kura.designsystem.KMotion
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
 
-// Twin of ios/Kura/DesignSystem/Components/Buttons.swift. Android has no Liquid Glass: every
-// "glass" control is the iOS 17–25 flat fill (`KColor.glassBg`). No borders, no glows, no ripple.
+// Twin of ios/Kura/DesignSystem/Components/Buttons.swift in NAME and signature; inside, Material 3
+// Expressive themed by KuraTheme (android/BRIEF.md › "El cromo es Material 3 Expressive"). At rest they
+// read like Kura (flat fills, no border, Hanken 600); pressed, the pill closes its corners to 14
+// (`shapes.small`) with Material's ripple instead of Kura's hand-made scale. No shadows, no glows.
+
+/** Kura's press morph for every pill button: round at rest, `shapes.small` (14) while pressed. */
+@Composable
+internal fun kuraButtonShapes(): ButtonShapes = ButtonDefaults.shapes(shape = CircleShape, pressedShape = MaterialTheme.shapes.small)
+
+/** Same morph for the 44 icon chips: circle → 14 while pressed. */
+@Composable
+internal fun kuraIconShapes(): IconButtonShapes = IconButtonDefaults.shapes(shape = CircleShape, pressedShape = MaterialTheme.shapes.small)
+
+/** A Kura text style whose color comes from the Material component (content / disabled color). */
+internal fun TextStyle.inherit(): TextStyle = copy(color = Color.Unspecified)
 
 /**
- * Glass pill button — `rgba(255,255,255,.075)`, Hanken 600, 44 high, padding 14|16 · 16.
- * [glyph] (a DS glyph in its color) or [icon] (an interface icon in text) leads; [trailingIcon] trails.
+ * Tonal pill button (was "glass") — `FilledTonalButton` on `secondaryContainer` (s2), Hanken 600,
+ * 44 high, padding 14|16 · 16. [glyph] (a DS glyph in its color) or [icon] (an interface icon)
+ * leads; [trailingIcon] trails. [fill] overrides the container (e.g. `KColor.glassBg` over a tint).
  */
 @Composable
 fun GlassButton(
@@ -54,30 +83,42 @@ fun GlassButton(
     height: Dp = 44.dp,
     fontSize: Float = 15f,
     fullWidth: Boolean = false,
-    fill: Color = KColor.glassBg,
+    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
     enabled: Boolean = true,
 ) {
     val lead = glyph != null || icon != null
-    Row(
-        modifier = modifier
-            .kPressable(enabled = enabled, onClick = onClick)
-            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .height(height)
-            .background(fill, CircleShape)
-            .padding(start = if (lead) 14.dp else 16.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+    FilledTonalButton(
+        onClick = onClick,
+        shapes = kuraButtonShapes(),
+        modifier = modifier.then(if (fullWidth) Modifier.fillMaxWidth() else Modifier).height(height),
+        enabled = enabled,
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = fill,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            disabledContainerColor = fill,
+            disabledContentColor = KColor.text2,
+        ),
+        contentPadding = PaddingValues(start = if (lead) 14.dp else 16.dp, end = 16.dp),
     ) {
-        if (glyph != null) GlyphIcon(glyph, size = 16.dp)
-        if (icon != null) KIconView(icon, size = 17.dp)
-        BasicText(title, style = KuraType.ui(fontSize, UiWeight.SemiBold).copy(color = if (enabled) KColor.text else KColor.text2), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (trailingIcon != null) KIconView(trailingIcon, size = 15.dp)
+        if (glyph != null) {
+            GlyphIcon(glyph, size = 16.dp)
+            Spacer(Modifier.width(8.dp))
+        }
+        if (icon != null) {
+            KIconView(icon, size = 17.dp, color = LocalContentColor.current)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(title, style = KuraType.ui(fontSize, UiWeight.SemiBold).inherit(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (trailingIcon != null) {
+            Spacer(Modifier.width(8.dp))
+            KIconView(trailingIcon, size = 15.dp, color = LocalContentColor.current)
+        }
     }
 }
 
 /**
- * The one primary action — text fill, bg text, 52 high, full width. [honey] = the screen's ONE
- * accent action (`KColor.accent` + `onAccent`). Disabled = s2 fill, text-2.
+ * The one primary action — `Button` with `primary` (text) / `onPrimary` (bg), 52 high, full width.
+ * [honey] = the screen's ONE accent action: `tertiary` (miel) / `onTertiary`. Disabled = s2, text-2.
  */
 @Composable
 fun SolidButton(
@@ -89,42 +130,37 @@ fun SolidButton(
     enabled: Boolean = true,
     honey: Boolean = false,
 ) {
-    val fill by animateColorAsState(
-        when {
-            !enabled -> KColor.s2
-            honey -> KColor.accent
-            else -> KColor.text
-        },
-        KMotion.fade(), label = "solidFill",
-    )
-    val ink = when {
-        !enabled -> KColor.text2
-        honey -> KColor.onAccent
-        else -> KColor.bg
-    }
-    Row(
-        modifier = modifier
-            .kPressable(enabled = enabled, onClick = onClick)
-            .fillMaxWidth()
-            .height(height)
-            .background(fill, CircleShape)
-            .padding(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+    val scheme = MaterialTheme.colorScheme
+    Button(
+        onClick = onClick,
+        shapes = kuraButtonShapes(),
+        modifier = modifier.fillMaxWidth().height(height),
+        enabled = enabled,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (honey) scheme.tertiary else scheme.primary,
+            contentColor = if (honey) scheme.onTertiary else scheme.onPrimary,
+            disabledContainerColor = KColor.s2,
+            disabledContentColor = KColor.text2,
+        ),
+        contentPadding = PaddingValues(horizontal = 20.dp),
     ) {
-        if (icon != null) KIconView(icon, size = 18.dp, color = ink)
-        BasicText(title, style = KuraType.ui(16f, UiWeight.SemiBold).copy(color = ink), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (icon != null) {
+            KIconView(icon, size = 18.dp, color = LocalContentColor.current)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(title, style = KuraType.ui(16f, UiWeight.SemiBold).inherit(), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** [SolidButton] in honey — the screen's one accent action. */
+/** [SolidButton] in honey (`tertiary`) — the screen's one accent action. */
 @Composable
 fun HoneyButton(title: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon? = null, height: Dp = 52.dp, enabled: Boolean = true) =
     SolidButton(title, onClick, modifier, icon, height, enabled, honey = true)
 
 /**
- * 44 round glass icon chip (Volver, Opciones, +, campana, compartir). [size] < 44 (the 36 close
- * chip of a sheet) still takes a 44 touch. [label] is what TalkBack reads.
+ * 44 round icon chip (Volver, Opciones, +, campana, compartir) — `FilledTonalIconButton`, circle →
+ * 14 while pressed. [size] < 44 (the 36 close chip of a sheet) still gets Material's 48 touch.
+ * [label] is what TalkBack reads.
  */
 @Composable
 fun IconChip44(
@@ -134,19 +170,16 @@ fun IconChip44(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
     iconSize: Dp = 18.dp,
-    fill: Color = KColor.glassBg,
+    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
     iconColor: Color = KColor.text,
 ) {
-    Box(
-        modifier = modifier
-            .size(maxOf(size, KSize.touch))
-            .kPressable(onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
+    FilledTonalIconButton(
+        onClick = onClick,
+        shapes = kuraIconShapes(),
+        modifier = modifier.size(size).semantics { contentDescription = label },
+        colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = fill, contentColor = iconColor),
     ) {
-        Box(Modifier.size(size).background(fill, CircleShape), contentAlignment = Alignment.Center) {
-            KIconView(icon, size = iconSize, color = iconColor)
-        }
+        KIconView(icon, size = iconSize, color = iconColor)
     }
 }
 
@@ -156,8 +189,8 @@ fun BackChip(onClick: () -> Unit, modifier: Modifier = Modifier) =
     IconChip44(KIcon.Back, "Volver", onClick, modifier, iconSize = 20.dp)
 
 /**
- * A text button: literal Hanken 15/600 (or [mono] 11 uppercase, like Deshacer / Reintentar in a
- * toast), no fill, 44 touch. [color] text by default.
+ * A text button — `TextButton`: literal Hanken 15/600 (or [mono] 11 uppercase, like Deshacer /
+ * Reintentar in a toast), no fill, 44 touch. [color] text by default.
  */
 @Composable
 fun KuraTextButton(
@@ -167,14 +200,14 @@ fun KuraTextButton(
     mono: Boolean = false,
     color: Color = KColor.text,
 ) {
-    Box(
-        modifier = modifier
-            .kPressable(feel = KPressFeel.Dim, onClick = onClick)
-            .heightIn(min = KSize.touch)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
+    TextButton(
+        onClick = onClick,
+        shapes = kuraButtonShapes(),
+        modifier = modifier.heightIn(min = KSize.touch),
+        colors = ButtonDefaults.textButtonColors(contentColor = color),
+        contentPadding = PaddingValues(horizontal = 12.dp),
     ) {
-        if (mono) MonoLabel(title, color = color) else BasicText(title, style = KuraType.ui(15f, UiWeight.SemiBold).copy(color = color), maxLines = 1)
+        if (mono) MonoLabel(title, color = color) else Text(title, style = KuraType.ui(15f, UiWeight.SemiBold).inherit(), maxLines = 1)
     }
 }
 
@@ -194,9 +227,9 @@ enum class FollowSize(val font: Float, val side: Dp, val height: Dp) {
 }
 
 /**
- * The one Seguir button: honey where the caller spends the screen's one accent ([honey]),
- * flat glass otherwise; Siguiendo / Solicitado are always flat glass. [handle] makes TalkBack say
- * "Dejar de seguir a @handle" on Siguiendo.
+ * The one Seguir button: `Button` in `tertiary` (miel) where the caller spends the screen's one
+ * accent ([honey]), `FilledTonalButton` otherwise; Siguiendo / Solicitado are always tonal.
+ * [handle] makes TalkBack say "Dejar de seguir a @handle" on Siguiendo.
  */
 @Composable
 fun FollowButton(
@@ -209,19 +242,22 @@ fun FollowButton(
 ) {
     val isHoney = state == FollowState.Follow && honey
     val label = if (state == FollowState.Following) handle?.let { "Dejar de seguir a @$it" } ?: "Dejar de seguir" else state.label
-    Box(
-        modifier = modifier
-            .heightIn(min = KSize.touch)
-            .kPressable(onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier.height(size.height).background(if (isHoney) KColor.accent else KColor.glassBg, CircleShape).padding(horizontal = size.side),
-            contentAlignment = Alignment.Center,
-        ) {
-            BasicText(state.label, style = KuraType.ui(size.font, UiWeight.SemiBold).copy(color = if (isHoney) KColor.onAccent else KColor.text), maxLines = 1)
-        }
+    val m = modifier.height(size.height).semantics { contentDescription = label }
+    val padding = PaddingValues(horizontal = size.side)
+    val text: @Composable () -> Unit = {
+        Text(state.label, style = KuraType.ui(size.font, UiWeight.SemiBold).inherit(), maxLines = 1)
+    }
+    if (isHoney) {
+        val scheme = MaterialTheme.colorScheme
+        Button(
+            onClick = onClick,
+            shapes = kuraButtonShapes(),
+            modifier = m,
+            colors = ButtonDefaults.buttonColors(containerColor = scheme.tertiary, contentColor = scheme.onTertiary),
+            contentPadding = padding,
+        ) { text() }
+    } else {
+        FilledTonalButton(onClick = onClick, shapes = kuraButtonShapes(), modifier = m, contentPadding = padding) { text() }
     }
 }
 
@@ -230,8 +266,9 @@ enum class SaveChipStyle { Pill, Icon }
 
 /**
  * The one "guardar un título" affordance (frontend.md § "Guardar un título"): the bookmark,
- * outlined until the title is in ≥ 1 collection ([count]), then filled with the count. Flat glass
- * (it's content, never chrome). No haptic: opening the sheet is silent.
+ * outlined until the title is in ≥ 1 collection ([count]), then filled with the count. Tonal
+ * (`FilledTonalButton`, or `FilledTonalIconButton` for the empty 44 circle). No haptic: opening the
+ * sheet is silent.
  * [Pill]: "Guardar" / "En 1 colección" / "En N colecciones" (ficha, recomendada).
  * [Icon]: 44 circle; saved keeps the fill as a 44 capsule with the count in mono (lists).
  */
@@ -251,60 +288,75 @@ fun SaveChip(
     val mark: @Composable (Dp) -> Unit = { s ->
         if (count > 0) GlyphIcon(Glyph.Bookmark, size = s, color = KColor.text) else KIconView(KIcon.BookmarkOutline, size = s)
     }
-    val base = modifier.kPressable(onClickLabel = if (count == 0) null else "Cambiar colecciones", onClick = onClick).semantics { contentDescription = a11y }
+    val base = modifier.semantics {
+        contentDescription = a11y
+        if (count > 0) {
+            onClick(label = "Cambiar colecciones") {
+                onClick()
+                true
+            }
+        }
+    }
     when (style) {
-        SaveChipStyle.Pill -> Row(
-            base.height(44.dp).background(KColor.glassBg, CircleShape).padding(start = if (compact) 12.dp else 14.dp, end = if (compact) 14.dp else 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        SaveChipStyle.Pill -> FilledTonalButton(
+            onClick = onClick,
+            shapes = kuraButtonShapes(),
+            modifier = base.height(44.dp),
+            contentPadding = PaddingValues(start = if (compact) 12.dp else 14.dp, end = if (compact) 14.dp else 16.dp),
         ) {
             mark(16.dp)
-            BasicText(
+            Spacer(Modifier.width(8.dp))
+            Text(
                 when (count) {
                     0 -> "Guardar"
                     1 -> "En 1 colección"
                     else -> "En $count colecciones"
                 },
-                style = KuraType.ui(if (compact) 14f else 15f, UiWeight.SemiBold),
+                style = KuraType.ui(if (compact) 14f else 15f, UiWeight.SemiBold).inherit(),
                 maxLines = 1,
             )
         }
         SaveChipStyle.Icon -> if (count > 0) {
-            Row(
-                base.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).height(44.dp).background(KColor.glassBg, CircleShape).padding(start = 11.dp, end = 13.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            FilledTonalButton(
+                onClick = onClick,
+                shapes = kuraButtonShapes(),
+                modifier = base.height(44.dp),
+                contentPadding = PaddingValues(start = 11.dp, end = 13.dp),
             ) {
                 mark(16.dp)
-                BasicText("$count", style = KuraType.mono(12f).copy(color = KColor.text2))
+                Spacer(Modifier.width(5.dp))
+                Text("$count", style = KuraType.mono(12f).copy(color = KColor.text2))
             }
         } else {
-            Box(base.size(44.dp).background(KColor.glassBg, CircleShape), contentAlignment = Alignment.Center) { mark(17.dp) }
+            FilledTonalIconButton(onClick = onClick, shapes = kuraIconShapes(), modifier = base.size(44.dp)) { mark(17.dp) }
         }
     }
 }
 
-/** Multiple choice mark (sheets): a filled text disc with a check, or a ring. 26. */
+/**
+ * Multiple choice mark (sheets: "Guardar en", "Mover a") — Material's `Checkbox`, checked in text
+ * with a bg check, unchecked in the Kura ring color. Display only: the row carries the click.
+ * In a 26 slot so rows keep their Kura geometry.
+ */
 @Composable
 fun RadioMark(on: Boolean, modifier: Modifier = Modifier) {
-    val fill by animateColorAsState(if (on) KColor.text else Color.Transparent, KMotion.fade(), label = "radioMark")
-    Box(
-        modifier
-            .size(26.dp)
-            .semantics { selected = on }
-            .then(if (on) Modifier else Modifier.border(1.5.dp, KColor.radioRing, CircleShape)) // the ring IS the control's shape (allowed: a radio has no fill to change)
-            .background(fill, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (on) KIconView(KIcon.CheckBold, size = 14.dp, color = KColor.bg)
+    Box(modifier.size(26.dp).semantics { selected = on }, contentAlignment = Alignment.Center) {
+        Checkbox(
+            checked = on,
+            onCheckedChange = null,
+            colors = CheckboxDefaults.colors(checkedColor = KColor.text, checkmarkColor = KColor.bg, uncheckedColor = KColor.radioRing),
+        )
     }
 }
 
-/** Single choice mark: a ring with a dot inside when chosen. 26. */
+/** Single choice mark — Material's `RadioButton` tinted text / Kura ring. Display only; 26 slot. */
 @Composable
 fun RadioDot(on: Boolean, modifier: Modifier = Modifier) {
-    val ring by animateColorAsState(if (on) KColor.text else KColor.radioRing, KMotion.fade(), label = "radioDot")
-    Box(modifier.size(26.dp).semantics { selected = on }.border(1.5.dp, ring, CircleShape), contentAlignment = Alignment.Center) {
-        if (on) Box(Modifier.size(12.dp).background(KColor.text, CircleShape))
+    Box(modifier.size(26.dp).semantics { selected = on }, contentAlignment = Alignment.Center) {
+        RadioButton(
+            selected = on,
+            onClick = null,
+            colors = RadioButtonDefaults.colors(selectedColor = KColor.text, unselectedColor = KColor.radioRing),
+        )
     }
 }
