@@ -82,7 +82,7 @@ class ApiClientTest {
     @Test fun getSendsHeadersAndDecodes() = runBlocking<Unit> {
         val (api, _) = harness { ok(Fixtures.text("me")) }
         val me = api.me()
-        assertEquals("ericbriseno", me.handle)
+        assertEquals("qa_founder", me.handle)
         val r = requests.single()
         assertEquals("$base/me", r.url.toString())
         assertEquals("Bearer a.b.c", r.headers[HttpHeaders.Authorization])
@@ -126,14 +126,14 @@ class ApiClientTest {
     @Test fun errorEnvelopesMapToTheTaxonomy() = runBlocking<Unit> {
         val cases = mapOf(
             404 to Fixtures.text("error_404"),
-            403 to Fixtures.text("people_julz_followers"),
+            403 to Fixtures.text("people_qa_persona_06_followers"),
         )
         for ((code, body) in cases) {
             requests.clear()
             val (api, _) = harness { status(code, body) }
             when (code) {
                 404 -> expect<KuraApiError.NotFound> { api.person("nadie") }
-                403 -> assertEquals("lists_private", expect<KuraApiError.Forbidden> { api.people(com.tromwey.kura.data.models.PeopleKind.FollowersOf("julz"), null) }.code)
+                403 -> assertEquals("lists_private", expect<KuraApiError.Forbidden> { api.people(com.tromwey.kura.data.models.PeopleKind.FollowersOf("qa_persona_06"), null) }.code)
             }
         }
         val (a1, _) = harness { status(422, """{"error":{"code":"invalid","message":"x","reason":"invalid_proof"}}""") }
@@ -158,7 +158,7 @@ class ApiClientTest {
     @Test fun getsRetryWritesDont() = runBlocking<Unit> {
         var n = 0
         val (api, _) = harness { n++; if (n < 3) status(503, "", listOf(HttpHeaders.RetryAfter to "0")) else ok(Fixtures.text("me")) }
-        assertEquals("ericbriseno", api.me().handle)
+        assertEquals("qa_founder", api.me().handle)
         assertEquals(3, requests.size)
         requests.clear()
         val (w, _) = harness { status(503, "", listOf(HttpHeaders.RetryAfter to "0")) }
@@ -173,7 +173,7 @@ class ApiClientTest {
     @Test fun identicalGetsInFlightShareOneRequest() = runBlocking<Unit> {
         val (api, _) = harness { delay(150); ok(Fixtures.text("me")) }
         val results = List(3) { async { api.me() } }.awaitAll()
-        assertTrue(results.all { it.handle == "ericbriseno" })
+        assertTrue(results.all { it.handle == "qa_founder" })
         assertEquals(1, requests.size)
     }
 
@@ -197,7 +197,7 @@ class ApiClientTest {
                 else -> ok(Fixtures.text("collections").let { KuraJson.json.parseToJsonElement(it).jsonObject["items"]!!.let { a -> (a as kotlinx.serialization.json.JsonArray)[0].toString() } })
             }
         }
-        api.signIn("eric@example.com", "123456")
+        api.signIn("persona@example.com", "123456")
         assertEquals("FAKE.TOKEN.REDACTED", session.token)
         val device = bodyOf(requests[0])["device"]!!.jsonObject
         assertEquals(JsonPrimitive("android"), device["platform"])

@@ -101,7 +101,7 @@ class AccountLinkTest {
         val store = h.store
         assertNull(store.identities)
         store.loadIdentities()
-        assertEquals("redacted@example.com", store.identities?.email)
+        assertEquals("qa.founder@example.invalid", store.identities?.email)
         assertEquals("web.apps.googleusercontent.com", store.googleLinkClientId)
         assertTrue(store.canRun(IdentityProvider.Google))
         assertFalse("Apple nunca corre en Android", store.canRun(IdentityProvider.Apple))
@@ -204,7 +204,7 @@ class AccountLinkTest {
         store.loadIdentities()
         assertFalse(store.requestMergeCode("no-es-correo"))
         assertEquals("Ese correo no parece válido. Revísalo.", store.mergeError)
-        assertFalse(store.requestMergeCode("  REDACTED@example.com "))
+        assertFalse(store.requestMergeCode("  QA.Founder@example.invalid "))
         assertEquals("Ese es el correo de esta cuenta. Escribe el de la otra.", store.mergeError)
         assertTrue(h.api.callsOf("requestMergeCode").isEmpty())
     }

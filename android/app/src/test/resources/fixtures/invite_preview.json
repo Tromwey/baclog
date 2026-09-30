@@ -1,13 +1,13 @@
 {
  "token": "AbCdEfGhIjKlMnOp",
  "party": {
-  "id": "995445ae-2038-4edd-9f64-37ff6e3f3364",
-  "name": "Halloween",
+  "id": "c9a07795-ed7d-4cf4-a018-b9f4a37c20df",
+  "name": "Fiesta de prueba 1",
   "perGuestLimit": 3,
   "host": {
-   "handle": "ericbriseno",
-   "name": "Eric",
-   "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616"
+   "handle": "qa_founder",
+   "name": "Persona Fundadora",
+   "avatarUrl": "/api/avatar/9c65e65d92dfb7a5009d0155aa44b186"
   },
   "songs": [
    {
@@ -29,9 +29,9 @@
     ],
     "addedAt": "2026-09-29T20:06:52Z",
     "addedBy": {
-     "handle": "ericbriseno",
-     "name": "Eric",
-     "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616"
+     "handle": "qa_founder",
+     "name": "Persona Fundadora",
+     "avatarUrl": "/api/avatar/9c65e65d92dfb7a5009d0155aa44b186"
     },
     "mine": true,
     "byHost": true,
@@ -57,9 +57,9 @@
     ],
     "addedAt": "2026-09-30T04:46:27Z",
     "addedBy": {
-     "handle": "ericbriseno",
-     "name": "Eric",
-     "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616"
+     "handle": "qa_founder",
+     "name": "Persona Fundadora",
+     "avatarUrl": "/api/avatar/9c65e65d92dfb7a5009d0155aa44b186"
     },
     "mine": true,
     "byHost": true,
@@ -70,9 +70,9 @@
   "contributors": [
    {
     "person": {
-     "handle": "ericbriseno",
-     "name": "Eric",
-     "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616"
+     "handle": "qa_founder",
+     "name": "Persona Fundadora",
+     "avatarUrl": "/api/avatar/9c65e65d92dfb7a5009d0155aa44b186"
     },
     "isYou": true,
     "songCount": 2

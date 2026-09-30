@@ -146,14 +146,14 @@ class ReactionsSocialTest {
     @Test fun blockMirrorsTheServerOnlyAfterItAnswered() = storeTest { h ->
         val store = h.store
         signedIn(h)
-        assertTrue(store.isFollowing("julz"))
+        assertTrue(store.isFollowing("qa_persona_06"))
         h.api.failNext("block", KuraApiError.Offline)
-        assertFalse(store.block("julz"))
-        assertTrue("sin 204 no cambia nada", store.isFollowing("julz"))
+        assertFalse(store.block("qa_persona_06"))
+        assertTrue("sin 204 no cambia nada", store.isFollowing("qa_persona_06"))
         assertEquals(ToastModel.Kind.Retry, store.toast?.kind)
-        assertTrue(store.block("julz"))
-        assertFalse(store.isFollowing("julz"))
-        assertTrue(store.isBlocked("julz"))
-        assertEquals("Bloqueaste a @julz.", store.toast?.text)
+        assertTrue(store.block("qa_persona_06"))
+        assertFalse(store.isFollowing("qa_persona_06"))
+        assertTrue(store.isBlocked("qa_persona_06"))
+        assertEquals("Bloqueaste a @qa_persona_06.", store.toast?.text)
     }
 }

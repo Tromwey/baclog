@@ -31,9 +31,9 @@ import java.time.Instant
  *  persist on their own. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ThirdRoundTest {
-    private val recs = "4f69f303-e6a1-4f76-95e3-e4b53763d0af"
-    private val pr = "5c75d6dd-1e73-45e2-a4b8-78ea0168fa1d"
-    private val rap = "30d54aae-a066-4be9-9bec-b36bf8f3c800"
+    private val recs = "9c306af3-78e5-4dfb-8c10-4c026eb6dae5"
+    private val pr = "b95d0019-f01f-4b63-b6f9-8bf2e78b7d9f"
+    private val rap = "10832df5-fe4f-4cac-a6e6-92ccb0a1a6bd"
     private val rapTitle = "d1493a89-e28c-4b8b-a40a-336133593825"
     private val recsTitle = "ed3e37c2-488b-4321-a720-76a8b6d0151c"
     private val yhlq = "11a4e43b-04d9-4892-b5f0-8bc24a6977be"

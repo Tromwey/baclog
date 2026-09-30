@@ -22,9 +22,9 @@ class SessionTest {
 
     @Test fun readsExpSidSub() {
         val exp = now.plusSeconds(30L * 24 * 3600).epochSecond
-        val s = session(jwt("""{"sub":"u-1","sid":"dfd9cdc7-89b8-4139-bdfc-23aaad2bd002","exp":$exp,"tv":0}"""))
+        val s = session(jwt("""{"sub":"u-1","sid":"70455997-2071-4e65-9cc8-6f3eae45f8ea","exp":$exp,"tv":0}"""))
         assertEquals(Instant.ofEpochSecond(exp), s.expiry)
-        assertEquals("dfd9cdc7-89b8-4139-bdfc-23aaad2bd002", s.sid)
+        assertEquals("70455997-2071-4e65-9cc8-6f3eae45f8ea", s.sid)
         assertEquals("u-1", s.subject)
         assertFalse(s.isExpiringSoon)
         assertFalse(s.needsRefresh)

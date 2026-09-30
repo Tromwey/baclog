@@ -1,10 +1,10 @@
 {
  "token": "FAKE.TOKEN.REDACTED",
  "user": {
-  "id": "4bcce597-6c6d-40ff-a971-d311a0c54568",
-  "handle": "ericbriseno",
-  "name": "Eric",
-  "avatarUrl": "/api/avatar/9311cf1d65d64c538fe5ce2f792fd616",
+  "id": "d84c48f4-fcdf-477d-823d-40343a7c26e7",
+  "handle": "qa_founder",
+  "name": "Persona Fundadora",
+  "avatarUrl": "/api/avatar/9c65e65d92dfb7a5009d0155aa44b186",
   "isPublic": true,
   "preferredService": "apple_music",
   "notifyReleases": true,

@@ -16,8 +16,8 @@ import org.junit.Test
 /** Membership writes, the deferred removal behind Deshacer, and collection edits that fail. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryTest {
-    private val recs = "4f69f303-e6a1-4f76-95e3-e4b53763d0af" // "me lo recomendaron", 1 title
-    private val pr = "5c75d6dd-1e73-45e2-a4b8-78ea0168fa1d" // "PR ta bien cabron", 10 titles
+    private val recs = "9c306af3-78e5-4dfb-8c10-4c026eb6dae5" // "Colección de prueba 2", 1 title
+    private val pr = "b95d0019-f01f-4b63-b6f9-8bf2e78b7d9f" // "Colección de prueba 4", 10 titles
     private val yhlq = "11a4e43b-04d9-4892-b5f0-8bc24a6977be" // first of PR
     private val fresh = "titulo-nuevo" // in no collection, no state
 
@@ -34,7 +34,7 @@ class LibraryTest {
         store.add(fresh, recs)
         assertEquals(fresh, store.collection(recs)!!.titleIds.first())
         assertNotNull("guardar crea tu estado", store.userTitles[fresh])
-        assertEquals("Agregado a me lo recomendaron", store.toast?.text)
+        assertEquals("Agregado a Colección de prueba 2", store.toast?.text)
         assertEquals(ToastModel.Kind.Undo, store.toast?.kind)
         runCurrent()
 
@@ -58,7 +58,7 @@ class LibraryTest {
         store.remove(yhlq, pr)
         assertFalse(yhlq in store.collection(pr)!!.titleIds)
         assertEquals(listOf(yhlq), store.pendingRemovals(pr))
-        assertEquals("Quitado de PR ta bien cabron", store.toast?.text)
+        assertEquals("Quitado de Colección de prueba 4", store.toast?.text)
 
         advanceTimeBy(store.undoWindow.inWholeMilliseconds - 1_000)
         assertTrue(h.api.callsOf("removeTitleMembership").isEmpty())
@@ -84,7 +84,7 @@ class LibraryTest {
         assertFalse(yhlq in store.collection(pr)!!.titleIds)
         assertEquals(yhlq, store.collection(recs)!!.titleIds.first())
         assertEquals(recs, store.lastUsedCollectionId)
-        assertEquals("Movido a me lo recomendaron", store.toast?.text)
+        assertEquals("Movido a Colección de prueba 2", store.toast?.text)
         runCurrent()
         store.tapToast()
         assertEquals(fromBefore, store.collection(pr)!!.titleIds)
@@ -145,7 +145,7 @@ class LibraryTest {
         assertEquals("me lo dijeron", store.collection(recs)!!.name) // optimistic
         runCurrent()
         // The server kept the old name: so does the phone, and it says so with Reintentar.
-        assertEquals("me lo recomendaron", store.collection(recs)!!.name)
+        assertEquals("Colección de prueba 2", store.collection(recs)!!.name)
         assertEquals(ToastModel.Kind.Retry, store.toast?.kind)
         assertEquals("No se guardaron los cambios de la colección.", store.toast?.text)
         store.tapToast()

@@ -22,8 +22,8 @@ class AppStoreLinksTest {
         assertEquals(DeepLink.TitleLink("abc-123"), DeepLink.parse("https://get-kura.app/item/abc-123"))
         assertEquals(DeepLink.TitleLink("abc"), DeepLink.parse("https://get-kura.app/mariel.ok/item/abc"))
         assertEquals(DeepLink.TitleLink("abc"), DeepLink.parse("https://get-kura.app/u/mariel.ok/item/abc"))
-        assertEquals(DeepLink.Profile("ericbriseno"), DeepLink.parse("https://get-kura.app/EricBriseno"))
-        assertEquals(DeepLink.Profile("ericbriseno"), DeepLink.parse("https://get-kura.app/u/@ericbriseno"))
+        assertEquals(DeepLink.Profile("qa_founder"), DeepLink.parse("https://get-kura.app/QA_Founder"))
+        assertEquals(DeepLink.Profile("qa_founder"), DeepLink.parse("https://get-kura.app/u/@qa_founder"))
         assertEquals(DeepLink.CollectionLink("mariel.ok", "c1"), DeepLink.parse("https://get-kura.app/mariel.ok/c1"))
         assertEquals(DeepLink.OwnCollection("c1"), DeepLink.parse("https://get-kura.app/backlogs/c1"))
         assertEquals(DeepLink.Recap, DeepLink.parse("https://get-kura.app/recap"))
@@ -34,7 +34,7 @@ class AppStoreLinksTest {
         )
         // The legacy domain and www still count; a trailing slash or a query doesn't matter.
         assertEquals(DeepLink.TitleLink("abc"), DeepLink.parse("https://baclog.app/item/abc/"))
-        assertEquals(DeepLink.Profile("ericbriseno"), DeepLink.parse("https://www.get-kura.app/ericbriseno?utm=x"))
+        assertEquals(DeepLink.Profile("qa_founder"), DeepLink.parse("https://www.get-kura.app/qa_founder?utm=x"))
     }
 
     @Test fun theEntranceCarriesItsNextStop() {
@@ -72,7 +72,7 @@ class AppStoreLinksTest {
         for (url in listOf(
             "https://get-kura.app/item/..%2F..%2Faccount", "https://get-kura.app/item/%2e%2e", "https://get-kura.app/item/a%2Fb",
             "https://get-kura.app/u/..", "https://get-kura.app/...", "https://get-kura.app/item/a+b", "https://get-kura.app/item/%zz",
-            "https://get-kura.app/ericbriseno/item/..",
+            "https://get-kura.app/qa_founder/item/..",
         )) {
             assertNull(url, DeepLink.parse(url))
         }

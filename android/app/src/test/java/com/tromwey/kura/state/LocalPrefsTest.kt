@@ -26,7 +26,7 @@ import java.nio.file.Files
  *  queue, and a 401 wiping them (a shared phone never hands them to the next account). */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LocalPrefsTest {
-    private val pr = "5c75d6dd-1e73-45e2-a4b8-78ea0168fa1d"
+    private val pr = "b95d0019-f01f-4b63-b6f9-8bf2e78b7d9f"
     private val yhlq = "11a4e43b-04d9-4892-b5f0-8bc24a6977be"
 
     @Test fun sortEpisodesAndMutedSurviveARelaunchButNotASessionEnd() = runTest {

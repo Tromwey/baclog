@@ -1,7 +1,7 @@
 {
  "items": [
   {
-   "id": "dfd9cdc7-89b8-4139-bdfc-23aaad2bd002",
+   "id": "70455997-2071-4e65-9cc8-6f3eae45f8ea",
    "platform": "ios",
    "deviceName": "Teléfono 1",
    "appVersion": "0.0-fixtures",
@@ -10,7 +10,7 @@
    "current": true
   },
   {
-   "id": "3950b130-62d7-4c85-818b-63b0e04ff940",
+   "id": "05f2fa1f-324d-4969-a484-f9edefb62a56",
    "platform": "ios",
    "deviceName": "Teléfono 2",
    "appVersion": "1.0.0",
@@ -19,7 +19,7 @@
    "current": false
   },
   {
-   "id": "f5ded756-6686-471a-b858-5a0134e3843a",
+   "id": "08ad4600-c057-493a-8695-ae961455cbd9",
    "platform": "ios",
    "deviceName": "Teléfono 3",
    "appVersion": "0.0.0",
@@ -28,7 +28,7 @@
    "current": false
   },
   {
-   "id": "9eee030d-61c1-4fde-9f7a-5f38d6294501",
+   "id": "eafba82c-abd0-4461-80bb-2f64e73d1e7a",
    "platform": "ios",
    "deviceName": "Teléfono 4",
    "appVersion": "0.0.0",
@@ -37,7 +37,7 @@
    "current": false
   },
   {
-   "id": "747bbcf8-cf1d-4c10-8f20-dd9b443b3937",
+   "id": "c0ad652c-2ed4-4109-9f89-e6ccf0d80123",
    "platform": "ios",
    "deviceName": "Teléfono 5",
    "appVersion": "0.0.0",
@@ -46,7 +46,7 @@
    "current": false
   },
   {
-   "id": "fca192cb-6b50-4e80-82c1-be5325a77296",
+   "id": "0cc95d31-bc66-4263-8b96-1e909613e52c",
    "platform": "ios",
    "deviceName": "Teléfono 6",
    "appVersion": "0.0.0",
@@ -55,7 +55,7 @@
    "current": false
   },
   {
-   "id": "dbe33f05-fbe4-451c-800b-ebced475ee00",
+   "id": "0432a259-146c-4b79-a9c6-df2d5b317f73",
    "platform": "ios",
    "deviceName": "Teléfono 7",
    "appVersion": "0.0.0",
@@ -64,7 +64,7 @@
    "current": false
   },
   {
-   "id": "d37cf233-8dc4-45ba-b1c4-63680aebf114",
+   "id": "231e02ca-d071-45fe-843d-4e1739d3a53e",
    "platform": "ios",
    "deviceName": "Teléfono 8",
    "appVersion": "0.0.0",
@@ -73,7 +73,7 @@
    "current": false
   },
   {
-   "id": "7ac16cc5-96df-435d-b725-b55f1a283f43",
+   "id": "7033b0f2-954f-4279-bdbd-a056a9cb8d41",
    "platform": "ios",
    "deviceName": "Teléfono 9",
    "appVersion": "0.0.0",
@@ -82,7 +82,7 @@
    "current": false
   },
   {
-   "id": "fd970d06-dd2a-451b-9498-faa7640802d2",
+   "id": "7d1ffe26-a65b-4440-93e0-b424bd9fe381",
    "platform": "ios",
    "deviceName": "Teléfono 10",
    "appVersion": "0.0.0",

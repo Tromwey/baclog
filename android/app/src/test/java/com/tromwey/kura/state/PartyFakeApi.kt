@@ -53,7 +53,7 @@ class PartyFakeApi(val base: FakeKuraApi = FakeKuraApi()) : KuraApi by base {
 
     // MARK: Data
 
-    /** The host's view of the fixture party ("Halloween", 2 songs, cap 3). */
+    /** The host's view of the fixture party ("Fiesta de prueba 1", 2 songs, cap 3). */
     var party: Party = FakeKuraApi.decode("party", Party.serializer())
     var cards: List<PartyCard> = FakeKuraApi.decode("parties", Items(PartyCard.serializer()))
     var preview: InvitePreview = FakeKuraApi.decode("invite_preview", InvitePreview.serializer())

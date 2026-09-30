@@ -106,7 +106,7 @@ class FixtureDecodingTest {
         "title_reviews" to ReviewPage.serializer(),
         "titles_ids" to Items(Title.serializer()),
     )
-    private val envelopes = setOf("error_401", "error_404", "people_julz_followers", "people_julz_following", "username_check", "feed_suggestion")
+    private val envelopes = setOf("error_401", "error_404", "people_qa_persona_06_followers", "people_qa_persona_06_following", "username_check", "feed_suggestion")
 
     @Test fun everyFixtureIsCovered() {
         val missing = Fixtures.names() - decoders.keys - envelopes
@@ -125,9 +125,9 @@ class FixtureDecodingTest {
 
     @Test fun me() {
         val me = decode("me", Me.serializer())
-        assertEquals("ericbriseno", me.handle)
-        assertEquals("Eric", me.name)
-        assertEquals("e", me.initials)
+        assertEquals("qa_founder", me.handle)
+        assertEquals("Persona Fundadora", me.name)
+        assertEquals("pf", me.initials)
         assertTrue(me.onboarded)
         assertTrue(me.isFounder)
         assertEquals(FollowListsVisibility.Private, me.followListsVisibility)
@@ -140,7 +140,7 @@ class FixtureDecodingTest {
     @Test fun authSessionRedacted() {
         val s = decode("auth_session", AuthSession.serializer())
         assertFalse(s.toString().contains(s.token))
-        assertEquals("ericbriseno", s.user.handle)
+        assertEquals("qa_founder", s.user.handle)
     }
 
     @Test fun collections() {
@@ -148,9 +148,9 @@ class FixtureDecodingTest {
         assertTrue(cols.isNotEmpty())
         cols.forEach { c -> assertTrue(c.fanTitleIds.size <= 3); assertTrue(c.titleIds.containsAll(c.fanTitleIds)) }
         val d = decode("collection_detail", CollectionDetail.serializer())
-        assertEquals("2026", d.collection.name)
+        assertEquals("Colección de prueba 1", d.collection.name)
         assertEquals(Privacy.PublicAccess, d.collection.privacy)
-        assertEquals("Discovered in 2026", d.collection.shownVibe)
+        assertEquals("Vibra de prueba 1", d.collection.shownVibe)
         assertEquals(13, d.collection.titleIds.size)
         assertEquals(13, d.titles.size)
         assertEquals(d.collection.titleIds.toSet(), d.collection.addedAt.keys)
@@ -169,13 +169,13 @@ class FixtureDecodingTest {
         assertTrue(d.title.isDetailed)
         assertEquals(Mark.Liked, d.state!!.mark)
         assertEquals(1, d.reviews.size)
-        assertEquals("ericbriseno", d.reviews[0].authorId)
+        assertEquals("qa_founder", d.reviews[0].authorId)
         assertNull(d.reviewsCursor)
     }
 
     @Test fun person() {
         val p = decode("person", Person.serializer())
-        assertEquals("julz", p.handle)
+        assertEquals("qa_persona_06", p.handle)
         assertEquals(2, p.collections.size)
         assertEquals(7, p.obsessions.size)
         assertEquals(FollowListsVisibility.Private, p.followListsVisibility)
@@ -197,7 +197,7 @@ class FixtureDecodingTest {
         val suggestion = KuraJson.json.parseToJsonElement(Fixtures.text("feed_suggestion")).jsonObject["event"]!!
         val ev = KuraJson.json.decodeFromJsonElement(com.tromwey.kura.data.models.FeedEvent.serializer(), suggestion)
         val kind = ev.kind as FeedKind.Suggestion
-        assertEquals("applereview", kind.personId)
+        assertEquals("qa_persona_01", kind.personId)
         assertEquals(1, kind.titleIds.size)
     }
 
@@ -218,7 +218,7 @@ class FixtureDecodingTest {
 
     @Test fun parties() {
         val p = decode("party", Party.serializer())
-        assertEquals("Halloween", p.name)
+        assertEquals("Fiesta de prueba 1", p.name)
         assertTrue(p.isHost)
         assertEquals(3, p.perGuestLimit)
         assertNull(p.viewer.remaining)

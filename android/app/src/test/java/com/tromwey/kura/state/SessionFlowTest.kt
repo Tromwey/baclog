@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
 /** Launch, per-resource load, sign-in and the way out (a 401). */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionFlowTest {
-    private val pinned = "2529d6d0-f034-4a7a-8b93-507ac41ffa81"
+    private val pinned = "82806df6-4498-4b0f-ac2e-516b22f1b27e"
 
     @Test fun bootstrapLoadsEveryResourceThenHydratesWhatsMissing() = storeTest { h ->
         val store = h.store
@@ -29,10 +29,10 @@ class SessionFlowTest {
         val hydrate = h.api.callsOf("titles")
         assertEquals(1, hydrate.size)
         assertTrue(h.api.calls.indexOf(hydrate.single()) > h.api.calls.indexOf("collections"))
-        assertEquals("ericbriseno", store.me.handle)
+        assertEquals("qa_founder", store.me.handle)
         assertEquals(4, store.collections.size)
         assertEquals(46, store.userTitles.size)
-        assertEquals(setOf("kuraqa", "julz", "kimberto", "roblp", "jsalvador", "borre"), store.following)
+        assertEquals(setOf("qa_persona_07", "qa_persona_06", "qa_persona_04", "qa_persona_08", "qa_persona_09", "qa_persona_05"), store.following)
         // Every library title is known (the cards never draw half-empty) and nothing says "incompleto".
         assertTrue(store.libraryIds.all { store.title(it) != null })
         assertFalse(store.libraryIncomplete)
@@ -80,10 +80,10 @@ class SessionFlowTest {
 
         assertFalse(store.requestCode("no-es-correo"))
         assertEquals("Ese correo no parece válido. Revísalo.", store.authError)
-        assertTrue(store.requestCode("  Eric@Correo.COM "))
-        assertEquals("eric@correo.com", store.authEmail)
+        assertTrue(store.requestCode("  Persona@Correo.COM "))
+        assertEquals("persona@correo.com", store.authEmail)
         assertTrue(store.verifyCode(" 123456 "))
-        assertTrue(h.api.calls.contains("signIn eric@correo.com 123456"))
+        assertTrue(h.api.calls.contains("signIn persona@correo.com 123456"))
         assertEquals(AppPhase.Main, store.phase)
         assertTrue(h.platform.welcomeSeen)
         store.startIfNeeded()
@@ -94,7 +94,7 @@ class SessionFlowTest {
         val store = h.store
         h.api.hasSession = false
         store.finishSplash()
-        store.requestCode("eric@correo.com")
+        store.requestCode("persona@correo.com")
         h.api.failNext("signIn", KuraApiError.Unauthorized)
         assertFalse(store.verifyCode("000000"))
         assertEquals("El código no coincide o ya caducó.", store.authError)
@@ -147,7 +147,7 @@ class SessionFlowTest {
         // A write of the old account still in flight: its late failure must never surface.
         val parked = h.api.hold("setFollowing")
         h.api.failNext("setFollowing", KuraApiError.Server("500"))
-        store.toggleFollow("julz")
+        store.toggleFollow("qa_persona_06")
         runCurrent()
 
         launch { h.expiries.emit(Unit) }

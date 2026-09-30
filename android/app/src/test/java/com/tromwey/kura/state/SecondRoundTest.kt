@@ -20,9 +20,9 @@ import java.time.Instant
  *  own `launch`, recent-search edits and a forced reload of a Descubrir format. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SecondRoundTest {
-    private val yhlq = "11a4e43b-04d9-4892-b5f0-8bc24a6977be" // in "PR ta bien cabron", no mark
-    private val pr = "5c75d6dd-1e73-45e2-a4b8-78ea0168fa1d"
-    private val recs = "4f69f303-e6a1-4f76-95e3-e4b53763d0af"
+    private val yhlq = "11a4e43b-04d9-4892-b5f0-8bc24a6977be" // in "Colección de prueba 4", no mark
+    private val pr = "b95d0019-f01f-4b63-b6f9-8bf2e78b7d9f"
+    private val recs = "9c306af3-78e5-4dfb-8c10-4c026eb6dae5"
 
     private fun serverReview(handle: String, spoiler: Boolean) = Review(
         id = "srv-review", authorId = handle, titleId = yhlq, text = "un disco que no se acaba", mark = Mark.Liked,
