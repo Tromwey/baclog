@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { PARTY_EVENT } from "@/modules/party/event";
 import { sfx } from "./party-sfx";
 
 /*
@@ -23,10 +22,9 @@ const INK_3 = "#a79d92";
 const eyebrow: CSSProperties = { fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".3em", textTransform: "uppercase", color: ACCENT };
 const title: CSSProperties = { fontFamily: "var(--pt-serif)", fontSize: "32px", lineHeight: 1.05, color: INK };
 const ghostBtn: CSSProperties = { height: "52px", borderRadius: "999px", border: "1px solid rgba(236,230,220,.25)", background: "transparent", color: INK, fontWeight: 600, fontSize: "15px", cursor: "pointer" };
-const primaryBtn: CSSProperties = { height: "56px", borderRadius: "999px", border: "none", background: "#d9573b", color: "#140e0c", fontWeight: 700, fontSize: "15px", letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer" };
 
 const GAMES: Record<GameKey, { label: string; prompt: string; failsForHelp: number; Game: (p: GameProps) => ReactNode }> = {
-  host: { label: "Lápida sellada", prompt: "¿Cuándo nació quien aquí yace?", failsForHelp: 3, Game: LockGame },
+  host: { label: "Lápida sellada", prompt: "Completa el título de la canción.", failsForHelp: 3, Game: TitleGame },
   date: { label: "El reloj del camposanto", prompt: "Detén la manecilla en la medianoche. Tres veces seguidas.", failsForHelp: 3, Game: ClockGame },
   place: { label: "Un mapa hecho pedazos", prompt: "Gira cada pedazo hasta que el camino lleve a la X.", failsForHelp: 99, Game: MapGame },
   bring: { label: "El caldero burbujea", prompt: "Repite la receta del brebaje.", failsForHelp: 3, Game: BrewGame },
@@ -99,89 +97,87 @@ function Feedback({ text, tone }: { text: string; tone: "bad" | "ok" | "info" })
   );
 }
 
-// ---------- host: the birthday lock ----------
+// ---------- host: complete the song title ----------
 
-const HOST_BIRTH = { d: 20, m: 11, y: 1994 };
-const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-const GLYPHS = "▒░▓#%&@$¿?§¤";
-
-/**
- * The host's name as a corrupted epitaph (like the death date on the host's
- * sheet): only a few letters are legible at any moment — never all — and
- * which ones keeps shifting, so guests can piece together whose grave it is.
+/*
+ * Titles only, never lyrics: song lyrics are copyrighted, titles aren't — and
+ * a blanked word in a famous title plays the same "finish the line" game.
+ * A mix of party/Halloween classics and Spanish-language hits.
  */
-function GlitchName({ name }: { name: string }) {
-  const chars = [...name];
-  const letters = chars.map((c, i) => (c.trim() ? i : -1)).filter((i) => i >= 0);
-  const maxClear = Math.max(1, Math.floor(letters.length * 0.4));
-  const scramble = () => {
-    const clear = new Set([...letters].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * maxClear)));
-    return chars.map((c, i) => (!c.trim() || clear.has(i) ? c : GLYPHS[Math.floor(Math.random() * GLYPHS.length)]));
-  };
-  const [shown, setShown] = useState<string[]>(scramble);
-  useEffect(() => {
-    const t = setInterval(() => setShown(scramble()), 420);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- name is constant per mount
-  }, []);
-  return (
-    <div aria-label="Nombre ilegible" style={{ fontFamily: "var(--pt-serif)", fontSize: "34px", lineHeight: 1.1, color: INK, animation: "pt-deathGlitch 3.5s steps(1) infinite", whiteSpace: "nowrap" }}>
-      {shown.map((c, i) => (
-        <span key={i} style={GLYPHS.includes(c) ? { fontFamily: "var(--pt-mono)", fontSize: "26px", color: "#6a6158" } : undefined}>
-          {c}
-        </span>
-      ))}
-    </div>
+const SONG_TITLES: { before: string; after?: string; answer: string; decoys: [string, string, string]; by: string }[] = [
+  { before: "Bohemian", answer: "Rhapsody", decoys: ["Dreams", "Nights", "Soul"], by: "Queen" },
+  { before: "Hotel", answer: "California", decoys: ["Transylvania", "Paradise", "Babylon"], by: "Eagles" },
+  { before: "Highway to", answer: "Hell", decoys: ["Heaven", "Home", "Nowhere"], by: "AC/DC" },
+  { before: "Somebody's", after: "Me", answer: "Watching", decoys: ["Calling", "Haunting", "Loving"], by: "Rockwell" },
+  { before: "Sweet Child O'", answer: "Mine", decoys: ["Night", "Gold", "Fire"], by: "Guns N' Roses" },
+  { before: "Smells Like Teen", answer: "Spirit", decoys: ["Ghost", "Magic", "Blood"], by: "Nirvana" },
+  { before: "Labios", answer: "Compartidos", decoys: ["Prohibidos", "Malditos", "Robados"], by: "Maná" },
+  { before: "De Música", answer: "Ligera", decoys: ["Ligada", "Lenta", "Negra"], by: "Soda Stereo" },
+  { before: "La Chica de", answer: "Humo", decoys: ["Hielo", "Rojo", "Ayer"], by: "Emmanuel" },
+  { before: "Rayando el", answer: "Sol", decoys: ["Día", "Cielo", "Mar"], by: "Maná" },
+];
+const TITLE_ROUNDS = 3;
+
+function TitleGame({ onWin, onFail }: GameProps) {
+  const [deck] = useState(() =>
+    [...SONG_TITLES]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, TITLE_ROUNDS)
+      .map((q) => ({ ...q, options: [q.answer, ...q.decoys].sort(() => Math.random() - 0.5) })),
   );
-}
+  const [round, setRound] = useState(0);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ t: string; tone: "bad" | "ok" | "info" }>({ t: `1 de ${TITLE_ROUNDS}`, tone: "info" });
+  const q = deck[round];
 
-function LockGame({ onWin, onFail }: GameProps) {
-  const [d, setD] = useState(1);
-  const [m, setM] = useState(1);
-  const [y, setY] = useState(1990);
-  const [hint, setHint] = useState("");
-
-  const tryIt = () => {
-    const off = Math.abs(Date.UTC(y, m - 1, d) - Date.UTC(HOST_BIRTH.y, HOST_BIRTH.m - 1, HOST_BIRTH.d)) / 864e5;
-    if (off === 0) return onWin();
-    onFail();
-    setHint(off > 1500 ? "Helado. Ni cerca." : off > 365 ? "Frío…" : off > 60 ? "Tibio." : off > 7 ? "Caliente." : "¡Quemas!");
+  const pick = (opt: string) => {
+    if (picked) return;
+    setPicked(opt);
+    if (opt === q.answer) {
+      sfx.chime();
+      const next = round + 1;
+      setMsg({ t: next === TITLE_ROUNDS ? "Afinado." : "¡Esa es!", tone: "ok" });
+      setTimeout(() => {
+        if (next === TITLE_ROUNDS) return onWin();
+        setRound(next);
+        setPicked(null);
+        setMsg({ t: `${next + 1} de ${TITLE_ROUNDS}`, tone: "info" });
+      }, 800);
+    } else {
+      onFail();
+      setMsg({ t: "Desafinaste. Intenta otra.", tone: "bad" });
+      setTimeout(() => setPicked(null), 700);
+    }
   };
-
-  const wheel: CSSProperties = { height: "64px", width: "100%", padding: "0 10px", borderRadius: "14px", border: "1px solid rgba(236,230,220,.18)", background: "#0d0b0a", color: INK, fontFamily: "var(--pt-serif)", fontSize: "26px", fontWeight: 600, textAlign: "center", textAlignLast: "center", appearance: "none" };
-  const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "14px 0 6px", borderRadius: "16px", background: "linear-gradient(180deg,#2a2622,#1a1714)" }}>
-        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "11px", letterSpacing: ".35em", color: INK_3 }}>AQUÍ YACE</div>
-        <GlitchName name={PARTY_EVENT.host} />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", padding: "18px 12px 14px", borderRadius: "16px", background: "linear-gradient(180deg,#2a2622,#1a1714)", textAlign: "center" }}>
+        <div style={{ fontFamily: "var(--pt-serif)", fontSize: "30px", lineHeight: 1.15, color: INK }}>
+          {q.before}{" "}
+          <span style={{ display: "inline-block", minWidth: "96px", borderBottom: "2px solid #8a7f73", color: picked === q.answer ? "#ffcf8a" : "transparent", transition: "color .3s" }}>
+            {picked === q.answer ? q.answer : "·"}
+          </span>
+          {q.after ? ` ${q.after}` : ""}
+        </div>
+        <div style={{ fontFamily: "var(--pt-mono)", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: INK_3 }}>{q.by}</div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr 1.4fr", gap: "8px" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: INK_3, textAlign: "center" }}>
-          Día
-          <select value={d} onChange={(e) => setD(+e.target.value)} style={wheel}>
-            {range(1, 31).map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: INK_3, textAlign: "center" }}>
-          Mes
-          <select value={m} onChange={(e) => setM(+e.target.value)} style={wheel}>
-            {MONTHS.map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
-          </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "11px", letterSpacing: ".2em", textTransform: "uppercase", color: INK_3, textAlign: "center" }}>
-          Año
-          <select value={y} onChange={(e) => setY(+e.target.value)} style={wheel}>
-            {range(1975, 2008).map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+        {q.options.map((opt) => {
+          const state = picked === opt ? (opt === q.answer ? "ok" : "bad") : null;
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => pick(opt)}
+              style={{ height: "56px", borderRadius: "14px", border: `1px solid ${state === "ok" ? "#ffcf8a" : state === "bad" ? "#d9573b" : "rgba(236,230,220,.18)"}`, background: state === "ok" ? "rgba(255,207,138,.14)" : state === "bad" ? "rgba(217,87,59,.15)" : "#0d0b0a", color: INK, fontFamily: "var(--pt-serif)", fontSize: "20px", cursor: "pointer", touchAction: "manipulation" }}
+            >
+              {opt}
+            </button>
+          );
+        })}
       </div>
-      <Feedback text={hint} tone="bad" />
-      <button type="button" onClick={tryIt} style={primaryBtn}>
-        Girar la llave
-      </button>
+      <Feedback text={msg.t} tone={msg.tone} />
     </div>
   );
 }

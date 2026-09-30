@@ -345,6 +345,9 @@ extension AppStore {
             case .noSubscription: updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleNoSubscription }
             case .libraryOff: updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleLibraryOff }
             case .service: updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p) }
+            case .token(let issue): updateExport { $0.step = .connect; $0.note = MusicExportCopy.appleToken(issue) }
+            case .failed(let stage, let detail):
+                updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p, stage: stage, detail: detail) }
             }
             return
         }

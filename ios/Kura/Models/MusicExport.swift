@@ -252,6 +252,21 @@ enum MusicExportCopy {
         "\(p.label) dejó de responder a mitad del proceso. Tu colección sigue intacta en kura; al reintentar no se duplican canciones."
     }
 
+    /// The same copy plus where it failed and what Apple said, so a screenshot tells the cause.
+    static func serviceFailed(_ p: MusicProvider, stage: String, detail: String) -> String {
+        "No pudimos terminar en \(p.label). Tu colección sigue intacta en kura; al reintentar no se duplican canciones.\n\nDetalle: \(stage) · \(detail)"
+    }
+
+    /// MusicKit had no token, so Apple Music never saw the request.
+    static func appleToken(_ issue: AppleMusicTokenIssue) -> String {
+        switch issue {
+        case .developer: return "Apple Music todavía no autoriza a kura en este iPhone. Suele tardar unos minutos después de activarlo; vuelve a intentarlo en un rato."
+        case .signedOut: return "Inicia sesión en Apple Music (app Música) con tu Apple ID y vuelve a intentarlo."
+        case .privacy: return "Abre la app Música una vez, acepta su aviso de privacidad y vuelve a intentarlo."
+        case .user: return "Apple Music no confirmó tu cuenta. Abre la app Música, revisa tu sesión y vuelve a intentarlo."
+        }
+    }
+
     static let offline = "Sin conexión. Tu colección sigue intacta en kura; al reintentar no se duplican canciones."
     static func pause(_ p: MusicProvider) -> String { "\(p.label) pidió una pausa. Seguimos en unos segundos." }
     static func notConfigured(_ p: MusicProvider) -> String { "\(p.label) todavía no está disponible en kura." }

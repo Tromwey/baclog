@@ -21,6 +21,23 @@ enum AppleMusicFailure: Error, Equatable {
     case libraryOff
     /// Apple answered something else (5xx, timeout, bad JSON): "no se pudo exportar."
     case service
+    /// MusicKit couldn't get a token, so nothing reached Apple Music at all.
+    case token(AppleMusicTokenIssue)
+    /// Any other failure, with WHERE it happened and what MusicKit said — shown as a short
+    /// "detalle" under the failure copy so a report from the field says the real cause.
+    case failed(stage: String, detail: String)
+}
+
+enum AppleMusicTokenIssue: Equatable {
+    /// `developerTokenRequestFailed`: Apple doesn't hand Kura its developer token yet (the MusicKit
+    /// App Service on `com.tromwey.kura` is off or still propagating).
+    case developer
+    /// `userNotSignedIn`: no Apple ID signed in to Música on this iPhone.
+    case signedOut
+    /// `privacyAcknowledgementRequired`: Música was never opened (its privacy sheet is pending).
+    case privacy
+    /// The user token failed for another reason.
+    case user
 }
 
 enum AppleMusicAuthorization: Equatable { case authorized, notDetermined, denied, restricted }
@@ -62,7 +79,7 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
 
     func checkCapabilities() async throws {
         let sub: MusicSubscription
-        do { sub = try await MusicSubscription.current } catch { throw AppleMusicFailure.service }
+        do { sub = try await MusicSubscription.current } catch { throw Self.failure("suscripción", error) }
         if !sub.canPlayCatalogContent { throw AppleMusicFailure.noSubscription }
         if !sub.hasCloudLibraryEnabled { throw AppleMusicFailure.libraryOff }
     }
@@ -78,7 +95,7 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
                 req.limit = byID.count
                 let r = try await req.response()
                 found = Set(r.items.map(\.id.rawValue))
-            } catch { throw AppleMusicFailure.service }
+            } catch { throw Self.failure("catálogo", error) }
             for (titleID, id) in byID where found.contains(id) { out[titleID] = id }
         }
         // 2. Not there (another storefront, or no id): by ISRC, the id that comes back.
@@ -89,7 +106,7 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
                 let req = MusicCatalogResourceRequest<Song>(matching: \.isrc, memberOf: byISRC.map(\.1))
                 let r = try await req.response()
                 for song in r.items { if let i = song.isrc?.uppercased(), isrcToID[i] == nil { isrcToID[i] = song.id.rawValue } }
-            } catch { throw AppleMusicFailure.service }
+            } catch { throw Self.failure("catálogo isrc", error) }
             for (titleID, isrc) in byISRC { if let id = isrcToID[isrc] { out[titleID] = id } }
         }
         return out
@@ -167,10 +184,29 @@ struct LiveAppleMusicLibrary: AppleMusicLibrary {
             return try await MusicDataRequest(urlRequest: req).response().data
         } catch let e as MusicDataRequest.Error {
             if e.status == 404 { throw AppleMusicHTTP.notFound }
-            KuraLog.party.error("apple music \(req.httpMethod ?? "GET", privacy: .public) → \(e.status, privacy: .public)")
-            throw AppleMusicFailure.service
+            let stage = "biblioteca \(req.httpMethod ?? "GET")"
+            KuraLog.party.error("apple music \(stage, privacy: .public) → \(e.status, privacy: .public) \(e.title, privacy: .public)")
+            throw AppleMusicFailure.failed(stage: stage, detail: "HTTP \(e.status) · \(e.title)")
         } catch {
-            throw AppleMusicFailure.service
+            throw Self.failure("biblioteca \(req.httpMethod ?? "GET")", error)
         }
+    }
+
+    /// Every MusicKit error goes through here: logged with its stage (never a body or a token),
+    /// token problems become their own case, the rest keeps a short readable detail.
+    private static func failure(_ stage: String, _ error: Error) -> AppleMusicFailure {
+        if let a = error as? AppleMusicFailure { return a }
+        let described = String(describing: error)
+        KuraLog.party.error("apple music \(stage, privacy: .public) failed: \(described, privacy: .public)")
+        if let t = error as? MusicTokenRequestError {
+            switch t {
+            case .developerTokenRequestFailed: return .token(.developer)
+            case .userNotSignedIn: return .token(.signedOut)
+            case .privacyAcknowledgementRequired: return .token(.privacy)
+            case .permissionDenied: return .denied
+            default: return .token(.user)
+            }
+        }
+        return .failed(stage: stage, detail: String(described.prefix(160)))
     }
 }
