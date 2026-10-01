@@ -191,6 +191,10 @@ private const val NEW_ID = "nueva-coleccion"
 
 /** One collection per 320 of finger; the rubber band's dimension. */
 private val STEP = 320.dp
+/** Transparent margin around each fan's layer: the back covers tilt ~10 dp past the 300 box, and the
+ *  cover shadow (`0 18 36 -16`) reaches ~40 dp below it. The 290 band (225 + 14 top) holds 225 + 48. */
+private val FAN_BLEED = 24.dp
+private val FAN_BLEED_BOTTOM = 48.dp
 private const val BAND = 390f
 private const val RUBBER_C = 0.55f
 
@@ -482,6 +486,10 @@ private fun Fans(store: AppStore, list: List<Entry>, pos: MutableFloatState, go:
                             scaleY = s
                             alpha = (1f - a * 1.2f).coerceIn(0f, 1f)
                         }
+                        // Room inside the layer: with alpha < 1 it's drawn offscreen at its own size, and at
+                        // the fan's bare 300×225 the tilted back covers (sides) and the cover shadow (below)
+                        // got clipped the moment a swipe began (learning 2026-09-30-compose-graphicslayer-…).
+                        .padding(start = FAN_BLEED, end = FAN_BLEED, bottom = FAN_BLEED_BOTTOM)
                         .then(
                             when {
                                 !isCentre -> Modifier.clearAndSetSemantics { }

@@ -152,13 +152,7 @@ internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: For
                 }
             }
             MediaFormat.Series -> {
-                Column(
-                    Modifier.padding(start = KSize.margin, end = KSize.margin, top = 32.dp, bottom = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    BasicText("para maratonear", Modifier.semantics { heading() }, style = KuraType.news(34f))
-                    NoteText("Miniseries completas, sin temporadas por venir.")
-                }
+                PageQuestion("para maratonear", bottom = 18.dp)
                 val lenses = p?.lenses ?: emptyList()
                 if (lenses.isNotEmpty()) Choices(lenses, picks.lens) { onPicks(picks.copy(lens = it)) }
                 Grid(
