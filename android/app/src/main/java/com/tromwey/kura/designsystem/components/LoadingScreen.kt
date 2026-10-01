@@ -86,7 +86,7 @@ private const val expressiveLoading = true
 
 /**
  * Pull-to-refresh (feed, colecciones) — Material's `PullToRefreshBox` with
- * `PullToRefreshDefaults.LoadingIndicator` (s2 container, text indicator). iOS has it from the
+ * `PullToRefreshDefaults.LoadingIndicator` (art-glass container, text indicator). iOS has it from the
  * system; Android needs it put there.
  */
 @Composable
@@ -102,8 +102,10 @@ fun KuraPullToRefresh(refreshing: Boolean, onRefresh: () -> Unit, modifier: Modi
                 state = state,
                 isRefreshing = refreshing,
                 modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = KColor.s2,
+                // Glass ON art (black at 50 %) and no elevation: a shadow would show THROUGH a translucent container.
+                containerColor = KColor.glassArt,
                 color = KColor.text,
+                elevation = 0.dp,
             )
         },
         content = content,

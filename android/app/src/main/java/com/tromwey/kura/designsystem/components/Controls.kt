@@ -4,6 +4,7 @@
 
 package com.tromwey.kura.designsystem.components
 
+import com.tromwey.kura.designsystem.LocalEntryActive
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -106,7 +107,7 @@ fun <T> MonoSegmented(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     height: Dp = 36.dp,
-    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+    fill: Color = KColor.glassBg,
 ) {
     val haptic = rememberKHaptic()
     val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
@@ -164,7 +165,7 @@ fun <T> ChipRow(
     selection: T,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
-    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+    fill: Color = KColor.glassBg,
     fillWidth: Boolean = false,
 ) {
     val haptic = rememberKHaptic()
@@ -572,8 +573,12 @@ fun KuraSearchBar(
         state = state,
         inputField = input,
         modifier = modifier,
-        colors = SearchBarDefaults.colors(containerColor = KColor.s1, dividerColor = Color.Transparent),
+        // Glass at rest (it takes the page's tone); the expanded search below stays opaque.
+        colors = SearchBarDefaults.colors(containerColor = KColor.glassBg, dividerColor = Color.Transparent),
     )
+    // The expanded search is its own WINDOW: a covered page (alive under a push, or in a hidden tab)
+    // must not keep it up over whatever is on screen. It comes back, still expanded, with the page.
+    if (!LocalEntryActive.current) return
     ExpandedFullScreenSearchBar(
         state = state,
         inputField = input,

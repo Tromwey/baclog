@@ -68,7 +68,8 @@ internal fun kuraIconShapes(): IconButtonShapes = IconButtonDefaults.shapes(shap
 internal fun TextStyle.inherit(): TextStyle = copy(color = Color.Unspecified)
 
 /**
- * Tonal pill button (was "glass") — `FilledTonalButton` on `secondaryContainer` (s2), Hanken 600,
+ * Tonal pill button — `FilledTonalButton` on GLASS (`KColor.glassBg`, white at 7.5 %: it takes the
+ * page's tone instead of sitting on it as an opaque s2 block — founder, 2026-10-01), Hanken 600,
  * 44 high, padding 14|16 · 16. [glyph] (a DS glyph in its color) or [icon] (an interface icon)
  * leads; [trailingIcon] trails. [fill] overrides the container (e.g. `KColor.glassBg` over a tint);
  * with [contentColor] it makes the pill the screen's accent (miel / onAccent).
@@ -84,7 +85,7 @@ fun GlassButton(
     height: Dp = 44.dp,
     fontSize: Float = 15f,
     fullWidth: Boolean = false,
-    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+    fill: Color = KColor.glassBg,
     enabled: Boolean = true,
     contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
 ) {
@@ -165,7 +166,8 @@ fun HoneyButton(title: String, onClick: () -> Unit, modifier: Modifier = Modifie
     SolidButton(title, onClick, modifier, icon, height, enabled, honey = true)
 
 /**
- * 44 round icon chip (Volver, Opciones, +, campana, compartir) — `FilledTonalIconButton`, circle →
+ * 44 round icon chip (Volver, Opciones, +, campana, compartir) — `FilledTonalIconButton` on glass
+ * (`KColor.glassBg`, like [GlassButton]), circle →
  * 14 while pressed. [size] < 44 (the 36 close chip of a sheet) still gets Material's 48 touch.
  * [label] is what TalkBack reads.
  */
@@ -177,7 +179,7 @@ fun IconChip44(
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
     iconSize: Dp = 18.dp,
-    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+    fill: Color = KColor.glassBg,
     iconColor: Color = KColor.text,
 ) {
     FilledTonalIconButton(

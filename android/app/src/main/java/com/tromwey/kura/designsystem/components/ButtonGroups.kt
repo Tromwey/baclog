@@ -100,7 +100,7 @@ enum class KuraReaction(val glyph: Glyph, val label: String) {
  * (or s1) or they vanish into it.
  */
 @Composable
-fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) {
+fun ReactionGroup(selected: KuraReaction?, onSelect: (KuraReaction) -> Unit, modifier: Modifier = Modifier, containerColor: Color = KColor.glassBg) {
     val entries = KuraReaction.entries
     val spec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     ButtonGroup(
@@ -164,7 +164,7 @@ data class KuraToggle(
  * [containerColor] fills the unchecked side (s2; `KColor.glassBg` on an s2 sheet).
  */
 @Composable
-fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier, containerColor: Color = KColor.s2) =
+fun ActionPair(primary: KuraToggle, secondary: KuraToggle, modifier: Modifier = Modifier, containerColor: Color = KColor.glassBg) =
     // Two halves of a phone's width: past 1.3× the labels ("Me obsesiona", "Tu reseña") would be cut,
     // so the pair tops out there and wraps to two lines (at word breaks) before cutting.
     KFixedChrome(maxFontScale = 1.3f) { ActionPairBody(primary, secondary, modifier, containerColor) }
@@ -329,7 +329,8 @@ fun KuraFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon = KI
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = label },
         shape = RoundedCornerShape(16.dp),
-        containerColor = KColor.s2,
+        // Glass ON art (black at 50 %): the covers it floats over show through, darkened.
+        containerColor = KColor.glassArt,
         contentColor = KColor.accent,
         elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
     ) {
@@ -358,7 +359,7 @@ fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startEx
                     contentDescription = if (open) "Cerrar" else "Crear"
                 },
                 containerColor = ToggleFloatingActionButtonDefaults.containerColor(
-                    initialColor = KColor.s2,
+                    initialColor = KColor.glassArt,
                     finalColor = KColor.s2,
                 ),
             ) {

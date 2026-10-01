@@ -358,7 +358,7 @@ internal fun AlertButton(store: AppStore, titleId: String, on: String, off: Stri
     val active = titleId in store.alerts
     val honey = accent && !active
     GlassButton(
-        fill = if (honey) KColor.accent else KColor.s2,
+        fill = if (honey) KColor.accent else KColor.glassBg,
         contentColor = if (honey) KColor.onAccent else KColor.text,
         title = if (active) on else off,
         onClick = { store.toggleAlert(titleId) },
