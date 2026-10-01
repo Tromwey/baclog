@@ -150,10 +150,13 @@ fun <T> MonoSegmented(
 }
 
 /**
- * Scrolling row of `FilterChip`s (Todo / Cine / Series / Música / Personas), 40 high, mono labels —
- * THE filter of the app (collections, Descubrir, search, add titles: one shape for one idea;
- * [MonoSegmented] is for switching between two views, not for filtering). [fill] is the unchosen
- * chips' container (e.g. `KColor.glassArt` over a tint).
+ * THE filter of the app (collections, Descubrir, search, add titles) — a CONNECTED group of
+ * single-choice `ToggleButton`s, 2 dp apart (founder, 2026-10-01: "agrúpalos" — Expressive's
+ * connected button group instead of loose pills): the chosen one fills in text (bg ink) and rounds
+ * fully; mono labels, 40 high. Each button is as wide as its label and the row scrolls when they
+ * don't fit (filters carry counts and vary in number); [fillWidth] spreads them over the width
+ * instead (a short fixed set, e.g. Descubrir's four). [fill] is the unchosen buttons' container
+ * (e.g. `KColor.glassArt` over a tint). For switching between two views use [MonoSegmented].
  */
 @Composable
 fun <T> ChipRow(
@@ -162,31 +165,35 @@ fun <T> ChipRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+    fillWidth: Boolean = false,
 ) {
     val haptic = rememberKHaptic()
     Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = KSize.margin),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier.fillMaxWidth()
+            .then(if (fillWidth) Modifier else Modifier.horizontalScroll(rememberScrollState()))
+            .padding(horizontal = KSize.margin),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
-        options.forEach { (value, label) ->
+        options.forEachIndexed { i, (value, label) ->
             val on = value == selection
-            FilterChip(
-                selected = on,
-                onClick = {
+            ToggleButton(
+                checked = on,
+                onCheckedChange = {
                     onSelect(value)
                     haptic(KHapticEvent.Selection)
                 },
-                label = { Text(label.uppercase(EsMx), style = KuraType.mono(11f, tracking = 0.1f).inherit(), maxLines = 1) },
-                modifier = Modifier.height(40.dp).semantics { role = Role.Tab },
-                shape = CircleShape,
-                colors = FilterChipDefaults.filterChipColors(
+                modifier = Modifier.then(if (fillWidth) Modifier.weight(1f) else Modifier).height(40.dp).semantics { role = Role.Tab },
+                shapes = connectedShapes(i, options.size),
+                colors = ToggleButtonDefaults.colors(
                     containerColor = fill,
-                    labelColor = KColor.text2,
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    contentColor = KColor.text2,
+                    checkedContainerColor = MaterialTheme.colorScheme.primary,
+                    checkedContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
-                border = null,
-            )
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) {
+                Text(label.uppercase(EsMx), style = KuraType.mono(11f, tracking = 0.1f).inherit(), maxLines = 1)
+            }
         }
     }
 }

@@ -207,6 +207,7 @@ fun DiscoverScreen(store: AppStore) {
                         selection = format,
                         onSelect = { formatRaw = it?.rawValue },
                         modifier = Modifier.padding(top = 12.dp),
+                        fillWidth = true,
                         // On a tint, the dark art glass lets it show through; on plain bg, the tonal s2.
                         fill = if (hexes.isEmpty()) KColor.s2 else KColor.glassArt,
                     )
