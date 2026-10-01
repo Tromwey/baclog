@@ -329,8 +329,8 @@ fun KuraFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon = KI
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = label },
         shape = RoundedCornerShape(16.dp),
-        // Glass ON art (black at 50 %): the covers it floats over show through, darkened.
-        containerColor = KColor.glassArt,
+        // Floating glass (graphite at 82 %): present on the dark page, covers show through darkened.
+        containerColor = KColor.glassFloat,
         contentColor = KColor.accent,
         elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
     ) {
@@ -359,8 +359,8 @@ fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startEx
                     contentDescription = if (open) "Cerrar" else "Crear"
                 },
                 containerColor = ToggleFloatingActionButtonDefaults.containerColor(
-                    initialColor = KColor.glassArt,
-                    finalColor = KColor.s2,
+                    initialColor = KColor.glassFloat,
+                    finalColor = KColor.glassFloat,
                 ),
             ) {
                 val p = checkedProgress
@@ -382,7 +382,7 @@ fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startEx
                 },
                 text = { Text(item.label, style = KuraType.ui(15f, UiWeight.SemiBold).inherit()) },
                 icon = { KIconView(item.icon, Modifier.size(20.dp), size = 20.dp, color = LocalContentColor.current) },
-                containerColor = KColor.s2,
+                containerColor = KColor.glassFloat,
                 contentColor = KColor.text,
             )
         }

@@ -137,6 +137,9 @@ object KColor {
     val glassBg = Color.White.copy(alpha = 0.075f)
     /** `rgba(11,11,13,.5)`: a pill sitting ON a cover. */
     val glassArt = Color(11, 11, 13).copy(alpha = 0.5f)
+    /** Graphite at 82 %: what FLOATS over scrolling covers (the "+", its menu). Present on the dark
+     *  page (art glass is black on black there) and still lets a cover show through, darkened. */
+    val glassFloat = Color(0xFF1C1C21).copy(alpha = 0.82f)
     /** Selected glass `rgba(255,255,255,.22)` — pressed/selected state of a glass control. */
     val glassSelected = Color.White.copy(alpha = 0.22f)
     /** Focus fill of a glass field (fill change instead of a ring — no borders). */
