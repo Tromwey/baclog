@@ -1,5 +1,7 @@
 package com.tromwey.kura.features.discover
 
+import com.tromwey.kura.designsystem.components.DockBandEffect
+import com.tromwey.kura.designsystem.components.animatedTintTail
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -174,6 +176,8 @@ internal fun CoverRow(
 @Composable
 internal fun PageTint(hexes: List<String>, scroll: ScrollState, spec: FiniteAnimationSpec<Float>, modifier: Modifier = Modifier) {
     val density = LocalDensity.current.density
+    val tail = animatedTintTail(hexes)
+    DockBandEffect { tail }
     Crossfade(hexes, modifier.fillMaxSize(), animationSpec = spec, label = "discoverTint") { h ->
         if (h.isEmpty()) return@Crossfade
         val brush = remember(h, density) { Tint.feed(h, TINT_SPAN, density) }

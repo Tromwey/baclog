@@ -149,9 +149,20 @@ fun <T> MonoSegmented(
     }
 }
 
-/** Scrolling row of `FilterChip`s (Todo / Cine / Series / Música / Personas), 40 high, mono labels. */
+/**
+ * Scrolling row of `FilterChip`s (Todo / Cine / Series / Música / Personas), 40 high, mono labels —
+ * THE filter of the app (collections, Descubrir, search, add titles: one shape for one idea;
+ * [MonoSegmented] is for switching between two views, not for filtering). [fill] is the unchosen
+ * chips' container (e.g. `KColor.glassArt` over a tint).
+ */
 @Composable
-fun <T> ChipRow(options: List<Pair<T, String>>, selection: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+fun <T> ChipRow(
+    options: List<Pair<T, String>>,
+    selection: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    fill: Color = MaterialTheme.colorScheme.secondaryContainer,
+) {
     val haptic = rememberKHaptic()
     Row(
         modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = KSize.margin),
@@ -169,7 +180,7 @@ fun <T> ChipRow(options: List<Pair<T, String>>, selection: T, onSelect: (T) -> U
                 modifier = Modifier.height(40.dp).semantics { role = Role.Tab },
                 shape = CircleShape,
                 colors = FilterChipDefaults.filterChipColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    containerColor = fill,
                     labelColor = KColor.text2,
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,

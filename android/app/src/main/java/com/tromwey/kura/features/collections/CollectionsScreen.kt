@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.collections
 
+import com.tromwey.kura.designsystem.components.DockBandEffect
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -292,6 +293,11 @@ private fun CollectionsCarousel(store: AppStore) {
     val tints = list.map { hexesOf(store, it) }
     val brushes = remember(tints, density.density) { tints.map { Tint.feed(it, 760.dp, density.density) } }
     val tails = remember(tints) { tints.map { Tint.feedTail(it) } }
+    // The navigation bar continues in the page's tail, between two stops too.
+    DockBandEffect {
+        val (lo, hi, t) = between(pos.floatValue, tails.size)
+        lerp(tails[lo], tails[hi], t)
+    }
     val scroll = rememberScrollState()
     val titleScroll = rememberKuraTitleScroll()
     var refreshing by remember { mutableStateOf(false) }

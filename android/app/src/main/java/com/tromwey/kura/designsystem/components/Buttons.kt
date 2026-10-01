@@ -70,7 +70,8 @@ internal fun TextStyle.inherit(): TextStyle = copy(color = Color.Unspecified)
 /**
  * Tonal pill button (was "glass") — `FilledTonalButton` on `secondaryContainer` (s2), Hanken 600,
  * 44 high, padding 14|16 · 16. [glyph] (a DS glyph in its color) or [icon] (an interface icon)
- * leads; [trailingIcon] trails. [fill] overrides the container (e.g. `KColor.glassBg` over a tint).
+ * leads; [trailingIcon] trails. [fill] overrides the container (e.g. `KColor.glassBg` over a tint);
+ * with [contentColor] it makes the pill the screen's accent (miel / onAccent).
  */
 @Composable
 fun GlassButton(
@@ -85,6 +86,7 @@ fun GlassButton(
     fullWidth: Boolean = false,
     fill: Color = MaterialTheme.colorScheme.secondaryContainer,
     enabled: Boolean = true,
+    contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
 ) {
     val lead = glyph != null || icon != null
     FilledTonalButton(
@@ -94,7 +96,7 @@ fun GlassButton(
         enabled = enabled,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = fill,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            contentColor = contentColor,
             disabledContainerColor = fill,
             disabledContentColor = KColor.text2,
         ),
@@ -117,9 +119,11 @@ fun GlassButton(
 }
 
 /**
- * The one primary action — `Button` with `primary` (text) / `onPrimary` (bg), 52 high, full width.
- * [honey] = the screen's ONE accent action: `tertiary` (miel) / `onTertiary`. Disabled = text at
- * .38 with bg ink at .6.
+ * The one primary action — `Button`, 52 high, full width. It IS the screen's (or the sheet's) one
+ * accent action, so it wears miel: `tertiary` / `onTertiary` (founder, 2026-10-01: cream had taken
+ * the accent's place and the honey had all but left the app). [honey] = false keeps the cream
+ * `primary` for the actions that take something away (Borrar, Bloquear, Cerrar sesión, Desconectar,
+ * Enviar reporte): never the accent. Disabled = text at .38 with bg ink at .6.
  */
 @Composable
 fun SolidButton(
@@ -129,7 +133,7 @@ fun SolidButton(
     icon: KIcon? = null,
     height: Dp = 52.dp,
     enabled: Boolean = true,
-    honey: Boolean = false,
+    honey: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
     Button(
@@ -155,7 +159,7 @@ fun SolidButton(
     }
 }
 
-/** [SolidButton] in honey (`tertiary`) — the screen's one accent action. */
+/** [SolidButton] in honey, by name (it's the default now) — kept for the call sites that say it. */
 @Composable
 fun HoneyButton(title: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon? = null, height: Dp = 52.dp, enabled: Boolean = true) =
     SolidButton(title, onClick, modifier, icon, height, enabled, honey = true)

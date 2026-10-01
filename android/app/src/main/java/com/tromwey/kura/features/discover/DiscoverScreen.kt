@@ -33,7 +33,7 @@ import com.tromwey.kura.designsystem.KMotion
 import com.tromwey.kura.designsystem.KSize
 import com.tromwey.kura.designsystem.components.KuraPullToRefresh
 import com.tromwey.kura.designsystem.components.KuraSearchBar
-import com.tromwey.kura.designsystem.components.MonoSegmented
+import com.tromwey.kura.designsystem.components.ChipRow
 import com.tromwey.kura.designsystem.components.TabTitleBar
 import com.tromwey.kura.designsystem.components.animatedTintTail
 import com.tromwey.kura.designsystem.components.kuraTitleScroll
@@ -202,12 +202,11 @@ fun DiscoverScreen(store: AppStore) {
                         }
                         DiscoverSearchContent(store, query, submitted, actions)
                     }
-                    MonoSegmented(
+                    ChipRow(
                         options = FORMATS,
                         selection = format,
                         onSelect = { formatRaw = it?.rawValue },
-                        modifier = Modifier.padding(horizontal = KSize.margin).padding(top = 12.dp),
-                        height = 40.dp,
+                        modifier = Modifier.padding(top = 12.dp),
                         // On a tint, the dark art glass lets it show through; on plain bg, the tonal s2.
                         fill = if (hexes.isEmpty()) KColor.s2 else KColor.glassArt,
                     )

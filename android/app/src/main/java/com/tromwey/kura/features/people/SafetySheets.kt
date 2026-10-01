@@ -260,6 +260,7 @@ fun KuraSheetScope.ReportSheet(store: AppStore, sheet: SheetRoute.Report) {
     }
     SolidButton(
         if (sending) "Enviando…" else "Enviar reporte",
+        honey = false,
         onClick = {
             val chosen = reason ?: return@SolidButton
             if (sending) return@SolidButton
@@ -295,6 +296,7 @@ fun KuraSheetScope.BlockSheet(store: AppStore, sheet: SheetRoute.Block) {
     }
     SolidButton(
         if (busy) "Bloqueando…" else "Bloquear",
+        honey = false,
         onClick = {
             if (busy) return@SolidButton
             store.sheetWrite { store.block(handle); true }

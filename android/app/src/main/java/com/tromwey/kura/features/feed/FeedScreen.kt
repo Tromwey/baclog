@@ -1,5 +1,8 @@
 package com.tromwey.kura.features.feed
 
+import com.tromwey.kura.designsystem.components.DockBandEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -373,6 +376,22 @@ private fun FeedStack(store: AppStore, events: List<FeedEvent>, hdr: Dp, base: D
             },
             modifier = Modifier.fillMaxSize().padding(top = hdr),
         ) {
+            // The navigation bar continues in what touches it: the LOWEST card on screen, at the height
+            // of its own 168° gradient where the bar begins (the tail item wears the last card's end).
+            val atBar by remember(rows) {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val low = info.visibleItemsInfo.lastOrNull()
+                    val row = rows.getOrNull(low?.index ?: 0)
+                    if (low == null || row == null) {
+                        Tint.ends(rows.last().palette).second.color
+                    } else {
+                        val (a, b) = Tint.ends(row.palette)
+                        lerp(a.color, b.color, ((info.viewportEndOffset - low.offset).toFloat() / maxOf(1, low.size)).coerceIn(0f, 1f))
+                    }
+                }
+            }
+            DockBandEffect { atBar }
             LazyColumn(
                 state = listState,
                 flingBehavior = rememberSnapFlingBehavior(listState, snap),

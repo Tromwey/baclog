@@ -293,7 +293,8 @@ private fun Actions(store: AppStore, t: Title, unreleased: Boolean, today: Boole
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AlertButton(store, t.id, on = "Te avisamos", off = "Avísame")
+            // Not out yet: asking for the notice IS this page's action — miel until it's on.
+            AlertButton(store, t.id, on = "Te avisamos", off = "Avísame", accent = true)
             save()
         }
         return
@@ -353,9 +354,12 @@ private fun toggleObsessed(store: AppStore, t: Title, on: Boolean, previous: Mar
 
 /** "Avísame" / "Te avisamos" — the local release alert (`toggleAlert`), same toggle as dónde ver's. */
 @Composable
-internal fun AlertButton(store: AppStore, titleId: String, on: String, off: String) {
+internal fun AlertButton(store: AppStore, titleId: String, on: String, off: String, accent: Boolean = false) {
     val active = titleId in store.alerts
+    val honey = accent && !active
     GlassButton(
+        fill = if (honey) KColor.accent else KColor.s2,
+        contentColor = if (honey) KColor.onAccent else KColor.text,
         title = if (active) on else off,
         onClick = { store.toggleAlert(titleId) },
         icon = if (active) null else KIcon.Bell,

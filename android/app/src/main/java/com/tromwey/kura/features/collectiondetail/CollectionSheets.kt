@@ -439,7 +439,7 @@ fun KuraSheetScope.DeleteCollectionSheet(store: AppStore, sheet: SheetRoute.Dele
             Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 14.dp),
             style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 21.sp),
         )
-        SolidButton("Borrar colección", {
+        SolidButton("Borrar colección", honey = false, onClick = {
             store.dismissSheet()
             store.deleteCollection(c.id)
         })

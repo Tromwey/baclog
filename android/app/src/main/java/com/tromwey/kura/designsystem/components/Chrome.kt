@@ -4,6 +4,11 @@
 
 package com.tromwey.kura.designsystem.components
 
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -306,17 +311,53 @@ object KuraDockDefaults {
 }
 
 /**
+ * The color the page on screen continues in under the navigation bar. The bar has no fill of its
+ * own (founder, 2026-10-01: its flat s1 band cut every tinted page): it wears the LAST color
+ * registered here — a page says its own with [DockBandEffect] (every `TintStyle.Feed` page does it
+ * through `kTint`) — and `bg` when nobody did. A list, not one value: during a push or a tab change
+ * two pages are composed, and when the one on top leaves, the one below is still registered.
+ */
+class DockBand {
+    private val entries = mutableStateListOf<() -> Color>()
+    val color: Color get() = entries.lastOrNull()?.invoke() ?: KColor.bg
+    internal fun add(e: () -> Color) { entries.add(e) }
+    internal fun remove(e: () -> Color) { entries.remove(e) }
+}
+
+val LocalDockBand = staticCompositionLocalOf { DockBand() }
+
+/** While composed, the navigation bar wears [color] (read when it DRAWS: no recomposition per frame). */
+@Composable
+fun DockBandEffect(color: () -> Color) {
+    val band = LocalDockBand.current
+    val latest by rememberUpdatedState(color)
+    DisposableEffect(band) {
+        val entry: () -> Color = { latest() }
+        band.add(entry)
+        onDispose { band.remove(entry) }
+    }
+}
+
+/**
  * The 4 tabs — Material's `ShortNavigationBar`, glued to the bottom edge (founder, 2026-09-30):
- * s1 container, the active tab's icon on an s2 pill indicator, label Hanken 600 in text; the rest
+ * no container of its own — it's painted in the page's color ([DockBand]) with a 16 veil above it,
+ * so the tint reaches the bottom edge and the content fades into the bar instead of being cut by
+ * it. The active tab's icon sits on a glass pill indicator, label Hanken 600 in text; the rest
  * text-2. Tab change is instant (0 ms, no haptic). [feedDot]: new notifications, as a `Badge`.
  * Pass it as [KuraScaffold]'s `bottomBar`.
  */
 @Composable
 fun KuraDock(selected: KuraTab, onSelect: (KuraTab) -> Unit, modifier: Modifier = Modifier, feedDot: Boolean = false) {
+    val band = LocalDockBand.current
     KFixedChrome {
         ShortNavigationBar(
-            modifier = modifier,
-            containerColor = KColor.s1,
+            modifier = modifier.drawBehind {
+                val c = band.color
+                val veil = 16.dp.toPx()
+                drawRect(Brush.verticalGradient(listOf(c.copy(alpha = 0f), c), startY = -veil, endY = 0f), Offset(0f, -veil), Size(size.width, veil))
+                drawRect(c)
+            },
+            containerColor = Color.Transparent,
             contentColor = KColor.text,
             windowInsets = NavigationBarDefaults.windowInsets,
         ) {
@@ -336,7 +377,7 @@ fun KuraDock(selected: KuraTab, onSelect: (KuraTab) -> Unit, modifier: Modifier 
                     colors = ShortNavigationBarItemDefaults.colors(
                         selectedIconColor = KColor.text,
                         selectedTextColorTopIconPosition = KColor.text,
-                        selectedIndicatorColor = KColor.s2,
+                        selectedIndicatorColor = KColor.glassSelected,
                         unselectedIconColor = KColor.text2,
                         unselectedTextColor = KColor.text2,
                     ),

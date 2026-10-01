@@ -64,6 +64,11 @@ fun Modifier.kTint(palette: List<String>?, style: TintStyle = TintStyle.Card, sh
             is TintStyle.Feed -> Tint.feed(palette.orEmpty(), style.span, density)
         } ?: androidx.compose.ui.graphics.SolidColor(KColor.s1)
     }
+    // A whole page: the navigation bar continues in its tail (`DockBand`).
+    if (style is TintStyle.Feed) {
+        val tail = animatedTintTail(palette)
+        DockBandEffect { tail }
+    }
     return background(brush, shape)
 }
 

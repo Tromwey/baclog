@@ -270,6 +270,7 @@ fun KuraSheetScope.UnlinkIdentitySheet(store: AppStore, sheet: SheetRoute.Unlink
     if (!lastWayIn) {
         SolidButton(
             if (busy) "Desconectando…" else "Desconectar",
+            honey = false,
             onClick = {
                 if (busy) return@SolidButton
                 store.sheetWrite { store.disconnect(p); true }

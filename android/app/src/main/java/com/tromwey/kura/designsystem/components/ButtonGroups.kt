@@ -319,8 +319,9 @@ fun KuraMenu(expanded: Boolean, onDismiss: () -> Unit, items: List<KuraMenuItem>
 }
 
 /**
- * Android's canonical "create" — `FloatingActionButton`, 16 corners, solid (`primary` = text on
- * bg). Inside a collection: "Agregar". [label] is what TalkBack reads.
+ * Android's canonical "create" — `FloatingActionButton`, 16 corners, TONAL: s2 with the "+" in
+ * miel (founder, 2026-10-01: the solid cream one was the brightest thing on the page and beat the
+ * fan to the eye). Inside a collection: "Agregar". [label] is what TalkBack reads.
  */
 @Composable
 fun KuraFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon = KIcon.Plus, label: String = "Agregar") {
@@ -328,8 +329,8 @@ fun KuraFab(onClick: () -> Unit, modifier: Modifier = Modifier, icon: KIcon = KI
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = label },
         shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
+        containerColor = KColor.s2,
+        contentColor = KColor.accent,
         elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
     ) {
         KIconView(icon, size = 24.dp, color = LocalContentColor.current)
@@ -341,7 +342,7 @@ data class KuraFabItem(val label: String, val icon: KIcon, val onClick: () -> Un
 
 /**
  * Tus colecciones' "+" — `FloatingActionButtonMenu` with a `ToggleFloatingActionButton`: closed it's
- * the solid 16-corner FAB with "+"; open it turns into an s2 pill, the "+" rotates to a close, and
+ * the tonal 16-corner FAB (s2, "+" in miel); open it turns into an s2 pill, the "+" rotates to a close in text, and
  * the [items] (Agregar títulos, Nueva colección) unfold above it as tonal pills.
  */
 @Composable
@@ -357,7 +358,7 @@ fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startEx
                     contentDescription = if (open) "Cerrar" else "Crear"
                 },
                 containerColor = ToggleFloatingActionButtonDefaults.containerColor(
-                    initialColor = MaterialTheme.colorScheme.primary,
+                    initialColor = KColor.s2,
                     finalColor = KColor.s2,
                 ),
             ) {
@@ -366,7 +367,7 @@ fun KuraFabMenu(items: List<KuraFabItem>, modifier: Modifier = Modifier, startEx
                     KIcon.Plus,
                     Modifier.graphicsLayer { rotationZ = 45f * p },
                     size = 24.dp,
-                    color = lerp(MaterialTheme.colorScheme.onPrimary, KColor.text, p),
+                    color = lerp(KColor.accent, KColor.text, p),
                 )
             }
         },

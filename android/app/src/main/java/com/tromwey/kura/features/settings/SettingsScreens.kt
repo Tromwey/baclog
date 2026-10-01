@@ -505,6 +505,7 @@ fun KuraSheetScope.RevokeSessionSheet(store: AppStore, sheet: SheetRoute.RevokeS
     )
     SolidButton(
         if (busy) "Cerrando…" else "Cerrar sesión",
+        honey = false,
         onClick = {
             if (busy) return@SolidButton
             store.sheetWrite { store.revokeSession(device); true }
@@ -536,7 +537,7 @@ fun KuraSheetScope.DeleteAccountSheet(store: AppStore) {
         KuraTextField(typed, { typed = it }, placeholder = handle, focusRequester = focus, fill = KColor.glassBg)
     }
     Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SolidButton("Borrar cuenta", onClick = {
+        SolidButton("Borrar cuenta", honey = false, onClick = {
             if (!ok) return@SolidButton
             store.dismissSheet()
             store.deleteAccount()
