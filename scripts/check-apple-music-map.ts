@@ -13,6 +13,9 @@ import {
   idFromAppleUrl,
   searchToCollections,
   songToItunes,
+  storefrontForCountry,
+  storefrontOfRaw,
+  storefrontOr,
   type AppleResource,
 } from "../src/modules/catalog/apple-music-map";
 
@@ -142,5 +145,26 @@ const lookup = albumLookupToItunes(
 assert.equal(lookup[0].wrapperType, "collection");
 assert.deepEqual(lookup.slice(1).map((r) => (r as { trackName: string }).trackName), ["Intro", "Track 4", "Outro"]);
 assert.deepEqual(albumLookupToItunes({ id: "x" }), []);
+
+// --- storefronts: search in the viewer's store, look up in the album's
+assert.equal(storefrontForCountry("MX"), "mx");
+assert.equal(storefrontForCountry(" ar "), "ar");
+assert.equal(storefrontForCountry(null), "us");
+assert.equal(storefrontForCountry(""), "us");
+assert.equal(storefrontForCountry("MEX"), "us"); // not alpha-2
+assert.equal(storefrontForCountry("../x"), "us"); // never reaches the URL path
+assert.equal(storefrontForCountry("mx", new Set(["us", "mx"])), "mx");
+assert.equal(storefrontForCountry("kp", new Set(["us", "mx"])), "us"); // no Apple Music store
+assert.equal(storefrontForCountry("kp", new Set()), "kp"); // list unknown: try it, us retry covers it
+assert.equal(albumToItunes(album, "mx")!._storefront, "mx");
+assert.equal(albumToItunes(album)!._storefront, undefined);
+assert.ok(searchToCollections({ results: { albums: { data: [album] }, songs: { data: [song("1", "x", 1)] } } }, "mx").every((r) => r._storefront === "mx"));
+assert.equal((albumLookupToItunes(album, [], "br")[0] as { _storefront?: string })._storefront, "br");
+assert.equal(storefrontOfRaw({ _storefront: "mx", artistId: 1 }), "mx");
+assert.equal(storefrontOfRaw({ artistId: 1 }), "us"); // pre-migration iTunes row
+assert.equal(storefrontOfRaw(null), "us");
+assert.equal(storefrontOfRaw({ _storefront: "MX/../" }), "us");
+assert.equal(storefrontOr(null), "us");
+assert.equal(storefrontOr("jp"), "jp");
 
 console.log("check-apple-music-map: ok");

@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import { searchStorefront } from "./apple-catalog";
 import { searchAlbums } from "./itunes";
 import { videoCatalog } from "./tmdb";
 import type { CatalogSearchResult, ExternalItem, SearchTab } from "./types";
@@ -27,6 +28,10 @@ export interface DetailedSearch {
 export async function unifiedSearchDetailed(
   query: string,
   tab: SearchTab,
+  /** The viewer's ISO country (`x-vercel-ip-country`): music searches that
+   *  Apple Music store (video is region-less; "dónde ver" uses it later).
+   *  Absent (recs, no viewer) = `us`. */
+  country?: string | null,
 ): Promise<DetailedSearch> {
   const tasks: { tab: SearchTab; run: Promise<ExternalItem[] | null> }[] = [];
   if (tab === "film" || tab === "all")
@@ -34,7 +39,10 @@ export async function unifiedSearchDetailed(
   if (tab === "series" || tab === "all")
     tasks.push({ tab: "series", run: safe(videoCatalog.search(query, "series")) });
   if (tab === "album" || tab === "all")
-    tasks.push({ tab: "album", run: safe(searchAlbums(query)) });
+    tasks.push({
+      tab: "album",
+      run: safe(searchStorefront(country).then((sf) => searchAlbums(query, sf))),
+    });
 
   const settled = await Promise.all(tasks.map((t) => t.run));
   const failed: SearchTab[] = [];
@@ -49,8 +57,9 @@ export async function unifiedSearchDetailed(
 export async function unifiedSearch(
   query: string,
   tab: SearchTab,
+  country?: string | null,
 ): Promise<CatalogSearchResult[]> {
-  return (await unifiedSearchDetailed(query, tab)).results;
+  return (await unifiedSearchDetailed(query, tab, country)).results;
 }
 
 /**

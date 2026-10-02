@@ -56,6 +56,11 @@ export interface ItunesCollectionRow {
   collectionViewUrl?: string;
   trackCount?: number;
   _via: "apple-music";
+  /** The Apple Music storefront this album was found in. Album ids and
+   *  availability are per storefront, and `catalog_item` is ONE shared row,
+   *  so every later lookup (ficha, release cron, discography) asks the store
+   *  that knows the album — never the current viewer's. */
+  _storefront?: string;
 }
 
 /** iTunes track row (search `entity=song`, lookup `wrapperType: "track"`). */
@@ -80,6 +85,35 @@ export interface ItunesTrackRow {
   trackExplicitness?: string;
   isStreamable: boolean;
   _via: "apple-music";
+}
+
+/** The storefront every album without one is looked up in: iTunes' calls
+ *  never sent a `country`, so every pre-migration row is a US-store id. */
+export const DEFAULT_STOREFRONT = "us";
+
+const STOREFRONT_RE = /^[a-z]{2}$/;
+
+/**
+ * The storefront to SEARCH for a viewer: their country (Vercel's
+ * `x-vercel-ip-country`, ISO alpha-2) when Apple Music has a store there,
+ * else `us`. `known` = Apple's storefront ids when we have them; without the
+ * list any well-formed code is tried (the caller retries `us` on failure).
+ */
+export function storefrontForCountry(country: string | null | undefined, known?: ReadonlySet<string> | null): string {
+  const sf = country?.trim().toLowerCase() ?? "";
+  if (!STOREFRONT_RE.test(sf)) return DEFAULT_STOREFRONT;
+  if (known && known.size > 0 && !known.has(sf)) return DEFAULT_STOREFRONT;
+  return sf;
+}
+
+/** A stored storefront (`raw->>'_storefront'` read in SQL) → itself, else `us`. */
+export function storefrontOr(value: unknown): string {
+  return typeof value === "string" && STOREFRONT_RE.test(value) ? value : DEFAULT_STOREFRONT;
+}
+
+/** The storefront an album row was found in (`raw._storefront`), else `us`. */
+export function storefrontOfRaw(raw: unknown): string {
+  return storefrontOr((raw as { _storefront?: unknown } | null)?._storefront);
 }
 
 /** Apple ids are decimal strings; anything else is not a catalog id. */
@@ -160,7 +194,7 @@ function primaryGenre(names: string[] | undefined): string | undefined {
 }
 
 /** An Apple Music `albums` resource → iTunes collection row (null if unusable). */
-export function albumToItunes(a: AppleResource): ItunesCollectionRow | null {
+export function albumToItunes(a: AppleResource, storefront?: string): ItunesCollectionRow | null {
   const id = numId(a.id);
   const at = a.attributes;
   if (id == null || !at?.name || !at.artistName) return null;
@@ -178,6 +212,7 @@ export function albumToItunes(a: AppleResource): ItunesCollectionRow | null {
     collectionViewUrl: at.url,
     trackCount: typeof at.trackCount === "number" ? at.trackCount : undefined,
     _via: "apple-music",
+    ...(storefront ? { _storefront: storefront } : {}),
   };
 }
 
@@ -220,12 +255,13 @@ export function songToItunes(s: AppleResource): ItunesTrackRow | null {
  * TITLE didn't match — "the record with that song"). Song hits become
  * collection rows from their own album fields.
  */
-export function searchToCollections(doc: {
-  results?: { albums?: { data?: AppleResource[] }; songs?: { data?: AppleResource[] } };
-}): ItunesCollectionRow[] {
+export function searchToCollections(
+  doc: { results?: { albums?: { data?: AppleResource[] }; songs?: { data?: AppleResource[] } } },
+  storefront?: string,
+): ItunesCollectionRow[] {
   const out: ItunesCollectionRow[] = [];
   for (const a of doc.results?.albums?.data ?? []) {
-    const row = albumToItunes(a);
+    const row = albumToItunes(a, storefront);
     if (row) out.push(row);
   }
   for (const s of doc.results?.songs?.data ?? []) {
@@ -244,6 +280,7 @@ export function searchToCollections(doc: {
       artworkUrl100: t.artworkUrl100,
       collectionViewUrl: t.collectionViewUrl,
       _via: "apple-music",
+      ...(storefront ? { _storefront: storefront } : {}),
     });
   }
   return out;
@@ -254,8 +291,9 @@ export function searchToCollections(doc: {
 export function albumLookupToItunes(
   album: AppleResource,
   extraTracks: AppleResource[] = [],
+  storefront?: string,
 ): Array<ItunesCollectionRow | ItunesTrackRow> {
-  const collection = albumToItunes(album);
+  const collection = albumToItunes(album, storefront);
   if (!collection) return [];
   const tracks = [...(album.relationships?.tracks?.data ?? []), ...extraTracks]
     // An album's tracks relationship can hold music videos too.

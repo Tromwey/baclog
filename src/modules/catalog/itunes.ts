@@ -35,11 +35,15 @@ interface ItunesCollection {
  * reports as `failed`, so the mobile API can answer 503 instead of an honest
  * looking empty result. The web search catches it (`safe`) and stays [].
  */
-export async function searchAlbums(query: string): Promise<ExternalItem[]> {
+export async function searchAlbums(
+  query: string,
+  storefront?: string,
+): Promise<ExternalItem[]> {
   // Apple Music first (2026-10-02, `apple-catalog.ts`): its index is the
-  // app's, current where iTunes' lags. Null (no key / Apple failed) or an
-  // empty answer → the iTunes path below, unchanged.
-  const apple = await appleSearchAlbums(query);
+  // app's, current where iTunes' lags, searched in the viewer's store
+  // (`storefront`, from their country). Null (no key / Apple failed) or an
+  // empty answer → the iTunes path below, unchanged (US store).
+  const apple = await appleSearchAlbums(query, storefront);
   if (apple && apple.length > 0) {
     const byId = new Map<string, ExternalItem>();
     for (const c of apple) {
@@ -166,8 +170,9 @@ function toAlbumViewUrl(viewUrl: string | undefined): string | undefined {
 export async function getArtistUpcoming(
   artistId: number,
   now: number = Date.now(),
+  storefront?: string,
 ): Promise<ExternalItem[]> {
-  const lookup = await lookupArtistAlbums(artistId);
+  const lookup = await lookupArtistAlbums(artistId, undefined, storefront);
   if (!lookup) return [];
   return lookup.albums
     .filter((r) => new Date(r.releaseDate as string).getTime() > now)
@@ -205,8 +210,9 @@ export async function getArtistReleases(
   now: number,
   pastDays = 120,
   timeoutMs = 4000,
+  storefront?: string,
 ): Promise<ArtistReleases> {
-  const lookup = await lookupArtistAlbums(artistId, AbortSignal.timeout(timeoutMs));
+  const lookup = await lookupArtistAlbums(artistId, AbortSignal.timeout(timeoutMs), storefront);
   if (!lookup) return { artistName: null, items: [] };
   const since = now - pastDays * 24 * 60 * 60 * 1000;
   const seen = new Set<string>();
@@ -232,13 +238,15 @@ export async function getArtistReleases(
 async function lookupArtistAlbums(
   artistId: number,
   signal?: AbortSignal,
+  /** The store of the album the artist id came from (`storefrontOfRaw`). */
+  storefront?: string,
 ): Promise<{
   artistName: string | null;
   albums: Array<ItunesCollection & { wrapperType?: string }>;
 } | null> {
   // Apple Music first; its rows are already collection-shaped. Same filter as
   // the iTunes rows below (a dateless album can't be placed in time).
-  const apple = await appleArtistAlbums(artistId, signal);
+  const apple = await appleArtistAlbums(artistId, signal, storefront);
   if (apple) {
     return {
       artistName: apple.artistName,
@@ -349,6 +357,8 @@ function isPlaceholderTrack(name: string, streamable: boolean): boolean {
 export async function getAlbumDetail(
   collectionId: string,
   freshness: DetailFreshness = "pending",
+  /** The store the album was found in (`storefrontOfRaw(item.raw)`). */
+  storefront?: string,
 ): Promise<AlbumDetail> {
   const FAILED: AlbumDetail = {
     releaseDate: null,
@@ -360,7 +370,7 @@ export async function getAlbumDetail(
   const revalidate =
     freshness === "fresh" ? null : freshness === "pending" ? 60 * 60 * 24 : 60 * 60 * 24 * 30;
   // Apple Music first (same freshness); null → the iTunes lookup below.
-  const apple = await appleAlbumLookup(collectionId, revalidate);
+  const apple = await appleAlbumLookup(collectionId, revalidate, storefront);
   if (apple) return albumDetailFromRows(apple);
 
   const url = new URL("https://itunes.apple.com/lookup");

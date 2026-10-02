@@ -22,6 +22,7 @@ import {
   userItems,
   users,
 } from "@/db/schema";
+import { storefrontOr } from "@/modules/catalog/apple-music-map";
 import { getAlbumDetail } from "@/modules/catalog/itunes";
 import { homeDayLong } from "@/modules/catalog/release";
 import { releaseFirstLine, releaseSubject, sendReleaseEmail } from "@/auth/mailer";
@@ -102,13 +103,14 @@ async function refreshAlbum(
   item: {
     id: string;
     externalId: string;
+    storefront: string | null;
     year: number | null;
     posterUrl: string | null;
     releaseDate: Date;
   },
   now: Date,
 ): Promise<{ releaseDate: Date; unavailable: boolean }> {
-  const detail = await getAlbumDetail(item.externalId, "fresh");
+  const detail = await getAlbumDetail(item.externalId, "fresh", storefrontOr(item.storefront));
   // UTC year: every stored release instant falls inside its UTC day (see
   // STOREFRONT_TZ in catalog/release.ts).
   const resolvedYear = item.year ?? item.releaseDate.getUTCFullYear();
@@ -228,6 +230,8 @@ export async function GET(request: Request) {
     .selectDistinct({
       id: catalogItems.id,
       externalId: catalogItems.externalId,
+      // The Apple Music store the album was found in (apple-catalog.ts).
+      storefront: sql<string | null>`${catalogItems.raw}->>'_storefront'`,
     })
     .from(catalogItems)
     .innerJoin(userItems, eq(userItems.catalogItemId, catalogItems.id))
@@ -246,7 +250,7 @@ export async function GET(request: Request) {
   let resolveFailed = 0;
   for (const album of dateless) {
     try {
-      const detail = await getAlbumDetail(album.externalId);
+      const detail = await getAlbumDetail(album.externalId, "pending", storefrontOr(album.storefront));
       await db
         .update(catalogItems)
         .set({
@@ -275,6 +279,8 @@ export async function GET(request: Request) {
       // an owner to mail); the filter below makes it explicit.
       mediaType: libraryMediaType(),
       externalId: catalogItems.externalId,
+      // The Apple Music store the album was found in (apple-catalog.ts).
+      storefront: sql<string | null>`${catalogItems.raw}->>'_storefront'`,
       title: catalogItems.title,
       byline: catalogItems.byline,
       year: catalogItems.year,
@@ -456,6 +462,8 @@ export async function GET(request: Request) {
     .select({
       id: catalogItems.id,
       externalId: catalogItems.externalId,
+      // The Apple Music store the album was found in (apple-catalog.ts).
+      storefront: sql<string | null>`${catalogItems.raw}->>'_storefront'`,
       year: catalogItems.year,
       posterUrl: catalogItems.posterUrl,
       releaseDate: catalogItems.releaseDate,

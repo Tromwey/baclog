@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems, userItems } from "@/db/schema";
 import { cacheExternalItems } from "@/modules/catalog/search";
+import { storefrontOfRaw } from "@/modules/catalog/apple-music-map";
 import { getArtistUpcoming } from "@/modules/catalog/itunes";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
 
@@ -79,15 +80,20 @@ async function byTheirArtists(
   alreadyHave: Set<string>,
 ): Promise<FollowSuggestion | null> {
   const artistIds: number[] = [];
+  // The Apple Music store of the album each artist came from.
+  const artistStore = new Map<number, string>();
   for (const o of owned) {
     const id = (o.raw as { artistId?: unknown } | null)?.artistId;
-    if (typeof id === "number" && !artistIds.includes(id)) artistIds.push(id);
+    if (typeof id === "number" && !artistIds.includes(id)) {
+      artistIds.push(id);
+      artistStore.set(id, storefrontOfRaw(o.raw));
+    }
     if (artistIds.length === ARTISTS_TRIED) break;
   }
 
   for (const artistId of artistIds) {
     try {
-      const upcoming = await getArtistUpcoming(artistId);
+      const upcoming = await getArtistUpcoming(artistId, Date.now(), artistStore.get(artistId));
       if (upcoming.length === 0) continue;
 
       // Upserting is what turns a provider payload into something followable:

@@ -24,6 +24,12 @@ export async function GET(request: Request) {
   }
 
   const started = Date.now();
-  const results = await unifiedSearch(parsed.data.q, parsed.data.tab);
+  // Music searches the viewer's Apple Music store (Vercel's country header,
+  // like "dónde ver"); absent locally → `us`.
+  const results = await unifiedSearch(
+    parsed.data.q,
+    parsed.data.tab,
+    request.headers.get("x-vercel-ip-country"),
+  );
   return NextResponse.json({ results, tookMs: Date.now() - started });
 }
