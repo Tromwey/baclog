@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import { appleSearchSongs } from "./apple-catalog";
 import { SONG_SOURCE, toSongItem, type ItunesSongResult, type SongItem, type SongRaw } from "./song-map";
 
 export { SONG_SOURCE, songFactsOf, type SongItem, type SongRaw } from "./song-map";
@@ -45,6 +46,11 @@ export class SongSearchUnavailableError extends Error {
  * query twice, or two guests searching the same hit, costs one call).
  */
 export async function searchSongs(query: string, limit = 25): Promise<SongItem[]> {
+  // Apple Music first (2026-10-02): same ids (song id = trackId), rows already
+  // in iTunes' shape. Null (no key / Apple failed) or empty → iTunes below.
+  const apple = await appleSearchSongs(query, limit, "mx");
+  if (apple && apple.length > 0) return dedupeSongs(apple);
+
   const url = new URL("https://itunes.apple.com/search");
   url.searchParams.set("term", query);
   url.searchParams.set("entity", "song");
@@ -60,9 +66,13 @@ export async function searchSongs(query: string, limit = 25): Promise<SongItem[]
     console.error("[catalog] iTunes song search failed:", err);
     throw new SongSearchUnavailableError(err);
   }
+  return dedupeSongs(data.results ?? []);
+}
+
+function dedupeSongs(results: ItunesSongResult[]): SongItem[] {
   const seen = new Set<string>();
   const out: SongItem[] = [];
-  for (const r of data.results ?? []) {
+  for (const r of results) {
     const song = toSongItem(r);
     if (!song || seen.has(song.externalId)) continue;
     seen.add(song.externalId);
