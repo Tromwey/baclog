@@ -16,7 +16,7 @@ export const LAB_NICHOS = [
   { id: "n2", umbral: 15, titulo: "Hora", texto: "6 PM" },
   { id: "n3", umbral: 30, titulo: "Lugar", texto: "Residencial Unio" },
   { id: "n4", umbral: 50, titulo: "Vestimenta", texto: "Disfrazados" },
-  { id: "n5", umbral: 75, titulo: "Qué llevar", texto: "Sus brebajes y golosinas de su preferencia" },
+  { id: "n5", umbral: 75, titulo: "Qué llevar", texto: "Brebajes y golosinas a tu gusto" },
   { id: "n6", umbral: 100, titulo: "Pista", texto: "¿Quién mató a Eric?" },
 ] as const;
 
