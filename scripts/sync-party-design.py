@@ -636,11 +636,10 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     const nombres = await elenco; if (nombres.length) bloque('Quienes abrieron los nichos', nombres);
     bloque('', ['Gracias por cada minuto y por acompañarme en el camino.']);
     bloque('', ['Ichigo-Ichie', '一期一会']);   // el agradecimiento del founder: un encuentro, una sola vez
-    bloque('', ['El culpable estará en la fiesta.'], 'chico');
     const fecha = (cache.mau.contenido[NICHOS[0].id] || {}).texto, fin = el('div', 'mau-final-fin'), volverB = el('button', 'lab-pill', 'Volver al Mausoleo'); volverB.type = 'button';
     const calB = el('a', 'lab-pill', 'Agregar al calendario'); calB.href = '/api/party/lab/calendario';
     const botones = el('div', 'mau-final-b'); botones.append(calB, volverB);
-    fin.appendChild(el('p', '', fecha ? `Nos vemos el ${fecha}` : 'Nos vemos en la fiesta')); fin.appendChild(botones);
+    fin.appendChild(el('p', 'chico', 'El culpable estará en la fiesta.')); fin.appendChild(el('p', '', fecha ? `Nos vemos el ${fecha}` : 'Nos vemos en la fiesta')); fin.appendChild(botones);
     const saltar = el('button', 'lab-pill mau-final-saltar', 'Saltar'); saltar.type = 'button';
     v.append(rollo, fin, saltar);
     $('live').textContent = [...rollo.querySelectorAll('h1,h2,p')].map(x => x.textContent).join('. ');
