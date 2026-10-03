@@ -95,7 +95,9 @@ import com.tromwey.kura.state.loadMoreReviews
 import com.tromwey.kura.state.releaseLabel
 import com.tromwey.kura.state.toggleEpisode
 import com.tromwey.kura.state.visibleReviews
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.ZoneOffset
 import com.tromwey.kura.state.present
 import com.tromwey.kura.state.push
@@ -549,7 +551,11 @@ private fun AlbumSections(store: AppStore, t: Title) {
     val context = LocalContext.current
     val unreleased = store.isUnreleased(t)
     val app = store.musicApp
-    val open: () -> Unit = { store.openLink(context, musicUrl(store, t)) }
+    val scope = rememberCoroutineScope()
+    val open: () -> Unit = {
+        val url = musicUrl(store, t)
+        scope.launch { store.openLink(context, directMusicLink(url) ?: url) }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(30.dp)) {
         if (unreleased) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -622,6 +628,32 @@ private fun musicUrl(store: AppStore, t: Title): String {
         "Tidal" -> "https://listen.tidal.com/search?q=$q"
         else -> "https://music.apple.com/mx/search?term=$q"
     }
+}
+
+/**
+ * The API's link is our `/api/links/resolve` 302. Opened as is, the browser follows it to the
+ * service's WEB player; asked as `format=json` it hands the final link, which ACTION_VIEW gives
+ * to the Spotify / Apple Music / TIDAL app (its app link). Null (an old server, a timeout,
+ * anything but https) = open the resolve URL as before.
+ */
+private suspend fun directMusicLink(url: String): String? = withContext(Dispatchers.IO) {
+    val uri = android.net.Uri.parse(url)
+    if (uri.path?.endsWith("/api/links/resolve") != true) return@withContext null
+    val ask = uri.buildUpon().appendQueryParameter("format", "json").build().toString()
+    runCatching {
+        val c = java.net.URL(ask).openConnection() as java.net.HttpURLConnection
+        c.connectTimeout = 4_000
+        c.readTimeout = 4_000
+        c.instanceFollowRedirects = false
+        c.setRequestProperty("Accept", "application/json")
+        try {
+            if (c.responseCode != 200) null
+            else org.json.JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+                .optString("url").takeIf { it.startsWith("https://") }
+        } finally {
+            c.disconnect()
+        }
+    }.getOrNull()
 }
 
 private fun repinService(url: String, wire: String): String {

@@ -14,6 +14,10 @@ const paramsSchema = z.object({
   service: z
     .enum(["spotify", "apple_music", "youtube_music", "tidal"])
     .optional(),
+  /** `json` = `{ url }` instead of the 302, for the apps: they open the
+   *  final link themselves so Spotify / Apple Music / TIDAL open in their
+   *  app (iOS doesn't hand a redirected tap to another app). */
+  format: z.enum(["json"]).optional(),
 });
 
 /**
@@ -41,6 +45,7 @@ export async function GET(request: Request) {
   const parsed = paramsSchema.safeParse({
     catalogItemId: searchParams.get("catalogItemId") ?? "",
     service: searchParams.get("service") ?? undefined,
+    format: searchParams.get("format") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid" }, { status: 400 });
@@ -66,5 +71,9 @@ export async function GET(request: Request) {
     target = await resolveVideoLink(item, region);
   }
 
+  if (parsed.data.format === "json") {
+    // The session's preferred service may have picked it: never cache shared.
+    return NextResponse.json({ url: target }, { headers: { "Cache-Control": "private, no-store" } });
+  }
   return NextResponse.redirect(target, 302);
 }

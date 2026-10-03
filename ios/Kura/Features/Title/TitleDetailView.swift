@@ -774,6 +774,7 @@ private struct SeriesSections: View {
 
 private struct AlbumSections: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.openURL) private var openURL
     let title: Title
 
     var body: some View {
@@ -783,7 +784,7 @@ private struct AlbumSections: View {
             if unreleased {
                 VStack(alignment: .leading, spacing: 4) {
                     SectionTitle(text: "dónde escuchar")
-                    Link(destination: musicURL(t)) {
+                    Button { openMusic(t) } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "music.note").font(.system(size: 16))
                                 .foregroundStyle(KColor.text)
@@ -794,13 +795,15 @@ private struct AlbumSections: View {
                             Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(KColor.text2)
                         }
                         .frame(minHeight: 56)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     let newCount = t.tracks.filter(\.isNew).count
                     Text("Abre el álbum completo. Los \(newCount) tracks nuevos llegan en \(store.releaseLabel(t) ?? "").")
                         .font(.kura.ui(13)).foregroundStyle(KColor.text2)
                 }
             } else {
-                Link(destination: musicURL(t)) {
+                Button { openMusic(t) } label: {
                     HStack(spacing: 8) {
                         Text("Abrir en \(store.musicApp)").font(.kura.ui(16, .semibold))
                         Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold))
@@ -810,6 +813,7 @@ private struct AlbumSections: View {
                     .frame(height: 48)
                     .background(KColor.glassBg, in: Capsule())
                 }
+                .buttonStyle(.plain)
             }
 
             if !t.tracks.isEmpty {
@@ -861,6 +865,16 @@ private struct AlbumSections: View {
         }
     }
 
+    /// Opens the album in the music app. The API's link is our `/api/links/resolve` 302, and iOS
+    /// hands a link to Spotify / Apple Music / TIDAL only when the tap itself goes to their host —
+    /// through our redirect it lands on their web player. So ask for the final link and open THAT.
+    private func openMusic(_ t: Title) {
+        let url = musicURL(t)
+        Task {
+            openURL(await MusicLink.direct(for: url) ?? url)
+        }
+    }
+
     private func musicURL(_ t: Title) -> URL {
         // The API hands back `/api/links/resolve?…&service=<wire>` pinned to the preference AT FETCH
         // TIME, and the title stays cached after the user switches app in Ajustes — so re-pin
@@ -895,6 +909,26 @@ private struct AlbumSections: View {
         c.queryItems = items.map { $0.name == "service" ? URLQueryItem(name: "service", value: wire) : $0 }
         return c.url ?? u
     }
+}
+
+/// `/api/links/resolve?…&format=json` → `{ url }`: the final link without the 302. Nil (an old
+/// server, a timeout, anything but an https link) = the caller opens the resolve URL as before.
+enum MusicLink {
+    static func direct(for url: URL) async -> URL? {
+        guard url.path.hasSuffix("/api/links/resolve"),
+              var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        c.queryItems = (c.queryItems ?? []).filter { $0.name != "format" } + [URLQueryItem(name: "format", value: "json")]
+        guard let ask = c.url else { return nil }
+        var req = URLRequest(url: ask, timeoutInterval: 4)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, res) = try? await URLSession.shared.data(for: req),
+              (res as? HTTPURLResponse)?.statusCode == 200,
+              let body = try? JSONDecoder().decode(Body.self, from: data),
+              let target = URL(string: body.url), target.scheme == "https", target.host != nil else { return nil }
+        return target
+    }
+
+    private struct Body: Decodable { let url: String }
 }
 
 extension String {

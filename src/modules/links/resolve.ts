@@ -62,6 +62,32 @@ export async function resolveMusicLink(
   return url;
 }
 
+/**
+ * The album link when it needs NO upstream call (Apple Music from the
+ * catalog, Spotify / YouTube Music = their search), so a page can put it in
+ * the `href` itself. A tap on `open.spotify.com/…` hands off to the Spotify
+ * app (universal link / app link); the same tap through our 302 lands on the
+ * web player — iOS only hands a link to another app when the tap itself goes
+ * there. Null for TIDAL (its exact link needs a search on their API): that
+ * one stays behind `/api/links/resolve`.
+ */
+export function directMusicLink(
+  item: Pick<CatalogItemRow, "title" | "byline" | "raw">,
+  service: MusicService,
+): string | null {
+  switch (service) {
+    case "apple_music": {
+      const outcome = appleMusicFromCatalog(item);
+      return outcome.kind === "exact" ? outcome.url : buildSearchFallback(service, item.title, item.byline);
+    }
+    case "spotify":
+    case "youtube_music":
+      return buildSearchFallback(service, item.title, item.byline);
+    case "tidal":
+      return null;
+  }
+}
+
 /** Per-service exact album link. `none` = confidently no exact link (cache
  *  the fallback); `unavailable` = don't cache, retry on the next tap. */
 async function resolveExactMusic(
@@ -85,7 +111,7 @@ async function resolveExactMusic(
 
 /** The catalog already stores the iTunes album page — exact, free, no
  *  upstream call. Host-checked so a malformed `raw` can't redirect anywhere. */
-function appleMusicFromCatalog(item: CatalogItemRow): ResolveOutcome {
+function appleMusicFromCatalog(item: Pick<CatalogItemRow, "raw">): ResolveOutcome {
   const raw = item.raw as { collectionViewUrl?: string } | null;
   const url = raw?.collectionViewUrl;
   if (!url) return { kind: "none" };
