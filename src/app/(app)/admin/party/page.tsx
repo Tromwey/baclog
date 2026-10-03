@@ -1,18 +1,20 @@
 import { fetched, requireAdmin } from "@/modules/admin/guard";
 import { PARTY_EVENT } from "@/modules/party/event";
-import { LAB_SEALS_TOTAL, listLabPlayers } from "@/modules/party/lab";
+import { labMonitor } from "@/modules/party/lab";
 import { listRsvps } from "@/modules/party/rsvp";
 import { plural } from "@/lib/plural";
-import { Card, CardLabel, EmptyNote, SectionError } from "../ui";
+import { Bar, Card, CardLabel, EmptyNote, SectionError, StatTile } from "../ui";
+import { AutoRefresh } from "./auto-refresh";
 
 /**
- * Torre de Control · Fiesta — the host's view of the /party invitation's
- * RSVPs (`party_rsvp`). Read-only, admin-gated like every Torre page. Not in
- * the tab strip (one-off event): reached by URL.
+ * Torre de Control · Fiesta — the host's live monitor of the /party labyrinth
+ * (players, seals, niches, RSVPs, recent activity; refreshes itself every 10 s)
+ * plus the RSVP list. Read-only, admin-gated like every Torre page. Not in the
+ * tab strip (one-off event): reached by URL.
  */
 export default async function AdminPartyPage() {
   await requireAdmin();
-  const [rows, lab] = await Promise.all([fetched(listRsvps()), fetched(listLabPlayers())]);
+  const [rows, lab] = await Promise.all([fetched(listRsvps()), fetched(labMonitor())]);
 
   if (!rows.ok) {
     return (
@@ -29,7 +31,8 @@ export default async function AdminPartyPage() {
 
   return (
     <div className="flex flex-col gap-3 pt-[4px]">
-      <LabCard lab={lab} />
+      <AutoRefresh seconds={10} />
+      <LabMonitor lab={lab} />
       <Card>
         <div className="flex items-baseline justify-between gap-2">
           <CardLabel>{PARTY_EVENT.title}</CardLabel>
@@ -81,58 +84,111 @@ export default async function AdminPartyPage() {
   );
 }
 
-type LabRows = Awaited<ReturnType<typeof listLabPlayers>>;
+type Monitor = Awaited<ReturnType<typeof labMonitor>>;
+
+/** "hace 3 min" — against the query's own clock, so it's as fresh as the last refresh (10 s). */
+function hace(d: Date, ahora: number): string {
+  const s = Math.max(0, Math.round((ahora - d.getTime()) / 1000));
+  if (s < 60) return "ahora";
+  const m = Math.round(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  return `hace ${Math.round(h / 24)} d`;
+}
 
 /**
- * The labyrinth's seals (`party_lab_*`): who is playing, how many seals each
- * holds and delivered, who finished. Players are anonymous — the nickname is
- * whatever they typed, the short code tells two "Ana"s apart.
+ * The live monitor: the group's seals and the next niche, RSVPs, every player
+ * and the latest activity. Only what the server knows — a seal is a seal.
  */
-function LabCard({ lab }: { lab: { ok: true; data: LabRows } | { ok: false } }) {
+function LabMonitor({ lab }: { lab: { ok: true; data: Monitor } | { ok: false } }) {
   if (!lab.ok) {
     return (
       <Card>
-        <CardLabel>Laberinto</CardLabel>
+        <CardLabel>Laberinto en vivo</CardLabel>
         <SectionError retryHref="/admin/party" />
       </Card>
     );
   }
-  const rows = lab.data;
-  const ganados = rows.reduce((n, r) => n + r.ganados, 0);
-  const entregados = rows.reduce((n, r) => n + r.entregados, 0);
-  const terminaron = rows.filter((r) => r.ganados >= LAB_SEALS_TOTAL).length;
+  const { ahora, total, nichos, rsvp, jugadores, actividad } = lab.data;
+  const siguiente = nichos.find((n) => !n.abierto);
+  const previo = [...nichos].reverse().find((n) => n.abierto)?.umbral ?? 0;
   return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-2">
-        <CardLabel>Laberinto</CardLabel>
-        <span className="font-mono text-[10px] tracking-[0.04em] text-text-2">
-          {rows.length} {plural(rows.length, "jugador", "jugadores")} · {terminaron} {plural(terminaron, "terminó", "terminaron")}
-        </span>
-      </div>
-      <div className="mt-[13px] flex items-center gap-[10px]">
-        <span className="font-display text-[30px] font-extrabold leading-none tracking-[-0.02em]">{ganados}</span>
-        <span className="text-xs leading-[1.4] text-text-3">
-          {plural(ganados, "sello ganado", "sellos ganados")} · {entregados} {plural(entregados, "entregado", "entregados")}
-        </span>
-      </div>
-      {rows.length === 0 ? (
-        <EmptyNote>Nadie ha entrado al laberinto todavía.</EmptyNote>
-      ) : (
-        <div className="mt-3 flex flex-col gap-[6px]">
-          {rows.map((r) => (
-            <div key={r.deviceId} className="flex items-baseline justify-between gap-2 text-[13px] leading-[1.45]">
-              <span className="min-w-0 truncate text-text">
-                {r.apodo ?? "sin apodo"} <span className="font-mono text-[10px] text-text-3">{r.deviceId.slice(0, 4)}</span>
-              </span>
-              <span className={`shrink-0 font-mono text-[10px] tracking-[0.04em] ${r.ganados >= LAB_SEALS_TOTAL ? "text-completed" : "text-text-2"}`}>
-                {r.ganados} {plural(r.ganados, "sello", "sellos")}
-                {r.entregados > 0 ? ` · ${r.entregados} entr.` : ""}
-                {r.ganados >= LAB_SEALS_TOTAL ? " · TERMINÓ" : ""}
-              </span>
-            </div>
-          ))}
+    <>
+      <Card>
+        <div className="flex items-baseline justify-between gap-2">
+          <CardLabel>Laberinto en vivo</CardLabel>
+          <span className="font-mono text-[10px] tracking-[0.04em] text-text-3">se actualiza solo · 10 s</span>
         </div>
-      )}
-    </Card>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatTile label="Entre todos" value={String(total.entregados)} sub={plural(total.entregados, "sello entregado", "sellos entregados")} />
+          <StatTile label="Ganados" value={String(total.ganados)} sub={`${total.ganados - total.entregados} sin entregar`} />
+          <StatTile label="Jugadores" value={String(total.jugadores)} sub={`${total.activos} en los últimos 15 min`} />
+          <StatTile label="Van" value={String(rsvp.personas)} sub={rsvp.abierta ? `${rsvp.van} sí · ${rsvp.noVan} no` : `confirmar abre con ${rsvp.umbral}`} />
+        </div>
+        <div className="mt-4">
+          <div className="flex items-baseline justify-between gap-2 text-[13px]">
+            <span className="text-text">{siguiente ? `Siguiente: ${siguiente.titulo}` : "Todos los nichos abiertos"}</span>
+            {siguiente && (
+              <span className="font-mono text-[10px] tracking-[0.04em] text-text-2">
+                faltan {siguiente.umbral - total.entregados} · {total.entregados}/{siguiente.umbral}
+              </span>
+            )}
+          </div>
+          {siguiente && <Bar className="mt-2" pct={((total.entregados - previo) / (siguiente.umbral - previo)) * 100} />}
+          <div className="mt-3 flex flex-wrap gap-[6px]">
+            {nichos.map((n, i) => (
+              <span
+                key={n.id}
+                className={`rounded-full px-[10px] py-[5px] font-mono text-[10px] tracking-[0.04em] ${n.abierto ? "bg-surface-3 text-completed" : "bg-surface-2 text-text-3"}`}
+              >
+                {["I", "II", "III", "IV", "V", "VI"][i]} {n.titulo} · {n.abierto ? "abierto" : n.umbral}
+              </span>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardLabel>Jugadores</CardLabel>
+        {jugadores.length === 0 ? (
+          <EmptyNote>Nadie ha entrado al laberinto todavía.</EmptyNote>
+        ) : (
+          <div className="mt-3 flex flex-col gap-[7px]">
+            {jugadores.map((j) => (
+              <div key={j.codigo + j.lastSeenAt.getTime()} className="flex items-baseline justify-between gap-2 text-[13px] leading-[1.45]">
+                <span className="min-w-0 truncate text-text">
+                  {j.apodo ?? "sin apodo"} <span className="font-mono text-[10px] text-text-3">{j.codigo}</span>
+                </span>
+                <span className={`shrink-0 font-mono text-[10px] tracking-[0.04em] ${j.ganados >= total.porJugador ? "text-completed" : "text-text-2"}`}>
+                  {j.ganados} {plural(j.ganados, "sello", "sellos")}
+                  {j.ganados > j.entregados ? ` · ${j.ganados - j.entregados} sin entregar` : ""}
+                  {j.rsvp ? ` · ${j.rsvp.toUpperCase()}` : ""}
+                  {j.ganados >= total.porJugador ? " · TERMINÓ" : ""} · {hace(j.lastSeenAt, ahora)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <CardLabel>Actividad reciente</CardLabel>
+        {actividad.length === 0 ? (
+          <EmptyNote>Sin movimiento todavía.</EmptyNote>
+        ) : (
+          <div className="mt-3 flex flex-col gap-[6px]">
+            {actividad.map((e, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-2 text-[13px] leading-[1.45]">
+                <span className="min-w-0 truncate text-text-2">
+                  <span className="text-text">{e.quien}</span> <span className="font-mono text-[10px] text-text-3">{e.codigo}</span> {e.que}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] tracking-[0.04em] text-text-3">{hace(e.at, ahora)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </>
   );
 }

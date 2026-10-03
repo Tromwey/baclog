@@ -19,7 +19,7 @@ const HTML = `
   </div>
   <div class="lab-der">
     <button type="button" class="lab-mini" data-r="mini" aria-label="Abrir mapa (M)"><canvas width="304" height="304" data-r="miniCv" aria-hidden="true"></canvas><span class="lab-n" aria-hidden="true">N</span></button>
-    <button type="button" class="lab-pill lab-ruta" data-r="btnRuta" aria-pressed="false">Ruta al Mausoleo</button>
+    <button type="button" class="lab-pill lab-ruta" data-r="btnRuta" aria-pressed="false" hidden>Ruta al Mausoleo</button><!-- [Kura] sin botón de ruta -->
   </div>
 </div>
 <div class="lab-inv" data-r="invBar" hidden>

@@ -198,6 +198,9 @@ def main(src):
         # arriving from the gate — its tap is what lets iPhone play the sound (skipping it left the page mute).
         ('aria-label="El laberinto. Haz clic o toca para entrar." hidden>\n  <h2>El laberinto</h2>',
          'aria-label="Encuentra el Mausoleo. Haz clic o toca para empezar." hidden>\n  <h2>Encuentra el Mausoleo</h2>'),
+        # No "Ruta al Mausoleo" button (founder 2026-10-03): finding it is the game.
+        ('<button type="button" class="lab-pill lab-ruta" data-r="btnRuta" aria-pressed="false">Ruta al Mausoleo</button>',
+         '<button type="button" class="lab-pill lab-ruta" data-r="btnRuta" aria-pressed="false" hidden>Ruta al Mausoleo</button><!-- [Kura] sin botón de ruta -->'),
         # Photo pieces: only the count, not "n/4" (founder 2026-10-02).
         ("    if (n) { ps.componerFoto($.invFotoCv); $.invFotoN.textContent = `${n}/${tot}`; $.invFotoN.hidden = n === tot; }",
          "    if (n) { ps.componerFoto($.invFotoCv); $.invFotoN.textContent = `${n}`; $.invFotoN.hidden = n === tot; }   // [Kura] solo el número"),

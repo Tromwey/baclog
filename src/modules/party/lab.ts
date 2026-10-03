@@ -326,6 +326,94 @@ export async function labRsvp(deviceId: string, body: { va?: unknown; acompanant
   return { respuesta: { va, acompanante } };
 }
 
+/**
+ * The host's live monitor (Torre › /admin/party, refreshed every few seconds). Admin-only: callers gate with
+ * requireAdmin(). Only what the server knows — seals, deliveries, nicknames, RSVPs; cards, achievements and
+ * the like live on each phone. A seal is a seal: no split by where it was earned.
+ */
+export async function labMonitor() {
+  const [jugadores, sellos, rsvps] = await Promise.all([
+    db
+      .select({ deviceId: partyLabPlayers.deviceId, apodo: partyLabPlayers.apodo, lastSeenAt: partyLabPlayers.lastSeenAt, createdAt: partyLabPlayers.createdAt })
+      .from(partyLabPlayers)
+      .where(eq(partyLabPlayers.eventSlug, SLUG)),
+    db
+      .select({ deviceId: partyLabSeals.deviceId, wonAt: partyLabSeals.wonAt, deliveredAt: partyLabSeals.deliveredAt })
+      .from(partyLabSeals)
+      .innerJoin(partyLabPlayers, eq(partyLabPlayers.deviceId, partyLabSeals.deviceId))
+      .where(eq(partyLabPlayers.eventSlug, SLUG)),
+    db
+      .select({ token: partyRsvps.guestToken, va: partyRsvps.attending, acompanante: partyRsvps.plusOne, updatedAt: partyRsvps.updatedAt })
+      .from(partyRsvps)
+      .where(and(eq(partyRsvps.eventSlug, SLUG), sql`${partyRsvps.guestToken} like 'lab:%'`)),
+  ]);
+  const rsvpDe = new Map(rsvps.map((r) => [r.token.slice(4), r]));
+  const porJugador = new Map<string, { ganados: number; entregados: number }>();
+  for (const s of sellos) {
+    const p = porJugador.get(s.deviceId) ?? { ganados: 0, entregados: 0 };
+    p.ganados++;
+    if (s.deliveredAt) p.entregados++;
+    porJugador.set(s.deviceId, p);
+  }
+  const nombre = new Map(jugadores.map((j) => [j.deviceId, j.apodo ?? "sin apodo"]));
+  const entregados = sellos.filter((s) => s.deliveredAt).length;
+
+  // Activity: seals won, deliveries (grouped: one urn = one event), RSVPs — newest first.
+  type Evento = { at: Date; quien: string; codigo: string; que: string };
+  const eventos: Evento[] = [];
+  const entregas = new Map<string, Evento & { n: number }>();
+  for (const s of sellos) {
+    eventos.push({ at: s.wonAt, quien: nombre.get(s.deviceId) ?? "?", codigo: s.deviceId.slice(0, 4), que: "ganó un sello" });
+    if (s.deliveredAt) {
+      const k = s.deviceId + "|" + s.deliveredAt.getTime();
+      const e = entregas.get(k) ?? { at: s.deliveredAt, quien: nombre.get(s.deviceId) ?? "?", codigo: s.deviceId.slice(0, 4), que: "", n: 0 };
+      e.n++;
+      entregas.set(k, e);
+    }
+  }
+  for (const e of entregas.values()) eventos.push({ ...e, que: e.n === 1 ? "entregó 1 sello" : `entregó ${e.n} sellos` });
+  for (const r of rsvps) {
+    const id = r.token.slice(4);
+    eventos.push({ at: r.updatedAt, quien: nombre.get(id) ?? "?", codigo: id.slice(0, 4), que: r.va ? (r.acompanante ? "confirmó que va, con acompañante" : "confirmó que va") : "dijo que no va" });
+  }
+  eventos.sort((a, b) => b.at.getTime() - a.at.getTime());
+
+  const ahora = Date.now();
+  return {
+    ahora,
+    total: {
+      entregados,
+      ganados: sellos.length,
+      jugadores: jugadores.length,
+      activos: jugadores.filter((j) => ahora - j.lastSeenAt.getTime() < 15 * 60 * 1000).length,
+      porJugador: LAB_SEALS_TOTAL,
+    },
+    nichos: LAB_NICHOS.map((n) => ({ id: n.id, titulo: n.titulo, umbral: n.umbral, abierto: entregados >= n.umbral })),
+    rsvp: {
+      umbral: LAB_RSVP_UMBRAL,
+      abierta: entregados >= LAB_RSVP_UMBRAL,
+      van: rsvps.filter((r) => r.va).length,
+      personas: rsvps.reduce((n, r) => n + (r.va ? (r.acompanante ? 2 : 1) : 0), 0),
+      noVan: rsvps.filter((r) => !r.va).length,
+    },
+    jugadores: jugadores
+      .map((j) => {
+        const p = porJugador.get(j.deviceId) ?? { ganados: 0, entregados: 0 };
+        const r = rsvpDe.get(j.deviceId);
+        return {
+          codigo: j.deviceId.slice(0, 4),
+          apodo: j.apodo,
+          ganados: p.ganados,
+          entregados: p.entregados,
+          lastSeenAt: j.lastSeenAt,
+          rsvp: r ? (r.va ? (r.acompanante ? "va +1" : "va") : "no va") : null,
+        };
+      })
+      .sort((a, b) => b.ganados - a.ganados || b.lastSeenAt.getTime() - a.lastSeenAt.getTime()),
+    actividad: eventos.slice(0, 30),
+  };
+}
+
 /** Admin-only read (Torre › /admin/party). Callers gate with requireAdmin(). */
 export async function listLabPlayers() {
   return db
