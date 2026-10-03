@@ -973,7 +973,7 @@ function iniciar3D() {
     if (k === 'logros') trans.onEnd = hablarLogros;
     if (k === 'logro') trans.onEnd = hablarLogroZoom;
     if (k === 'ouija') trans.onEnd = hablarOuija;
-    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho' && !cache.mau.finalVisto) mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */
+    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho') mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */
   }
   // Capilla derecha: primero se ve completa (ouija a la izquierda, cartas a la derecha) y desde ahí se elige
   // Capillas: primero se ven completas y desde ahí se elige (derecha: ouija / cartas; izquierda: marcador / logros)

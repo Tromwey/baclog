@@ -520,7 +520,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
          "    mostrar(ficha, k === 'nicho' && !fotoDe(i));   /* [Kura] con la instantánea no hay ficha */ mostrar(marP,"),
         ("    if (k === 'ouija') trans.onEnd = hablarOuija;",
          "    if (k === 'ouija') trans.onEnd = hablarOuija;\n"
-         "    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho' && !cache.mau.finalVisto) mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */"),
+         "    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho') mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */"),
         ("    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) return;",
          "    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) { if (fotoVisible()) fotoGirar(); return; }   /* [Kura] */"),
         ("    if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(pick()); }",
