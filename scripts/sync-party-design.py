@@ -524,7 +524,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
         ("  function act(id, k) {\n    if (!id || vista.k === 'afuera') return;", """  // [Kura] ---------- Instantánea del último nicho: la lápida del anfitrión con su fecha, y la pregunta al reverso ----------
   const fotoDe = i => { const n = NICHOS[i]; return (n && n.abierto && (cache.mau.contenido[n.id] || {}).foto) || null; };
   const fotoVisible = () => vista.k === 'nicho' && !trans && !!fotoDe(vista.i);
-  let foto3D = null, fotoClave = '', fotoRot = 0, fotoRotT = 0, fotoK = 0;
+  let foto3D = null, fotoClave = '', fotoRot = 0, fotoRotT = 0, fotoK = 0, fotoInv = false;
   function texFoto(d) {
     const W = 660, H = 800, X = 40, Y = 40, S = 580;
     const papel = (g, a, b) => { const p = g.createLinearGradient(0, 0, W, H); p.addColorStop(0, a); p.addColorStop(1, b); g.fillStyle = p; g.fillRect(0, 0, W, H); };
@@ -641,6 +641,8 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
   }
   function fotoTick(dt) {
     const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
+    // Con la instantánea a la vista se oculta el inventario (founder 2026-10-03): la foto ocupa esa orilla
+    if (!!d !== fotoInv) { fotoInv = !!d; const inv = ui.querySelector('.lab-inv'); if (inv) { inv.style.transition = 'opacity .4s'; inv.style.opacity = d ? '0' : ''; } }
     if (d) { const clave = d.nombre + '|' + d.fechas + '|' + d.reverso; if (clave !== fotoClave) { fotoClave = clave; crearFoto(d); } }
     if (!foto3D) return;
     fotoK += ((on ? 1 : 0) - fotoK) * (1 - Math.exp(-dt * (on ? 5 : 9)));
