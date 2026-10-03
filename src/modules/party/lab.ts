@@ -4,8 +4,11 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/db";
 import { partyLabAttempts, partyLabPlayers, partyLabSeals } from "@/db/schema";
 import mapa from "../../../public/party/laberinto/mapa.json";
+import logros from "../../../public/party/mausoleo/logros.json";
 import { PARTY_EVENT, costumeKey } from "./event";
-import { LAB_NICHOS, LAB_OUIJA, normalNombre } from "./lab-config";
+import { LAB_NICHOS, LAB_OUIJA, LAB_RSVP_UMBRAL, normalNombre } from "./lab-config";
+import { partyRsvps } from "@/db/schema";
+import { saveRsvp } from "./rsvp";
 
 /*
  * The seal server of the /party labyrinth — the contract of the design's
@@ -22,6 +25,14 @@ const LAPIDAS: string[] = Object.values(mapa.lapidas as Record<string, { id: str
   .filter((l) => l.juego)
   .map((l) => l.id);
 export const LAB_SEALS = LAPIDAS.length;
+
+/**
+ * Seals won INSIDE the Mausoleum (design v3): the tarot table's drawer and one
+ * drawer per achievement plaque. The client registers them at the urn
+ * (`POST /mausoleo/entregar { extras }`) and they count like the tombstones'
+ * — total, niches, scoreboard. Only these ids are accepted.
+ */
+const EXTRAS = new Set(["extra:mesa", ...(logros.logros as { id: string }[]).map((l) => "extra:logro-" + l.id)]);
 
 /** Anonymous writes: these bound a flood. */
 const MAX_PLAYERS = 2000;
@@ -193,9 +204,16 @@ export async function labMausoleo(deviceId: string) {
   };
 }
 
-/** POST /mausoleo/entregar — every seal the player holds and hasn't delivered. */
-export async function labEntregar(deviceId: string) {
+/** POST /mausoleo/entregar { extras } — registers the Mausoleum's own seals, then delivers every seal the player holds. */
+export async function labEntregar(deviceId: string, rawExtras: unknown) {
   await touch(deviceId);
+  const extras = Array.isArray(rawExtras) ? [...new Set(rawExtras.filter((x): x is string => typeof x === "string" && EXTRAS.has(x)))] : [];
+  if (extras.length) {
+    await db
+      .insert(partyLabSeals)
+      .values(extras.map((lapida) => ({ deviceId, lapida })))
+      .onConflictDoNothing();
+  }
   const en = new Date();
   const rows = await db
     .update(partyLabSeals)
@@ -260,6 +278,48 @@ export async function labOuija(deviceId: string, raw: unknown) {
   return { texto: textos[i % textos.length] ?? "...", para: k >= 0 };
 }
 
+/**
+ * RSVP through the ouija. It lands in `party_rsvp` (the /party invitation's
+ * table, already read by /admin/party) under the guest token `lab:<device>`
+ * and the player's nickname. Open only once the group revealed the place.
+ */
+const rsvpToken = (deviceId: string) => "lab:" + deviceId;
+
+/** GET /rsvp → { abierta, umbral, total, respuesta: { va, acompanante } | null } */
+export async function labRsvpEstado(deviceId: string) {
+  await touch(deviceId);
+  const [{ entregados: total }, [r]] = await Promise.all([
+    labResumen(),
+    db
+      .select({ va: partyRsvps.attending, acompanante: partyRsvps.plusOne })
+      .from(partyRsvps)
+      .where(and(eq(partyRsvps.eventSlug, SLUG), eq(partyRsvps.guestToken, rsvpToken(deviceId)))),
+  ]);
+  return { abierta: total >= LAB_RSVP_UMBRAL, umbral: LAB_RSVP_UMBRAL, total, respuesta: r ?? null };
+}
+
+/** POST /rsvp { va, acompanante } — 403 before the place is revealed, 400 without a nickname. */
+export async function labRsvp(deviceId: string, body: { va?: unknown; acompanante?: unknown }) {
+  const estado = await labRsvpEstado(deviceId);
+  if (!estado.abierta) throw new LabError(403, "cerrada");
+  const [p] = await db.select({ apodo: partyLabPlayers.apodo }).from(partyLabPlayers).where(eq(partyLabPlayers.deviceId, deviceId));
+  if (!p?.apodo) throw new LabError(400, "falta_nombre");
+  const va = body.va === true;
+  const acompanante = va && body.acompanante === true;
+  const r = await saveRsvp({
+    guestToken: rsvpToken(deviceId),
+    name: p.apodo,
+    attending: va,
+    plusOne: acompanante,
+    plusName: "",
+    diets: [],
+    drink: "",
+    costume: "",
+  });
+  if (r === "full") throw new LabError(503, "lleno");
+  return { respuesta: { va, acompanante } };
+}
+
 /** Admin-only read (Torre › /admin/party). Callers gate with requireAdmin(). */
 export async function listLabPlayers() {
   return db
@@ -270,6 +330,8 @@ export async function listLabPlayers() {
       lastSeenAt: partyLabPlayers.lastSeenAt,
       ganados: sql<number>`count(${partyLabSeals.lapida})::int`,
       entregados: sql<number>`count(${partyLabSeals.deliveredAt})::int`,
+      /** Tombstone seals only — "finished" means all of these, whatever the Mausoleum's extras. */
+      lapidas: sql<number>`count(${partyLabSeals.lapida}) filter (where ${partyLabSeals.lapida} not like 'extra:%')::int`,
       ultimoSello: sql<Date | null>`max(${partyLabSeals.wonAt})`,
     })
     .from(partyLabPlayers)

@@ -11,4 +11,14 @@ http://creativecommons.org/publicdomain/zero/1.0/ — trimmed/normalized and con
 - click-0: "Flashlight Clicking On.wav" by baidonovan — https://freesound.org/people/baidonovan/sounds/187335/
 - static-0: "Static Tele or Radio" by AnusProductions — https://freesound.org/people/AnusProductions/sounds/447405/
 - scurry-0: "Small Animal Scurrying Through Leaves.mp3" by Yin_Yang_Jake007 — https://freesound.org/people/Yin_Yang_Jake007/sounds/415203/
+Labyrinth / Mausoleum (2026-10-02):
+- crow-0: "Crow Caw" by qubodup — https://freesound.org/people/qubodup/sounds/813115/
+- crow-1: "Crow Caw" by Jofae — https://freesound.org/people/Jofae/sounds/361470/
+- meow-0: "cat meow" by tuberatanka — https://freesound.org/people/tuberatanka/sounds/110011/
+- meow-1: "cat meow short" by skymary — https://freesound.org/people/skymary/sounds/412017/
+- meow-2: "New Cat Meow 1" by steffcaffrey — https://freesound.org/people/steffcaffrey/sounds/479272/
+- purr-0: "Cat Purring" by HenKonen — https://freesound.org/people/HenKonen/sounds/757184/
+- thunder-0: "thunder 5 dry.wav" by elmoustachio — https://freesound.org/people/elmoustachio/sounds/476739/
+- whisper-0: "Four_Voices_Whispering_6_wEcho.wav" by geoneo0 — https://freesound.org/people/geoneo0/sounds/193818/
+- match-0: "Match Ignite (No Strike)" by brachern — https://freesound.org/people/brachern/sounds/398448/
 (CC0 needs no attribution; credited anyway, with thanks.)

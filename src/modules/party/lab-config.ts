@@ -21,6 +21,13 @@ export const LAB_NICHOS = [
 ] as const;
 
 /**
+ * RSVP (founder, 2026-10-02): the ouija asks "¿Vendrás?" once the group has
+ * revealed WHERE the party is — niche III (Lugar). Before that, nobody knows
+ * what they'd be saying yes to.
+ */
+export const LAB_RSVP_UMBRAL = LAB_NICHOS.find((n) => n.id === "n3")!.umbral;
+
+/**
  * Messages from beyond. `para` = the names or nicknames that trigger a message
  * (case- and accent-insensitive; the first name is enough). Each time that
  * person asks, the next text of `textos` comes out. No match → `generico`.

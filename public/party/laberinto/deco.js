@@ -530,7 +530,7 @@ export function crearDeco({ scene, mapa, cam, P, linea, sfx = null, tema = 'muro
         if (g.tGuia <= 0) { rutaHasta(g, g.spot); alEvento('sigueme'); if (sfx && sfx.miau) sfx.miau(0.8, g.tono, panDe(g.x, g.z)); }
         return;
       }
-      if (!g.espera && d > 5.5) g.espera = true; else if (g.espera && d < 3.6) g.espera = false;
+      if (!g.espera && d > 5.5) { g.espera = true; alEvento('sigueme'); /* [Kura] cada vez que se detiene a esperar */ } else if (g.espera && d < 3.6) g.espera = false;
       if (g.espera) { quieto(); alJugador(); if ((g.tLlamar -= dt) <= 0) { g.tLlamar = 4 + R() * 2; if (d < 13) miau(g, d); } }
       else { g.estado = 'camina'; g.velT = 1.1; mirarCab(g, dt, 0, 0.05, 6); if (moverRuta(g, dt)) { quieto(); g.final = 'espera'; } }
     } else {
@@ -543,7 +543,52 @@ export function crearDeco({ scene, mapa, cam, P, linea, sfx = null, tema = 'muro
 
   let T0 = 0;
   if (tumba && encs.length && encs.every(e => e.estado === 'entregado')) finalInmediato();
+  // ---------- Baile de la calabaza: los tres gatos se paran en dos patas y bailan sincronizados ----------
+  const BAILE = { activo: false, t: 0, dur: 0, bpm: 104, guard: [] };
+  function bailar({ x, z, frente = [0, 1], dur = 13, bpm = 104 }) {
+    if (BAILE.activo) return false;
+    Object.assign(BAILE, { activo: true, t: 0, dur, bpm, guard: gatos.map(g => ({ g, x: g.x, z: g.z, head: g.head, estado: g.estado, final: g.final, visible: g.obj.visible, s: g.s, ac: g.ac, acT: g.acT, tSent: g.tSent })) });
+    // En fila a lo largo de la pared, delante de la calabaza (frente = hacia el pasillo). Cada lugar se prueba:
+    // si cae en muro se refleja al otro lado, luego se acerca; nunca quedan a menos de 0.45 m entre ellos.
+    const [fx, fz] = frente, lx = -fz, lz = fx, libre = (px, pz) => !solido(Math.floor(px / C), Math.floor(pz / C));
+    const orden = ['carey', 'van', 'tuxedo'], pref = [[0, 0.75], [-0.6, 0.6], [0.6, 0.6]], puestos = [];
+    const lejos = (px, pz) => puestos.every(([qx, qz]) => Math.hypot(px - qx, pz - qz) >= 0.45);
+    orden.forEach((tipo, i) => {
+      const g = gatos.find(q => q.tipo === tipo); if (!g) return;
+      const [a0, b0] = pref[i], cand = [];
+      [1, 0.8, 0.65].forEach(k => [a0, -a0].forEach(a => [b0, b0 + 0.35, b0 + 0.7].forEach(b => cand.push([a * k, b]))));
+      cand.push([0, 1.15], [0, 1.6], [0.45, 1.3], [-0.45, 1.3]);
+      let pos = null;
+      for (const [a, b] of cand) { const px = x + lx * a + fx * b, pz = z + lz * a + fz * b; if (libre(px, pz) && lejos(px, pz)) { pos = [px, pz]; break; } }
+      if (!pos) pos = [x + fx * (1 + i * 0.5), z + fz * (1 + i * 0.5)];
+      puestos.push(pos); const [px, pz] = pos;
+      Object.assign(g, { baila: 0.001, x: px, z: pz, head: Math.atan2(P.x - px, P.z - pz), estado: 'sentado', esfuma: 0, ruta: [], v: 0, velT: 0, s: 1, ac: 0, acT: 0 });
+      g.obj.visible = true; g.obj.scale.setScalar(0.001);
+      setTimeout(() => miau(g, 2), 150 + i * 220);
+    });
+    return true;
+  }
+  function terminarBaile() {
+    BAILE.guard.forEach(s => { const g = s.g; Object.assign(g, { x: s.x, z: s.z, head: s.head, estado: s.estado, final: s.final, s: s.s, ac: s.ac, acT: s.acT, tSent: s.tSent, baila: 0 }); g.obj.visible = s.visible; g.obj.scale.setScalar(1); g.obj.position.y = 0; g.obj.rotation.set(0, g.head, 0); });
+    BAILE.activo = false; BAILE.guard = []; alEvento('bailefin');
+  }
+  function posarBaile(g) {
+    const t = BAILE.t, bt = t * BAILE.bpm / 60, U = 1.35, amp = reducido ? 0.5 : 1;
+    const ent = Math.min(1, g.baila / 0.35), sal = BAILE.dur - t < 0.35 ? (BAILE.dur - t) / 0.35 : 1;
+    g.obj.scale.setScalar(Math.max(0.001, Math.min(ent, sal)));
+    const fr = bt % 16, giro = fr >= 14 ? (fr - 14) / 2 : 0;    // cada 16 tiempos, una vuelta completa
+    g.obj.position.set(g.x, Math.abs(Math.sin(Math.PI * bt)) * 0.035 * amp, g.z);
+    g.obj.rotation.set(0, Math.atan2(P.x - g.x, P.z - g.z) + (reducido ? 0 : giro * Math.PI * 2), Math.sin(Math.PI * bt / 2) * 0.16 * amp);
+    g.cuerpo.position.set(0, 0.115, -0.1); g.cuerpo.rotation.set(-U, 0, 0);
+    g.tra.forEach((Lg, k) => { const l = 0.13; Lg.p.rotation.set(U + Math.sin(Math.PI * bt) * 0.08 * (k ? 1 : -1), 0, 0); Lg.l.scale.y = l; Lg.pie.position.y = -l; });
+    g.del.forEach((Lg, k) => { const l = 0.11, w = Math.sin(Math.PI * bt + (k ? Math.PI : 0)); Lg.p.rotation.set(-1.0 + w * 0.75 * amp, 0, (k ? 1 : -1) * 0.25); Lg.l.scale.y = l; Lg.pie.position.y = -l; });
+    g.cuello.rotation.set(U * 0.92 + Math.sin(2 * Math.PI * bt) * 0.1 * amp, Math.sin(Math.PI * bt / 2) * 0.3 * amp, 0);
+    g.cola[0].rotation.set(1.2, Math.sin(2 * Math.PI * bt) * 0.7 * amp, 0);
+    for (let i = 1; i < 6; i++) { g.cola[i].rotation.x = 0.1; g.cola[i].rotation.z = Math.sin(2 * Math.PI * bt - i * 0.7) * 0.3 * amp; }
+    g.orejas.forEach(o => { o.rotation.z = o.userData.base; });
+  }
   function actualizarGato(g, dt, T) {
+    if (g.baila) { g.baila += dt; posarBaile(g); return; }
     if (g.estado === 'oculto') {
       g.tOc -= dt;
       if (g.tOc <= 0) { const c = ansioso(g) && viene(g) ? buscarPiso(5, 16, { vista: false }) : buscarPiso(9, 40, { vista: false }); if (c) aparecer(g, c); else g.tOc = 3; }
@@ -614,6 +659,7 @@ export function crearDeco({ scene, mapa, cam, P, linea, sfx = null, tema = 'muro
   // ---------- Bucle ----------
   function update(dt, T) {
     T0 = T; uT.value = T;
+    if (BAILE.activo && (BAILE.t += dt) >= BAILE.dur) terminarBaile();
     capas.forEach(m => { const mp = m.material.alphaMap; mp.offset.x += m.userData.v[0] * dt; mp.offset.y += m.userData.v[1] * dt; });
     jirones.forEach(j => {
       j.t += dt; if (j.t > j.vida) { reubicarJiron(j); return; }
@@ -688,7 +734,7 @@ export function crearDeco({ scene, mapa, cam, P, linea, sfx = null, tema = 'muro
     lista.length = 0;
     encs.forEach(e => { if (e.estado === 'escondido' && !e.saca) lista.push(e); });
     gatos.forEach(g => {
-      if (g.estado === 'oculto' || g.esfuma > 0) return;
+      if (g.estado === 'oculto' || g.esfuma > 0 || g.baila) return;
       const m = ansioso(g) ? g.meta : g.metaC;     // con su objeto: darlo; si no: acariciarlo
       g.cabeza.getWorldPosition(m.p); m.fp.set(g.x, 0, g.z); lista.push(m);
     });
@@ -741,7 +787,7 @@ export function crearDeco({ scene, mapa, cam, P, linea, sfx = null, tema = 'muro
     });
   }
   return {
-    grupo, update, gatos, encargos: encs, objetivos, recoger, entregar, acariciar, resetEncargos, iniciarFinal,
+    grupo, update, gatos, encargos: encs, bailar, get bailando() { return BAILE.activo; }, objetivos, recoger, entregar, acariciar, resetEncargos, iniciarFinal,
     ajustarEncargos(c = {}) { Object.assign(CFG, c); encs.forEach(e => { e.cercaT = 0; }); gatos.forEach(g => { if (ansioso(g)) g.tAmb = Math.min(g.tAmb, T0 + CFG.miau); }); return { ...CFG }; },
     // Pruebas: entrega todo y arranca el final con el gato más cercano, traído frente al jugador
     forzarFinal() {

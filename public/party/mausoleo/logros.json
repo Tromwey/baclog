@@ -1,0 +1,42 @@
+{
+  "_nota": "Placas de logros de la capilla izquierda. regla: tarot | gatos | lapidas | cuervos | calabaza | foto | coleccionables. Las reglas viven en laberinto/logros.js (y en el Mausoleo).",
+  "logros": [
+    {
+      "id": "magia",
+      "titulo": "oh, estas haciendo magia",
+      "como": "Resuelve el misterio del tarot",
+      "regla": "tarot"
+    },
+    {
+      "id": "gatos",
+      "titulo": "No me duele, me quema, me lastima",
+      "como": "Resuelve el misterio de los tres gatos",
+      "regla": "gatos"
+    },
+    {
+      "id": "astucia",
+      "titulo": "¡No contaban con mi astucia!",
+      "como": "Resuelve los juegos de todas las lápidas",
+      "regla": "lapidas"
+    },
+    {
+      "id": "cuervos",
+      "titulo": "No mires arriba",
+      "como": "Encuentra los cuatro cuervos entre los árboles",
+      "regla": "cuervos",
+      "cuantos": 4
+    },
+    {
+      "id": "calabaza",
+      "titulo": "la calabaza",
+      "como": "Encuentra la calabaza",
+      "regla": "calabaza"
+    },
+    {
+      "id": "pintaste",
+      "titulo": "Tu pintaste eso?",
+      "como": "Encuentra los cuatro pedazos de la fotografía",
+      "regla": "foto"
+    }
+  ]
+}

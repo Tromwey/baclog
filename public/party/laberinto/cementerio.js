@@ -38,7 +38,7 @@ export function construirCementerio({ scene, mapa, renderer, calidad = 'alta', s
   }
   const glowTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return keep(new THREE.CanvasTexture(cv)); })();
-  const objetivos = [], paredes = [], huecos = [], pivotes = {}, animados = {}, arbolesDentro = [], bancos = [];
+  const objetivos = [], paredes = [], huecos = [], pivotes = {}, animados = {}, arbolesDentro = [], bancos = [], copas = [];   // copas: donde se pueden posar los cuervos
   let binForzado = null, halosE = [], rattle = -1, rattleAmp = 1, intentos = 0, ultimo = -99;
 
   // ---------- Materiales ----------
@@ -140,6 +140,7 @@ export function construirCementerio({ scene, mapa, renderer, calidad = 'alta', s
     }
   }
   function cipres(x, z, s) {
+    copas.push({ x, z, y: 3.75 * s, s, tipo: 'cipres' });
     poner('tronco', G.tronco, x, 0.3 * s, z, { sx: 0.17 * s, sy: 0.6 * s, sz: 0.17 * s });
     poner('seto', G.cono, x, 0.45 * s + 1.65 * s, z, { ry: R() * 6.28, sx: 0.95 * s, sy: 3.3 * s, sz: 0.95 * s, k: 0.7 + R() * 0.3 });
   }
@@ -364,6 +365,7 @@ export function construirCementerio({ scene, mapa, renderer, calidad = 'alta', s
     telaB(marco(x + (R() - .5) * 0.5, z + (R() - .5) * 0.5, R() * 6.28), null, 0.7 + R() * 0.4, 0, 2.3 + R() * 0.6, 0);
   }
   arbolesDentro.forEach(([x, z]) => {
+    copas.push({ x, z, y: 1.85, s: 1, tipo: 'seco' });
     rama(x, 0, z, new THREE.Vector3((R() - .5) * 0.15, 1, (R() - .5) * 0.15).normalize(), 1.9 + R() * 0.8, 0.13 + R() * 0.04, 0);
     if (R() < 0.6) telaB(marco(x, z, R() * 6.28), null, 0.6 + R() * 0.3, 0, 2.1 + R() * 0.5, 0);
   });
@@ -399,7 +401,7 @@ export function construirCementerio({ scene, mapa, renderer, calidad = 'alta', s
   Object.values(MAT).forEach(keep);
 
   return {
-    grupo, sinHierba, paredes, huecos, objetivos,
+    grupo, sinHierba, paredes, huecos, objetivos, copas,
     update(T, dt = 0.016) {
       if (farolLuz) { const f = 0.9 + 0.07 * Math.sin(T * 9.1) + 0.05 * Math.sin(T * 23); farolLuz.intensity = 7 * f; halosE.forEach(h => { h.material.opacity = 0.5 * f; }); }
       bancos.forEach(m => { m.material.opacity = m.userData.op * (0.85 + 0.15 * Math.sin(T * 0.2 + m.userData.ph)); });

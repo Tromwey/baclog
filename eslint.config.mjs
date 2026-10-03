@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     // El laberinto de /party y su three.js: módulos de Claude Design servidos tal cual desde public/.
     "public/party/laberinto/**",
     "public/party/vendor/**",
+    // Transpilado de src/app/party/party-drone.ts por scripts/sync-party-design.py (para la página estática del Mausoleo).
+    "public/party/party-drone.js",
   ]),
 ]);
 

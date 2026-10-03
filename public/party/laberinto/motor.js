@@ -5,8 +5,9 @@ import * as THREE from '../vendor/three.module.min.js';
 import { texMuro, texSuelo, texPiedra, texGrabado, texLetrero, rng, fbm } from './texturas.js';
 import { crearDeco } from './deco.js';
 import { construirCementerio } from './cementerio.js';
-import { crearVelas } from './velas.js';
+import { crearCartas } from './cartas.js';
 import { crearPistas } from './pistas.js';
+import { crearSecretos } from './secretos.js';
 
 const N4 = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 const esMuro = c => c === '#' || c === 'M';
@@ -54,7 +55,7 @@ export function leerMapa(j) {
   return m;
 }
 
-export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explorado, sfx = null, tema = 'muros', estadoEncargos = {}, estadoVelas = {}, estadoPistas = {}, on = {} }) {
+export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explorado, sfx = null, tema = 'muros', estadoEncargos = {}, estadoCartas = {}, estadoPistas = {}, estadoSecretos = {}, on = {} }) {
   const mapa = leerMapa(json), { W, H, C, A, at, solido } = mapa;
   const coarse = matchMedia('(pointer:coarse)').matches, cementerio = tema === 'cementerio';
   const scene = new THREE.Scene();
@@ -208,7 +209,18 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
     const llama = mesh(GEO.llama, MAT.llama, 0.3, 0.315, -0.32, 'llama'), vela = mesh(GEO.vela, MAT.vela, 0.3, 0.2, -0.32, 'vela');
     const cabo = mesh(GEO.cabo, MAT.cabo, 0.3, 0.145, -0.32, 'cabo'); cabo.visible = false;
     const sello = new THREE.Group(); sello.name = 'sello'; sello.position.set(0, 0.749, -0.469); sello.scale.setScalar(0.8); sello.visible = l.tipo !== 'tumba';   // [Kura, founder 2026-10-02] arriba, donde estaba la cruz (antes y = 0.2, al pie)   // sin resolver: sellada y con la vela apagada
-    sello.add(new THREE.Mesh(GEO.sello, MAT.cera), mesh(GEO.selloIn, MAT.ceraIn, 0, 0, 0.002));
+    // [Kura, founder 2026-10-02] El mismo sello que el Mausoleo (el diseño más nuevo): disco de cera con canto, dos aros
+    // y la estrella — antes eran dos círculos planos.
+    { const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const sg = cv.getContext('2d');
+      sg.fillStyle = '#6e2c25'; sg.fillRect(0, 0, S, S);
+      sg.strokeStyle = '#55211b'; sg.lineWidth = 10; sg.beginPath(); sg.arc(64, 64, 54, 0, 6.29); sg.stroke();
+      sg.strokeStyle = '#84392f'; sg.lineWidth = 3; sg.beginPath(); sg.arc(64, 64, 47, 0, 6.29); sg.stroke();
+      sg.font = '700 54px Cinzel, Georgia, serif'; sg.textAlign = 'center'; sg.textBaseline = 'middle'; sg.fillStyle = '#e8cbbd';
+      // la tapa del cilindro, girada para mirar al frente, muestra la imagen 90° en el sentido del reloj: la letra va girada al revés
+      sg.translate(64, 64); sg.rotate(-Math.PI / 2);
+      sg.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 13 : 32; sg.lineTo(Math.cos(a) * r, Math.sin(a) * r); } sg.closePath(); sg.fill();   // estrella, como el sello de la mesa
+      const cara = keep(new THREE.MeshLambertMaterial({ map: tex(cv, null), emissive: 0x2a0d09 })), canto = keep(new THREE.MeshLambertMaterial({ color: 0x6e2c25 }));
+      const disco = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 32)), [canto, cara, canto]); disco.rotation.x = Math.PI / 2; disco.position.z = 0.012; sello.add(disco); }
     g.add(losa, remate, sello, mesh(GEO.tumba, MAT.tierra, 0, 0.06, 0.05, 'tumba'), vela, cabo, llama);
     // Fecha en glitch: un parche sin luz delante de la losa, redibujado a saltos (nunca muestra la fecha real)
     if (cvG.glitch) {
@@ -383,13 +395,16 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
   function quitarRayo() { if (!rayoObj) return; rayoObj.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); scene.remove(rayoObj); rayoObj = null; }
   function apagarTumba() { if (!tz) return; tz.encendida = false; tz.llama.visible = false; expVer++; dirty = true; }
   const deco = crearDeco({ scene, mapa, cam, P, linea, sfx, tema, sinHierba: cem && cem.sinHierba, paredes: cem && cem.paredes, huecos: cem && cem.huecos, calidad: coarse ? 'baja' : 'alta', reducido: matchMedia('(prefers-reduced-motion: reduce)').matches, encargos: json.encargos || [], estadoEnc: estadoEncargos,
-    tumba: tumbaF, alEvento: e => { if (e === 'acostados') rayo(); else if (e === 'acostadosYa') encenderTumba(); else if (e === 'reset') apagarTumba(); on.evento?.(e); } });
-  // Lo interactuable que las velas deben evitar: lápidas, puerta, reja, encargos y el inicio
+    tumba: tumbaF, alEvento: e => { if (e === 'acostados') rayo(); else if (e === 'acostadosYa') encenderTumba(); else if (e === 'reset') apagarTumba(); else if (e === 'bailefin') { secretos.mostrarCalabaza(false); sfx?.cumbiaParar?.(); } on.evento?.(e); } });
+  // Lo interactuable que las cartas deben evitar: lápidas, puerta, reja, encargos y el inicio
   const evitar = [...objetivos.map(o => [o.fp.x, o.fp.z]), ...deco.encargos.map(e => [e.x, e.z]), [mapa.inicio.x, mapa.inicio.z]];
-  const cirios = crearVelas({ scene, mapa, P, linea, defs: json.velas || [], huecos: cem ? cem.huecos : [], evitar, encendidas: estadoVelas, sfx, luces: coarse ? 0 : 2, reducido: matchMedia('(prefers-reduced-motion: reduce)').matches });
+  const cartas = crearCartas({ scene, mapa, P, linea, defs: json.cartas || [], huecos: cem ? cem.huecos : [], evitar, estado: estadoCartas, reducido: matchMedia('(prefers-reduced-motion: reduce)').matches });
   // Pistas del misterio (foto en 4 pedazos y caja de música), lejos de todo lo demás
-  const pistas = crearPistas({ scene, mapa, P, linea, defs: json.pistas || {}, evitar: [...evitar, ...cirios.lista.map(v => [v.x, v.z])], estado: estadoPistas, sfx,
+  const pistas = crearPistas({ scene, mapa, P, linea, defs: json.pistas || {}, evitar: [...evitar, ...cartas.lista.map(v => [v.x, v.z])], estado: estadoPistas, sfx,
     reducido: matchMedia('(prefers-reduced-motion: reduce)').matches, onFoto: () => on.foto?.() });
+  // Secretos: 4 cuervos en los árboles y la calabaza (aparece cuando los tres gatos recibieron su objeto)
+  const secretos = crearSecretos({ scene, mapa, P, linea, cam, copas: cem ? cem.copas : [], evitar: [...evitar, ...cartas.lista.map(v => [v.x, v.z]), ...pistas.piezas.map(o => [o.x, o.z]), ...(pistas.caja ? [[pistas.caja.x, pistas.caja.z]] : [])],
+    estado: estadoSecretos, sfx, reducido: matchMedia('(prefers-reduced-motion: reduce)').matches, alCuervo: (id, n, tot) => on.cuervo?.(id, n, tot), alGatoBlanco: e => on.gatoBlanco?.(e) });
   if (pistas.caja && pistas.caja.estado === 'entregada') { const t = mapa.tumbas.find(x => x.id === pistas.caja.tumba); if (t) pistas.colocarCajaEn(t.obj); }
 
   // ---------- Entrada ----------
@@ -482,7 +497,7 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
   let objetivo = null;
   function buscarObjetivo() {
     let best = null, bd = ALCANCE; const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
-    for (const lista of [objetivos, deco.objetivos(), cirios.objetivos(), pistas.objetivos()]) for (const t of lista) {
+    for (const lista of [objetivos, deco.objetivos(), cartas.objetivos(), pistas.objetivos(), secretos.objetivos()]) for (const t of lista) {
       const dx = t.p.x - P.x, dz = t.p.z - P.z, d = Math.hypot(dx, dz);
       if (d > bd || (dx * fx + dz * fz) / (d || 1) < 0.8 || !linea(P.x, P.z, t.fp.x, t.fp.z)) continue;
       best = t; bd = d;
@@ -519,7 +534,7 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
     }
     cam.position.set(P.x, OJO, P.z); cam.rotation.set(P.pitch, P.yaw, 0);
     if (shake > 0.01) { cam.position.x += (Math.random() - .5) * shake * 0.05; cam.position.y += (Math.random() - .5) * shake * 0.03; shake *= Math.exp(-7 * dt); dirty = true; }
-    if (!paused) { deco.update(dt, T); cirios.update(dt, T); pistas.update(dt, T, cam); if (cem) cem.update(T, dt); }
+    if (!paused) { deco.update(dt, T); cartas.update(dt, T, cam); pistas.update(dt, T, cam); secretos.update(dt, T, cam); if (cem) cem.update(T, dt); }
     cielo.position.copy(cam.position);
     lunaM.position.copy(cam.position).addScaledVector(lunaDir, 44); lunaM.lookAt(cam.position);
     halo.position.copy(cam.position).addScaledVector(lunaDir, 45); halo.lookAt(cam.position);
@@ -592,12 +607,19 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
     ctx.clearRect(0, 0, S, S); ctx.drawImage(base, 0, 0);
     // Pruebas: objetos escondidos (cuadro) y gatos (punto), con el color de cada uno
     if (marcadores) {
+      ctx.save();   /* [Kura] marcadores solo dentro de lo ya explorado (no a través de la niebla) */
+      if (!completo) { ctx.beginPath(); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (exp[y * W + x]) ctx.rect(x * s, y * s, s + .5, s + .5); ctx.clip(); }
       const COLE = { van: '#6f9ee8', carey: '#f3efe4', tuxedo: '#ffd166' }, r = Math.max(3, s * 0.32);
       ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.75)';
       deco.encargos.forEach(e => { if (e.estado !== 'escondido') return; ctx.fillStyle = COLE[e.gato] || '#fff'; ctx.fillRect(e.x / C * s - r, e.z / C * s - r, r * 2, r * 2); ctx.strokeRect(e.x / C * s - r, e.z / C * s - r, r * 2, r * 2); });
       pistas.piezas.forEach(o => { if (o.estado !== 'escondido') return; ctx.fillStyle = '#e8ddc6'; ctx.fillRect(o.x / C * s - r * .7, o.z / C * s - r * .7, r * 1.4, r * 1.4); ctx.strokeRect(o.x / C * s - r * .7, o.z / C * s - r * .7, r * 1.4, r * 1.4); });
+      cartas.lista.forEach(o => { if (o.estado !== 'escondido') return; ctx.fillStyle = '#d9c6f0'; ctx.fillRect(o.x / C * s - r * .45, o.z / C * s - r * .75, r * .9, r * 1.5); ctx.strokeRect(o.x / C * s - r * .45, o.z / C * s - r * .75, r * .9, r * 1.5); });
+      secretos.cuervos.forEach(v => { if (v.estado !== 'posado') return; ctx.fillStyle = '#20222a'; ctx.beginPath(); ctx.arc(v.x / C * s, v.z / C * s, r * 0.7, 0, 6.29); ctx.fill(); ctx.strokeStyle = '#d9b45a'; ctx.stroke(); ctx.strokeStyle = 'rgba(0,0,0,.75)'; });
+      { const g = secretos.gatoBlanco; if (g) { ctx.fillStyle = '#f2efe8'; ctx.beginPath(); ctx.arc(g.x / C * s, g.z / C * s, r * 0.75, 0, 6.29); ctx.fill(); ctx.stroke(); } }
+      { const o = secretos.calabaza; if (o && o.estado === 'escondido') { ctx.fillStyle = o.activa ? '#e8781e' : 'rgba(232,120,30,.35)'; ctx.beginPath(); ctx.arc(o.x / C * s, o.z / C * s, r * 0.85, 0, 6.29); ctx.fill(); ctx.stroke(); } }
       if (pistas.caja && pistas.caja.estado === 'escondido') { const o = pistas.caja; ctx.fillStyle = '#b07a48'; ctx.beginPath(); ctx.moveTo(o.x / C * s, o.z / C * s - r); ctx.lineTo(o.x / C * s + r, o.z / C * s); ctx.lineTo(o.x / C * s, o.z / C * s + r); ctx.lineTo(o.x / C * s - r, o.z / C * s); ctx.closePath(); ctx.fill(); ctx.stroke(); }
       deco.gatos.forEach(g => { if (g.estado === 'oculto') return; ctx.fillStyle = COLE[g.tipo] || '#fff'; ctx.beginPath(); ctx.arc(g.x / C * s, g.z / C * s, r * 0.85, 0, 6.29); ctx.fill(); ctx.stroke(); });
+      ctx.restore();
     }
     ctx.save(); ctx.translate(P.x / C * s, P.z / C * s); ctx.rotate(-P.yaw);
     ctx.fillStyle = COL.yo; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.5;
@@ -633,15 +655,28 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
     acariciar(tipo) { deco.acariciar(tipo); dirty = true; },
     resetEncargos() { deco.resetEncargos(); dirty = true; },
     modeloEncargo(id) { return deco.modelo(id); },
-    get velas() { return cirios.lista; },
     get pistas() { return pistas; },
+    get secretos() { return secretos; },
+    activarCalabaza() { const r = secretos.activarCalabaza(); dirty = true; return r; },
+    recogerCalabaza() { secretos.recogerCalabaza(); dirty = true; },
+    // La calabaza ya en la mano: aparece Cuchito, Vaquita y Bonnie bailando alrededor de ella
+    bailarCalabaza() { const c = secretos.calabaza; if (!c || deco.bailando) return false; secretos.mostrarCalabaza(true); const ok = deco.bailar({ x: c.x, z: c.z, frente: c.frente, dur: 13, bpm: 104 }); if (ok) sfx?.cumbia?.(13, 104); else secretos.mostrarCalabaza(false); dirty = true; return ok; },
+    esSecreto(id) { return secretos.es(id); },
+    modeloSecreto(id) { return secretos.modelo(id); },
+    resetSecretos() { secretos.reset(); dirty = true; },
+    // Gato blanco: si lo molestas, salta a la cámara (susto) con sacudida
+    asustar() { if (secretos.asustar()) shake = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1.6; dirty = true; },
     recogerPista(id) { pistas.recoger(id); dirty = true; },
     dejarCaja(tumbaId) { const t = mapa.tumbas.find(x => x.id === tumbaId); if (t) pistas.dejarCaja(t.obj); dirty = true; },
     resetPistas() { pistas.reset(); dirty = true; },
     modeloPista(id) { return pistas.modelo(id); },
-    ajustarPistas(c) { pistas.ajustar(c); },
-    encenderVela(id) { cirios.encender(id); dirty = true; },
-    apagarVelas() { cirios.apagar(); dirty = true; },
+    ajustarPistas(c) { pistas.ajustar(c); cartas.ajustar(c); },
+    // Cartas de tarot repartidas por el mapa (mapa.json → "cartas"); se colocan en la mesa del Mausoleo
+    get cartas() { return cartas.lista; },
+    esCarta(id) { return cartas.es(id); },
+    recogerCarta(id) { cartas.recoger(id); dirty = true; },
+    resetCartas() { cartas.reset(); dirty = true; },
+    modeloCarta(id) { return cartas.modelo(id); },
     // Pruebas: pararse a ~1,5 m de un punto, mirándolo, en el primer lado libre con línea de vista
     mirarA(x, z, dist = 1.5) {
       for (let k = 0; k < 16; k++) {
@@ -686,7 +721,7 @@ export function crearLaberinto({ renderer, json, stage, joy, ajustes, pos, explo
       document.removeEventListener('mousemove', onMouse); document.removeEventListener('pointerlockchange', onLockChange); document.removeEventListener('pointerlockerror', fallaLock);
       stage.removeEventListener('pointerdown', onDown); stage.removeEventListener('pointermove', onMove);
       stage.removeEventListener('pointerup', onUp); stage.removeEventListener('pointercancel', onUp);
-      ro.disconnect(); petalos.dispose(); deco.dispose(); cirios.dispose(); pistas.dispose(); if (cem) cem.dispose(); disposables.forEach(d => d.dispose());
+      ro.disconnect(); petalos.dispose(); deco.dispose(); cartas.dispose(); pistas.dispose(); secretos.dispose(); if (cem) cem.dispose(); disposables.forEach(d => d.dispose());
     },
   };
 }

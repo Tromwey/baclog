@@ -5,6 +5,8 @@ import { crearLaberinto, GLIFOS } from './motor.js';
 import { crearApi } from './api.js';
 import { crearSfx } from './sfx.js';
 import { disponible, cargarMinijuego } from './juegos/registro.js';
+import { cargarLogros, crearLogros, crearAvisoLogros } from './logros.js';
+import { dorsoCarta } from './cartas.js';   // [Kura] dorso de carta para el inventario
 
 const BASE = new URL('./', import.meta.url);
 const KEY = 'lab.v1';
@@ -14,7 +16,6 @@ const HTML = `
 <div class="lab-hud">
   <div class="lab-izq">
     <button class="lab-pill" type="button" data-r="btnPausa">Pausa</button>
-    <div class="lab-pill lab-sellos" role="status" data-r="velasP" hidden><span>Velas <b data-r="velasN">0/7</b></span></div>
   </div>
   <div class="lab-der">
     <button type="button" class="lab-mini" data-r="mini" aria-label="Abrir mapa (M)"><canvas width="304" height="304" data-r="miniCv" aria-hidden="true"></canvas><span class="lab-n" aria-hidden="true">N</span></button>
@@ -23,7 +24,8 @@ const HTML = `
 </div>
 <div class="lab-inv" data-r="invBar" hidden>
   <p class="lab-sr" role="status" data-r="invT">Encargos <b data-r="invN">0/3</b></p>
-  <div class="lab-inv-sello" role="status" data-r="invSello" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true"></div><b data-r="invSelloN" aria-hidden="true">0</b></div>
+  <div class="lab-inv-sello" role="status" data-r="invSello" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true">★</div><b data-r="invSelloN" aria-hidden="true">0</b></div>
+  <div class="lab-inv-carta" role="status" data-r="cartasP" hidden><canvas width="92" height="144" data-r="cartasCv" aria-hidden="true"></canvas><b data-r="cartasN" aria-hidden="true">0</b></div><!-- [Kura] cartas en el inventario -->
   <span class="lab-inv-sync" data-r="invSync" hidden>Sincronizando</span>
   <div class="lab-inv-foto" data-r="invFoto" role="button" tabindex="-1" hidden><canvas width="320" height="240" data-r="invFotoCv" aria-hidden="true"></canvas><b data-r="invFotoN" aria-hidden="true">0/4</b></div>
   <div class="lab-inv-l" role="list" aria-label="Inventario" data-r="invL"></div>
@@ -40,7 +42,12 @@ const HTML = `
   <button type="button" data-r="devAparicion">Aparición</button>
   <button type="button" data-r="devOjos">Ojos</button>
   <button type="button" data-r="devObjeto">Ir a objeto</button>
-  <button type="button" data-r="devVela">Ir a vela</button>
+  <button type="button" data-r="devCarta">Ir a carta</button>
+  <button type="button" data-r="devCuervo">Ir a cuervo</button>
+  <button type="button" data-r="devCalabaza">Ir a calabaza</button>
+  <button type="button" data-r="devGatoB">Ir al gato blanco</button>
+  <button type="button" data-r="devBaile">Baile de la calabaza</button>
+  <button type="button" data-r="devSecretos">Borrar cuervos y calabaza</button>
   <button type="button" data-r="devTumba">Ir a tumba</button>
   <button type="button" data-r="devFinal">Probar final</button>
   <button type="button" data-r="devPieza">Ir a pedazo de foto</button>
@@ -56,7 +63,7 @@ const HTML = `
   <button type="button" data-r="devOlvidar">Olvidar mapa</button>
   <button type="button" data-r="devBorrar">Borrar sellos</button>
   <button type="button" data-r="devEncargos">Borrar encargos</button>
-  <button type="button" data-r="devApagar">Apagar velas</button>
+  <button type="button" data-r="devCartas">Borrar cartas</button>
   <button type="button" data-r="devReset">Reiniciar posición</button>
 </div>
 <div class="lab-mira" data-r="mira"></div>
@@ -66,11 +73,12 @@ const HTML = `
 <div class="lab-guia" data-r="guia" aria-hidden="true"><span>Arrastra · caminar</span><span>Arrastra · mirar</span></div>
 <div class="lab-paso" data-r="paso"></div>
 <div class="lab-rayo" data-r="rayo" aria-hidden="true"></div>
+<div class="lab-susto" data-r="susto" aria-hidden="true"><img src="/party/cat-jumpscare.jpg" alt="" decoding="sync"></div><!-- [Kura] foto del susto -->
 <div class="lab-msg" data-r="msg"></div>
 <p class="lab-sr" data-r="live" aria-live="polite"></p>
 
-<section class="lab-capa lab-entrada" data-r="entrada" role="button" tabindex="0" aria-label="El laberinto. Haz clic o toca para entrar." hidden>
-  <h2>El laberinto</h2>
+<section class="lab-capa lab-entrada" data-r="entrada" role="button" tabindex="0" aria-label="Encuentra el Mausoleo. Haz clic o toca para empezar." hidden>
+  <h2>Encuentra el Mausoleo</h2>
   <p class="lab-cta"><span class="lab-solo-mouse">Haz clic para entrar</span><span class="lab-solo-touch">Toca para entrar</span></p>
   <dl class="lab-leyenda lab-solo-mouse"><dt>WASD · flechas</dt><dd>Caminar</dd><dt>Mouse · ← →</dt><dd>Mirar</dd><dt>E · clic</dt><dd>Leer lápida</dd><dt>M</dt><dd>Mapa</dd><dt>Esc</dt><dd>Pausa</dd></dl>
   <dl class="lab-leyenda lab-solo-touch"><dt>Izquierda</dt><dd>Caminar</dd><dt>Derecha</dt><dd>Mirar</dd><dt>Botón</dt><dd>Leer lápida</dd></dl>
@@ -100,10 +108,10 @@ const HTML = `
     <div class="lab-fila"><span>Tamaño del paso</span><div class="lab-seg2" role="group" aria-label="Tamaño del paso"><button type="button" data-p-paso="30">30°</button><button type="button" data-p-paso="45">45°</button><button type="button" data-p-paso="90">90°</button></div></div>
     <div class="lab-fila"><label for="lab-sens">Sensibilidad · <output data-r="sensO"></output></label><input type="range" id="lab-sens" data-r="sens" min="0.4" max="2" step="0.1"></div>
     <label class="lab-check"><input type="checkbox" data-r="inv"> Invertir eje vertical</label>
-    <div class="lab-fila"><label for="lab-lt">Linterna · tamaño del haz · <output data-r="ltO"></output></label><input type="range" id="lab-lt" data-r="lt" min="5" max="40" step="1"></div>
-    <div class="lab-fila"><label for="lab-li">Linterna · intensidad · <output data-r="liO"></output></label><input type="range" id="lab-li" data-r="li" min="0" max="250" step="5"></div>
-    <div class="lab-fila"><label for="lab-ll">Linterna · alcance · <output data-r="llO"></output></label><input type="range" id="lab-ll" data-r="ll" min="6" max="40" step="1"></div>
-    <div class="lab-fila"><label for="lab-lp">Linterna · borde suave · <output data-r="lpO"></output></label><input type="range" id="lab-lp" data-r="lp" min="0" max="100" step="5"></div>
+    <div class="lab-fila" hidden><label for="lab-lt">Linterna · tamaño del haz · <output data-r="ltO"></output></label><input type="range" id="lab-lt" data-r="lt" min="5" max="40" step="1"></div>
+    <div class="lab-fila" hidden><label for="lab-li">Linterna · intensidad · <output data-r="liO"></output></label><input type="range" id="lab-li" data-r="li" min="0" max="250" step="5"></div>
+    <div class="lab-fila" hidden><label for="lab-ll">Linterna · alcance · <output data-r="llO"></output></label><input type="range" id="lab-ll" data-r="ll" min="6" max="40" step="1"></div>
+    <div class="lab-fila" hidden><label for="lab-lp">Linterna · borde suave · <output data-r="lpO"></output></label><input type="range" id="lab-lp" data-r="lp" min="0" max="100" step="5"></div>
     <div class="lab-acciones"><button class="lab-pill" type="button" data-r="seguir">Continuar</button></div>
     <p class="lab-nota lab-solo-mouse">Esc libera el mouse. Con el teclado puedes jugar sin mouse.</p>
   </div>
@@ -168,8 +176,9 @@ export async function montarLaberinto({
 } = {}) {
   const q = new URLSearchParams(location.search);
   const coarse = matchMedia('(pointer:coarse)').matches, reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const [json] = await Promise.all([
+  const [json, logrosDef] = await Promise.all([
     fetch(mapaUrl, { cache: 'no-cache' }).then(r => r.json()),
+    cargarLogros(new URL('../mausoleo/logros.json', BASE).href),
     cargarCss(),
     Promise.race([Promise.all(['700 20px Cinzel', '400 20px Cinzel', '500 12px Oswald'].map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, 2500))]).catch(() => {}),
   ]);
@@ -191,10 +200,15 @@ export async function montarLaberinto({
   if (!cache.dispositivo) cache.dispositivo = crypto.randomUUID ? crypto.randomUUID() : 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2);
   cache.explorado = cache.explorado || {};
   cache.encargos = cache.encargos || {};
-  cache.velas = cache.velas || {};
+  cache.cartas = cache.cartas || {};
+  cache.cuervos = cache.cuervos || {};
   cache.pistas = cache.pistas || {};
   guardar();
   const sfx = crearSfx();
+  // Logros: aviso en pantalla la primera vez que se consigue cada uno (lo que ya había antes no se anuncia)
+  const LOGROS = crearLogros({ logros: logrosDef, mapa: json, cache, guardar }), avisoLogros = crearAvisoLogros(ui, { cache, guardar, sfx });
+  let revLogT = 0; const revisarLogros = () => { clearTimeout(revLogT); revLogT = setTimeout(() => avisoLogros.avisar(LOGROS.nuevos()), 450); };
+  LOGROS.nuevos();
 
   // ---------- Renderer y motor ----------
   const propio = !renderer;
@@ -211,20 +225,26 @@ export async function montarLaberinto({
     const el = $.paso; el.style.transition = 'none'; el.style.opacity = '.55';
     void el.offsetWidth; el.style.transition = 'opacity .14s ease-out'; el.style.opacity = '0';
   }
-  const etiqueta = t => t.tipo === 'lapida' || t.tipo === 'tumba' ? 'Leer lápida' : t.tipo === 'reja' ? 'Tocar la reja' : t.tipo === 'objeto' ? t.recoger : t.tipo === 'gato' ? t.enc.dar : t.tipo === 'caricia' ? '¿Acariciar?' : t.tipo === 'vela' ? 'Encender la vela' : t.tipo === 'pieza' ? 'Recoger el pedazo de foto' : t.tipo === 'caja' ? 'Recoger la caja de música' : 'Entrar al ' + (t.nombre || 'Mausoleo');
-  const BOTON = { lapida: 'Leer', reja: 'Tocar', objeto: 'Tomar', gato: 'Dar', caricia: 'Acariciar', vela: 'Encender', tumba: 'Leer', pieza: 'Tomar', caja: 'Tomar' };
+  const etiqueta = t => t.tipo === 'lapida' || t.tipo === 'tumba' ? 'Leer lápida' : t.tipo === 'reja' ? 'Tocar la reja' : t.tipo === 'objeto' ? t.recoger : t.tipo === 'gato' ? t.enc.dar : t.tipo === 'caricia' ? '¿Acariciar?' : t.tipo === 'carta' ? 'Recoger la carta' : t.tipo === 'calabaza' ? 'Esto no estaba aquí antes… ¿acaso esto es…?' : t.tipo === 'gatoBlanco' ? 'Molestarlo' : t.tipo === 'pieza' ? 'Recoger el pedazo de foto' : t.tipo === 'caja' ? 'Recoger la caja de música' : 'Entrar al ' + (t.nombre || 'Mausoleo');
+  const BOTON = { lapida: 'Leer', reja: 'Tocar', objeto: 'Tomar', gato: 'Dar', caricia: 'Acariciar', carta: 'Tomar', calabaza: '¿…?', gatoBlanco: 'Molestar', tumba: 'Leer', pieza: 'Tomar', caja: 'Tomar' };
   function pintarObjetivo(t, silencio) {
     $.prompt.hidden = $.accion.hidden = !t; $.mira.classList.toggle('on', !!t);
     if (!t) return;
     $.promptT.textContent = etiqueta(t) + (t.sellada ? ' · resuelta' : '');
     $.accion.textContent = BOTON[t.tipo] || 'Entrar';
-    if (!silencio) live.textContent = t.tipo === 'reja' ? 'Reja de entrada, cerrada. Pulsa E para tocarla.' : t.tipo === 'lapida' ? `Lápida de ${t.nombre}${t.sellada ? ', resuelta' : ''}. Pulsa E para leer.` : t.tipo === 'vela' ? 'Vela apagada. Pulsa E para encenderla.' : t.tipo === 'tumba' ? `Lápida de ${t.nombre}. Pulsa E para leer.` : t.tipo === 'caricia' ? `¿Acariciar${t.enc && t.enc.nombreGato ? ' a ' + t.enc.nombreGato : ''}? Pulsa E.` : t.tipo === 'objeto' || t.tipo === 'gato' ? `${etiqueta(t)}. Pulsa E.` : `Puerta del ${t.nombre || 'Mausoleo'}. Pulsa E para entrar.`;
+    if (!silencio) live.textContent = t.tipo === 'reja' ? 'Reja de entrada, cerrada. Pulsa E para tocarla.' : t.tipo === 'lapida' ? `Lápida de ${t.nombre}${t.sellada ? ', resuelta' : ''}. Pulsa E para leer.` : t.tipo === 'carta' ? 'Una carta en el suelo. Pulsa E para recogerla.' : t.tipo === 'calabaza' ? 'Esto no estaba aquí antes. Pulsa E para acercarte.' : t.tipo === 'gatoBlanco' ? 'Un gato blanco en el árbol. No debería molestarlo.' : t.tipo === 'tumba' ? `Lápida de ${t.nombre}. Pulsa E para leer.` : t.tipo === 'caricia' ? `¿Acariciar${t.enc && t.enc.nombreGato ? ' a ' + t.enc.nombreGato : ''}? Pulsa E.` : t.tipo === 'objeto' || t.tipo === 'gato' ? `${etiqueta(t)}. Pulsa E.` : `Puerta del ${t.nombre || 'Mausoleo'}. Pulsa E para entrar.`;
   }
   const lab = crearLaberinto({
-    renderer, json, stage: $.stage, ajustes, sfx, tema: temaF, pos: cache.pos && cache.pos.v === json.version ? cache.pos : null, explorado: cache.explorado[json.version], estadoEncargos: cache.encargos, estadoVelas: cache.velas, estadoPistas: cache.pistas,
+    renderer, json, stage: $.stage, ajustes, sfx, tema: temaF, pos: cache.pos && cache.pos.v === json.version ? cache.pos : null, explorado: cache.explorado[json.version], estadoEncargos: cache.encargos, estadoCartas: cache.cartas, estadoSecretos: { cuervos: cache.cuervos, calabaza: !!cache.calabaza, calabazaActiva: (json.encargos || []).length > 0 && (json.encargos || []).every(e => cache.encargos[e.id] === 'entregado') }, estadoPistas: cache.pistas,
     joy: { base: $.joy, knob: $.knob },
     on: {
       objetivo: t => pintarObjetivo(t),
+      gatoBlanco(e) {
+        if (e === 'visto') mensaje('No debería molestarlo.', 2600);
+        else if (e === 'susto') { $.msg.classList.remove('on'); const el = $.susto; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); }
+        else if (e === 'fin') setTimeout(() => mensaje('No debí molestarlo.', 2600), 350);
+      },
+      cuervo(id, n, tot) { cache.cuervos[id] = true; guardar(); revisarLogros(); mensaje(n >= tot ? 'Creo que esos son todos.' : (['Un cuervo. ¿Cuántos habrá? Puedo escucharlos cerca.', 'Al menos son 2.', 'Van 3.'][n - 1] || `Van ${n}.`), 3200) /* [Kura] textos del founder */; },
       interactuar: t => interactuar(t),
       desbloqueo() { if (!dialogo) abrirPausa(); },
       bloqueo(l) { ui.dataset.lock = l ? '1' : '0'; },
@@ -235,7 +255,8 @@ export async function montarLaberinto({
       foto() { Object.keys(miniaturas).forEach(k => { if (/^foto/.test(k)) delete miniaturas[k]; }); pintarPistas(); },
       evento(e) {
         if (e === 'sigueme') mensaje('Creo que quiere que lo siga.', 4200);
-        else if (e === 'acostados') { const r = $.rayo; r.classList.remove('on'); void r.offsetWidth; r.classList.add('on'); }   // el rayo ciega la pantalla
+        else if (e === 'acostados') { const r = $.rayo; r.classList.remove('on'); void r.offsetWidth; r.classList.add('on'); cache.gatosTumba = true; guardar(); setTimeout(revisarLogros, 1800); /* [Kura] */ }
+        else if (e === 'acostadosYa' && !cache.gatosTumba) { cache.gatosTumba = true; guardar(); revisarLogros(); /* [Kura] */ }   // el rayo ciega la pantalla
       },
     },
   });
@@ -281,7 +302,7 @@ export async function montarLaberinto({
     panelL = l; panelTumba = null; $.pJugar.hidden = false; $.pFechas.removeAttribute('aria-label'); clearInterval(glitchI);
     const sellada = !!sellos[l.id], hay = disponible(l.juego);
     $.pNombre.textContent = l.nombre; $.pFechas.textContent = l.fechas || ''; $.pEpitafio.textContent = l.epitafio || '';
-    $.pEstado.hidden = !sellada; $.pSello.textContent = inicial(l.nombre);
+    $.pEstado.hidden = !sellada; $.pSello.textContent = '★';
     $.pJugar.disabled = !hay; $.pJugar.textContent = sellada ? 'Jugar de nuevo' : 'Jugar';
     $.pNota.textContent = !hay ? 'Este minijuego todavía no existe.' : sellada ? 'Jugar de nuevo no da otro sello.' : (l.params && l.params.segundos === 0) ? 'Minijuego · sin límite de tiempo' : `Minijuego · ${(l.params && l.params.segundos) || 60} s`;
     abrir($.panel, hay ? $.pJugar : $.pVolver);
@@ -314,7 +335,7 @@ export async function montarLaberinto({
   function dejarCaja(t) {
     const c = lab.pistas.caja; if (!c || c.estado !== 'llevas') return;
     if (t.id !== c.tumba) { $.pNota.textContent = c.error || 'No parece ser aquí.'; return; }
-    lab.dejarCaja(t.id); cache.pistas.caja = 'entregada'; guardar(); cerrar(true); pintarPistas(); mensaje(c.exito || '', 4200);
+    lab.dejarCaja(t.id); cache.pistas.caja = 'entregada'; guardar(); revisarLogros(); cerrar(true); pintarPistas(); mensaje(c.exito || '', 4200);
   }
   $.pJugar.addEventListener('click', () => panelTumba ? dejarCaja(panelTumba) : panelL && jugar(panelL));
   function entrarMausoleo() {
@@ -324,7 +345,7 @@ export async function montarLaberinto({
   }
   const MSG_REJA = ['Está cerrada.', 'Desde adentro no abre.', 'La salida es el Mausoleo.', 'Insistir no la abre.'];
   function tocarReja() { const n = lab.sacudirReja(); if (sfx.cadena) sfx.cadena(n); mensaje(MSG_REJA[n <= 4 ? n - 1 : 1 + ((n - 2) % 3)], 2400); }
-  function interactuar(t) { if (t.tipo === 'lapida') abrirPanel(t); else if (t.tipo === 'reja') tocarReja(); else if (t.tipo === 'objeto') recoger(t); else if (t.tipo === 'gato') entregar(t); else if (t.tipo === 'caricia') acariciar(t); else if (t.tipo === 'vela') encenderVela(t); else if (t.tipo === 'tumba') { if (t.final) mensaje(t.texto || '¿Cómo y cuándo murió?', 4000); else abrirTumbaLeer(t); } else if (t.tipo === 'pieza') recogerPieza(t); else if (t.tipo === 'caja') recogerCaja(t); else entrarMausoleo(); }
+  function interactuar(t) { if (t.tipo === 'lapida') abrirPanel(t); else if (t.tipo === 'reja') tocarReja(); else if (t.tipo === 'objeto') recoger(t); else if (t.tipo === 'gato') entregar(t); else if (t.tipo === 'caricia') acariciar(t); else if (t.tipo === 'carta') recogerCarta(t); else if (t.tipo === 'calabaza') recogerCalabaza(); else if (t.tipo === 'gatoBlanco') lab.asustar(); else if (t.tipo === 'tumba') { if (t.final) mensaje(t.texto || '¿Cómo y cuándo murió?', 4000); else abrirTumbaLeer(t); } else if (t.tipo === 'pieza') recogerPieza(t); else if (t.tipo === 'caja') recogerCaja(t); else entrarMausoleo(); }
   $.accion.addEventListener('click', () => { const t = lab.estado().objetivo; if (t) interactuar(t); });
 
   // ---------- Encargos de los gatos (solo en este dispositivo, por ahora no van al servidor) ----------
@@ -369,7 +390,7 @@ export async function montarLaberinto({
   }
   function ponerModelo(id) {
     const H = escenaItem(); if (H.modelo) H.pivot.remove(H.modelo);
-    const m = /^(foto\d|caja)$/.test(id) ? lab.modeloPista(id) : lab.modeloEncargo(id), caja = new THREE.Box3().setFromObject(m), tam = caja.getSize(new THREE.Vector3()), cen = caja.getCenter(new THREE.Vector3());
+    const m = lab.esSecreto(id) ? lab.modeloSecreto(id) : lab.esCarta(id) ? lab.modeloCarta(id) : /^(foto\d|caja)$/.test(id) ? lab.modeloPista(id) : lab.modeloEncargo(id), caja = new THREE.Box3().setFromObject(m), tam = caja.getSize(new THREE.Vector3()), cen = caja.getCenter(new THREE.Vector3());
     const k = 1.5 / (Math.max(tam.x, tam.y, tam.z) || 1); m.scale.multiplyScalar(k); m.position.copy(cen).multiplyScalar(-k);
     const h = new THREE.Group(); h.add(m); h.rotation.set(0.12, 0, 0.2); H.pivot.add(h); H.modelo = h;
   }
@@ -379,7 +400,9 @@ export async function montarLaberinto({
     if (miniaturas[id]) return miniaturas[id];
     const H = escenaItem(); ponerModelo(id); H.pivot.rotation.y = 0.7; H.pivot.position.y = 0;
     H.R.setSize(128, 128, false); H.R.render(H.S, H.C);
-    return (miniaturas[id] = H.R.domElement.toDataURL('image/png'));
+    const url = H.R.domElement.toDataURL('image/png');
+    try { const mm = JSON.parse(localStorage.getItem('lab.mini')) || {}; mm[id] = url; localStorage.setItem('lab.mini', JSON.stringify(mm)); } catch (_) {}   /* [Kura] para el Mausoleo */
+    return (miniaturas[id] = url);
   }
   function verHallazgo(t) {
     const H = escenaItem(); ponerModelo(t.id); H.id = t.id;
@@ -395,14 +418,14 @@ export async function montarLaberinto({
     if (dialogo !== $.hall || $.hall.classList.contains('out') || performance.now() - hall.t0 < 350) return;
     sfx('flip'); $.hall.classList.add('out');
     const id = hall.id; setTimeout(() => { pintarEncargos(id); pintarPistas(id); }, reducido ? 200 : 420);
-    setTimeout(() => { cancelAnimationFrame(hall.raf); cerrar(relock); $.hall.classList.remove('out'); }, reducido ? 320 : 650);
+    setTimeout(() => { cancelAnimationFrame(hall.raf); cerrar(relock); $.hall.classList.remove('out'); if (trasHallazgo) { mensaje(trasHallazgo, 4200); trasHallazgo = ''; } if (despuesHallazgo) { const fn = despuesHallazgo; despuesHallazgo = null; fn(); } revisarLogros(); }, reducido ? 320 : 650);
   }
   $.hall.addEventListener('click', () => guardarHallazgo(true));
   function entregar(t) {
-    const e = t.enc; lab.entregar(e.id); cache.encargos[e.id] = 'entregado'; guardar(); pintarEncargos();
+    const e = t.enc; lab.entregar(e.id); cache.encargos[e.id] = 'entregado'; guardar(); pintarEncargos(); revisarLogros();
     const todos = lab.encargos.every(x => cache.encargos[x.id] === 'entregado');
     mensaje(e.gracias, 3200);
-    if (todos) lab.iniciarFinal(e.gato);   // el gato espera ~3 s y luego guía a la tumba (evento "sigueme")
+    if (todos) { lab.iniciarFinal(e.gato); lab.activarCalabaza(); }   // el gato espera ~3 s y luego guía a la tumba (evento "sigueme")
   }
   // Acariciar: ronronea, se calma un rato y deja una pista (o, si ya recibió lo suyo, la frase de la entrega)
   function acariciar(t) { lab.acariciar(t.gato); const e = t.enc; if (e) mensaje(e.estado === 'entregado' ? (e.despues || e.gracias) : e.caricia, 3800); }
@@ -414,7 +437,7 @@ export async function montarLaberinto({
   function pintarPistas(nuevo) {
     const ps = lab.pistas, n = ps.piezas.filter(p => cache.pistas[p.id]).length, tot = ps.piezas.length;
     $.invFoto.hidden = !n; $.invFoto.classList.toggle('completa', n === tot && tot > 0);
-    if (n) { ps.componerFoto($.invFotoCv); $.invFotoN.textContent = `${n}/${tot}`; $.invFotoN.hidden = n === tot; }
+    if (n) { ps.componerFoto($.invFotoCv); $.invFotoN.textContent = `${n}`; $.invFotoN.hidden = n === tot; try { const mm = JSON.parse(localStorage.getItem('lab.mini')) || {}; mm.foto = $.invFotoCv.toDataURL('image/png'); localStorage.setItem('lab.mini', JSON.stringify(mm)); } catch (_) {} }   // [Kura] solo el número; la foto también va al Mausoleo
     $.invFoto.setAttribute('aria-label', n === tot ? 'Fotografía completa. Toca para verla.' : `Fotografía: ${n} de ${tot} pedazos.`);
     if (nuevo && /^foto/.test(nuevo)) { $.invFoto.classList.remove('nuevo'); void $.invFoto.offsetWidth; $.invFoto.classList.add('nuevo'); }
     const c = ps.caja; if (!c) return;
@@ -453,22 +476,36 @@ export async function montarLaberinto({
   }
   function cerrarFoto(relock) {
     if (dialogo !== $.foto || $.foto.classList.contains('out') || performance.now() - fotoT0 < 500) return;
-    $.foto.classList.add('out'); setTimeout(() => { cerrar(relock); $.foto.classList.remove('out'); }, reducido ? 250 : 550);
+    $.foto.classList.add('out'); setTimeout(() => { cerrar(relock); $.foto.classList.remove('out'); revisarLogros(); /* [Kura] */ }, reducido ? 250 : 550);
   }
   $.foto.addEventListener('click', () => cerrarFoto(true));
   $.invFoto.addEventListener('click', () => { if (!dialogo && $.invFoto.classList.contains('completa')) verFoto(false); });
   pintarPistas();
 
-  // ---------- Velas: apagadas al inicio; contador en el HUD (solo local, sin recompensa por ahora) ----------
-  function pintarVelas() {
-    const l = lab.velas, n = l.filter(v => cache.velas[v.id]).length;
-    $.velasP.hidden = !l.length; $.velasN.textContent = `${n}/${l.length}`; $.velasP.setAttribute('aria-label', `Velas encendidas: ${n} de ${l.length}.`);
+  // ---------- Cartas de tarot: se recogen aquí (solo en este dispositivo) y se colocan en la mesa del Mausoleo ----------
+  let trasHallazgo = '', despuesHallazgo = null;
+  function pintarCartas() {
+    const l = lab.cartas, n = l.filter(c => cache.cartas[c.id]).length;
+    // [Kura] en el inventario: aparece con la primera carta, dorso + contador, y 'estampa' al sumar una
+    const antes = +($.cartasP.dataset.n || 0);
+    $.cartasP.hidden = !n; $.cartasN.textContent = `${n}`; $.cartasP.setAttribute('aria-label', `Cartas: ${n} de ${l.length}.`);
+    if (n && !$.cartasP.dataset.pintado) { const d = dorsoCarta(), g = $.cartasCv.getContext('2d'); g.drawImage(d, 0, 0, $.cartasCv.width, $.cartasCv.height); $.cartasP.dataset.pintado = '1'; }
+    if (n > antes && antes > 0) { $.cartasP.classList.remove('nuevo'); void $.cartasP.offsetWidth; $.cartasP.classList.add('nuevo'); }
+    $.cartasP.dataset.n = n;
   }
-  function encenderVela(t) {
-    lab.encenderVela(t.id); cache.velas[t.id] = true; guardar(); pintarVelas();
-    if (lab.velas.every(v => cache.velas[v.id])) mensaje('Encendiste todas las velas.', 4000);
+  function recogerCarta(t) {
+    lab.recogerCarta(t.id); cache.cartas[t.id] = true; guardar(); pintarCartas();
+    const l = lab.cartas, n = l.filter(c => cache.cartas[c.id]).length;
+    if (n === l.length) trasHallazgo = 'Tienes todas las cartas. Llévalas a la mesa del Mausoleo.';
+    verHallazgo({ id: t.id, objeto: t.nombre, para: t.sentido, hallazgo: `Encontraste ${t.nombre}. ${t.sentido}. Llevas ${n} de ${l.length}.` });
   }
-  pintarVelas();
+  pintarCartas();
+  // Calabaza: aparece encendida en algún rincón cuando los tres gatos ya recibieron lo suyo
+  function recogerCalabaza() {
+    lab.recogerCalabaza(); cache.calabaza = true; guardar();
+    despuesHallazgo = () => { revisarLogros(); /* [Kura] */ if (lab.bailarCalabaza()) setTimeout(() => mensaje('¿Están… bailando?', 2800), 1800); };
+    verHallazgo({ id: 'calabaza', objeto: 'La calabaza', para: 'Alguien la dejó encendida.', hallazgo: 'Encontraste la calabaza. Alguien la dejó encendida.' });
+  }
 
   // ---------- Sellos: el servidor manda; la caché pinta mientras tanto ----------
   const api = crearApi({ base: apiBase || q.get('api') || null, red: q.get('red') || red, cache, guardar, lapidas: lab.mapa.lapidas.map(l => l.id) });
@@ -478,7 +515,7 @@ export async function montarLaberinto({
     (cache.pendientes || []).forEach(p => { if (p.resultado.gano && !sellos[p.lapida]) sellos[p.lapida] = { ganado: p.t, entregado: null, pendiente: true }; });
     lab.mapa.lapidas.forEach(l => lab.setSellada(l.id, !!sellos[l.id]));
     pintarObjetivo(lab.estado().objetivo, true);
-    pintarSellos();
+    pintarSellos(); revisarLogros();
   }
   // Sellos en el inventario: el sello de cera con un contador de los que llevas (ganados y aún no entregados)
   let sellosPrev = null;
@@ -550,7 +587,7 @@ export async function montarLaberinto({
       if (!practica) api.resultado(token, l.id, { gano: false, ms: r.ms || null }).catch(() => {});
       $.fOtra.focus(); return;
     }
-    s.textContent = inicial(l.nombre); s.classList.remove('estampa'); void s.offsetWidth; s.classList.add('estampa');
+    s.textContent = '★'; s.classList.remove('estampa'); void s.offsetWidth; s.classList.add('estampa');
     setTimeout(() => sfx('thud'), reducido ? 0 : 200);
     $.fT.textContent = practica ? 'Ganaste' : 'Sello obtenido';
     $.fP.textContent = practica ? `Ya tenías el sello de ${l.nombre}.` : `El sello de ${l.nombre} es tuyo.`;
@@ -562,7 +599,7 @@ export async function montarLaberinto({
     try { await api.resultado(token, l.id, { gano: true, ms: r.ms }); finEstado('Guardado.'); enLinea = true; }
     catch (e) { finEstado(e.status ? 'El servidor no aceptó el resultado.' : 'Sin conexión. Se guardará cuando vuelva.'); }
     aplicarProgreso();
-    const n = Object.keys(sellos).length, total = lab.mapa.lapidas.length;
+    const n = Object.keys(sellos).filter(id => lab.mapa.lapidas.some(x => x.id === id)).length, total = lab.mapa.lapidas.length;   // solo los de las lápidas (no los "extra:" del Mausoleo)
     if (n === total) $.fP.textContent += ' Tienes todos los sellos: llévalos al Mausoleo.';
     if (!cache.apodo && partida && partida.l === l) { $.fApodo.hidden = false; $.apodoIn.focus(); }
   }
@@ -595,7 +632,7 @@ export async function montarLaberinto({
   function setLinterna(v) { cache.linterna = Object.assign(cache.linterna || {}, v, { v: 2 }); guardar(); lab.ajustarLinterna(v); syncLinterna(); }
   [['lt', 'grados'], ['li', 'pct'], ['ll', 'alcance'], ['lp', 'borde']].forEach(([k, p]) => $[k].addEventListener('input', () => setLinterna({ [p]: +$[k].value })));
   if (cache.linterna && cache.linterna.v !== 2) { delete cache.linterna; guardar(); }   // defaults nuevos: haz 20°, intensidad 70 %
-  if (cache.linterna) lab.ajustarLinterna(cache.linterna);
+  /* [Kura] los ajustes de linterna ya no están en el menú: no se aplican los guardados */
   function syncPausa() {
     syncLinterna();
     $$('[data-p-giro]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pGiro === ajustes.giro));
@@ -665,9 +702,21 @@ export async function montarLaberinto({
     $.devCaja.addEventListener('click', () => { const c = lab.pistas.caja; if (c) { lab.mirarA(c.obj.position.x, c.obj.position.z); mensaje(`Caja · ${c.estado}`); } });
     $.devFotoT.addEventListener('click', () => { lab.pistas.piezas.forEach(p => { if (p.estado === 'escondido') lab.recogerPista(p.id); cache.pistas[p.id] = true; }); guardar(); pintarPistas('foto1'); verFoto(true); });
     $.devPistas.addEventListener('click', () => { lab.resetPistas(); cache.pistas = {}; guardar(); if (slotCaja) slotCaja.firstChild.removeAttribute('src'); pintarPistas(); mensaje('Pistas borradas.'); });
-    let velaI = 0;
-    $.devVela.addEventListener('click', () => { const l = lab.velas; if (!l.length) return; const v = l[velaI++ % l.length]; lab.mirarA(v.x, v.z); mensaje(`${v.id} · ${v.lugar}${cache.velas[v.id] ? ' · encendida' : ''}`); });
-    $.devApagar.addEventListener('click', () => { lab.apagarVelas(); cache.velas = {}; guardar(); pintarVelas(); mensaje('Velas apagadas.'); });
+    let cuervoI = 0;
+    $.devCuervo.addEventListener('click', () => {
+      const l = lab.secretos.cuervos; if (!l.length) { mensaje('No hay árboles para los cuervos.'); return; }
+      const v = l[cuervoI++ % l.length], { C, solido } = lab.mapa, cx = Math.floor(v.x / C), cy = Math.floor(v.z / C); let b = null;
+      for (let r = 1; r <= 4 && !b; r++) for (let dy = -r; dy <= r && !b; dy++) for (let dx = -r; dx <= r && !b; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r && !solido(cx + dx, cy + dy)) b = [cx + dx, cy + dy];
+      if (!b) return; const px = (b[0] + .5) * C, pz = (b[1] + .5) * C;
+      lab.ponerEn(b[0], b[1], Math.atan2(px - v.x, pz - v.z), Math.min(0.9, Math.atan2(v.y - 1.6, Math.hypot(px - v.x, pz - v.z)))); mensaje(`${v.id} · ${v.estado}`);
+    });
+    $.devCalabaza.addEventListener('click', () => { const c = lab.secretos.calabaza; if (!c) return; if (!c.activa) { lab.activarCalabaza(); mensaje('Calabaza activada (como si los gatos ya tuvieran lo suyo).'); } lab.mirarA(c.x, c.z); });
+    $.devSecretos.addEventListener('click', () => { lab.resetSecretos(); cache.cuervos = {}; delete cache.calabaza; guardar(); mensaje('Cuervos y calabaza borrados.'); });
+    $.devGatoB.addEventListener('click', () => { const g = lab.secretos.gatoBlanco; if (!g) { mensaje('No hay árbol para el gato blanco.'); return; } const { C } = lab.mapa, cx = Math.floor(g.fp.x / C), cy = Math.floor(g.fp.z / C); lab.ponerEn(cx, cy, Math.atan2((cx + .5) * C - g.x, (cy + .5) * C - g.z), 0.25); });
+    $.devBaile.addEventListener('click', () => { const c = lab.secretos.calabaza; if (!c) return; lab.mirarA(c.x, c.z, 2.2); setTimeout(() => lab.bailarCalabaza(), 100); });
+    let cartaI = 0;
+    $.devCarta.addEventListener('click', () => { const l = lab.cartas; if (!l.length) return; const c = l[cartaI++ % l.length]; lab.mirarA(c.x, c.z); mensaje(`${c.nombre} · ${c.lugar} · ${c.estado}`); });
+    $.devCartas.addEventListener('click', () => { lab.resetCartas(); cache.cartas = {}; guardar(); pintarCartas(); mensaje('Cartas borradas.'); });
     $.devEncargos.addEventListener('click', () => { lab.resetEncargos(); cache.encargos = {}; guardar(); pintarEncargos(); mensaje('Encargos borrados.'); });
     $.devDeco.addEventListener('click', () => { const on = $.devDeco.getAttribute('aria-pressed') !== 'true'; lab.setDeco(on); $.devDeco.setAttribute('aria-pressed', on); });
     $.linTam.addEventListener('input', () => setLinterna({ grados: +$.linTam.value }));

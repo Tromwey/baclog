@@ -74,6 +74,8 @@ function crearMock(lapidasValidas, nichos = [], ouija = null) {
       const r = responder(j, body.nombre); escribir(db); return r;
     }
     if (method === 'POST' && path === '/mausoleo/entregar') {
+      // extras: sellos ganados dentro del Mausoleo ("extra:..."); se registran y se entregan junto con los de las lápidas
+      ((body && body.extras) || []).filter(id => /^extra:[\w-]+$/.test(id)).forEach(id => { if (!j.sellos[id]) j.sellos[id] = { ganado: new Date().toISOString(), entregado: null }; });
       const t = new Date().toISOString(), ids = Object.keys(j.sellos).filter(id => !j.sellos[id].entregado);
       ids.forEach(id => { j.sellos[id].entregado = t; }); escribir(db);
       return { entregados: ids, en: t, ...estadoMausoleo(db, j) };
@@ -158,8 +160,8 @@ export function crearApi({ base = null, red = 'ok', cache, guardar, lapidas, nic
   api.marcador = () => pedir('GET', '/mausoleo/marcador');
   api.ouija = nombre => pedir('POST', '/ouija', { nombre });
   // Entrega todos los sellos ganados que faltan. La caché local los marca como entregados.
-  api.entregar = async () => {
-    const r = await pedir('POST', '/mausoleo/entregar');
+  api.entregar = async (extras = []) => {
+    const r = await pedir('POST', '/mausoleo/entregar', { extras });
     cache.progreso = cache.progreso || { sellos: {} }; cache.progreso.sellos = cache.progreso.sellos || {};
     (r.entregados || []).forEach(id => { cache.progreso.sellos[id] = { ...(cache.progreso.sellos[id] || { ganado: null }), entregado: r.en || new Date().toISOString() }; });
     guardar(); return r;

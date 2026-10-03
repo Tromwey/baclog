@@ -98,14 +98,13 @@
   "puerta": {
     "nombre": "Mausoleo"
   },
-  "velas": [
-    { "id": "vela1", "lugar": "mausoleo" },
-    { "id": "vela2", "lugar": "mausoleo" },
-    { "id": "vela3", "lugar": "borde" },
-    { "id": "vela4", "lugar": "borde" },
-    { "id": "vela5", "lugar": "borde" },
-    { "id": "vela6", "lugar": "suelo" },
-    { "id": "vela7", "lugar": "suelo" }
+  "cartas": [
+    { "id": "siete-espadas", "nombre": "Siete de Espadas", "sentido": "El Suceso Previo", "arcano": "VII", "palo": "espadas", "n": 7, "lugar": "mausoleo" },
+    { "id": "tres-copas", "nombre": "Tres de Copas", "invertida": true, "sentido": "La Falsa Fiesta", "arcano": "III", "palo": "copas", "n": 3, "lugar": "borde" },
+    { "id": "tres-pentaculos", "nombre": "Tres de Pentáculos", "sentido": "El Complot de Grupo", "arcano": "III", "palo": "pentaculos", "n": 3, "lugar": "suelo" },
+    { "id": "luna", "nombre": "La Luna", "sentido": "El Engaño / La Ilusión", "arcano": "XVIII", "mayor": "luna", "lugar": "borde" },
+    { "id": "justicia", "nombre": "La Justicia", "sentido": "El Juicio / La Sentencia", "arcano": "XI", "mayor": "justicia", "lugar": "mausoleo" },
+    { "id": "diez-espadas", "nombre": "Diez de Espadas", "sentido": "El Desenlace", "arcano": "X", "palo": "espadas", "n": 10, "lugar": "suelo" }
   ],
   "encargos": [
     {

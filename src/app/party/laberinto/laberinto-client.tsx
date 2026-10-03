@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PARTY_LANDING } from "@/modules/party/event";
-import { pauseAmbienceWhenHidden, startDrone, startOrgan, swellAmbience } from "../party-drone";
+import { duckAmbience, pauseAmbienceWhenHidden, startDrone, startOrgan, swellAmbience } from "../party-drone";
 
 /*
  * Mounts the labyrinth. The labyrinth is NOT bundled: it is the design's own
@@ -18,16 +18,6 @@ import { pauseAmbienceWhenHidden, startDrone, startOrgan, swellAmbience } from "
  */
 
 const APP_URL = "/party/laberinto/app.js";
-
-/** Did the visitor walk here from another page of /party (the gate, the Mausoleum)? */
-function cameFromParty(): boolean {
-  try {
-    const r = new URL(document.referrer);
-    return r.origin === location.origin && r.pathname.startsWith("/party") && r.pathname !== location.pathname;
-  } catch {
-    return false;
-  }
-}
 
 function preload(urls: string[]) {
   urls.forEach((href) => {
@@ -65,7 +55,6 @@ export function LaberintoClient() {
     }
     let live = true;
     let app: LabApp | null = null;
-    const fromParty = cameFromParty();
     // A cross-page fade the browser skips (hidden tab, reduced motion) rejects a promise nobody holds: keep the console clean.
     const onReveal = (e: Event) => (e as Event & { viewTransition?: { finished: Promise<void> } }).viewTransition?.finished.catch(() => {});
     window.addEventListener("pagereveal", onReveal);
@@ -75,7 +64,10 @@ export function LaberintoClient() {
     // The gate's ambient drone keeps sounding in here (founder, 2026-10-02; not in the design). It rides the
     // labyrinth's own AudioContext — `window.__audio.ctx`, the one its sfx.js creates or reuses — and starts
     // with the first tap or key, which is also what lets the browser play anything.
-    const w = window as Window & { __audio?: { ctx: AudioContext | null }; webkitAudioContext?: typeof AudioContext };
+    const w = window as Window & {
+      __audio?: { ctx: AudioContext | null; ducking?: (segundos: number) => void };
+      webkitAudioContext?: typeof AudioContext;
+    };
     let stopDrone: (() => void) | null = null;
     const unlock = () => {
       const C = window.AudioContext || w.webkitAudioContext;
@@ -87,13 +79,24 @@ export function LaberintoClient() {
         // The organ is the labyrinth's alone: the gate only has the drone.
         const organ = startOrgan(ctx);
         swellAmbience(ctx);
+        // The labyrinth's sound layer (public/party/laberinto/sfx.js) calls this to make room for an event's sound.
+        au.ducking = (segundos: number) => duckAmbience(ctx, segundos);
         stopDrone = () => {
           drone();
           organ();
         };
       }
-      ctx.resume().catch(() => {});
-      ["click", "touchend", "keydown"].forEach((t) => window.removeEventListener(t, unlock, true));
+      // iOS only resumes inside a TAP: a drag (looking around, the joystick) doesn't count, and arriving from
+      // the gate the first touch is usually a drag. So keep listening until the context really runs.
+      const listo = () => ["click", "touchend", "keydown"].forEach((t) => window.removeEventListener(t, unlock, true));
+      if (ctx.state === "running") listo();
+      else
+        ctx
+          .resume()
+          .then(() => {
+            if (ctx.state === "running") listo();
+          })
+          .catch(() => {});
     };
     ["click", "touchend", "keydown"].forEach((t) => window.addEventListener(t, unlock, true));
     const stopPausing = pauseAmbienceWhenHidden(() => w.__audio?.ctx);
@@ -103,8 +106,9 @@ export function LaberintoClient() {
         if (!live || !host.current) return;
         const mounted = await mod.montarLaberinto({
           host: host.current,
-          // Arriving from the gate or the Mausoleum there is no "click to enter" stop: the walk continues.
-          entrada: q.get("entrada") !== "0" && !fromParty,
+          // The entry screen ("Encuentra el Mausoleo") shows for everyone, also arriving from the gate: its tap is
+          // the gesture iPhone needs to play sound — skipping it left the page mute (founder, 2026-10-02).
+          entrada: q.get("entrada") !== "0",
           dev: false,
           tema: "cementerio",
           // A visit opened early for testing carries its switch on to the Mausoleum (which has the same gate).

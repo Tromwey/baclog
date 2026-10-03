@@ -35,7 +35,7 @@ function losa(texto, S) {
   if (l) lineas.push(l);
   const lh = fs * 1.45, y0 = S / 2 - (lineas.length - 1) * lh / 2;
   lineas.forEach((t, i) => { g.fillStyle = 'rgba(255,255,255,.12)'; g.fillText(t, S / 2, y0 + i * lh + 1.5); g.fillStyle = '#29282b'; g.fillText(t, S / 2, y0 + i * lh); });
-  g.font = `700 ${S * 0.06}px Cinzel, Georgia, serif`; g.fillStyle = '#3a393c'; g.fillText('✝', S / 2, S * 0.14);
+  g.font = `700 ${S * 0.06}px Cinzel, Georgia, serif`; g.fillStyle = '#3a393c'; /* [Kura] sin cruz: en iOS sale como emoji */
   return c.toDataURL('image/jpeg', 0.86);
 }
 

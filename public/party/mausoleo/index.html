@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>El Mausoleo</title>
-<!-- [Kura] Página del diseño "proto/Fase 3e - Mausoleo v2.html" servida tal cual desde public/ (ver
-     .claude/knowledge/state/frontend.md). Cambios locales marcados [Kura]: rutas absolutas, three local,
-     servidor real de sellos, sin ?volver/?api/?red, barra dev solo con ?dev=1, y este bloque. -->
+<!-- [Kura] Página del diseño "proto/Fase 3e - Mausoleo v3.html" copiada por scripts/sync-party-design.py; los cambios
+     locales van marcados [Kura]. No editar a mano: editar el script y volver a correrlo. -->
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#07080b">
 <meta name="description" content="Si te atreves.">
@@ -16,7 +15,7 @@
 <script>
 // [Kura] Un fundido entre páginas que el navegador se salta rechaza una promesa que nadie espera: sin ruido en consola.
 addEventListener('pagereveal', function (e) { if (e.viewTransition) e.viewTransition.finished.catch(function () {}); });
-// [Kura] Detrás de la reja: antes de la apertura (sáb 3 oct, 00:00 hora local) aquí no hay nada. ?estado=revelado para pruebas.
+// [Kura] Detrás de la reja: antes de la apertura (hora local) aquí no hay nada. ?estado=revelado para pruebas.
 (function(){
   var q = new URLSearchParams(location.search);
   if (Date.now() < new Date(q.get('abre') || '2026-10-03T00:00:00').getTime() && q.get('estado') !== 'revelado') location.replace('/party');
@@ -33,6 +32,24 @@ addEventListener('pagereveal', function (e) { if (e.viewTransition) e.viewTransi
   document.documentElement.dataset.modo = m || (reason ? 'fallback' : '3d');
   window.__boot = { reason: m ? 'forzado por URL' : reason };
 })();
+</script>
+<script type="module">
+// [Kura] La música ambiental sigue en el Mausoleo (zumbido + órgano, como en el laberinto; founder 2026-10-02).
+// Arranca con el primer toque o tecla (los navegadores no dejan antes), sobre el mismo AudioContext que los
+// efectos (window.__audio.ctx), entra suave y se apaga con fundido al ocultar o salir de la página.
+import { startDrone, startOrgan, swellAmbience, pauseAmbienceWhenHidden, duckAmbience } from '/party/party-drone.js';
+const au = (window.__audio = window.__audio || { ctx: null });
+let sonando = false;
+const arrancar = () => {
+  const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+  const ctx = (au.ctx = au.ctx || new C());
+  if (!sonando) { sonando = true; startDrone(ctx); startOrgan(ctx); swellAmbience(ctx); au.ducking = segs => duckAmbience(ctx, segs); }
+  // iOS solo reanuda dentro de un TOQUE (arrastrar no cuenta): se sigue escuchando hasta que de verdad suene.
+  const listo = () => ['click', 'touchend', 'keydown'].forEach(t => removeEventListener(t, arrancar, true));
+  if (ctx.state === 'running') listo(); else ctx.resume().then(() => { if (ctx.state === 'running') listo(); }).catch(() => {});
+};
+['click', 'touchend', 'keydown'].forEach(t => addEventListener(t, arrancar, true));
+pauseAmbienceWhenHidden(() => au.ctx);
 </script>
 <script type="importmap">
 { "imports": { "three": "/party/vendor/three.module.min.js" } }
@@ -61,6 +78,10 @@ html[data-modo="3d"] #plano{display:none}
 /* Indicación contextual */
 .mau-pista{position:absolute;left:50%;bottom:max(64px,calc(env(safe-area-inset-bottom) + 52px));transform:translateX(-50%);z-index:4;margin:0;font:500 12px/1.4 "Oswald",system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#ddd7ca;text-shadow:0 0 12px #000,0 0 3px #000;pointer-events:none;opacity:0;transition:opacity .4s;text-align:center;width:max-content;max-width:calc(100% - 48px)}
 .mau-pista.on{opacity:1}
+/* Nombre para la ouija: una línea del personaje con un campo, sin panel */
+.mau-yo{position:absolute;left:50%;bottom:max(96px,calc(env(safe-area-inset-bottom) + 84px));transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:12px;margin:0;font:500 13px/1 "Oswald",system-ui,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#ddd7ca;text-shadow:0 0 12px #000,0 0 3px #000;width:max-content;max-width:calc(100% - 32px)}
+.mau-yo input{width:min(200px,42vw);min-height:44px;padding:0 4px;border:0;border-bottom:1px solid #8d877b;border-radius:0;background:transparent;color:#e6e0d4;font:500 18px/1 "Oswald",system-ui,sans-serif;letter-spacing:.04em;-webkit-user-select:text;user-select:text}
+.mau-yo input:focus{outline:none;border-bottom-color:#c9a08f}
 /* Ficha del nicho: a la derecha en escritorio, abajo en móvil */
 .mau-ficha{position:absolute;z-index:7;right:max(20px,env(safe-area-inset-right));top:50%;width:min(360px,calc(100% - 40px));padding:26px 22px 18px;border-radius:12px;background:rgba(14,14,17,.94);border:1px solid #2c2c31;display:flex;flex-direction:column;gap:12px;text-align:center;transform:translateY(-50%);opacity:0;transition:opacity .35s ease-out .25s}
 .mau-ficha.on{opacity:1}
@@ -121,6 +142,10 @@ html[data-modo="3d"] #plano{display:none}
 .mau-plano section > h2{margin:0;font:500 13px/1 "Oswald",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#8d877b}
 .mau-plano .mau-lista{max-width:420px}
 .mau-plano .mau-nombre{width:100%;max-width:420px}
+/* Mesa de las cartas */
+.mau-mesa li{align-items:center}
+.mau-mesa li.vacia span,.mau-mesa li.vacia b{color:#77777c}
+.mau-inv-cartas i{width:30px;height:46px;border-radius:3px;background:#4a1915;box-shadow:inset 0 0 0 2px #2a0f0c,inset 0 0 0 4px #b08a48,0 2px 6px rgba(0,0,0,.55);transform:rotate(-8deg)}
 /* [Kura] Fundido entre páginas de /party (reja → laberinto → mausoleo) */
 @view-transition{navigation:auto}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.45s}
@@ -139,9 +164,11 @@ html[data-modo="3d"] #plano{display:none}
       <span class="mau-sig" id="total-sig"></span>
     </div>
   </div>
-  <div class="lab-inv"><div class="lab-inv-sello" id="inv" role="status" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true"></div><b id="inv-n" aria-hidden="true">0</b></div></div>
+  <div class="lab-inv"><div class="lab-inv-sello" id="inv-t" role="status" aria-label="Llevas el sello de la mesa de las cartas" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true">★</div><b id="inv-t-n" aria-hidden="true" hidden></b></div><div class="lab-inv-sello" id="inv" role="status" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true">★</div><b id="inv-n" aria-hidden="true">0</b></div><div class="lab-inv-sello mau-inv-cartas" id="inv-c" role="status" hidden><i aria-hidden="true"></i><b id="inv-c-n" aria-hidden="true">0</b></div></div>
   <nav class="lab-sr" id="nav" aria-label="Lugares del Mausoleo"></nav>
   <p class="mau-pista" id="pista" aria-hidden="true"></p>
+  <form class="mau-yo" id="rsvp-form" hidden><span id="rsvp-q">¿Vendrás?</span><button class="lab-pill" type="button" data-rsvp="si">Sí</button><button class="lab-pill" type="button" data-rsvp="no">No</button></form><!-- [Kura] confirmación -->
+  <form class="mau-yo" id="ouija-form" hidden><label for="ouija-in">Me llamo</label><input id="ouija-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Listo</button></form>
   <section class="mau-ficha" id="ficha" aria-labelledby="ficha-t" hidden>
     <p class="mau-ficha-n" id="ficha-n"></p>
     <h2 id="ficha-t"></h2>
@@ -161,14 +188,6 @@ html[data-modo="3d"] #plano{display:none}
     <h2 id="urna-t">Firma tus sellos</h2>
     <form class="mau-nombre" id="urna-form"><label for="urna-in">Tu nombre o apodo</label><div class="mau-nombre-fila"><input id="urna-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Firmar y dejar</button></div></form>
   </section>
-  <section class="mau-ficha" id="ouija-p" aria-labelledby="ouija-t" hidden>
-    <p class="mau-ficha-n">La ouija</p>
-    <h2 id="ouija-t">¿Hay alguien ahí?</h2>
-    <p class="mau-ouija-letras" id="ouija-letras"></p>
-    <form class="mau-nombre" id="ouija-form" hidden><label for="ouija-in">¿Quién pregunta?</label><div class="mau-nombre-fila"><input id="ouija-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Preguntar</button></div></form>
-    <p class="mau-ficha-estado" id="ouija-quien"></p>
-    <div class="mau-ficha-nav" id="ouija-acc"><button class="lab-pill" type="button" id="ouija-btn">Preguntar</button><button class="lab-pill" type="button" id="ouija-otro">Cambiar nombre</button></div>
-  </section>
   <div class="lab-msg" id="msg"></div>
   <p class="lab-sr" id="live" aria-live="polite"></p>
   <section class="lab-capa lab-entrada" id="entrada" role="button" tabindex="0" aria-label="El Mausoleo. Haz clic o toca para entrar." hidden>
@@ -178,10 +197,15 @@ html[data-modo="3d"] #plano{display:none}
   </section>
   <div class="lab-dev" id="dev" hidden>
     <button type="button" class="lab-dev-t" id="dev-t" aria-expanded="false">Dev</button>
-    <span class="lab-badge lab-mono">FASE 3E · MAUSOLEO</span>
+    <span class="lab-badge lab-mono">FASE 3E · MAUSOLEO v3</span>
     <div class="lab-seg" role="group" aria-label="Red simulada"><button type="button" data-red="ok">Red ok</button><button type="button" data-red="lenta">Lenta</button><button type="button" data-red="falla">Sin red</button></div>
     <div class="lab-seg" role="group" aria-label="Luz"><button type="button" data-luz="noche">Noche</button><button type="button" data-luz="prueba">Luz de prueba</button></div>
     <button type="button" id="dev-sellos">Darme los 6 sellos</button>
+    <button type="button" id="dev-cartas">Darme las 6 cartas</button>
+    <button type="button" id="dev-mesa">Vaciar la mesa</button>
+    <button type="button" id="dev-tarot">Resolver la mesa</button>
+    <button type="button" id="dev-logros" aria-pressed="false">Todos los logros</button>
+    <button type="button" id="dev-placas">Cerrar cajones</button>
     <div class="lab-seg" role="group" aria-label="Otros jugadores"><button type="button" data-otros="1">Otros +1</button><button type="button" data-otros="5">+5</button><button type="button" data-otros="25">+25</button></div>
     <button type="button" id="dev-mias">Borrar mis entregas</button>
     <button type="button" id="dev-todo">Reiniciar mausoleo</button>
@@ -203,6 +227,14 @@ html[data-modo="3d"] #plano{display:none}
   </div>
   <ol id="p-nichos"></ol>
   <section><h2>Los que más sellos dejaron</h2><ol class="mau-lista" id="p-marcador"></ol></section>
+  <section><h2>Logros</h2><ol class="mau-lista mau-mesa" id="p-logros"></ol></section>
+  <section>
+    <h2>La mesa de las cartas</h2>
+    <ol class="mau-lista mau-mesa" id="p-cartas"></ol>
+    <p class="mau-ficha-estado" id="p-cartas-e"></p>
+    <button class="lab-pill" type="button" id="p-sello" hidden>Tomar el sello</button>
+    <button class="lab-pill" type="button" id="p-colocar" hidden>Colocar</button>
+  </section>
   <section>
     <h2>La ouija</h2>
     <form class="mau-nombre" id="p-ouija"><label for="p-ouija-in">¿Quién pregunta?</label><div class="mau-nombre-fila"><input id="p-ouija-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Preguntar</button></div></form>
@@ -217,6 +249,8 @@ import * as THREE from 'three';
 import { crearApi } from '/party/laberinto/api.js';
 import { crearSfx } from '/party/laberinto/sfx.js';
 import { texMuro, texAdoquin, texPiedra, texSuelo, texLetrero, fbm, rng } from '/party/laberinto/texturas.js';
+import { mallaCarta, lineas } from '/party/laberinto/cartas.js';
+import { crearLogros, crearAvisoLogros } from '/party/laberinto/logros.js';
 
 const q = new URLSearchParams(location.search), root = document.documentElement;
 const LABERINTO_URL = '/party/laberinto' + (q.get('estado') === 'revelado' ? '?estado=revelado' : '');   // [Kura] sin ?volver= (sería un redirect abierto)
@@ -226,10 +260,11 @@ const espera = ms => new Promise(r => setTimeout(r, ms));
 const coarse = matchMedia('(pointer:coarse)').matches, reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- Datos ----------
-const [mapa, cfg, ouijaCfg] = await Promise.all([
+const [mapa, cfg, ouijaCfg, logrosCfg] = await Promise.all([
   fetch('/party/laberinto/mapa.json', { cache: 'no-cache' }).then(r => r.json()),
   fetch('/party/mausoleo/nichos.json', { cache: 'no-cache' }).then(r => r.json()),
   null,   // [Kura] los mensajes de la ouija viven solo en el servidor (src/modules/party/lab-config.ts)
+  fetch('/party/mausoleo/logros.json', { cache: 'no-cache' }).then(r => r.json()).catch(() => null),
   Promise.race([Promise.all(['700 20px Cinzel', '400 20px Cinzel', '500 12px Oswald'].map(f => document.fonts.load(f))), espera(2500)]).catch(() => {}),
 ]);
 const LAPIDAS = Object.values(mapa.lapidas).filter(l => l.juego);
@@ -245,9 +280,13 @@ guardar();
 const api = crearApi({ base: '/api/party/lab', red: 'ok',   /* [Kura] servidor real; sin ?api= ni ?red= */ cache, guardar, lapidas: LAPIDAS.map(l => l.id), nichos: cfg.nichos, ouija: ouijaCfg });
 const sfx = crearSfx();
 const NICHOS = cfg.nichos.slice(0, 6).map((n, i) => ({ id: n.id, umbral: n.umbral, i, num: ROMANOS[i], abierto: false }));
+const CARTAS = (mapa.cartas || []).slice(0, 6).map((c, i) => ({ ...c, i, pos: ROMANOS[i] }));
 const misSellos = () => (cache.progreso && cache.progreso.sellos) || {};
 const porEntregar = () => Object.entries(misSellos()).filter(([id, s]) => LAPIDAS.some(l => l.id === id) && !s.entregado).map(([id]) => id);
 const misEntregados = () => Object.values(misSellos()).filter(s => s.entregado).length;
+// Sellos extra (mesa del tarot y cajones de logros): se toman aquí y se entregan en la urna como los demás
+const extrasTomados = () => [...(cache.mau.selloMesa ? ['extra:mesa'] : []), ...Object.entries(cache.mau.cajones || {}).filter(([, v]) => v === 'tomado').map(([id]) => 'extra:logro-' + id)];
+const extrasPorEntregar = () => extrasTomados().filter(id => !(misSellos()[id] && misSellos()[id].entregado));
 
 let total = cache.mau.total || 0, enLinea = true;
 async function cargarEstado() {
@@ -273,6 +312,7 @@ function contenidoNicho(n) {
 }
 let msgT = 0;
 function mensaje(t, ms = 3000) { const m = $('msg'); m.textContent = t; $('live').textContent = t; m.classList.add('on'); clearTimeout(msgT); msgT = setTimeout(() => m.classList.remove('on'), ms); }
+function callar() { clearTimeout(msgT); $('msg').classList.remove('on'); }
 // Marcador: última respuesta guardada para mostrar algo sin conexión
 let marc = cache.mau.marcador || null;
 async function cargarMarcador() {
@@ -294,12 +334,47 @@ async function firmar(v) {
 }
 // La ouija solo deletrea letras (con Ñ), números y espacios
 const deletreable = t => String(t || '').toUpperCase().replace(/Ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'Ñ').replace(/[^A-ZÑ0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+// Cartas: se recogen en el laberinto (cache.cartas) y se acomodan en la mesa (cache.mau.mesa: un lugar por carta, null o { id, inv }).
+// Minijuego: dejarlas en el orden de mapa.json → "cartas" y con su orientación ("invertida"). Solo en este dispositivo.
+if (!Array.isArray(cache.mau.mesa)) { const v = cache.mau.cartas || []; cache.mau.mesa = CARTAS.map((_, k) => v[k] ? { id: v[k], inv: false } : null); delete cache.mau.cartas; guardar(); }
+const mesa = () => cache.mau.mesa;
+const enMesa = () => mesa().filter(Boolean).map(s => s.id);
+const cartaDe = id => CARTAS.find(c => c.id === id);
+const cartasPorColocar = () => Object.keys(cache.cartas || {}).filter(id => cache.cartas[id] && cartaDe(id) && !enMesa().includes(id));
+const tiradaCorrecta = () => CARTAS.length > 0 && CARTAS.every((c, k) => { const s = mesa()[k]; return s && s.id === c.id && s.inv === !!c.invertida; });
+// Las cartas nuevas caen en lugares libres al azar y con orientación al azar: acomodarlas es cosa del jugador
+function repartir(ids) {
+  const libres = mesa().map((s, k) => s ? -1 : k).filter(k => k >= 0).map(k => [Math.random(), k]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+  return ids.slice(0, libres.length).map((id, j) => ({ id, k: libres[j], inv: Math.random() < 0.5 }));
+}
+// Logros (mausoleo/logros.json): cada regla lee la caché compartida con el laberinto (lab.v1)
+const LOGROS = ((logrosCfg && logrosCfg.logros) || []).slice(0, 6);
+const COLECCION = {
+  cartas: () => CARTAS.length > 0 && CARTAS.every(c => (cache.cartas || {})[c.id]),
+  foto: () => [1, 2, 3, 4].every(i => (cache.pistas || {})['foto' + i]),
+  caja: () => !!(cache.pistas || {}).caja,
+  encargos: () => (mapa.encargos || []).every(e => (cache.encargos || {})[e.id]),
+  selloMesa: () => !!cache.mau.selloMesa,
+  calabaza: () => !!cache.calabaza,
+};
+const REGLAS = {
+  tarot: () => tiradaCorrecta(),
+  gatos: () => (mapa.encargos || []).length > 0 && mapa.encargos.every(e => (cache.encargos || {})[e.id] === 'entregado'),
+  lapidas: () => LAPIDAS.length > 0 && LAPIDAS.every(l => misSellos()[l.id]),
+  cuervos: l => Object.keys(cache.cuervos || {}).length >= (l.cuantos || 4),
+  calabaza: () => !!cache.calabaza,
+  foto: () => COLECCION.foto(),
+  coleccionables: l => (l.coleccionables || []).length > 0 && l.coleccionables.every(k => !!(COLECCION[k] && COLECCION[k]())),
+};
+const logroObtenido = l => !!cache.mau.devLogros || !!(REGLAS[l.regla] && REGLAS[l.regla](l));
+const LOGAV = crearLogros({ logros: LOGROS, mapa, cache, guardar }); LOGAV.nuevos();
+const nExtra = () => extrasPorEntregar().length;
 
 // ---------- Vista sin 3D ----------
 function pintarPlano() {
   $('p-total').textContent = total; $('p-u').textContent = plural(total, 'sello entregado', 'sellos entregados');
   $('p-sig').textContent = textoSig(total);
-  const n = porEntregar().length;
+  const n = porEntregar().length + extrasPorEntregar().length;
   $('p-traes').textContent = n ? `Traes ${n} ${plural(n, 'sello', 'sellos')}` : misEntregados() ? `Ya dejaste tus ${misEntregados()} ${plural(misEntregados(), 'sello', 'sellos')} en la urna` : 'No traes sellos. Se ganan en las lápidas del laberinto.';
   $('p-entregar').hidden = !n;
   $('p-nichos').innerHTML = '';
@@ -312,6 +387,33 @@ function pintarPlano() {
     $('p-nichos').appendChild(li);
   });
   listaMarcador($('p-marcador'), marc);
+  pintarPlanoCartas();
+  pintarPlanoLogros();
+}
+function pintarPlanoLogros() {
+  const ol = $('p-logros'); ol.innerHTML = '';
+  LOGROS.forEach(l => {
+    const ok = logroObtenido(l), li = document.createElement('li'), b = document.createElement('b'), sp = document.createElement('span');
+    li.className = ok ? '' : 'vacia'; b.textContent = ok ? '★' : '·'; sp.textContent = `${l.titulo} — ${l.como}`; li.append(b, sp); ol.appendChild(li);
+  });
+}
+function pintarPlanoCartas() {
+  const ol = $('p-cartas'), listo = tiradaCorrecta(); ol.innerHTML = '';
+  mesa().forEach((s, k) => {
+    const li = document.createElement('li'), b = document.createElement('b'), sp = document.createElement('span'), c = s && cartaDe(s.id);
+    li.className = c ? '' : 'vacia'; b.textContent = (k + 1) + '.'; sp.textContent = c ? `${c.nombre} · ${s.inv ? 'de cabeza' : 'al derecho'}` : 'Vacío'; li.append(b, sp);
+    if (c && !listo) [['↑', 'Subir', -1], ['↓', 'Bajar', 1], ['↻', 'Girar', 0]].forEach(([t, a, d]) => {
+      const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'lab-pill'; bt.textContent = t; bt.setAttribute('aria-label', `${a} ${c.nombre}`);
+      bt.disabled = !!d && (k + d < 0 || k + d >= mesa().length);
+      bt.onclick = () => { const M = mesa(); if (d) [M[k], M[k + d]] = [M[k + d], M[k]]; else s.inv = !s.inv; guardar(); pintarPlanoCartas(); };
+      li.appendChild(bt);
+    });
+    ol.appendChild(li);
+  });
+  const n = cartasPorColocar().length, b = $('p-colocar'); b.hidden = !n; b.textContent = `Colocar ${n} ${plural(n, 'carta', 'cartas')}`;
+  $('p-cartas-e').textContent = listo ? (cache.mau.selloMesa ? 'Las cartas están en su lugar. Tomaste el sello del cajón' : 'Las cartas están en su lugar. Se abrió un cajón con un sello') : enMesa().length === CARTAS.length ? 'Todavía no están en el orden correcto' : '';
+  $('p-sello').hidden = !listo || !!cache.mau.selloMesa;
+  $('p-sello').onclick = () => { cache.mau.selloMesa = true; guardar(); pintarPlanoCartas(); };
 }
 function iniciarPlano(nota) {
   total = totalServidor(); NICHOS.forEach(n => { n.abierto = total >= n.umbral; });
@@ -327,11 +429,12 @@ function iniciarPlano(nota) {
     try { const r = await api.ouija(v); $('p-ouija-r').textContent = r.texto; } catch (_) { $('p-ouija-r').textContent = 'La ouija no responde.'; }
     listaMarcador($('p-marcador'), marc);
   };
+  $('p-colocar').onclick = () => { repartir(cartasPorColocar()).forEach(r => { mesa()[r.k] = { id: r.id, inv: r.inv }; }); guardar(); pintarPlanoCartas(); };
   $('p-entregar').onclick = async () => {
     // [Kura] tampoco sin firma en la vista 2D
     if (!cache.apodo) { const v = prompt('Firma tus sellos: tu nombre o apodo'); if (!v || !(await firmar(v))) return; }
     const b = $('p-entregar'); b.disabled = true;
-    try { const r = await api.entregar(); guardarMausoleo(r); total = r.total; NICHOS.forEach(n => { n.abierto = total >= n.umbral; }); $('p-traes').textContent = ''; pintarPlano(); cargarMarcador().then(() => listaMarcador($('p-marcador'), marc)); }
+    try { const r = await api.entregar(extrasPorEntregar()); guardarMausoleo(r); total = r.total; NICHOS.forEach(n => { n.abierto = total >= n.umbral; }); $('p-traes').textContent = ''; pintarPlano(); cargarMarcador().then(() => listaMarcador($('p-marcador'), marc)); }
     catch (e) { $('p-traes').textContent = 'No se pudo entregar. Revisa tu conexión.'; }
     finally { b.disabled = false; }
   };
@@ -345,6 +448,8 @@ else {
 
 function iniciar3D() {
   const ui = $('ui'), stage = $('stage');
+  const avisoLogros = crearAvisoLogros(ui, { cache, guardar, sfx, ayuda: 'Los logros están en la capilla Marcador y logros.' });
+  let revLogT = 0; const revisarLogros = (ms = 450) => { clearTimeout(revLogT); revLogT = setTimeout(() => { avisoLogros.avisar(LOGAV.nuevos()); pintarLogros(); }, ms); };
   ui.dataset.input = coarse ? 'touch' : 'mouse';
   addEventListener('pointerdown', e => { const t = e.pointerType === 'mouse' ? 'mouse' : 'touch'; if (ui.dataset.input !== t) { ui.dataset.input = t; if (typeof pintarUI === 'function' && cur) pintarUI(); } }, true);
 
@@ -411,7 +516,7 @@ function iniciar3D() {
 
   // ---------- Cámara mortuoria: nave, dos capillas laterales y bóveda ----------
   // Fondo en z = -3 (cara), puerta en z = 7. Nave de 5.2 m; a cada lado una capilla de 3.4 × 3.4 m centrada en z = 2.6,
-  // abierta a la nave por un arco. Izquierda: el marcador. Derecha: la ouija.
+  // abierta a la nave por un arco. Izquierda: el marcador (fondo) y los logros (muro lateral). Derecha: la ouija y las cartas.
   const ZW = -3, ZD = 7, XW = 2.6, HM = 3.6, ZC = 2.6, XC = 6.0, CW = 3.4, HC = 3.2, AR = 1.25, AH = 2.1;
   const LARGO = ZD - ZW + 0.3, ZM = (ZW + ZD) / 2, z0c = ZC - CW / 2, z1c = ZC + CW / 2, XM = (XW + XC) / 2;
   plano(5.2, ZD - ZW, M.piso, 0, 0, ZM).rotation.x = -Math.PI / 2;
@@ -458,7 +563,7 @@ function iniciar3D() {
   const placaVieja = (() => {
     const W = 128, H = 108, c = lienzo(W, H), g = c.getContext('2d'), R = rng(77);
     fondoPiedra(g, W, H, 7);
-    grabar(g, '✝', W / 2, 26, '700 16px Cinzel, Georgia, serif', 0.7);
+    /* [Kura] sin cruz (en iOS sale como emoji) */
     g.fillStyle = 'rgba(28,27,30,.45)';
     [48, 62, 74].forEach((y, i) => { const w = (i === 0 ? 60 : 36) + R() * 20; g.fillRect(W / 2 - w / 2, y, w, i === 0 ? 4 : 3); });
     return c;
@@ -607,8 +712,61 @@ function iniciar3D() {
   [-1, 1].forEach(t => { const z = ZC + t * 1.45, x = -XC + 0.5; cyl(0.12, 0.16, 0.05, M.bronce, x, 0.025, z, 12); cyl(0.018, 0.026, 1.0, M.bronce, x, 0.55, z, 8); cyl(0.07, 0.04, 0.04, M.bronce, x, 1.07, z, 12); vela(x, 1.09, z, 0.3, 0.035); });
   const luzMarcador = add(new THREE.PointLight(0xffb36a, 2.4, 5, 1.6)); luzMarcador.position.set(-XC + 1.0, 1.7, ZC);
 
+  // ---------- Capilla izquierda, muro lateral (z = z0c): placas de logros ----------
+  // 2 filas × 3, en el orden de mausoleo/logros.json, de izquierda a derecha para quien mira el muro
+  // Cada logro: placa arriba y su cajón abajo. 2 filas × 3, en el orden de mausoleo/logros.json
+  const PL_W = 0.7, PL_H = 0.44, LX = -4.3, LZ = z0c, CJ_W = 0.46, CJ_H = 0.1;
+  const placaPos = i => new V3(LX + ((i % 3) - 1) * 0.8, 2.13 - Math.floor(i / 3) * 0.68, LZ + 0.022);
+  const cajonPos = i => { const P = placaPos(i); return new V3(P.x, P.y - PL_H / 2 - 0.08, LZ); };
+  box(2.6, 1.47, 0.03, M.piedraOsc, LX, 1.715, LZ + 0.008);
+  const rotuloL = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.15), new THREE.MeshLambertMaterial({ map: tex(texLetrero('LOGROS', piedraC), 1, 1, true, true) })); rotuloL.position.set(LX, 2.6, LZ + 0.02); add(rotuloL);
+  function pintarPlacaLogro(c, l, ok) {
+    const g = c.getContext('2d'), W = 512, H = 322; g.clearRect(0, 0, W, H); fondoPiedra(g, W, H, 14);
+    if (ok) { g.strokeStyle = 'rgba(176,132,60,.95)'; g.lineWidth = 4; g.strokeRect(26, 26, W - 52, H - 52); }
+    const FT = '700 34px Cinzel, Georgia, serif', FC = '400 22px Cinzel, Georgia, serif';
+    g.font = FT; const ls = lineas(g, l.titulo.toUpperCase(), 420).slice(0, 3), y0 = 122 - (ls.length - 1) * 22;
+    ls.forEach((t, i) => grabar(g, t, W / 2, y0 + i * 44, FT, ok ? 0.95 : 0.85));
+    g.fillStyle = 'rgba(28,27,30,.45)'; g.fillRect(W / 2 - 40, 210, 80, 2);
+    g.font = FC; lineas(g, l.como, 420).slice(0, 2).forEach((t, i) => grabar(g, t, W / 2, 242 + i * 28, FC, ok ? 0.85 : 0.75));
+  }
+  const placasLogro = LOGROS.map((l, i) => {
+    const c = lienzo(512, 322), t = tex(c, 1, 1, true, true), mf = new THREE.MeshLambertMaterial({ map: t, color: 0xc8c1b4, emissive: 0x0e0c09, name: 'logro_' + l.id });
+    const m = new THREE.Mesh(new THREE.BoxGeometry(PL_W, PL_H, 0.04), [M.piedra, M.piedra, M.piedra, M.piedra, mf, M.piedra]); m.position.copy(placaPos(i)); add(m);
+    return { l, c, t, mf, ok: null };
+  });
+  function pintarLogros() { placasLogro.forEach(p => { const ok = logroObtenido(p.l); if (ok === p.ok) return; p.ok = ok; pintarPlacaLogro(p.c, p.l, ok); p.t.needsUpdate = true; p.mf.color.setHex(ok ? 0xf0e6d4 : 0xc8c1b4); p.mf.emissive.setHex(ok ? 0x2a1e0a : 0x0e0c09); }); }
+  pintarLogros();
+  const matSelloLogros = (() => {
+    const S = 128, c = lienzo(S, S), g = c.getContext('2d');
+    g.fillStyle = '#6e2c25'; g.fillRect(0, 0, S, S);
+    g.strokeStyle = '#55211b'; g.lineWidth = 10; g.beginPath(); g.arc(64, 64, 54, 0, 6.29); g.stroke();
+    g.strokeStyle = '#84392f'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 47, 0, 6.29); g.stroke();
+    g.fillStyle = '#e8cbbd'; [0, Math.PI].forEach(a0 => { g.beginPath(); for (let i = 0; i < 3; i++) { const a = a0 - Math.PI / 2 + i * 2 * Math.PI / 3; g.lineTo(64 + Math.cos(a) * 30, 64 + Math.sin(a) * 30); } g.closePath(); g.fill(); });
+    return new THREE.MeshLambertMaterial({ map: tex(c, 1, 1, true, true), emissive: 0x2a0d09, name: 'sello_logros' });
+  })();
+  // Un cajón por logro, bajo su placa: se abre cuando el logro está conseguido y trae un sello de pie
+  const geoSelloL = new THREE.CylinderGeometry(0.04, 0.04, 0.012, 24);
+  const cajonesL = LOGROS.map((l, i) => {
+    const C = cajonPos(i);
+    const hueco = new THREE.Mesh(new THREE.PlaneGeometry(CJ_W - 0.02, CJ_H - 0.02), M.boca); hueco.position.set(C.x, C.y, LZ + 0.0245); add(hueco);
+    const g = new THREE.Group(); g.position.copy(C); add(g);
+    const pz = (w, h, d, x, y, z, m = M.piedra) => { const o = new THREE.Mesh(projUV(new THREE.BoxGeometry(w, h, d)), m); o.position.set(x, y, z); g.add(o); };
+    pz(CJ_W, CJ_H, 0.03, 0, 0, 0.04);
+    pz(CJ_W - 0.03, 0.01, 0.24, 0, -CJ_H / 2 + 0.01, -0.08, M.piedraOsc);
+    [-1, 1].forEach(sx => pz(0.012, CJ_H - 0.02, 0.24, sx * (CJ_W / 2 - 0.02), -0.005, -0.08, M.piedraOsc));
+    pz(CJ_W - 0.03, CJ_H - 0.02, 0.012, 0, -0.005, -0.2, M.piedraOsc);
+    const jal = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.005, 6, 14), M.bronce); jal.position.set(0, 0, 0.058); g.add(jal);
+    const sello = new THREE.Mesh(geoSelloL, [M.cera, matSelloLogros, M.cera]); sello.rotation.x = Math.PI / 2; sello.position.set(0, 0.006, -0.05); g.add(sello);
+    const brillo = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0xff9a4a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); brillo.position.set(0, 0.006, -0.02); brillo.scale.setScalar(0.2); g.add(brillo);
+    return { l, g, sello, brillo, k: 0 };
+  });
+  const estadoCajon = i => (cache.mau.cajones || {})[LOGROS[i].id];
+  const ponerCajonL = (c, k) => { c.k = k; c.g.position.z = LZ + k * 0.17; };
+  const luzLogros = add(new THREE.PointLight(0xffc27a, 2.8, 3.8, 1.5)); luzLogros.position.set(LX, 2.05, LZ + 1.0);
+
   // ---------- Capilla derecha: la ouija ----------
-  const MESA = new V3(XC - 1.25, 0, ZC), TAB_Y = 0.777;
+  // La ouija a la izquierda de la capilla (z menor) y la mesa de las cartas a la derecha
+  const MESA = new V3(XC - 1.25, 0, ZC - 0.85), TAB_Y = 0.777;
   cyl(0.3, 0.34, 0.04, M.madera, MESA.x, 0.02, MESA.z, 24);
   cyl(0.045, 0.07, 0.7, M.madera, MESA.x, 0.39, MESA.z, 12);
   cyl(0.58, 0.58, 0.04, M.madera, MESA.x, 0.745, MESA.z, 40);
@@ -623,25 +781,79 @@ function iniciar3D() {
   arcoL('NÑOPQRSTUVWXYZ', 380, 215, 545, 0.15, 0.85, 58);
   [...'1234567890'].forEach((ch, i) => { const x = 330 + i * 60; tinta(ch, x, 645, 46); GLIFO[ch] = [x, 645]; });
   tinta('SÍ', 150, 122, 58); GLIFO.SI = [150, 122]; tinta('NO', 1050, 122, 58); GLIFO.NO = [1050, 122];
-  tinta('ADIÓS', 600, 735, 48); GLIFO.ADIOS = [600, 735]; tinta('✝', 600, 104, 40); GLIFO.CENTRO = [600, 500];
+  tinta('ADIÓS', 600, 735, 48); GLIFO.ADIOS = [600, 735]; /* [Kura] sin cruz */ GLIFO.CENTRO = [600, 500];
   const tabla = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.012, 0.6), [M.madera, M.madera, new THREE.MeshLambertMaterial({ map: tex(ouC, 1, 1, true, true), name: 'ouija' }), M.madera, M.madera, M.madera]);
-  tabla.rotation.y = Math.PI / 2; tabla.position.set(MESA.x, TAB_Y - 0.006, MESA.z); add(tabla);
-  const enTabla = ([x, y]) => new V3(MESA.x + (0.5 - y / OH) * 0.6, TAB_Y + 0.004, MESA.z - (x / OW - 0.5) * 0.9);
+  // Arriba del tablero (SÍ / NO) hacia el fondo de la capilla y la A a la izquierda de quien se sienta frente a ella
+  tabla.rotation.y = -Math.PI / 2; tabla.position.set(MESA.x, TAB_Y - 0.006, MESA.z); add(tabla);
+  const enTabla = ([x, y]) => new V3(MESA.x + (0.5 - y / OH) * 0.6, TAB_Y + 0.004, MESA.z + (x / OW - 0.5) * 0.9);
   const ps = new THREE.Shape(); ps.moveTo(0, 0.088); ps.bezierCurveTo(0.036, 0.072, 0.072, 0.012, 0.064, -0.03); ps.bezierCurveTo(0.056, -0.068, -0.056, -0.068, -0.064, -0.03); ps.bezierCurveTo(-0.072, 0.012, -0.036, 0.072, 0, 0.088);
   const ph = new THREE.Path(); ph.absarc(0, 0, 0.027, 0, Math.PI * 2, true); ps.holes.push(ph);
   const pg = new THREE.ExtrudeGeometry(ps, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2, curveSegments: 16 }); pg.rotateX(-Math.PI / 2);
   const planch = new THREE.Mesh(pg, M.hueso); planch.rotation.y = -Math.PI / 2; planch.position.copy(enTabla(GLIFO.CENTRO)); add(planch);
   [[0.4, -0.3, 0.16], [0.42, 0.26, 0.2], [-0.05, 0.5, 0.13]].forEach(([dx, dz, h]) => vela(MESA.x + dx, 0.765, MESA.z + dz, h, 0.03));
-  const luzOuija = add(new THREE.PointLight(0xffb070, 2.2, 3.6, 1.8)); luzOuija.position.set(MESA.x + 0.3, 1.2, ZC);
+  const luzOuija = add(new THREE.PointLight(0xffb070, 2.2, 3.6, 1.8)); luzOuija.position.set(MESA.x + 0.3, 1.2, MESA.z);
+
+  // ---------- Capilla derecha, lado derecho: la mesa de las cartas ----------
+  // Seis lugares sin número ni texto; se llenan de izquierda a derecha según llegan (1 px del paño = 1 mm)
+  const CM = new V3(XC - 1.25, 0, ZC + 0.85), CM_Y = 0.8, CM_D = 0.7, CM_L = 1.4, PASO = 0.21;
+  box(CM_D, 0.05, CM_L, M.madera, CM.x, CM_Y - 0.025, CM.z);
+  // Faldones: el de atrás entero; el de enfrente con hueco para el cajón
+  const AX = CM.x - (CM_D / 2 - 0.05), CAJ_W = 0.4, TRAMO = (CM_L - 0.12 - CAJ_W) / 2;
+  box(0.03, 0.1, CM_L - 0.12, M.madera, CM.x + (CM_D / 2 - 0.05), CM_Y - 0.1, CM.z);
+  [-1, 1].forEach(s => box(0.03, 0.1, TRAMO, M.madera, AX, CM_Y - 0.1, CM.z + s * (CAJ_W / 2 + TRAMO / 2)));
+  [-1, 1].forEach(a => [-1, 1].forEach(b => box(0.05, CM_Y - 0.05, 0.05, M.madera, CM.x + a * (CM_D / 2 - 0.06), (CM_Y - 0.05) / 2, CM.z + b * (CM_L / 2 - 0.06))));
+  const PW = 1320, PH = 560, panoC = lienzo(PW, PH), pa = panoC.getContext('2d');
+  pa.fillStyle = '#2a1517'; pa.fillRect(0, 0, PW, PH);
+  { const R = rng(31); for (let i = 0; i < 4000; i++) { pa.fillStyle = R() < 0.5 ? `rgba(0,0,0,${R() * 0.14})` : `rgba(120,60,60,${R() * 0.1})`; pa.fillRect(R() * PW, R() * PH, 2, 2); } }
+  pa.strokeStyle = 'rgba(176,138,72,.6)'; pa.lineWidth = 3; pa.strokeRect(14, 14, PW - 28, PH - 28); pa.lineWidth = 1; pa.strokeRect(24, 24, PW - 48, PH - 48);
+  pa.setLineDash([10, 8]); pa.strokeStyle = 'rgba(176,138,72,.45)'; pa.lineWidth = 2;
+  for (let k = 0; k < 6; k++) pa.strokeRect(PW / 2 + (k - 2.5) * PASO * 1000 - 76, PH / 2 - 126, 152, 252);
+  pa.setLineDash([]);
+  const panoG = new THREE.PlaneGeometry(PW / 1000, PH / 1000); panoG.rotateX(-Math.PI / 2).rotateY(-Math.PI / 2);
+  const pano = new THREE.Mesh(panoG, new THREE.MeshLambertMaterial({ map: tex(panoC, 1, 1, true, true), name: 'pano_cartas' })); pano.position.set(CM.x, CM_Y + 0.002, CM.z); add(pano);
+  // Dos velas apagadas que prenden cuando están las seis cartas
+  const velasMesa = [-1, 1].map(s => vela(CM.x + 0.24, CM_Y, CM.z + s * 0.65, 0.15, 0.026, false));
+  const luzCartas = add(new THREE.PointLight(0xffb070, 0.9, 2.8, 1.8)); luzCartas.position.set(CM.x - 0.35, 1.4, CM.z);
+  let mesaLista = false;
+  // Cajón al frente de la mesa: se abre cuando las cartas están en su lugar y deja ver un sello (local: +x hacia el fondo)
+  const cajon = new THREE.Group(); cajon.position.set(AX, CM_Y - 0.1, CM.z); add(cajon);
+  const pieza = (w, h, d, x, y, z, m = M.madera) => { const o = new THREE.Mesh(projUV(new THREE.BoxGeometry(w, h, d)), m); o.position.set(x, y, z); cajon.add(o); return o; };
+  pieza(0.025, 0.085, CAJ_W - 0.01, 0, 0, 0);
+  pieza(0.36, 0.008, CAJ_W - 0.04, 0.19, -0.035, 0);
+  [-1, 1].forEach(s => pieza(0.36, 0.06, 0.012, 0.19, -0.008, s * (CAJ_W / 2 - 0.026)));
+  pieza(0.012, 0.06, CAJ_W - 0.04, 0.37, -0.008, 0);
+  const jalador = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), M.bronce); jalador.position.set(-0.02, 0, 0); cajon.add(jalador);
+  const matSelloMesa = (() => {
+    const S = 128, c = lienzo(S, S), g = c.getContext('2d');
+    g.fillStyle = '#6e2c25'; g.fillRect(0, 0, S, S);
+    g.strokeStyle = '#55211b'; g.lineWidth = 10; g.beginPath(); g.arc(64, 64, 54, 0, 6.29); g.stroke();
+    g.strokeStyle = '#84392f'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 47, 0, 6.29); g.stroke();
+    g.fillStyle = '#e8cbbd'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 13 : 32; g.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); } g.closePath(); g.fill();
+    return new THREE.MeshLambertMaterial({ map: tex(c, 1, 1, true, true), emissive: 0x2a0d09, name: 'sello_mesa' });
+  })();
+  const SELLO0 = { p: new V3(0.14, -0.024, 0), ry: 0.4 };
+  const selloMesa = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.014, 28), [M.cera, matSelloMesa, M.cera]); selloMesa.position.copy(SELLO0.p); selloMesa.rotation.y = SELLO0.ry; cajon.add(selloMesa);
+  const brilloCajon = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0xff9a4a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
+  brilloCajon.position.set(0.14, 0.02, 0); brilloCajon.scale.setScalar(0.3); cajon.add(brilloCajon);
+  let cajonK = 0;
+  const ponerCajon = k => { cajonK = k; cajon.position.x = AX - k * 0.27; };
+  // Carta acostada boca arriba con la parte de arriba hacia el fondo de la capilla; inv = de cabeza
+  const qMesa = (k, inv) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new V3(0, 0, inv ? -1 : 1), new V3(inv ? -1 : 1, 0, 0), new V3(0, 1, 0)))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new V3(0, 0, 1), Math.sin(k * 12.9) * 0.04));
+  const slotCarta = (k, alto = 0) => new V3(CM.x, CM_Y + 0.0045 + alto, CM.z + (k - 2.5) * PASO);
+  const cartas3D = {}; let selK = null;
+  function ponerCarta(c, k, inv) { const m = mallaCarta(c); m.position.copy(slotCarta(k)); m.quaternion.copy(qMesa(k, inv)); add(m); cartas3D[c.id] = m; }
   // ---------- Sellos de cera (los que vuelan a la urna) ----------
   const selloGeo = new THREE.CylinderGeometry(0.048, 0.048, 0.014, 28), selloMats = {};
   function matInicial(id) {
+    if (id === 'extra:mesa') return matSelloMesa;
+    if (/^extra:logro-/.test(id)) return matSelloLogros;
     if (selloMats[id]) return selloMats[id];
     const S = 128, c = lienzo(S, S), g = c.getContext('2d');
     g.fillStyle = '#6e2c25'; g.fillRect(0, 0, S, S);
     g.strokeStyle = '#55211b'; g.lineWidth = 10; g.beginPath(); g.arc(64, 64, 54, 0, 6.29); g.stroke();
     g.strokeStyle = '#84392f'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 47, 0, 6.29); g.stroke();
-    g.font = '700 54px Cinzel, Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e8cbbd'; g.fillText(inicial(nombreDe(id)), 64, 68);
+    g.font = '700 54px Cinzel, Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e8cbbd'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 13 : 32; g.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); } g.closePath(); g.fill();   /* [Kura] estrella */
     return (selloMats[id] = new THREE.MeshLambertMaterial({ map: tex(c, 1, 1, true, true), emissive: 0x2a0d09 }));
   }
 
@@ -650,9 +862,17 @@ function iniciar3D() {
   function zona(id, w, h, d, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), hitMat); m.position.set(x, y, z); m.userData = { id, anchor: new V3(x, y + h / 2 + 0.05, z) }; add(m); hits.push(m); return m; }
   zona('urna', 1.9, 1.62, 0.95, 0, 0.94, ZW + 0.48);
   NICHOS.forEach((n, i) => { const z = zona('n' + i, NW, NH, 0.3, n.x, n.y, ZF + 0.05); z.userData.anchor.set(n.x, n.y + NH / 2 + 0.03, ZF + 0.1); });
-  [['marcador', -1], ['ouija', 1]].forEach(([id, s]) => zona(id, 0.5, AH + AR, AR * 2, s * (XW + 0.15), (AH + AR) / 2, ZC));
+  [['capillaIzq', -1], ['capilla', 1]].forEach(([id, s]) => zona(id, 0.5, AH + AR, AR * 2, s * (XW + 0.15), (AH + AR) / 2, ZC));
+  zona('logros', 2.6, 1.56, 0.3, LX, 1.67, LZ + 0.15).userData.anchor.set(LX, 2.72, LZ + 0.15);
+  const placasZ = LOGROS.map((l, i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(PL_W, PL_H, 0.12), hitMat); m.position.copy(placaPos(i)); m.userData = { id: 'logro', k: i, anchor: placaPos(i).add(new V3(0, PL_H / 2 + 0.04, 0.05)) }; add(m); return m; });
+  const zSellosL = cajonesL.map((c, i) => { const C = cajonPos(i), m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.12), hitMat); m.position.set(C.x, C.y + 0.006, LZ + 0.12); m.userData = { id: 'sello-logro', k: i, anchor: new V3(C.x, C.y + 0.1, LZ + 0.14) }; add(m); return m; });
   zona('marcador', 0.2, 2.2, 2.6, -XC + 0.2, 1.85, ZC);
-  zona('ouija', 1.0, 0.25, 1.2, MESA.x, 0.85, ZC).userData.anchor.set(MESA.x - 0.2, 1.05, ZC);
+  zona('ouija', 1.0, 0.25, 1.2, MESA.x, 0.85, MESA.z).userData.anchor.set(MESA.x - 0.2, 1.05, MESA.z);
+  zona('cartas', CM_D + 0.1, 0.32, CM_L, CM.x, CM_Y + 0.1, CM.z).userData.anchor.set(CM.x - 0.15, CM_Y + 0.3, CM.z);
+  // Un lugar tocable por carta (solo en la vista de la mesa)
+  // El sello del cajón abierto (la zona queda donde estará el cajón abierto; solo vale en la vista de la mesa)
+  zona('sello-mesa', 0.2, 0.12, 0.2, AX - 0.13, CM_Y - 0.12, CM.z).userData.anchor.set(AX - 0.13, CM_Y + 0.02, CM.z);
+  const lugares = CARTAS.map((_, k) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.05, 0.2), hitMat); m.position.copy(slotCarta(k)); m.userData = { id: 'lugar', k, anchor: slotCarta(k, 0.16) }; add(m); return m; });
 
   // ---------- Linterna ----------
   const cam = new THREE.PerspectiveCamera(55, 1, 0.05, 80); add(cam);
@@ -672,12 +892,20 @@ function iniciar3D() {
     altar: () => ({ pos: [0, EYE, 0.4], target: [0, 2.25, ZF], fit: [4.9, 2.7], fmin: 46, fmax: 68, back: 1.6, lim: { yaw: 0.55, up: 0.4, down: 0.45, fwd: 0.8, bwd: 0.8 } }),
     nicho: i => { const n = NICHOS[i]; return { pos: [n.x * 0.8, Math.min(n.y - 0.1, 2.25), -0.6], target: [n.x, n.y, ZF], fit: [NW + 0.5, NH + 0.5], fmin: 26, fmax: 60, back: 1.2, lim: { yaw: 0.2, up: 0.15, down: 0.15, fwd: 0.3, bwd: 0.4 } }; },
     marcador: () => ({ pos: [-3.4, EYE, ZC], target: [-XC, 1.85, ZC], fit: [2.6, 2.2], fmin: 40, fmax: 66, back: 0.7, lim: { yaw: 0.35, up: 0.25, down: 0.25, fwd: 0.6, bwd: 0.5 } }),
-    ouija: () => ({ pos: [MESA.x - 1.55, 1.75, ZC], target: [MESA.x + 0.05, TAB_Y, ZC], fit: [1.0, 1.0], fmin: 34, fmax: 64, back: 0.5, lim: { yaw: 0.3, up: 0.25, down: 0.2, fwd: 0.4, bwd: 0.3 } }),
+    // Capilla izquierda completa: el marcador al fondo (izquierda) y los logros en el muro lateral (derecha)
+    capillaIzq: () => ({ pos: [-3.1, 1.85, 3.7], target: [-5.1, 1.6, 1.7], fit: [3.4, 2.2], fmin: 46, fmax: 72, back: 0.4, lim: { yaw: 0.45, up: 0.3, down: 0.25, fwd: 0.5, bwd: 0.3 } }),
+    logros: () => ({ pos: [LX, 1.75, LZ + 2.7], target: [LX, 1.82, LZ], fit: [2.8, 2.1], fmin: 36, fmax: 64, back: 0.6, lim: { yaw: 0.3, up: 0.25, down: 0.25, fwd: 0.6, bwd: 0.4 } }),
+    // De frente; con el cajón abierto, la cámara sube y mira un poco hacia abajo para que se vea el sello adentro
+    logro: i => { const P = placaPos(i), y = P.y - 0.13, ab = !!estadoCajon(i); return { pos: ab ? [P.x, P.y + 0.18, LZ + 0.95] : [P.x, Math.min(y + 0.05, 2.0), LZ + 1.0], target: ab ? [P.x, P.y - 0.2, LZ + 0.06] : [P.x, y, LZ], fit: [PL_W + 0.25, PL_H + 0.5], fmin: 26, fmax: 60, back: 0.9, lim: { yaw: 0.2, up: 0.15, down: 0.15, fwd: 0.3, bwd: 0.4 } }; },
+    ouija: () => ({ pos: [MESA.x - 1.55, 1.75, MESA.z], target: [MESA.x + 0.05, TAB_Y, MESA.z], fit: [1.0, 1.0], fmin: 34, fmax: 64, back: 0.5, lim: { yaw: 0.3, up: 0.25, down: 0.2, fwd: 0.4, bwd: 0.3 } }),
+    capilla: () => ({ pos: [XW + 0.35, 1.9, ZC], target: [XC - 1.25, 0.75, ZC], fit: [3.1, 1.3], fmin: 46, fmax: 72, back: 0.5, lim: { yaw: 0.45, up: 0.3, down: 0.25, fwd: 0.6, bwd: 0.4 } }),
+    // Casi cenital (~77°) para leer bien las cartas y su orientación; incluye el cajón del frente
+    cartas: () => ({ pos: [CM.x - 0.95, CM_Y + 1.1, CM.z], target: [CM.x - 0.05, CM_Y, CM.z],   /* [Kura] cámara más inclinada */ fit: [1.5, 0.95], cenital: true, fmin: 30, fmax: 62, back: 0.5, lim: { yaw: 0.06, up: 0.12, down: 0.12, fwd: 0.35, bwd: 0.3 } }),
   };
   let vista = { k: 'afuera' };
-  const defVista = () => vista.k === 'nicho' ? VISTAS.nicho(vista.i) : VISTAS[vista.k]();
-  const ficha = $('ficha'), marP = $('marcador-p'), ouP = $('ouija-p'), urnaP = $('urna-p'), btnVolver = $('btn-volver'), tag = $('tag');
-  const PANELES = [ficha, marP, ouP];
+  const defVista = () => vista.k === 'nicho' ? VISTAS.nicho(vista.i) : vista.k === 'logro' ? VISTAS.logro(vista.i) : VISTAS[vista.k]();
+  const ficha = $('ficha'), marP = $('marcador-p'), urnaP = $('urna-p'), btnVolver = $('btn-volver'), tag = $('tag');
+  const PANELES = [ficha, marP];
   function libre() {
     const W = stage.clientWidth, H = stage.clientHeight; let l = 0, r = W, t = 0, b = H;
     if (W < 760) t = Math.max(btnVolver.getBoundingClientRect().bottom, $('total').getBoundingClientRect().bottom) + 8;
@@ -693,7 +921,14 @@ function iniciar3D() {
     if (fov > def.fmax) { const d2 = Math.min(d + (def.back || 0), d * tv / Math.tan(def.fmax / 2 * D2R)); P.addScaledVector(dir, -(d2 - d)); }
     fov = THREE.MathUtils.clamp(fov, def.fmin, def.fmax);
     const tV = Math.tan(fov / 2 * D2R), tH = tV * W / H, cx = (fr.l + fr.r) / W - 1, cy = 1 - (fr.t + fr.b) / H;
-    return { pos: P, yaw: Math.atan2(-dir.x, -dir.z) + Math.atan(cx * tH), pitch: Math.atan2(dir.y, Math.hypot(dir.x, dir.z)) - Math.atan(cy * tV), fov };
+    const yaw = Math.atan2(-dir.x, -dir.z), pitch = Math.atan2(dir.y, Math.hypot(dir.x, dir.z));
+    // Vista cenital: girar la cámara para descentrar ladearía la imagen; se desplaza la cámara en su plano
+    if (def.cenital) {
+      const e = new THREE.Euler(pitch, yaw, 0, 'YXZ'), dd = P.distanceTo(T);
+      P.addScaledVector(new V3(1, 0, 0).applyEuler(e), -cx * tH * dd).addScaledVector(new V3(0, 1, 0).applyEuler(e), -cy * tV * dd);
+      return { pos: P, yaw, pitch, fov };
+    }
+    return { pos: P, yaw: yaw + Math.atan(cx * tH), pitch: pitch - Math.atan(cy * tV), fov };
   }
   let meta = null, cur = null, trans = null;
   const look = { yaw: 0, pitch: 0, z: 0 }, lookT = { yaw: 0, pitch: 0, z: 0 }, par = { x: 0, y: 0 };
@@ -714,32 +949,56 @@ function iniciar3D() {
   const conPanelMarcador = () => stage.clientWidth < 760 || !cache.apodo;
   function ir(k, i, dur) {
     const prev = vista; vista = { k, i };
-    if (prev.k === 'ouija' && k !== 'ouija') ouTok++;
+    if (prev.k === 'cartas' && k !== 'cartas' && selK !== null) elegir(null);
+    if (prev.k === 'ouija' && k !== 'ouija') { ouTok++; hablando = sesion = false; roceApagar(); $('rsvp-form').hidden = true; }   /* [Kura] */
+    // Lo que dijo el personaje en una mesa no se queda en pantalla al pasar a otra vista
+    if (prev.k !== k && (prev.k === 'cartas' || prev.k === 'ouija')) callar();
     if (k === 'nicho') pintarFicha(i);
     if (k === 'marcador') { pintarPanelMarcador(); cargarMarcador().then(() => { pintarMarcador(marc); pintarPanelMarcador(); }); }
     if (k === 'ouija') pintarOuija();
-    mostrar(ficha, k === 'nicho'); mostrar(marP, k === 'marcador' && conPanelMarcador()); mostrar(ouP, k === 'ouija'); mostrar(urnaP, false);
+    if (k === 'cartas') refrescarMesa();
+    if (IZQ.includes(k)) pintarLogros();
+    mostrar(ficha, k === 'nicho'); mostrar(marP, k === 'marcador' && conPanelMarcador()); mostrar(urnaP, false);
     encuadrar();
     const p0 = cur.pos.clone().addScaledVector(new V3(-Math.sin(cur.yaw), 0, -Math.cos(cur.yaw)), look.z);
-    trans = { t: 0, dur: reducido ? 0.01 : dur || (k === 'nicho' && prev.k === 'nicho' ? 0.75 : (k === 'marcador' || k === 'ouija' || prev.k === 'marcador' || prev.k === 'ouija') ? 1.9 : 1.5), from: { pos: p0, yaw: cur.yaw + look.yaw, pitch: cur.pitch + look.pitch, fov: cur.fov } };
+    trans = { t: 0, dur: reducido ? 0.01 : dur || ((k === 'nicho' && prev.k === 'nicho') || (k === 'logro' && prev.k === 'logro') ? 0.75 : (LADO.includes(k) && LADO.includes(prev.k)) || (IZQ.includes(k) && IZQ.includes(prev.k)) ? 1.15 : (CAPILLAS.includes(k) || CAPILLAS.includes(prev.k)) ? 1.9 : 1.5), from: { pos: p0, yaw: cur.yaw + look.yaw, pitch: cur.pitch + look.pitch, fov: cur.fov } };
+    // [Kura] entrar o salir de una capilla: la cámara pasa por delante del arco, no a través del pilar
+    if (CAPILLAS.includes(k) !== CAPILLAS.includes(prev.k)) { const sx = Math.sign(CAPILLAS.includes(k) ? meta.pos.x : p0.x) || 1; trans.via = new V3(sx * (XW - 0.9), (p0.y + meta.pos.y) / 2, ZC); }
     look.yaw = look.pitch = look.z = 0; lookT.yaw = lookT.pitch = lookT.z = 0;
     setHover(null); pintarUI();
+    if (k === 'cartas') trans.onEnd = hablarMesa;
+    if (k === 'logros') trans.onEnd = hablarLogros;
+    if (k === 'logro') trans.onEnd = hablarLogroZoom;
+    if (k === 'ouija') trans.onEnd = hablarOuija;
   }
+  // Capilla derecha: primero se ve completa (ouija a la izquierda, cartas a la derecha) y desde ahí se elige
+  // Capillas: primero se ven completas y desde ahí se elige (derecha: ouija / cartas; izquierda: marcador / logros)
+  const CAPILLAS = ['capillaIzq', 'marcador', 'logros', 'logro', 'capilla', 'ouija', 'cartas'], LADO = ['capilla', 'ouija', 'cartas'], IZQ = ['capillaIzq', 'marcador', 'logros', 'logro'];
   function volver() {
     if (trans && vista.k === 'afuera') return;
     if (vista.k === 'nicho') return ir('altar');
-    if (vista.k === 'altar' || vista.k === 'marcador' || vista.k === 'ouija') return ir('umbral');
+    if (vista.k === 'ouija' || vista.k === 'cartas') return ir('capilla');
+    if (vista.k === 'logro') return ir('logros');
+    if (vista.k === 'marcador' || vista.k === 'logros') return ir('capillaIzq');
+    if (vista.k === 'altar' || CAPILLAS.includes(vista.k)) return ir('umbral');
     salir();
   }
   function salir() { $('velo').classList.remove('fuera'); setTimeout(() => { location.href = LABERINTO_URL; }, 650); }
   btnVolver.addEventListener('click', volver);
 
   // ---------- UI: etiquetas, pista, ficha ----------
-  const n2 = () => porEntregar().length;
-  function etiqueta(id) {
+  const n2 = () => porEntregar().length + extrasPorEntregar().length;
+  function etiqueta(id, k) {
+    if (id === 'lugar') { const s = mesa()[k]; if (selK === null) return s ? cartaDe(s.id).nombre : ''; return k === selK ? 'Girar' : s ? 'Cambiar de lugar' : 'Mover aquí'; }
     if (id === 'urna') { if (vista.k !== 'altar') return 'Altar'; const n = n2(); return n ? `Dejar ${n} ${plural(n, 'sello', 'sellos')}` : 'La urna'; }
     if (id === 'marcador') return 'El marcador';
-    if (id === 'ouija') return vista.k === 'ouija' ? 'Preguntar' : 'La ouija';
+    if (id === 'capilla') return 'Ouija y tarot';   /* [Kura] nombre de la capilla */
+    if (id === 'capillaIzq') return 'Marcador y logros';   /* [Kura] nombre de la capilla */
+    if (id === 'logros') return 'Los logros';
+    if (id === 'logro') return '';   // la placa ya dice lo mismo
+    if (id === 'sello-mesa' || id === 'sello-logro') return 'Tomar el sello';
+    if (id === 'ouija') return vista.k !== 'ouija' ? 'La ouija' : hablando || sesion ? '' : 'Preguntar';
+    if (id === 'cartas') { if (vista.k !== 'cartas') return 'Las cartas'; if (selK !== null) return 'Soltar'; const n = cartasPorColocar().length; return n ? `Colocar ${n} ${plural(n, 'carta', 'cartas')}` : 'Las cartas'; }
     const n = NICHOS[+id.slice(1)]; return `Nicho ${n.num}` + (n.abierto ? '' : ` · ${n.umbral} sellos`);
   }
   function pintarFicha(i) {
@@ -763,35 +1022,83 @@ function iniciar3D() {
     if (await firmar($('firma-in').value)) { pintarMarcador(marc); pintarPanelMarcador(); mensaje(`Firmaste como ${cache.apodo}.`); if (!conPanelMarcador()) { mostrar(marP, false); encuadrar(); } }
     b.disabled = false;
   });
+  // Ouija: sin panel; lo que pasa lo dice el personaje. Solo si no hay nombre aparece "Me llamo ___" abajo.
   // [Kura] Firmar en la urna y, en el mismo gesto, dejar los sellos
   $('urna-form').addEventListener('submit', async e => {
     e.preventDefault(); const b = $('urna-form').querySelector('button'); b.disabled = true;
     if (await firmar($('urna-in').value)) { mostrar(urnaP, false); mensaje(`Firmaste como ${cache.apodo}.`); depositar(); }
     b.disabled = false;
   });
-  // Ouija
   let ultimoOuija = '';
-  function pintarOuija(pedirNombre) {
-    const sin = (!cache.apodo || pedirNombre) && !hablando;
-    $('ouija-form').hidden = !sin; $('ouija-acc').hidden = sin;
-    if (sin) $('ouija-in').value = cache.apodo || '';
-    $('ouija-quien').textContent = hablando ? 'Escucha…' : !sin && cache.apodo ? `Pregunta ${cache.apodo}` : '';
-    $('ouija-btn').textContent = ultimoOuija ? 'Preguntar otra vez' : 'Preguntar'; $('ouija-btn').disabled = hablando;
-    $('ouija-otro').disabled = hablando;
-    if (!hablando) $('ouija-letras').textContent = ultimoOuija;
+  function pintarOuija() { $('ouija-form').hidden = true; }
+  function pedirNombre() { $('ouija-form').hidden = false; $('ouija-in').value = cache.apodo || ''; $('ouija-in').focus({ preventScroll: true }); }
+  function hablarOuija() {
+    if (vista.k !== 'ouija' || hablando) return;
+    if (!cache.apodo) { mensaje('Si voy a preguntar, primero tendría que decir mi nombre.', 4200); pedirNombre(); return; }
+    mensaje(ultimoOuija ? 'Podría preguntar otra vez.' : 'Una ouija… podría preguntar algo.', 3400);
   }
-  $('ouija-btn').addEventListener('click', () => preguntar());
-  $('ouija-otro').addEventListener('click', () => { pintarOuija(true); $('ouija-in').focus(); });
-  $('ouija-form').addEventListener('submit', async e => { e.preventDefault(); const v = $('ouija-in').value.trim(); if (!v) return; if (v !== cache.apodo) await firmar(v); pintarOuija(); preguntar(); });
+  // Logros: cada cajón se abre la primera vez que se ve su logro ya conseguido (en la vista general o de cerca)
+  const selloLogroDisp = i => (vista.k === 'logros' || vista.k === 'logro') && estadoCajon(i) === 'abierto' && !ocupado && cajonesL[i].k > 0.99;
+  function abrirCajonesLogro(ids, animar) {
+    const nuevos = ids.filter(i => logroObtenido(LOGROS[i]) && !estadoCajon(i));
+    if (!nuevos.length) return Promise.resolve(0);
+    cache.mau.cajones = cache.mau.cajones || {}; nuevos.forEach(i => { cache.mau.cajones[LOGROS[i].id] = 'abierto'; }); guardar();
+    if (vista.k === 'logro') encuadrar();
+    if (!animar || reducido) { nuevos.forEach(i => ponerCajonL(cajonesL[i], 1)); pintarUI(); return Promise.resolve(nuevos.length); }
+    ocupado = true; setHover(null); pintarUI(); arrastre(0.6 + nuevos.length * 0.25, 0.45);
+    return Promise.all(nuevos.map((i, j) => espera(j * 250).then(() => tween(0.7, k => ponerCajonL(cajonesL[i], 1 - Math.pow(1 - k, 3))))))
+      .then(() => { sfx('tink', 0.45); ocupado = false; mensaje(nuevos.length === 1 ? 'Se abrió un cajón… hay un sello.' : `Se abrieron ${nuevos.length} cajones.`, 3600); pintarUI(); return nuevos.length; });
+  }
+  function hablarLogros() {
+    if (vista.k !== 'logros') return;
+    abrirCajonesLogro(LOGROS.map((_, i) => i), true).then(n => {
+      if (n || vista.k !== 'logros') return;
+      const pend = LOGROS.filter((_, i) => estadoCajon(i) === 'abierto').length;
+      mensaje(pend ? (pend === 1 ? 'Todavía hay un sello en un cajón.' : `Todavía hay ${pend} sellos en los cajones.`) : `Llevo ${LOGROS.filter(logroObtenido).length} de ${LOGROS.length}.`, 2800);
+    });
+  }
+  function hablarLogroZoom() {
+    if (vista.k !== 'logro') return; const i = vista.i;
+    abrirCajonesLogro([i], true).then(n => { if (!n && vista.k === 'logro' && vista.i === i) mensaje(logroObtenido(LOGROS[i]) ? (estadoCajon(i) === 'abierto' ? 'Este ya lo tengo. El sello sigue en el cajón.' : 'Este ya lo tengo.') : 'Este todavía no.', 2400); });
+  }
+  function tomarSelloLogro(i) {
+    if (!selloLogroDisp(i)) return;
+    const c = cajonesL[i]; cache.mau.cajones[LOGROS[i].id] = 'tomado'; guardar(); setHover(null); ocupado = true;
+    scene.attach(c.sello); const A = c.sello.position.clone(); cam.updateMatrixWorld();
+    const C = cam.localToWorld(new V3(-0.3, -0.18, -0.55)), Bm = A.clone().add(new V3(0, 0.25, 0.25));
+    sfx('flip', 0.6);
+    tween(0.7, k => {
+      const e = ease(k), u = 1 - e;
+      c.sello.position.set(u * u * A.x + 2 * u * e * Bm.x + e * e * C.x, u * u * A.y + 2 * u * e * Bm.y + e * e * C.y, u * u * A.z + 2 * u * e * Bm.z + e * e * C.z);
+      c.sello.rotation.z = k * 4; c.sello.scale.setScalar(1 - 0.5 * e);
+    }).then(() => { c.sello.visible = false; sfx('tink', 0.5); setTimeout(() => sfx('thud', 0.25), 70); ocupado = false; mensaje('Me lo llevo.'); pintarUI(); });
+  }
+  // Mesa de las cartas: sin panel; lo que hay que saber lo dice el personaje (mensaje) y las etiquetas al pasar el mouse
+  function refrescarMesa() { pintarUI(); if (hovered) setHover(hovered, true); }
+  function hablarMesa() {
+    if (vista.k !== 'cartas') return;
+    const k = enMesa().length, N = CARTAS.length, n = cartasPorColocar().length;
+    if (tiradaCorrecta()) { if (!cache.mau.selloMesa) mensaje('El cajón sigue abierto. Ahí está el sello.', 3600); return; }
+    if (n) return mensaje(k ? 'Aquí puedo dejar las que traigo.' : 'Seis lugares… aquí deben ir las cartas.', 3600);
+    if (!k) return mensaje('Seis lugares vacíos. Las cartas deben seguir en el laberinto.', 3800);
+    if (k < N) return mensaje(`Me ${N - k === 1 ? 'falta una' : `faltan ${N - k}`}. Deben seguir en el laberinto.`, 3600);
+    mensaje('Están todas, pero algo no cuadra. ¿En qué orden irán?', 3800);
+  }
+  $('ouija-form').addEventListener('submit', async e => { e.preventDefault(); const v = $('ouija-in').value.trim(); if (!v) return; if (v !== cache.apodo) await firmar(v); $('ouija-form').hidden = true; preguntar(); });
   const verbo = () => ui.dataset.input === 'mouse' ? 'Haz clic en' : 'Toca';
   function pintarUI() {
     btnVolver.textContent = vista.k === 'umbral' ? 'Salir' : 'Volver';
     btnVolver.hidden = $('total').hidden = vista.k === 'afuera';
-    const n = n2(), p = $('pista');
-    p.textContent = vista.k === 'umbral' ? (n ? `Lleva tus sellos a la urna del altar` : `${verbo()} el altar o una de las capillas`)
-      : vista.k === 'altar' ? (n ? `${verbo()} la urna para dejar ${plural(n, 'tu sello', `tus ${n} sellos`)}` : `${verbo()} un nicho para leerlo`) : '';
+    const n = n2(), nc = cartasPorColocar().length, p = $('pista');
+    p.textContent = vista.k === 'umbral' ? (n ? `Lleva tus sellos a la urna del altar` : nc ? 'Lleva tus cartas a la capilla de Ouija y tarot' : `${verbo()} el altar o una de las capillas`)
+      : vista.k === 'altar' ? (n ? `${verbo()} la urna para dejar ${plural(n, 'tu sello', `tus ${n} sellos`)}` : `${verbo()} un nicho para leerlo`)
+      : vista.k === 'capilla' ? (nc ? `${verbo()} la mesa de la derecha para dejar tus cartas` : `${verbo()} la ouija o la mesa de las cartas`)
+      : vista.k === 'capillaIzq' ? `${verbo()} el marcador o los logros`
+      : vista.k === 'cartas' && selK === null && enMesa().length && !tiradaCorrecta() ? 'Puedo cambiarlas de lugar o girarlas' : '';
+    $('inv-c').hidden = !nc; $('inv-c-n').textContent = nc; $('inv-c').setAttribute('aria-label', `Traes ${nc} ${plural(nc, 'carta', 'cartas')} por colocar`);
+    $('inv-t').hidden = !nExtra(); $('inv-t-n').textContent = nExtra(); $('inv-t-n').hidden = nExtra() < 2; $('inv-t').setAttribute('aria-label', `Llevas ${nExtra()} ${plural(nExtra(), 'sello', 'sellos')} de la capilla`);
     p.classList.toggle('on', !!p.textContent && !trans && !ocupado);
-    $('inv').hidden = !n; $('inv-n').textContent = n; $('inv').setAttribute('aria-label', `Traes ${n} ${plural(n, 'sello', 'sellos')} por entregar`);
+    const nl = porEntregar().length; $('inv').hidden = !nl; $('inv-n').textContent = nl; $('inv').setAttribute('aria-label', `Traes ${nl} ${plural(nl, 'sello', 'sellos')} de las lápidas por entregar`);
     $('nav').querySelectorAll('button').forEach(b => { b.textContent = etiqueta(b.dataset.id); });
     if (vista.k === 'nicho') pintarFicha(vista.i);
   }
@@ -801,7 +1108,7 @@ function iniciar3D() {
     if (sube && !reducido) { const t = $('total'); t.classList.remove('sube'); void t.offsetWidth; t.classList.add('sube'); }
   }
   // Navegación con teclado: un botón por zona; al enfocarlo se ve la etiqueta en la escena
-  ['urna', 'marcador', 'ouija', ...NICHOS.map((_, i) => 'n' + i)].forEach(id => {
+  ['urna', 'capillaIzq', 'marcador', 'logros', 'capilla', 'ouija', 'cartas', 'sello-mesa', ...NICHOS.map((_, i) => 'n' + i)].forEach(id => {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.id = id;
     b.addEventListener('focus', () => setHover(id, true)); b.addEventListener('blur', () => setHover(null)); b.addEventListener('click', () => act(id));
     $('nav').appendChild(b);
@@ -812,22 +1119,33 @@ function iniciar3D() {
   let tapStart = null, pinch0 = 0, hovered = null, pointerDirty = false, mouseIn = false;
   const conMouse = () => mouseIn && ui.dataset.input === 'mouse';
   const toNdc = (x, y) => { const r = el.getBoundingClientRect(); ndc.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1); };
-  const pick = () => { ray.setFromCamera(ndc, cam); const h = ray.intersectObjects(hits, false)[0]; return h ? h.object : null; };
-  const setAim = (x, y) => { const r = el.getBoundingClientRect(); aimT.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1); };
+  // Desde la nave solo se toca el arco de la capilla derecha; ya adentro, solo sus dos mesas
+  const selloDisponible = () => vista.k === 'cartas' && mesaLista && cajonK > 0.99 && !cache.mau.selloMesa;
+  const vale = id => id === 'capillaIzq' ? !IZQ.includes(vista.k) : id === 'marcador' || id === 'logros' ? IZQ.includes(vista.k) && !(id === 'logros' && vista.k === 'logros') : id === 'ouija' && vista.k === 'ouija' && (hablando || sesion) ? false : id === 'sello-mesa' ? selloDisponible() : id === 'capilla' ? !LADO.includes(vista.k) : id === 'cartas' && vista.k === 'cartas' ? selK !== null || cartasPorColocar().length > 0 : id === 'ouija' || id === 'cartas' ? LADO.includes(vista.k) : true;
+  const pick = () => {
+    ray.setFromCamera(ndc, cam);
+    if ((vista.k === 'logros' || vista.k === 'logro') && !trans) {
+      { const h = ray.intersectObjects(zSellosL.filter(z => selloLogroDisp(z.userData.k)), false)[0]; if (h) return h.object; }
+      const l = ray.intersectObjects(placasZ, false)[0]; if (l) return l.object;
+    }
+    if (vista.k === 'cartas' && !trans && !tiradaCorrecta()) { const l = ray.intersectObjects(lugares, false)[0]; if (l && (mesa()[l.object.userData.k] || selK !== null)) return l.object; }
+    const hs = ray.intersectObjects(hits, false).filter(x => vale(x.object.userData.id)), h = hs.find(x => x.object.userData.id === 'sello-mesa') || hs[0]; return h ? h.object : null; };
+  let tactil = coarse; if (tactil) { aim.set(0, 0); aimT.set(0, 0); }   /* [Kura] en táctil la linterna va al centro */
+  const setAim = (x, y) => { if (tactil) { aimT.set(0, 0); return; } const r = el.getBoundingClientRect(); aimT.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1); };
   // h: zona tocada, id (desde el teclado: se elige la zona con ese id que está a la vista) o null
   function setHover(h, forzar) {
     if (typeof h === 'string') { const vs = hits.filter(x => x.userData.id === h), p = new V3(); h = vs.find(x => { p.copy(x.userData.anchor).project(cam); return p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1; }) || vs[0]; }
     if (hovered === h && !forzar) return; hovered = h;
-    if (h) tag.textContent = etiqueta(h.userData.id);
-    tag.classList.toggle('on', !!h); el.style.cursor = h ? 'pointer' : '';
+    tag.textContent = h ? etiqueta(h.userData.id, h.userData.k) : '';
+    tag.classList.toggle('on', !!tag.textContent); el.style.cursor = h ? 'pointer' : '';
   }
   el.addEventListener('pointerdown', e => {
-    el.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); setAim(e.clientX, e.clientY);
+    el.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); tactil = e.pointerType !== 'mouse'; setAim(e.clientX, e.clientY);
     if (pointers.size === 1) tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
     if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); tapStart = null; }
   });
   el.addEventListener('pointermove', e => {
-    if (e.isPrimary) setAim(e.clientX, e.clientY);
+    if (e.isPrimary) { if (e.pointerType === 'mouse') tactil = false; setAim(e.clientX, e.clientY); }
     if (e.pointerType === 'mouse' && !pointers.size) { mouseIn = true; toNdc(e.clientX, e.clientY); pointerDirty = true; par.x = -ndc.x * 0.04; par.y = ndc.y * 0.025; return; }
     const p = pointers.get(e.pointerId); if (!p || trans) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -839,7 +1157,7 @@ function iniciar3D() {
     pointers.delete(e.pointerId);
     if (tapStart && !pointers.size) {
       const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), dt = performance.now() - tapStart.t; tapStart = null;
-      if (moved < 8 && dt < 500) { toNdc(e.clientX, e.clientY); const h = pick(); setHover(e.pointerType === 'mouse' ? h : null); act(h && h.userData.id); }
+      if (moved < 8 && dt < 500) { toNdc(e.clientX, e.clientY); const h = pick(); setHover(e.pointerType === 'mouse' ? h : null); act(h && h.userData.id, h && h.userData.k); }
     }
   };
   el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
@@ -847,18 +1165,36 @@ function iniciar3D() {
   el.addEventListener('wheel', e => { e.preventDefault(); if (trans) return; lookT.z -= e.deltaY * 0.003; clampLook(); }, { passive: false });
   addEventListener('keydown', e => {
     if (vista.k === 'afuera' || e.target.closest('input')) return;
+    if (vista.k === 'cartas' && !trans) {
+      const N = CARTAS.length;
+      if (e.key === 'Escape' && selK !== null) { e.preventDefault(); elegir(null); return; }
+      if (/^[1-9]$/.test(e.key) && +e.key <= N) { e.preventDefault(); tocarLugar(+e.key - 1); return; }
+      if ((e.key === 'r' || e.key === 'R') && selK !== null) { e.preventDefault(); girar(); return; }
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && selK !== null) { e.preventDefault(); const k = selK + (e.key === 'ArrowLeft' ? -1 : 1); if (k >= 0 && k < N && !ocupado) moverCarta(selK, k, true); return; }
+    }
     if (e.key === 'Escape') { e.preventDefault(); volver(); }
     else if (vista.k === 'nicho' && e.key === 'ArrowLeft') $('ficha-prev').click();
     else if (vista.k === 'nicho' && e.key === 'ArrowRight') $('ficha-next').click();
+    else if (vista.k === 'logro' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { const i = vista.i + (e.key === 'ArrowLeft' ? -1 : 1); if (i >= 0 && i < LOGROS.length) ir('logro', i); }
+    else if (vista.k === 'ouija' && e.key === 'ArrowRight') ir('cartas');
+    else if (vista.k === 'cartas' && e.key === 'ArrowLeft') ir('ouija');
   });
 
-  function act(id) {
+  function act(id, k) {
     if (!id || vista.k === 'afuera') return;
     if (id === 'ouija' && vista.k === 'ouija') return preguntar();
     if (trans) return;
+    if (id === 'lugar') return tocarLugar(k);
+    if (id === 'sello-mesa') return tomarSelloMesa();
     if (id === 'urna') return vista.k === 'altar' ? depositar() : ir('altar');
+    if (id === 'cartas') return vista.k !== 'cartas' ? ir('cartas') : selK !== null ? elegir(null) : colocar();
     if (id === 'marcador') return vista.k === 'marcador' ? undefined : ir('marcador');
     if (id === 'ouija') return ir('ouija');
+    if (id === 'capilla') return ir('capilla');
+    if (id === 'capillaIzq') return ir('capillaIzq');
+    if (id === 'logros') return ir('logros');
+    if (id === 'logro') return vista.k === 'logro' && vista.i === k ? undefined : ir('logro', k);
+    if (id === 'sello-logro') return tomarSelloLogro(k);
     const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) return;
     ir('nicho', i);
   }
@@ -899,29 +1235,42 @@ function iniciar3D() {
     const dur = (rapido ? 0.16 : 0.32 + d * 1.6) * f, r0 = planch.rotation.y, r1 = -Math.PI / 2 + (Math.random() - 0.5) * 0.3;
     return tween(dur, k => { const e = ease(k); planch.position.lerpVectors(A, B, e); planch.rotation.y = r0 + (r1 - r0) * e; });
   }
-  // El mensaje aparece completo; la planchette recorre algunas letras de fondo y termina en ADIÓS
+  // Una sola sesión a la vez: mientras espera o la planchette se mueve, tocar la tabla no hace nada.
+  // Un solo mensaje (la respuesta) y un solo sonido (el roce de la planchette).
   async function preguntar() {
-    if (hablando) return;
-    if (!cache.apodo) { pintarOuija(true); $('ouija-in').focus(); return; }
+    if (hablando || sesion) return;
+    if (!cache.apodo) { mensaje('Primero tendría que decir mi nombre.'); pedirNombre(); return; }
     const tok = ++ouTok, vivo = () => tok === ouTok;
-    hablando = true; ultimoOuija = ''; $('ouija-letras').textContent = ''; pintarOuija(); setHover(null);
-    sfx.susurro(1);
+    hablando = true; ultimoOuija = ''; $('ouija-form').hidden = true; setHover(null); pintarUI();
     let r = null;
-    try { [r] = await Promise.all([api.ouija(cache.apodo), espera(reducido ? 0 : 900)]); } catch (_) { mensaje('La ouija no responde. Revisa tu conexión.'); }
+    try { [r] = await Promise.all([api.ouija(cache.apodo), espera(reducido ? 0 : 900)]); } catch (_) { if (vivo()) mensaje('No contesta… quizá no hay conexión.'); }
     hablando = false;
-    if (r && vivo()) {
-      ultimoOuija = r.texto; $('live').textContent = `La ouija dice: ${r.texto}`; sfx('toll', 0.35);
-      const el = $('ouija-letras'); el.classList.remove('nuevo'); void el.offsetWidth; el.classList.add('nuevo');
-    }
-    pintarOuija(); pintarUI();
-    if (r && vivo()) moverFondo(r.texto, vivo);
+    if (r && vivo()) { ultimoOuija = r.texto; mensaje(`Dice: “${r.texto}”`, Math.max(5200, r.texto.length * 120)); }
+    pintarUI();
+    if (r && vivo()) moverFondo(r.texto, vivo).then(() => { if (vivo()) rsvpTalvez(vivo); });   /* [Kura] luego, la confirmación */
+  }
+  // [Kura] Confirmación de asistencia por la ouija
+  const rsvpApi = (method, body) => fetch('/api/party/lab/rsvp', { method, headers: { 'Content-Type': 'application/json', 'X-Dispositivo': cache.dispositivo }, body: body ? JSON.stringify(body) : undefined }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+  const rsvpForm = $('rsvp-form'), rsvpQ = $('rsvp-q');
+  const rsvpPreguntar = q => new Promise(res => { rsvpQ.textContent = q; rsvpForm.hidden = false; rsvpForm.querySelectorAll('button').forEach(b => { b.onclick = () => { rsvpForm.hidden = true; res(b.dataset.rsvp === 'si'); }; }); rsvpForm.querySelector('button').focus({ preventScroll: true }); });
+  async function rsvpTalvez(vivo) {
+    let e; try { e = await rsvpApi('GET'); } catch (_) { return; }
+    if (!vivo() || vista.k !== 'ouija') return;
+    if (!e.abierta) { mensaje('Siento que quiere preguntarme algo… pero todavía no sé a dónde iría.', 4600); return; }
+    if (e.respuesta) { mensaje(e.respuesta.va ? 'Ya le dije que iré.' : 'Ya le dije que no iré.', 3200); return; }
+    mensaje('La plancheta se mueve sola… me está preguntando algo.', 3600); await espera(reducido ? 0 : 1200); if (!vivo()) return;
+    const va = await rsvpPreguntar('¿Vendrás?'); if (!vivo()) return;
+    const acompanante = va ? await rsvpPreguntar('¿Vendrás con alguien?') : false; if (!vivo()) return;
+    sesion = true; pintarUI(); rocePrender(); await mover(va ? 'SI' : 'NO', 0.8); await espera(500); await mover('CENTRO', 0.7); roceApagar(); sesion = false; pintarUI();
+    try { await rsvpApi('POST', { va, acompanante }); mensaje(va ? (acompanante ? 'Así quedó escrito. Nos esperan a los dos.' : 'Así quedó escrito. Me esperan.') : 'Así quedó escrito. No iré.', 4200); }
+    catch (_) { mensaje('La plancheta se detuvo… no quedó escrito. Debería intentarlo otra vez.', 4200); }
   }
   async function moverFondo(texto, vivo) {
     sesion = true; rocePrender();
     const letras = [...deletreable(texto).replace(/ /g, '')].filter(ch => GLIFO[ch]).slice(0, 10);
     for (const k of ['SI', ...letras, 'ADIOS', 'CENTRO']) { if (!vivo()) break; await mover(k, 0.7); await espera(140); }
     roceApagar();
-    if (vivo()) sesion = false;
+    if (vivo()) { sesion = false; pintarUI(); }
   }
   const refrescarMarcador = () => cargarMarcador().then(() => { pintarMarcador(marc); if (!marP.hidden) pintarPanelMarcador(); });
 
@@ -944,24 +1293,113 @@ function iniciar3D() {
   }
   async function depositar() {
     if (ocupado) return;
-    const ids = porEntregar();
+    const ids = [...porEntregar(), ...extrasPorEntregar()];
     if (!ids.length) { mensaje(misEntregados() ? 'Ya dejaste todos tus sellos en la urna.' : 'No traes sellos. Se ganan en las lápidas del laberinto.'); return; }
     if (!cache.apodo) { mostrar(urnaP, true); setTimeout(() => $('urna-in').focus({ preventScroll: true }), 60); return; }   // [Kura] firma primero
     mostrar(urnaP, false);
     ocupado = true; pintarUI(); setHover(null);
     let r;
-    try { r = await api.entregar(); guardarMausoleo(r); enLinea = true; }
+    try { r = await api.entregar(extrasPorEntregar()); guardarMausoleo(r); enLinea = true; }
     catch (e) { ocupado = false; pintarUI(); mensaje('No se pudo entregar. Revisa tu conexión e inténtalo otra vez.'); return; }
     const mios = r.entregados.length, otros = Math.max(0, r.total - total - mios);
     if (otros) { total += otros; pintarTotal(); }
     let quedan = ids.length;
-    const salir1 = () => { quedan--; $('inv').hidden = !quedan; $('inv-n').textContent = quedan; };
+    const salir1 = () => { quedan--; const nl = Math.min(quedan, porEntregar().length); $('inv').hidden = !nl; $('inv-n').textContent = nl; $('inv-t').hidden = !(quedan - nl); $('inv-t-n').textContent = quedan - nl; };
     await Promise.all(r.entregados.map((id, k) => lanzarSello(id, k * 340, salir1).then(() => { total++; pintarTotal(true); })));
     total = r.total; pintarTotal();
     mensaje(mios === 1 ? 'Tu sello está en la urna.' : `Tus ${mios} sellos están en la urna.`);
     await espera(reducido ? 0 : 700);
     await revisarNichos(true);
     ocupado = false; pintarUI(); refrescarMarcador();
+  }
+
+  // Las cartas vuelan de la mano a un lugar libre de la mesa
+  function lanzarCarta(c, k, inv, retraso, sonar) {
+    return new Promise(res => setTimeout(() => {
+      const m = mallaCarta(c); cam.updateMatrixWorld();
+      const A = cam.localToWorld(new V3(0.16, -0.12, -0.55)), B = slotCarta(k), Bm = B.clone().add(new V3(-0.2, 0.4, 0));
+      const q0 = cam.quaternion.clone(), q1 = qMesa(k, inv);
+      m.position.copy(A); m.quaternion.copy(q0); add(m);
+      tween(0.8, k => {
+        const e = 1 - Math.pow(1 - k, 2), u = 1 - e;
+        m.position.set(u * u * A.x + 2 * u * e * Bm.x + e * e * B.x, u * u * A.y + 2 * u * e * Bm.y + e * e * B.y, u * u * A.z + 2 * u * e * Bm.z + e * e * B.z);
+        m.quaternion.slerpQuaternions(q0, q1, Math.min(1, k * 1.15));
+      }).then(() => { m.position.copy(B); m.quaternion.copy(q1); cartas3D[c.id] = m; if (sonar) sfx('flip', 0.3); res(); });
+    }, reducido ? 0 : retraso));
+  }
+  async function colocar() {
+    if (ocupado) return;
+    const ids = cartasPorColocar();
+    if (!ids.length) { mensaje(tiradaCorrecta() ? 'Ya están en su lugar.' : 'No traigo cartas. Deben seguir en el laberinto.'); return; }
+    elegir(null); ocupado = true; setHover(null); pintarUI(); refrescarMesa();
+    const rs = repartir(ids);
+    await Promise.all(rs.map((r, j) => lanzarCarta(cartaDe(r.id), r.k, r.inv, j * 320, j === rs.length - 1).then(() => { mesa()[r.k] = { id: r.id, inv: r.inv }; guardar(); pintarUI(); })));
+    ocupado = false; pintarUI(); refrescarMesa();
+    if (tiradaCorrecta()) comprobar();
+    else { const f = CARTAS.length - enMesa().length; mensaje(f ? `Me ${f === 1 ? 'falta una' : `faltan ${f}`}. Deben seguir en el laberinto.` : 'Ya están todas. Ahora, ¿en qué orden van?', 3800); }
+  }
+  // ---------- Minijuego de la mesa: elegir una carta, cambiarla de lugar y girarla ----------
+  function resaltar(k, on) { const s = mesa()[k], m = s && cartas3D[s.id]; if (m) m.material[4].emissive.setHex(on ? 0x2e2210 : 0x000000); }
+  function llevar(k, dur, alto = 0) {
+    const s = mesa()[k], m = s && cartas3D[s.id]; if (!m) return Promise.resolve();
+    const P0 = m.position.clone(), Q0 = m.quaternion.clone(), P1 = slotCarta(k, k === selK ? 0.035 : 0), Q1 = qMesa(k, s.inv);
+    return tween(dur, t => { const e = ease(t); m.position.lerpVectors(P0, P1, e); m.position.y += Math.sin(Math.PI * t) * alto; m.quaternion.slerpQuaternions(Q0, Q1, e); });
+  }
+  function elegir(k) {
+    if (selK !== null) { const a = selK; selK = null; resaltar(a, false); llevar(a, 0.2); }
+    if (k !== null && mesa()[k]) { selK = k; resaltar(k, true); llevar(k, 0.2); sfx('flip', 0.25); const c = cartaDe(mesa()[k].id); mensaje(`${c.nombre}… ${c.sentido}.`, 3400); }
+    refrescarMesa(); if (hovered) setHover(hovered, true);
+  }
+  function tocarLugar(k) {
+    if (ocupado || tiradaCorrecta() || k == null || k >= CARTAS.length) return;
+    if (selK === null) return elegir(mesa()[k] ? k : null);
+    if (selK === k) return girar();
+    moverCarta(selK, k, false);
+  }
+  // (no llamarla "mover": ese nombre es el de la planchette de la ouija)
+  async function moverCarta(a, b, seguir) {
+    if (typeof a !== 'number' || typeof b !== 'number') return;
+    const M = mesa(); [M[a], M[b]] = [M[b], M[a]]; guardar();
+    selK = seguir ? b : null; if (!seguir) resaltar(b, false);
+    sfx('flip', 0.4); ocupado = true; refrescarMesa();
+    await Promise.all([llevar(a, 0.45, 0.06), llevar(b, 0.45, 0.06)]);
+    ocupado = false; refrescarMesa(); if (hovered) setHover(hovered, true);
+    comprobar();
+  }
+  async function girar() {
+    if (selK === null || ocupado || tiradaCorrecta()) return;
+    const s = mesa()[selK]; s.inv = !s.inv; guardar(); sfx('flip', 0.4);
+    ocupado = true; refrescarMesa(); await llevar(selK, 0.4); ocupado = false;
+    refrescarMesa(); comprobar();
+  }
+  function comprobar() {
+    if (!tiradaCorrecta()) return;
+    if (selK !== null) { const k = selK; selK = null; resaltar(k, false); llevar(k, 0.2); }
+    setHover(null); completarMesa(true); refrescarMesa(); pintarUI();
+  }
+  // El sello sale del cajón hacia la mano (abajo a la izquierda, donde está el inventario)
+  function tomarSelloMesa() {
+    if (!mesaLista || cajonK < 0.99 || cache.mau.selloMesa || ocupado) return;
+    cache.mau.selloMesa = true; guardar(); setHover(null); ocupado = true; refrescarMesa();
+    scene.attach(selloMesa); const A = selloMesa.position.clone(); cam.updateMatrixWorld();
+    const C = cam.localToWorld(new V3(-0.3, -0.18, -0.55)), Bm = A.clone().add(new V3(-0.1, 0.35, 0));
+    sfx('flip', 0.6);
+    tween(0.75, k => {
+      const e = ease(k), u = 1 - e;
+      selloMesa.position.set(u * u * A.x + 2 * u * e * Bm.x + e * e * C.x, u * u * A.y + 2 * u * e * Bm.y + e * e * C.y, u * u * A.z + 2 * u * e * Bm.z + e * e * C.z);
+      selloMesa.rotation.x = k * 4; selloMesa.scale.setScalar(1 - 0.55 * e);
+    }).then(() => { selloMesa.visible = false; sfx('tink', 0.5); setTimeout(() => sfx('thud', 0.25), 70); ocupado = false; mensaje('Me llevo el sello.'); pintarLogros(); pintarUI(); refrescarMesa(); revisarLogros(1200); });
+  }
+  function completarMesa(animar) {
+    pintarLogros(); if (animar) revisarLogros(3600);
+    mesaLista = true;
+    velasMesa.forEach(L => { L.s.visible = L.halo.visible = true; L.t = animar && !reducido ? 0 : 1; });
+    if (!animar) { ponerCajon(1); return; }
+    sfx.cerillo(); setTimeout(() => sfx('toll', 0.6), 450); mensaje('Creo que así van.', 3000);
+    setTimeout(() => {
+      if (reducido) ponerCajon(1); else arrastre(0.7, 0.35);
+      tween(0.9, t => ponerCajon(1 - Math.pow(1 - t, 3))).then(() => { sfx('tink', 0.5); if (vista.k === 'cartas') mensaje('Se abrió un cajón… hay un sello adentro.', 4200); refrescarMesa(); });
+    }, reducido ? 0 : 1300);
   }
 
   function abrirNicho(n, animar) {
@@ -989,6 +1427,10 @@ function iniciar3D() {
   // ---------- Estado inicial ----------
   total = totalServidor();
   NICHOS.forEach(n => { if (total >= n.umbral && cache.mau.vistos.includes(n.id)) abrirNicho(n, false); });
+  mesa().forEach((s, k) => { if (s && cartaDe(s.id)) ponerCarta(cartaDe(s.id), k, s.inv); });
+  if (tiradaCorrecta()) completarMesa(false);
+  if (cache.mau.selloMesa) selloMesa.visible = false;
+  cajonesL.forEach((c, i) => { const e = estadoCajon(i); if (e) ponerCajonL(c, 1); if (e === 'tomado') c.sello.visible = false; });
   pintarTotal(); pintarUI(); pintarMarcador(marc); refrescarMarcador();
   if (!enLinea) mensaje('Sin conexión. Se muestra lo último que se guardó.', 4000);
 
@@ -1004,12 +1446,11 @@ function iniciar3D() {
   setInterval(consultar, 15000);
 
   // ---------- Entrada: tocar desbloquea el audio y se cruza la puerta ----------
-  // [Kura] Quien llega caminando desde el laberinto no se detiene en "clic para entrar".
-  const deParty = (() => { try { const r = new URL(document.referrer); return r.origin === location.origin && r.pathname.startsWith('/party') && r.pathname !== location.pathname; } catch (_) { return false; } })();
   const entrada = $('entrada'), saltar = q.get('entrada') === '0';
-  const nT = n2(); $('traes').textContent = nT ? `Traes ${nT} ${plural(nT, 'sello', 'sellos')}` : '';
+  const nT = n2(), nC = cartasPorColocar().length, lleva = [nT && `${nT} ${plural(nT, 'sello', 'sellos')}`, nC && `${nC} ${plural(nC, 'carta', 'cartas')}`].filter(Boolean);
+  $('traes').textContent = lleva.length ? `Traes ${lleva.join(' y ')}` : '';
   function llegar() {
-    pintarUI();
+    pintarUI(); revisarLogros(1500);
     const nuevos = NICHOS.filter(n => !n.abierto && total >= n.umbral).length;
     setTimeout(async () => {
       if (nuevos) mensaje(nuevos === 1 ? 'Mientras no estabas, se abrió un nicho.' : `Mientras no estabas, se abrieron ${nuevos} nichos.`, 3200);
@@ -1023,9 +1464,7 @@ function iniciar3D() {
     entrada.classList.add('out'); setTimeout(() => { entrada.hidden = true; }, 650);
     ir('umbral', null, 2.8); trans.onEnd = llegar;
   }
-  // [Kura] viene del laberinto: sin pantalla de entrada, pero SÍ cruza la puerta caminando (linterna ya encendida)
-  if (deParty && !saltar) { entrada.hidden = true; linT = 1; ir('umbral', null, 2.8); trans.onEnd = llegar; }
-  else if (saltar) { vista = { k: 'umbral' }; encuadrar(); cur = { pos: meta.pos.clone(), yaw: meta.yaw, pitch: meta.pitch, fov: meta.fov }; linT = 1; pintarUI(); llegar(); }
+  if (saltar) { vista = { k: 'umbral' }; encuadrar(); cur = { pos: meta.pos.clone(), yaw: meta.yaw, pitch: meta.pitch, fov: meta.fov }; linT = 1; pintarUI(); llegar(); }
   else { entrada.hidden = false; entrada.addEventListener('click', entrar); entrada.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); entrar(e); } }); entrada.focus({ preventScroll: true }); }
 
   // ---------- Barra de desarrollo ----------
@@ -1040,6 +1479,19 @@ function iniciar3D() {
     const LUZ = { noche: [0.2, 3, 15], prueba: [2.6, 8, 30] };
     dev.querySelectorAll('[data-luz]').forEach(b => b.addEventListener('click', () => { const [h, n, f] = LUZ[b.dataset.luz]; hemi.intensity = h; scene.fog.near = n; scene.fog.far = f; marcarSeg('luz', b.dataset.luz); }));
     marcarSeg('luz', 'noche');
+    $('dev-cartas').addEventListener('click', () => { cache.cartas = cache.cartas || {}; CARTAS.map(c => [Math.random(), c.id]).sort((a, b) => a[0] - b[0]).forEach(([, id]) => { cache.cartas[id] = true; }); guardar(); pintarUI(); if (vista.k === 'cartas') refrescarMesa(); mensaje(`Traes ${cartasPorColocar().length} cartas por colocar.`); });
+    const vaciar = () => { cache.mau.selloMesa = false; cajon.attach(selloMesa); selloMesa.position.copy(SELLO0.p); selloMesa.rotation.set(0, SELLO0.ry, 0); selloMesa.scale.setScalar(1); selloMesa.visible = true; Object.keys(cartas3D).forEach(id => { scene.remove(cartas3D[id]); delete cartas3D[id]; }); selK = null; mesaLista = false; ponerCajon(0); velasMesa.forEach(L => { L.t = -1; L.k = 0; L.s.visible = L.halo.visible = false; }); };
+    $('dev-mesa').addEventListener('click', () => {
+      vaciar(); cache.mau.mesa = CARTAS.map(() => null); guardar();
+      pintarUI(); if (vista.k === 'cartas') refrescarMesa(); mensaje('La mesa quedó vacía.');
+    });
+    $('dev-tarot').addEventListener('click', () => {
+      vaciar(); cache.cartas = cache.cartas || {}; cache.mau.mesa = CARTAS.map(c => { cache.cartas[c.id] = true; return { id: c.id, inv: !!c.invertida }; }); guardar();
+      CARTAS.forEach((c, k) => ponerCarta(c, k, !!c.invertida)); completarMesa(true); pintarUI(); if (vista.k === 'cartas') refrescarMesa();
+    });
+    $('dev-logros').setAttribute('aria-pressed', !!cache.mau.devLogros);
+    $('dev-logros').addEventListener('click', () => { cache.mau.devLogros = !cache.mau.devLogros; guardar(); $('dev-logros').setAttribute('aria-pressed', cache.mau.devLogros); pintarLogros(); pintarUI(); if (vista.k === 'logros') hablarLogros(); mensaje(cache.mau.devLogros ? 'Logros forzados.' : 'Logros reales.'); });
+    $('dev-placas').addEventListener('click', () => { cache.mau.cajones = {}; guardar(); cajonesL.forEach(c => { ponerCajonL(c, 0); c.g.attach(c.sello); c.sello.position.set(0, 0.006, -0.05); c.sello.rotation.set(Math.PI / 2, 0, 0); c.sello.scale.setScalar(1); c.sello.visible = true; }); pintarUI(); mensaje('Cajones cerrados.'); });
     const sinMock = () => { if (!api.dev) { mensaje('Solo con el servidor de prueba.'); return true; } };
     $('dev-sellos').addEventListener('click', async () => { if (sinMock()) return; api.dev.darSellos(LAPIDAS.map(l => l.id)); await api.progreso(); pintarTotal(); pintarUI(); $('traes').textContent = ''; mensaje(`Traes ${n2()} sellos por entregar.`); });
     dev.querySelectorAll('[data-otros]').forEach(b => b.addEventListener('click', () => { if (sinMock()) return; api.dev.otros(+b.dataset.otros); consultar(); }));
@@ -1056,7 +1508,8 @@ function iniciar3D() {
     for (let i = tweens.length - 1; i >= 0; i--) { const w = tweens[i]; w.t += dt; const k = Math.min(1, w.t / w.dur); w.fn(k); if (k >= 1) { tweens.splice(i, 1); w.res(); } }
     if (trans) {
       trans.t += dt; const k = ease(Math.min(1, trans.t / trans.dur)), f = trans.from;
-      cur.pos.lerpVectors(f.pos, meta.pos, k); cur.yaw = THREE.MathUtils.lerp(f.yaw, meta.yaw, k); cur.pitch = THREE.MathUtils.lerp(f.pitch, meta.pitch, k); cur.fov = THREE.MathUtils.lerp(f.fov, meta.fov, k);
+      if (trans.via) { const a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k; cur.pos.set(a * f.pos.x + b * trans.via.x + c * meta.pos.x, a * f.pos.y + b * trans.via.y + c * meta.pos.y, a * f.pos.z + b * trans.via.z + c * meta.pos.z); }   /* [Kura] curva */
+      else cur.pos.lerpVectors(f.pos, meta.pos, k); cur.yaw = THREE.MathUtils.lerp(f.yaw, meta.yaw, k); cur.pitch = THREE.MathUtils.lerp(f.pitch, meta.pitch, k); cur.fov = THREE.MathUtils.lerp(f.fov, meta.fov, k);
       if (k >= 1) { const cb = trans.onEnd; trans = null; pintarUI(); if (conMouse()) pointerDirty = true; if (cb) cb(); }
     } else {
       const s = 1 - Math.exp(-dt * 4);
@@ -1086,18 +1539,48 @@ function iniciar3D() {
     const fa = 0.88 + 0.07 * Math.sin(T * 8.3) + 0.05 * Math.sin(T * 19.7 + 1.3);
     luzAltar.intensity = 4.2 * fa; luzRincon.intensity = 1.6 * (0.9 + 0.1 * Math.sin(T * 11 + 2)); if (luzRincon2) luzRincon2.intensity = 1.1 * (0.9 + 0.1 * Math.sin(T * 13 + 4));
     luzMarcador.intensity = 2.4 * (0.9 + 0.1 * Math.sin(T * 10 + 1));
+    luzLogros.intensity = 2.8 * (0.92 + 0.08 * Math.sin(T * 9.3 + 2));
+    cajonesL.forEach((c, i) => { c.brillo.material.opacity = estadoCajon(i) === 'abierto' ? c.k * (0.3 + 0.12 * Math.sin(T * 2.4 + i)) : 0; });
+    luzCartas.intensity = (mesaLista ? 2.0 : 0.9) * (0.9 + 0.1 * Math.sin(T * 9.7 + 5));
+    brilloCajon.material.opacity = cache.mau.selloMesa ? 0 : cajonK * (0.35 + 0.15 * Math.sin(T * 2.4));
     if (roce) { const vel = planch.position.distanceTo(planchAntes) / Math.max(dt, 1e-3); roce.g.gain.setTargetAtTime(Math.min(0.1, vel * 0.22), roce.c.currentTime, 0.06); }
     planchAntes.copy(planch.position);
     luzOuija.intensity = 2.2 * (sesion || hablando ? 0.62 + 0.38 * Math.abs(Math.sin(T * 17)) * (0.6 + 0.4 * Math.sin(T * 5.3)) : 0.9 + 0.1 * Math.sin(T * 9 + 3));
     NICHOS.forEach(n => { if (n.luz) n.luz.intensity = n.vela.t < 0 ? 0 : 0.9 * n.vela.k; });
     brilloK = Math.max(0, brilloK - dt * 1.4); brillo.material.opacity = brilloK * 0.9; M.boca.color.setRGB(0.02 + brilloK * 0.45, 0.015 + brilloK * 0.2, 0.01 + brilloK * 0.06);
     if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(pick()); }
-    if (hovered) { v.copy(hovered.userData.anchor).project(cam); tag.classList.toggle('on', v.z < 1); tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * stage.clientWidth}px, ${(-v.y * 0.5 + 0.5) * stage.clientHeight}px) translate(-50%, -100%)`; }
+    if (hovered) { v.copy(hovered.userData.anchor).project(cam); tag.classList.toggle('on', v.z < 1 && !!tag.textContent); tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * stage.clientWidth}px, ${(-v.y * 0.5 + 0.5) * stage.clientHeight}px) translate(-50%, -100%)`; }
     renderer.render(scene, cam);
     if (primero) { primero = false; $('velo').classList.add('fuera'); }
   }
-  window.__mau = { scene, cam, NICHOS, ir, depositar, consultar, revisarNichos, preguntar, get total() { return total; } };
+  window.__mau = { scene, cam, NICHOS, CARTAS, ir, depositar, colocar, consultar, revisarNichos, preguntar, get total() { return total; } };
 }
+</script>
+<script>
+// [Kura] Lo que traes del cementerio también se ve aquí (founder 2026-10-02): la fotografía (o sus pedazos) y los
+// objetos que aún no entregas. El laberinto deja sus dibujos en localStorage['lab.mini'] al ponerlos en su inventario.
+(function () {
+  var c = {}, m = {};
+  try { c = JSON.parse(localStorage.getItem('lab.v1')) || {}; m = JSON.parse(localStorage.getItem('lab.mini')) || {}; } catch (_) {}
+  var inv = document.querySelector('.lab-inv'); if (!inv) return;
+  var pistas = c.pistas || {}, piezas = ['foto1', 'foto2', 'foto3', 'foto4'].filter(function (k) { return pistas[k]; }).length;
+  if (piezas && m.foto) {
+    var f = document.createElement('div'); f.className = 'lab-inv-foto'; f.setAttribute('role', 'status');
+    f.setAttribute('aria-label', piezas === 4 ? 'Fotografía completa.' : 'Fotografía: ' + piezas + ' de 4 pedazos.');
+    var fi = new Image(); fi.alt = ''; fi.src = m.foto; fi.style.cssText = 'display:block;width:72px;height:54px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))'; f.appendChild(fi);
+    if (piezas < 4) { var fb = document.createElement('b'); fb.setAttribute('aria-hidden', 'true'); fb.textContent = piezas; f.appendChild(fb); }
+    inv.appendChild(f);
+  }
+  var l = document.createElement('div'); l.className = 'lab-inv-l'; l.setAttribute('role', 'list'); l.setAttribute('aria-label', 'Lo que traes del cementerio');
+  var slot = function (id, etiqueta) {
+    if (!m[id]) return;
+    var d = document.createElement('div'); d.className = 'lab-slot'; d.dataset.estado = 'llevas'; d.setAttribute('role', 'listitem'); d.setAttribute('aria-label', etiqueta);
+    var im = new Image(); im.alt = ''; im.src = m[id]; d.appendChild(im); l.appendChild(d);
+  };
+  Object.keys(c.encargos || {}).forEach(function (id) { if (c.encargos[id] === 'llevas') slot(id, 'Un encargo de los gatos, lo llevas'); });
+  if (pistas.caja === 'llevas') slot('caja', 'Caja de música, la llevas');
+  if (l.children.length) inv.appendChild(l);
+})();
 </script>
 </body>
 </html>
