@@ -1256,6 +1256,7 @@ function iniciar3D() {
     // subirla y bajarla con fundido; sin contexto (nunca hubo sonido) no hay música.
     const AU = window.__audio, AC = AU && AU.ctx; let musica = null;
     try { if (AC) { const a = new Audio('/party/sfx/creditos-0.m4a'), g = AC.createGain(); a.preload = 'auto'; g.gain.value = 0; AC.createMediaElementSource(a).connect(g).connect(AC.destination); a.play().catch(() => {}); musica = { a, g }; } } catch (_) {}
+    const truenoBuf = AC ? fetch('/party/sfx/thunder-0.m4a').then(r => (r.ok ? r.arrayBuffer() : null)).then(b => (b ? AC.decodeAudioData(b) : null)).catch(() => null) : Promise.resolve(null);
     const sonar = () => { if (!musica) return; try { musica.a.currentTime = 0; musica.a.play().catch(() => {}); } catch (_) {} musica.g.gain.setTargetAtTime(0.9, AC.currentTime, 0.7); if (AU.ducking) AU.ducking((isFinite(musica.a.duration) && musica.a.duration) || 320, 0.0001, true); };
     const callarMusica = () => { if (!musica) return; const m = musica; musica = null; m.g.gain.setTargetAtTime(0, AC.currentTime, 0.45); setTimeout(() => { try { m.a.pause(); } catch (_) {} }, 2400); if (AU.ducking) AU.ducking(0.4, 0.0001, true); };
     const d = fotoDe(vista.i) || {}, el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
@@ -1282,7 +1283,11 @@ function iniciar3D() {
     ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'click'].forEach(t => v.addEventListener(t, e => e.stopPropagation()));
     const elenco = cargarMarcador().then(m => (m && m.elenco) || (m && m.top || []).map(f => f.apodo)).catch(() => []);
     await espera(otraVez ? 350 : reducido ? 900 : 1900);
-    sfx.trueno(); shake = 1.4; v.classList.add('blanco');
+    // El trueno (9 s de grabación) se apaga antes de que entre la canción, 4.35 s después (founder 2026-10-03): aquí
+    // se toca con su propio fundido en vez de sfx.trueno(), que lo deja sonar entero. Sin el buffer a tiempo, el de siempre.
+    const tb = await Promise.race([truenoBuf, espera(300).then(() => null)]);
+    if (tb) { try { const s = AC.createBufferSource(), g = AC.createGain(), t = AC.currentTime; s.buffer = tb; s.connect(g).connect(AC.destination); g.gain.setValueAtTime(1, t); g.gain.setValueAtTime(1, t + 2.3); g.gain.linearRampToValueAtTime(0.0001, t + 3.8); s.start(t); s.stop(t + 3.9); if (AU.ducking) AU.ducking(4); } catch (_) { sfx.trueno(); } } else sfx.trueno();
+    shake = 1.4; v.classList.add('blanco');
     await espera(750); v.classList.add('negro'); await espera(3600);
     const rollo = el('div', 'mau-final-rollo'), bloque = (t, ls, c) => { const b = el('div'); if (t) b.appendChild(el('h2', '', t)); ls.forEach(l => b.appendChild(el('p', c || '', l))); rollo.appendChild(b); };
     rollo.appendChild(el('h1', '', (d.reverso || '').replace(/[¡!]/g, '')));
