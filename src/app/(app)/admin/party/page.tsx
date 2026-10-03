@@ -1,6 +1,6 @@
 import { fetched, requireAdmin } from "@/modules/admin/guard";
 import { PARTY_EVENT } from "@/modules/party/event";
-import { LAB_SEALS, listLabPlayers } from "@/modules/party/lab";
+import { LAB_SEALS_TOTAL, listLabPlayers } from "@/modules/party/lab";
 import { listRsvps } from "@/modules/party/rsvp";
 import { plural } from "@/lib/plural";
 import { Card, CardLabel, EmptyNote, SectionError } from "../ui";
@@ -100,7 +100,7 @@ function LabCard({ lab }: { lab: { ok: true; data: LabRows } | { ok: false } }) 
   const rows = lab.data;
   const ganados = rows.reduce((n, r) => n + r.ganados, 0);
   const entregados = rows.reduce((n, r) => n + r.entregados, 0);
-  const terminaron = rows.filter((r) => r.lapidas >= LAB_SEALS).length;
+  const terminaron = rows.filter((r) => r.ganados >= LAB_SEALS_TOTAL).length;
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-2">
@@ -124,11 +124,10 @@ function LabCard({ lab }: { lab: { ok: true; data: LabRows } | { ok: false } }) 
               <span className="min-w-0 truncate text-text">
                 {r.apodo ?? "sin apodo"} <span className="font-mono text-[10px] text-text-3">{r.deviceId.slice(0, 4)}</span>
               </span>
-              <span className={`shrink-0 font-mono text-[10px] tracking-[0.04em] ${r.lapidas >= LAB_SEALS ? "text-completed" : "text-text-2"}`}>
-                {r.lapidas}/{LAB_SEALS} lápidas
-                {r.ganados > r.lapidas ? ` · +${r.ganados - r.lapidas} capilla` : ""}
+              <span className={`shrink-0 font-mono text-[10px] tracking-[0.04em] ${r.ganados >= LAB_SEALS_TOTAL ? "text-completed" : "text-text-2"}`}>
+                {r.ganados} {plural(r.ganados, "sello", "sellos")}
                 {r.entregados > 0 ? ` · ${r.entregados} entr.` : ""}
-                {r.lapidas >= LAB_SEALS ? " · TERMINÓ" : ""}
+                {r.ganados >= LAB_SEALS_TOTAL ? " · TERMINÓ" : ""}
               </span>
             </div>
           ))}

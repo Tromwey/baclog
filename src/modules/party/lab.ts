@@ -34,6 +34,12 @@ export const LAB_SEALS = LAPIDAS.length;
  */
 const EXTRAS = new Set(["extra:mesa", ...(logros.logros as { id: string }[]).map((l) => "extra:logro-" + l.id)]);
 
+/**
+ * Every seal a player can get — a seal is a seal, wherever it was earned (founder, 2026-10-02: tombstones and
+ * the Mausoleum's drawers are just different ways to get one). "Finished" = all of them.
+ */
+export const LAB_SEALS_TOTAL = LAB_SEALS + EXTRAS.size;
+
 /** Anonymous writes: these bound a flood. */
 const MAX_PLAYERS = 2000;
 const MAX_ATTEMPTS_PER_DEVICE = 200;
@@ -103,7 +109,7 @@ export async function labResumen() {
     .from(partyLabSeals)
     .innerJoin(partyLabPlayers, eq(partyLabPlayers.deviceId, partyLabSeals.deviceId))
     .where(eq(partyLabPlayers.eventSlug, SLUG));
-  return { ganados: r.ganados, entregados: r.entregados, porJugador: LAB_SEALS };
+  return { ganados: r.ganados, entregados: r.entregados, porJugador: LAB_SEALS_TOTAL };
 }
 
 /** GET /progreso */
@@ -330,8 +336,6 @@ export async function listLabPlayers() {
       lastSeenAt: partyLabPlayers.lastSeenAt,
       ganados: sql<number>`count(${partyLabSeals.lapida})::int`,
       entregados: sql<number>`count(${partyLabSeals.deliveredAt})::int`,
-      /** Tombstone seals only — "finished" means all of these, whatever the Mausoleum's extras. */
-      lapidas: sql<number>`count(${partyLabSeals.lapida}) filter (where ${partyLabSeals.lapida} not like 'extra:%')::int`,
       ultimoSello: sql<Date | null>`max(${partyLabSeals.wonAt})`,
     })
     .from(partyLabPlayers)
