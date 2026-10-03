@@ -26,7 +26,7 @@ export const LAB_NICHOS = [
     id: "n6",
     umbral: 100,
     titulo: "Pista",
-    texto: "Una instantánea. Arrástrala o tócala para darle la vuelta.",
+    texto: "Una instantánea. Pareciera tener algo escrito detrás.",
     foto: { nombre: "Eric Briseño", fechas: "20/11/1994 – 31/10/2026", reverso: "¿¡Quién mató a Eric!?" },
   },
 ] as const;
