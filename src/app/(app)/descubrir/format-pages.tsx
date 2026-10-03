@@ -47,7 +47,7 @@ import { DiscoverTop, type KindTab } from "./kura-bits";
  *    ≤ 5 h · un fin de semana ≤ 12 h); the pill is the whole series' hours,
  *    the meta the network and episodes; Guardar sits on the poster.
  *  - 2c **Música · por momento**: moments read from the chart's genres; the
- *    picked one tints the page. Albums 1:1, then "próximos discos" — the
+ *    picked one tints the page. Albums 1:1, then "próximos álbumes" — the
  *    most anticipated albums on Kura (`getMostAnticipated`, albums only).
  *
  * Every page closes with **Colecciones Kuradas** (the team's public
@@ -586,13 +586,13 @@ function MusicPage(props: FormatPageProps) {
       <MoodRow moods={MUSIC_MOODS} value={mood} label="Momento" onPick={setPicked} />
 
       {shelf.failed ? (
-        <ShelfFailed what="discos" onRetry={shelf.retry} />
+        <ShelfFailed what="álbumes" onRetry={shelf.retry} />
       ) : albums === null ? (
         <GridSkeleton square />
       ) : shown.length === 0 ? (
         <Empty>
           {albums.length === 0
-            ? "No hay discos aquí por ahora. Vuelve en unos días."
+            ? "No hay álbumes aquí por ahora. Vuelve en unos días."
             : "Nada para ese momento en lo que más suena hoy. Prueba otro."}
         </Empty>
       ) : (
@@ -624,7 +624,7 @@ function SoonDiscs({
   return (
     <section className="flex flex-col gap-3.5 pt-10">
       <div className="flex items-baseline justify-between gap-3 px-5">
-        <h2 className="font-display text-[22px] leading-[1.1] text-text">próximos discos</h2>
+        <h2 className="font-display text-[22px] leading-[1.1] text-text">próximos álbumes</h2>
       </div>
       <div className="bl-scroll flex items-start gap-3 overflow-x-auto px-5">
         {items.map((u) => (
@@ -653,7 +653,7 @@ function SoonDiscs({
 
 /* --------------------------------------------------------------- kurada */
 
-const FORMAT_WORD: Record<MediaType, string> = { film: "cine", series: "series", album: "música" };
+const FORMAT_WORD: Record<MediaType, string> = { film: "películas", series: "series", album: "álbumes" };
 
 /**
  * "Colecciones Kuradas · Hechas a mano por nuestros expertos": 300-wide tinted

@@ -91,8 +91,8 @@ export function ownCreditLine(collaborators: readonly Collaborator[]): string {
   return joinNames(["tú", ...collaborators.map(shortName)]);
 }
 
-/** "12 títulos · cine, series, música" — the formats a collection mixes. */
+/** "12 títulos · películas, series, álbumes" — the formats a collection mixes. */
 export function formatsLine(kinds: readonly MediaType[]): string {
-  const word: Record<MediaType, string> = { film: "cine", series: "series", album: "música" };
+  const word: Record<MediaType, string> = { film: "películas", series: "series", album: "álbumes" };
   return (["film", "series", "album"] as const).filter((k) => kinds.includes(k)).map((k) => word[k]).join(", ");
 }

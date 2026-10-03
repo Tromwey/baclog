@@ -269,7 +269,7 @@ export const SECTIONS: Section[] = [
       },
       {
         kind: "p",
-        text: "Para el catálogo usamos TMDB (películas y series, incluidos datos de JustWatch sobre dónde verlas), Apple (música, con la API de búsqueda de iTunes) y TIDAL (links a álbumes). Nuestros servidores les preguntan por títulos y por lo que escribes en la búsqueda, sin ningún dato de tu cuenta. Las portadas, en cambio, tu navegador o la app las descarga directo de los servidores de TMDB y de Apple, así que ellos ven tu dirección IP, como con cualquier imagen en internet.",
+        text: "Para el catálogo usamos TMDB (películas y series, incluidos datos de JustWatch sobre dónde verlas), Apple (álbumes, con la API de búsqueda de iTunes) y TIDAL (links a álbumes). Nuestros servidores les preguntan por títulos y por lo que escribes en la búsqueda, sin ningún dato de tu cuenta. Las portadas, en cambio, tu navegador o la app las descarga directo de los servidores de TMDB y de Apple, así que ellos ven tu dirección IP, como con cualquier imagen en internet.",
       },
       {
         kind: "p",

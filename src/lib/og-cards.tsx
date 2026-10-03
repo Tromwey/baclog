@@ -337,7 +337,7 @@ export function profileOg(input: {
 
 /* ----------------------------------------------------------------- title */
 
-const KIND = { film: "Cine", series: "Serie", album: "Álbum" } as const;
+const KIND = { film: "Película", series: "Serie", album: "Álbum" } as const;
 
 export function titleOg(input: {
   title: string;

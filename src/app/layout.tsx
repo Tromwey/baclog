@@ -52,7 +52,7 @@ export const metadata: Metadata = {
   // served from get-kura.app is the same one.
   metadataBase: new URL(SITE_URL),
   title: "kura",
-  description: "Guarda lo que más vale: películas, series y música, en colecciones.",
+  description: "Guarda lo que más vale: películas, series y álbumes, en colecciones.",
   // iOS home-screen icon — Safari prefers apple-touch-icon over the manifest
   // icons. Placeholder spark (scripts/generate-icons.mjs); the app/favicon.ico
   // convention stays auto-linked for browser tabs. The PWA install icons

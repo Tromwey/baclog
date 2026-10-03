@@ -282,7 +282,7 @@ private fun showcaseItem(store: AppStore, pc: PersonCollection, owner: Person, p
 
 /**
  * 4a · someone else's public collection, read-only: the page in its fan's gradient, the fan at 225,
- * "una colección de @handle", the name, its line, "N títulos · cine, música", then the titles in
+ * "una colección de @handle", the name, its line, "N títulos · películas, álbumes", then the titles in
  * columns with the OWNER's marks. Tap → ficha (the cover travels); hold → Guardar en (YOUR library).
  * 404 (private or gone, never which) → the "no está disponible" shape.
  */
@@ -398,7 +398,7 @@ fun CreatorScreen(store: AppStore, route: Route.CreatorRoute) {
         ) {
             Seal(c.initials, emptyList(), size = SealSize.profile)
             BasicText(c.name.lowercase(), Modifier.padding(top = 12.dp).semantics { heading() }, style = KuraType.news(32f))
-            MonoLabel("${c.role} · ${c.works} ${if (c.works == 1) "obra" else "obras"}")
+            MonoLabel("${c.role} · ${c.works} ${if (c.works == 1) "título" else "títulos"}")
         }
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
             if (saved.isNotEmpty()) {
@@ -408,7 +408,7 @@ fun CreatorScreen(store: AppStore, route: Route.CreatorRoute) {
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SectionTitle("obra", Modifier.padding(horizontal = 20.dp), trailing = "${c.works}")
+                SectionTitle("títulos", Modifier.padding(horizontal = 20.dp), trailing = "${c.works}")
                 if (formats.size > 1) {
                     ChipRow(
                         listOf<Pair<String?, String>>(null to "Todo") + formats.map { it.rawValue to it.label },

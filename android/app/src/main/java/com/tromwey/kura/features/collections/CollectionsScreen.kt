@@ -635,7 +635,7 @@ private fun Below(store: AppStore, e: Entry) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BasicText(
-                "Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.",
+                "Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar películas, series y álbumes.",
                 style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),
             )
             GlassButton("Nueva colección", { store.present(SheetRoute.NewCollection(addingTitleId = null)) }, Modifier.padding(top = 6.dp), icon = KIcon.Plus)
@@ -719,7 +719,7 @@ private fun NoCollections(store: AppStore) {
                 style = KuraType.emptyPhrase.copy(textAlign = TextAlign.Center),
             )
             BasicText(
-                "Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.",
+                "Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar películas, series y álbumes.",
                 style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),
             )
             GlassButton("Nueva colección", open, Modifier.padding(top = 6.dp), icon = KIcon.Plus)

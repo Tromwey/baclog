@@ -347,7 +347,7 @@ export function SearchView({
       {q.length >= MIN_QUERY && phase === "done" && results.length > 0 && (
         <section className="flex flex-col gap-3.5 pt-[22px]">
           <div className="px-5">
-            <SectionTitle aside={String(results.length)}>obras</SectionTitle>
+            <SectionTitle aside={String(results.length)}>títulos</SectionTitle>
           </div>
           <ul className="flex flex-col">
             {results.map((r) => {

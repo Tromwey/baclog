@@ -392,7 +392,7 @@ private struct SearchMode: View {
             HStack(spacing: 12) {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .medium)).foregroundStyle(KColor.text2)
-                    TextField("", text: $query, prompt: Text("Obras, personas, usuarios").foregroundStyle(KColor.text2))
+                    TextField("", text: $query, prompt: Text("Títulos, personas, usuarios").foregroundStyle(KColor.text2))
                         .font(.kura.ui(16))
                         .foregroundStyle(KColor.text)
                         .tint(KColor.accent)
@@ -522,7 +522,7 @@ private struct SearchMode: View {
                             InitialsSeal(initials: c.initials, size: 44)
                         } text: {
                             Highlight(text: c.name, query: q, serif: false)
-                            Text("Persona · \(c.role) · \(c.works) obras").monoLabel().lineLimit(1)
+                            Text("Persona · \(c.role) · \(c.works) títulos").monoLabel().lineLimit(1)
                         }
                     }
                 }
@@ -531,7 +531,7 @@ private struct SearchMode: View {
                         InitialsSeal(initials: c.initials, size: 44)
                     } text: {
                         Highlight(text: c.name, query: q, serif: false)
-                        Text("Persona · \(c.role) · \(c.works) obras").monoLabel().lineLimit(1)
+                        Text("Persona · \(c.role) · \(c.works) títulos").monoLabel().lineLimit(1)
                     }
                 }
                 ForEach(users) { p in
@@ -611,7 +611,7 @@ private struct SearchMode: View {
             }
         } else {
             VStack(spacing: 0) {
-                ChipRow(options: ["Todo", "Cine", "Series", "Música", "Personas", "Usuarios"].map { ($0, $0) }, selection: $filter)
+                ChipRow(options: ["Todo", MediaFormat.film.label, MediaFormat.series.label, MediaFormat.album.label, "Personas", "Usuarios"].map { ($0, $0) }, selection: $filter)
                     .padding(.top, 14)
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 28) {
@@ -621,7 +621,7 @@ private struct SearchMode: View {
                                     InitialsSeal(initials: c.initials, size: 64)
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text(c.name.lowercased()).font(.kura.news(24)).foregroundStyle(KColor.text)
-                                        Text("\(c.role) · \(c.works) obras").monoLabel().lineLimit(1)
+                                        Text("\(c.role) · \(c.works) títulos").monoLabel().lineLimit(1)
                                     }
                                     Spacer()
                                 }
@@ -633,16 +633,16 @@ private struct SearchMode: View {
                         }
                         let shown = titles.filter { t in
                             switch filter {
-                            case "Cine": return t.format == .film
-                            case "Series": return t.format == .series
-                            case "Música": return t.format == .album
+                            case MediaFormat.film.label: return t.format == .film
+                            case MediaFormat.series.label: return t.format == .series
+                            case MediaFormat.album.label: return t.format == .album
                             case "Todo": return true
                             default: return false
                             }
                         }
                         if !shown.isEmpty {
                             VStack(alignment: .leading, spacing: 14) {
-                                SectionTitle(text: "obras", trailing: "\(shown.count)").padding(.horizontal, 20)
+                                SectionTitle(text: "títulos", trailing: "\(shown.count)").padding(.horizontal, 20)
                                 VStack(spacing: 0) {
                                     ForEach(shown) { t in
                                         HStack(spacing: 14) {
@@ -722,14 +722,18 @@ private struct DiscoverSkeleton: View {
 private struct SearchSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                ForEach(["Todo", "Cine", "Series", "Música"], id: \.self) { l in
-                    Text(l).monoLabel(11, tracking: 0.1, color: l == "Todo" ? KColor.text : KColor.text2)
-                        .padding(.horizontal, 16).frame(height: 40)
-                        .background(l == "Todo" ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(["Todo"] + MediaFormat.allCases.map(\.label), id: \.self) { l in
+                        Text(l).monoLabel(11, tracking: 0.1, color: l == "Todo" ? KColor.text : KColor.text2)
+                            .lineLimit(1)
+                            .padding(.horizontal, 16).frame(height: 40)
+                            .background(l == "Todo" ? KColor.glassSelected : KColor.glassBg, in: Capsule())
+                    }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
+            .scrollDisabled(true)
             .padding(.top, 14)
             HStack(spacing: 16) {
                 Skeleton(radius: 999).frame(width: 64, height: 64)
@@ -1048,7 +1052,7 @@ private struct DiscoverFormatPage: View {
             withAnimation(KMotion.short) { mood = i }
         }
         grid(empty: payload?.titles.isEmpty == true
-             ? "No pudimos traer discos. Vuelve a intentarlo más tarde."
+             ? "No pudimos traer álbumes. Vuelve a intentarlo más tarde."
              : "Nada para ese momento en lo que más suena hoy. Prueba otro.") { item in
             let t = fresh(item.title)
             tile(t, pill: nil) {
@@ -1067,7 +1071,7 @@ private struct DiscoverFormatPage: View {
         let list = source.map { (fresh($0.title), $0.releaseDate) }.filter { $0.0.format == .album }
         if !list.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                SectionTitle(text: "próximos discos", size: 22).padding(.horizontal, 20)
+                SectionTitle(text: "próximos álbumes", size: 22).padding(.horizontal, 20)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 12) {
                         ForEach(list, id: \.0.id) { t, date in
@@ -1328,7 +1332,7 @@ private struct DiscoverTop: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
-            MonoSegmented(options: [(nil, "Todo"), (.film, "Cine"), (.series, "Series"), (.album, "Música")],
+            MonoSegmented(options: [(nil, "Todo"), (.film, MediaFormat.film.label), (.series, MediaFormat.series.label), (.album, MediaFormat.album.label)],
                           selection: $tab, height: 40, fill: Self.darkGlass)
                 .padding(.horizontal, 20)
                 .padding(.top, 12)

@@ -44,7 +44,7 @@ export const ST = {
 } as const;
 
 const KIND: Record<MediaType, string> = {
-  film: "CINE",
+  film: "PELÍCULA",
   series: "SERIE",
   album: "ÁLBUM",
 };

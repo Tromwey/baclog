@@ -482,7 +482,7 @@ private struct CollectionsCarousel: View {
             PartyCarouselBody(card: p)
         case .new:
             VStack(spacing: 12) {
-                Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.")
+                Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar películas, series y álbumes.")
                     .font(.kura.ui(15))
                     .lineSpacing(4)
                     .foregroundStyle(KColor.text2)
@@ -829,7 +829,7 @@ struct NoCollectionsView: View {
                         .foregroundStyle(KColor.text)
                         .multilineTextAlignment(.center)
                         .padding(.top, 16)
-                    Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y música.")
+                    Text("Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar películas, series y álbumes.")
                         .font(.kura.ui(15))
                         .lineSpacing(4)
                         .foregroundStyle(KColor.text2)
@@ -934,7 +934,7 @@ struct NewCollectionSheet: View {
     /// Colección (series, películas o álbumes) | Fiesta (cada invitado agrega canciones).
     private var kindPicker: some View {
         VStack(spacing: 8) {
-            kindRow(false, "Colección", "Agrega series, películas o álbumes.")
+            kindRow(false, "Colección", "Agrega películas, series o álbumes.")
             kindRow(true, "Fiesta", "Cada invitado agrega canciones.")
         }
     }

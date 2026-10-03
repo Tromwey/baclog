@@ -49,7 +49,7 @@ export async function generateMetadata({
     .find(Boolean);
   return {
     title: `${profile.displayName} · kura`,
-    description: `Las colecciones de ${profile.displayName}: películas, series y música.`,
+    description: `Las colecciones de ${profile.displayName}: películas, series y álbumes.`,
     openGraph: {
       title: `${profile.displayName} en kura`,
       description: `${profile.backlogs.length} ${plural(profile.backlogs.length, "colección", "colecciones")}.`,

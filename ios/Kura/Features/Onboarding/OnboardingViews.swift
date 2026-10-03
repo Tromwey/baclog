@@ -120,7 +120,7 @@ struct WelcomeView: View {
                     .lineSpacing(-4)
                     .foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Películas, series y música. Empieza por lo que no puedes dejar de recomendar.")
+                Text("Películas, series y álbumes. Empieza por lo que no puedes dejar de recomendar.")
                     .font(.kura.ui(15))
                     .lineSpacing(4)
                     .foregroundStyle(KColor.text2)
@@ -563,7 +563,7 @@ struct PickThreeView: View {
                         .font(.kura.ui(15))
                         .lineSpacing(4)
                         .foregroundStyle(KColor.text2)
-                    SearchPill(placeholder: "Buscar películas, series o música", text: $query)
+                    SearchPill(placeholder: "Buscar películas, series o álbumes", text: $query)
                     if grid.isEmpty {
                         if query.isEmpty, let e = store.onboardingGridError {
                             VStack(alignment: .leading, spacing: 12) {

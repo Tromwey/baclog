@@ -12,7 +12,7 @@ export interface SheetWork {
   paletteHex: string[] | null;
 }
 
-const KIND: Record<MediaType, string> = { film: "Cine", series: "Serie", album: "Álbum" };
+const KIND: Record<MediaType, string> = { film: "Película", series: "Serie", album: "Álbum" };
 
 /** "Cine · 1997 · Miyazaki" — the sheet's mono line under the title. */
 export function sheetMeta(work: SheetWork): string {

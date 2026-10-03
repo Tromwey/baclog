@@ -16,7 +16,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "kura",
     short_name: "kura",
-    description: "Guarda lo que más vale: películas, series y música, en colecciones.",
+    description: "Guarda lo que más vale: películas, series y álbumes, en colecciones.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait-primary",

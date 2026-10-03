@@ -53,7 +53,7 @@ import com.tromwey.kura.state.push
 // Flujo 07 · Descubrir — the tab root (twin of ios/Kura/Features/Discover/DiscoverView.swift):
 // "descubrir" (the Material large title that collapses) over ONE scroll with the search pill (the
 // DS `KuraSearchBar`: it opens into Material's full-screen search, 19d–19g, see DiscoverSearch.kt)
-// and the format track (Todo / Cine / Series / Música). Todo = DiscoverHome.kt (19a · 3a); a format
+// and the format track (Todo / Películas / Series / Álbumes). Todo = DiscoverHome.kt (19a · 3a); a format
 // = DiscoverFormat.kt (2a–2c). The page wears the tint of what's in view (PageTint). Pull to refresh
 // reloads what's in view: `GET /discover` on Todo, the format's shelves (`force`) on a format.
 //
@@ -62,7 +62,7 @@ import com.tromwey.kura.state.push
 // (iOS keeps the search mode under a pushed ficha).
 
 private val FORMATS: List<Pair<MediaFormat?, String>> =
-    listOf(null to "Todo", MediaFormat.Film to "Cine", MediaFormat.Series to "Series", MediaFormat.Album to "Música")
+    listOf(null to "Todo", MediaFormat.Film to MediaFormat.Film.label, MediaFormat.Series to MediaFormat.Series.label, MediaFormat.Album to MediaFormat.Album.label)
 
 /** Tab root · Descubrir. */
 @Composable

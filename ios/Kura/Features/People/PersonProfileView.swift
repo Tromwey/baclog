@@ -582,7 +582,7 @@ struct CreatorView: View {
                         InitialsSeal(initials: c.initials, size: 128)
                         Text(c.name.lowercased()).font(.kura.news(32)).foregroundStyle(KColor.text).padding(.top, 12)
                             .accessibilityAddTraits(.isHeader)
-                        Text("\(c.role) · \(c.works) obras").monoLabel()
+                        Text("\(c.role) · \(c.works) títulos").monoLabel()
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, KSize.pushedTitleTop)
@@ -608,7 +608,7 @@ struct CreatorView: View {
                             }
                         }
                         VStack(alignment: .leading, spacing: 6) {
-                            SectionTitle(text: "obra", trailing: "\(c.works)").padding(.horizontal, 20)
+                            SectionTitle(text: "títulos", trailing: "\(c.works)").padding(.horizontal, 20)
                             if formats.count > 1 {
                                 ChipRow(options: [(nil, "Todo")] + formats.map { (Optional($0), $0.label) }, selection: $filter)
                                     .padding(.vertical, 8)

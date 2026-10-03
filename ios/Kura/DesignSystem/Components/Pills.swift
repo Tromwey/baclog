@@ -129,6 +129,9 @@ struct MonoSegmented<T: Hashable>: View {
                         .tracking(1.1)
                         .textCase(.uppercase)
                         .foregroundStyle(on ? KColor.text : KColor.text2)
+                        // «PELÍCULAS» fills an equal quarter at 375 pt; shrink before clipping.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                         .frame(height: height)
                         .background(on ? KColor.dockActive : Color.clear, in: Capsule())

@@ -680,7 +680,7 @@ function DoubleFeatureCard({
     >
       {covers}
       <span className="flex min-w-0 flex-col gap-2">
-        <span className={kicker}>La película y el disco que se sienten igual</span>
+        <span className={kicker}>La película y el álbum que se sienten igual</span>
         <span className={title}>
           {a && b ? `${a.title} × ${b.title}` : "tu primera conexión"}
         </span>

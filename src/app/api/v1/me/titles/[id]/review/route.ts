@@ -28,7 +28,7 @@ const PutReviewBody = z.object({
 });
 
 const REACTION_REQUIRED =
-  "Primero cuéntanos qué te pareció: marca la obra y luego escribe tu reseña.";
+  "Primero cuéntanos qué te pareció: marca el título y luego escribe tu reseña.";
 const NO_LINKS = "Las reseñas no llevan enlaces.";
 const BAD_BODY = `Escribe entre 1 y ${REVIEW_MAX_LENGTH} caracteres.`;
 

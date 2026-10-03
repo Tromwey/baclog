@@ -125,7 +125,7 @@ internal fun FeedCard(store: AppStore, event: FeedEvent, height: Dp, topInset: D
                 .height(height + topInset)
                 .then(
                     event.titleId?.let { tid ->
-                        Modifier.clickable(interactionSource = null, indication = null, onClickLabel = "Abrir ${title?.name ?: "la obra"}") {
+                        Modifier.clickable(interactionSource = null, indication = null, onClickLabel = "Abrir ${title?.name ?: "el título"}") {
                             store.push(Route.TitleRoute(tid))
                         }
                     // A card with no title of its own (burst, suggestion) still TAKES the tap: a card

@@ -69,6 +69,9 @@ App nativa Android (Kotlin + Jetpack Compose, minSdk 26) que implementa el siste
   `kotlin-android`).
 - **Vocabulario**: colección, tus colecciones, completar, guardar, tu gente, recap, crear cuenta. Nunca
   "backlog", "lista" ni "estante" en texto visible.
+  Formatos (2026-10-03): **película, serie, álbum** y **título** para cualquier formato; nunca "cine",
+  "música"/"disco" (como formato) ni "obra". Chips «Películas · Series · Álbumes». Regla y excepciones:
+  `design/kura/copy-unificado.md` regla 6.
 - **Las colecciones son el abanico, nunca la card con lomo (founder, 2026-09-29).** La card horizontal
   con el nombre en el lomo que describen `ios/BRIEF.md` y `flujos-v2` (pantalla 10) está DEPRECADA
   desde el 27 de septiembre: manda `.claude/knowledge/state/frontend.md` §"iOS · colecciones abanico" y

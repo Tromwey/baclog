@@ -25,7 +25,7 @@ export const REASON_LABEL: Record<string, string> = {
   link_didnt_make_sense: "El vínculo no tenía sentido",
   not_my_vibe: "No es mi vibe",
   already_knew_it: "Ya lo conocía",
-  not_into_medium: "El medio no me interesa",
+  not_into_medium: "El formato no me interesa",
   link_was_great: "El vínculo fue genial",
   nailed_my_vibe: "Acertó mi vibe",
   real_discovery: "Es un descubrimiento real",

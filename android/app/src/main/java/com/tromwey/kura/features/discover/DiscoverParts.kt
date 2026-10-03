@@ -106,7 +106,7 @@ internal fun InitialsSeal(initials: String, size: Dp, modifier: Modifier = Modif
     Seal(initials, emptyList(), modifier, size = size, photo = photo)
 }
 
-/** "Cine · 2001 · Miyazaki" — the short meta under a title in a row. */
+/** "Película · 2001 · Miyazaki" — the short meta under a title in a row. */
 internal fun metaShort(t: Title): String =
     listOfNotNull(t.format.metaLabel, t.year?.toString(), if (t.format == MediaFormat.Album) t.creator else t.creatorShort)
         .filter { it.isNotEmpty() }

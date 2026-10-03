@@ -578,8 +578,8 @@ function GhostBody() {
   return (
     <div className="flex flex-col items-center gap-3 px-8 pt-2 text-center">
       <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
-        Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar cine, series y
-        música.
+        Empieza por lo que no puedes dejar de recomendar. Una colección puede mezclar películas, series y
+        álbumes.
       </p>
       <NewBacklogTrigger className="mt-1.5 flex h-11 items-center gap-2 rounded-full bg-[var(--glass-bg)] pl-3 pr-4 font-sans text-[15px] font-semibold text-text bl-press">
         <KIcon name="plus" size={18} />

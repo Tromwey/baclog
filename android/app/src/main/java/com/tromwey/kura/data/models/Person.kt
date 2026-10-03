@@ -228,7 +228,7 @@ data class ReportReason(val id: String, val label: String) {
             ReportReason("harassment", "Acoso"),
             ReportReason("hate", "Odio o discriminación"),
             ReportReason("illegal_content", "Contenido ilegal"),
-            ReportReason("off_topic", "No habla de la obra"),
+            ReportReason("off_topic", "No habla del título"),
             ReportReason("other", "Otro"),
         )
 

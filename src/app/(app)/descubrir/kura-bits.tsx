@@ -15,19 +15,19 @@ export type KindTab = "all" | MediaType;
 
 export const KIND_TABS: { key: KindTab; label: string }[] = [
   { key: "all", label: "Todo" },
-  { key: "film", label: "Cine" },
+  { key: "film", label: "Películas" },
   { key: "series", label: "Series" },
-  { key: "album", label: "Música" },
+  { key: "album", label: "Álbumes" },
 ];
 
-/** The mock's short kind names for meta lines ("Cine · 2001 · Miyazaki"). */
+/** The mock's short kind names for meta lines ("Película · 2001 · Miyazaki"). */
 export const KIND_SHORT: Record<MediaType, string> = {
-  film: "Cine",
+  film: "Película",
   series: "Serie",
   album: "Álbum",
 };
 
-/** "Cine · 2001 · Miyazaki" / "Álbum · 2016 · ZAYN" — set in mono caps by CSS. */
+/** "Película · 2001 · Miyazaki" / "Álbum · 2016 · ZAYN" — set in mono caps by CSS. */
 export function workMeta(w: {
   mediaType: MediaType;
   year: number | null;
@@ -37,9 +37,10 @@ export function workMeta(w: {
 }
 
 /**
- * 19a — the format track: one glass track, four equal segments in mono, the
- * selected one a lighter fill. Todo is Descubrir's home; Cine, Series and
- * Música open that format's own page in place (format-pages.tsx, 2a–2c).
+ * 19a — the format track: one glass track, four segments in mono (sized by
+ * their label, sharing the slack — «Películas» clips in an equal quarter), the
+ * selected one a lighter fill. Todo is Descubrir's home; Películas, Series and
+ * Álbumes open that format's own page in place (format-pages.tsx, 2a–2c).
  */
 export function KindTrack({
   value,
@@ -62,7 +63,7 @@ export function KindTrack({
             role="tab"
             aria-selected={on}
             onClick={() => onSelect(t.key)}
-            className={`min-h-10 flex-1 rounded-full font-mono text-[11px] uppercase tracking-[0.1em] transition-colors ${
+            className={`min-h-10 flex-auto rounded-full px-2 font-mono text-[11px] uppercase tracking-[0.1em] transition-colors ${
               on ? "bg-white/[0.1] text-text" : "text-text-2 hover:text-text"
             }`}
           >

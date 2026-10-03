@@ -526,7 +526,7 @@ export function DescubrirScreen({
 
 const LOADING_MESSAGES = [
   "leyendo lo que te obsesiona…",
-  "cruzando cine, series y música…",
+  "cruzando películas, series y álbumes…",
   "buscando la pareja…",
 ];
 
@@ -614,7 +614,7 @@ function AiResults({
         body={
           out
             ? `Vuelven el 1 de ${nextMonthName()}.`
-            : "Buscamos la pareja de algo que te gusta: una película para un disco, un disco para una serie."
+            : "Buscamos la pareja de algo que te gusta: una película para un álbum, un álbum para una serie."
         }
         action={
           out ? undefined : (

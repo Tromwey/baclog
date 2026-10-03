@@ -22,14 +22,14 @@ enum class MediaFormat(val rawValue: String) {
     @SerialName("series") Series("series"),
     @SerialName("album") Album("album");
 
-    /** Segmented / chip label ("Cine"). */
-    val label: String get() = when (this) { Film -> "Cine"; Series -> "Series"; Album -> "Música" }
+    /** Segmented / chip label ("Películas"). */
+    val label: String get() = when (this) { Film -> "Películas"; Series -> "Series"; Album -> "Álbumes" }
 
     /** Section name inside a collection (Newsreader, lowercase). */
-    val sectionName: String get() = when (this) { Film -> "cine"; Series -> "series"; Album -> "música" }
+    val sectionName: String get() = when (this) { Film -> "películas"; Series -> "series"; Album -> "álbumes" }
 
-    /** Singular for meta lines ("Cine · 2001"). */
-    val metaLabel: String get() = when (this) { Film -> "Cine"; Series -> "Serie"; Album -> "Álbum" }
+    /** Singular for meta lines ("Película · 2001"). */
+    val metaLabel: String get() = when (this) { Film -> "Película"; Series -> "Serie"; Album -> "Álbum" }
 
     /** width / height — póster 2:3, disco 1:1. */
     val aspect: Float get() = if (this == Album) 1f else 2f / 3f

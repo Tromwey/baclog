@@ -161,7 +161,7 @@ data class DiscoverPayload(
     val recommended: List<Recommended>,
     val trending: List<Trending>,
     val upcoming: List<Upcoming>,
-    /** "próximos discos" on the Música page (≤ 12). Empty from an older server → `upcoming`'s albums. */
+    /** "próximos álbumes" on the Álbumes page (≤ 12). Empty from an older server → `upcoming`'s albums. */
     val upcomingAlbums: List<Upcoming> = emptyList(),
     val collections: List<FollowedCollection> = emptyList(),
 ) {

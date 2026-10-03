@@ -13,7 +13,7 @@ import { ItemStatus } from "./item-status";
 
 /** Media tag copy (Spanish, rendered uppercase by the mono-meta style). */
 const MEDIA_LABEL: Record<MediaType, string> = {
-  film: "Cine",
+  film: "Película",
   series: "Serie",
   album: "Álbum",
 };

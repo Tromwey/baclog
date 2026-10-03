@@ -178,7 +178,7 @@ private fun Recents(store: AppStore, actions: SearchActions) {
             }
         }
         if (store.recentSearches.isEmpty() && viewed.isEmpty()) {
-            NoteText("Busca una película, una serie, un disco, a quien los hizo o a alguien de kura.", Modifier.padding(horizontal = KSize.margin))
+            NoteText("Busca una película, una serie, un álbum, a quien los hizo o a alguien de kura.", Modifier.padding(horizontal = KSize.margin))
         }
     }
 }
@@ -279,12 +279,12 @@ private fun Highlight(text: String, query: String, serif: Boolean) {
     BasicText(annotated, style = base, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-/** "1 obra" · "12 obras". */
-internal fun worksLabel(n: Int) = if (n == 1) "1 obra" else "$n obras"
+/** "1 título" · "12 títulos". */
+internal fun worksLabel(n: Int) = if (n == 1) "1 título" else "$n títulos"
 
 // MARK: 19f / 19g
 
-private val FILTERS = listOf("Todo", "Cine", "Series", "Música", "Personas", "Usuarios")
+private val FILTERS = listOf("Todo", MediaFormat.Film.label, MediaFormat.Series.label, MediaFormat.Album.label, "Personas", "Usuarios")
 
 @Composable
 private fun Results(store: AppStore, q: String, actions: SearchActions) {
@@ -311,9 +311,9 @@ private fun Results(store: AppStore, q: String, actions: SearchActions) {
     var filter by rememberSaveable(q) { mutableStateOf("Todo") }
     val shown = titles.filter { t ->
         when (filter) {
-            "Cine" -> t.format == MediaFormat.Film
-            "Series" -> t.format == MediaFormat.Series
-            "Música" -> t.format == MediaFormat.Album
+            MediaFormat.Film.label -> t.format == MediaFormat.Film
+            MediaFormat.Series.label -> t.format == MediaFormat.Series
+            MediaFormat.Album.label -> t.format == MediaFormat.Album
             "Todo" -> true
             else -> false
         }
@@ -344,7 +344,7 @@ private fun Results(store: AppStore, q: String, actions: SearchActions) {
             }
             if (shown.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SectionTitle("obras", Modifier.padding(horizontal = KSize.margin), trailing = "${shown.size}")
+                    SectionTitle("títulos", Modifier.padding(horizontal = KSize.margin), trailing = "${shown.size}")
                     Column { shown.forEach { t -> ResultRow(store, t, actions) } }
                 }
             }
@@ -364,7 +364,7 @@ private fun Results(store: AppStore, q: String, actions: SearchActions) {
             }
             if (empty) {
                 val note = when (filter) {
-                    "Personas" -> "Nadie que haga cine, series o música con “$q”. Prueba en Todo."
+                    "Personas" -> "Nadie que haga películas, series o álbumes con “$q”. Prueba en Todo."
                     "Usuarios" -> "Nadie en kura con “$q”. Prueba en Todo."
                     else -> "Nada de ${filter.lowercase(EsMx)} con “$q”. Prueba en Todo."
                 }

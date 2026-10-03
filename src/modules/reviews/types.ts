@@ -94,7 +94,7 @@ export const REVIEW_REPORT_REASONS = [
   { id: "harassment", label: "Acoso" },
   { id: "hate", label: "Odio o discriminación" },
   { id: "illegal_content", label: "Contenido ilegal" },
-  { id: "off_topic", label: "No habla de la obra" },
+  { id: "off_topic", label: "No habla del título" },
   { id: "other", label: "Otro" },
 ] as const;
 

@@ -5,7 +5,7 @@ import { WaitlistForm } from "./waitlist-form";
 
 export const metadata = {
   title: "lista de espera · kura",
-  description: "Guarda lo que más vale: películas, series y música, en colecciones. Apártate un lugar.",
+  description: "Guarda lo que más vale: películas, series y álbumes, en colecciones. Apártate un lugar.",
 };
 
 /**
@@ -24,7 +24,7 @@ export default function WaitlistPage() {
           guarda lo que más vale.
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-          Películas, series y música en colecciones, y lo que obsesiona a tu
+          Películas, series y álbumes en colecciones, y lo que obsesiona a tu
           gente. Apártate un lugar: invita gente y sube en la fila.
         </p>
         <Suspense>

@@ -33,7 +33,7 @@ const TEXT = "#f4f3ee";
 const TEXT_2 = "#b9b8c2";
 const RULE = "rgba(255,255,255,.18)";
 
-const KIND: Record<string, string> = { film: "CINE", series: "SERIE", album: "ÁLBUM" };
+const KIND: Record<string, string> = { film: "PELÍCULA", series: "SERIE", album: "ÁLBUM" };
 
 /** Cover sizes on the 300-wide frame: two works side by side. */
 const COVER = { poster: [92, 138], album: [116, 116] } as const;

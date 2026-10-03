@@ -79,7 +79,7 @@ import com.tromwey.kura.state.push
 //  - 2b Series · maratón: finished miniseries under two lenses; the pill is the whole series' hours,
 //    the meta its network and episodes; Guardar sits on the poster.
 //  - 2c Música · por momento: moments read from the chart's genres; the picked one tints the page.
-//    Albums 1:1, then "próximos discos".
+//    Albums 1:1, then "próximos álbumes".
 // Every page closes with Colecciones Kuradas. The store drops what's already in your library.
 
 /** What the format page picked: the time window (cine), the lens (series), the humor/moment. */
@@ -194,7 +194,7 @@ internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: For
                 MoodRow(p?.moods ?: emptyList(), if (p == null) null else musicMood(p, picks)) { i -> onPicks(picks.copy(mood = i)) }
                 Grid(
                     format, p, shown, error, retry, retrying = retrying,
-                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer discos. Vuelve a intentarlo más tarde."
+                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer álbumes. Vuelve a intentarlo más tarde."
                     else "Nada para ese momento en lo que más suena hoy. Prueba otro.",
                 ) { item ->
                     val t = store.fresh(item.title)
@@ -291,7 +291,7 @@ private fun Grid(
                 error == KuraApiError.Offline -> "Sin conexión. No se cargó el resto."
                 format == MediaFormat.Film -> "No pudimos traer películas."
                 format == MediaFormat.Series -> "No pudimos traer series."
-                else -> "No pudimos traer discos."
+                else -> "No pudimos traer álbumes."
             },
             onRetry = onRetry,
             modifier = m,
@@ -302,7 +302,7 @@ private fun Grid(
             when (format) {
                 MediaFormat.Film -> "No pudimos traer películas."
                 MediaFormat.Series -> "No pudimos traer series."
-                else -> "No pudimos traer discos."
+                else -> "No pudimos traer álbumes."
             },
             onRetry = onRetry,
             modifier = m,
@@ -415,7 +415,7 @@ private fun KuradaCard(store: AppStore, format: MediaFormat, k: DiscoverFormatPa
 }
 
 /**
- * "próximos discos" — `GET /discover`'s `upcomingAlbums` (≤ 12); an older server without it falls
+ * "próximos álbumes" — `GET /discover`'s `upcomingAlbums` (≤ 12); an older server without it falls
  * back to the albums of "los más esperados".
  */
 @Composable
@@ -426,7 +426,7 @@ private fun SoonDiscs(store: AppStore, heroesExcept: Set<String>) {
         .filter { it.first.format == MediaFormat.Album }
         .map { (t, date) -> CoverRowItem(t, "", date?.let { store.label(Release.Day(KuraJson.dayAtNoon(it))) }) }
     CoverRow(
-        store, "próximos discos", items,
+        store, "próximos álbumes", items,
         heroes = items.map { it.title.id }.filterNot { it in heroesExcept }.toSet(),
         modifier = Modifier.padding(top = 40.dp),
     )

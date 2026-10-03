@@ -258,7 +258,7 @@ export function PicksStep({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar películas, series o música"
+              placeholder="Buscar películas, series o álbumes"
               autoCapitalize="none"
               autoCorrect="off"
               enterKeyHint="search"

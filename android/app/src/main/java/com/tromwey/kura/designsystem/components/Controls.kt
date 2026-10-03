@@ -95,7 +95,7 @@ import kotlinx.coroutines.launch
 // and signature; inside, Material 3 Expressive themed by KuraTheme.
 
 /**
- * Mono segmented control (Todas / Cine / Series / Música) — a connected `ButtonGroup` of
+ * Mono segmented control (Todas / Películas / Series / Álbumes) — a connected `ButtonGroup` of
  * single-choice `ToggleButton`s, 2 dp apart: the chosen segment fills in text (bg ink), rounds
  * fully and widens a little; labels in Red Hat Mono. Selecting plays `Selection`. [fill] is the
  * unchosen segments' container.
@@ -183,7 +183,9 @@ fun <T> ChipRow(
                     onSelect(value)
                     haptic(KHapticEvent.Selection)
                 },
-                modifier = Modifier.then(if (fillWidth) Modifier.weight(1f) else Modifier).height(40.dp).semantics { role = Role.Tab },
+                // Weighted by label length (+ the padding, ~3.5 glyphs), not equally: «Películas» next to
+                // «Todo» would clip in an equal quarter at 360 dp.
+                modifier = Modifier.then(if (fillWidth) Modifier.weight(label.length + 3.5f) else Modifier).height(40.dp).semantics { role = Role.Tab },
                 shapes = connectedShapes(i, options.size),
                 colors = ToggleButtonDefaults.colors(
                     containerColor = fill,
@@ -191,7 +193,7 @@ fun <T> ChipRow(
                     checkedContainerColor = MaterialTheme.colorScheme.primary,
                     checkedContentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
-                contentPadding = PaddingValues(horizontal = 14.dp),
+                contentPadding = PaddingValues(horizontal = if (fillWidth) 12.dp else 14.dp),
             ) {
                 Text(label.uppercase(EsMx), style = KuraType.mono(11f, tracking = 0.1f).inherit(), maxLines = 1)
             }

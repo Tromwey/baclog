@@ -66,7 +66,7 @@ fun WelcomeScreen(store: AppStore) {
                 style = KuraType.news(36f).copy(lineHeight = 38.sp), // 1.05 (flujos-v2 13)
             )
             BasicText(
-                "Películas, series y música. Empieza por lo que no puedes dejar de recomendar.",
+                "Películas, series y álbumes. Empieza por lo que no puedes dejar de recomendar.",
                 style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 22.sp),
             )
         }

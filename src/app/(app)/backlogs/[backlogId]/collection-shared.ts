@@ -17,7 +17,7 @@ export const SORTS: { id: Sort; label: string }[] = [
   { id: "year", label: "Año" },
 ];
 export const FORMAT: Record<MediaType, { icon: KIconName; singular: string; plural: string; one: string }> = {
-  film: { icon: "film", singular: "película", plural: "películas", one: "Cine" },
+  film: { icon: "film", singular: "película", plural: "películas", one: "Película" },
   series: { icon: "series", singular: "serie", plural: "series", one: "Serie" },
   album: { icon: "music", singular: "álbum", plural: "álbumes", one: "Álbum" },
 };

@@ -9,28 +9,28 @@ enum MediaFormat: String, CaseIterable, Identifiable, Hashable, Codable {
 
     var id: String { rawValue }
 
-    /// Segmented / chip label ("Cine").
+    /// Segmented / chip label ("Películas").
     var label: String {
         switch self {
-        case .film: return "Cine"
+        case .film: return "Películas"
         case .series: return "Series"
-        case .album: return "Música"
+        case .album: return "Álbumes"
         }
     }
 
     /// Section name inside a collection (Newsreader, lowercase).
     var sectionName: String {
         switch self {
-        case .film: return "cine"
+        case .film: return "películas"
         case .series: return "series"
-        case .album: return "música"
+        case .album: return "álbumes"
         }
     }
 
-    /// Singular for meta lines ("Cine · 2001").
+    /// Singular for meta lines ("Película · 2001").
     var metaLabel: String {
         switch self {
-        case .film: return "Cine"
+        case .film: return "Película"
         case .series: return "Serie"
         case .album: return "Álbum"
         }

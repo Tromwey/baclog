@@ -66,7 +66,7 @@ export async function generateMetadata({
 
 /** The mock's kind label in the meta line: "Cine · 2001 · 125 min". */
 const KIND: Record<MediaType, string> = {
-  film: "Cine",
+  film: "Película",
   series: "Serie",
   album: "Álbum",
 };

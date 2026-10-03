@@ -147,7 +147,7 @@ function NewCollectionBody() {
           <KindChoice
             on={kind === "collection"}
             title="Colección"
-            description="Agrega series, películas o álbumes."
+            description="Agrega películas, series o álbumes."
             onSelect={() => setKind("collection")}
           />
           <KindChoice

@@ -210,10 +210,10 @@ const FIXTURE_PAIRINGS: {
       targetTitle: "For Emma, Forever Ago",
       targetMediaType: "album",
       targetByline: "Bon Iver",
-      linkClaim: "Vínculo temático: el registro íntimo del disco debut de Bon Iver.",
+      linkClaim: "Vínculo temático: el registro íntimo del álbum debut de Bon Iver.",
       narrative: {
         hookEyebrow: "te dejó pensando",
-        hookTitle: "Fuimos a buscar el disco que vive en el mismo silencio.",
+        hookTitle: "Fuimos a buscar el álbum que vive en el mismo silencio.",
         resultEyebrow: "y dimos con tu próxima obsesión",
         closer: "Para escuchar solo, de noche.",
       },
@@ -229,7 +229,7 @@ const FIXTURE_PAIRINGS: {
       linkClaim: "Vínculo temático: registro emocional compartido con el seed.",
       narrative: {
         hookEyebrow: "no te lo pudiste sacar de la cabeza",
-        hookTitle: "Buscamos la película que se siente como ese disco.",
+        hookTitle: "Buscamos la película que se siente como ese álbum.",
         resultEyebrow: "y esto te va a doler bonito",
         closer: "Guárdala para cuando estés listo.",
       },

@@ -104,7 +104,7 @@ fun PickScreen(store: AppStore) {
                 "Las tres tiñen tu perfil. Con las tres encontramos a tu gente.",
                 style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 22.sp),
             )
-            SearchPill(query, { query = it }, "Buscar películas, series o música")
+            SearchPill(query, { query = it }, "Buscar películas, series o álbumes")
             val gridError = store.onboardingGridError
             val searchError = store.searchError
             when {

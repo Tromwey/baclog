@@ -289,7 +289,7 @@ struct ReportReason: Hashable, Identifiable {
         ReportReason(id: "harassment", label: "Acoso"),
         ReportReason(id: "hate", label: "Odio o discriminación"),
         ReportReason(id: "illegal_content", label: "Contenido ilegal"),
-        ReportReason(id: "off_topic", label: "No habla de la obra"),
+        ReportReason(id: "off_topic", label: "No habla del título"),
         ReportReason(id: "other", label: "Otro")
     ]
 
