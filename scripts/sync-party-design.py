@@ -629,6 +629,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     bloque('En memoria de', [d.nombre || '', d.fechas || '']);
     NICHOS.slice(0, 5).forEach(n => { const c = cache.mau.contenido[n.id]; if (c && c.titulo) bloque(c.titulo, [c.texto]); });
     const nombres = await elenco; if (nombres.length) bloque('Quienes abrieron los nichos', nombres);
+    bloque('', ['Gracias por cada minuto y por acompañarme en el camino.']);
     bloque('', ['Ichigo-Ichie', '一期一会']);   // el agradecimiento del founder: un encuentro, una sola vez
     bloque('', ['El culpable estará en la fiesta.'], 'chico');
     const fecha = (cache.mau.contenido[NICHOS[0].id] || {}).texto, fin = el('div', 'mau-final-fin'), volverB = el('button', 'lab-pill', 'Volver al Mausoleo'); volverB.type = 'button';
