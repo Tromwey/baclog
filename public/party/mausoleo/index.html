@@ -961,7 +961,7 @@ function iniciar3D() {
     if (k === 'ouija') pintarOuija();
     if (k === 'cartas') refrescarMesa();
     if (IZQ.includes(k)) pintarLogros();
-    mostrar(ficha, k === 'nicho'); mostrar(marP, k === 'marcador' && conPanelMarcador()); mostrar(urnaP, false);
+    mostrar(ficha, k === 'nicho' && !fotoDe(i));   /* [Kura] con la instantánea no hay ficha */ mostrar(marP, k === 'marcador' && conPanelMarcador()); mostrar(urnaP, false);
     encuadrar();
     const p0 = cur.pos.clone().addScaledVector(new V3(-Math.sin(cur.yaw), 0, -Math.cos(cur.yaw)), look.z);
     trans = { t: 0, dur: reducido ? 0.01 : dur || ((k === 'nicho' && prev.k === 'nicho') || (k === 'logro' && prev.k === 'logro') ? 0.75 : (LADO.includes(k) && LADO.includes(prev.k)) || (IZQ.includes(k) && IZQ.includes(prev.k)) ? 1.15 : (CAPILLAS.includes(k) || CAPILLAS.includes(prev.k)) ? 1.9 : 1.5), from: { pos: p0, yaw: cur.yaw + look.yaw, pitch: cur.pitch + look.pitch, fov: cur.fov } };
@@ -973,6 +973,7 @@ function iniciar3D() {
     if (k === 'logros') trans.onEnd = hablarLogros;
     if (k === 'logro') trans.onEnd = hablarLogroZoom;
     if (k === 'ouija') trans.onEnd = hablarOuija;
+    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho' && !cache.mau.finalVisto) mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */
   }
   // Capilla derecha: primero se ve completa (ouija a la izquierda, cartas a la derecha) y desde ahí se elige
   // Capillas: primero se ven completas y desde ahí se elige (derecha: ouija / cartas; izquierda: marcador / logros)
@@ -1305,8 +1306,9 @@ function iniciar3D() {
   }
   function fotoTick(dt) {
     const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
-    // Con la instantánea a la vista se oculta el inventario (founder 2026-10-03): la foto ocupa esa orilla
-    if (!!d !== fotoInv) { fotoInv = !!d; const inv = ui.querySelector('.lab-inv'); if (inv) { inv.style.transition = 'opacity .4s'; inv.style.opacity = d ? '0' : ''; } }
+    // Con la instantánea a la vista no queda nada más en pantalla (founder 2026-10-03): ni inventario, ni contador,
+    // ni ficha (ver ir()); solo la foto, lo que dice el personaje y el botón de volver.
+    if (!!d !== fotoInv) { fotoInv = !!d; ['.lab-inv', '#total', '#pista', '#tag'].forEach(q => { const x = ui.querySelector(q); if (x) { x.style.transition = 'opacity .4s'; x.style.opacity = d ? '0' : ''; x.style.pointerEvents = d ? 'none' : ''; } }); if (!d) callar(); }
     if (d) { const clave = d.nombre + '|' + d.fechas + '|' + d.reverso; if (clave !== fotoClave) { fotoClave = clave; crearFoto(d); } }
     if (!foto3D) return;
     fotoK += ((on ? 1 : 0) - fotoK) * (1 - Math.exp(-dt * (on ? 5 : 9)));

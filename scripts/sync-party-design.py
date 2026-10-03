@@ -516,6 +516,11 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
          "      if (moved < 8 && dt < 500) { toNdc(e.clientX, e.clientY);"),
         ("    if (vista.k === 'afuera' || e.target.closest('input')) return;\n    if (vista.k === 'cartas' && !trans) {",
          "    if (vista.k === 'afuera' || finalOn || e.target.closest('input')) return;   /* [Kura] sin teclado durante el final */\n    if (vista.k === 'cartas' && !trans) {"),
+        ("    mostrar(ficha, k === 'nicho'); mostrar(marP,",
+         "    mostrar(ficha, k === 'nicho' && !fotoDe(i));   /* [Kura] con la instantánea no hay ficha */ mostrar(marP,"),
+        ("    if (k === 'ouija') trans.onEnd = hablarOuija;",
+         "    if (k === 'ouija') trans.onEnd = hablarOuija;\n"
+         "    if (k === 'nicho' && fotoDe(i)) trans.onEnd = () => { if (vista.k === 'nicho' && !cache.mau.finalVisto) mensaje(contenidoNicho(NICHOS[i]).texto, 5600); };   /* [Kura] lo dice el personaje */"),
         ("    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) return;",
          "    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) { if (fotoVisible()) fotoGirar(); return; }   /* [Kura] */"),
         ("    if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(pick()); }",
@@ -641,8 +646,9 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
   }
   function fotoTick(dt) {
     const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
-    // Con la instantánea a la vista se oculta el inventario (founder 2026-10-03): la foto ocupa esa orilla
-    if (!!d !== fotoInv) { fotoInv = !!d; const inv = ui.querySelector('.lab-inv'); if (inv) { inv.style.transition = 'opacity .4s'; inv.style.opacity = d ? '0' : ''; } }
+    // Con la instantánea a la vista no queda nada más en pantalla (founder 2026-10-03): ni inventario, ni contador,
+    // ni ficha (ver ir()); solo la foto, lo que dice el personaje y el botón de volver.
+    if (!!d !== fotoInv) { fotoInv = !!d; ['.lab-inv', '#total', '#pista', '#tag'].forEach(q => { const x = ui.querySelector(q); if (x) { x.style.transition = 'opacity .4s'; x.style.opacity = d ? '0' : ''; x.style.pointerEvents = d ? 'none' : ''; } }); if (!d) callar(); }
     if (d) { const clave = d.nombre + '|' + d.fechas + '|' + d.reverso; if (clave !== fotoClave) { fotoClave = clave; crearFoto(d); } }
     if (!foto3D) return;
     fotoK += ((on ? 1 : 0) - fotoK) * (1 - Math.exp(-dt * (on ? 5 : 9)));
