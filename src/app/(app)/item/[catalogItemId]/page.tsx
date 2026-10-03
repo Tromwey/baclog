@@ -17,6 +17,7 @@ import {
 } from "@/modules/social/title-activity";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import { directMusicLink } from "@/modules/links/resolve";
 import {
   getRenderInstant,
   isFreshlyReleased,
@@ -140,8 +141,13 @@ export default async function ItemPage({
 
   const isAlbum = item.mediaType === "album";
   const palette = item.paletteHex ?? [];
-  const linkHref = `/api/links/resolve?catalogItemId=${item.id}`;
-  const service = SERVICE_LABEL[user.preferredService ?? "spotify"];
+  const preferred = user.preferredService ?? "spotify";
+  // Music: the app's own link when it needs no upstream (`directMusicLink`),
+  // so the tap opens Spotify / Apple Music instead of their web player.
+  const linkHref =
+    (isAlbum ? directMusicLink(item, preferred) : null) ??
+    `/api/links/resolve?catalogItemId=${item.id}`;
+  const service = SERVICE_LABEL[preferred];
   const allowSpoiler = supportsSpoiler(item.mediaType);
   const songs = trackCount || tracks.length;
 

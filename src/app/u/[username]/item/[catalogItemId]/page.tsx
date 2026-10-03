@@ -11,6 +11,7 @@ import { getTitleStats } from "@/modules/backlog/title-stats";
 import { captureView } from "@/modules/analytics/capture";
 import { Synopsis } from "@/components/synopsis";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import { directMusicLink } from "@/modules/links/resolve";
 import { getRenderInstant, isUpcoming, restArrivesLabel } from "@/modules/catalog/release";
 import { seriesStatusLabel } from "@/modules/catalog/series-status";
 import { getSpanishOverview } from "@/modules/catalog/tmdb";
@@ -217,7 +218,7 @@ export default async function PublicItemPage({
               {MUSIC_SERVICES.map((s) => (
                 <a
                   key={s.id}
-                  href={resolve(`&service=${s.id}`)}
+                  href={directMusicLink(item, s.id) ?? resolve(`&service=${s.id}`)}
                   className="flex min-h-[56px] items-center gap-3.5 transition-opacity active:opacity-70"
                 >
                   <span aria-hidden className="flex h-10 w-10 flex-none items-center justify-center rounded-[10px] bg-surface-2 font-mono text-[12px] font-medium text-text">
