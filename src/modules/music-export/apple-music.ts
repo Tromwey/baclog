@@ -199,15 +199,29 @@ export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<str
  * rejected, so the next calls go straight to the fallback for an hour
  * instead of failing one by one.
  */
+/** A missing or rejected key would otherwise fall back to iTunes in silence: say it, once per instance. */
+const warned = new Set<string>();
+function warnOnce(key: string, message: string): void {
+  if (warned.has(key)) return;
+  warned.add(key);
+  console.warn(message);
+}
+
 export async function appleCatalogGet<T>(
   path: string,
   params: Record<string, string> = {},
   opts: { revalidate?: number; noStore?: boolean; signal?: AbortSignal } = {},
 ): Promise<T | null> {
   const cfg = appleMusicServerKeyConfig();
-  if (!cfg) return null;
+  if (!cfg) {
+    warnOnce("no-key", "[catalog] apple catalog: no server key on this deploy, music falls back to iTunes");
+    return null;
+  }
   const known = probeCache.get(cfg.keyId);
-  if (known && !known.ok && Date.now() - known.at < PROBE_TTL_MS) return null;
+  if (known && !known.ok && Date.now() - known.at < PROBE_TTL_MS) {
+    warnOnce(`rejected ${cfg.keyId}`, `[catalog] apple catalog: key=${cfg.source} rejected within the hour, music falls back to iTunes`);
+    return null;
+  }
   const dev = await appleServerToken(cfg);
   if (!dev) return null;
 
