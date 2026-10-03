@@ -585,8 +585,12 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
   // El final (founder 2026-10-03): al ver el reverso ya no se puede tocar nada; cae un rayo, todo se vuelve blanco,
   // se tiñe de negro y pasan los créditos. Una vez por dispositivo (cache.mau.finalVisto); después la foto queda libre.
   let finalOn = false;
-  async function fotoFinal() {
-    if (finalOn || cache.mau.finalVisto) return; finalOn = true; setHover(null);
+  // Ya visto el final, con la foto por el reverso queda un botón para volver a ver los créditos
+  const btnCred = document.createElement('button'); btnCred.type = 'button'; btnCred.className = 'lab-pill'; btnCred.textContent = 'Ver los créditos';
+  btnCred.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);bottom:max(84px,calc(env(safe-area-inset-bottom) + 56px));z-index:8;display:none';
+  ui.appendChild(btnCred); btnCred.addEventListener('click', () => fotoFinal(true));
+  async function fotoFinal(otraVez) {
+    if (finalOn || (cache.mau.finalVisto && !otraVez)) return; finalOn = true; setHover(null);
     // La canción de los créditos (public/party/sfx/creditos-0.m4a, del founder). Se arranca AQUÍ, muda, dentro del
     // toque que volteó la foto: iOS no deja empezar un audio después, sin gesto. Va por el AudioContext para poder
     // subirla y bajarla con fundido; sin contexto (nunca hubo sonido) no hay música.
@@ -617,7 +621,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     const v = el('div', 'mau-final'); v.setAttribute('role', 'dialog'); v.setAttribute('aria-label', 'Créditos'); v.appendChild(st); document.body.appendChild(v);
     ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'click'].forEach(t => v.addEventListener(t, e => e.stopPropagation()));
     const elenco = cargarMarcador().then(m => (m && m.elenco) || (m && m.top || []).map(f => f.apodo)).catch(() => []);
-    await espera(reducido ? 900 : 1900);
+    await espera(otraVez ? 350 : reducido ? 900 : 1900);
     sfx.trueno(); shake = 1.4; v.classList.add('blanco');
     await espera(750); v.classList.add('negro'); await espera(3600);
     const rollo = el('div', 'mau-final-rollo'), bloque = (t, ls, c) => { const b = el('div'); if (t) b.appendChild(el('h2', '', t)); ls.forEach(l => b.appendChild(el('p', c || '', l))); rollo.appendChild(b); };
@@ -646,6 +650,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
   }
   function fotoTick(dt) {
     const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
+    { const ver = on && cache.mau.finalVisto && !finalOn && fotoCara() === 1; if (ver && btnCred.style.display) callar(); btnCred.style.display = ver ? '' : 'none'; }
     // Con la instantánea a la vista no queda nada más en pantalla (founder 2026-10-03): ni inventario, ni contador,
     // ni ficha (ver ir()); solo la foto, lo que dice el personaje y el botón de volver.
     if (!!d !== fotoInv) { fotoInv = !!d; ['.lab-inv', '#total', '#pista', '#tag'].forEach(q => { const x = ui.querySelector(q); if (x) { x.style.transition = 'opacity .4s'; x.style.opacity = d ? '0' : ''; x.style.pointerEvents = d ? 'none' : ''; } }); $('msg').style.bottom = d && stage.clientWidth <= 520 ? 'max(28px, env(safe-area-inset-bottom))' : ''; if (!d) callar(); }
