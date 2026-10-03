@@ -316,7 +316,7 @@ let sonando = false;
 const arrancar = () => {
   const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
   const ctx = (au.ctx = au.ctx || new C());
-  if (!sonando) { sonando = true; startDrone(ctx); startOrgan(ctx); swellAmbience(ctx); au.ducking = segs => duckAmbience(ctx, segs); }
+  if (!sonando) { sonando = true; startDrone(ctx); startOrgan(ctx); swellAmbience(ctx); au.ducking = (segs, nivel, reemplazar) => duckAmbience(ctx, segs, nivel, reemplazar); }
   // iOS solo reanuda dentro de un TOQUE (arrastrar no cuenta): se sigue escuchando hasta que de verdad suene.
   const listo = () => ['click', 'touchend', 'keydown'].forEach(t => removeEventListener(t, arrancar, true));
   if (ctx.state === 'running') listo(); else ctx.resume().then(() => { if (ctx.state === 'running') listo(); }).catch(() => {});
@@ -582,6 +582,13 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
   let finalOn = false;
   async function fotoFinal() {
     if (finalOn || cache.mau.finalVisto) return; finalOn = true; setHover(null);
+    // La canción de los créditos (public/party/sfx/creditos-0.m4a, del founder). Se arranca AQUÍ, muda, dentro del
+    // toque que volteó la foto: iOS no deja empezar un audio después, sin gesto. Va por el AudioContext para poder
+    // subirla y bajarla con fundido; sin contexto (nunca hubo sonido) no hay música.
+    const AU = window.__audio, AC = AU && AU.ctx; let musica = null;
+    try { if (AC) { const a = new Audio('/party/sfx/creditos-0.m4a'), g = AC.createGain(); a.preload = 'auto'; g.gain.value = 0; AC.createMediaElementSource(a).connect(g).connect(AC.destination); a.play().catch(() => {}); musica = { a, g }; } } catch (_) {}
+    const sonar = () => { if (!musica) return; try { musica.a.currentTime = 0; musica.a.play().catch(() => {}); } catch (_) {} musica.g.gain.setTargetAtTime(0.9, AC.currentTime, 0.7); if (AU.ducking) AU.ducking((isFinite(musica.a.duration) && musica.a.duration) || 320, 0.0001, true); };
+    const callarMusica = () => { if (!musica) return; const m = musica; musica = null; m.g.gain.setTargetAtTime(0, AC.currentTime, 0.45); setTimeout(() => { try { m.a.pause(); } catch (_) {} }, 2400); if (AU.ducking) AU.ducking(0.4, 0.0001, true); };
     const d = fotoDe(vista.i) || {}, el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
     const st = el('style'); st.textContent = `
 .mau-final{position:fixed;inset:0;z-index:80;background:rgba(255,255,255,0);overflow:hidden;touch-action:none;color:#c9c3b6;text-align:center}
@@ -597,6 +604,8 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
 .mau-final-fin.on{opacity:1;pointer-events:auto}
 .mau-final-saltar{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));opacity:0;transition:opacity .8s}
 .mau-final-saltar.on{opacity:.75}
+.mau-final a.lab-pill{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;box-sizing:border-box}
+.mau-final-fin .mau-final-b{display:flex;flex-direction:column;align-items:center;gap:12px}
 .mau-final.quieto{overflow-y:auto;touch-action:pan-y}
 .mau-final.quieto .mau-final-rollo{position:static;padding:15vh 24px}
 .mau-final.quieto .mau-final-fin{position:static;padding:0 24px 15vh}`;
@@ -614,13 +623,16 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     bloque('Sellos entregados', [String(total)]);
     bloque('', ['El culpable estará en la fiesta.'], 'chico');
     const fecha = (cache.mau.contenido[NICHOS[0].id] || {}).texto, fin = el('div', 'mau-final-fin'), volverB = el('button', 'lab-pill', 'Volver al Mausoleo'); volverB.type = 'button';
-    fin.appendChild(el('p', '', fecha ? `Nos vemos el ${fecha}` : 'Nos vemos en la fiesta')); fin.appendChild(volverB);
+    const calB = el('a', 'lab-pill', 'Agregar al calendario'); calB.href = '/api/party/lab/calendario';
+    const botones = el('div', 'mau-final-b'); botones.append(calB, volverB);
+    fin.appendChild(el('p', '', fecha ? `Nos vemos el ${fecha}` : 'Nos vemos en la fiesta')); fin.appendChild(botones);
     const saltar = el('button', 'lab-pill mau-final-saltar', 'Saltar'); saltar.type = 'button';
     v.append(rollo, fin, saltar);
     $('live').textContent = [...rollo.querySelectorAll('h1,h2,p')].map(x => x.textContent).join('. ');
-    const cerrar = () => { cache.mau.finalVisto = true; guardar(); v.style.transition = 'opacity 1.2s'; v.style.opacity = '0'; setTimeout(() => { v.remove(); finalOn = false; }, 1250); };
+    const cerrar = () => { callarMusica(); cache.mau.finalVisto = true; guardar(); v.style.transition = 'opacity 1.2s'; v.style.opacity = '0'; setTimeout(() => { v.remove(); finalOn = false; }, 1250); };
     volverB.addEventListener('click', cerrar);
-    const terminar = () => { rollo.classList.remove('on'); saltar.hidden = true; fin.classList.add('on'); volverB.focus({ preventScroll: true }); };
+    const terminar = () => { rollo.classList.remove('on'); saltar.remove(); fin.classList.add('on'); calB.focus({ preventScroll: true }); };
+    sonar();
     if (reducido) { v.classList.add('quieto'); rollo.classList.add('on'); fin.classList.add('on'); saltar.remove(); return; }
     await espera(60); const alto = rollo.scrollHeight, vh = v.clientHeight;
     const anim = rollo.animate([{ transform: `translateY(${vh}px)` }, { transform: `translateY(${-alto}px)` }], { duration: (vh + alto) / 62 * 1000, easing: 'linear', fill: 'both' });

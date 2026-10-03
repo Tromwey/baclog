@@ -6,7 +6,7 @@ import { partyLabAttempts, partyLabPlayers, partyLabSeals } from "@/db/schema";
 import mapa from "../../../public/party/laberinto/mapa.json";
 import logros from "../../../public/party/mausoleo/logros.json";
 import { PARTY_EVENT, costumeKey } from "./event";
-import { LAB_NICHOS, LAB_OUIJA, LAB_RSVP_UMBRAL, normalNombre } from "./lab-config";
+import { LAB_EVENTO, LAB_NICHOS, LAB_OUIJA, LAB_RSVP_UMBRAL, normalNombre } from "./lab-config";
 import { partyRsvps } from "@/db/schema";
 import { saveRsvp } from "./rsvp";
 
@@ -208,6 +208,33 @@ export async function labMausoleo(deviceId: string) {
     tuyos,
     nichos: LAB_NICHOS.map((n) => (total >= n.umbral ? { ...n, abierto: true } : { id: n.id, umbral: n.umbral, abierto: false })),
   };
+}
+
+/**
+ * GET /calendario — the party as an .ics, or null until the group has opened the last niche (the credits that
+ * link here only play then; before that the date and place are still being earned).
+ */
+export async function labCalendario(): Promise<string | null> {
+  const { entregados } = await labResumen();
+  if (entregados < LAB_NICHOS[LAB_NICHOS.length - 1].umbral) return null;
+  const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/([,;])/g, "\\$1").replace(/\n/g, "\\n");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Kura//Party//ES",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${SLUG}@get-kura.app`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`,
+    `DTSTART:${LAB_EVENTO.inicio}`,
+    `DTEND:${LAB_EVENTO.fin}`,
+    `SUMMARY:${esc(LAB_EVENTO.titulo)}`,
+    `LOCATION:${esc(LAB_EVENTO.lugar)}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n");
 }
 
 /** POST /mausoleo/entregar { extras } — registers the Mausoleum's own seals, then delivers every seal the player holds. */

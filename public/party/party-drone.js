@@ -46,10 +46,11 @@ export function swellAmbience(ctx) {
  * smooth both ways. A new duck while one is running just extends it.
  */
 const duckUntil = new WeakMap();
-export function duckAmbience(ctx, segundos, nivel = 0.18) {
+export function duckAmbience(ctx, segundos, nivel = 0.18, reemplazar = false) {
     if (ctx.state === "closed" || !(segundos > 0))
         return;
-    const g = bus(ctx).gain, now = ctx.currentTime, hasta = Math.max(now + segundos, duckUntil.get(ctx) ?? 0);
+    // `reemplazar`: this duck sets the end on its own (the credits' song releases the ambience when it is dismissed)
+    const g = bus(ctx).gain, now = ctx.currentTime, hasta = reemplazar ? now + segundos : Math.max(now + segundos, duckUntil.get(ctx) ?? 0);
     duckUntil.set(ctx, hasta);
     g.cancelScheduledValues(now);
     g.setTargetAtTime(nivel, now, 0.15);

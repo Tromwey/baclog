@@ -22,3 +22,7 @@ Labyrinth / Mausoleum (2026-10-02):
 - whisper-0: "Four_Voices_Whispering_6_wEcho.wav" by geoneo0 — https://freesound.org/people/geoneo0/sounds/193818/
 - match-0: "Match Ignite (No Strike)" by brachern — https://freesound.org/people/brachern/sounds/398448/
 (CC0 needs no attribution; credited anyway, with thanks.)
+
+NOT CC0 — files supplied by the host for this private, temporary party page:
+- baile-0: the cats' dance.
+- creditos-0: the song under the final credits (2026-10-03).

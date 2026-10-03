@@ -32,6 +32,17 @@ export const LAB_NICHOS = [
 ] as const;
 
 /**
+ * The party as a calendar event — "Agregar al calendario" at the end of the credits (founder, 2026-10-03).
+ * Times are floating local time (no zone), like the invitation: 6 PM wherever the guest's phone is.
+ */
+export const LAB_EVENTO = {
+  titulo: "Costume Party: ¿Quién mató a Eric?",
+  inicio: "20261031T180000",
+  fin: "20261031T230000",
+  lugar: "Residencial Unio",
+} as const;
+
+/**
  * RSVP (founder, 2026-10-02): the ouija asks "¿Vendrás?" once the group has
  * revealed WHERE the party is — niche III (Lugar). Before that, nobody knows
  * what they'd be saying yes to.
