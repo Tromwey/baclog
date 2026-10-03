@@ -1198,7 +1198,7 @@ function iniciar3D() {
     const R = rng(77);
     for (let i = 0; i < 5; i++) { g.fillStyle = `rgba(150,160,175,${0.03 + R() * 0.03})`; g.beginPath(); g.ellipse(X + R() * S, Y + S * (0.45 + R() * 0.3), 150 + R() * 160, 30 + R() * 30, 0, 0, 6.29); g.fill(); }
     // La losa: la misma cara grabada del laberinto, con su remate redondo
-    const cara = texGrabado(d.nombre, d.fechas, piedraC), LW = 330, LH = LW * cara.height / cara.width, LX = W / 2 - LW / 2, LB = Y + S - 74, LY = LB - LH;
+    const cara = texGrabado(d.nombre, d.fechas, piedraC), LW = 430, LH = LW * cara.height / cara.width, LX = W / 2 - LW / 2, LB = Y + S - 40, LY = LB - LH;
     g.fillStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.ellipse(W / 2 + 26, LB + 6, LW * 0.72, 30, 0, 0, 6.29); g.fill();
     g.save(); g.beginPath(); g.arc(W / 2, LY + 2, LW / 2, Math.PI, 0); g.closePath(); g.fillStyle = g.createPattern(piedraC, 'repeat'); g.fill(); g.restore();
     g.drawImage(cara, LX, LY, LW, LH);
@@ -1311,7 +1311,7 @@ function iniciar3D() {
     if (!on && fotoK < 0.01) { fotoK = 0; fotoRot = fotoRotT = 0; foto3D.visible = false; return; }
     fotoRot += (fotoRotT - fotoRot) * (1 - Math.exp(-dt * 9));
     const W = stage.clientWidth, H = stage.clientHeight, fr = libre(), D = 0.6, tV = Math.tan(cam.fov / 2 * D2R), tH = tV * W / H;
-    const s = Math.min(fr.h / H * 2 * D * tV * 0.74, fr.w / W * 2 * D * tH * 0.82 / 0.825), e = reducido ? 1 : fotoK;
+    const s = Math.min(fr.h / H * 2 * D * tV * 0.82, fr.w / W * 2 * D * tH * 0.95 / 0.825), e = reducido ? 1 : fotoK;
     foto3D.visible = true; foto3D.scale.setScalar(s * (0.7 + 0.3 * e));
     foto3D.position.set(((fr.l + fr.r) / W - 1) * tH * D, (1 - (fr.t + fr.b) / H) * tV * D - (1 - e) * 0.12, -D);
     foto3D.rotation.set(0, fotoRot, -0.035 * Math.cos(fotoRot));
