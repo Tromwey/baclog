@@ -247,6 +247,10 @@ export async function labMarcador(deviceId: string) {
     .where(and(eq(partyLabPlayers.eventSlug, SLUG), sql`${partyLabPlayers.apodo} is not null`))
     .groupBy(partyLabPlayers.deviceId)
     .having(sql`count(${partyLabSeals.deliveredAt}) > 0`);
+  const firmados = await db
+    .select({ apodo: partyLabPlayers.apodo })
+    .from(partyLabPlayers)
+    .where(and(eq(partyLabPlayers.eventSlug, SLUG), sql`${partyLabPlayers.apodo} is not null`));
   const filas = rows
     .map((r) => ({ ...r, apodo: r.apodo as string }))
     .sort((a, b) => b.sellos - a.sellos || a.apodo.localeCompare(b.apodo, "es"));
@@ -255,8 +259,10 @@ export async function labMarcador(deviceId: string) {
     top: filas.slice(0, 8).map((f, i) => ({ puesto: i + 1, apodo: f.apodo, sellos: f.sellos, tu: f.deviceId === deviceId })),
     tu: { puesto: puesto || null, sellos: await entregadosDe(deviceId), apodo: player.apodo },
     firmados: filas.length,
-    /** Every signed player who delivered at least one seal, most seals first, one line per nickname — the cast of the final credits. */
-    elenco: [...new Map(filas.map((f) => [normalNombre(f.apodo), f.apodo])).values()].slice(0, 80),
+    /** Everyone who signed with a nickname, delivered or not, A–Z, one line per nickname — the cast of the final credits. */
+    elenco: [...new Map(firmados.map((f) => [normalNombre(f.apodo as string), f.apodo as string])).values()]
+      .sort((x, y) => x.localeCompare(y, "es", { sensitivity: "base" }))
+      .slice(0, 120),
   };
 }
 
