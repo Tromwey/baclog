@@ -6,7 +6,7 @@ import { partyLabAttempts, partyLabPlayers, partyLabSeals } from "@/db/schema";
 import mapa from "../../../public/party/laberinto/mapa.json";
 import logros from "../../../public/party/mausoleo/logros.json";
 import { PARTY_EVENT, costumeKey } from "./event";
-import { LAB_EVENTO, LAB_NICHOS, LAB_OUIJA, LAB_RSVP_UMBRAL, normalNombre } from "./lab-config";
+import { LAB_ELENCO_FUERA, LAB_EVENTO, LAB_NICHOS, LAB_OUIJA, LAB_RSVP_UMBRAL, normalNombre } from "./lab-config";
 import { partyRsvps } from "@/db/schema";
 import { saveRsvp } from "./rsvp";
 
@@ -286,8 +286,9 @@ export async function labMarcador(deviceId: string) {
     top: filas.slice(0, 8).map((f, i) => ({ puesto: i + 1, apodo: f.apodo, sellos: f.sellos, tu: f.deviceId === deviceId })),
     tu: { puesto: puesto || null, sellos: await entregadosDe(deviceId), apodo: player.apodo },
     firmados: filas.length,
-    /** Everyone who signed with a nickname, delivered or not, A–Z, one line per nickname — the cast of the final credits. */
+    /** Everyone who signed with a nickname (minus the host), delivered or not, A–Z, one line per nickname — the cast of the final credits. */
     elenco: [...new Map(firmados.map((f) => [normalNombre(f.apodo as string), f.apodo as string])).values()]
+      .filter((apodo) => !LAB_ELENCO_FUERA.includes(normalNombre(apodo)))
       .sort((x, y) => x.localeCompare(y, "es", { sensitivity: "base" }))
       .slice(0, 120),
   };

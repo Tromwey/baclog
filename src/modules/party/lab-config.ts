@@ -43,6 +43,12 @@ export const LAB_EVENTO = {
 } as const;
 
 /**
+ * Nicknames left out of the credits' cast (founder, 2026-10-03): the host is the deceased, not a player.
+ * Already normalized (see `normalNombre`). His seals still count; only the name is skipped.
+ */
+export const LAB_ELENCO_FUERA: readonly string[] = ["eric", "eric b", "eric briseño"];
+
+/**
  * RSVP (founder, 2026-10-02): the ouija asks "¿Vendrás?" once the group has
  * revealed WHERE the party is — niche III (Lugar). Before that, nobody knows
  * what they'd be saying yes to.
