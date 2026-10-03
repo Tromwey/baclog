@@ -342,6 +342,9 @@ const enMesa = () => mesa().filter(Boolean).map(s => s.id);
 const cartaDe = id => CARTAS.find(c => c.id === id);
 const cartasPorColocar = () => Object.keys(cache.cartas || {}).filter(id => cache.cartas[id] && cartaDe(id) && !enMesa().includes(id));
 const tiradaCorrecta = () => CARTAS.length > 0 && CARTAS.every((c, k) => { const s = mesa()[k]; return s && s.id === c.id && s.inv === !!c.invertida; });
+/* [Kura] pista de la mesa: cuántas en su lugar y cuántas bien orientadas */
+const pistaTirada = () => { const ss = mesa().filter(Boolean), lugar = mesa().filter((s, k) => s && CARTAS[k] && s.id === CARTAS[k].id).length, giro = ss.filter(s => cartaDe(s.id) && s.inv === !!cartaDe(s.id).invertida).length;
+  return `${lugar === 1 ? '1 está en su lugar' : `${lugar} están en su lugar`} y ${giro === 1 ? '1 está bien orientada' : `${giro} están bien orientadas`}`; };
 // Las cartas nuevas caen en lugares libres al azar y con orientación al azar: acomodarlas es cosa del jugador
 function repartir(ids) {
   const libres = mesa().map((s, k) => s ? -1 : k).filter(k => k >= 0).map(k => [Math.random(), k]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
@@ -411,7 +414,7 @@ function pintarPlanoCartas() {
     ol.appendChild(li);
   });
   const n = cartasPorColocar().length, b = $('p-colocar'); b.hidden = !n; b.textContent = `Colocar ${n} ${plural(n, 'carta', 'cartas')}`;
-  $('p-cartas-e').textContent = listo ? (cache.mau.selloMesa ? 'Las cartas están en su lugar. Tomaste el sello del cajón' : 'Las cartas están en su lugar. Se abrió un cajón con un sello') : enMesa().length === CARTAS.length ? 'Todavía no están en el orden correcto' : '';
+  $('p-cartas-e').textContent = listo ? (cache.mau.selloMesa ? 'Las cartas están en su lugar. Tomaste el sello del cajón' : 'Las cartas están en su lugar. Se abrió un cajón con un sello') : enMesa().length === CARTAS.length ? 'Todavía no están en el orden correcto. ' + pistaTirada() + '.' : '';   /* [Kura] */
   $('p-sello').hidden = !listo || !!cache.mau.selloMesa;
   $('p-sello').onclick = () => { cache.mau.selloMesa = true; guardar(); pintarPlanoCartas(); };
 }
@@ -1082,7 +1085,7 @@ function iniciar3D() {
     if (n) return mensaje(k ? 'Aquí puedo dejar las que traigo.' : 'Seis lugares… aquí deben ir las cartas.', 3600);
     if (!k) return mensaje('Seis lugares vacíos. Las cartas deben seguir en el laberinto.', 3800);
     if (k < N) return mensaje(`Me ${N - k === 1 ? 'falta una' : `faltan ${N - k}`}. Deben seguir en el laberinto.`, 3600);
-    mensaje('Están todas, pero algo no cuadra. ¿En qué orden irán?', 3800);
+    mensaje(`Están todas, pero algo no cuadra: ${pistaTirada()}.`, 4600);   /* [Kura] */
   }
   $('ouija-form').addEventListener('submit', async e => { e.preventDefault(); const v = $('ouija-in').value.trim(); if (!v) return; if (v !== cache.apodo) await firmar(v); $('ouija-form').hidden = true; preguntar(); });
   const verbo = () => ui.dataset.input === 'mouse' ? 'Haz clic en' : 'Toca';
@@ -1373,7 +1376,7 @@ function iniciar3D() {
     refrescarMesa(); comprobar();
   }
   function comprobar() {
-    if (!tiradaCorrecta()) return;
+    if (!tiradaCorrecta()) { if (enMesa().length === CARTAS.length) mensaje(pistaTirada().replace(/^./, m => m.toUpperCase()) + '.', 4200); return; }   /* [Kura] pista */
     if (selK !== null) { const k = selK; selK = null; resaltar(k, false); llevar(k, 0.2); }
     setHover(null); completarMesa(true); refrescarMesa(); pintarUI();
   }

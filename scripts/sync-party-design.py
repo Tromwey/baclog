@@ -482,6 +482,20 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     // [Kura] tampoco sin firma en la vista 2D
     if (!cache.apodo) { const v = prompt('Firma tus sellos: tu nombre o apodo'); if (!v || !(await firmar(v))) return; }
     const b = $('p-entregar'); b.disabled = true;"""),
+        # Tarot table hint, Wordle/Mastermind style (founder 2026-10-03): with all the cards on the table and the
+        # spread still wrong, it says how many are in their place and how many face the right way (each card's own
+        # orientation, wherever it sits). Same counts in the 2D panel.
+        ("const tiradaCorrecta = () => CARTAS.length > 0 && CARTAS.every((c, k) => { const s = mesa()[k]; return s && s.id === c.id && s.inv === !!c.invertida; });",
+         "const tiradaCorrecta = () => CARTAS.length > 0 && CARTAS.every((c, k) => { const s = mesa()[k]; return s && s.id === c.id && s.inv === !!c.invertida; });\n"
+         "/* [Kura] pista de la mesa: cuántas en su lugar y cuántas bien orientadas */\n"
+         "const pistaTirada = () => { const ss = mesa().filter(Boolean), lugar = mesa().filter((s, k) => s && CARTAS[k] && s.id === CARTAS[k].id).length, giro = ss.filter(s => cartaDe(s.id) && s.inv === !!cartaDe(s.id).invertida).length;\n"
+         "  return `${lugar === 1 ? '1 está en su lugar' : `${lugar} están en su lugar`} y ${giro === 1 ? '1 está bien orientada' : `${giro} están bien orientadas`}`; };"),
+        ("enMesa().length === CARTAS.length ? 'Todavía no están en el orden correcto' : '';",
+         "enMesa().length === CARTAS.length ? 'Todavía no están en el orden correcto. ' + pistaTirada() + '.' : '';   /* [Kura] */"),
+        ("    mensaje('Están todas, pero algo no cuadra. ¿En qué orden irán?', 3800);",
+         "    mensaje(`Están todas, pero algo no cuadra: ${pistaTirada()}.`, 4600);   /* [Kura] */"),
+        ("  function comprobar() {\n    if (!tiradaCorrecta()) return;",
+         "  function comprobar() {\n    if (!tiradaCorrecta()) { if (enMesa().length === CARTAS.length) mensaje(pistaTirada().replace(/^./, m => m.toUpperCase()) + '.', 4200); return; }   /* [Kura] pista */"),
     ], MAUSOLEO_PAGE)
     open(os.path.join(MAU, "index.html"), "w", encoding="utf-8").write(html)
     check_syntax(html)
