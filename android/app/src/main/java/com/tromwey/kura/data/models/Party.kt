@@ -374,7 +374,7 @@ object PartyCopy {
     fun theirs(l: Int?): String = if (l == null || l <= 0) "sus canciones" else if (l == 1) "su canción" else "sus $l"
 
     /** A server without parties yet (`503 unavailable`, `MIGRATION_0033_LIVE`). */
-    const val UNAVAILABLE_TITLE = "las fiestas llegan muy pronto."
+    const val UNAVAILABLE_TITLE = "las fiestas llegan muy pronto"
     const val UNAVAILABLE_NOTE = "Todavía no están listas en kura. Vuelve a abrir este link en unos días; sigue siendo el mismo."
     const val UNAVAILABLE = "Las fiestas llegan muy pronto."
     /** A party that answered 404 after we had it (deleted, you left, a block with the host). */
@@ -386,6 +386,6 @@ object PartyCopy {
     const val LEFT = "Saliste de la fiesta"
     /** `POST /invites/{token}/join` failed with nothing of its own to say (a 5xx): it is not a save. */
     const val JOIN_FAILED = "No se pudo entrar a la fiesta. Vuelve a intentarlo."
-    const val DEAD_TITLE = "este link ya no funciona."
+    const val DEAD_TITLE = "este link ya no funciona"
     const val DEAD_NOTE = "Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo."
 }

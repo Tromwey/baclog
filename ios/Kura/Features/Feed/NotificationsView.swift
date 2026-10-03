@@ -18,7 +18,7 @@ struct NotificationsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 10) {
-                    Text("todo en calma.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                    Text("todo en calma").font(.kura.news(28)).foregroundStyle(KColor.text)
                     Text("Aquí llegan tus seguidores, los estrenos que esperas y tu recap.")
                         .font(.kura.ui(15)).foregroundStyle(KColor.text2).multilineTextAlignment(.center)
                 }
@@ -184,7 +184,7 @@ struct FeedEmptyView: View {
                 Text("feed").font(.kura.screenTitle).foregroundStyle(KColor.text)
                     .padding(.top, KSize.titleTop).padding(.bottom, 14)
                     .accessibilityAddTraits(.isHeader)
-                Text("tu gente todavía no llega.").font(.kura.news(30)).foregroundStyle(KColor.text)
+                Text("tu gente todavía no llega").font(.kura.news(30)).foregroundStyle(KColor.text)
                 Text("Sigue a quien comparte tus obsesiones y aquí vas a ver lo que completan y les obsesiona.")
                     .font(.kura.ui(14)).foregroundStyle(KColor.text2).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)

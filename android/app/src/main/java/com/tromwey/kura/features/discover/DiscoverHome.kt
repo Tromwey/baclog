@@ -153,7 +153,7 @@ private fun FirstSteps() {
             GlyphIcon(Glyph.Flame, size = 12.dp)
             MonoLabel("Para empezar", size = 12f, tracking = 0.06f, color = KColor.text)
         }
-        BasicText("descubrir aprende de tus obsesiones.", Modifier.semantics { heading() }, style = KuraType.news(24f))
+        BasicText("descubrir aprende de tus obsesiones", Modifier.semantics { heading() }, style = KuraType.news(24f))
         NoteText("Marca algo con la llama en cualquier ficha y aquí aparecen títulos que se le parecen.")
     }
 }

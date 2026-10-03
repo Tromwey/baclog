@@ -86,7 +86,7 @@ class AuditRound5Test {
         store.createCollection("lista nueva", Privacy.OnlyMe)
         runCurrent()
         assertEquals(ToastModel.Kind.Info, store.toast?.kind)
-        assertEquals("Ya tienes demasiadas colecciones.", store.toast?.text)
+        assertEquals("Ya tienes demasiadas colecciones", store.toast?.text)
         assertTrue(store.collections.none { it.name == "lista nueva" })
 
         reconnect(store)

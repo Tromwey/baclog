@@ -569,7 +569,7 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="las conexiones no están listas."
+        title="las conexiones no están listas"
         body="No pudimos pensar una ahora. Vuelve más tarde."
       />
     );
@@ -578,7 +578,7 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title="todavía no hay nada que te guste."
+        title="todavía no hay nada que te guste"
         body="Marca un título con «me gusta» o «me obsesiona» y volvemos con una conexión."
       />
     );
@@ -588,7 +588,7 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         failure
-        title="no pudimos crear tu conexión."
+        title="no pudimos crear tu conexión"
         body="Este intento no cuenta. Vuelve a intentarlo."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
@@ -599,7 +599,7 @@ function AiResults({
       <EmptyState
         onBack={onBack}
         failure
-        title="la conexión que pensamos no está en el catálogo."
+        title="la conexión que pensamos no está en el catálogo"
         body="Este intento sí contó. Vuelve a intentarlo."
         action={<RetryButton onClick={onNext} pending={pending} />}
       />
@@ -610,7 +610,7 @@ function AiResults({
     return (
       <EmptyState
         onBack={onBack}
-        title={out ? "ya usaste tus conexiones del mes." : "todavía no hay una conexión para ti."}
+        title={out ? "ya usaste tus conexiones del mes" : "todavía no hay una conexión para ti"}
         body={
           out
             ? `Vuelven el 1 de ${nextMonthName()}.`

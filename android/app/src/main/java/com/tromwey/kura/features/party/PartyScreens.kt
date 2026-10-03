@@ -125,7 +125,7 @@ fun PartyScreen(store: AppStore, route: Route.PartyRoute) {
             )
             store.partyIsMissing(route.id) -> GoneView(
                 onBack = { store.pop() },
-                title = "esta fiesta ya no está disponible.",
+                title = "esta fiesta ya no está disponible",
                 note = "Puede que ya no exista o que ya no seas parte de ella.",
             )
             error != null -> {
@@ -318,7 +318,7 @@ internal fun PartySongs(store: AppStore, p: Party, heading: Boolean, openParty: 
     }
 }
 
-/** No songs yet ("la pista está vacía."): 28 on the page, 22 in the carousel. */
+/** No songs yet ("la pista está vacía"): 28 on the page, 22 in the carousel. */
 @Composable
 internal fun PartyEmpty(isHost: Boolean, limit: Int?, big: Boolean) {
     Column(
@@ -327,7 +327,7 @@ internal fun PartyEmpty(isHost: Boolean, limit: Int?, big: Boolean) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         BasicText(
-            "la pista está vacía.",
+            "la pista está vacía",
             style = KuraType.news(if (big) 28f else 22f).copy(color = if (big) KColor.text else KColor.text2, textAlign = TextAlign.Center),
         )
         BasicText(
@@ -541,10 +541,10 @@ private fun SearchRow(h: PartySongHit, busy: Boolean, onAction: () -> Unit) {
 
 /** The search's error, by what failed. (`NotFound` never gets here: the search leaves the page.) */
 private fun searchErrorCopy(e: KuraApiError, partiesOff: Boolean): Pair<String, String> = when {
-    e is KuraApiError.RateLimited -> "un momento." to "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar."
+    e is KuraApiError.RateLimited -> "un momento" to "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar."
     e == KuraApiError.Unavailable && partiesOff -> PartyCopy.UNAVAILABLE_TITLE to PartyCopy.UNAVAILABLE
-    e == KuraApiError.Unavailable -> "no pudimos buscar." to "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas."
-    else -> "no pudimos buscar." to "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas."
+    e == KuraApiError.Unavailable -> "no pudimos buscar" to "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas."
+    else -> "no pudimos buscar" to "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas."
 }
 
 private fun remainLabel(p: Party?): String {

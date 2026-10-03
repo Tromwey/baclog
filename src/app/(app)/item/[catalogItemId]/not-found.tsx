@@ -17,7 +17,7 @@ export default function ItemNotFound() {
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
         <h1 className="font-brand text-[32px] leading-[1.1] text-text text-balance">
-          esta ficha no existe.
+          esta ficha no existe
         </h1>
         <p className="max-w-[300px] text-[15px] leading-[1.5] text-text-2 text-pretty">
           El título ya no está en el catálogo o el link está incompleto.

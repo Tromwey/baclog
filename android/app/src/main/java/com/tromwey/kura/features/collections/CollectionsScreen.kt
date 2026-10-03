@@ -714,7 +714,7 @@ private fun NoCollections(store: AppStore) {
         ) {
             FanView(emptyList(), 180.dp, Modifier.kPressable(onClickLabel = "Nueva colección", onClick = open), ghost = true, label = "Nueva colección")
             BasicText(
-                "aquí va lo que más vale.",
+                "aquí va lo que más vale",
                 Modifier.padding(top = 16.dp).semanticsHeading(),
                 style = KuraType.emptyPhrase.copy(textAlign = TextAlign.Center),
             )

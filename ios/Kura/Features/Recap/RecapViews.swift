@@ -131,7 +131,7 @@ struct EmptyRecapView: View {
                 FanView(covers: [], lead: 150, ghost: true, plus: false)
                     .padding(.bottom, 6)
                 // Roman: italic is for works, and this is a sentence.
-                Text("tu recap de \(monthName(0)) todavía se está escribiendo.")
+                Text("tu recap de \(monthName(0)) todavía se está escribiendo")
                     .font(.kura.news(44)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                 // Same words as the web (and as the recap's own tiles: guardados · completos · reseñas).

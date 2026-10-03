@@ -121,7 +121,7 @@ fun PersonScreen(store: AppStore, route: Route.PersonRoute) {
         error = error,
         onRetry = { scope.launch { store.loadPerson(handle, force = true) } },
         onBack = { store.pop() },
-        gone = "este perfil no existe o es privado." to "Puede que sea privado o que ya no exista.",
+        gone = "este perfil no existe o es privado" to "Puede que sea privado o que ya no exista.",
         square = true,
     ) { p -> PersonProfile(store, p, preview = false) }
 }
@@ -298,7 +298,7 @@ fun PublicCollectionScreen(store: AppStore, route: Route.PublicCollection) {
         error = store.loadError(LoadKey.PublicCollection(key)),
         onRetry = { scope.launch { store.loadPublicCollection(route.handle, route.id, force = true) } },
         onBack = { store.pop() },
-        gone = "esta colección no existe o es privada." to "Puede que sea privada o que ya no exista.",
+        gone = "esta colección no existe o es privada" to "Puede que sea privada o que ya no exista.",
     ) { d ->
         val c = d.collection
         val all = c.titleIds.mapNotNull { store.title(it) }
@@ -356,7 +356,7 @@ fun PublicCollectionScreen(store: AppStore, route: Route.PublicCollection) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    BasicText("todavía está vacía.", style = KuraType.news(28f))
+                    BasicText("todavía está vacía", style = KuraType.news(28f))
                     BasicText("@${route.handle} no ha guardado nada aquí.", style = KuraType.ui(15f).copy(color = KColor.text2))
                 }
             } else {
@@ -471,7 +471,7 @@ fun ProfileAsStrangerScreen(store: AppStore) {
     if (store.profilePrivate) {
         Box(Modifier.fillMaxSize().background(KColor.bg)) {
             Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 140.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                BasicText("este perfil no existe o es privado.", Modifier.semantics { heading() }, style = KuraType.news(28f))
+                BasicText("este perfil no existe o es privado", Modifier.semantics { heading() }, style = KuraType.news(28f))
                 BasicText(
                     "Así te ve cualquiera mientras tu perfil sea privado. Se cambia en Ajustes › privacidad.",
                     style = KuraType.ui(15f).copy(color = KColor.text2),

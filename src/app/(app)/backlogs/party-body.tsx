@@ -61,7 +61,7 @@ export function PartyBody({
       {(detail === "error" || detail === "gone") && (
         <div role="status" className="flex flex-col items-center gap-2.5 px-8 pt-2 text-center">
           <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
-            {detail === "gone" ? "esta fiesta ya no está disponible." : "no se cargaron las canciones."}
+            {detail === "gone" ? "esta fiesta ya no está disponible" : "no se cargaron las canciones"}
           </h2>
           <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {detail === "gone"
@@ -99,7 +99,7 @@ export function PartyBody({
       {loaded && loaded.songs.length === 0 && (
         <div className="flex flex-col items-center gap-2.5 px-8 pt-2 text-center">
           <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
-            la pista está vacía.
+            la pista está vacía
           </h2>
           <p className="max-w-[30ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {host

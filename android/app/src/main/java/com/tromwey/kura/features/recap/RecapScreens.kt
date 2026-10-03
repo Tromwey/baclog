@@ -316,7 +316,7 @@ private fun EmptyRecap(store: AppStore) {
             FanView(emptyList(), lead = 150.dp, ghost = true, plus = false, modifier = Modifier.padding(bottom = 6.dp))
             // Roman: italic is for works, and this is a sentence.
             BasicText(
-                "tu recap de ${monthName(today)} todavía se está escribiendo.",
+                "tu recap de ${monthName(today)} todavía se está escribiendo",
                 Modifier.semantics { heading() },
                 style = KuraType.news(44f),
             )

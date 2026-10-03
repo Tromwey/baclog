@@ -335,7 +335,7 @@ function FirstSteps() {
         Para empezar
       </span>
       <p className="m-0 font-display text-[24px] leading-[1.15] text-text text-balance">
-        descubrir aprende de tus obsesiones.
+        descubrir aprende de tus obsesiones
       </p>
       <p className="m-0 text-[15px] leading-[1.5] text-text-2 text-pretty">
         Marca algo con la llama en cualquier ficha y aquí aparecen títulos que se le parecen.
@@ -658,7 +658,7 @@ function DoubleFeatureCard({
         {covers}
         <span className="flex min-w-0 flex-col gap-2">
           <span className={kicker}>En espera</span>
-          <span className={title}>necesita saber qué te gusta.</span>
+          <span className={title}>necesita saber qué te gusta</span>
           <span className={line}>
             Marca un título con «me gusta» o «me obsesiona» y se enciende.{" "}
             <span className="font-semibold text-text">

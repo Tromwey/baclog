@@ -205,7 +205,7 @@ export default async function PublicBacklogPage({
           // (PublicCollectionView): the visitor isn't the owner, so no
           // "Agregar títulos" and no "colección nueva" — it's someone else's.
           <div className="flex flex-col items-center gap-3 px-8 text-center">
-            <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">todavía está vacía.</p>
+            <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">todavía está vacía</p>
             <p className="max-w-[30ch] text-[15px] leading-[1.5] text-text-2">@{username} no ha guardado nada aquí.</p>
           </div>
         )}

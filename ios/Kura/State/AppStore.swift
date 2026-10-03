@@ -111,9 +111,21 @@ struct ToastModel: Identifiable, Equatable {
     var onExpire: (() -> Void)?
 
     init(text: String, kind: Kind, action: (() -> Void)? = nil) {
-        self.text = text
+        self.text = Self.normalized(text)
         self.kind = kind
         self.action = action
+    }
+
+    /// The ONE place a notice loses its final period (founder, 2026-10-03): a single sentence
+    /// reads without it as a toast, whether the copy is ours or the server's. Two or more
+    /// sentences (an inner ". ", "? " or "! ") stay intact; "…", "?" and "!" are never touched.
+    /// Inline error lines don't pass through here and keep theirs.
+    static func normalized(_ raw: String) -> String {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.hasSuffix("."), !t.hasSuffix("..") , !t.hasSuffix("…") else { return raw }
+        let body = String(t.dropLast())
+        let multi = [". ", "? ", "! "].contains { body.contains($0) }
+        return multi ? raw : body
     }
 
     static func == (a: ToastModel, b: ToastModel) -> Bool { a.id == b.id }

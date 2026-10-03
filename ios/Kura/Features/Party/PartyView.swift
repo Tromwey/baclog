@@ -27,7 +27,7 @@ struct PartyView: View {
             } else if store.partiesUnavailable {
                 GoneView(title: PartyCopy.unavailableTitle, note: "Todavía no están listas en kura. Vuelve en unos días.")
             } else if store.partyIsMissing(partyID) {
-                GoneView(title: "esta fiesta ya no está disponible.",
+                GoneView(title: "esta fiesta ya no está disponible",
                          note: "Puede que ya no exista o que ya no seas parte de ella.")
             } else if let e = store.loadError(.party(partyID)) {
                 LoadErrorScreen(error: e) { Task { await store.loadParty(partyID, force: true) } }
@@ -223,7 +223,7 @@ private struct PartyPage: View {
 
     private var empty: some View {
         VStack(spacing: 10) {
-            Text("la pista está vacía.").font(.kura.news(28)).foregroundStyle(KColor.text)
+            Text("la pista está vacía").font(.kura.news(28)).foregroundStyle(KColor.text)
             Text(p.isHost
                  ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue \(PartyCopy.theirs(limit))."
                  : "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.")

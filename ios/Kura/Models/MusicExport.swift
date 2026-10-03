@@ -244,7 +244,7 @@ enum MusicExportCopy {
         case .connect: return "conecta \(p.label.lowercased())"
         case .progress: return "pasando la colección"
         case .done: return "lista"
-        case .failed: return "no se pudo exportar."
+        case .failed: return "no se pudo exportar"
         }
     }
 

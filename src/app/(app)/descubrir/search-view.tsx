@@ -314,7 +314,7 @@ export function SearchView({
             <TriangleGlyph size={22} />
           </span>
           <h2 className="font-display text-[32px] font-normal leading-[1.1] text-text text-balance">
-            no pudimos buscar.
+            no pudimos buscar
           </h2>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             Revisa tu conexión y vuelve a intentarlo.
@@ -328,7 +328,7 @@ export function SearchView({
       {q.length >= MIN_QUERY && phase === "done" && results.length === 0 && (
         <div className="flex flex-col items-start gap-4 px-7 pt-[100px]">
           <h2 className="font-display text-[32px] font-normal leading-[1.1] text-text text-balance break-words">
-            nada con “{q}”.
+            nada con “{q}”
           </h2>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             {tab === "all"

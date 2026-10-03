@@ -31,7 +31,7 @@ export default function PublicError({
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-          no pudimos cargar esto.
+          no pudimos cargar esto
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Algo falló de nuestro lado, no del link. Vuelve a intentarlo.

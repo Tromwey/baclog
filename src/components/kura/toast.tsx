@@ -20,6 +20,7 @@ import {
   type SpringHandle,
 } from "@/lib/spring";
 import { KIcon } from "./icons";
+import { toastText } from "./toast-text";
 
 /**
  * Confirmar y deshacer (sistema de diseño §patrones · 35b / O4b): everything
@@ -134,7 +135,7 @@ export function useToast(): ToastHost {
     (spec: ToastSpec) => {
       if (current.current) retire();
       seq.current += 1;
-      const t = { ...spec, id: seq.current };
+      const t = { ...spec, message: toastText(spec.message), id: seq.current };
       current.current = t;
       // Pauses that belonged to the old pill's element go with it; the page
       // being hidden is about the page, and stays.

@@ -88,7 +88,7 @@ struct CollectionSkeleton: View {
 
 /// The 404 shape: something that was here is gone (collection, title, person).
 struct GoneView: View {
-    static let defaultTitle = "esta colección ya no existe."
+    static let defaultTitle = "esta colección ya no existe"
     static let defaultNote = "Se borró o dejó de estar disponible."
     var title = GoneView.defaultTitle
     var note = GoneView.defaultNote
@@ -159,10 +159,10 @@ extension KuraAPIError {
     /// happened and what to do, lowercase headline with a period, no "!".
     var loadCopy: (title: String, note: String) {
         switch self {
-        case .offline: return ("sin conexión.", "Revisa tu red y vuelve a intentarlo.")
-        case .unavailable: return ("el catálogo no responde.", "Vuelve a intentarlo en unos minutos.")
-        case .rateLimited: return ("un momento.", "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.")
-        default: return ("no pudimos cargar esto.", "Algo falló de nuestro lado. Vuelve a intentarlo.")
+        case .offline: return ("sin conexión", "Revisa tu red y vuelve a intentarlo.")
+        case .unavailable: return ("el catálogo no responde", "Vuelve a intentarlo en unos minutos.")
+        case .rateLimited: return ("un momento", "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.")
+        default: return ("no pudimos cargar esto", "Algo falló de nuestro lado. Vuelve a intentarlo.")
         }
     }
 }

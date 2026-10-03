@@ -768,7 +768,7 @@ function EmptyCollection({ addHref, auto }: { addHref: string; auto: boolean }) 
     return (
       <div className="flex flex-col items-center gap-2.5 px-8 pt-4 text-center">
         <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
-          nada por estrenarse.
+          nada por estrenarse
         </h2>
         <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
           Lo que guardes y todavía no salga aparece aquí solo, con cuánto falta.
@@ -781,7 +781,7 @@ function EmptyCollection({ addHref, auto }: { addHref: string; auto: boolean }) 
       {/* Second voice, not a second headline (critique 2026-09-27): the
           name above is the title; this line sits under it at 22 in text-2. */}
       <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
-        colección nueva, repisa vacía.
+        colección nueva, repisa vacía
       </h2>
       <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
         Empieza por lo que no puedes dejar de recomendar.

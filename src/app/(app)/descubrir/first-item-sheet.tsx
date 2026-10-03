@@ -75,7 +75,7 @@ export function FirstItemSheet({
         </div>
 
         <p className="mt-5 font-display text-[22px] leading-[1.15] text-text text-balance">
-          tu colección ya tiene color.
+          tu colección ya tiene color
         </p>
         <p className="mt-2 text-[15px] leading-[1.5] text-text-2 text-pretty">
           {item.backlogName} toma el color de {item.title}. Cada portada que

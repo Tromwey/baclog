@@ -96,7 +96,7 @@ export default async function LensPage({
         </div>
       ) : (
         <div className="relative mt-16 px-[30px] text-center">
-          <p className="font-brand text-[32px] leading-[1.1]">nada por aquí todavía.</p>
+          <p className="font-brand text-[32px] leading-[1.1]">nada por aquí todavía</p>
           <p className="mx-auto mt-3 max-w-[30ch] font-sans text-[15px] leading-[1.5] text-text-2">
             Se llena sola con lo que marcas en tus colecciones.
           </p>

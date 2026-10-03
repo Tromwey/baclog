@@ -329,7 +329,7 @@ internal fun LockedCollections(firstName: String, modifier: Modifier = Modifier)
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             BasicText(
-                "$firstName tiene su perfil en privado.",
+                "$firstName tiene su perfil en privado",
                 Modifier.semantics { heading() },
                 style = KuraType.news(24f).copy(textAlign = TextAlign.Center),
             )
@@ -345,7 +345,7 @@ internal fun LockedCollections(firstName: String, modifier: Modifier = Modifier)
 @Composable
 internal fun BlockedNote(handle: String, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        BasicText("Bloqueaste a @$handle.", Modifier.semantics { heading() }, style = KuraType.news(24f))
+        BasicText("Bloqueaste a @$handle", Modifier.semantics { heading() }, style = KuraType.news(24f))
         BasicText(
             "No ves su actividad ni sus reseñas, y @$handle no ve las tuyas. Si desbloqueas a @$handle, no vuelven a seguirse solos.",
             style = KuraType.ui(15f).copy(color = KColor.text2),

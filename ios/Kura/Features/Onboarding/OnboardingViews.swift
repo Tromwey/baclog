@@ -567,7 +567,7 @@ struct PickThreeView: View {
                     if grid.isEmpty {
                         if query.isEmpty, let e = store.onboardingGridError {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text(e == .offline ? "sin conexión." : "el catálogo no responde.")
+                                Text(e == .offline ? "sin conexión" : "el catálogo no responde")
                                     .font(.kura.news(24)).foregroundStyle(KColor.text)
                                 Text("Vuelve a intentarlo en unos minutos; también puedes buscar arriba.")
                                     .font(.kura.ui(14)).foregroundStyle(KColor.text2)
@@ -576,7 +576,7 @@ struct PickThreeView: View {
                             .padding(.top, 12)
                         } else if !query.isEmpty, let e = store.searchError, e == .unavailable || e == .offline {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text(e == .offline ? "sin conexión." : "el catálogo no responde.")
+                                Text(e == .offline ? "sin conexión" : "el catálogo no responde")
                                     .font(.kura.news(24)).foregroundStyle(KColor.text)
                                 GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { Task { await store.runSearch(query) } }
                             }
@@ -584,7 +584,7 @@ struct PickThreeView: View {
                         } else if store.searchLoading || (query.isEmpty && store.onboardingGrid.isEmpty) {
                             pickSkeleton.padding(.top, 4)
                         } else if !query.isEmpty {
-                            Text("nada con “\(query)”.").font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 12)
+                            Text("nada con “\(query)”").font(.kura.news(24)).foregroundStyle(KColor.text).padding(.top, 12)
                         }
                     } else {
                         masonry.padding(.top, 4)
@@ -936,7 +936,7 @@ struct UnderageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Spacer()
-            Text("kura es para personas de 13 años o más.")
+            Text("kura es para personas de 13 años o más")
                 .font(.kura.news(36))
                 .foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)

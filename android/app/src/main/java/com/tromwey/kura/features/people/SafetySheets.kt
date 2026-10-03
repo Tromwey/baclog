@@ -391,7 +391,7 @@ fun BlockedAccountsScreen(store: AppStore) {
                     }
                     if (list.isEmpty()) {
                         Column(Modifier.padding(horizontal = 8.dp).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            BasicText("No has bloqueado a nadie.", style = KuraType.news(22f))
+                            BasicText("No has bloqueado a nadie", style = KuraType.news(22f))
                             BasicText("Para bloquear a alguien, abre su perfil › Opciones.", style = KuraType.ui(14f).copy(color = KColor.text2))
                         }
                     } else {

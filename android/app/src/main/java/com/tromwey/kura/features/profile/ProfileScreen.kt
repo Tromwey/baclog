@@ -121,7 +121,7 @@ fun ProfileScreen(store: AppStore) {
         store.loadState == LoadState.Failed -> {
             // The launch read failed: nothing honest to draw yet (no name, no counts).
             Box(Modifier.fillMaxSize().background(KColor.bg)) {
-                val (t, note) = (store.loadError(LoadKey.Library))?.loadCopy ?: ("no pudimos cargar esto." to "Algo falló de nuestro lado. Vuelve a intentarlo.")
+                val (t, note) = (store.loadError(LoadKey.Library))?.loadCopy ?: ("no pudimos cargar esto" to "Algo falló de nuestro lado. Vuelve a intentarlo.")
                 LoadErrorBlock(t, note, onRetry = { scope.launch { store.bootstrap() } }, modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 140.dp))
                 Row(Modifier.fillMaxWidth().padding(top = KSize.chromeTop, end = KSize.chromeSide)) {
                     Spacer(Modifier.weight(1f))

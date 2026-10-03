@@ -261,7 +261,7 @@ struct EmptyCollectionBody: View {
     let add: () -> Void
     var body: some View {
         VStack(spacing: 12) {
-            Text("colección nueva, repisa vacía.")
+            Text("colección nueva, repisa vacía")
                 .font(.kura.news(22))
                 .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)
@@ -375,7 +375,7 @@ struct WaitingCollectionView: View {
                     }
                     if all.isEmpty {
                         VStack(spacing: 10) {
-                            Text("nada por estrenarse.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                            Text("nada por estrenarse").font(.kura.news(28)).foregroundStyle(KColor.text)
                             Text("Lo que guardes y todavía no salga aparece aquí solo, con cuánto falta.")
                                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                                 .multilineTextAlignment(.center)

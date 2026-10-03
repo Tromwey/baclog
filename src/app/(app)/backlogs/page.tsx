@@ -120,7 +120,7 @@ function NoCollections() {
           <Fan covers={[]} lead={180} ghost />
         </NewBacklogTrigger>
         <h2 className="mt-4 font-brand text-[34px] font-normal leading-[1.05] [text-wrap:balance]">
-          aquí va lo que más vale.
+          aquí va lo que más vale
         </h2>
         <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
           Empieza por lo que no puedes dejar de recomendar. Una colección puede

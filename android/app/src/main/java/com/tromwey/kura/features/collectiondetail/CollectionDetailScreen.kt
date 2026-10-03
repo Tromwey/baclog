@@ -207,7 +207,7 @@ fun WaitingCollectionScreen(store: AppStore) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        BasicText("nada por estrenarse.", style = KuraType.news(28f))
+                        BasicText("nada por estrenarse", style = KuraType.news(28f))
                         BasicText(
                             "Lo que guardes y todavía no salga aparece aquí solo, con cuánto falta.",
                             style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),

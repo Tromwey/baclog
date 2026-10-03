@@ -263,7 +263,7 @@ private fun AppStore.setSongPalette(titleId: String, hexes: List<String>) {
 
 /** The toast for a party write that failed (the server's `message` when it wrote the copy). */
 fun partyText(e: KuraApiError, fallback: String = e.toast): String = when {
-    e == KuraApiError.Unavailable -> PartyCopy.UNAVAILABLE.removeSuffix(".")
+    e == KuraApiError.Unavailable -> PartyCopy.UNAVAILABLE
     // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
     e is KuraApiError.Conflict && e.message.isNotEmpty() -> e.message
     e is KuraApiError.Conflict && e.code == "too_many_parties" -> PartyCopy.TOO_MANY_PARTIES

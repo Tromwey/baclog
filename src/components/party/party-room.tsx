@@ -13,7 +13,6 @@ import { Sheet } from "@/components/ui";
 import type { MusicProvider } from "@/modules/music-export/types";
 import type { PartyDetail, PartySong } from "@/modules/party-collections/types";
 import { logged, PARTY_GONE_MESSAGE } from "./party-errors";
-import { toastText } from "@/components/kura/attempt";
 import { setPartyFlash } from "./party-flash";
 import { handleOf, PartyHero, songsLabel, SongCover, SongRowBody } from "./party-parts";
 import { type TidalReturn, tidalConnectFailed } from "./export-copy";
@@ -116,7 +115,7 @@ export function PartyRoom({
   // A failed TIDAL connection says why, once (the query already left the URL).
   const tidalFailed = tidalReturn && !tidalReturn.ok ? tidalConnectFailed(tidalReturn.reason) : null;
   useEffect(() => {
-    if (tidalFailed) toast.show({ message: toastText(tidalFailed), kind: "error" });
+    if (tidalFailed) toast.show({ message: tidalFailed, kind: "error" });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
@@ -267,7 +266,7 @@ export function PartyRoom({
         </section>
       ) : (
         <div className="flex flex-col items-center gap-2.5 px-8 text-center">
-          <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía.</span>
+          <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía</span>
           <span className="max-w-[28ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {host
               ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue las suyas."

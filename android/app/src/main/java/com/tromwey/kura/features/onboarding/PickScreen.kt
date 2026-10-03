@@ -122,7 +122,7 @@ fun PickScreen(store: AppStore) {
                 q.isNotEmpty() && (searchError == KuraApiError.Unavailable || searchError == KuraApiError.Offline) ->
                     Unavailable(searchError, note = null) { scope.launch { store.runSearch(q) } }
                 store.searchLoading || (q.isEmpty() && store.onboardingGrid.isEmpty()) -> PickSkeleton(Modifier.padding(top = 4.dp))
-                q.isNotEmpty() -> BasicText("nada con “$q”.", modifier = Modifier.padding(top = 12.dp), style = KuraType.news(24f))
+                q.isNotEmpty() -> BasicText("nada con “$q”", modifier = Modifier.padding(top = 12.dp), style = KuraType.news(24f))
             }
             InlineError(store.authError)
         }
@@ -146,7 +146,7 @@ fun PickScreen(store: AppStore) {
 @Composable
 private fun Unavailable(error: KuraApiError, note: String?, onRetry: () -> Unit) {
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        BasicText(if (error == KuraApiError.Offline) "sin conexión." else "el catálogo no responde.", style = KuraType.news(24f))
+        BasicText(if (error == KuraApiError.Offline) "sin conexión" else "el catálogo no responde", style = KuraType.news(24f))
         if (note != null) BasicText(note, style = KuraType.ui(14f).copy(color = KColor.text2))
         GlassButton("Reintentar", onClick = onRetry, icon = KIcon.Retry)
     }

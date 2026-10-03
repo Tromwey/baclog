@@ -131,7 +131,7 @@ fun KuraWavyProgress(progress: Float, modifier: Modifier = Modifier) {
 fun GoneView(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    title: String = "esta colección ya no existe.",
+    title: String = "esta colección ya no existe",
     note: String = "Se borró o dejó de estar disponible.",
 ) {
     Box(modifier.fillMaxSize().background(KColor.bg)) {

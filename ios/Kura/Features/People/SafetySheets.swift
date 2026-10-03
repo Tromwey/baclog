@@ -278,7 +278,7 @@ struct BlockedAccountsView: View {
             }
             if list.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("No has bloqueado a nadie.").font(.kura.news(22)).foregroundStyle(KColor.text)
+                    Text("No has bloqueado a nadie").font(.kura.news(22)).foregroundStyle(KColor.text)
                     Text("Para bloquear a alguien, abre su perfil › Opciones.")
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)

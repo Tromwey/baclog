@@ -135,7 +135,7 @@ struct DiscoverView: View {
             }
             .padding(.horizontal, 14).frame(height: 30)
             .background(KColor.glassBg, in: Capsule())
-            Text("descubrir aprende de tus obsesiones.").font(.kura.news(24)).foregroundStyle(KColor.text)
+            Text("descubrir aprende de tus obsesiones").font(.kura.news(24)).foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Marca algo con la llama en cualquier ficha y aquí aparecen títulos que se le parecen.")
                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
@@ -595,7 +595,7 @@ private struct SearchMode: View {
         let users = store.searchPeople
         if let e = store.searchError, e == .unavailable || e == .offline {
             VStack(alignment: .leading, spacing: 16) {
-                Text(e == .offline ? "sin conexión." : "el catálogo no responde.").font(.kura.news(32)).foregroundStyle(KColor.text)
+                Text(e == .offline ? "sin conexión" : "el catálogo no responde").font(.kura.news(32)).foregroundStyle(KColor.text)
                 Text(e == .offline ? "Revisa tu red y vuelve a buscar." : "Vuelve a intentarlo en unos minutos.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                 GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", flat: true) { submit(q) }
@@ -776,7 +776,7 @@ private struct NoResults: View {
     let fix: (String) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("nada con “\(query)”.").font(.kura.news(32)).foregroundStyle(KColor.text)
+            Text("nada con “\(query)”").font(.kura.news(32)).foregroundStyle(KColor.text)
             Text("Revisa cómo se escribe o busca por persona o año.")
                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
             if let c = SearchIndex.correction(for: query, store) {

@@ -248,7 +248,7 @@ private fun Plain(header: @Composable (Modifier) -> Unit, content: @Composable (
 @Composable
 private fun Quiet(store: AppStore) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        BasicText("tu gente anda tranquila.", style = KuraType.news(32f))
+        BasicText("tu gente anda tranquila", style = KuraType.news(32f))
         BasicText("Cuando completen, se obsesionen o reseñen algo, aparece aquí.", style = KuraType.ui(15f).copy(color = KColor.text2))
         GlassButton("Buscar más gente", onClick = { store.select(Tab.Discover) }, Modifier.padding(top = 6.dp), icon = KIcon.Search)
     }
@@ -268,7 +268,7 @@ private fun FeedEmpty(store: AppStore, header: @Composable (Modifier) -> Unit) {
             Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BasicText("tu gente todavía no llega.", style = KuraType.news(30f))
+            BasicText("tu gente todavía no llega", style = KuraType.news(30f))
             BasicText(
                 "Sigue a quien comparte tus obsesiones y aquí vas a ver lo que completan y les obsesiona.",
                 style = KuraType.ui(14f).copy(color = KColor.text2),

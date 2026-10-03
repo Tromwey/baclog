@@ -68,7 +68,7 @@ async function EmptyNoFollows({ userId }: { userId: string }) {
   return (
     <div className="flex flex-col gap-3 px-5 pt-3.5">
       <h2 className="font-brand text-[30px] leading-[1.1] text-text text-balance">
-        tu gente todavía no llega.
+        tu gente todavía no llega
       </h2>
       <p className="text-[14px] leading-[1.5] text-pretty text-text-2">
         Sigue a quien comparte tus obsesiones y aquí vas a ver lo que guardan,
@@ -109,7 +109,7 @@ async function EmptyNoActivity({
   return (
     <div className="flex flex-col gap-3 px-5 pt-3.5">
       <h2 className="font-brand text-[30px] leading-[1.1] text-text text-balance">
-        tu gente anda tranquila.
+        tu gente anda tranquila
       </h2>
       <p className="text-[14px] leading-[1.5] text-pretty text-text-2">
         {one

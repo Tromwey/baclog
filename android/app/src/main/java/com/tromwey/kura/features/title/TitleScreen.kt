@@ -112,7 +112,7 @@ fun TitleScreen(store: AppStore, route: Route.TitleRoute) {
         t != null -> TitlePage(store, t)
         id in store.missingTitles -> GoneView(
             onBack = { store.pop() },
-            title = "este título ya no está disponible.",
+            title = "este título ya no está disponible",
             note = "Se quitó del catálogo o dejó de estar disponible.",
         )
         error != null -> {

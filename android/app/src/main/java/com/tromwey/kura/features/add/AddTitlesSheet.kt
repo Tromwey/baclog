@@ -151,11 +151,11 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
                 store.searchLoading && results.isEmpty() -> items(5, key = { "sk-$it" }) { RowSkeleton() }
                 error != null && results.isEmpty() -> item("error") {
                     Message(
-                        if (error == KuraApiError.Offline) "sin conexión." else "no se pudo buscar.",
+                        if (error == KuraApiError.Offline) "sin conexión" else "no se pudo buscar",
                         if (error == KuraApiError.Offline) "Revisa tu red y vuelve a intentarlo." else error.toast("Vuelve a intentarlo en unos minutos."),
                     )
                 }
-                results.isEmpty() -> item("empty") { Message("nada con “$q”.", "Revisa cómo se escribe o busca por persona o año.") }
+                results.isEmpty() -> item("empty") { Message("nada con “$q”", "Revisa cómo se escribe o busca por persona o año.") }
             }
             items(results, key = { "r-" + it.id }) { t -> AddRow(t, c, q, toggle) }
         }

@@ -297,7 +297,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         {narrative.hookEyebrow}
       </p>
       <p className="mt-2 font-display text-[22px] font-bold leading-tight tracking-[-0.01em] text-text">
-        {narrative.hookTitle}
+        {narrative.hookTitle.replace(/\.$/, "")}
       </p>
 
       {/* Discs with REAL covers (in-app artwork allowed) */}

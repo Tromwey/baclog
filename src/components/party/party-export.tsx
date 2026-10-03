@@ -108,7 +108,7 @@ export function ExportSheet({
 }: {
   party: PartyDetail;
   toast: ToastHost;
-  /** `connected`: TIDAL already linked (straight to "pasando la colección."). */
+  /** `connected`: TIDAL already linked (straight to "pasando la colección"). */
   onPick: (provider: MusicProvider, connected: boolean) => void;
 }) {
   const [services, setServices] = useState<MusicServices | null | "off">(null);
@@ -472,12 +472,12 @@ export function ExportScreen({
 
   const title =
     step.k === "connect"
-      ? `conecta ${svc.toLowerCase()}.`
+      ? `conecta ${svc.toLowerCase()}`
       : step.k === "progress"
-        ? "pasando la colección."
+        ? "pasando la colección"
         : step.k === "done"
-          ? "lista."
-          : "no se pudo exportar.";
+          ? "lista"
+          : "no se pudo exportar";
 
   let body: string;
   if (step.k === "connect") {

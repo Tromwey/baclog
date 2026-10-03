@@ -421,7 +421,7 @@ fun MergeConfirmScreen(store: AppStore) {
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
         if (proof == null) {
             Column(Modifier.padding(start = 24.dp, end = 24.dp, top = KSize.pushedTitleTop), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BasicText("no hay nada que fusionar.", Modifier.semantics { heading() }, style = KuraType.news(28f))
+                BasicText("no hay nada que fusionar", Modifier.semantics { heading() }, style = KuraType.news(28f))
                 BasicText("Vuelve a probar que la otra cuenta es tuya.", style = KuraType.ui(15f).copy(color = KColor.text2))
             }
         } else {

@@ -61,7 +61,7 @@ export async function PeopleScreen({
         {page.people.length === 0 && page.privateCount === 0 ? (
           <div className="flex flex-col gap-2 pt-8">
             <p className="font-brand text-[28px] leading-[1.1] text-text text-balance">
-              {mode === "following" ? "todavía no sigues a nadie." : "todavía nadie te sigue."}
+              {mode === "following" ? "todavía no sigues a nadie" : "todavía nadie te sigue"}
             </p>
             <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
               {mode === "following"

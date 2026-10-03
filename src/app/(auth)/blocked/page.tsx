@@ -9,7 +9,7 @@ export default function BlockedPage() {
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-          kura es para personas de 13 años o más.
+          kura es para personas de 13 años o más
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2">
           Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13. No guardamos nada más de ti.

@@ -35,7 +35,7 @@ export default function InterceptedCollectionNotFound() {
       </div>
       <div className="flex flex-col gap-3" style={STAGE_A}>
         <h1 className="font-brand text-[32px] leading-[1.1] text-text text-balance">
-          esto no existe o es privado.
+          esto no existe o es privado
         </h1>
         <p className="max-w-[320px] text-[15px] leading-[1.5] text-text-2 text-pretty">
           Este link no lleva a nada que puedas ver. Revisa que esté completo.

@@ -46,10 +46,10 @@ val Person.photo: String? get() = KuraRuntime.resolve(avatarUrl)
  */
 val KuraApiError.loadCopy: Pair<String, String>
     get() = when (this) {
-        KuraApiError.Offline -> "sin conexión." to "Revisa tu red y vuelve a intentarlo."
-        KuraApiError.Unavailable -> "el catálogo no responde." to "Vuelve a intentarlo en unos minutos."
-        is KuraApiError.RateLimited -> "un momento." to "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
-        else -> "no pudimos cargar esto." to "Algo falló de nuestro lado. Vuelve a intentarlo."
+        KuraApiError.Offline -> "sin conexión" to "Revisa tu red y vuelve a intentarlo."
+        KuraApiError.Unavailable -> "el catálogo no responde" to "Vuelve a intentarlo en unos minutos."
+        is KuraApiError.RateLimited -> "un momento" to "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
+        else -> "no pudimos cargar esto" to "Algo falló de nuestro lado. Vuelve a intentarlo."
     }
 
 /** The store's haptic cases → the design system's events (iOS `KHaptic.Event.reaction`). */

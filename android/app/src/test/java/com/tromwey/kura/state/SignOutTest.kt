@@ -139,7 +139,7 @@ class SignOutTest {
         assertFalse(h.store.signOutThisDevice())
         assertNull(h.tokens.get())
         assertEquals(AppPhase.Onboarding, h.store.phase)
-        assertEquals(AppStore.DEVICE_SIGN_OUT_QUEUED, h.store.toast?.text)
+        assertEquals(toastText(AppStore.DEVICE_SIGN_OUT_QUEUED), h.store.toast?.text)
         assertEquals(listOf(PendingRevoke(bearer = bearer, sid = "sid-1", global = false)), h.queue.all())
 
         // Still offline: it stays for the next reconnect.
@@ -165,7 +165,7 @@ class SignOutTest {
         h.api.failNext("logout", KuraApiError.Offline)
         h.store.signOut()
         advanceTimeBy(1_000)
-        assertEquals(AppStore.GLOBAL_SIGN_OUT_QUEUED, h.store.toast?.text)
+        assertEquals(toastText(AppStore.GLOBAL_SIGN_OUT_QUEUED), h.store.toast?.text)
         assertEquals(listOf("unregisterDevice fcm:token-1 $bearer"), h.api.callsOf("unregisterDevice"))
         assertEquals(listOf(PendingRevoke(bearer = bearer, global = true)), h.queue.all())
 

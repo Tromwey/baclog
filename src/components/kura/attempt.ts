@@ -67,11 +67,4 @@ export const ONBOARDING_TO_FOLLOW = finishSignupTo("seguir a gente");
 export const ONBOARDING_TO_PARTY = finishSignupTo("organizar fiestas");
 export const ONBOARDING_TO_REVIEW = finishSignupTo("publicar reseñas");
 export const ONBOARDING_TO_EDIT_PROFILE = finishSignupTo("editar tu perfil");
-/**
- * An aviso of ONE sentence carries no final period (voz, 2026-10-03); one of
- * two keeps its punctuation. For copy shared with inline messages, which DO
- * keep the period.
- */
-export const toastText = (s: string) => (/\.\s/.test(s) ? s : s.replace(/\.$/, ""));
-
 export const ONBOARDING_EXIT_LABEL = "Terminar";

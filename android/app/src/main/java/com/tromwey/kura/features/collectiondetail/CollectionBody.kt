@@ -140,7 +140,7 @@ fun ownBadge(store: AppStore, t: Title): MasonryBadge {
 }
 
 /**
- * 6b — "colección nueva, repisa vacía." (Newsreader 22, text-2: under the collection's own name
+ * 6b — "colección nueva, repisa vacía" (Newsreader 22, text-2: under the collection's own name
  * it's the second voice) + one line + Agregar títulos (tonal, 48).
  */
 @Composable
@@ -150,7 +150,7 @@ fun EmptyCollectionBody(onAdd: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        BasicText("colección nueva, repisa vacía.", style = KuraType.news(22f).copy(color = KColor.text2, textAlign = TextAlign.Center))
+        BasicText("colección nueva, repisa vacía", style = KuraType.news(22f).copy(color = KColor.text2, textAlign = TextAlign.Center))
         BasicText(
             "Empieza por lo que no puedes dejar de recomendar.",
             style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),

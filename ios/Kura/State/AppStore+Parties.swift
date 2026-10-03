@@ -177,7 +177,7 @@ extension AppStore {
     /// The toast for a party write that failed (the server's `message` when it wrote the copy).
     static func partyText(_ e: KuraAPIError, or fallback: String = "No se pudo guardar", rotating: Bool = false) -> String {
         switch e {
-        case .unavailable: return PartyCopy.unavailableToast
+        case .unavailable: return PartyCopy.unavailable
         // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
         case .conflict(_, let m) where !m.isEmpty: return m
         case .conflict(let code, _) where code == "too_many_parties": return PartyCopy.tooManyParties

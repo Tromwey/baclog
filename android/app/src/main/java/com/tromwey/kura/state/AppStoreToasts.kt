@@ -74,8 +74,12 @@ import kotlin.time.Duration.Companion.seconds
  * A toast over the dock. Equality is identity (`id`), like iOS. A [Kind.Retry] toast never times out:
  * it stays until Reintentar, its ✕, a newer toast, or the same write (`retryKey`) going through.
  */
-class ToastModel(val text: String, val kind: Kind, val retryKey: String? = null, val action: (() -> Unit)? = null) {
+class ToastModel(text: String, val kind: Kind, val retryKey: String? = null, val action: (() -> Unit)? = null) {
     enum class Kind { Undo, Retry, Info }
+
+    /** What the toast says: one sentence has no final period (see [toastText]). The ONE place it is
+     *  normalized, so server-written copy (`e.message`, `e.note`…) and literals alike. */
+    val text: String = toastText(text)
 
     val id: Long = ids.incrementAndGet()
 
@@ -88,6 +92,15 @@ class ToastModel(val text: String, val kind: Kind, val retryKey: String? = null,
     }
 }
 
+/** A notice of ONE sentence carries no final period (founder, 2026-10-03); one of two or more keeps
+ *  them all. Server copy reuses the same sentences as inline errors, which DO end in a period. */
+internal fun toastText(raw: String): String {
+    val t = raw.trimEnd()
+    if (!t.endsWith(".") || t.endsWith("..")) return raw
+    val body = t.dropLast(1)
+    val inner = Regex("""[.?!…](\s|$)""")
+    return if (inner.containsMatchIn(body)) raw else body
+}
 
 // MARK: Toasts
 

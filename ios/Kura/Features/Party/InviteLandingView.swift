@@ -169,7 +169,7 @@ private struct InvitePreviewPage: View {
                     .padding(.bottom, 26)
                     if p.songs.isEmpty {
                         VStack(spacing: 10) {
-                            Text("la pista está vacía.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                            Text("la pista está vacía").font(.kura.news(28)).foregroundStyle(KColor.text)
                             Text("Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.")
                                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                                 .multilineTextAlignment(.center)

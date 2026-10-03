@@ -34,7 +34,7 @@ export default function AppError({
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-3 bg-bg px-6 pb-dock-clearance text-text">
       <KIcon name="warning" size={22} className="text-text" />
       <h1 className="font-brand text-[32px] leading-[1.1] text-text text-balance">
-        no pudimos cargar esta pantalla.
+        no pudimos cargar esta pantalla
       </h1>
       <p className="max-w-[320px] text-[15px] leading-[1.5] text-text-2 text-pretty">
         Lo que ya guardaste sigue ahí. Revisa tu conexión y vuelve a intentarlo.

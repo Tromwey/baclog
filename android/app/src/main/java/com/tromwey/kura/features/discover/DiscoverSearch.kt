@@ -298,7 +298,7 @@ private fun Results(store: AppStore, q: String, actions: SearchActions) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val offline = error == KuraApiError.Offline
-            BasicText(if (offline) "sin conexión." else "el catálogo no responde.", Modifier.semantics { heading() }, style = KuraType.news(32f))
+            BasicText(if (offline) "sin conexión" else "el catálogo no responde", Modifier.semantics { heading() }, style = KuraType.news(32f))
             NoteText(if (offline) "Revisa tu red y vuelve a buscar." else "Vuelve a intentarlo en unos minutos.")
             GlassButton("Reintentar", { actions.submit(q) }, icon = KIcon.Retry)
         }
@@ -429,7 +429,7 @@ private fun NoResults(store: AppStore, q: String, actions: SearchActions) {
         Modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, top = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        BasicText("nada con “$q”.", Modifier.semantics { heading() }, style = KuraType.news(32f))
+        BasicText("nada con “$q”", Modifier.semantics { heading() }, style = KuraType.news(32f))
         NoteText("Revisa cómo se escribe o busca por persona o año.")
         SearchIndex.correction(q, store)?.let { fix ->
             GlassButton("Buscar “$fix”", { actions.submit(fix) }, icon = KIcon.Search)

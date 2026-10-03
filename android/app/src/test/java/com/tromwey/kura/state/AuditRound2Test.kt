@@ -76,7 +76,7 @@ class AuditRound2Test {
 
         assertFalse("revertido", store.isFollowing("nueva"))
         assertEquals("un aviso, nunca un Reintentar", ToastModel.Kind.Info, store.toast?.kind)
-        assertEquals("Termina tu perfil para seguir a alguien.", store.toast?.text)
+        assertEquals("Termina tu perfil para seguir a alguien", store.toast?.text)
         assertEquals(meCalls + 1, h.api.callsOf("me").size)
         assertEquals(AppPhase.Onboarding, store.phase)
         assertEquals(OnboardingStep.Username, store.onboardingStep)

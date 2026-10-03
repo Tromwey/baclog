@@ -174,14 +174,14 @@ struct PartySearchView: View {
     private func errorCopy(_ e: KuraAPIError) -> (title: String, note: String) {
         switch e {
         case .rateLimited:
-            return ("un momento.", "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar.")
+            return ("un momento", "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar.")
         // A 503 is iTunes down — or the server without parties at all (its reads said so too).
         case .unavailable where store.partiesUnavailable:
             return (PartyCopy.unavailableTitle, PartyCopy.unavailable)
         case .unavailable:
-            return ("no pudimos buscar.", "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas.")
+            return ("no pudimos buscar", "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas.")
         default:
-            return ("no pudimos buscar.", "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas.")
+            return ("no pudimos buscar", "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas.")
         }
     }
 

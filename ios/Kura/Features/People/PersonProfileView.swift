@@ -20,7 +20,7 @@ struct PersonProfileView: View {
                            missing: store.missingPeople.contains(personID),
                            error: store.loadError(.person(personID)),
                            retry: { Task { await store.loadPerson(personID, force: true) } },
-                           gone: ("este perfil no existe o es privado.", "Revisa que el @ esté completo."),
+                           gone: ("este perfil no existe o es privado", "Revisa que el @ esté completo."),
                            square: true) { p in
                 content(p)
             }
@@ -214,7 +214,7 @@ private struct LockedCollections: View {
                 }
                 .accessibilityHidden(true)
             VStack(spacing: 8) {
-                Text("\(firstName) tiene su perfil en privado.")
+                Text("\(firstName) tiene su perfil en privado")
                     .font(.kura.news(24)).foregroundStyle(KColor.text)
                     .accessibilityAddTraits(.isHeader)
                 Text("Mientras sea privado, nadie más ve sus obsesiones ni sus colecciones.")
@@ -234,7 +234,7 @@ private struct BlockedNote: View {
     let handle: String
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Bloqueaste a @\(handle).")
+            Text("Bloqueaste a @\(handle)")
                 .font(.kura.news(24)).foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -528,7 +528,7 @@ private struct PrivateListNote: View {
                 .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .accessibilityHidden(true)
                 .padding(.bottom, 6)
-            Text(following ? "a quién sigue es privado." : "sus seguidores son privados.")
+            Text(following ? "a quién sigue es privado" : "sus seguidores son privados")
                 .font(.kura.news(24)).foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -694,7 +694,7 @@ struct ProfileAsStrangerView: View {
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 10) {
-                Text("este perfil no existe o es privado.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                Text("este perfil no existe o es privado").font(.kura.news(28)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Así te ve cualquiera mientras tu perfil sea privado. Se cambia en Ajustes › privacidad.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)

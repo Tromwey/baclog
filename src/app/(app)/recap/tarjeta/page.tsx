@@ -27,7 +27,7 @@ export default async function RecapCardPage({
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-4 bg-bg px-6 pb-dock-clearance pt-[calc(16px+env(safe-area-inset-top))] text-text">
         <BackButton href="/recap" className="h-11! w-11!" />
-        <h1 className="pt-10 font-brand text-[32px] leading-[1.1] text-text">todavía no hay tarjeta.</h1>
+        <h1 className="pt-10 font-brand text-[32px] leading-[1.1] text-text">todavía no hay tarjeta</h1>
         <p className="text-[15px] leading-[1.5] text-text-2">
           Guarda, completa o reseña algo y tu recap del mes aparece aquí.
         </p>

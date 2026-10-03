@@ -13,7 +13,7 @@ struct TitleDetailView: View {
                        missing: store.missingTitles.contains(titleID),
                        error: store.loadError(.title(titleID)),
                        retry: { Task { await store.loadTitle(titleID, force: true) } },
-                       gone: ("este título ya no está disponible.", "Se quitó del catálogo.")) { t in
+                       gone: ("este título ya no está disponible", "Se quitó del catálogo.")) { t in
             detail(t)
         }
         .task(id: titleID) { await store.loadTitle(titleID) }

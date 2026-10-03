@@ -136,7 +136,7 @@ function EmptyRecap({ now }: { now: number }) {
             2026-09-27). Decorative. */}
         <Fan covers={[]} lead={120} ghost className="self-start" />
         <h1 className="font-brand text-[44px] leading-none text-text text-balance">
-          tu recap de {monthName(key)} todavía se está escribiendo.
+          tu recap de {monthName(key)} todavía se está escribiendo
         </h1>
         <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
           El recap llega el 1 de {nextName} con lo que guardes, completes o reseñes este mes.

@@ -140,7 +140,7 @@ struct PartyCarouselBody: View {
     /// No songs yet: `PartyView`'s empty copy, in a collection's empty size (22, like 6b).
     private func empty(_ p: Party) -> some View {
         VStack(spacing: 10) {
-            Text("la pista está vacía.")
+            Text("la pista está vacía")
                 .font(.kura.news(22))
                 .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)

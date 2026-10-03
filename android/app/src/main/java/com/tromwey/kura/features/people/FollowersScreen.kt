@@ -298,7 +298,7 @@ private fun PrivateListNote(note: String, following: Boolean, modifier: Modifier
     Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         LockTile(Modifier.padding(bottom = 6.dp))
         BasicText(
-            if (following) "a quién sigue es privado." else "sus seguidores son privados.",
+            if (following) "a quién sigue es privado" else "sus seguidores son privados",
             Modifier.semantics { heading() },
             style = KuraType.news(24f),
         )

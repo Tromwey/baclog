@@ -175,7 +175,7 @@ object MusicExportCopy {
         PartyExportFlow.Step.Connect -> "conecta ${p.label.lowercase()}"
         PartyExportFlow.Step.Progress -> "pasando la colección"
         PartyExportFlow.Step.Done -> "lista"
-        PartyExportFlow.Step.Failed -> "no se pudo exportar."
+        PartyExportFlow.Step.Failed -> "no se pudo exportar"
     }
 
     fun connectBody(name: String) = "kura solo crea la playlist «$name» en tu cuenta. No lee ni cambia tu biblioteca."

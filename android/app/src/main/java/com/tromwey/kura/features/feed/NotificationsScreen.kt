@@ -90,7 +90,7 @@ fun NotificationsScreen(store: AppStore) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                BasicText("todo en calma.", style = KuraType.news(28f))
+                BasicText("todo en calma", style = KuraType.news(28f))
                 BasicText(
                     "Aquí llegan tus seguidores, los estrenos que esperas y tu recap.",
                     style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center),

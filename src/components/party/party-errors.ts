@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
-import { ONBOARDING_EXIT_LABEL, ONBOARDING_TO_PARTY, toastText } from "@/components/kura/attempt";
+import { ONBOARDING_EXIT_LABEL, ONBOARDING_TO_PARTY } from "@/components/kura/attempt";
 import type { ToastHost } from "@/components/kura/toast";
 import { safeReturnTo } from "@/lib/return-to";
 import { setPartyFlash } from "./party-flash";
@@ -97,7 +97,7 @@ export function usePartyFailure(toast: ToastHost) {
           return res.error;
         case "onboarding_required":
           toast.show({
-            message: toastText(PARTY_ONBOARDING_MESSAGE),
+            message: PARTY_ONBOARDING_MESSAGE,
             kind: "error",
             actionLabel: ONBOARDING_EXIT_LABEL,
             onAction: () => router.push(partyOnboardingPath()),
@@ -112,7 +112,7 @@ export function usePartyFailure(toast: ToastHost) {
           router.replace("/backlogs");
           return res.error;
         default:
-          toast.show({ message: res.message ?? toastText(partyErrorMessage(res.error) ?? fallback), kind: "error" });
+          toast.show({ message: res.message ?? partyErrorMessage(res.error) ?? fallback, kind: "error" });
           return res.error;
       }
     },

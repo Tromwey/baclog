@@ -336,7 +336,7 @@ struct MergeConfirmView: View {
                 content(proof.source)
             } else {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("no hay nada que fusionar.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                    Text("no hay nada que fusionar").font(.kura.news(28)).foregroundStyle(KColor.text)
                     Text("Vuelve a probar que la otra cuenta es tuya.")
                         .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                 }

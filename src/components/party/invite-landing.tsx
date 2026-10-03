@@ -173,7 +173,7 @@ export function InviteLanding({
         </section>
       ) : (
         <div className="flex flex-col items-center gap-2.5 px-8 text-center">
-          <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía.</span>
+          <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía</span>
           <span className="max-w-[28ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.
           </span>

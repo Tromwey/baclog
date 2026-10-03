@@ -66,7 +66,7 @@ class StateFixesTest {
         store.profilePrivate = !was
         advanceTimeBy(1_000) // inside the toast's window
         assertEquals(was, store.profilePrivate)
-        assertEquals("No se pudo cambiar la privacidad de tu perfil.", store.toast?.text)
+        assertEquals("No se pudo cambiar la privacidad de tu perfil", store.toast?.text)
 
         h.api.failNext("updateMe", KuraApiError.Offline)
         store.notifyRecap = !store.notifyRecap
@@ -93,7 +93,7 @@ class StateFixesTest {
         assertEquals("otro nombre", store.me.name)
         advanceTimeBy(1_000)
         assertEquals(old, store.me.name)
-        assertEquals("No se pudo cambiar tu nombre.", store.toast?.text)
+        assertEquals("No se pudo cambiar tu nombre", store.toast?.text)
     }
 
     // G

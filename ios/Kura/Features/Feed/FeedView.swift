@@ -61,7 +61,7 @@ struct FeedView: View {
         VStack(spacing: 0) {
             header
             VStack(alignment: .leading, spacing: 14) {
-                Text("tu gente anda tranquila.").font(.kura.news(32)).foregroundStyle(KColor.text)
+                Text("tu gente anda tranquila").font(.kura.news(32)).foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Cuando completen, se obsesionen o reseñen algo, aparece aquí.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)

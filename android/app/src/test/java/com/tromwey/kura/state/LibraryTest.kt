@@ -164,7 +164,7 @@ class LibraryTest {
         runCurrent()
         assertEquals(Privacy.OnlyMe, store.collection(recs)!!.privacy)
         assertEquals(ToastModel.Kind.Info, store.toast?.kind)
-        assertEquals("Esa visibilidad no existe.", store.toast?.text)
+        assertEquals("Esa visibilidad no existe", store.toast?.text)
     }
 
     @Test fun pinningMovesThePinAndUndoPutsItBack() = storeTest { h ->

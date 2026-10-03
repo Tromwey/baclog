@@ -20,7 +20,7 @@ export default function RootNotFound() {
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-          esto no existe o es privado.
+          esto no existe o es privado
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Este link no lleva a nada que puedas ver. Revisa que esté completo.

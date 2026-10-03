@@ -18,7 +18,7 @@ struct PublicCollectionView: View {
                        missing: store.missingPublicCollections.contains(key),
                        error: store.loadError(.publicCollection(key)),
                        retry: { Task { await store.loadPublicCollection(handle: handle, id: collectionID, force: true) } },
-                       gone: ("esta colección no existe o es privada.", "Revisa que el link esté completo."),
+                       gone: ("esta colección no existe o es privada", "Revisa que el link esté completo."),
                        skeleton: .collection) { d in
             content(d)
         }
@@ -66,7 +66,7 @@ struct PublicCollectionView: View {
 
                     if all.isEmpty {
                         VStack(spacing: 10) {
-                            Text("todavía está vacía.").font(.kura.news(28)).foregroundStyle(KColor.text)
+                            Text("todavía está vacía").font(.kura.news(28)).foregroundStyle(KColor.text)
                             Text("@\(handle) no ha guardado nada aquí.")
                                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                                 .multilineTextAlignment(.center)

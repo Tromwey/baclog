@@ -824,7 +824,7 @@ struct NoCollectionsView: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Nueva colección")
                         .accessibilityAddTraits(.isButton)
-                    Text("aquí va lo que más vale.")
+                    Text("aquí va lo que más vale")
                         .font(.kura.news(34))
                         .foregroundStyle(KColor.text)
                         .multilineTextAlignment(.center)

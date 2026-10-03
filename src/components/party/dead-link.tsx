@@ -18,7 +18,7 @@ export function DeadLinkScreen() {
       <div className="flex flex-1 flex-col justify-center gap-3 px-7 pb-10">
         <PartyFan songs={[]} empty lead={90} />
         <span className="mt-[18px] font-brand text-[36px] leading-[1.02] tracking-[-0.015em] [text-wrap:balance]">
-          este link ya no funciona.
+          este link ya no funciona
         </span>
         <span className="font-sans text-[16px] leading-[1.45] text-text-2 [text-wrap:pretty]">
           Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo.

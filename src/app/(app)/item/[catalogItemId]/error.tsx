@@ -34,7 +34,7 @@ export default function ItemError({
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
         <h1 className="font-brand text-[32px] leading-[1.1] text-text text-balance">
-          no pudimos traer esta ficha.
+          no pudimos traer esta ficha
         </h1>
         <p className="max-w-[300px] text-[15px] leading-[1.5] text-text-2 text-pretty">
           Revisa tu conexión y vuelve a intentarlo.

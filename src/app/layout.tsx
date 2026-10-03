@@ -134,7 +134,7 @@ export default function RootLayout({
               strokeLinecap="round"
             />
           </svg>
-          <p className="font-brand text-2xl text-text">gira tu teléfono.</p>
+          <p className="font-brand text-2xl text-text">gira tu teléfono</p>
           <p className="max-w-[30ch] text-sm leading-[1.55] text-text-2">
             kura está hecha para usarse en vertical.
           </p>

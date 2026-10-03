@@ -35,7 +35,7 @@ export default function GlobalError({
         <title>kura</title>
         <main className="kura relative mx-auto flex min-h-lvh w-full max-w-md flex-col justify-center gap-3 bg-bg px-6 pb-11 text-text">
           <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-            no pudimos cargar esto.
+            no pudimos cargar esto
           </h1>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             Algo falló de nuestro lado. Vuelve a intentarlo.

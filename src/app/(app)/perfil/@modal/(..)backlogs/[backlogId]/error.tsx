@@ -52,7 +52,7 @@ export default function InterceptedCollectionError({
       </div>
       <div className="flex flex-col gap-3" style={STAGE_A}>
         <h1 className="font-brand text-[32px] leading-[1.1] text-text text-balance">
-          no pudimos cargar esta colección.
+          no pudimos cargar esta colección
         </h1>
         <p className="max-w-[320px] text-[15px] leading-[1.5] text-text-2 text-pretty">
           Lo que guardaste sigue ahí. Revisa tu conexión y vuelve a intentarlo.

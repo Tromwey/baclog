@@ -628,7 +628,7 @@ export function SearchSheet({
           {state === "done" && results.length === 0 && (
             <div className="flex flex-col gap-2 px-5 pt-6">
               <p className="font-display text-[26px] leading-[1.1] text-text text-balance break-words">
-                nada con “{q}”.
+                nada con “{q}”
               </p>
               <p className="text-[15px] leading-[1.5] text-text-2">
                 Revisa cómo se escribe, o prueba con otro nombre.

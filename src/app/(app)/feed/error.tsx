@@ -28,7 +28,7 @@ export default function FeedError({
           <path d="M12 9v4.5M12 17h.01" stroke="var(--bg)" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
         <h2 className="font-brand text-[30px] leading-[1.1] text-text text-balance">
-          no pudimos cargar tu feed.
+          no pudimos cargar tu feed
         </h2>
         <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
           Nada se perdió: la actividad de tu gente sigue ahí. Revisa tu conexión y vuelve a intentarlo.

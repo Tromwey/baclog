@@ -155,7 +155,7 @@ fun UnderageScreen(store: AppStore) {
     ) {
         Spacer(Modifier.weight(1f))
         BasicText(
-            "kura es para personas de 13 años o más.",
+            "kura es para personas de 13 años o más",
             modifier = Modifier.semantics { heading() },
             style = KuraType.news(36f),
         )

@@ -221,7 +221,7 @@ export function PartySearch({
           {status === "loading" && <SongRowsSkeleton pulse={SKELETON_PULSE} aside={88} />}
           {status === "error" && (
             <div className="flex flex-col gap-2.5 px-5 pt-14">
-              <span className="font-brand text-[30px] leading-[1.05] tracking-[-0.01em]">no pudimos buscar.</span>
+              <span className="font-brand text-[30px] leading-[1.05] tracking-[-0.01em]">no pudimos buscar</span>
               <span className="font-sans text-[15px] leading-[1.45] text-text-2 [text-wrap:pretty]">
                 El buscador de canciones no respondió. Revisa tu conexión y vuelve a intentarlo; tus
                 canciones siguen guardadas.
