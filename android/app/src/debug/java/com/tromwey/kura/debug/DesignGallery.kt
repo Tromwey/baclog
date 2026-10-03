@@ -183,7 +183,7 @@ fun DesignGallery(openSheet: Boolean = false, unknown: String? = null, onlyColle
                     GlyphsSection()
                     ButtonsSection(onToast = { kind ->
                         toastSeq += 1
-                        toast = KuraToastModel(toastSeq, if (kind == ToastKind.Retry) "No se pudo guardar" else "Quitado de con mi hermana", kind) { toast = null }
+                        toast = KuraToastModel(toastSeq, if (kind == ToastKind.Retry) "No se pudo guardar." else "Quitado de con mi hermana", kind) { toast = null }
                     }, onSheet = { sheet = true })
                     GroupsSection()
                     CreateSection()
@@ -531,7 +531,7 @@ private fun ControlsSection() = Section("controles", "grupo · filtros · campo"
 private fun ChromeSection() = Section("avisos y barra", "snackbar · navegación") {
     Padded {
         KuraToast("Quitado de con mi hermana", onAction = {})
-        KuraToast("No se pudo guardar", kind = ToastKind.Retry, onAction = {})
+        KuraToast("No se pudo guardar.", kind = ToastKind.Retry, onAction = {})
         KuraToast("Nombre cambiado", kind = ToastKind.Info)
     }
     KuraDock(KuraTab.Feed, {}, feedDot = true)

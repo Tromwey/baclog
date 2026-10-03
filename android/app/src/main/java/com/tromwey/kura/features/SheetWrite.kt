@@ -1,6 +1,7 @@
 package com.tromwey.kura.features
 
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.dismissSheet
 
 /**
  * A write started from a sheet (Enviar reporte, Bloquear, Desconectar, Salir de la fiesta…): it runs

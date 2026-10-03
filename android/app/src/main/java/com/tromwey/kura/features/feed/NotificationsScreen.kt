@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.feed
 
+import com.tromwey.kura.designsystem.OnEntryCovered
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,8 @@ import com.tromwey.kura.state.isFollowing
 import com.tromwey.kura.state.markNotificationsRead
 import com.tromwey.kura.state.setRequest
 import com.tromwey.kura.state.toggleFollow
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // 31a Notificaciones · 31b Sin notificaciones (iOS `NotificationsView`). Live has no
 // `GET /me/notifications` yet: `store.notifications` is always empty there, so 31b is what people see.
@@ -75,7 +78,7 @@ import com.tromwey.kura.state.toggleFollow
 @Composable
 fun NotificationsScreen(store: AppStore) {
     // Read on the way OUT (like iOS `.onDisappear`): the unread dots stay while you're looking.
-    DisposableEffect(Unit) { onDispose { store.markNotificationsRead() } }
+    OnEntryCovered { store.markNotificationsRead() }
     val all = store.notifications
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
         if (all.isEmpty()) {

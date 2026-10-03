@@ -34,15 +34,16 @@ suspend fun AppStore.report(target: ReportTarget, reason: String, details: Strin
         }
         is BoundWrite.Failed -> {
             val e = result.error
+            if (onboardingRequired(e)) return false
             when (e) {
                 KuraApiError.Unauthorized -> Unit
                 KuraApiError.NotFound -> showToast(ToastModel(
-                    if (target.isReview) "Esa reseña ya no existe." else "Ese perfil ya no existe.", ToastModel.Kind.Info))
+                    if (target.isReview) "Esa reseña ya no existe." else "Ese perfil no existe o es privado.", ToastModel.Kind.Info))
                 else -> {
                     val text = when {
                         e == KuraApiError.Offline -> "Sin conexión. No se envió tu reporte."
                         e.isRateLimit -> e.toast
-                        else -> "No se pudo enviar tu reporte."
+                        else -> "No se envió tu reporte."
                     }
                     showToast(ToastModel(text, ToastModel.Kind.Retry) {
                         dismissToast()
@@ -68,7 +69,7 @@ suspend fun AppStore.block(handle: String): Boolean = when (val r = boundWrite {
     is BoundWrite.Failed -> {
         when (r.error) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.NotFound -> showToast(ToastModel("@$handle ya no existe.", ToastModel.Kind.Info))
+            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado.", ToastModel.Kind.Info))
             else -> {
                 val text = if (r.error == KuraApiError.Offline) "Sin conexión. No se bloqueó a @$handle." else "No se pudo bloquear a @$handle."
                 showToast(ToastModel(text, ToastModel.Kind.Retry) {

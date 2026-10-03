@@ -222,13 +222,26 @@ class AccountLinkTest {
     @Test fun rateLimitedSaysHowLongAndBlocksTheResend() = linkTest { h ->
         val store = h.store
         store.loadIdentities()
-        h.api.failNext("requestMergeCode", KuraApiError.RateLimited(2400))
+        h.api.failNext("requestMergeCode", KuraApiError.RateLimited(2400, "hourly_cap"))
         assertFalse(store.requestMergeCode("vieja@example.com"))
-        assertEquals("Ya pediste varios códigos para ese correo. Intenta en 40 min.", store.mergeError)
+        assertEquals("Se pidieron demasiados códigos para ese correo. Podrás pedir otro en 40 min.", store.mergeError)
         assertNotNull(store.mergeRetryAt)
+        assertEquals("sin código prometido, no avanza", "", store.mergeEmail)
+        // No `reason` (an older server, the per-IP limiter): just too fast.
         h.api.failNext("requestMergeCode", KuraApiError.RateLimited(45))
         assertFalse(store.requestMergeCode("vieja@example.com"))
-        assertEquals("Espera 45 s para pedir otro código.", store.mergeError)
+        assertEquals("Demasiados intentos seguidos. Espera 45 s y vuelve a intentarlo.", store.mergeError)
+    }
+
+    /** 429 `cooldown`: the code already sent still works — on to the code screen, nothing failed. */
+    @Test fun aCooldownGoesOnToTheCodeScreen() = linkTest { h ->
+        val store = h.store
+        store.loadIdentities()
+        h.api.failNext("requestMergeCode", KuraApiError.RateLimited(40, "cooldown"))
+        assertTrue(store.requestMergeCode("vieja@example.com"))
+        assertEquals("vieja@example.com", store.mergeEmail)
+        assertNull(store.mergeError)
+        assertNotNull("Enviar otro código espera", store.mergeRetryAt)
     }
 
     @Test fun waitLabel() {
@@ -245,7 +258,7 @@ class AccountLinkTest {
         store.requestMergeCode("vieja@example.com")
         store.push(Route.MergeCode)
         store.verifyMergeCode("000000")
-        assertEquals("Ese código no sirve. Revísalo o pide otro.", store.mergeError)
+        assertEquals("El código es incorrecto o ya venció. Revísalo o pide otro.", store.mergeError)
         assertNull(store.mergeProof)
         assertEquals(Route.MergeCode, store.path(store.tab).last())
     }
@@ -304,7 +317,7 @@ class AccountLinkTest {
         h.api.failNext("merge", KuraApiError.Forbidden("underage"))
         store.confirmMerge()
         assertEquals(listOf(Route.Settings), store.path(Tab.Profile))
-        assertEquals("Una de las dos cuentas es de alguien menor de 13. No se pueden juntar.", store.toast?.text)
+        assertEquals("Una de las dos cuentas es de alguien menor de 13 años. No se pueden fusionar.", store.toast?.text)
     }
 
     @Test fun offlineMovesNothingAndOffersReintentar() = linkTest { h ->

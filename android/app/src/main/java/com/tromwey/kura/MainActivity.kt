@@ -22,6 +22,8 @@ import com.tromwey.kura.push.PushIntent
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.openPushTarget
 import com.tromwey.kura.state.openWebLink
+import com.tromwey.kura.state.restoreSavedState
+import com.tromwey.kura.state.savedState
 import com.tromwey.kura.state.tidalCallback
 
 class MainActivity : ComponentActivity() {
@@ -41,11 +43,19 @@ class MainActivity : ComponentActivity() {
         // Both honor their extras only from `adb shell` (`DebugLaunch.fromShell`): the activity is exported.
         DebugLaunch.seedSession(this, intent)
         val store = app.store
+        // Back from a process death: the tab, the open pages and unpublished review text (a live store
+        // ignores it — it already has the real thing). `state/AppStoreSavedState.kt`.
+        store.restoreSavedState(savedInstanceState?.getString(SAVED_STATE))
         val options = DebugLaunch.configure(this, store, intent, firstLaunch = savedInstanceState == null)
         setContent { KuraRoot(store, options) }
         // A link / notice tap that launched us. Not on a recreation (the store already acted on it) nor on
         // a relaunch from Recents (the intent is the old one).
         if (savedInstanceState == null) openFrom(intent, store)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        (application as KuraApp).store.savedState()?.let { outState.putString(SAVED_STATE, it) }
     }
 
     /** singleTask (manifest): App Links from other apps and notice taps land here when we're alive. */
@@ -125,6 +135,8 @@ class MainActivity : ComponentActivity() {
         }
 
     private companion object {
+        /** The store's snapshot in the activity's saved state (`state/AppStoreSavedState.kt`). */
+        const val SAVED_STATE = "kura.savedState"
         /** Both notice shapes (PushIntent): kura's own extra and the FCM data map as flat extras. */
         val PUSH_EXTRAS = listOf(PushIntent.EXTRA_OPEN, "type", "titleId", "handle")
     }

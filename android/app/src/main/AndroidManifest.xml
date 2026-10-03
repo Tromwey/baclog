@@ -27,6 +27,7 @@
     <application
         android:name=".app.KuraApp"
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
@@ -36,6 +37,14 @@
         android:supportsRtl="false"
         android:theme="@style/Theme.Kura"
         tools:targetApi="36">
+
+        <!-- DEUDA (state/android.md): con targetSdk 36, Android 16 ignora `screenOrientation`/resizeability
+             en pantallas >= 600 dp (tablets, plegables, ventanas). kura es solo retrato y no tiene layout
+             ancho todavía: este es el opt-out TEMPORAL de la plataforma — deja de existir al subir a
+             targetSdk 37, y para entonces hace falta un layout adaptativo de verdad. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
 
         <activity
             android:name=".MainActivity"

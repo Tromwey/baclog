@@ -30,7 +30,15 @@ suspend fun AppStore.loadFeed(force: Boolean = false) {
     try {
         val (first, suggestion) = coroutineScope {
             val page = async { api.feed(null) }
-            val sug = async { api.feedSuggestion() }
+            // The suggestion is an extra: its failure is "no suggestion", never a feed that doesn't load.
+            val sug = async {
+                try {
+                    api.feedSuggestion()
+                } catch (e: Exception) {
+                    if (e is CancellationException || e == KuraApiError.Unauthorized) throw e
+                    null
+                }
+            }
             page.await() to sug.await()
         }
         check(session)
@@ -63,6 +71,9 @@ suspend fun AppStore.loadFeed(force: Boolean = false) {
     } finally {
         session.feedLoading = false
     }
+    // Page 1 can be all muted / blocked people: "todo en calma" would be a guess while there are more
+    // pages — ask on (one `loadMoreFeed`, with its own cap) before the screen says the feed is quiet.
+    if (s === session && s.feedLoaded && s.feedCursor != null && visibleFeed.isEmpty()) loadMoreFeed()
 }
 
 /** At most this many pages per `loadMoreFeed` call, until something visible arrives. */
@@ -318,7 +329,7 @@ fun AppStore.followFromProfile(id: String) {
     when {
         id in following -> {
             setFollow(id, false)
-            undoToast("Dejaste de seguir a @${p.handle}") { setFollow(id, true) }
+            undoToast("Dejaste de seguir a @${p.handle}.") { setFollow(id, true) }
         }
         p.isPrivate -> {
             s.requested = if (id in s.requested) s.requested - id else s.requested + id
@@ -335,24 +346,41 @@ fun AppStore.followFromProfile(id: String) {
  */
 private fun AppStore.setFollow(id: String, on: Boolean) {
     if ((id in following) == on) return
+    val session = s
+    val key = AppStore.WriteKey.follow(id)
+    session.beginWrite(key, id in following)
     applyFollow(id, on)
-    sync(key = AppStore.WriteKey.follow(id), onError = err@{ e ->
-        if ((id in following) != on) return@err true
-        applyFollow(id, !on)
+    sync(key = key, onError = err@{ e ->
+        // Back to what the SERVER last confirmed (not to the tap before this one) — unless a newer
+        // follow write is queued (that one decides) or the phone no longer shows this one.
+        val base = session.endWrite(key)
+        // The session this follow belonged to is gone (a 401 → `sessionExpired`): `following` is now
+        // the next account's, and a revert here would put this person in it.
+        if (s !== session) return@err true
+        val newer = base?.newer == true || session.writeChains[session.canonicalWriteKey(key)] != null
+        if (newer || (id in following) != on) return@err true
+        val confirmed = base?.value as? Boolean ?: !on
+        if ((id in following) != confirmed) applyFollow(id, confirmed)
+        // The server already has what was asked (follow → unfollow, both lost): nothing to retry.
+        if (confirmed == on) return@err true
         when (e) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil ya no está disponible.", ToastModel.Kind.Info))
+            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado.", ToastModel.Kind.Info))
             else -> {
                 val who = person(id)?.let { "@${it.handle}" } ?: "este perfil"
                 val text = e.toast(if (on) "No se pudo seguir a $who." else "No se pudo dejar de seguir a $who.")
-                retryToast(text, AppStore.WriteKey.follow(id)) {
+                retryToast(text, key) {
                     dismissToast()
                     setFollow(id, on)
                 }
             }
         }
         true
-    }) { api -> api.setFollowing(id, on) }
+    }) { api ->
+        api.setFollowing(id, on)
+        session.confirmWrite(key, on)
+        session.endWrite(key)
+    }
 }
 
 private fun AppStore.applyFollow(id: String, on: Boolean) {

@@ -192,6 +192,15 @@ suspend fun AppStore.loadCollection(id: String, force: Boolean = false) {
     // Like `refreshLibrary`: a title written since this read started keeps the phone's state.
     val gens = HashMap(session.writeGen)
     fun wroteSince(id: String) = (session.writeGen[id] ?: 0) != (gens[id] ?: 0) || session.inflightCount(id) > 0
+    // Same per collection (`SessionData.collectionGen`): a write of it issued since this GET went out —
+    // or still on its way when it did — makes this answer older than the screen, even when that write
+    // has already resolved by the time the answer lands (the re-read after a timeout takes a while).
+    val fieldsGen = session.collectionGen["c|$cid"]
+    val membersGen = session.collectionGen["m|$cid"]
+    val pinGen = session.collectionGen[AppStore.WriteKey.PIN]
+    val fieldsBusy = collectionWriteInFlight(cid)
+    val membersBusy = membershipWriteInFlight(cid)
+    val pinBusy = pinWriteInFlight
     try {
         val d = api.collection(cid)
         check(session)
@@ -208,16 +217,18 @@ suspend fun AppStore.loadCollection(id: String, force: Boolean = false) {
             val current = s.collections[i]
             var c = applyLocal(d.collection)
             // A pin / cover / order / rename still on its way wins over this (older) read.
-            if (collectionWriteInFlight(cid)) {
+            if (fieldsBusy || collectionWriteInFlight(cid) || session.collectionGen["c|$cid"] != fieldsGen) {
                 c = c.copy(
                     pinned = current.pinned, chosenCoverTitleId = current.chosenCoverTitleId, titleIds = current.titleIds,
                     name = current.name, vibe = current.vibe, privacy = current.privacy,
                 )
-            } else if (current.pinned != c.pinned && pinWriteInFlight) {
+            } else if (current.pinned != c.pinned && (pinBusy || pinWriteInFlight || session.collectionGen[AppStore.WriteKey.PIN] != pinGen)) {
                 c = c.copy(pinned = current.pinned)
             }
             // An add / remove on its way to THIS collection: the read predates it, the phone's titles win.
-            if (membershipWriteInFlight(cid)) c = c.copy(titleIds = current.titleIds, addedAt = current.addedAt)
+            if (membersBusy || membershipWriteInFlight(cid) || session.collectionGen["m|$cid"] != membersGen) {
+                c = c.copy(titleIds = current.titleIds, addedAt = current.addedAt)
+            }
             val next = if (pendingRemovals(cid).isEmpty()) c else current.copy(
                 name = c.name, vibe = c.vibe, privacy = c.privacy, pinned = c.pinned, chosenCoverTitleId = c.chosenCoverTitleId,
             )
@@ -376,27 +387,37 @@ suspend fun AppStore.loadDiscoverCreators() {
 }
 
 /** Descubrir por formato (2a–2c): `GET /discover/formats/{format}`, once per key per session unless
- *  `force` (pull to refresh on a format page). Fail-open: a first load that fails leaves an EMPTY shelf
- *  (the page words it), never a block; a forced reload that fails keeps the shelves it had. */
+ *  `force` (pull to refresh on a format page). A first load that fails caches NOTHING: the page says
+ *  it didn't load and offers Reintentar (`LoadKey.DiscoverFormat`), and the next visit asks again — a
+ *  503 is never an empty shelf for the rest of the session. A forced reload that fails keeps the
+ *  shelves it had. `titlesUnavailable` (the shelf failed, the Kuradas came) is kept so the page draws
+ *  its Kuradas, but it is NOT "loaded": every visit and Reintentar ask again, and it never replaces
+ *  shelves that did load. */
 suspend fun AppStore.loadDiscoverFormat(format: MediaFormat, time: Int? = null, force: Boolean = false) {
     val key = AppStore.formatKey(format, time)
     val had = s.discoverFormats[key]
-    if (had != null && !force) return
+    if (had != null && !had.titlesUnavailable && !force) return
     val session = s
+    val errorKey = LoadKey.DiscoverFormat(format, time)
+    if (had == null) setLoadError(errorKey, null)
     var payload = try {
         api.discoverFormat(format, time)
     } catch (err: Exception) {
         if (err is CancellationException) throw err
-        if (had != null) {
-            if (s === session) noteError(err)
-            return
-        }
-        DiscoverFormatPayload(format = format, time = time)
+        if (s !== session) return
+        val e = noteError(err) ?: return
+        // `fail` skips a 404; here every failure but the 401 must show (the page has no other shape).
+        if (had == null && e != KuraApiError.Unauthorized) setLoadError(errorKey, e)
+        return
     }
     if (s !== session) return
+    loaded(errorKey)
     registerAll(payload.allTitles)
     val mine = libraryIds
     payload = payload.copy(titles = payload.titles.filter { it.title.id !in mine })
+    // A reload whose shelf failed keeps the shelves it had (only the Kuradas are news).
+    val kept = s.discoverFormats[key]
+    if (payload.titlesUnavailable && kept != null && !kept.titlesUnavailable) payload = kept.copy(kuradas = payload.kuradas)
     s.discoverFormats = s.discoverFormats + (key to payload)
 }
 

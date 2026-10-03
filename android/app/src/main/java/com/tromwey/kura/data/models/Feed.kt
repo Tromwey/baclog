@@ -64,7 +64,7 @@ data class FeedEvent(
                     spoiler = c.bool("hasSpoiler") ?: false, date = at ?: Instant.now())
             } else null
             var collectionId: String? = null
-            val kind: FeedKind = when (c.string("kind") ?: "") {
+            val kind: FeedKind = when (val other = c.lenientString("kind") ?: "") {
                 "obsessed" -> FeedKind.Obsessed
                 "completed" -> FeedKind.Completed(if (mark == Mark.Completed) null else mark)
                 "reviewed" -> FeedKind.Reviewed
@@ -76,7 +76,9 @@ data class FeedEvent(
                     val s = c.obj("suggest")
                     FeedKind.Suggestion(authorId, s?.string("reason") ?: "", s?.string("common") ?: "", s?.strings("titleIds") ?: emptyList())
                 }
-                else -> FeedKind.Added("")
+                // A kind this build doesn't know: the event is dropped by the list that reads it (`lossyList`),
+                // never drawn as an "added" card with no collection.
+                else -> throw WireException("kind de feed desconocido: ${other.take(40)}")
             }
             return FeedEvent(
                 id = c.string("id") ?: UUID.randomUUID().toString(),
@@ -148,7 +150,7 @@ data class FeedPage(val items: List<FeedEvent>, val nextCursor: String? = null) 
     internal object Serializer : WireSerializer<FeedPage>("FeedPage") {
         override fun read(e: JsonElement): FeedPage {
             val c = Obj.of(e)
-            return FeedPage(c.list("items", FeedEvent.serializer()) ?: emptyList(), c.string("nextCursor"))
+            return FeedPage(c.list("items", FeedEvent.serializer(), strict = true) ?: emptyList(), c.string("nextCursor"))
         }
     }
 }
@@ -296,6 +298,9 @@ data class DiscoverFormatPayload(
     val moods: List<Mood> = emptyList(),
     val titles: List<Item> = emptyList(),
     val kuradas: List<Kurada> = emptyList(),
+    /** The shelf's provider failed but the Kuradas came (additive, absent normally): `titles` is NOT
+     *  "an empty shelf" — the page offers Reintentar over the Kuradas and the store asks again. */
+    val titlesUnavailable: Boolean = false,
 ) {
     /** "¿cuánto tiempo tienes?" (cine) / the marathon lenses (series, with `maxMinutes`). */
     data class Choice(val label: String, val sub: String, val maxMinutes: Int? = null)
@@ -352,13 +357,14 @@ data class DiscoverFormatPayload(
             val c = Obj.of(e)
             val raw = c.requireString("format")
             return DiscoverFormatPayload(
-                format = MediaFormat.from(raw) ?: throw kotlinx.serialization.SerializationException("format desconocido: $raw"),
+                format = MediaFormat.from(raw) ?: throw WireException("format desconocido: ${raw.take(40)}"),
                 time = c.int("time"),
                 times = c.array("times")?.map(::choice) ?: emptyList(),
                 lenses = c.array("lenses")?.map(::choice) ?: emptyList(),
                 moods = c.array("moods")?.map(::mood) ?: emptyList(),
                 titles = c.list("titles", Item.serializer()) ?: emptyList(),
                 kuradas = c.array("kuradas")?.map(::kurada) ?: emptyList(),
+                titlesUnavailable = c.bool("titlesUnavailable") ?: false,
             )
         }
     }

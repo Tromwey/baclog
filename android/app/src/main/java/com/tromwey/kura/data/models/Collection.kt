@@ -17,21 +17,19 @@ import java.time.Instant
  * link would see it, not "only who follows you".
  */
 enum class Privacy {
-    PublicAccess, Followers, OnlyMe, Link;
+    PublicAccess, OnlyMe, Link;
 
     val id: String get() = name
 
     /** "Todos" / "Quien tenga el link" / "Solo yo" — the row asks "quién la ve". */
     val label: String get() = when (this) {
         PublicAccess -> "Todos"
-        Followers -> "Seguidores"
         OnlyMe -> "Solo yo"
         Link -> "Quien tenga el link"
     }
 
     val note: String get() = when (this) {
         PublicAccess -> "Aparece en tu perfil."
-        Followers -> "Solo quien te sigue."
         OnlyMe -> "Nadie más la ve. Su link deja de abrir."
         Link -> "No aparece en tu perfil; se abre con su link."
     }
@@ -40,13 +38,13 @@ enum class Privacy {
     val changedToast: String get() = when (this) {
         PublicAccess -> "Ahora la ven todos."
         OnlyMe -> "Ahora solo tú la ves."
-        Link, Followers -> "Ahora la ve quien tenga el link."
+        Link -> "Ahora la ve quien tenga el link."
     }
 
     val wire: String get() = when (this) {
         PublicAccess -> "profile"
         OnlyMe -> "private"
-        Link, Followers -> "link"
+        Link -> "link"
     }
 
     companion object {
@@ -55,8 +53,8 @@ enum class Privacy {
 
         fun fromWire(wire: String): Privacy = when (wire) {
             "profile", "public" -> PublicAccess
-            "link" -> Link
-            "followers" -> Followers
+            // "followers" was never offered in live and the server stores it as link.
+            "link", "followers" -> Link
             else -> OnlyMe
         }
     }

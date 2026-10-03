@@ -1,5 +1,9 @@
 package com.tromwey.kura.features.recap
 
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareIntent
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -30,11 +34,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,6 +117,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
+import com.tromwey.kura.state.select
 
 // Recap — twins of iOS `RecapViews.swift`: 08 el recap del mes · 09 vacío · O8 meses anteriores ·
 // C2 la tarjeta compartible. Titles per `state/frontend.md` §"Recap · título con año corto": the
@@ -145,7 +151,7 @@ private fun shortYear(year: Int) = "’" + "%02d".format(year % 100)
  */
 @Composable
 fun RecapEntryButton(store: AppStore, modifier: Modifier = Modifier) {
-    LaunchedEffect(store.loadState) { if (store.loadState == LoadState.Loaded) store.loadRecapMonths() }
+    ActiveEffect(store.loadState) { if (store.loadState == LoadState.Loaded) store.loadRecapMonths() }
     val label = store.recapButtonLabel ?: return
     Row(
         modifier
@@ -168,7 +174,7 @@ fun RecapEntryButton(store: AppStore, modifier: Modifier = Modifier) {
 fun RecapScreen(store: AppStore, route: Route.Recap) {
     val scope = rememberCoroutineScope()
     val era = route.era
-    LaunchedEffect(era) { store.loadRecap(era) }
+    ActiveEffect(era) { store.loadRecap(era) }
     val r = store.recap(era)
     val top = r?.top
     val error = store.loadError(LoadKey.Recap)
@@ -344,7 +350,7 @@ private fun monthName(d: LocalDate) = RecapPayload.MONTH_NAMES[d.monthValue - 1]
 @Composable
 fun RecapHistoryScreen(store: AppStore) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { store.loadRecap() }
+    ActiveEffect { store.loadRecap() }
     val current = store.currentRecap
     val months = store.recapMonths
     val older = months.orEmpty().drop(1)
@@ -406,7 +412,7 @@ private fun Miniature(store: AppStore, m: RecapMonth) {
     val shape = RoundedCornerShape(14.dp)
     if (t == null) {
         Skeleton(Modifier.size(108.dp, 192.dp), radius = 14.dp)
-        LaunchedEffect(m.era) { store.loadRecap(m.era) }
+        ActiveEffect(m.era) { store.loadRecap(m.era) }
         return
     }
     val (a, b) = remember(t.palette) { Tint.ends(t.palette) }
@@ -449,7 +455,7 @@ fun RecapShareScreen(store: AppStore, route: Route.RecapShare) {
     val picture = remember { Picture() }
     var sharing by remember { mutableStateOf(false) }
     // Opened straight (a link) the recap isn't loaded yet.
-    LaunchedEffect(route.era) { if (store.recap(route.era) == null) store.loadRecap(route.era) }
+    ActiveEffect(route.era) { if (store.recap(route.era) == null) store.loadRecap(route.era) }
     val r = store.recap(route.era)
     val ready = r?.top != null
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
@@ -468,7 +474,7 @@ fun RecapShareScreen(store: AppStore, route: Route.RecapShare) {
                     scope.launch {
                         val ok = shareCard(context, picture, r.era)
                         sharing = false
-                        if (!ok) store.showToast(ToastModel("No pudimos preparar la tarjeta. Inténtalo de nuevo.", ToastModel.Kind.Info))
+                        if (!ok) store.showToast(ToastModel("No pudimos preparar la tarjeta. Vuelve a intentarlo.", ToastModel.Kind.Info))
                     }
                 },
                 modifier = Modifier.widthIn(max = CARD_WIDTH),
@@ -612,10 +618,5 @@ private suspend fun shareCard(context: Context, picture: Picture, era: String): 
         .putExtra(Intent.EXTRA_STREAM, uri)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     send.clipData = ClipData.newRawUri(null, uri)
-    return try {
-        context.startActivity(Intent.createChooser(send, null))
-        true
-    } catch (_: android.content.ActivityNotFoundException) {
-        false
-    }
+    return shareIntent(context, send)
 }

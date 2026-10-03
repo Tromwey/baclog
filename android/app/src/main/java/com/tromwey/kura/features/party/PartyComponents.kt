@@ -58,6 +58,7 @@ import com.tromwey.kura.designsystem.rememberKHaptic
 import com.tromwey.kura.designsystem.KHapticEvent
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
+import com.tromwey.kura.state.present
 
 // The pieces the party screens share (twin of ios/Kura/Features/Party/PartyComponents.swift, design
 // `fiesta-app-v2`). Covers are records (1:1) drawn with the DS `CoverImage` / `FanView`; the page
@@ -143,7 +144,7 @@ fun PartyCredits(contributors: List<PartyContributor>, host: PartyPerson?, isHos
 }
 
 /**
- * One row of "las canciones": cover 56, italic title, artist, the seal + "Puso @x"; "…" for the host.
+ * One row of "las canciones": cover 56, italic title, artist, the seal + "Agregó @x"; "…" for the host.
  * Tapping it opens the song's sheet when there's something to do with it ([onTap]).
  */
 @Composable

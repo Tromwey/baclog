@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.collectiondetail
 
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,9 @@ import com.tromwey.kura.state.loadCollection
 import com.tromwey.kura.state.releaseLabel
 import com.tromwey.kura.state.waitingTitles
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // Twin of ios/Kura/Features/CollectionDetail/CollectionDetailView.swift (10b · 2a): the collection
 // continues from its fan, the whole page in the feed gradient of its front cover (span 900).
@@ -80,7 +84,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CollectionDetailScreen(store: AppStore, route: Route.Collection) {
     var tried by remember(route.id) { mutableStateOf(false) }
-    LaunchedEffect(route.id) {
+    ActiveEffect(route.id) {
         store.loadCollection(route.id)
         tried = true
     }
@@ -126,7 +130,7 @@ private fun CollectionPage(store: AppStore, c: KCollection, error: KuraApiError?
                 CollectionBody(store, c) {
                     if (error != null) {
                         RetryStrip(
-                            if (error == KuraApiError.Offline) "Sin conexión." else "No cargaron todos los títulos.",
+                            if (error == KuraApiError.Offline) "Sin conexión." else "No se cargó el resto.",
                             retry,
                             Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
                             offline = error == KuraApiError.Offline,

@@ -45,6 +45,25 @@ class ApiClientFixesTest {
         return LiveApi(ApiClient(base = base, session = session, http = http, userAgent = "t"), DeviceInfo(name = "t", appVersion = "1"))
     }
 
+    // Ronda 5: `POST auth/otp/verify` → 401 + `reason: "locked"` is its own case; without it, the 401 of always.
+    @Test fun aLockedCodeIsNotAPlainUnauthorized() = runBlocking<Unit> {
+        var body = """{"error":{"code":"unauthorized","message":"Demasiados intentos con ese código. Pide uno nuevo.","reason":"locked"}}"""
+        val api = live(Session(InMemoryTokenStore(null))) { 401 to body }
+        try {
+            api.signIn("qa@example.invalid", "123456")
+            fail("se esperaba 401")
+        } catch (e: KuraApiError) {
+            assertEquals(KuraApiError.CodeLocked, e)
+        }
+        body = Fixtures.text("error_401")
+        try {
+            api.signIn("qa@example.invalid", "123456")
+            fail("se esperaba 401")
+        } catch (e: KuraApiError) {
+            assertEquals(KuraApiError.Unauthorized, e)
+        }
+    }
+
     // O
     @Test fun a401ForAnOlderBearerNeverEndsTheNewSession() = runBlocking<Unit> {
         val session = Session(InMemoryTokenStore("old.bearer.x"))

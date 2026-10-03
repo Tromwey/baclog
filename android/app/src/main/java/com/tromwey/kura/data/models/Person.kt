@@ -274,10 +274,10 @@ data class PeoplePage(
     internal object Serializer : WireSerializer<PeoplePage>("PeoplePage") {
         override fun read(e: JsonElement): PeoplePage {
             // `{ items, nextCursor }`, or a bare array from an older server.
-            if (e is JsonArray) return PeoplePage(e.map { KuraJson.json.decodeFromJsonElement(Person.serializer(), it) })
+            if (e is JsonArray) return PeoplePage(lossyList(e, Person.serializer(), strict = true))
             val c = Obj.of(e)
             return PeoplePage(
-                items = c.list("items", Person.serializer()) ?: emptyList(),
+                items = c.list("items", Person.serializer(), strict = true) ?: emptyList(),
                 nextCursor = c.string("nextCursor"),
                 anonymousCount = c.int("anonymousCount") ?: 0,
                 privateCount = c.int("privateCount") ?: 0,

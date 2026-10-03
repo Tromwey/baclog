@@ -116,6 +116,12 @@ class ApiClient(
     /** Emits when any authenticated call answers 401 (the token is already gone). */
     val sessionExpired: SharedFlow<Unit> = expired.asSharedFlow()
 
+    /** Whether the LAST `Offline` this client threw was a timeout (the request reached a path that
+     *  works) and not a transport failure. Last-writer-wins across concurrent requests: the worst case
+     *  is one reconnection retry more or less. */
+    @Volatile var lastOfflineTimedOut = false
+        private set
+
     internal class Response(val data: ByteArray, val requestId: String?)
 
     /** One failed attempt: the error the caller sees + how `RetryPolicy` should read it. */
@@ -153,7 +159,10 @@ class ApiClient(
             // A contract change must leave a trace: where it broke, never the payload.
             // Only the exception's class: kotlinx's message quotes the offending JSON (it can carry a
             // name, an email, a review…).
-            KuraLog.api("decode ${e.method} ${e.path.template} as ${strategy.descriptor.serialName} rid=${r.requestId ?: "-"}: ${x.javaClass.simpleName}")
+            // An emptied list is the exception: its message is ours (model, count, the first reason).
+            // Ours too: a missing key / a wrong type (`WireException`) names the key, never a value.
+            val what = com.tromwey.kura.data.models.safeReason(x)
+            KuraLog.api("decode ${e.method} ${e.path.template} as ${strategy.descriptor.serialName} rid=${r.requestId ?: "-"}: $what")
             throw KuraApiError.Server("Respuesta inesperada del servidor")
         }
     }
@@ -225,6 +234,9 @@ class ApiClient(
             throw c
         } catch (x: IOException) {
             val timedOut = x is InterruptedIOException || x.javaClass.simpleName.contains("Timeout")
+            // Read on the store's side right after it catches this `Offline` (`noteError`): a timeout is
+            // a slow server on a good path, not a lost network.
+            lastOfflineTimedOut = timedOut
             throw AttemptFailure(KuraApiError.Offline, if (timedOut) RetryPolicy.Failure.TimedOut else RetryPolicy.Failure.Transport)
         }
         val status = resp.status.value
@@ -272,14 +284,15 @@ class ApiClient(
         val message = env?.message ?: ""
         val retryAfter = env?.retryAfterSeconds ?: retryAfterHeader?.trim()?.toIntOrNull()
         when (code) {
-            "unauthorized" -> return KuraApiError.Unauthorized
-            "forbidden" -> return KuraApiError.Forbidden(env?.reason)
+            // Only `auth/otp/verify` sends `locked` (no bearer in that request: nothing to expire).
+            "unauthorized" -> return if (env?.reason == "locked") KuraApiError.CodeLocked else KuraApiError.Unauthorized
+            "forbidden" -> return KuraApiError.Forbidden(env?.reason, message)
             "not_found" -> return KuraApiError.NotFound
             // The provider token or the merge code was rejected (422, same body whatever failed).
             "invalid" -> return if (env?.reason == "invalid_proof") KuraApiError.Forbidden("proof_rejected")
                 else KuraApiError.Invalid(env?.fields ?: emptyMap(), message)
             "conflict" -> return KuraApiError.Conflict(env?.reason, message)
-            "rate_limited" -> return KuraApiError.RateLimited(retryAfter)
+            "rate_limited" -> return KuraApiError.RateLimited(retryAfter, env?.reason)
             "unsupported" -> return KuraApiError.Unsupported
             // The music export's 503s that mean something else than "not live yet".
             "unavailable" -> {
@@ -287,8 +300,6 @@ class ApiClient(
                 return if (reason == "not_configured" || reason == "service_failed") KuraApiError.ServiceUnavailable(reason, message)
                 else KuraApiError.Unavailable
             }
-            "underage" -> return KuraApiError.Forbidden("underage")
-            "not_released", "reaction_required" -> return KuraApiError.Conflict(code, message)
         }
         return when (status) {
             401 -> KuraApiError.Unauthorized
@@ -296,7 +307,7 @@ class ApiClient(
             404 -> KuraApiError.NotFound
             400, 422 -> KuraApiError.Invalid(env?.fields ?: emptyMap(), message)
             409 -> KuraApiError.Conflict(code.ifEmpty { null }, message)
-            429 -> KuraApiError.RateLimited(retryAfter)
+            429 -> KuraApiError.RateLimited(retryAfter, env?.reason)
             501 -> KuraApiError.Unsupported
             503 -> KuraApiError.Unavailable
             else -> KuraApiError.Server(message.ifEmpty { "HTTP $status" })

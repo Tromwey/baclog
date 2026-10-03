@@ -25,6 +25,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +64,13 @@ import com.tromwey.kura.designsystem.components.TintStyle
 import com.tromwey.kura.designsystem.components.kArtGlass
 import com.tromwey.kura.designsystem.components.kPressable
 import com.tromwey.kura.designsystem.components.kTint
+import com.tromwey.kura.data.api.KuraApiError
+import com.tromwey.kura.designsystem.components.RetryStrip
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.LoadKey
+import com.tromwey.kura.state.loadDiscoverFormat
 import com.tromwey.kura.state.label
+import com.tromwey.kura.state.push
 
 // Descubrir por formato (Claude Design "Descubrir Final – Formatos" 2a–2c; frontend.md § "Descubrir
 // · por formato"). Twin of `DiscoverFormatPage` in ios/Kura/Features/Discover/DiscoverView.swift:
@@ -126,6 +135,19 @@ private val fallbackTimes = listOf(
 internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: FormatPicks, onPicks: (FormatPicks) -> Unit) {
     val p = store.formatPayload(format, picks)
     val shown = shownItems(format, p, picks)
+    val time = timeParam(format, picks)
+    // The first read failed (a 503 while the catalog is down, no network): say so and offer it again,
+    // never the empty sentence of a shelf that did load.
+    val error = if (p == null) store.loadError(LoadKey.DiscoverFormat(format, time)) else null
+    // Reintentar of a shelf that came `titlesUnavailable`: the strip gives way to the loading tiles
+    // while it's asked again (the payload stays, so nothing else would say the tap did something).
+    var retrying by remember(format, time) { mutableStateOf(false) }
+    val retry: () -> Unit = {
+        if (!retrying) store.launch {
+            retrying = true
+            try { store.loadDiscoverFormat(format, time) } finally { retrying = false }
+        }
+    }
     Column(Modifier.fillMaxWidth()) {
         when (format) {
             MediaFormat.Film -> {
@@ -138,8 +160,8 @@ internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: For
                 )
                 MoodRow(p?.moods ?: emptyList(), picks.mood) { i -> onPicks(picks.copy(mood = if (picks.mood == i) null else i)) }
                 Grid(
-                    format, p, shown,
-                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer películas ahora. Prueba en un rato."
+                    format, p, shown, error, retry, retrying = retrying,
+                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer películas. Vuelve a intentarlo más tarde."
                     else "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor.",
                 ) { item ->
                     val t = store.fresh(item.title)
@@ -156,8 +178,8 @@ internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: For
                 val lenses = p?.lenses ?: emptyList()
                 if (lenses.isNotEmpty()) Choices(lenses, picks.lens) { onPicks(picks.copy(lens = it)) }
                 Grid(
-                    format, p, shown,
-                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer series ahora. Prueba en un rato."
+                    format, p, shown, error, retry, retrying = retrying,
+                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer series. Vuelve a intentarlo más tarde."
                     else "Nada tan corto por ahora. Prueba con un fin de semana.",
                 ) { item ->
                     val t = store.fresh(item.title)
@@ -171,8 +193,8 @@ internal fun DiscoverFormatPage(store: AppStore, format: MediaFormat, picks: For
                 PageQuestion("¿para qué momento?", bottom = 18.dp)
                 MoodRow(p?.moods ?: emptyList(), if (p == null) null else musicMood(p, picks)) { i -> onPicks(picks.copy(mood = i)) }
                 Grid(
-                    format, p, shown,
-                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer discos ahora. Prueba en un rato."
+                    format, p, shown, error, retry, retrying = retrying,
+                    empty = if (p?.titles?.isEmpty() == true) "No pudimos traer discos. Vuelve a intentarlo más tarde."
                     else "Nada para ese momento en lo que más suena hoy. Prueba otro.",
                 ) { item ->
                     val t = store.fresh(item.title)
@@ -255,13 +277,37 @@ private fun Grid(
     format: MediaFormat,
     p: DiscoverFormatPayload?,
     shown: List<DiscoverFormatPayload.Item>,
+    error: KuraApiError?,
+    onRetry: () -> Unit,
     empty: String,
+    retrying: Boolean = false,
     cell: @Composable (DiscoverFormatPayload.Item) -> Unit,
 ) {
     val m = Modifier.padding(start = KSize.margin, end = KSize.margin, top = 26.dp)
     val aspect = if (format == MediaFormat.Album) 1f else 2f / 3f
     when {
-        p == null -> Column(m.clearAndSetSemantics { }, verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        p == null && error != null -> RetryStrip(
+            when {
+                error == KuraApiError.Offline -> "Sin conexión. No se cargó el resto."
+                format == MediaFormat.Film -> "No pudimos traer películas."
+                format == MediaFormat.Series -> "No pudimos traer series."
+                else -> "No pudimos traer discos."
+            },
+            onRetry = onRetry,
+            modifier = m,
+            offline = error == KuraApiError.Offline,
+        )
+        // The shelf's source failed and the Kuradas came: not an empty shelf — say so, offer it again.
+        p?.titlesUnavailable == true && !retrying -> RetryStrip(
+            when (format) {
+                MediaFormat.Film -> "No pudimos traer películas."
+                MediaFormat.Series -> "No pudimos traer series."
+                else -> "No pudimos traer discos."
+            },
+            onRetry = onRetry,
+            modifier = m,
+        )
+        p == null || p.titlesUnavailable -> Column(m.clearAndSetSemantics { }, verticalArrangement = Arrangement.spacedBy(24.dp)) {
             repeat(2) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     repeat(2) {

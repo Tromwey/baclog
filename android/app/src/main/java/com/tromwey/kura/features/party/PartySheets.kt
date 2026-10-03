@@ -1,9 +1,11 @@
 package com.tromwey.kura.features.party
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,11 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,9 +69,14 @@ import com.tromwey.kura.state.revokePartyInvite
 import com.tromwey.kura.state.rotatePartyInvite
 import com.tromwey.kura.state.unblockPartyGuest
 import com.tromwey.kura.state.updateParty
-import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.dismissSheet
+import com.tromwey.kura.state.path
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // The party's sheets (twin of ios/Kura/Features/Party/PartySheets.swift, design `fiesta-app-v2` ·
 // welcome · cap · remove · share · opts · link · edit). The export sheets live in PartyExport.kt.
@@ -104,14 +109,14 @@ fun KuraSheetScope.PartyWelcomeSheet(store: AppStore, sheet: SheetRoute.PartyWel
 
 private fun welcomeMessage(host: String, limit: Int?, returning: Boolean): String {
     val put = when (limit) {
-        null -> "Pon las canciones que quieras"
-        1 -> "Pon tu canción"
-        else -> "Pon hasta $limit canciones"
+        null -> "Agrega las canciones que quieras"
+        1 -> "Agrega tu canción"
+        else -> "Agrega hasta $limit canciones"
     }
     return when {
-        limit == 0 -> "Eres parte de la fiesta de $host. Aquí se escucha la playlist que armó; todos ven quién puso cuál."
-        returning -> "Entraste con tu cuenta de kura. $put en la fiesta de $host; todos ven quién puso cuál."
-        else -> "Eres parte de la fiesta de $host. $put; todos ven quién puso cuál y las escuchan esa noche."
+        limit == 0 -> "Eres parte de la fiesta de $host. Aquí se escucha la playlist que creó; todos ven quién agregó cuál."
+        returning -> "Entraste con tu cuenta de kura. $put en la fiesta de $host; todos ven quién agregó cuál."
+        else -> "Eres parte de la fiesta de $host. $put; todos ven quién agregó cuál y las escuchan esa noche."
     }
 }
 
@@ -128,7 +133,7 @@ fun KuraSheetScope.PartyCapSheet(store: AppStore, sheet: SheetRoute.PartyCap) {
     val limit = maxOf(1, p?.perGuestLimit ?: mine.size)
     val search = Route.PartySearch(sheet.id)
     Column(SheetPad) {
-        PartySheetTitle(if (limit == 1) "ya pusiste tu canción." else "ya pusiste tus $limit.")
+        PartySheetTitle(if (limit == 1) "ya agregaste tu canción." else "ya agregaste tus $limit.")
         PartySheetBody("Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             mine.forEach { s ->
@@ -228,7 +233,7 @@ fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) store.showToast(ToastModel("Link copiado", ToastModel.Kind.Info))
                 }, height = 40.dp, fontSize = 13f, fill = Color.White.copy(alpha = 0.14f))
             }
-            HoneyButton("Compartir link", { shareLink(context, p.name, url) }, Modifier.padding(top = 12.dp), icon = KIcon.Share, height = 56.dp)
+            HoneyButton("Compartir link", { shareText(context, "Agrega tus canciones en ${p.name}: $url", p.name) }, Modifier.padding(top = 12.dp), icon = KIcon.Share, height = 56.dp)
             PartyFlatButton("Gestionar link", { store.present(SheetRoute.PartyLink(sheet.id)) }, Modifier.padding(top = 4.dp), quiet = true)
         } else {
             BasicText(
@@ -250,10 +255,10 @@ fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare
 
 private fun shareNote(l: Int?): String {
     val tail = when (l) {
-        null -> "Con cuenta en kura, pone las canciones que quiera."
+        null -> "Con cuenta en kura, agrega las canciones que quiera."
         0 -> "Es solo para escuchar: nadie más agrega canciones."
-        1 -> "Con cuenta en kura, pone 1 canción."
-        else -> "Con cuenta en kura, pone hasta $l canciones."
+        1 -> "Con cuenta en kura, agrega 1 canción."
+        else -> "Con cuenta en kura, agrega hasta $l canciones."
     }
     return "Quien abra el link ve la colección en vivo. $tail"
 }
@@ -261,15 +266,6 @@ private fun shareNote(l: Int?): String {
 private fun copyLink(context: Context, label: String, url: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText(label, url))
-}
-
-private fun shareLink(context: Context, name: String, url: String) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, name)
-        putExtra(Intent.EXTRA_TEXT, "Pon tus canciones en $name: $url")
-    }
-    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 /** Opciones. The host's: Gestionar link · Llevar a otra app · Editar, Bloqueados (when there are), Borrar
@@ -314,8 +310,8 @@ fun KuraSheetScope.PartyLeaveSheet(store: AppStore, sheet: SheetRoute.PartyLeave
     val mine = p?.mySongs?.size ?: 0
     val songs = when (mine) {
         0 -> ""
-        1 -> " La canción que pusiste se queda."
-        else -> " Las $mine canciones que pusiste se quedan."
+        1 -> " La canción que agregaste se queda."
+        else -> " Las $mine canciones que agregaste se quedan."
     }
     Column(SheetPad) {
         PartySheetTitle("¿salir de la fiesta?")
@@ -454,7 +450,7 @@ fun KuraSheetScope.PartyDeleteSheet(store: AppStore, sheet: SheetRoute.PartyDele
     val busy = store.sheetLocked
     Column(SheetPad) {
         PartySheetTitle("¿borrar la fiesta?")
-        PartySheetBody("Se borra para todos: las canciones y quién puso cuál. El link deja de funcionar.", Modifier.padding(top = 10.dp))
+        PartySheetBody("Se borra para todos: las canciones y quién agregó cuál. El link deja de funcionar.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Deleted closes the sheet (the store does it); a failure keeps it up to try again.
             PartyFlatButton("Borrar fiesta", {

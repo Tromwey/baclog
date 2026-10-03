@@ -63,16 +63,16 @@ data class ExportSong(
     val appleMusicId: String? = null,
     val isrc: String? = null,
     val state: State = State.Pending,
-    /** null → "Puso alguien". */
+    /** null → "Agregó alguien". */
     val addedBy: PartyPerson? = null,
-    /** → "Pusiste". */
+    /** → "Agregaste". */
     val mine: Boolean = false,
 ) {
     enum class State(val rawValue: String) { Pending("pending"), Added("added"), Missing("missing") }
 
     val id: String get() = titleId
-    /** "Pusiste" · "Puso @ana" · "Puso alguien" (the "No están en…" rows). */
-    val byLine: String get() = if (mine) "Pusiste" else addedBy?.let { "Puso ${it.at}" } ?: "Puso alguien"
+    /** "Agregaste" · "Agregó @ana" · "Agregó alguien" (the "No están en…" rows). */
+    val byLine: String get() = if (mine) "Agregaste" else addedBy?.let { "Agregó ${it.at}" } ?: "Agregó alguien"
 
     internal object Serializer : WireSerializer<ExportSong>("ExportSong") {
         override fun read(e: JsonElement): ExportSong {
@@ -143,17 +143,6 @@ data class ExportState(
     }
 }
 
-/** `PUT /parties/{id}/exports/apple_music`: what MusicKit did (iOS only today; kept for parity). */
-@Serializable
-data class AppleMusicReport(
-    val playlistId: String,
-    val replace: Boolean,
-    /** titleIds that ARE in the playlist now (including the ones that already were). */
-    val added: List<String>,
-    /** titleIds the service couldn't find in the person's storefront. */
-    val missing: List<String>,
-)
-
 /** The export screen (design `isExport`) — one at a time, over everything. */
 data class PartyExportFlow(
     val partyId: String,
@@ -208,14 +197,14 @@ object MusicExportCopy {
     fun pause(p: MusicProvider) = "${p.label} pidió una pausa. Seguimos en unos segundos."
     fun notConfigured(p: MusicProvider) = "${p.label} todavía no está disponible en kura."
     /** `assertMusicExportLive` (503 `migration`). */
-    const val UNAVAILABLE = "Exportar a otras apps todavía no está disponible. Inténtalo más tarde."
+    const val UNAVAILABLE = "Exportar a otras apps todavía no está disponible. Vuelve a intentarlo más tarde."
     fun description(name: String) = "La colección de fiesta «$name», desde kura."
 
     /** `kura://music/tidal/connected?ok=0&reason=…` and `complete`'s 409 (contract §4.1 copy). */
     fun tidalReason(reason: String?): String = when (reason) {
         "denied" -> "No diste permiso en TIDAL."
         "unavailable" -> "TIDAL todavía no está disponible en kura."
-        "rate_limited" -> "Demasiados intentos. Espera un momento."
+        "rate_limited" -> "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         else -> "La conexión con TIDAL caducó. Vuelve a intentarlo."
     }
 }

@@ -23,7 +23,8 @@ class ExportAndAvatarFixesTest {
         assertNotEquals(PartyExportFlow.Step.Done, flow.step)
         assertEquals(PartyExportFlow.Step.Failed, flow.step)
         assertEquals(TIDAL_UNFINISHED, flow.failure)
-        assertEquals(TIDAL_MAX_ROUNDS, h.api.callsOf("stepTidalExport").size)
+        // The first step passed a song; every one after it passed none (ronda 5: the stall cap).
+        assertEquals(1 + TIDAL_MAX_STALLED, h.api.callsOf("stepTidalExport").size)
     }
 
     // J (the decode budget; OOM itself can't be staged on the JVM)

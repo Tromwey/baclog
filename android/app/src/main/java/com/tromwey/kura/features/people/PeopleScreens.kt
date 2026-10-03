@@ -1,5 +1,9 @@
 package com.tromwey.kura.features.people
 
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,12 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -92,6 +94,9 @@ import com.tromwey.kura.data.api.KuraApiError
 import com.tromwey.kura.app.loadCopy
 import com.tromwey.kura.state.SheetRoute
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // Gente: someone else's profile (20a · 20d privado · 35d solicitado · bloqueado), their public
 // collection, a creator (O7) and your profile as a stranger sees it (K1d / K1e) — twins of iOS
@@ -104,7 +109,7 @@ import kotlinx.coroutines.launch
 fun PersonScreen(store: AppStore, route: Route.PersonRoute) {
     val handle = route.handle
     val scope = rememberCoroutineScope()
-    LaunchedEffect(handle) { store.loadPerson(handle) }
+    ActiveEffect(handle) { store.loadPerson(handle) }
     val error = store.loadError(LoadKey.PersonKey(handle))
     // A card from a list or the feed is LITE (no counts, no collections, maybe no follow state): the
     // profile waits for its own read instead of flashing "0 seguidores · Seguir". Only a failed read
@@ -116,7 +121,7 @@ fun PersonScreen(store: AppStore, route: Route.PersonRoute) {
         error = error,
         onRetry = { scope.launch { store.loadPerson(handle, force = true) } },
         onBack = { store.pop() },
-        gone = "@$handle no está disponible." to "El perfil es privado o ya no existe.",
+        gone = "este perfil no existe o es privado." to "Puede que sea privado o que ya no exista.",
         square = true,
     ) { p -> PersonProfile(store, p, preview = false) }
 }
@@ -149,7 +154,7 @@ internal fun PersonProfile(store: AppStore, p: Person, preview: Boolean) {
                 } else {
                     // Someone else's profile we can open is public: its link is live.
                     PublicLinks.profile(p.handle)?.let { link ->
-                        IconChip44(KIcon.Share, "Compartir perfil", { shareLink(context, link, "@${p.handle}") }, fill = KColor.glassBg)
+                        IconChip44(KIcon.Share, "Compartir perfil", { shareText(context, link, "@${p.handle}") }, fill = KColor.glassBg)
                     }
                     IconChip44(KIcon.More, "Opciones", { store.present(SheetRoute.PersonOptions(p.id)) }, fill = KColor.glassBg)
                 }
@@ -199,7 +204,7 @@ internal fun PersonProfile(store: AppStore, p: Person, preview: Boolean) {
         if (error != null) {
             // What's on screen came from a list (counts 0, no collections): say it's partial.
             RetryStrip(
-                if (error == KuraApiError.Offline) error.loadCopy.first.replaceFirstChar { it.uppercase() } else "No se pudo cargar todo el perfil.",
+                if (error == KuraApiError.Offline) error.loadCopy.first.replaceFirstChar { it.uppercase() } else "No se cargó el resto.",
                 onRetry = { scope.launch { store.loadPerson(p.id, force = true) } },
                 modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
                 offline = error == KuraApiError.Offline,
@@ -258,7 +263,7 @@ private fun PersonBody(store: AppStore, p: Person, preview: Boolean, modifier: M
             CollectionsShowcase(
                 "colecciones",
                 visible.map { pc -> showcaseItem(store, pc, p, preview) },
-                onShare = { item -> item.shareLink?.let { shareLink(context, it, item.name) } },
+                onShare = { item -> item.shareLink?.let { shareText(context, it, item.name) } },
             )
         }
     }
@@ -286,14 +291,14 @@ fun PublicCollectionScreen(store: AppStore, route: Route.PublicCollection) {
     val key = AppStore.publicKey(route.handle, route.id)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    LaunchedEffect(key) { store.loadPublicCollection(route.handle, route.id) }
+    ActiveEffect(key) { store.loadPublicCollection(route.handle, route.id) }
     ResourceScreen(
         value = store.publicCollections[key],
         missing = key in store.missingPublicCollections,
         error = store.loadError(LoadKey.PublicCollection(key)),
         onRetry = { scope.launch { store.loadPublicCollection(route.handle, route.id, force = true) } },
         onBack = { store.pop() },
-        gone = "esta colección no está disponible." to "Es privada o ya no existe.",
+        gone = "esta colección no existe o es privada." to "Puede que sea privada o que ya no exista.",
     ) { d ->
         val c = d.collection
         val all = c.titleIds.mapNotNull { store.title(it) }
@@ -307,7 +312,7 @@ fun PublicCollectionScreen(store: AppStore, route: Route.PublicCollection) {
         TintedPage(tint, veilSolid = KSize.chromeTop, veilEnd = KSize.pushedTitleTop, overlay = {
             KuraTopBar(onBack = { store.pop() }) {
                 PublicLinks.collection(route.handle, route.id)?.let { link ->
-                    IconChip44(KIcon.Share, "Compartir ${c.name}", { shareLink(context, link, c.name) }, fill = KColor.glassBg)
+                    IconChip44(KIcon.Share, "Compartir ${c.name}", { shareText(context, link, c.name) }, fill = KColor.glassBg)
                 }
             }
         }) {

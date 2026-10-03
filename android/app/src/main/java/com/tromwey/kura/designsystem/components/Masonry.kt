@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -86,8 +87,18 @@ fun Masonry(
     onHold: ((CoverArt) -> Unit)? = null,
     coverModifier: @Composable (CoverArt) -> Modifier = { Modifier },
 ) {
-    ColumnsLayout(modifier.fillMaxWidth().padding(horizontal = KSize.margin)) {
-        titles.forEach { t -> MasonryTile(t, badge(t), onOpen = { onOpen(t) }, onHold = onHold?.let { h -> { h(t) } }, coverModifier = coverModifier(t)) }
+    // Windowed (`Windowed.kt`): a collection of hundreds composes its first page, then grows as the
+    // page scrolls. Dealing to the shortest column is order-stable, so new tiles never move old ones.
+    val window = rememberWindow(titles)
+    Column(modifier.fillMaxWidth()) {
+        ColumnsLayout(Modifier.fillMaxWidth().padding(horizontal = KSize.margin)) {
+            window.visible.forEach { t ->
+                key(t.id) {
+                    MasonryTile(t, badge(t), onOpen = { onOpen(t) }, onHold = onHold?.let { h -> { h(t) } }, coverModifier = coverModifier(t))
+                }
+            }
+        }
+        WindowEnd(window)
     }
 }
 

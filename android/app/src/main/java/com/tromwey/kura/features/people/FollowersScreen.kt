@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.people
 
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +13,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,6 +48,9 @@ import com.tromwey.kura.designsystem.components.KPressFeel
 import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.LoadErrorBlock
 import com.tromwey.kura.designsystem.components.MonoSegmented
+import com.tromwey.kura.designsystem.components.NearViewport
+import com.tromwey.kura.designsystem.components.WindowEnd
+import com.tromwey.kura.designsystem.components.rememberWindow
 import com.tromwey.kura.designsystem.components.Seal
 import com.tromwey.kura.designsystem.components.Skeleton
 import com.tromwey.kura.designsystem.components.kPressable
@@ -55,7 +62,11 @@ import com.tromwey.kura.state.isFollowing
 import com.tromwey.kura.state.loadMorePeople
 import com.tromwey.kura.state.loadPeopleList
 import com.tromwey.kura.state.loadPerson
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tromwey.kura.designsystem.components.KuraTextButton
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 /**
  * 20e · Seguidores / siguiendo (iOS `FollowersView`): whose people these are in Newsreader, the two
@@ -75,8 +86,8 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
     val p = store.person(personId)
     val key = AppStore.peopleListKey(personId, showFollowing)
 
-    LaunchedEffect(personId) { if (!isMe && p == null) store.loadPerson(personId) }
-    LaunchedEffect(key) { store.loadPeopleList(personId, showFollowing) }
+    ActiveEffect(personId) { if (!isMe && p == null) store.loadPerson(personId) }
+    ActiveEffect(key) { store.loadPeopleList(personId, showFollowing) }
 
     val followersCount = maxOf(p?.followers ?: 0, 0)
     val followingCount = if (isMe) maxOf(p?.followingCount ?: 0, store.following.size) else (p?.followingCount ?: 0)
@@ -87,6 +98,13 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
     val denied = meta?.denied
     val handle = p?.handle ?: personId
     val q = fold(query)
+    // Searching someone else's list reads the pages that haven't come (the endpoint doesn't search):
+    // after a pause in the typing, and at most `SEARCH_PAGES` per search SESSION (from the first
+    // letter until the field is empty again — not per text, or every keystroke would reset the
+    // count) — then "Seguir buscando".
+    var searchPages by remember(key) { mutableIntStateOf(0) }
+    LaunchedEffect(key, q.isEmpty()) { if (q.isEmpty()) searchPages = 0 }
+    val searchCapped = q.isNotEmpty() && searchPages >= SEARCH_PAGES
     val list = (loaded ?: emptyList()).map { store.person(it.id) ?: it }.filter { it.id != store.me.id }
         .filter { q.isEmpty() || fold(it.handle).contains(q) || fold(it.name).contains(q) }
     val mutual = list.filter { store.isFollowing(it.id) }
@@ -130,35 +148,65 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
                     }
                     loaded == null -> repeat(4) { RowSkeleton() }
                     denied != null -> PrivateListNote(denied, showFollowing, Modifier.padding(top = 12.dp))
-                    list.isEmpty() && q.isNotEmpty() -> Note("Nadie con ese nombre.")
+                    // Searching a list that hasn't all arrived: "nobody" can only be said once the last
+                    // page is in (the rest keeps coming below, and may still bring the name).
+                    list.isEmpty() && q.isNotEmpty() && meta?.nextCursor == null -> Note("Nadie con ese nombre.")
+                    list.isEmpty() && q.isNotEmpty() && searchCapped -> Note("No aparece en lo que ya se cargó de la lista.")
+                    list.isEmpty() && q.isNotEmpty() -> Note("Buscando en el resto de la lista…")
                     list.isEmpty() && !isMe && anonymous == 0 ->
                         Note(if (showFollowing) "@$handle todavía no sigue a nadie." else "Todavía nadie sigue a @$handle.")
                     list.isEmpty() && isMe && anonymous == 0 ->
                         Note(if (showFollowing) "Todavía no sigues a nadie." else "Todavía nadie te sigue.")
                 }
-                if (mutual.isNotEmpty()) {
+                // Windowed (`Windowed.kt`) across both groups: the first page of rows, growing with the scroll.
+                val window = rememberWindow(mutual + rest)
+                val shownMutual = window.visible.take(mutual.size)
+                val shownRest = window.visible.drop(mutual.size)
+                if (shownMutual.isNotEmpty()) {
                     MonoLabel("Que también sigues", Modifier.padding(top = 8.dp, bottom = 4.dp), tracking = 0.1f, color = KColor.text3)
-                    mutual.forEach { PersonListRow(store, it) }
+                    shownMutual.forEach { key(it.id) { PersonListRow(store, it) } }
                 }
-                if (rest.isNotEmpty()) {
+                if (shownRest.isNotEmpty()) {
                     MonoLabel("Todos", Modifier.padding(top = 16.dp, bottom = 4.dp), tracking = 0.1f, color = KColor.text3)
-                    rest.forEach { PersonListRow(store, it) }
+                    shownRest.forEach { key(it.id) { PersonListRow(store, it) } }
                 }
-                if (meta?.nextCursor != null && q.isEmpty()) {
+                WindowEnd(window)
+                if (window.hasMore) {
+                    // More rows of what's already here come first; the server's next page after them.
+                } else if (meta?.nextCursor != null) {
                     val moreError = store.loadError(LoadKey.PeopleMore(personId, showFollowing))
                     if (moreError != null) {
                         // The next page failed: say so and let it be asked again, instead of a
                         // skeleton that would wait forever.
                         RetryStrip(
-                            "No se cargaron más personas.",
+                            "No se cargó el resto.",
                             onRetry = { scope.launch { store.loadMorePeople(personId, showFollowing) } },
                             Modifier.padding(top = 12.dp),
                             offline = moreError == KuraApiError.Offline,
                         )
                     } else {
-                        // The end of the rows asks for the next page (one at a time).
-                        RowSkeleton()
-                        LaunchedEffect(meta.nextCursor) { store.loadMorePeople(personId, showFollowing) }
+                        // The end of the rows asks for the next page (one at a time) as it nears the screen —
+                        // or right away while searching: the name may be on a page that hasn't come.
+                        if (searchCapped) {
+                            KuraTextButton("Seguir buscando", onClick = { searchPages = 0 }, color = KColor.text2)
+                        } else {
+                            RowSkeleton()
+                        }
+                        if (searchCapped) {
+                            // Waits for "Seguir buscando".
+                        } else if (q.isNotEmpty()) {
+                            // Keyed by the text AND the cursor: every keystroke restarts the wait (a real
+                            // debounce from the last one), and a page that landed asks for the next.
+                            // The read runs on the store's scope — typing must not cancel it midway.
+                            LaunchedEffect(key, q, meta.nextCursor) {
+                                delay(SEARCH_DEBOUNCE_MS)
+                                if (store.peopleListMeta[key]?.loadingMore == true) return@LaunchedEffect
+                                searchPages += 1
+                                store.launch { store.loadMorePeople(personId, showFollowing) }
+                            }
+                        } else {
+                            key(meta.nextCursor) { NearViewport { scope.launch { store.loadMorePeople(personId, showFollowing) } } }
+                        }
                     }
                 } else if (anonymous > 0 && q.isEmpty() && denied == null) {
                     // Private accounts, no public handle, a block with you: a number, never who (your
@@ -174,6 +222,10 @@ fun FollowersScreen(store: AppStore, route: Route.Followers) {
     }
 }
 
+/** Pages one search may pull by itself before asking ("Seguir buscando"). */
+private const val SEARCH_PAGES = 5
+private const val SEARCH_DEBOUNCE_MS = 350L
+
 @Composable
 private fun Note(text: String) {
     BasicText(text, Modifier.padding(top = 12.dp), style = KuraType.ui(15f).copy(color = KColor.text2))
@@ -184,6 +236,9 @@ private fun Note(text: String) {
 internal fun PersonListRow(store: AppStore, p: Person) {
     val f = store.isFollowing(p.id)
     val n = p.common.size
+    // A row that came from a list is the lite shape: it never carries `common`, so "nada en común"
+    // can only be said of a profile that was read whole.
+    val commonKnown = n > 0 || p.id in store.loadedPeople
     // A followed profile that went private (`isPrivate` on your own lists): dimmed, like the web.
     val dimmed = p.isPrivate && f
     Row(
@@ -198,7 +253,11 @@ internal fun PersonListRow(store: AppStore, p: Person) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             BasicText(p.name, style = KuraType.ui(16f, UiWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicText(
-                "@${p.handle} · " + if (n == 0) "nada en común aún" else "$n en común",
+                when {
+                    !commonKnown -> "@${p.handle}"
+                    n == 0 -> "@${p.handle} · nada en común aún"
+                    else -> "@${p.handle} · $n en común"
+                },
                 style = KuraType.mono(11f).copy(color = KColor.text2),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

@@ -139,7 +139,7 @@ class StateFixesTest {
         store.onboardingPicks = listOf("a", "b", "c")
         h.api.failNext("onboardingPicks", KuraApiError.Server("500"))
         assertFalse(store.submitPicks())
-        assertEquals("No se guardaron tus 3. Inténtalo de nuevo.", store.authError)
+        assertEquals("No se guardaron tus 3. Vuelve a intentarlo.", store.authError)
         h.api.failNext("onboardingPicks", KuraApiError.NotFound)
         assertFalse(store.submitPicks())
         assertFalse("never the code screen's words", store.authError!!.contains("código"))

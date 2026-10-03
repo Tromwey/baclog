@@ -1,10 +1,8 @@
 package com.tromwey.kura.features.people
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -393,18 +391,6 @@ internal fun <T : Any> ResourceScreen(
 }
 
 // MARK: Share / copy (the system's share sheet and clipboard)
-
-/** The system share sheet with [text] (a public link). */
-internal fun shareLink(context: Context, text: String, title: String? = null) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-        if (title != null) putExtra(Intent.EXTRA_TITLE, title)
-    }
-    val chooser = Intent.createChooser(send, title)
-    if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    context.startActivity(chooser)
-}
 
 /** Copies [text]; true when the app should confirm it (Android 13+ shows its own confirmation). */
 internal fun copyLink(context: Context, text: String): Boolean {

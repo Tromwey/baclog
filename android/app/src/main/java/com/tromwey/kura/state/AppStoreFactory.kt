@@ -15,6 +15,7 @@ import com.tromwey.kura.data.PendingRevokes
 import com.tromwey.kura.data.SecureStore
 import com.tromwey.kura.data.Session
 import com.tromwey.kura.data.api.ApiClient
+import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.data.api.LiveApi
 import com.tromwey.kura.data.models.KuraRuntime
 import com.tromwey.kura.data.models.Title
@@ -82,6 +83,51 @@ open class AndroidStorePlatform(private val context: Context) : StorePlatform, P
 
     override suspend fun extractPalette(url: String): List<String> =
         CoverPalette.extract(context, SingletonImageLoader.get(context), url)
+
+    /** Every way out of a session: no profile photo of the old account stays on the device. Photos come
+     *  from `/api/avatar/{key}` with the bearer and Coil's disk cache has no "only these" — so the whole
+     *  image cache goes (memory now, disk off the main thread); covers just download again. */
+    override fun clearAvatarCache() {
+        val loader = SingletonImageLoader.get(context)
+        loader.memoryCache?.clear()
+        val disk = loader.diskCache ?: return
+        Thread({
+            try {
+                disk.clear()
+            } catch (e: Exception) {
+                KuraLog.w("KuraStore", "caché de imágenes: ${e.javaClass.simpleName}")
+            }
+        }, "kura-image-cache-clear").start()
+    }
+
+    /** The recap cards shared through the FileProvider (`cache/recap/`, `RecapScreens.shareCard`): they
+     *  carry the old account's month, so they go with it. Off the main thread (disk). */
+    override fun clearExports() {
+        val dir = java.io.File(context.cacheDir, "recap")
+        Thread({
+            try {
+                dir.deleteRecursively()
+            } catch (e: Exception) {
+                KuraLog.w("KuraStore", "caché del recap: ${e.javaClass.simpleName}")
+            }
+        }, "kura-recap-cache-clear").start()
+    }
+
+    /** Cookies of any in-app web content (WebView's store; the app opens the web in the browser or an
+     *  Auth Tab, whose cookies belong to the browser). A phone without a WebView provider has none. */
+    override fun clearWebSession() {
+        // Off the main thread: `CookieManager.getInstance()` loads the WebView provider (hundreds of ms
+        // on a cold process) and `flush()` writes to disk — on the way out of a session, never on the UI.
+        Thread({
+            try {
+                val cookies = android.webkit.CookieManager.getInstance()
+                cookies.removeAllCookies(null)
+                cookies.flush()
+            } catch (e: Exception) {
+                KuraLog.w("KuraStore", "sesión web: ${e.javaClass.simpleName}")
+            }
+        }, "kura-web-session-clear").start()
+    }
 
     // MARK: Release notices (local only while the server doesn't send them)
 

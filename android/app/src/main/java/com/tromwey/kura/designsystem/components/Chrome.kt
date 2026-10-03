@@ -4,6 +4,7 @@
 
 package com.tromwey.kura.designsystem.components
 
+import com.tromwey.kura.designsystem.LocalEntryActive
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.DisposableEffect
@@ -326,12 +327,15 @@ class DockBand {
 
 val LocalDockBand = staticCompositionLocalOf { DockBand() }
 
-/** While composed, the navigation bar wears [color] (read when it DRAWS: no recomposition per frame). */
+/** While its page is the one on screen, the navigation bar wears [color] (read when it DRAWS: no recomposition per frame). */
 @Composable
 fun DockBandEffect(color: () -> Color) {
     val band = LocalDockBand.current
     val latest by rememberUpdatedState(color)
-    DisposableEffect(band) {
+    // Only the page on screen: a covered page (alive under a push, or in a hidden tab) says nothing.
+    val active = LocalEntryActive.current
+    DisposableEffect(band, active) {
+        if (!active) return@DisposableEffect onDispose { }
         val entry: () -> Color = { latest() }
         band.add(entry)
         onDispose { band.remove(entry) }

@@ -22,8 +22,10 @@ App nativa Android (Kotlin + Jetpack Compose, minSdk 26) que implementa el siste
 ## Decisiones cerradas (no re-litigar)
 
 - **Nativo, Kotlin + Compose.** Sin Flutter/RN/KMP. `applicationId` = `com.tromwey.kura` (= bundle iOS).
-- **Stack**: Navigation Compose (rutas tipadas) · Ktor 3 (motor OkHttp) + kotlinx.serialization · Coil 3
-  para portadas · `androidx.palette` para la paleta on-device (`CoverPalette` en iOS) · Credential
+- **Navegación como `NavigationStack`/`TabView` (founder, 2026-10-01)**: las páginas de un stack y las pestañas ya visitadas siguen vivas (compuestas, sin dibujarse) para que Volver encuentre todo como estaba; tope de 4 entradas vivas por stack; atrás predictivo = el deslizar-para-volver de iOS. Las lecturas de una pantalla van en `ActiveEffect` (el `.task` de iOS), no en `LaunchedEffect`. Detalle en `state/android.md` › Stack con pantallas vivas.
+- **Stack**: navegación propia en el `AppStore` (`tab` + `paths` de `Route`; Navigation Compose, `androidx.palette`
+  y `lifecycle-viewmodel-compose` se quitaron del build el 2026-10-01: sin un solo uso) · Ktor 3 (motor OkHttp) +
+  kotlinx.serialization · Coil 3 para portadas · `CoverPalette` propio (algoritmo de iOS/web) · Credential
   Manager + `googleid` para Google · sin framework de DI (construcción manual, como iOS) · un solo
   `AppStore` (`StateFlow`/`mutableStateOf`, `ViewModel` de proceso) espejo de `ios/Kura/State/`, para
   que Deshacer funcione de verdad.

@@ -1,5 +1,9 @@
 package com.tromwey.kura.features.feed
 
+import com.tromwey.kura.designsystem.OnEntryCovered
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.tromwey.kura.designsystem.components.DockBandEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.lerp
@@ -38,12 +42,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +111,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.select
 
 // Feed v10 (iOS `FeedView`): a STACK of tinted cards. Each card pins under the header and the next
 // one slides over it, raising a band of its own colour behind the header as it arrives. Tiers
@@ -135,14 +140,13 @@ private object FeedMemory {
 fun FeedScreen(store: AppStore) {
     val scope = rememberCoroutineScope()
     val holdEmpty = FeedMemory.holdEmptyFor == store.me.id
-    // Only the visible tab is composed (MainTabs): this runs when the feed is OPENED and every time
-    // it comes back from a push — so a followed set that changed meanwhile reloads it (feedStale).
-    LaunchedEffect(Unit) {
+    // The feed stays composed once opened (MainTabs' live stack): this runs when it's OPENED and every
+    // time it comes back to the front — from a push or another tab — so a followed set that changed
+    // meanwhile reloads it (feedStale).
+    ActiveEffect {
         if (store.feedStale) store.loadFeed(force = true) else store.loadFeed()
     }
-    DisposableEffect(Unit) {
-        onDispose { if (store.tab != Tab.Feed) FeedMemory.holdEmptyFor = null }
-    }
+    OnEntryCovered { if (store.tab != Tab.Feed) FeedMemory.holdEmptyFor = null }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(KColor.bg)) {
         val density = LocalDensity.current
@@ -174,6 +178,14 @@ fun FeedScreen(store: AppStore) {
                 LoadErrorBlock(t, n, onRetry = { scope.launch { store.loadFeed(force = true) } }, titleSize = 32f)
             }
             !store.feedLoaded && events.isEmpty() -> FeedSkeleton(hdr, tierHeight(FeedEvent.Tier.M, base), header)
+            // Nothing visible yet but the server has more pages (page 1 was all muted / blocked people):
+            // `loadFeed` is asking on — "todo en calma" only once that's done.
+            events.isEmpty() && store.feedLoading && store.feedCursor != null ->
+                FeedSkeleton(hdr, tierHeight(FeedEvent.Tier.M, base), header)
+            events.isEmpty() && store.feedCursor != null && store.loadError(LoadKey.FeedMore) != null -> Plain(header) {
+                val (t, n) = store.loadError(LoadKey.FeedMore)!!.loadCopy
+                LoadErrorBlock(t, n, onRetry = { store.launch { store.loadMoreFeed(retry = true) } }, titleSize = 32f)
+            }
             events.isEmpty() -> Plain(header) { Quiet(store) }
             else -> FeedStack(store, events, hdr, base, viewport, header)
         }
@@ -248,7 +260,7 @@ private fun Quiet(store: AppStore) {
  *  three of `GET me/onboarding/people`), all at once (the screen's honey) or one by one. */
 @Composable
 private fun FeedEmpty(store: AppStore, header: @Composable (Modifier) -> Unit) {
-    LaunchedEffect(Unit) { store.loadOnboardingPeople() }
+    ActiveEffect { store.loadOnboardingPeople() }
     val people = store.onboardingPeople.take(3).map { store.person(it.id) ?: it }
     Column(Modifier.fillMaxSize().background(KColor.bg)) {
         header(Modifier)
@@ -341,7 +353,8 @@ private fun FeedStack(store: AppStore, events: List<FeedEvent>, hdr: Dp, base: D
     val hits = remember(density) { FeedHits(density.density) { haptic(it) } }
     val marks = rows.drop(1).map { it.top - hdrPx }
     LaunchedEffect(marks) { hits.setMarks(marks) }
-    LaunchedEffect(listState) {
+    // Both collectors pause while the feed is covered (ActiveEffect).
+    ActiveEffect(listState) {
         // The drag and its fling are two scrolls with a frame of "not scrolling" between them: only a
         // stop that lasts (and no finger down) ends the user's run.
         snapshotFlow { listState.isScrollInProgress }.distinctUntilChanged().collectLatest {
@@ -351,12 +364,18 @@ private fun FeedStack(store: AppStore, events: List<FeedEvent>, hdr: Dp, base: D
             }
         }
     }
-    LaunchedEffect(listState) { snapshotFlow { offset() }.collect { hits.scrolled(it) } }
+    ActiveEffect(listState) { snapshotFlow { offset() }.collect { hits.scrolled(it) } }
 
     // A refresh that brings a new first card: the list would keep the old one in view by its key,
     // off its snap line. The stack starts over from the top instead.
+    // Only when the first card CHANGES: the effect also runs when the screen is rebuilt from its
+    // saved state (a process death, an entry deeper than the live window), and there the saved
+    // scroll position is the one to keep.
     val firstId = rows.first().event.id
+    var seenFirstId by rememberSaveable { mutableStateOf(firstId) }
     LaunchedEffect(firstId) {
+        if (seenFirstId == firstId) return@LaunchedEffect
+        seenFirstId = firstId
         if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) listState.scrollToItem(0)
     }
 
@@ -426,8 +445,14 @@ private fun FeedStack(store: AppStore, events: List<FeedEvent>, hdr: Dp, base: D
                             .zIndex(if (moreError != null) rows.size.toFloat() else -1f)
                             .background(Tint.ends(last.palette).second.color),
                     ) {
-                        // The next page loads when the END of the stack comes into view, re-armed per page.
-                        LaunchedEffect(last.event.id) { store.loadMoreFeed() }
+                        // The next page loads when the END of the stack comes into view, re-armed by the CURSOR
+                        // (a page can bring nothing visible, so the last card's id may not change) and once
+                        // the previous read is over. A failure stops it: Reintentar below.
+                        val cursor = store.feedCursor
+                        val loading = store.feedLoading
+                        // On the STORE's scope: `loadMoreFeed` flips `feedLoading`, one of this effect's
+                        // keys — run inside the effect it would cancel its own read every time.
+                        LaunchedEffect(cursor, loading) { if (cursor != null && !loading) store.launch { store.loadMoreFeed() } }
                         if (moreError != null) {
                             RetryStrip(
                                 if (moreError == KuraApiError.Offline) "Sin conexión. No se cargó lo anterior." else "No se cargó lo anterior.",

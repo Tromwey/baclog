@@ -97,7 +97,7 @@ class SessionFlowTest {
         store.requestCode("persona@correo.com")
         h.api.failNext("signIn", KuraApiError.Unauthorized)
         assertFalse(store.verifyCode("000000"))
-        assertEquals("El código no coincide o ya caducó.", store.authError)
+        assertEquals("El código es incorrecto o ya venció. Revísalo o pide otro.", store.authError)
         assertEquals(AppPhase.Onboarding, store.phase)
         assertNull("un 401 del código no es una sesión que termina", store.toast)
     }
@@ -112,9 +112,9 @@ class SessionFlowTest {
         assertEquals(AppPhase.Onboarding, store.phase)
         assertEquals(OnboardingStep.Username, store.onboardingStep)
 
-        assertFalse("sin año no hay cuenta", store.submitUsername("nuevo", "Nuevo", null))
-        assertEquals("Falta tu año de nacimiento.", store.authError)
-        assertTrue(store.submitUsername("nuevo", "Nuevo", 1995))
+        assertFalse("sin fecha no hay cuenta", store.submitUsername("nuevo", "Nuevo", null))
+        assertEquals("Escribe tu fecha de nacimiento.", store.authError)
+        assertTrue(store.submitUsername("nuevo", "Nuevo", "1995-03-09"))
         assertEquals(OnboardingStep.Pick, store.onboardingStep)
         advanceUntilIdle()
         assertTrue(store.onboardingGrid.isNotEmpty())
@@ -136,7 +136,7 @@ class SessionFlowTest {
         store.requestCode("nuevo@correo.com")
         store.verifyCode("123456")
         h.api.failNext("completeOnboarding", KuraApiError.Forbidden("underage"))
-        assertFalse(store.submitUsername("peque", "Peque", 2016))
+        assertFalse(store.submitUsername("peque", "Peque", "2016-01-01"))
         assertEquals(OnboardingStep.Underage, store.onboardingStep)
     }
 

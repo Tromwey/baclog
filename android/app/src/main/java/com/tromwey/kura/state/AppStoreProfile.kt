@@ -117,7 +117,7 @@ private fun AppStore.revertHandle(newHandle: String, oldHandle: String) {
 suspend fun AppStore.uploadAvatar(jpeg: ByteArray?) {
     if (s.avatarBusy) return
     if (jpeg == null) {
-        showToast(ToastModel("Esa imagen no se pudo leer. Prueba con otra.", ToastModel.Kind.Info))
+        showToast(ToastModel("No se pudo usar esa foto. Prueba con otra.", ToastModel.Kind.Info))
         return
     }
     val session = s
@@ -135,7 +135,7 @@ suspend fun AppStore.uploadAvatar(jpeg: ByteArray?) {
                 val text = when {
                     e is KuraApiError.Invalid && e.message.isNotEmpty() -> e.message
                     e == KuraApiError.Offline -> "Sin conexión. La foto no se subió."
-                    else -> "No se pudo subir la foto"
+                    else -> "No se pudo subir la foto."
                 }
                 showToast(ToastModel(text, ToastModel.Kind.Retry) { scope.launch { uploadAvatar(jpeg) } })
             }

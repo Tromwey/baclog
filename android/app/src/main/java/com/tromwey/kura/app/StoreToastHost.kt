@@ -8,6 +8,9 @@ import com.tromwey.kura.designsystem.components.KuraToastModel
 import com.tromwey.kura.designsystem.components.ToastKind
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.ToastModel
+import com.tromwey.kura.state.dismissToast
+import com.tromwey.kura.state.closeToast
+import com.tromwey.kura.state.tapToastAction
 
 /**
  * The store's one toast (`store.toast`) drawn by the design system's [KuraToastHost]: the frame's

@@ -1,5 +1,9 @@
 package com.tromwey.kura.features.settings
 
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.openLink
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -27,11 +31,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -94,12 +96,15 @@ import com.tromwey.kura.state.deviceSessions
 import com.tromwey.kura.state.loadIdentities
 import com.tromwey.kura.state.loadSessions
 import com.tromwey.kura.state.revokeSession
-import com.tromwey.kura.state.saveLocal
 import com.tromwey.kura.state.signOutThisDevice
 import com.tromwey.kura.features.sheetWrite
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.dismissSheet
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // Ajustes (30a), privacidad (K1c), app de música (30b), sesiones activas, borrar cuenta (C3) and
 // "¿te avisamos?" — twins of iOS SettingsViews.swift. Inicio de sesión / fusionar cuentas
@@ -148,7 +153,7 @@ fun SettingsScreen(store: AppStore) {
     // The sheet may have just granted it: re-read when it closes.
     LaunchedEffect(store.sheet) { notificationsAllowed = notificationsGranted(context) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { store.loadIdentities() }
+    ActiveEffect { store.loadIdentities() }
 
     SettingsPage(store, "ajustes") {
         GroupedList {
@@ -176,7 +181,7 @@ fun SettingsScreen(store: AppStore) {
             SettingsRow("Cuentas bloqueadas", onClick = { store.push(Route.BlockedAccounts) }) {
                 RowValue(store.blockedAccounts?.let { if (it.isEmpty()) "" else "${it.size}" } ?: "")
             }
-            SettingsRow("Aviso de privacidad", onClick = { openUrl(context, privacyNoticeUrl) }) {
+            SettingsRow("Aviso de privacidad", onClick = { store.openLink(context, privacyNoticeUrl) }) {
                 KIconView(KIcon.ExternalLink, size = 15.dp, color = KColor.text2)
             }
         }
@@ -280,20 +285,17 @@ private fun notificationsGranted(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-private fun openUrl(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    } catch (_: android.content.ActivityNotFoundException) {
-        // No browser: nothing to open it with.
-    }
-}
-
 private fun openNotificationSettings(context: Context) {
     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     try {
         context.startActivity(intent)
     } catch (_: android.content.ActivityNotFoundException) {
-        openUrl(context, "package:${context.packageName}")
+        // No per-app notifications page on this build of Android: the app's own page in Settings.
+        try {
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+        } catch (_: android.content.ActivityNotFoundException) {
+            // Nothing to open it with.
+        }
     }
 }
 
@@ -396,7 +398,7 @@ fun MusicAppScreen(store: AppStore) {
 @Composable
 fun SessionsScreen(store: AppStore) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { store.loadSessions() }
+    ActiveEffect { store.loadSessions() }
     SettingsPage(store, "sesiones activas") {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             BasicText(

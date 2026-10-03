@@ -1,7 +1,6 @@
 package com.tromwey.kura.features.settings
 
-import android.content.Context
-import android.os.SystemClock
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -54,16 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
-import androidx.credentials.exceptions.NoCredentialException
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
-import com.tromwey.kura.data.api.GoogleNonce
+import com.tromwey.kura.features.googleCredential
 import com.tromwey.kura.data.models.IdentityProvider
 import com.tromwey.kura.data.models.MergeSource
 import com.tromwey.kura.data.models.Route
@@ -88,20 +78,15 @@ import com.tromwey.kura.designsystem.components.Skeleton
 import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.designsystem.components.TopVeil
 import com.tromwey.kura.designsystem.components.kPressable
-import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.state.AppStore
-import com.tromwey.kura.state.GoogleCredential
 import com.tromwey.kura.state.LAST_WAY_IN_TEXT
 import com.tromwey.kura.state.LoadKey
 import com.tromwey.kura.state.SheetRoute
-import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.canRun
 import com.tromwey.kura.state.cancelMerge
 import com.tromwey.kura.state.confirmMerge
 import com.tromwey.kura.state.connectGoogle
 import com.tromwey.kura.state.disconnect
-import com.tromwey.kura.state.GOOGLE_SILENT_CANCEL_MS
-import com.tromwey.kura.state.googleFailureText
 import com.tromwey.kura.state.googleLinkClientId
 import com.tromwey.kura.state.identities
 import com.tromwey.kura.state.identityBusy
@@ -119,6 +104,9 @@ import com.tromwey.kura.features.sheetWrite
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // Inicio de sesión · fusionar cuentas — twins of iOS `AccountLinkViews.swift`. Apple never exists on
 // Android: no row, no button, nothing that names it (a Apple linked on iOS stays linked; the server
@@ -196,50 +184,6 @@ private fun GoogleRow(store: AppStore, linked: Boolean) {
 private fun ProviderMark() {
     Box(Modifier.size(32.dp).background(KColor.s2, CircleShape).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         BasicText("G", style = KuraType.ui(14f, UiWeight.SemiBold))
-    }
-}
-
-/**
- * Credential Manager + Sign in with Google → an ID token whose `aud` is the web client id
- * (`auth/providers.google.androidClientId`), with the nonce scheme of `POST /auth/google`: Google
- * gets `sha256hex(nonce)`, `GoogleNonce` keeps the raw one for `LiveApi.linkGoogle`. Same recipe as
- * the entrance's `SignupScreen` (copied, not shared: onboarding is its own lane).
- */
-private suspend fun googleCredential(context: Context, store: AppStore, clientId: String?): GoogleCredential {
-    if (clientId == null) return GoogleCredential.Failed
-    val nonce = GoogleNonce.make()
-    val option = GetGoogleIdOption.Builder()
-        .setServerClientId(clientId)
-        .setFilterByAuthorizedAccounts(false)
-        .setNonce(GoogleNonce.sha256(nonce))
-        .build()
-    val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-    val started = SystemClock.elapsedRealtime()
-    return try {
-        val credential = CredentialManager.create(context).getCredential(context, request).credential
-        if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-            val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
-            GoogleNonce.remember(nonce, token)
-            GoogleCredential.Token(token)
-        } else {
-            GoogleCredential.Failed
-        }
-    } catch (e: GetCredentialCancellationException) {
-        // A "cancel" before Google's sheet could even rise = no account on this phone (`googleFailureText`).
-        val elapsed = SystemClock.elapsedRealtime() - started
-        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
-        if (elapsed < GOOGLE_SILENT_CANCEL_MS) GoogleCredential.NoAccount else GoogleCredential.Cancelled
-    } catch (_: NoCredentialException) {
-        GoogleCredential.NoAccount
-    } catch (_: GoogleIdTokenParsingException) {
-        GoogleCredential.Failed
-    } catch (e: GetCredentialException) {
-        // The type says why: to the log for us; the user reads the store's words for it (none for a
-        // cancel), so the store is told "Cancelled" and adds no second, vaguer toast.
-        val elapsed = SystemClock.elapsedRealtime() - started
-        KuraLog.w("Google", "${e.type} en $elapsed ms: ${e.errorMessage}")
-        store.googleFailureText(e.type, e.errorMessage?.toString(), elapsed)?.let { store.showToast(ToastModel(it, ToastModel.Kind.Info)) }
-        GoogleCredential.Cancelled
     }
 }
 
@@ -323,7 +267,7 @@ fun MergeAccountScreen(store: AppStore) {
     var email by rememberSaveable { mutableStateOf(store.mergeEmail) }
     val google = store.identities?.providers?.any { it.provider == IdentityProvider.Google } == true && store.canRun(IdentityProvider.Google)
     val busy = store.mergeBusy || store.identityBusy != null
-    LaunchedEffect(Unit) {
+    ActiveEffect {
         store.mergeError = null
         if (store.identities == null) store.loadIdentities() else store.loadAuthProviders()
     }
@@ -369,7 +313,7 @@ fun MergeAccountScreen(store: AppStore) {
         }
         MergeError(store.mergeError, Modifier.padding(horizontal = 8.dp))
         BasicText(
-            "Te mandamos un código de seis dígitos a ese correo.",
+            "Te enviamos un código de seis dígitos a ese correo.",
             Modifier.fillMaxWidth().padding(top = 2.dp),
             style = KuraType.ui(13f).copy(color = KColor.text2, textAlign = TextAlign.Center),
         )
@@ -405,7 +349,7 @@ fun MergeCodeScreen(store: AppStore) {
     // After a 429 the button waits out `retryAfterSeconds` (up to an hour), counting down.
     var wait by remember { mutableLongStateOf(0L) }
     val retryAt = store.mergeRetryAt
-    LaunchedEffect(retryAt) {
+    ActiveEffect(retryAt) {
         while (true) {
             val left = retryAt?.let { Duration.between(java.time.Instant.now(), it).seconds + 1 } ?: 0
             wait = maxOf(0, left)
@@ -429,7 +373,7 @@ fun MergeCodeScreen(store: AppStore) {
             BasicText("su código.", Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
-                    append("Lo mandamos a ")
+                    append("Lo enviamos a ")
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text)) { append(store.mergeEmail) }
                 },
                 style = KuraType.ui(15f).copy(color = KColor.text2),

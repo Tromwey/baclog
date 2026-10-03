@@ -54,6 +54,7 @@ import com.tromwey.kura.features.settings.DeleteAccountSheet
 import com.tromwey.kura.features.settings.MergeAccountScreen
 import com.tromwey.kura.features.settings.MergeCodeScreen
 import com.tromwey.kura.features.settings.MergeConfirmScreen
+import com.tromwey.kura.features.title.DropReviewSheet
 import com.tromwey.kura.features.settings.MusicAppScreen
 import com.tromwey.kura.features.settings.NotificationsAskSheet
 import com.tromwey.kura.features.settings.RevokeSessionSheet
@@ -67,6 +68,10 @@ import com.tromwey.kura.features.title.TitleMoreSheet
 import com.tromwey.kura.features.title.TitleScreen
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.dismissSheet
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // THE contract between the shell and the screen lanes (iOS `RouteView` / `SheetContent` + each
 // tab's root). One composable per screen/sheet, in its feature package, with a uniform signature:
@@ -142,6 +147,7 @@ fun KuraSheetScope.SheetContent(sheet: SheetRoute, store: AppStore) {
         is SheetRoute.Report -> ReportSheet(store, sheet)
         is SheetRoute.Block -> BlockSheet(store, sheet)
         SheetRoute.DeleteAccount -> DeleteAccountSheet(store)
+        is SheetRoute.DropReview -> DropReviewSheet(store, sheet)
         is SheetRoute.AddTitles -> AddTitlesSheet(store, sheet)
         is SheetRoute.Reorder -> ReorderSheet(store, sheet)
         is SheetRoute.RevokeSession -> RevokeSessionSheet(store, sheet)

@@ -1,8 +1,9 @@
 package com.tromwey.kura.features.party
 
+import com.tromwey.kura.designsystem.LocalEntryActive
+import com.tromwey.kura.app.openLink
+import com.tromwey.kura.app.openUrl
 import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.browser.auth.AuthTabIntent
@@ -72,6 +73,7 @@ import com.tromwey.kura.state.startPartyExport
 import com.tromwey.kura.state.supportedHere
 import com.tromwey.kura.state.tidalAuthResult
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.showToast
 
 // "Llévala a otra app" — twin of ios/Kura/Features/Party/PartyExportView.swift + the sheets
 // `PartyExportSheet` / `PartyExportLeaveSheet` (design `fiesta-app-v2` · `shExport` · `isExport`).
@@ -189,8 +191,10 @@ fun PartyExportScreen(store: AppStore, f: PartyExportFlow) {
     val launcher = rememberLauncherForActivityResult(AuthTabIntent.AuthenticateUserResultContract()) { r ->
         store.tidalAuthResult(if (r.resultCode == AuthTabIntent.RESULT_OK) r.resultUri?.toString() else null)
     }
-    DisposableEffect(f.step) {
-        view.keepScreenOn = f.step == PartyExportFlow.Step.Progress
+    // Only while this page is the one on screen: a covered export doesn't hold the screen awake.
+    val active = LocalEntryActive.current
+    DisposableEffect(f.step, active) {
+        view.keepScreenOn = active && f.step == PartyExportFlow.Step.Progress
         onDispose { view.keepScreenOn = false }
     }
     val party = store.party(f.partyId)
@@ -255,7 +259,7 @@ fun PartyExportScreen(store: AppStore, f: PartyExportFlow) {
                     enabled = !f.busy,
                 )
                 PartyExportFlow.Step.Done -> f.state?.playlist?.url?.let { url ->
-                    HoneyButton("Abrir en ${f.provider.label}", { openUrl(context, url) }, height = 56.dp)
+                    HoneyButton("Abrir en ${f.provider.label}", { store.openLink(context, url) }, height = 56.dp)
                 }
                 PartyExportFlow.Step.Failed -> HoneyButton("Reintentar", { store.retryPartyExport() }, height = 56.dp)
                 PartyExportFlow.Step.Progress -> Unit
@@ -272,7 +276,7 @@ private fun exportBody(f: PartyExportFlow): String = when (f.step) {
     PartyExportFlow.Step.Failed -> f.failure ?: MusicExportCopy.serviceFailed(f.provider)
 }
 
-/** "No están en TIDAL": cover, title, "artista · Puso @x". */
+/** "No están en TIDAL": cover, title, "artista · Agregó @x". */
 @Composable
 private fun MissingList(f: PartyExportFlow, palettes: Map<String, List<String>>) {
     val list = f.state?.missing.orEmpty()
@@ -297,13 +301,5 @@ private fun MissingList(f: PartyExportFlow, palettes: Map<String, List<String>>)
                 }
             }
         }
-    }
-}
-
-private fun openUrl(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (_: ActivityNotFoundException) {
-        // Nothing can open it: the playlist is in the account anyway.
     }
 }

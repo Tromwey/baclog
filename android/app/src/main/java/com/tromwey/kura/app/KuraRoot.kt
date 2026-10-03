@@ -42,6 +42,8 @@ import com.tromwey.kura.state.LoadState
 import com.tromwey.kura.state.SheetStyle
 import com.tromwey.kura.state.StoreEvent
 import com.tromwey.kura.state.openPendingLink
+import com.tromwey.kura.state.dismissSheet
+import com.tromwey.kura.state.dockVisible
 
 /**
  * RootRouter (iOS `RootView`): splash → entrance/onboarding → the tabs, cross-faded, inside the app's
@@ -114,7 +116,9 @@ fun KuraRoot(store: AppStore, options: LaunchOptions = LaunchOptions.Normal) {
 private fun PendingLinks(store: AppStore) {
     val ready = store.phase == AppPhase.Main && store.loadState != LoadState.Loading
     LaunchedEffect(store, ready) {
-        if (ready) store.openPendingLink()
+        // On the store's scope: `ready` flips with a reconnection (the library is read again), and an
+        // effect cancelled there would drop what comes after the join (the party's push, its welcome).
+        if (ready) store.launch { store.openPendingLink() }
     }
 }
 

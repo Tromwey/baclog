@@ -74,14 +74,25 @@ suspend fun AppStore.requestCode(email: String): Boolean {
         if (err is CancellationException) throw err
         val k = noteError(err)
         if (k is KuraApiError.RateLimited) {
-            // A code for this email went out less than a minute ago (Volver, or the process died on
-            // O1c): it's still valid for 10 minutes, so the code screen opens to type it, with the
-            // wait before another on its Reenviar. Never stuck on "Espera 60 s" with no way forward.
+            val wait = k.retryAfter?.takeIf { it > 0 }
             val known = codeResendAt?.takeIf { authEmail == e && it.isAfter(realNow()) }
-            authEmail = e
-            codeAlreadySent = true
-            codeResendAt = known ?: realNow().plusSeconds((k.retryAfter ?: CODE_RESEND_SECONDS.toInt()).coerceIn(1, 600).toLong())
-            return true
+            // `cooldown` (or an older server without `reason` and a wait of a minute at most): a code
+            // for this email went out less than a minute ago (Volver, or the process died on O1c) and
+            // is still valid for 10 minutes — the code screen opens to type it, with the wait before
+            // another on its Reenviar.
+            if (k.reason == "cooldown" || (k.reason == null && (wait ?: CODE_RESEND_SECONDS.toInt()) <= CODE_RESEND_SECONDS)) {
+                authEmail = e
+                codeAlreadySent = true
+                codeResendAt = known ?: realNow().plusSeconds((wait ?: CODE_RESEND_SECONDS.toInt()).toLong())
+                return true
+            }
+            // `hourly_cap` / `ip_limit` (or anything longer than the cooldown): NO code went out and
+            // nothing says one is waiting. The real wait, in minutes, never clipped; on the code screen
+            // (same email) Reenviar counts it down.
+            codeAlreadySent = false
+            if (authEmail == e && wait != null) codeResendAt = realNow().plusSeconds(wait.toLong())
+            authError = codeLimitText(k.reason, wait)
+            return false
         }
         authError = k?.authText
         return false
@@ -89,6 +100,22 @@ suspend fun AppStore.requestCode(email: String): Boolean {
         authBusy = false
     }
 }
+
+/**
+ * No code went out (429 on `auth/otp/request`): `ip_limit` is about this network, anything else
+ * (`hourly_cap`, or a long wait without a `reason`) about the email. The real wait when the server
+ * sent one, "más tarde" when it didn't — never an invented one. [email] = "este correo" at the
+ * entrance, "ese correo" when it is another account's (Fusionar).
+ */
+fun codeLimitText(reason: String?, wait: Int?, email: String = "este correo"): String = when {
+    reason == "ip_limit" && wait != null -> "Demasiados intentos desde esta red. Podrás pedir un código en ${waitText(wait)}."
+    reason == "ip_limit" -> "Demasiados intentos desde esta red. Pide un código más tarde."
+    wait != null -> "Se pidieron demasiados códigos para $email. Podrás pedir otro en ${waitText(wait)}."
+    else -> "Se pidieron demasiados códigos para $email. Pide otro más tarde."
+}
+
+/** A wait as people read it: seconds up to a minute and a half, whole minutes (rounded up) after. */
+fun waitText(seconds: Int): String = if (seconds <= 90) "$seconds s" else "${(seconds + 59) / 60} min"
 
 /** The server's cooldown between two codes for one email (`auth/otp/request`, `COOLDOWN_SECONDS`). */
 const val CODE_RESEND_SECONDS = 60L
@@ -173,12 +200,12 @@ fun AppStore.socialSignInFailed(error: Throwable, provider: String) {
             onboardingStep = OnboardingStep.Underage
             return
         }
-        e is KuraApiError.Unavailable -> "$provider no responde ahora. Entra con tu correo o prueba en un rato."
-        e is KuraApiError.Offline -> "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        e is KuraApiError.RateLimited -> "Demasiados intentos. Espera un momento."
+        e is KuraApiError.Unavailable -> "$provider no responde ahora. Entra con tu correo o vuelve a intentarlo más tarde."
+        e is KuraApiError.Offline -> "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        e is KuraApiError.RateLimited -> "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         e is KuraApiError.Conflict && e.message.isNotEmpty() -> e.message
         e is KuraApiError.Invalid && e.message.isNotEmpty() -> e.message
-        else -> "No se pudo entrar con $provider. Inténtalo de nuevo."
+        else -> "No se pudo entrar con $provider. Vuelve a intentarlo."
     }
     showToast(ToastModel(text, ToastModel.Kind.Info))
 }

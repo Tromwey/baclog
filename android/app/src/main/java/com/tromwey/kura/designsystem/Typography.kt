@@ -85,20 +85,29 @@ object KuraType {
     )
 
     /**
-     * Red Hat Mono, FIXED size (the data voice lives in fixed geometry: badges, spines, ribbons),
-     * with the leading trimmed. [tracking] in em (0.08 = +8 %).
+     * Red Hat Mono (the data voice lives in fixed geometry: badges, spines, ribbons): it follows the
+     * system font scale up to the chrome cap (1.35, [capped]) and stops there, with the leading trimmed. [tracking] in em (0.08 = +8 %).
      */
     @Composable
     @ReadOnlyComposable
     fun mono(size: Float, medium: Boolean = false, tracking: Float = 0f): TextStyle = TextStyle(
         fontFamily = RedHatMono,
         fontWeight = if (medium) FontWeight.Medium else FontWeight.Normal,
-        fontSize = fixed(size),
+        fontSize = capped(size),
         letterSpacing = tracking.em,
         lineHeight = 1.em,
         lineHeightStyle = tight,
         color = KColor.text,
     )
+
+    /** A size that follows the system font scale only up to [MAX_CHROME_FONT_SCALE] (the cap of
+     *  `KFixedChrome`): the data voice grows for who needs it, without breaking its fixed geometry. */
+    @Composable
+    @ReadOnlyComposable
+    fun capped(size: Float): TextUnit {
+        val scale = LocalDensity.current.fontScale
+        return if (scale <= MAX_CHROME_FONT_SCALE) size.sp else (size * MAX_CHROME_FONT_SCALE / scale).sp
+    }
 
     /** A size that ignores the system font scale (iOS `fixedSize:`). */
     @Composable
@@ -173,13 +182,16 @@ private fun Color.takeOrElse(fallback: Color) = if (this == Color.Unspecified) f
 /** Spanish (México) — uppercase/lowercase of UI strings (the app is es-MX only). */
 val EsMx: Locale = Locale.forLanguageTag("es-MX")
 
+/** Where fixed-geometry chrome and the mono data voice stop growing (= iOS xxxLarge). */
+const val MAX_CHROME_FONT_SCALE = 1.35f
+
 /**
  * Fixed-geometry chrome (dock, top chips, covers, cards, toast) stops growing at the equivalent
  * of iOS xxxLarge (fontScale 1.35): its frames are exact and it's secondary to the reading text,
  * which keeps scaling. Never wrap a whole screen or sheet in it.
  */
 @Composable
-fun KFixedChrome(maxFontScale: Float = 1.35f, content: @Composable () -> Unit) {
+fun KFixedChrome(maxFontScale: Float = MAX_CHROME_FONT_SCALE, content: @Composable () -> Unit) {
     val d = LocalDensity.current
     if (d.fontScale <= maxFontScale) {
         content()

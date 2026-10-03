@@ -1,5 +1,8 @@
 package com.tromwey.kura.features.title
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,11 +16,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -29,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tromwey.kura.app.art
 import com.tromwey.kura.app.mark
 import com.tromwey.kura.app.reaction
@@ -63,12 +65,16 @@ import com.tromwey.kura.designsystem.components.SolidButton
 import com.tromwey.kura.designsystem.components.SplitActionButton
 import com.tromwey.kura.designsystem.components.kPressable
 import com.tromwey.kura.designsystem.rememberKHaptic
+import com.tromwey.kura.state.reviewDraft
+import com.tromwey.kura.state.setReviewDraft
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.ToastModel
 import com.tromwey.kura.state.deleteReview
+import com.tromwey.kura.state.dismissSheet
 import com.tromwey.kura.state.removeFromLibrary
 import com.tromwey.kura.state.isReleaseDay
+import com.tromwey.kura.state.markDropsReview
 import com.tromwey.kura.state.isUnreleased
 import com.tromwey.kura.state.publishReview
 import com.tromwey.kura.state.setMark
@@ -76,6 +82,8 @@ import com.tromwey.kura.state.setMarkConfirmed
 import com.tromwey.kura.state.setMembership
 import com.tromwey.kura.state.suggestSaving
 import kotlinx.coroutines.delay
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
 
 // The ficha's sheets — twin of ios/Kura/Features/Title/TitleSheets.swift. Completar is the DS
 // `ReactionGroup` (Material's connected toggle group) where iOS has its three-stop slider.
@@ -100,7 +108,8 @@ fun KuraSheetScope.CompleteSheet(store: AppStore, sheet: SheetRoute.Complete) {
     val t = store.title(sheet.titleId) ?: return
     val mine = store.myReview(t.id)
     var reaction by rememberSaveable { mutableStateOf((store.mark(t.id) ?: Mark.Completed).reaction) }
-    var text by rememberSaveable { mutableStateOf(mine?.text.orEmpty()) }
+    // A draft typed earlier and not published (it survives closing the sheet and a process death).
+    var text by rememberSaveable { mutableStateOf(store.reviewDraft(t.id) ?: mine?.text.orEmpty()) }
     var spoiler by rememberSaveable { mutableStateOf(mine?.spoiler ?: false) }
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
@@ -145,6 +154,7 @@ fun KuraSheetScope.CompleteSheet(store: AppStore, sheet: SheetRoute.Complete) {
             value = text,
             onValueChange = {
                 text = it
+                store.setReviewDraft(t.id, it)
                 saveError = null
             },
             placeholder = "Escribe tu reseña (opcional)",
@@ -205,10 +215,8 @@ fun KuraSheetScope.CompleteSheet(store: AppStore, sheet: SheetRoute.Complete) {
                 KuraTextButton(
                     if (album) "Quitar tu reacción" else "Quitar completado",
                     {
-                        if (!saving) {
-                            store.setMark(t.id, null)
-                            dismiss()
-                        }
+                        // False = it deletes your review: the confirmation took this sheet's place.
+                        if (!saving && store.setMark(t.id, null)) dismiss()
                     },
                     color = KColor.text2,
                 )
@@ -236,7 +244,8 @@ private fun saveComplete(
 ) {
     val preview = store.isUnreleased(t) || store.isReleaseDay(t)
     if (review.isEmpty() || choice == Mark.Completed) {
-        store.setMark(t.id, choice, haptic = true, preview = preview)
+        // False = "Completo" would delete your review: the confirmation took this sheet's place.
+        if (!store.setMark(t.id, choice, haptic = true, preview = preview)) return
         if (review.isEmpty() && store.myReview(t.id) != null) store.deleteReview(t.id)
         onDone()
         return
@@ -265,10 +274,35 @@ private fun saveComplete(
                 if (stillOpen) onError(AppStore.UNKNOWN_TITLE_NOTE) else store.showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
             stillOpen -> onError(failure.toast)
             else -> store.showToast(ToastModel(
-                if (failure == KuraApiError.Offline) "Sin conexión. Tu reseña no se guardó." else "Tu reseña no se guardó.",
+                if (failure == KuraApiError.Offline) "Sin conexión. No se guardó tu reseña." else "No se pudo guardar tu reseña.",
                 ToastModel.Kind.Info,
             ))
         }
+    }
+}
+
+// MARK: Tu reseña se borra con la reacción ───────────────────────────────────────────────
+
+/**
+ * Before a mark that leaves the title without a reaction (Completo, or none) when you have a review:
+ * the server deletes the review with it and nothing brings the text back (`AppStore.setMark`). Same
+ * copy as web and iOS. No red: the cream button is "what takes something away".
+ */
+@Composable
+fun KuraSheetScope.DropReviewSheet(store: AppStore, sheet: SheetRoute.DropReview) {
+    val dismiss: () -> Unit = this::close
+    Column(Modifier.padding(horizontal = 4.dp).padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BasicText("tu reseña se borra con la reacción.", Modifier.padding(horizontal = 8.dp).semantics { heading() }, style = KuraType.news(26f))
+        BasicText(
+            "Si quitas la reacción, tu reseña se borra y no se puede recuperar.",
+            Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 14.dp),
+            style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 21.sp),
+        )
+        SolidButton("Quitar y borrar reseña", honey = false, onClick = {
+            store.dismissSheet()
+            store.setMark(sheet.titleId, sheet.mark, preview = sheet.preview, confirmed = true)
+        })
+        KuraTextButton("Conservar", { dismiss() }, Modifier.fillMaxWidth())
     }
 }
 
@@ -395,7 +429,7 @@ fun KuraSheetScope.TitleMoreSheet(store: AppStore, sheet: SheetRoute.TitleMore) 
                         store.showToast(ToastModel("Link copiado", ToastModel.Kind.Info))
                         dismiss()
                     },
-                    menu = listOf("Compartir…" to { shareLink(context, link, t.name) }),
+                    menu = listOf("Compartir…" to { shareText(context, link, t.name) }),
                     icon = KIcon.Link,
                 )
             }
@@ -441,7 +475,7 @@ fun KuraSheetScope.TitleMoreSheet(store: AppStore, sheet: SheetRoute.TitleMore) 
             } else {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     BasicText(
-                        removeNote(cols.size, mark != null, review != null),
+                        removeNote(cols.size, mark != null, store.markDropsReview(t.id, null)),
                         style = KuraType.ui(15f).copy(color = KColor.text),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -459,11 +493,11 @@ fun KuraSheetScope.TitleMoreSheet(store: AppStore, sheet: SheetRoute.TitleMore) 
 
 /**
  * What "Quitar de tus colecciones" (`removeFromLibrary`, `DELETE /me/titles/{id}`) takes with it: every
- * membership, your reaction and your review. The toast's Deshacer puts all of it back.
+ * membership, your reaction and your review — the server deletes the review too, so the body says it
+ * ("También se borra tu reseña."). The toast's Deshacer is deferred: tapped in time, nothing is deleted.
  */
-private fun removeNote(collections: Int, marked: Boolean, reviewed: Boolean): String {
+internal fun removeNote(collections: Int, marked: Boolean, reviewed: Boolean): String {
     val where = if (collections == 1) "Sale de tu colección" else "Sale de tus $collections colecciones"
-    val lost = listOfNotNull(if (marked) "tu reacción" else null, if (reviewed) "tu reseña" else null)
-    val body = if (lost.isEmpty()) "$where." else "$where y se quita ${lost.joinToString(" y ")}."
-    return "$body Deshacer lo devuelve todo."
+    val body = if (marked) "$where y se quita tu reacción." else "$where."
+    return body + (if (reviewed) " También se borra tu reseña." else "") + " Deshacer lo devuelve todo."
 }

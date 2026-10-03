@@ -1,8 +1,6 @@
 package com.tromwey.kura.data.api
 
-import com.tromwey.kura.data.models.AppleMusicReport
 import com.tromwey.kura.data.models.ExportState
-import com.tromwey.kura.data.models.KuraJson
 import com.tromwey.kura.data.models.MusicProvider
 import com.tromwey.kura.data.models.MusicServices
 import com.tromwey.kura.data.models.Obj
@@ -46,7 +44,3 @@ internal suspend fun LiveApi.startPartyExportImpl(id: String, provider: MusicPro
 
 internal suspend fun LiveApi.stepTidalExportImpl(id: String): ExportState =
     client.decode(Endpoint.post(ApiPath("parties/{}/exports/tidal/step", id)), ExportState.serializer())
-
-internal suspend fun LiveApi.reportAppleMusicExportImpl(id: String, report: AppleMusicReport): ExportState =
-    client.decode(Endpoint.put(ApiPath("parties/{}/exports/apple_music", id), KuraJson.json.encodeToJsonElement(AppleMusicReport.serializer(), report)),
-        ExportState.serializer())

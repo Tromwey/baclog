@@ -25,12 +25,21 @@ sealed class KuraApiError(detail: String) : Exception(detail), CopyableThrowable
     data object Unauthorized : KuraApiError("unauthorized")
     /** `code` = the server's `reason` (`underage`, `lists_private`, `onboarding_required`, `blocked`,
      *  `view_only`, `not_yours`…) or `proof_rejected` (a 422 `invalid_proof`, fase 4g). */
-    data class Forbidden(val code: String?) : KuraApiError("forbidden ${code ?: ""}")
+    data class Forbidden(val code: String?, val note: String = "") : KuraApiError("forbidden ${code ?: ""}") {
+        /** `403 onboarding_required`: the account lacks its name or its year (`Me.onboardingComplete`).
+         *  Handled in ONE place, `AppStore.onboardingRequired` — never a Reintentar. */
+        val needsOnboarding: Boolean get() = code == "onboarding_required"
+    }
+    /** `POST auth/otp/verify` → 401 with `reason: "locked"`: the code's attempts (or a guess budget)
+     *  are spent, no retyping fixes it. Its own case so it is never taken for "the session ended". */
+    data object CodeLocked : KuraApiError("locked")
     data object NotFound : KuraApiError("not_found")
     data class Invalid(val fields: Map<String, String>, override val message: String) : KuraApiError("invalid")
     /** `code` = `reason` (`taken`, `not_released`, `reaction_required`, `duplicate_mine`, `last_way_in`…). */
     data class Conflict(val code: String?, override val message: String) : KuraApiError("conflict")
-    data class RateLimited(val retryAfter: Int?) : KuraApiError("rate_limited")
+    /** `reason` (only `auth/otp/request` sends one): `cooldown` (the code already sent still works),
+     *  `hourly_cap`, `ip_limit`. `retryAfter` = the real wait in seconds, never clipped. */
+    data class RateLimited(val retryAfter: Int?, val reason: String? = null) : KuraApiError("rate_limited")
     data object Unsupported : KuraApiError("unsupported")
     data object Unavailable : KuraApiError("unavailable")
     /** A `503 unavailable` WITH a reason this client acts on (`not_configured`, `service_failed` —
@@ -44,21 +53,23 @@ sealed class KuraApiError(detail: String) : Exception(detail), CopyableThrowable
     val isRateLimit: Boolean get() = this is RateLimited
 
     /** Text for the toast, in the Kura voice (what happened, what to do). */
-    val toast: String get() = toast("No se pudo guardar")
+    val toast: String get() = toast("No se pudo guardar.")
 
     /** The toast with the caller's own verb for the generic failure ("No se pudo seguir a @x."). */
     fun toast(fallback: String): String = when {
-        this is Offline -> "Sin conexión"
-        this is RateLimited -> "Demasiado rápido. Espera un momento"
-        this is Unavailable -> "El catálogo no responde"
+        this is Offline -> "Sin conexión."
+        this is RateLimited -> "Demasiados intentos seguidos. Espera un momento."
+        this is Unavailable -> "El catálogo no responde. Vuelve a intentarlo en unos minutos."
         this is Conflict && code == "not_released" -> "Todavía no sale. Usa La vi en preestreno."
-        // The server unlocks reviews only with a reaction (`obsessed || verdict != null`).
-        this is Conflict && code == "reaction_required" -> "Para reseñar, elige Me gusta o Me obsesiona."
+        this is Conflict && code == "reaction_required" -> REACTION_REQUIRED_TEXT
         this is Invalid && message.isNotEmpty() -> message
         this is ServiceUnavailable && message.isNotEmpty() -> message
         else -> fallback
     }
 }
+
+/** The server unlocks reviews only with a reaction (`obsessed || verdict != null`). */
+const val REACTION_REQUIRED_TEXT = "Para reseñar, elige Me gusta o Me obsesiona."
 
 /**
  * When a failed `GET` is tried again (writes never are — the store's "Reintentar" toast is the

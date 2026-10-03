@@ -1,12 +1,10 @@
 package com.tromwey.kura.state
 
 import com.tromwey.kura.data.Fixtures
-import com.tromwey.kura.data.api.AppleCredential
 import com.tromwey.kura.data.api.Change
 import com.tromwey.kura.data.api.Items
 import com.tromwey.kura.data.api.KuraApi
 import com.tromwey.kura.data.api.MePatch
-import com.tromwey.kura.data.models.AppleMusicReport
 import com.tromwey.kura.data.models.AuthProviders
 import com.tromwey.kura.data.models.BlockedAccount
 import com.tromwey.kura.data.models.CollectionDetail
@@ -69,6 +67,7 @@ import java.time.Instant
 class FakeKuraApi : KuraApi {
     override var hasSession: Boolean = true
     override var needsRefresh: Boolean = false
+    override var lastOfflineTimedOut: Boolean = false
 
     val calls = mutableListOf<String>()
     private val failures = HashMap<String, ArrayDeque<Throwable>>()
@@ -108,6 +107,8 @@ class FakeKuraApi : KuraApi {
     val titleReviews = HashMap<String, List<Review>>()
     /** Counts `discoverFormat` answers (a forced reload must ask again). */
     var discoverFormatAnswers = 0
+    /** The shelf's provider is down: `titles` empty + `titlesUnavailable`, the Kuradas still come. */
+    var discoverFormatUnavailable = false
     private var serverIds = 0
 
     init {
@@ -143,9 +144,7 @@ class FakeKuraApi : KuraApi {
         calls += "forgetSession"
         hasSession = false
     }
-    override suspend fun webSession(to: String): String = call("webSession", to) { "https://example.test/handoff" }
     override suspend fun authProviders(): AuthProviders = call("authProviders") { decode("auth_providers", AuthProviders.serializer()) }
-    override suspend fun signInWithApple(credential: AppleCredential): Me = unused()
     override suspend fun signInWithGoogle(idToken: String): Me = call("signInWithGoogle") { signInMe ?: me }
 
     // MARK: Devices / identities (fase 2 in the store)
@@ -155,7 +154,6 @@ class FakeKuraApi : KuraApi {
     override suspend fun registerDevice(pushToken: String, environment: String?, provider: String) = call("registerDevice", pushToken, provider) {}
     override suspend fun unregisterDevice(pushToken: String, bearer: String?) = call("unregisterDevice", pushToken, bearer) {}
     override suspend fun identities(): Identities = call("identities") { decode("me_identities", Identities.serializer()) }
-    override suspend fun linkApple(credential: AppleCredential): LinkOutcome = unused()
     override suspend fun linkGoogle(idToken: String): LinkOutcome = unused()
     override suspend fun unlinkIdentity(provider: IdentityProvider): Unit = unused()
     override suspend fun requestMergeCode(email: String): Unit = unused()
@@ -179,7 +177,7 @@ class FakeKuraApi : KuraApi {
         signInMe = signInMe?.copy(handle = username)
         me
     }
-    override suspend fun completeOnboarding(name: String, birthYear: Int): Me = call("completeOnboarding", name, birthYear) {
+    override suspend fun completeOnboarding(name: String, birthDate: String): Me = call("completeOnboarding", name, birthDate) {
         me = me.copy(name = name, onboarded = true)
         me
     }
@@ -211,7 +209,8 @@ class FakeKuraApi : KuraApi {
     }
     override suspend fun updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?): KCollection =
         call("updateCollection", id, name, vibe, privacy) { collections.first { it.id == id } }
-    override suspend fun deleteCollection(id: String) = call("deleteCollection", id) {}
+    override suspend fun deleteCollection(id: String, purge: Boolean) =
+        if (purge) call("deleteCollection", id, "purge") {} else call("deleteCollection", id) {}
     override suspend fun setCollectionPinned(id: String, pinned: Boolean): KCollection =
         call("setCollectionPinned", id, pinned) { collections.first { it.id == id } }
     override suspend fun setCollectionCover(id: String, titleId: String?): KCollection =
@@ -262,7 +261,10 @@ class FakeKuraApi : KuraApi {
     override suspend fun discoverFormat(format: MediaFormat, time: Int?): DiscoverFormatPayload =
         call("discoverFormat", format.rawValue) {
             discoverFormatAnswers += 1
-            decode("discover_formats_film", DiscoverFormatPayload.serializer())
+            decode("discover_formats_film", DiscoverFormatPayload.serializer()).let {
+                val kuradas = listOf(DiscoverFormatPayload.Kurada("k1", "kurada", "kura", "kura", 0, emptyList(), emptyList()))
+                if (discoverFormatUnavailable) it.copy(titles = emptyList(), kuradas = kuradas, titlesUnavailable = true) else it
+            }
         }
 
     // MARK: People and feed
@@ -322,7 +324,6 @@ class FakeKuraApi : KuraApi {
     override suspend fun partyExport(id: String, provider: MusicProvider): ExportState = unused()
     override suspend fun startPartyExport(id: String, provider: MusicProvider): ExportState = unused()
     override suspend fun stepTidalExport(id: String): ExportState = unused()
-    override suspend fun reportAppleMusicExport(id: String, report: AppleMusicReport): ExportState = unused()
 
     private fun unused(): Nothing = throw UnsupportedOperationException("no lo usa el store en fase 1")
 }

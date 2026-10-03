@@ -245,7 +245,7 @@ private fun AppStore.connectFailed(error: Throwable) {
         e == KuraApiError.Unauthorized -> Unit
         e is KuraApiError.Conflict && e.code == "auth_expired" -> updateExport { it.copy(note = MusicExportCopy.tidalReason("expired")) }
         e is KuraApiError.RateLimited -> updateExport { it.copy(note = MusicExportCopy.tidalReason("rate_limited")) }
-        e == KuraApiError.Offline -> updateExport { it.copy(note = "Sin conexión. Vuelve a intentarlo.") }
+        e == KuraApiError.Offline -> updateExport { it.copy(note = "Sin conexión. Revisa tu red y vuelve a intentarlo.") }
         e == KuraApiError.Unavailable || e == KuraApiError.NotFound ||
             (e is KuraApiError.ServiceUnavailable && e.reason == "not_configured") -> exportFailed(e)
         e is KuraApiError.ServiceUnavailable && e.message.isNotEmpty() -> updateExport { it.copy(note = e.message) }
@@ -258,22 +258,31 @@ private fun AppStore.connectFailed(error: Throwable) {
 /** Steps before giving up on an export the server keeps calling "in progress". */
 internal const val TIDAL_MAX_ROUNDS = 2_000
 
+/** Steps IN A ROW that pass no song (`processed` where it was) before giving up: about a minute of an
+ *  export that says "in progress" and moves nothing. A rate-limit pause is not one of them. */
+internal const val TIDAL_MAX_STALLED = 60
+
 /** The export ran out of rounds: what's passed stays in the playlist, Reintentar resumes. */
-internal const val TIDAL_UNFINISHED = "La exportación no terminó. Lo que ya pasó sigue en TIDAL: vuelve a intentarlo para seguir."
+internal val TIDAL_UNFINISHED = MusicExportCopy.serviceFailed(MusicProvider.Tidal)
 
 private suspend fun AppStore.runTidal(partyId: String) {
     try {
         var st = exportCall { api.startPartyExport(partyId, MusicProvider.Tidal) }
         applyExportState(st)
         var rounds = 0
-        while (currentCoroutineContext().isActive && rounds < TIDAL_MAX_ROUNDS) {
+        var stalled = 0
+        while (currentCoroutineContext().isActive && rounds < TIDAL_MAX_ROUNDS && stalled < TIDAL_MAX_STALLED) {
             rounds++
             if (st.status == ExportState.Status.Done || (st.status == ExportState.Status.Idle && !st.busy)) break
-            if (st.busy) delay(1.seconds)
+            // Another step holds the lock (`busy`), or the last one answered "in progress" without
+            // passing a song: a beat before asking again, never a tight loop against the server.
+            if (st.busy || stalled > 0) delay(1.seconds)
             try {
+                val before = st.processed
                 st = exportCall { api.stepTidalExport(partyId) }
                 updateExport { it.copy(pause = null) }
                 applyExportState(st)
+                stalled = if (st.processed > before) 0 else stalled + 1
             } catch (e: KuraApiError.RateLimited) {
                 // `service_rate_limited` (TIDAL) or ours: wait and call the same step again.
                 updateExport { it.copy(pause = MusicExportCopy.pause(MusicProvider.Tidal)) }
@@ -285,7 +294,7 @@ private suspend fun AppStore.runTidal(partyId: String) {
             finishExport(st)
         } else if (currentCoroutineContext().isActive) {
             // Out of rounds with the server still "in progress": never "Listo" over a playlist that isn't.
-            logError("export tidal: sin terminar tras $TIDAL_MAX_ROUNDS rondas (${st.processed}/${st.total})")
+            logError("export tidal: sin terminar tras $rounds rondas, $stalled sin avance (${st.processed}/${st.total})")
             updateExport { it.copy(step = PartyExportFlow.Step.Failed, pause = null, current = null, failure = TIDAL_UNFINISHED) }
         }
     } catch (e: Exception) {
@@ -327,7 +336,7 @@ private fun AppStore.exportFailed(error: Throwable) {
             updateExport { it.copy(step = PartyExportFlow.Step.Failed, failure = e.message.ifEmpty { MusicExportCopy.serviceFailed(p) }) }
         e == KuraApiError.Offline -> updateExport { it.copy(step = PartyExportFlow.Step.Failed, failure = MusicExportCopy.OFFLINE) }
         e is KuraApiError.RateLimited ->
-            updateExport { it.copy(step = PartyExportFlow.Step.Failed, failure = "Demasiados intentos. Espera un momento y vuelve a intentarlo.") }
+            updateExport { it.copy(step = PartyExportFlow.Step.Failed, failure = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.") }
         else -> {
             logError("export ${p.rawValue} failed: $e")
             updateExport { it.copy(step = PartyExportFlow.Step.Failed, failure = MusicExportCopy.serviceFailed(p)) }

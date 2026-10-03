@@ -131,7 +131,7 @@ suspend fun AppStore.connectGoogle(fromMerge: Boolean = false, credential: suspe
                 return
             }
             GoogleCredential.Failed -> {
-                if (s === session) showToast(ToastModel("Google no respondió. Inténtalo de nuevo.", ToastModel.Kind.Info))
+                if (s === session) showToast(ToastModel("Google no respondió. Vuelve a intentarlo.", ToastModel.Kind.Info))
                 return
             }
         }
@@ -174,11 +174,11 @@ private fun AppStore.identityFailed(error: Throwable, p: IdentityProvider) {
         e == KuraApiError.Unauthorized -> return
         e is KuraApiError.Conflict && e.code == "provider_already_linked" ->
             "Ya tienes otra cuenta de ${p.label} conectada. Desconéctala primero."
-        e is KuraApiError.Forbidden && e.code == "proof_rejected" -> "${p.label} no confirmó esa cuenta. Inténtalo de nuevo."
-        e == KuraApiError.Unavailable -> "${p.label} no responde ahora. Prueba en un rato."
-        e == KuraApiError.Offline -> "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        e is KuraApiError.RateLimited -> "Demasiados intentos. Espera un momento."
-        else -> "No se pudo conectar ${p.label}. Inténtalo de nuevo."
+        e is KuraApiError.Forbidden && e.code == "proof_rejected" -> "${p.label} no confirmó esa cuenta. Vuelve a intentarlo."
+        e == KuraApiError.Unavailable -> "${p.label} no responde ahora. Vuelve a intentarlo más tarde."
+        e == KuraApiError.Offline -> "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        e is KuraApiError.RateLimited -> "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
+        else -> "No se pudo conectar ${p.label}. Vuelve a intentarlo."
     }
     showToast(ToastModel(text, ToastModel.Kind.Info))
 }
@@ -256,11 +256,35 @@ suspend fun AppStore.requestMergeCode(email: String): Boolean {
             }
             is BoundWrite.Failed -> {
                 val err = r.error
+                if (err !is KuraApiError.RateLimited) {
+                    state.mergeError = mergeText(err)
+                    return false
+                }
                 // The wall clock, not `now` (which only ticks each minute): the code screen counts down
                 // this deadline second by second against `Instant.now()`.
-                if (err is KuraApiError.RateLimited) state.mergeRetryAt = Instant.now().plusSeconds(maxOf(err.retryAfter ?: 60, 1).toLong())
-                state.mergeError = mergeText(err)
-                false
+                val wait = err.retryAfter?.takeIf { it > 0 }
+                when (err.reason) {
+                    // A code went out less than a minute ago and still works: on to the code screen,
+                    // where "Enviar otro código" counts the wait down. Nothing failed.
+                    "cooldown" -> {
+                        state.mergeEmail = e
+                        state.mergeRetryAt = Instant.now().plusSeconds((wait ?: 60).toLong())
+                        true
+                    }
+                    // Too many codes this hour: no code is promised, and the wait is said in minutes.
+                    // …or from this network (`ip_limit`): same shape, its own words.
+                    "hourly_cap", "ip_limit" -> {
+                        state.mergeRetryAt = wait?.let { Instant.now().plusSeconds(it.toLong()) }
+                        state.mergeError = codeLimitText(err.reason, wait, email = "ese correo")
+                        false
+                    }
+                    // No `reason` (an older server, the per-IP limiter): just too fast.
+                    else -> {
+                        state.mergeRetryAt = wait?.let { Instant.now().plusSeconds(it.toLong()) }
+                        state.mergeError = tooFastText(wait)
+                        false
+                    }
+                }
             }
         }
     } finally {
@@ -285,7 +309,7 @@ suspend fun AppStore.verifyMergeCode(code: String) {
             is BoundWrite.Failed -> {
                 val e = r.error
                 state.mergeError = if (e is KuraApiError.Forbidden && e.code == "proof_rejected") {
-                    "Ese código no sirve. Revísalo o pide otro."
+                    "El código es incorrecto o ya venció. Revísalo o pide otro."
                 } else {
                     mergeText(e)
                 }
@@ -300,20 +324,18 @@ suspend fun AppStore.verifyMergeCode(code: String) {
 fun mergeWaitLabel(seconds: Long): String =
     if (seconds >= 90) "${ceil(seconds / 60.0).toInt()} min" else "$seconds s"
 
+/** A plain `rate_limited` (no code was promised or denied): the wait when the server sent one. */
+private fun tooFastText(wait: Int?): String =
+    if (wait == null) "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
+    else "Demasiados intentos seguidos. Espera ${waitText(wait)} y vuelve a intentarlo."
+
 private fun mergeText(e: KuraApiError): String? = when {
     e == KuraApiError.Unauthorized -> null
-    e == KuraApiError.Offline -> "Sin conexión. Revisa tu red e inténtalo de nuevo."
-    e is KuraApiError.RateLimited -> {
-        val s = e.retryAfter
-        when {
-            s == null || s <= 0 -> "Demasiados intentos. Espera un momento."
-            s < 90 -> "Espera $s s para pedir otro código."
-            else -> "Ya pediste varios códigos para ese correo. Intenta en ${ceil(s / 60.0).toInt()} min."
-        }
-    }
+    e == KuraApiError.Offline -> "Sin conexión. Revisa tu red y vuelve a intentarlo."
+    e is KuraApiError.RateLimited -> tooFastText(e.retryAfter?.takeIf { it > 0 })
     e is KuraApiError.Invalid && e.message.isNotEmpty() -> e.message
     e is KuraApiError.Invalid -> "Ese correo no parece válido. Revísalo."
-    else -> "Algo falló de nuestro lado. Inténtalo de nuevo."
+    else -> "Algo falló de nuestro lado. Vuelve a intentarlo."
 }
 
 /** Cancelar on the confirmation: the proof is dropped (it's one use; a new one is cheap). */
@@ -346,13 +368,15 @@ suspend fun AppStore.confirmMerge() {
                     e is KuraApiError.Forbidden && e.code == "underage" -> {
                         state.mergeProof = null
                         popToSettings()
-                        showToast(ToastModel("Una de las dos cuentas es de alguien menor de 13. No se pueden juntar.", ToastModel.Kind.Info))
+                        showToast(ToastModel("Una de las dos cuentas es de alguien menor de 13 años. No se pueden fusionar.", ToastModel.Kind.Info))
                     }
                     e is KuraApiError.Conflict && e.code == "merge_token_invalid" -> {
                         state.mergeProof = null
                         popToSettings(keeping = Route.MergeAccount)
                         showToast(ToastModel("Pasaron más de 10 minutos. Vuelve a probar que la otra cuenta es tuya.", ToastModel.Kind.Info))
                     }
+                    // Anything else (a 500 included: the server no longer burns the token on it) keeps
+                    // the proof, and Reintentar sends the SAME token again.
                     else -> {
                         val text = if (e == KuraApiError.Offline) "Sin conexión. No se movió nada." else "No se pudo fusionar. No se movió nada."
                         showToast(ToastModel(text, ToastModel.Kind.Retry) {

@@ -1,5 +1,8 @@
 package com.tromwey.kura.features.profile
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,12 +25,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -85,7 +86,6 @@ import com.tromwey.kura.features.people.StripCover
 import com.tromwey.kura.features.people.TintedPage
 import com.tromwey.kura.features.people.myObsessions
 import com.tromwey.kura.features.people.myProfileHexes
-import com.tromwey.kura.features.people.shareLink
 import com.tromwey.kura.features.recap.RecapEntryButton
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.AvatarEncoder
@@ -102,6 +102,11 @@ import com.tromwey.kura.state.saveProfile
 import com.tromwey.kura.state.uploadAvatar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
+import com.tromwey.kura.state.select
 
 // Tu perfil (20c · E2 vacío) and Editar perfil (20f) — twins of iOS `ProfileView` /
 // `EmptyOwnProfile` / `EditProfileView`. The page wears your profile's gradient (the featured
@@ -116,7 +121,7 @@ fun ProfileScreen(store: AppStore) {
         store.loadState == LoadState.Failed -> {
             // The launch read failed: nothing honest to draw yet (no name, no counts).
             Box(Modifier.fillMaxSize().background(KColor.bg)) {
-                val (t, note) = (store.loadError(LoadKey.Library))?.loadCopy ?: ("no se pudo cargar." to "Vuelve a intentarlo.")
+                val (t, note) = (store.loadError(LoadKey.Library))?.loadCopy ?: ("no pudimos cargar esto." to "Algo falló de nuestro lado. Vuelve a intentarlo.")
                 LoadErrorBlock(t, note, onRetry = { scope.launch { store.bootstrap() } }, modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 140.dp))
                 Row(Modifier.fillMaxWidth().padding(top = KSize.chromeTop, end = KSize.chromeSide)) {
                     Spacer(Modifier.weight(1f))
@@ -163,7 +168,7 @@ private fun FullProfile(store: AppStore) {
                     if (link == null) {
                         store.showToast(ToastModel(AppStore.PRIVATE_PROFILE_SHARE_NOTE, ToastModel.Kind.Info))
                     } else {
-                        shareLink(context, link, "@${me.handle}")
+                        shareText(context, link, "@${me.handle}")
                     }
                 }, fill = KColor.glassBg)
                 SettingsChip(store)
@@ -290,7 +295,7 @@ private fun EmptyOwnProfile(store: AppStore) {
 
 /**
  * 20f · Editar perfil: Cancelar / Guardar, the seal as it will look (photo on top, uploading dims
- * it), Cambiar/Poner foto (the system photo picker → cropped and shrunk ON the device →
+ * it), Cambiar/Agregar foto (the system photo picker → cropped and shrunk ON the device →
  * `uploadAvatar`) and Quitar foto, Nombre and @usuario (checked as you type), the featured obsession
  * (it tints your profile; tap one to try it) and the two privacy switches. Guardar writes it all.
  */
@@ -369,7 +374,7 @@ fun EditProfileScreen(store: AppStore) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         KuraTextButton(
-                            if (store.avatarBusy) "Subiendo…" else if (me.avatarUrl == null) "Poner foto" else "Cambiar foto",
+                            if (store.avatarBusy) "Subiendo…" else if (me.avatarUrl == null) "Agregar foto" else "Cambiar foto",
                             onClick = {
                                 if (!store.avatarBusy) picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             },

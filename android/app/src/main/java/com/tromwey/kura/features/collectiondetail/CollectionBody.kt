@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,12 +48,16 @@ import com.tromwey.kura.designsystem.components.Masonry
 import com.tromwey.kura.designsystem.components.MasonryBadge
 import com.tromwey.kura.designsystem.components.MonoPill
 import com.tromwey.kura.designsystem.components.VibeLine
+import com.tromwey.kura.designsystem.components.WindowEnd
 import com.tromwey.kura.designsystem.components.kHeroCover
+import com.tromwey.kura.designsystem.components.rememberWindow
 import com.tromwey.kura.designsystem.components.kPressable
 import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.SheetRoute
 import com.tromwey.kura.state.isUnreleased
 import com.tromwey.kura.state.releaseLabel
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
 
 // Everything UNDER a collection's fan and name (iOS `CollectionBody.swift`), shared by Tus
 // colecciones (the collection in the centre of the carousel) and Colección — "una sola página".
@@ -160,48 +165,56 @@ fun EmptyCollectionBody(onAdd: () -> Unit) {
  */
 @Composable
 fun TitleList(store: AppStore, titles: List<Title>, collectionId: String?) {
+    // Windowed (`Windowed.kt`): the first page of rows, growing as the page scrolls.
+    val window = rememberWindow(titles)
     Column(Modifier.fillMaxWidth().padding(horizontal = KSize.margin).padding(top = 0.dp)) {
-        titles.forEach { t ->
-            val m = store.mark(t.id)
-            val unreleased = store.isUnreleased(t)
-            val meta = buildList {
-                add(t.format.metaLabel)
-                t.creator?.takeIf { it.isNotEmpty() }?.let(::add)
-                if (unreleased) store.releaseLabel(t)?.let(::add)
-            }.joinToString(" · ")
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 72.dp)
-                    .kPressable(
-                        feel = KPressFeel.Row((-10).dp),
-                        onClickLabel = "Abrir",
-                        onLongPress = { store.present(SheetRoute.TitleActions(t.id, collectionId)) },
-                    ) { store.push(Route.TitleRoute(t.id)) }
-                    .clearAndSetSemantics { contentDescription = "${t.name}, $meta" + (m?.let { ", ${it.myLabel}" } ?: "") },
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) {
-                    val album = t.format == MediaFormat.Album
-                    Cover(
-                        t.art,
-                        Modifier.kHeroCover("cover-${t.id}"),
-                        width = if (album) 56.dp else 40.dp,
-                        height = if (album) 56.dp else 60.dp,
-                        radius = KRadius.coverS,
-                    )
+        window.visible.forEach { t ->
+            key(t.id) { TitleListRow(store, t, collectionId) }
+        }
+        WindowEnd(window)
+    }
+}
+
+@Composable
+private fun TitleListRow(store: AppStore, t: Title, collectionId: String?) {
+    val m = store.mark(t.id)
+    val unreleased = store.isUnreleased(t)
+    val meta = buildList {
+        add(t.format.metaLabel)
+        t.creator?.takeIf { it.isNotEmpty() }?.let(::add)
+        if (unreleased) store.releaseLabel(t)?.let(::add)
+    }.joinToString(" · ")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .kPressable(
+                feel = KPressFeel.Row((-10).dp),
+                onClickLabel = "Abrir",
+                onLongPress = { store.present(SheetRoute.TitleActions(t.id, collectionId)) },
+            ) { store.push(Route.TitleRoute(t.id)) }
+            .clearAndSetSemantics { contentDescription = "${t.name}, $meta" + (m?.let { ", ${it.myLabel}" } ?: "") },
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) {
+            val album = t.format == MediaFormat.Album
+            Cover(
+                t.art,
+                Modifier.kHeroCover("cover-${t.id}"),
+                width = if (album) 56.dp else 40.dp,
+                height = if (album) 56.dp else 60.dp,
+                radius = KRadius.coverS,
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            BasicText(t.name, style = KuraType.rowWork, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                when {
+                    m != null -> GlyphIcon(m.reaction.glyph, size = 12.dp)
+                    unreleased -> GlyphIcon(Glyph.Clock, size = 12.dp)
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    BasicText(t.name, style = KuraType.rowWork, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        when {
-                            m != null -> GlyphIcon(m.reaction.glyph, size = 12.dp)
-                            unreleased -> GlyphIcon(Glyph.Clock, size = 12.dp)
-                        }
-                        MonoLabel(meta)
-                    }
-                }
+                MonoLabel(meta)
             }
         }
     }

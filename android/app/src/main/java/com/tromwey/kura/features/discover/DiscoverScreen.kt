@@ -1,5 +1,7 @@
 package com.tromwey.kura.features.discover
 
+import com.tromwey.kura.designsystem.OnEntryCovered
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +48,7 @@ import com.tromwey.kura.state.loadDiscoverFormat
 import com.tromwey.kura.state.runSearch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.push
 
 // Flujo 07 · Descubrir — the tab root (twin of ios/Kura/Features/Discover/DiscoverView.swift):
 // "descubrir" (the Material large title that collapses) over ONE scroll with the search pill (the
@@ -109,7 +112,7 @@ fun DiscoverScreen(store: AppStore) {
         )
     }
 
-    LaunchedEffect(Unit) {
+    ActiveEffect {
         if (reopen) {
             reopen = false
             searchOpen = true
@@ -124,8 +127,8 @@ fun DiscoverScreen(store: AppStore) {
         store.loadDiscoverCreators()
     }
     // The search owns the bottom (the keyboard): no dock while it's open.
-    LaunchedEffect(searchOpen) { store.dockHidden = searchOpen }
-    DisposableEffect(Unit) { onDispose { store.dockHidden = false } }
+    ActiveEffect(searchOpen) { store.dockHidden = searchOpen }
+    OnEntryCovered { store.dockHidden = false }
 
     // Format pages: what they picked (reset when the format changes, like iOS's `.id(format)`).
     var time by rememberSaveable(formatRaw) { mutableIntStateOf(1) }
@@ -133,7 +136,7 @@ fun DiscoverScreen(store: AppStore) {
     var mood by rememberSaveable(formatRaw) { mutableIntStateOf(-1) }
     val picks = FormatPicks(time, lens, mood.takeIf { it >= 0 })
     val timeParam = format?.let { timeParam(it, picks) }
-    LaunchedEffect(format, timeParam) {
+    ActiveEffect(format, timeParam) {
         if (format != null) store.loadDiscoverFormat(format, timeParam)
     }
 

@@ -51,13 +51,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 
 /** `{ items: [T] }` (or a bare array). A body without `items` is a decoding error, not an empty list. */
 internal class Items<T>(private val item: KSerializer<T>) : WireSerializer<List<T>>("Items") {
     override fun read(e: JsonElement): List<T> {
-        if (e is JsonArray) return e.map { KuraJson.json.decodeFromJsonElement(item, it) }
-        return Obj.of(e).list("items", item) ?: Obj.missing("items")
+        if (e is JsonArray) return com.tromwey.kura.data.models.lossyList(e, item, strict = true)
+        return Obj.of(e).list("items", item, strict = true) ?: Obj.missing("items")
     }
 }
 
@@ -72,6 +71,7 @@ class LiveApi(
     private val device: DeviceInfo = DeviceInfo.current(),
 ) : KuraApi {
     private val session: Session get() = client.session
+    override val lastOfflineTimedOut: Boolean get() = client.lastOfflineTimedOut
 
     private fun deviceJson(): JsonElement = KuraJson.json.encodeToJsonElement(DeviceInfo.serializer(), device)
 
@@ -102,20 +102,6 @@ class LiveApi(
 
     override suspend fun authProviders(): AuthProviders =
         client.decode(Endpoint(Endpoint.Method.GET, ApiPath("auth/providers"), auth = false), AuthProviders.serializer())
-
-    override suspend fun signInWithApple(credential: AppleCredential): Me {
-        val c = credential
-        return storeSession(Endpoint.post(ApiPath("auth/apple"), buildJsonObject {
-            put("identityToken", c.identityToken)
-            put("rawNonce", c.rawNonce)
-            c.authorizationCode?.let { put("authorizationCode", it) }
-            // Apple sends the name only on the FIRST authorization: forward it when present.
-            if (c.givenName != null || c.familyName != null) put("fullName", buildJsonObject {
-                c.givenName?.let { put("givenName", it) }; c.familyName?.let { put("familyName", it) }
-            })
-            put("device", deviceJson())
-        }, auth = false))
-    }
 
     override suspend fun signInWithGoogle(idToken: String): Me = storeSession(
         Endpoint.post(ApiPath("auth/google"), buildJsonObject {
@@ -149,15 +135,6 @@ class LiveApi(
         if (token != null) onForgetSession?.invoke(token)
     }
 
-    override suspend fun webSession(to: String): String {
-        val r = client.decode(Endpoint.post(ApiPath("auth/web-session"), buildJsonObject { put("to", to) }), UrlEnvelope)
-        return r
-    }
-
-    private object UrlEnvelope : WireSerializer<String>("WebSession") {
-        override fun read(e: JsonElement) = Obj.of(e).requireString("url")
-    }
-
     // MARK: Account
 
     override suspend fun me(): Me = client.decode(Endpoint.get(ApiPath("me")), Me.serializer())
@@ -178,8 +155,8 @@ class LiveApi(
     override suspend fun claimUsername(username: String): Me =
         client.decode(Endpoint.put(ApiPath("me/username"), buildJsonObject { put("username", username) }), Me.serializer())
 
-    override suspend fun completeOnboarding(name: String, birthYear: Int): Me =
-        client.decode(Endpoint.post(ApiPath("me/onboarding"), buildJsonObject { put("name", name); put("birthYear", birthYear) }), Me.serializer())
+    override suspend fun completeOnboarding(name: String, birthDate: String): Me =
+        client.decode(Endpoint.post(ApiPath("me/onboarding"), buildJsonObject { put("name", name); put("birthDate", birthDate) }), Me.serializer())
 
     /** `GET /onboarding/pool?page=1` — the curated pick pool the web uses (`{ items, nextPage }`). */
     override suspend fun onboardingGrid(): List<Title> =
@@ -255,12 +232,6 @@ class LiveApi(
         LinkOutcome.Mergeable(c.proof)
     }
 
-    override suspend fun linkApple(credential: AppleCredential): LinkOutcome = link(Endpoint.post(ApiPath("me/identities/apple"), buildJsonObject {
-        put("identityToken", credential.identityToken)
-        put("rawNonce", credential.rawNonce)
-        credential.authorizationCode?.let { put("authorizationCode", it) }
-    }))
-
     override suspend fun linkGoogle(idToken: String): LinkOutcome = link(Endpoint.post(ApiPath("me/identities/google"), buildJsonObject {
         put("idToken", idToken)
         GoogleNonce.nonce(idToken)?.let { put("nonce", it) }
@@ -299,7 +270,9 @@ class LiveApi(
             name?.let { put("name", it) }; vibe?.let { put("vibe", it) }; privacy?.let { put("visibility", it.wire) }
         }), KCollection.serializer())
 
-    override suspend fun deleteCollection(id: String) = client.send(Endpoint.delete(ApiPath("collections/{}", id)))
+    override suspend fun deleteCollection(id: String, purge: Boolean) = client.send(
+        Endpoint(Endpoint.Method.DELETE, ApiPath("collections/{}", id), query = if (purge) listOf("purge" to "1") else emptyList()),
+    )
 
     override suspend fun setCollectionPinned(id: String, pinned: Boolean): KCollection =
         client.decode(Endpoint.patch(ApiPath("collections/{}", id), buildJsonObject { put("pinned", pinned) }), KCollection.serializer())
@@ -492,6 +465,5 @@ class LiveApi(
     override suspend fun partyExport(id: String, provider: com.tromwey.kura.data.models.MusicProvider) = partyExportImpl(id, provider)
     override suspend fun startPartyExport(id: String, provider: com.tromwey.kura.data.models.MusicProvider) = startPartyExportImpl(id, provider)
     override suspend fun stepTidalExport(id: String) = stepTidalExportImpl(id)
-    override suspend fun reportAppleMusicExport(id: String, report: com.tromwey.kura.data.models.AppleMusicReport) = reportAppleMusicExportImpl(id, report)
 }
 

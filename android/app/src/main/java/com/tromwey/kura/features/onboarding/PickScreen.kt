@@ -116,7 +116,7 @@ fun PickScreen(store: AppStore) {
                     },
                     modifier = Modifier.padding(top = 4.dp),
                 )
-                q.isEmpty() && gridError != null -> Unavailable(gridError, note = "Inténtalo de nuevo en un momento; también puedes buscar arriba.") {
+                q.isEmpty() && gridError != null -> Unavailable(gridError, note = "Vuelve a intentarlo en unos minutos; también puedes buscar arriba.") {
                     scope.launch { store.loadOnboardingGrid() }
                 }
                 q.isNotEmpty() && (searchError == KuraApiError.Unavailable || searchError == KuraApiError.Offline) ->

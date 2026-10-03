@@ -74,7 +74,8 @@ import kotlinx.coroutines.launch
 //    account is ready, joins and opens the party with "ya estás dentro." (`signInForInvite`);
 //  - a dead link (revoked, unknown, malformed — or a block with the host) → "este link ya no funciona.";
 //  - the server without parties yet (503) → "las fiestas llegan muy pronto.".
-// Signed in, a live link never shows this: it joins at once (`openInvite`).
+// Signed in, a live link shows the same preview with "Entrar a la fiesta": the tap joins (`openInvite`),
+// the link alone never does (founder, 2026-10-01).
 
 @Composable
 fun InviteLandingScreen(store: AppStore, token: String) {
@@ -202,8 +203,8 @@ private fun InvitePreviewPage(store: AppStore, preview: InvitePreview, token: St
 }
 
 private fun ctaTitle(l: Int?): String = when (l) {
-    null -> "Entra a kura para poner tus canciones"
+    null -> "Entra a kura para agregar tus canciones"
     0 -> "Entra a kura para ver la fiesta"
-    1 -> "Entra a kura para poner tu canción"
-    else -> "Entra a kura para poner tus $l canciones"
+    1 -> "Entra a kura para agregar tu canción"
+    else -> "Entra a kura para agregar tus $l canciones"
 }

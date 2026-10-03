@@ -28,7 +28,7 @@ class GoogleSignInTest {
         h.api.failNext("signInWithGoogle", KuraApiError.Unauthorized)
         h.store.signInWithGoogle("bad")
         assertEquals(AppPhase.Onboarding, h.store.phase)
-        assertEquals("No se pudo entrar con Google. Inténtalo de nuevo.", h.store.toast?.text)
+        assertEquals("No se pudo entrar con Google. Vuelve a intentarlo.", h.store.toast?.text)
         assertFalse(h.store.authBusy)
     }
 }

@@ -152,7 +152,7 @@ fun KuraSheetScope.AddTitlesSheet(store: AppStore, sheet: SheetRoute.AddTitles) 
                 error != null && results.isEmpty() -> item("error") {
                     Message(
                         if (error == KuraApiError.Offline) "sin conexión." else "no se pudo buscar.",
-                        if (error == KuraApiError.Offline) "Revisa tu red y vuelve a intentarlo." else error.toast("Inténtalo de nuevo en un momento."),
+                        if (error == KuraApiError.Offline) "Revisa tu red y vuelve a intentarlo." else error.toast("Vuelve a intentarlo en unos minutos."),
                     )
                 }
                 results.isEmpty() -> item("empty") { Message("nada con “$q”.", "Revisa cómo se escribe o busca por persona o año.") }

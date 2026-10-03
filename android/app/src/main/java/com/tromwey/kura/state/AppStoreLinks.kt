@@ -3,7 +3,6 @@ package com.tromwey.kura.state
 import com.tromwey.kura.app.DeepLink
 import com.tromwey.kura.data.models.Route
 import com.tromwey.kura.data.models.Tab
-import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 
@@ -75,14 +74,12 @@ fun AppStore.openLink(link: DeepLink) {
             link.next?.let(::openLink)
             return
         }
-        // A party invite signed out: the landing (public preview + "Entra a kura…") instead of waiting for a
-        // sign-in the person doesn't know they need yet. Signed in, `openInvite` joins (and waits itself).
+        // A party invite ALWAYS opens the landing (founder, 2026-10-01): signed out it's the public preview
+        // + "Entra a kura…"; signed in it's the same preview with "Entrar a la fiesta", and only THAT tap
+        // joins (`openInvite`). A link never puts you in a party by itself.
         is DeepLink.Invite -> {
-            if (!api.hasSession) {
-                inviteLanding = link.token
-            } else {
-                scope.launch { openInvite(link.token) }
-            }
+            if (sheet != null && !sheetLocked) dismissSheet()
+            inviteLanding = link.token
             return
         }
         else -> Unit
@@ -103,7 +100,7 @@ fun AppStore.openLink(link: DeepLink) {
             else show(Route.PublicCollection(link.handle, link.id))
         is DeepLink.OwnCollection ->
             if (collection(link.id) != null) openOwnCollection(link.id)
-            else showToast(ToastModel("No encontramos esa colección.", ToastModel.Kind.Info))
+            else showToast(ToastModel("Esa colección ya no existe.", ToastModel.Kind.Info))
         DeepLink.Recap -> show(Route.Recap())
         is DeepLink.Party -> show(Route.PartyRoute(link.id))
         is DeepLink.Invite, is DeepLink.Entrance -> Unit // handled above

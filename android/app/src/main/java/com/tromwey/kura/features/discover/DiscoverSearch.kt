@@ -299,7 +299,7 @@ private fun Results(store: AppStore, q: String, actions: SearchActions) {
         ) {
             val offline = error == KuraApiError.Offline
             BasicText(if (offline) "sin conexión." else "el catálogo no responde.", Modifier.semantics { heading() }, style = KuraType.news(32f))
-            NoteText(if (offline) "Revisa tu red y vuelve a buscar." else "Inténtalo de nuevo en un momento.")
+            NoteText(if (offline) "Revisa tu red y vuelve a buscar." else "Vuelve a intentarlo en unos minutos.")
             GlassButton("Reintentar", { actions.submit(q) }, icon = KIcon.Retry)
         }
         return

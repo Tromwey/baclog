@@ -26,7 +26,7 @@ class ModelsTest {
         assertEquals(Privacy.PublicAccess, Privacy.fromWire("profile"))
         assertEquals(Privacy.PublicAccess, Privacy.fromWire("public"))
         assertEquals(Privacy.OnlyMe, Privacy.fromWire("whatever"))
-        assertEquals("link", Privacy.Followers.wire) // never offered in live; saved as link
+        assertEquals(Privacy.Link, Privacy.fromWire("followers")) // never offered in live; saved as link
         assertEquals(listOf(Privacy.OnlyMe, Privacy.Link, Privacy.PublicAccess), Privacy.options)
     }
 

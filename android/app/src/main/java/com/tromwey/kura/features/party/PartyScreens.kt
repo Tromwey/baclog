@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.party
 
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +87,11 @@ import com.tromwey.kura.state.searchPartySongs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.path
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.pop
 
 // Colecciones de fiesta + llevar a otra app (fase 2 on Android) — twin of
 // ios/Kura/Features/Party/PartyView.swift + PartySearchView.swift. Sheets: PartySheets.kt; the export
@@ -106,7 +112,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun PartyScreen(store: AppStore, route: Route.PartyRoute) {
     val scope = rememberCoroutineScope()
     // Always re-read on the way in: other guests add while you're away.
-    LaunchedEffect(route.id) { store.loadParty(route.id, force = true) }
+    ActiveEffect(route.id) { store.loadParty(route.id, force = true) }
     val p = store.party(route.id)
     val error = store.loadError(LoadKey.PartyKey(route.id))
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
@@ -119,8 +125,8 @@ fun PartyScreen(store: AppStore, route: Route.PartyRoute) {
             )
             store.partyIsMissing(route.id) -> GoneView(
                 onBack = { store.pop() },
-                title = "esta fiesta ya no está.",
-                note = "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella.",
+                title = "esta fiesta ya no está disponible.",
+                note = "Puede que ya no exista o que ya no seas parte de ella.",
             )
             error != null -> {
                 val (title, note) = error.loadCopy
@@ -233,14 +239,14 @@ private fun PartyStatus(p: Party) {
                 BasicText("Ya no puedes agregar canciones", style = KuraType.ui(15f, UiWeight.SemiBold))
                 PartySheetBody(
                     if (mine.isEmpty()) "${p.host.atOrSomeone} te quitó de los colaboradores. Puedes seguir viendo la colección."
-                    else "${p.host.atOrSomeone} te quitó de los colaboradores. Puedes seguir viendo la colección y quitar las que pusiste.",
+                    else "${p.host.atOrSomeone} te quitó de los colaboradores. Puedes seguir viendo la colección y quitar las que agregaste.",
                 )
             }
         }
         limit == 0 -> PartyCard {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 BasicText("Esta fiesta es para escuchar", style = KuraType.ui(15f, UiWeight.SemiBold))
-                PartySheetBody("${p.host.atOrSomeone} armó la playlist; aquí no se agregan canciones.")
+                PartySheetBody("${p.host.atOrSomeone} creó la playlist; aquí no se agregan canciones.")
             }
         }
         else -> PartyCard(Modifier.semantics(mergeDescendants = true) { }) {
@@ -262,17 +268,17 @@ private fun PartyStatus(p: Party) {
 }
 
 private fun slotsTitle(n: Int, limit: Int?): String = when {
-    limit == null -> if (n == 0) "Tus canciones" else "Pusiste ${PartyCopy.songs(n)}"
+    limit == null -> if (n == 0) "Tus canciones" else "Agregaste ${PartyCopy.songs(n)}"
     n == 0 -> if (limit == 1) "Tu canción" else "Tus $limit canciones"
-    n >= limit -> if (limit == 1) "Pusiste tu canción" else "Pusiste tus $limit"
-    else -> "Pusiste $n de $limit"
+    n >= limit -> if (limit == 1) "Agregaste tu canción" else "Agregaste tus $limit"
+    else -> "Agregaste $n de $limit"
 }
 
 private fun slotsSub(n: Int, limit: Int?, remaining: Int?): String {
-    if (limit == null) return if (n == 0) "Todavía no pones ninguna" else "Sin límite"
+    if (limit == null) return if (n == 0) "Todavía no agregas ninguna" else "Sin límite"
     val r = remaining ?: 0
     return when {
-        n == 0 -> "Todavía no pones ninguna"
+        n == 0 -> "Todavía no agregas ninguna"
         r == 0 -> "Quita una para cambiarla"
         else -> "Te ${if (r == 1) "queda" else "quedan"} $r"
     }
@@ -327,10 +333,10 @@ internal fun PartyEmpty(isHost: Boolean, limit: Int?, big: Boolean) {
         BasicText(
             when {
                 // Cupo 0: guests only watch and listen — nobody else is going to put anything.
-                limit == 0 && isHost -> "Esta fiesta es solo para ver y escuchar: las canciones las pones tú."
+                limit == 0 && isHost -> "Esta fiesta es solo para ver y escuchar: las canciones las agregas tú."
                 limit == 0 -> "Esta fiesta es solo para ver y escuchar. Todavía no hay canciones."
-                isHost -> "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga ${PartyCopy.theirs(limit)}."
-                else -> "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista."
+                isHost -> "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue ${PartyCopy.theirs(limit)}."
+                else -> "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista."
             },
             Modifier.widthIn(max = 290.dp),
             style = KuraType.ui(15f).copy(color = KColor.text2, textAlign = TextAlign.Center, lineHeight = 21.sp),
@@ -393,7 +399,7 @@ fun PartySearchScreen(store: AppStore, route: Route.PartySearch) {
     var adding by remember { mutableStateOf<Set<String>>(emptySet()) }
     var left by remember { mutableStateOf(false) }
     val party = store.party(id)
-    LaunchedEffect(id) { store.loadParty(id) }
+    ActiveEffect(id) { store.loadParty(id) }
 
     fun leave() {
         if (left) return
@@ -475,7 +481,7 @@ fun PartySearchScreen(store: AppStore, route: Route.PartySearch) {
                                 if (inParty != null) {
                                     store.showToast(
                                         com.tromwey.kura.state.ToastModel(
-                                            if (inParty.mine) "Ya la pusiste tú." else "Ya está, la puso ${inParty.addedBy.atOrSomeone}",
+                                            if (inParty.mine) "Ya la agregaste tú." else "Ya está, la agregó ${inParty.addedBy.atOrSomeone}",
                                             com.tromwey.kura.state.ToastModel.Kind.Info,
                                         ),
                                     )
@@ -535,7 +541,7 @@ private fun SearchRow(h: PartySongHit, busy: Boolean, onAction: () -> Unit) {
 
 /** The search's error, by what failed. (`NotFound` never gets here: the search leaves the page.) */
 private fun searchErrorCopy(e: KuraApiError, partiesOff: Boolean): Pair<String, String> = when {
-    e is KuraApiError.RateLimited -> "un momento." to "Fueron muchas búsquedas seguidas. Espera unos segundos y vuelve a intentarlo."
+    e is KuraApiError.RateLimited -> "un momento." to "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar."
     e == KuraApiError.Unavailable && partiesOff -> PartyCopy.UNAVAILABLE_TITLE to PartyCopy.UNAVAILABLE
     e == KuraApiError.Unavailable -> "no pudimos buscar." to "El buscador de canciones no respondió. Vuelve a intentarlo en unos segundos; tus canciones siguen guardadas."
     else -> "no pudimos buscar." to "No hubo respuesta. Revisa tu conexión y vuelve a intentarlo; tus canciones siguen guardadas."
@@ -543,12 +549,12 @@ private fun searchErrorCopy(e: KuraApiError, partiesOff: Boolean): Pair<String, 
 
 private fun remainLabel(p: Party?): String {
     p ?: return " "
-    if (p.isHost || p.perGuestLimit == null) return "Pon las que quieras"
+    if (p.isHost || p.perGuestLimit == null) return "Agrega las que quieras"
     val limit: Int = p.perGuestLimit
     val r = p.viewer.remaining ?: 0
     return when {
         limit == 0 -> "Solo para escuchar"
-        r == 0 -> if (limit == 1) "Ya pusiste tu canción" else "Ya pusiste tus $limit"
+        r == 0 -> if (limit == 1) "Ya agregaste tu canción" else "Ya agregaste tus $limit"
         else -> "Te ${if (r == 1) "queda" else "quedan"} $r de $limit"
     }
 }

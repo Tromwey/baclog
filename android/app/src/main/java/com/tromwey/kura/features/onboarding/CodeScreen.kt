@@ -41,13 +41,14 @@ import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.codeResendWait
 import com.tromwey.kura.state.requestCode
 import com.tromwey.kura.state.verifyCode
+import com.tromwey.kura.state.waitText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * 07 · O1c el código: "tu código." + where it went, six digits (entering the sixth sends it), Entrar,
  * "Enviar otro código" (counting down the server's minute per code). Errors inline, in the voice,
- * without a wink (`authText`: "El código no coincide o ya caducó."). Opened by a 429 too
+ * without a wink (`authText`: "El código es incorrecto o ya venció. Revísalo o pide otro."). Opened by a 429 too
  * (`codeAlreadySent`): the code that already went out is the one to type.
  */
 @Composable
@@ -91,7 +92,7 @@ fun CodeScreen(store: AppStore) {
             BasicText("tu código.", modifier = Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
-                    withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Lo mandamos a ") }
+                    withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Lo enviamos a ") }
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text)) { append(store.authEmail) }
                 },
                 modifier = Modifier.padding(bottom = if (store.codeAlreadySent) 0.dp else 20.dp),
@@ -99,7 +100,7 @@ fun CodeScreen(store: AppStore) {
             )
             if (store.codeAlreadySent) {
                 BasicText(
-                    "Ya te enviamos un código hace poco y sigue sirviendo. Búscalo en tu correo.",
+                    "Ya te enviamos un código hace poco y sigue siendo válido. Revisa tu correo.",
                     modifier = Modifier.padding(bottom = 20.dp),
                     style = KuraType.ui(15f).copy(color = KColor.text2),
                 )
@@ -126,7 +127,7 @@ fun CodeScreen(store: AppStore) {
             )
             InlineError(store.authError)
             KuraTextButton(
-                if (wait > 0) "Enviar otro código en $wait s" else "Enviar otro código",
+                if (wait > 0) "Enviar otro código en ${waitText(wait)}" else "Enviar otro código",
                 onClick = {
                     if (!store.authBusy && wait <= 0) {
                         scope.launch {
@@ -159,7 +160,7 @@ fun UnderageScreen(store: AppStore) {
             style = KuraType.news(36f),
         )
         BasicText(
-            "Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13.",
+            "Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13. No guardamos nada más de ti.",
             style = KuraType.ui(15f).copy(color = KColor.text2),
         )
         Spacer(Modifier.weight(1f))

@@ -40,9 +40,9 @@ data class PartySong(
     val appleMusicUrl: String? = null,
     val palette: List<String> = emptyList(),
     val addedAt: Instant? = null,
-    /** null → "Puso alguien". */
+    /** null → "Agregó alguien". */
     val addedBy: PartyPerson?,
-    /** → "Pusiste". */
+    /** → "Agregaste". */
     val mine: Boolean,
     val byHost: Boolean = false,
     val canRemove: Boolean = false,
@@ -52,10 +52,10 @@ data class PartySong(
 ) {
     val id: String get() = titleId
 
-    /** "Pusiste tú" · "Puso @ana" · "Puso alguien" (the list's line under the artist). */
-    val byShort: String get() = if (mine) "Pusiste tú" else addedBy?.let { "Puso ${it.at}" } ?: "Puso alguien"
-    /** "Pusiste" · "Puso @ana" · "Puso alguien" (the remove sheet). */
-    val byLong: String get() = if (mine) "Pusiste" else addedBy?.let { "Puso ${it.at}" } ?: "Puso alguien"
+    /** "Agregaste tú" · "Agregó @ana" · "Agregó alguien" (the list's line under the artist). */
+    val byShort: String get() = if (mine) "Agregaste tú" else addedBy?.let { "Agregó ${it.at}" } ?: "Agregó alguien"
+    /** "Agregaste" · "Agregó @ana" · "Agregó alguien" (the remove sheet). */
+    val byLong: String get() = if (mine) "Agregaste" else addedBy?.let { "Agregó ${it.at}" } ?: "Agregó alguien"
 
     /** The song drawn with the shared cover components: a record, 1:1. Never registered as a title;
      *  the id carries a prefix so palette filling never sends it to `PUT /titles/{id}/palette`. */
@@ -295,7 +295,7 @@ data class PartySongHit(
     val album: String?,
     val artworkUrl: String? = null,
     val palette: List<String> = emptyList(),
-    /** null → "Agregar"; mine → "Ya la pusiste"; else → "Ya está · la puso @x". */
+    /** null → "Agregar"; mine → "Ya la agregaste"; else → "Ya está · la puso @x". */
     val inParty: InParty? = null,
     /** Android extras (the server sends them; iOS ignores them). */
     val previewUrl: String? = null,
@@ -308,7 +308,7 @@ data class PartySongHit(
     /** "Caifanes · El nervio del volcán" (the search row's second line). */
     val subtitle: String get() = listOfNotNull(artist, album).joinToString(" · ")
     /** The third line when it's already in. */
-    val dupLine: String? get() = inParty?.let { if (it.mine) "Ya la pusiste" else "Ya está · la puso ${it.addedBy.atOrSomeone}" }
+    val dupLine: String? get() = inParty?.let { if (it.mine) "Ya la agregaste" else "Ya está · la agregó ${it.addedBy.atOrSomeone}" }
 
     internal object Serializer : WireSerializer<PartySongHit>("PartySongHit") {
         override fun read(e: JsonElement): PartySongHit {
@@ -362,9 +362,9 @@ object PartyCopy {
 
     /** "cada invitado pone 3 canciones" (the hero's italic line). */
     fun heroLine(l: Int?): String = when (l) {
-        null -> "cada invitado pone las canciones que quiera"
+        null -> "cada invitado agrega las canciones que quiera"
         0 -> "solo para ver y escuchar"
-        else -> "cada invitado pone ${songs(l)}"
+        else -> "cada invitado agrega ${songs(l)}"
     }
 
     /** "tus 3" / "tu canción" / "tus canciones". */
@@ -378,12 +378,14 @@ object PartyCopy {
     const val UNAVAILABLE_NOTE = "Todavía no están listas en kura. Vuelve a abrir este link en unos días; sigue siendo el mismo."
     const val UNAVAILABLE = "Las fiestas llegan muy pronto."
     /** A party that answered 404 after we had it (deleted, you left, a block with the host). */
-    const val GONE = "Esa fiesta ya no está."
+    const val GONE = "Esa fiesta ya no está disponible."
     /** 409 `too_many_parties` when the server sends no message of its own. */
     const val TOO_MANY_PARTIES = "Ya tienes 20 fiestas. Borra alguna para crear otra."
     /** 429 on "Crear link nuevo". */
-    const val ROTATE_LIMITED = "Creaste varios links seguidos. Espera un momento y vuelve a intentarlo."
+    const val ROTATE_LIMITED = "Creaste varios links seguidos. Espera un momento para crear otro."
     const val LEFT = "Saliste de la fiesta."
+    /** `POST /invites/{token}/join` failed with nothing of its own to say (a 5xx): it is not a save. */
+    const val JOIN_FAILED = "No se pudo entrar a la fiesta. Vuelve a intentarlo."
     const val DEAD_TITLE = "este link ya no funciona."
     const val DEAD_NOTE = "Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo."
 }

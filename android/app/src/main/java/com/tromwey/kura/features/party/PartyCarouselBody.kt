@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.party
 
+import com.tromwey.kura.designsystem.ActiveEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,8 @@ import com.tromwey.kura.state.party
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
 
 /**
  * A party centred in Tus colecciones (twin of ios/Kura/Features/Party/PartyCarouselBody.swift;
@@ -43,9 +46,9 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 fun PartyCarouselBody(store: AppStore, card: PartyCard) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(card.id, card.songCount) {
+    ActiveEffect(card.id, card.songCount) {
         val cached = store.party(card.id)
-        if (cached != null && cached.songs.size == card.songCount) return@LaunchedEffect
+        if (cached != null && cached.songs.size == card.songCount) return@ActiveEffect
         delay(250.milliseconds)
         store.loadParty(card.id, force = cached != null)
     }
@@ -70,7 +73,7 @@ fun PartyCarouselBody(store: AppStore, card: PartyCard) {
                 if (p.songs.isEmpty()) PartyEmpty(p.isHost, p.perGuestLimit, big = false) else PartySongs(store, p, heading = false, openParty = true)
             }
             error != null -> RetryStrip(
-                if (error == KuraApiError.Offline) "Sin conexión." else "No se cargaron las canciones.",
+                if (error == KuraApiError.Offline) "Sin conexión." else "No se cargó el resto.",
                 { scope.launch { store.loadParty(card.id, force = true) } },
                 Modifier.padding(horizontal = 12.dp),
                 offline = error == KuraApiError.Offline,

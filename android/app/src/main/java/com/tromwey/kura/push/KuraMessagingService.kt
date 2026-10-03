@@ -9,6 +9,8 @@ import com.tromwey.kura.BuildConfig
 import com.tromwey.kura.app.KuraApp
 import com.tromwey.kura.data.api.KuraLog
 import com.tromwey.kura.state.didReceivePushToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 /**
  * FCM's side of push (twin of iOS `KuraAppDelegate`). The server sends
@@ -28,6 +30,15 @@ class KuraMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // No session on this phone = nobody to tell: a push that was already on its way when the person
+        // signed out (the token comes off the server a moment later) is dropped, never drawn for whoever
+        // holds the phone now. The store is main-thread state; FCM calls from its own thread.
+        val app = application as? KuraApp ?: return
+        val signedIn = runBlocking(Dispatchers.Main.immediate) { app.store.api.hasSession }
+        if (!signedIn) {
+            KuraLog.w(PushLog.TAG, "push sin sesión: descartado (type=${message.data["type"] ?: "-"})")
+            return
+        }
         val title = message.notification?.title ?: message.data["title"]
         if (title.isNullOrBlank()) {
             // Nothing to draw (a data-only message this build doesn't know): dropped, but never silently —

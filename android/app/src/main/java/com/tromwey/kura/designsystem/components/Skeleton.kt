@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import com.tromwey.kura.designsystem.KColor
 import com.tromwey.kura.designsystem.KMotion
 import com.tromwey.kura.designsystem.KRadius
+import com.tromwey.kura.designsystem.LocalEntryActive
 import com.tromwey.kura.designsystem.LocalReduceMotion
 
 /**
@@ -25,7 +26,8 @@ import com.tromwey.kura.designsystem.LocalReduceMotion
  * s1 and s2 as the shape sits on the page. Reduce motion: still, at .7. No shimmer, no spinner.
  */
 fun Modifier.kSkeletonPulse(still: Float = 0.7f): Modifier = composed {
-    if (LocalReduceMotion.current) {
+    // A covered page keeps no clock running: its skeleton holds still until it's back on screen.
+    if (LocalReduceMotion.current || !LocalEntryActive.current) {
         graphicsLayer { alpha = still }
     } else {
         val t = rememberInfiniteTransition(label = "skeleton")

@@ -1,5 +1,6 @@
 package com.tromwey.kura.features.collections
 
+import com.tromwey.kura.designsystem.ActiveEffect
 import com.tromwey.kura.designsystem.components.DockBandEffect
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animate
@@ -138,6 +139,10 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.dismissSheet
+import com.tromwey.kura.state.push
 
 // Twin of ios/Kura/Features/Collections/CollectionsView.swift (propuesta 10a — "Tus colecciones y
 // Colección, una sola página"): one collection at a time, its FAN in a carousel that follows the
@@ -147,7 +152,7 @@ import kotlin.math.roundToInt
 @Composable
 fun CollectionsScreen(store: AppStore) {
     // Your parties (`GET /parties`): silent when the server doesn't have parties yet (503).
-    LaunchedEffect(Unit) { store.loadParties() }
+    ActiveEffect { store.loadParties() }
     when (store.loadState) {
         LoadState.Loading -> CollectionsSkeleton()
         LoadState.Failed -> CollectionsFailed(store)
@@ -277,7 +282,7 @@ private fun CollectionsCarousel(store: AppStore) {
         placed[0] = true
     }
     // The rounding of the position crossed into another stop (finger or spring).
-    LaunchedEffect(Unit) {
+    ActiveEffect {
         snapshotFlow { pos.floatValue.roundToInt() }.distinctUntilChanged().collect { r ->
             val l = latest
             val i = r.coerceIn(0, l.size - 1)
@@ -725,7 +730,7 @@ private fun NoCollections(store: AppStore) {
 // MARK: O2a Nueva colección
 
 /**
- * The name in Newsreader ("ponle nombre", ≤ 40), "Quién la ve" (the account's default; opens the
+ * The name in Newsreader ("nombre de la colección", ≤ 40), "Quién la ve" (the account's default; opens the
  * three choices in place) and Crear. From scratch it opens the new collection; from "Guardar en"
  * it saves the title there; from "Mover a" it moves it.
  */
@@ -783,7 +788,7 @@ fun KuraSheetScope.NewCollectionSheet(store: AppStore, sheet: SheetRoute.NewColl
         KuraTextField(
             name,
             { name = it.take(if (party) 60 else AppStore.COLLECTION_NAME_LIMIT) },
-            if (party) "la fiesta de…" else "ponle nombre",
+            if (party) "la fiesta de…" else "nombre de la colección",
             serif = true,
             imeAction = ImeAction.Done,
             focusRequester = focus,

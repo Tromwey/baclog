@@ -1,5 +1,9 @@
 package com.tromwey.kura.features.people
 
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +22,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -91,6 +93,9 @@ import com.tromwey.kura.state.toggleMute
 import com.tromwey.kura.features.sheetWrite
 import com.tromwey.kura.state.unblock
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.pop
 
 // Reportar y bloquear (App Review 1.2) and Ajustes › Cuentas bloqueadas — twins of iOS
 // `PersonOptionsSheet` (PersonProfileView.swift) and SafetySheets.swift.
@@ -143,7 +148,7 @@ fun KuraSheetScope.PersonOptionsSheet(store: AppStore, sheet: SheetRoute.PersonO
         } else {
             val link = PublicLinks.profile(p.handle)
             if (link != null) {
-                OptionRow(KIcon.Share, "Compartir perfil") { shareLink(context, link, "@${p.handle}") }
+                OptionRow(KIcon.Share, "Compartir perfil") { shareText(context, link, "@${p.handle}") }
                 OptionRow(KIcon.Copy, "Copiar link") {
                     if (copyLink(context, link)) store.showToast(ToastModel("Link copiado", ToastModel.Kind.Info))
                     closeSheet()
@@ -363,7 +368,7 @@ fun ReviewMenu(
 @Composable
 fun BlockedAccountsScreen(store: AppStore) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { store.loadBlocks() }
+    ActiveEffect { store.loadBlocks() }
     Box(Modifier.fillMaxSize().background(KColor.bg)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()

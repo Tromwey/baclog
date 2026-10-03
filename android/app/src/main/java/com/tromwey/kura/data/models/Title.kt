@@ -262,7 +262,7 @@ data class Title(
                 id = c.string("id") ?: externalRef?.localId ?: Obj.missing("id"),
                 name = c.string("name") ?: c.string("title") ?: "",
                 // Never a guessed format: a song drawn as a film is a wrong cover shape and a wrong verb.
-                format = formatRaw?.let { MediaFormat.from(it) ?: throw SerializationException("format desconocido: $it") }
+                format = formatRaw?.let { MediaFormat.from(it) ?: throw WireException("format desconocido: ${it.take(40)}") }
                     ?: Obj.missing("format"),
                 year = c.int("year"),
                 creator = byline?.takeUnless { it.isBlank() },
@@ -399,9 +399,9 @@ data class UserTitleState(
 data class ReviewPage(val items: List<Review>, val nextCursor: String? = null) {
     internal object Serializer : WireSerializer<ReviewPage>("ReviewPage") {
         override fun read(e: JsonElement): ReviewPage {
-            if (e is JsonArray) return ReviewPage(e.map { KuraJson.json.decodeFromJsonElement(Review.serializer(), it) })
+            if (e is JsonArray) return ReviewPage(lossyList(e, Review.serializer(), strict = true))
             val c = Obj.of(e)
-            return ReviewPage(c.list("items", Review.serializer()) ?: Obj.missing("items"), c.string("nextCursor"))
+            return ReviewPage(c.list("items", Review.serializer(), strict = true) ?: Obj.missing("items"), c.string("nextCursor"))
         }
     }
 }

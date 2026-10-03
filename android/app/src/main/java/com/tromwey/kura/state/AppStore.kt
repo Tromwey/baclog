@@ -77,95 +77,16 @@ import kotlin.time.Duration.Companion.seconds
 // directly (no `collect`); Compose recomposes on change. No `StateFlow` today: nothing needs one.
 // What nobody draws (write queues, timers, caches) is plain Kotlin, like iOS `@ObservationIgnored`.
 //
+// The file is split by theme (a pure move, 2026-10-01): `SessionData.kt` (the per-account state),
+// `AppStoreToasts.kt` (toasts, Deshacer/Reintentar and `sync`, the optimistic-write queue) and
+// `AppStoreNavigation.kt` (sheets, tabs and pages) hold what used to live here; they are extensions, so a
+// screen imports them like every other `AppStore<Tema>.kt` function.
+//
 // Threading: everything runs on the `scope` handed in (Main.immediate in the app, a test dispatcher
 // in the JVM tests). Nothing in here touches the Android framework: platform services arrive through
 // `StorePlatform` and `AppStore.create(context)` (AppStoreFactory.kt) is the only place with a Context.
 
 enum class AppPhase { Splash, Onboarding, Main }
-
-enum class SheetStyle { Compact, Tall }
-
-/**
- * Every bottom sheet in the app (iOS `SheetRoute`). The screens lane draws them (`KuraSheet`); the store
- * only says which one is up. The party sheets (`PartyWelcome`…`PartyLeave`) are drawn by `features/party` (fase 2).
- */
-sealed interface SheetRoute {
-    data class NewCollection(val addingTitleId: String?, val movingFrom: String? = null) : SheetRoute
-    data class CollectionQuick(val id: String) : SheetRoute
-    data class More(val id: String) : SheetRoute
-    data class Sort(val id: String) : SheetRoute
-    /** O2b Editar: nombre + frase. The case keeps its old iOS name. */
-    data class Rename(val id: String) : SheetRoute
-    data class Privacy(val id: String) : SheetRoute
-    data class Share(val id: String) : SheetRoute
-    data class DeleteCollection(val id: String) : SheetRoute
-    /** 18c. `collectionId` null = 9b, a title of "no puedo esperar" (Tu reacción · Reseñar only). */
-    data class TitleActions(val titleId: String, val collectionId: String?) : SheetRoute
-    data class MoveTo(val titleId: String, val fromId: String) : SheetRoute
-    data class Complete(val titleId: String, val focusReview: Boolean) : SheetRoute
-    data class SaveTo(val titleId: String) : SheetRoute
-    data class TitleMore(val titleId: String) : SheetRoute
-    data class PersonOptions(val handle: String) : SheetRoute
-    data class Report(val target: ReportTarget) : SheetRoute
-    /** "¿bloquear a @…?" — what blocking does, then `PUT /me/blocks/{handle}`. */
-    data class Block(val handle: String) : SheetRoute
-    data object DeleteAccount : SheetRoute
-    data class AddTitles(val id: String) : SheetRoute
-    /** O3b · Reordenar: "Guardar orden" writes it all, closing discards. */
-    data class Reorder(val id: String) : SheetRoute
-    /** Ajustes › Sesiones activas › "Cerrar sesión" on another device (`+AccountLink`, fase 2). */
-    data class RevokeSession(val device: DeviceSession) : SheetRoute
-    /** Ajustes › Inicio de sesión › "¿desconectar…?" (`+AccountLink`, fase 2). */
-    data class UnlinkIdentity(val provider: IdentityProvider) : SheetRoute
-    /** "¿te avisamos?" — Kura's own ask before the system permission prompt. */
-    data object NotificationsAsk : SheetRoute
-    // Colecciones de fiesta (fase 2: `features/party/PartyScreens.kt`), twins of iOS's party cases.
-    /** "ya estás dentro." after joining by the link (`returning`: the account already existed). */
-    data class PartyWelcome(val id: String, val returning: Boolean) : SheetRoute
-    /** "ya pusiste tus 3." — your songs with Quitar, and Listo. */
-    data class PartyCap(val id: String) : SheetRoute
-    /** A song's sheet: Quitar de la colección · Quitar y bloquear a @x. */
-    data class PartySong(val partyId: String, val titleId: String) : SheetRoute
-    /** "invita a la fiesta." — the link, Copiar, Compartir link, Gestionar link. */
-    data class PartyShare(val id: String) : SheetRoute
-    /** Opciones — the host's: Gestionar link · Llevar a otra app · Editar · Bloqueados · Borrar;
-     *  a guest's: Salir de la fiesta. */
-    data class PartyOptions(val id: String) : SheetRoute
-    /** "el link." — active / desactivado, Crear link nuevo, Desactivar link. */
-    data class PartyLink(val id: String) : SheetRoute
-    /** "llévala a otra app." — Apple Music · TIDAL ("Próximamente" when the service isn't on). */
-    data class PartyExport(val id: String) : SheetRoute
-    /** "¿salir ahora?" — closing the export screen while it's passing the songs. */
-    data class PartyExportLeave(val id: String) : SheetRoute
-    data class PartyEdit(val id: String) : SheetRoute
-    data class PartyBlocked(val id: String) : SheetRoute
-    data class PartyDelete(val id: String) : SheetRoute
-    /** A guest's "¿salir de la fiesta?" (`POST /parties/{id}/leave`). */
-    data class PartyLeave(val id: String) : SheetRoute
-
-    val style: SheetStyle get() = if (this is AddTitles) SheetStyle.Tall else SheetStyle.Compact
-    val showsGrabber: Boolean get() = this !is DeleteCollection
-    /** Opened by holding something (18c on a title, 9a on a fan): it rises in place instead of sliding up. */
-    val isHold: Boolean get() = this is TitleActions || this is CollectionQuick
-}
-
-/**
- * A toast over the dock. Equality is identity (`id`), like iOS. A [Kind.Retry] toast never times out:
- * it stays until Reintentar, its ✕, a newer toast, or the same write (`retryKey`) going through.
- */
-class ToastModel(val text: String, val kind: Kind, val retryKey: String? = null, val action: (() -> Unit)? = null) {
-    enum class Kind { Undo, Retry, Info }
-
-    val id: Long = ids.incrementAndGet()
-
-    override fun equals(other: Any?) = other is ToastModel && other.id == id
-    override fun hashCode() = id.hashCode()
-    override fun toString() = "ToastModel($kind, \"$text\")"
-
-    private companion object {
-        val ids = AtomicLong()
-    }
-}
 
 enum class LoadState { Loading, Loaded, Failed }
 
@@ -188,6 +109,8 @@ sealed interface LoadKey {
     data object Feed : LoadKey
     data object FeedMore : LoadKey
     data object Discover : LoadKey
+    /** A format page of Descubrir (`AppStore.formatKey`) whose first read failed. */
+    data class DiscoverFormat(val format: MediaFormat, val time: Int?) : LoadKey
     data class PersonKey(val handle: String) : LoadKey
     data class PeopleList(val key: String) : LoadKey
     /** The next page of someone's followers / following failed (the list shows a Reintentar strip). */
@@ -251,206 +174,11 @@ interface StorePlatform {
     fun clearWebSession() {}
     /** Drops cached profile photos (iOS `AvatarStore.shared.clear()`). */
     fun clearAvatarCache() {}
+    /** Drops what the account exported to share (the recap cards in `cache/recap/`). */
+    fun clearExports() {}
 }
 
 open class InMemoryStorePlatform(override var welcomeSeen: Boolean = false) : StorePlatform
-
-/** A per-account cache slot recomputed only when an input changed (compared by identity: every
- *  mutation of the store's immutable values builds a new instance). iOS `SessionData.DerivedCache`. */
-internal class Memo<T> {
-    private var deps: Array<out Any?>? = null
-    private var value: Any? = null
-
-    @Suppress("UNCHECKED_CAST")
-    fun get(vararg inputs: Any?, compute: () -> T): T {
-        val d = deps
-        if (d != null && d.size == inputs.size && d.indices.all { d[it] === inputs[it] }) return value as T
-        val v = compute()
-        deps = inputs
-        value = v
-        return v
-    }
-}
-
-internal class WriteChain(val token: Any, val job: Job)
-
-/**
- * Everything that belongs to ONE signed-in account (and the entrance that leads to it). Signing out, a
- * deleted account and a 401 all replace it whole (`AppStore.resetData` → `SessionData()`), so nothing
- * of account A can leak into account B. **A new per-account field goes HERE, never as a stored
- * property of `AppStore`**; the store forwards it.
- */
-internal class SessionData {
-    // Navigation (a new account starts at the root of Colecciones)
-    var tab by mutableStateOf(Tab.Collections)
-    var paths by mutableStateOf<Map<Tab, List<Route>>>(emptyMap())
-    var sheet by mutableStateOf<SheetRoute?>(null)
-    var sheetLocked by mutableStateOf(false)
-    var loadState by mutableStateOf(LoadState.Loading)
-    var dockHidden by mutableStateOf(false)
-    var heroResets by mutableStateOf<Map<Tab, Int>>(emptyMap())
-
-    // Account / entrance
-    var me by mutableStateOf(Person(handle = "", name = "", initials = "k", hexes = emptyList()))
-    var account by mutableStateOf<Me?>(null)
-    var authEmail by mutableStateOf("")
-    var authError by mutableStateOf<String?>(null)
-    var suggestedName by mutableStateOf<String?>(null)
-    var onboardingPicks by mutableStateOf<List<String>>(emptyList())
-    var pendingSaveTitle by mutableStateOf<Title?>(null)
-
-    // Data
-    var people by mutableStateOf<Map<String, Person>>(emptyMap())
-    var titles by mutableStateOf<Map<String, Title>>(emptyMap())
-    var catalogOrder by mutableStateOf<List<String>>(emptyList())
-    var collections by mutableStateOf<List<KCollection>>(emptyList())
-    var userTitles by mutableStateOf<Map<String, UserTitleState>>(emptyMap())
-    var following by mutableStateOf<Set<String>>(emptySet())
-    /** Reviews by title id, in display order (`reviewTitleIndex` finds one by its own id). */
-    var reviewsByTitle by mutableStateOf<Map<String, List<Review>>>(emptyMap())
-    var feed by mutableStateOf<List<FeedEvent>>(emptyList())
-    var revealedSpoilers by mutableStateOf<Set<String>>(emptySet())
-    var lastUsedCollectionId by mutableStateOf<String?>(null)
-    var titleActivity by mutableStateOf<Map<String, List<PeopleMark>>>(emptyMap())
-
-    // Per-screen loads
-    var loadErrors by mutableStateOf<Map<LoadKey, KuraApiError>>(emptyMap())
-    var loadedCollections by mutableStateOf<Set<String>>(emptySet())
-    var loadedTitles by mutableStateOf<Set<String>>(emptySet())
-    var loadingTitles by mutableStateOf<Set<String>>(emptySet())
-    var missingTitles by mutableStateOf<Set<String>>(emptySet())
-    var reviewCursors by mutableStateOf<Map<String, String>>(emptyMap())
-    var reviewsPaging by mutableStateOf<Set<String>>(emptySet())
-    var publicCollections by mutableStateOf<Map<String, CollectionDetail>>(emptyMap())
-    var missingPublicCollections by mutableStateOf<Set<String>>(emptySet())
-    var avatarBusy by mutableStateOf(false)
-    var loadedPeople by mutableStateOf<Set<String>>(emptySet())
-    var loadingPeople by mutableStateOf<Set<String>>(emptySet())
-    var missingPeople by mutableStateOf<Set<String>>(emptySet())
-    var peopleLists by mutableStateOf<Map<String, List<Person>>>(emptyMap())
-    var peopleListMeta by mutableStateOf<Map<String, PeopleListMeta>>(emptyMap())
-    var feedLoaded by mutableStateOf(false)
-    var feedLoading by mutableStateOf(false)
-    var feedCursor by mutableStateOf<String?>(null)
-    var discover by mutableStateOf<DiscoverPayload?>(null)
-    var discoverLoading by mutableStateOf(false)
-    var discoverCreators by mutableStateOf<DiscoverCreatorsPayload?>(null)
-    var discoverCreatorsLoading by mutableStateOf(false)
-    var discoverFormats by mutableStateOf<Map<String, DiscoverFormatPayload>>(emptyMap())
-    var searchQuery by mutableStateOf("")
-    var searchResults by mutableStateOf<List<SearchResult>>(emptyList())
-    var searchPeople by mutableStateOf<List<Person>>(emptyList())
-    var searchLoading by mutableStateOf(false)
-    var searchError by mutableStateOf<KuraApiError?>(null)
-    var onboardingGrid by mutableStateOf<List<Title>>(emptyList())
-    var onboardingGridError by mutableStateOf<KuraApiError?>(null)
-    var onboardingPeople by mutableStateOf<List<Person>>(emptyList())
-    var onboardingPeopleLoaded by mutableStateOf(false)
-    var recapMonths by mutableStateOf<List<RecapMonth>?>(null)
-    var recaps by mutableStateOf<Map<String, RecapPayload>>(emptyMap())
-    var recapLoading by mutableStateOf(false)
-    var recapEraLoads by mutableStateOf<Set<String>>(emptySet())
-
-    // Social / settings
-    var requested by mutableStateOf<Set<String>>(emptySet())
-    var muted by mutableStateOf<Set<String>>(emptySet())
-    var blocked by mutableStateOf<Set<String>>(emptySet())
-    var blockedAccounts by mutableStateOf<List<BlockedAccount>?>(null)
-    var reportedReviews by mutableStateOf<Set<String>>(emptySet())
-    var notifications by mutableStateOf<List<KNotification>>(emptyList())
-    var requestStates by mutableStateOf<Map<String, RequestState>>(emptyMap())
-    var recentSearches by mutableStateOf<List<String>>(emptyList())
-    var showCommon by mutableStateOf(true)
-    var defaultPrivacy by mutableStateOf(Privacy.OnlyMe)
-    var alerts by mutableStateOf<Set<String>>(emptySet())
-    var recentlyViewed by mutableStateOf<List<String>>(emptyList())
-    // `PATCH /me` settings, raw (the store's setters patch the server)
-    var profilePrivate by mutableStateOf(false)
-    var notifyReleases by mutableStateOf(true)
-    var notifyRecap by mutableStateOf(true)
-    var notifyFollowers by mutableStateOf(true)
-    var followListsVisibility by mutableStateOf(FollowListsVisibility.Private)
-    var musicApp by mutableStateOf("Apple Music")
-
-    // Bookkeeping nobody draws
-    var feedFollowingKey: Set<String> = emptySet()
-    var feedDirty = false
-    var pendingPush: Route? = null
-    /** Collections created optimistically: local id → the POST that gives the server id. */
-    val pendingCollections = HashMap<String, Deferred<String>>()
-    /** Local id → server id, forever (an undo captured with the local id still finds it). */
-    val collectionAliases = HashMap<String, String>()
-    /** Removals waiting for the Deshacer window to close. */
-    val deferredWrites = HashMap<String, Job>()
-    /** Titles with a write in flight (a read must not clobber the optimistic state). */
-    val inflight = HashMap<String, Int>()
-    /** The last write queued per key (`WriteKey`): the next one for the same key waits for it. */
-    val writeChains = HashMap<String, WriteChain>()
-    /** What `LocalPrefs` holds for THIS account; `localDirty` = memory is ahead of it. */
-    var local = LocalPrefs.Payload()
-    var localDirty = false
-    /** `loadLocal()` in flight (DataStore is async): `bootstrap` waits for it before `applyLocal`. */
-    var localLoad: Job? = null
-    /** `bootstrap` put the server's collections and states in memory. */
-    var libraryLoaded = false
-    val reviewTitleIndex = HashMap<String, String>()
-
-    // Derived caches (iOS `DerivedCache`)
-    val orderedMemo = Memo<List<KCollection>>()
-    val indexMemo = Memo<Map<String, Int>>()
-    val containingMemo = Memo<Map<String, List<Int>>>()
-    val libraryMemo = Memo<Set<String>>()
-    val waitingMemo = Memo<List<Title>>()
-    val titlesInMemo = HashMap<String, Memo<List<Title>>>()
-
-    /** Fiestas + "llévala a otra app" of this account (`AppStoreParties.kt`, `AppStoreMusicExport.kt`). */
-    val party = PartySession()
-
-    fun inflightCount(titleId: String) = inflight[titleId] ?: 0
-
-    /** Writes ISSUED per title (never goes down). A read captures it when it starts: if it moved by the
-     *  time the answer lands, the read is older than a write and must not overwrite what it wrote. */
-    val writeGen = HashMap<String, Int>()
-
-    fun bumpWriteGen(titleId: String) {
-        writeGen[titleId] = (writeGen[titleId] ?: 0) + 1
-    }
-
-    /**
-     * Failed writes waiting for the network (`AppStore.retryToast`): write key → what re-applies the
-     * change on screen and sends it again. Run once each when the connection comes back
-     * (`connectivityChanged`), dropped by Reintentar (it runs it), by the toast's ✕ (the change was
-     * already reverted on screen) and by a later success of the same key.
-     */
-    val pendingRetries = LinkedHashMap<String, () -> Unit>()
-
-    /** "Quitar de tus colecciones" not confirmed yet: title id → what puts it all back (Deshacer, or a
-     *  DELETE that failed). */
-    val libraryRemovals = HashMap<String, () -> Unit>()
-
-    /** "Quitar de tus colecciones" waiting for its Deshacer window: title id → the toast that offers it. */
-    val libraryRemovalToasts = HashMap<String, Long>()
-
-    /** A `sync` key with its collection id made current (`collectionAliases`). */
-    fun canonicalWriteKey(key: String): String {
-        val bar = key.lastIndexOf('|')
-        if (bar < 0) return key
-        val serverId = collectionAliases[key.substring(bar + 1)] ?: return key
-        return key.substring(0, bar) + "|" + serverId
-    }
-
-    /** Cancels every write and timer of this session (it's being replaced). */
-    fun cancelAll() {
-        deferredWrites.values.forEach { it.cancel() }
-        writeChains.values.forEach { it.job.cancel() }
-        pendingCollections.values.forEach { it.cancel() }
-        localLoad?.cancel()
-        party.exportJob?.cancel()
-        deferredWrites.clear()
-        writeChains.clear()
-        pendingCollections.clear()
-    }
-}
 
 /**
  * The store. Build it with `AppStore.create(context)` (AppStoreFactory.kt) — one per process, held by
@@ -490,6 +218,9 @@ class AppStore(
 
     internal fun haptic(kind: StoreHaptic) { _events.tryEmit(StoreEvent.Haptic(kind)) }
 
+    /** What a toast says, for TalkBack (`AppStoreToasts.kt`). */
+    internal fun announce(text: String) { _events.tryEmit(StoreEvent.Announce(text)) }
+
     /** The store's clock. Live: advanced when the app comes to the foreground and each minute while it's
      *  active (`sceneBecameActive`). Tests and the mock: whatever `clock` says (fixed). */
     var now: Instant by mutableStateOf(clock())
@@ -505,7 +236,7 @@ class AppStore(
     /** A sheet mid-write (Completar + reseña): the scrim tap and the handle drag don't close it. */
     var sheetLocked: Boolean get() = s.sheetLocked; set(v) { s.sheetLocked = v }
     var toast by mutableStateOf<ToastModel?>(null)
-        private set
+        internal set
     var offline by mutableStateOf(false)
         internal set
     var loadState: LoadState get() = s.loadState; internal set(v) { s.loadState = v }
@@ -780,14 +511,23 @@ class AppStore(
 
     val entryStep: OnboardingStep get() = if (welcomeSeen || invitePending) OnboardingStep.Signup else OnboardingStep.Welcome
 
-    /** The title a shared web link was about (iOS `pendingSaveTitle`; no Android path sets it yet). */
-    var pendingSaveTitle: Title? get() = s.pendingSaveTitle; set(v) { s.pendingSaveTitle = v }
+    /** What `MainActivity` handed back after a process death (`AppStoreSavedState.kt`): applied once
+     *  the same account is back in the tabs. Outside the session: it waits for it. */
+    internal var restoredState: SavedState? = null
 
     /** A notification tapped before the tabs were up: opened once the library has loaded. */
     var pendingPush: Route? get() = s.pendingPush; set(v) { s.pendingPush = v }
 
-    private var toastJob: Job? = null
-    private var pathSatisfied = true
+    internal var toastJob: Job? = null
+    /** While `sync` runs a caller's revert for a write Reintentar can't fix (`onboarding_required`):
+     *  the revert happens, its toast and its `pendingRetries` don't. */
+    internal var revertOnly = false
+    /** The error `sync` is handing to a caller's `onError` right now: `retryToast` queues the write
+     *  only when trying again can fix it (`KuraApiError.canRetry`). */
+    internal var failing: KuraApiError? = null
+    /** The `GET /me` that follows a `403 onboarding_required` (one at a time). */
+    internal var onboardingRecheck: Job? = null
+    internal var pathSatisfied = true
 
     // MARK: Clock
 
@@ -825,8 +565,8 @@ class AppStore(
         offline = false
         // A sign-out that didn't reach the server (this phone or everywhere): now it can.
         retryPendingRevokesSoon()
-        // Writes that failed offline (already reverted on screen, their Reintentar still up): re-applied
-        // and sent again, as if Reintentar had been tapped.
+        // Every write that failed for the network (already reverted on screen, waiting in the retry
+        // queue — whether or not its notice is the toast up right now): re-applied and sent again, in order.
         if (phase == AppPhase.Main) resendPendingRetries()
         val wasOffline = s.loadErrors.filterValues { it is KuraApiError.Offline }.keys
         s.loadErrors = s.loadErrors - wasOffline
@@ -854,7 +594,10 @@ class AppStore(
         }
         when (tab) {
             Tab.Feed -> if (LoadKey.Feed in keys) loadFeed(force = true)
-            Tab.Discover -> if (LoadKey.Discover in keys) loadDiscover(force = true)
+            Tab.Discover -> {
+                if (LoadKey.Discover in keys) loadDiscover(force = true)
+                for (k in keys) if (k is LoadKey.DiscoverFormat) loadDiscoverFormat(k.format, k.time)
+            }
             Tab.Collections -> if (LoadKey.Library in keys) retryLibraryTitles()
             else -> Unit
         }
@@ -1033,7 +776,15 @@ class AppStore(
         val e = error as? KuraApiError ?: KuraApiError.Server(error.toString())
         when (e) {
             KuraApiError.Unauthorized -> sessionExpired()
-            KuraApiError.Offline -> offline = true
+            KuraApiError.Offline -> {
+                offline = true
+                // A request died on the transport while the system still said "connected" (a captive
+                // portal, a dead route): the path is NOT good, so the next "validated" from the system
+                // counts as a reconnection and retries what failed (`connectivityChanged`). A TIMEOUT
+                // is not that: the path works, the server was slow — lowering it would make the next
+                // capabilities callback replay every pending write for nothing.
+                if (!api.lastOfflineTimedOut) pathSatisfied = false
+            }
             else -> Unit
         }
         return e
@@ -1217,168 +968,6 @@ class AppStore(
     /** A title "as sent by you" — null while your profile is private. */
     fun myItemLink(titleId: String): String? = if (profilePrivate) null else PublicLinks.item(me.handle, titleId)
 
-    // MARK: Toasts
-
-    /** How long a toast (and the Deshacer behind it) stays: 5 s, or 15 s with TalkBack. `deferRemove`
-     *  waits exactly this long, so an undo still on screen can always be honored (learning
-     *  2026-09-24-ios-deshacer-y-aviso-comparten-ventana). */
-    val undoWindow: Duration get() = if (platform.screenReaderOn) 15.seconds else 5.seconds
-
-    /** The beat between "the network is back" and resending the writes that failed without it. */
-    internal val retryAfterReconnect: Duration = 1.seconds
-
-    fun showToast(t: ToastModel) {
-        toastJob?.cancel()
-        toastJob = null
-        if (t.kind == ToastModel.Kind.Retry) haptic(StoreHaptic.Error)
-        toast = t
-        val verb = if (t.kind == ToastModel.Kind.Retry) "Reintentar" else "Deshacer"
-        _events.tryEmit(StoreEvent.Announce(if (t.action == null) t.text else "${t.text}. $verb disponible"))
-        // A failed write's Reintentar never closes by itself: the phone and the server disagree until
-        // it's retried (or its ✕ accepts the revert).
-        if (t.kind == ToastModel.Kind.Retry) return
-        val window = undoWindow
-        toastJob = scope.launch {
-            delay(window)
-            if (toast?.id == t.id) toast = null
-        }
-    }
-
-    /**
-     * The Reintentar of an optimistic write that was ALREADY reverted on screen: [redo] re-applies the
-     * change and sends it again. Kept under [key] (the write's `WriteKey`) so it's also re-run when the
-     * network comes back, and dropped when a later write with that key succeeds.
-     */
-    fun retryToast(text: String, key: String?, redo: () -> Unit) {
-        val session = s
-        val k = key?.let(session::canonicalWriteKey) ?: "toast|${System.nanoTime()}"
-        session.pendingRetries[k] = redo
-        showToast(ToastModel(text, ToastModel.Kind.Retry, retryKey = k) {
-            session.pendingRetries.remove(k)
-            if (s === session) redo()
-        })
-    }
-
-    /** The network is back: every write waiting in `pendingRetries` goes again (once), after a beat
-     *  for DNS/TLS to settle — a resend that still fails just brings its Reintentar back. */
-    private fun resendPendingRetries() {
-        val session = s
-        if (session.pendingRetries.isEmpty()) return
-        scope.launch {
-            delay(retryAfterReconnect)
-            if (s !== session || !pathSatisfied) return@launch
-            val pending = session.pendingRetries.values.toList()
-            session.pendingRetries.clear()
-            if (toast?.kind == ToastModel.Kind.Retry && toast?.retryKey != null) toast = null
-            for (redo in pending) redo()
-        }
-    }
-
-    /** A write under [key] went through: its old Reintentar (if any) has nothing left to do. */
-    private fun settleRetry(session: SessionData, key: String?) {
-        key ?: return
-        session.pendingRetries.remove(key)
-        val t = toast
-        if (t != null && t.kind == ToastModel.Kind.Retry && t.retryKey == key) toast = null
-    }
-
-    fun undoToast(text: String, undo: () -> Unit) {
-        showToast(ToastModel(text, ToastModel.Kind.Undo) {
-            undo()
-            toast = null
-        })
-    }
-
-    fun dismissToast() {
-        toast = null
-    }
-
-    /** The toast's ✕ (only a Reintentar has one): the change it offers stays reverted, and it's not
-     *  resent when the network comes back. */
-    fun closeToast(t: ToastModel) {
-        if (toast?.id != t.id) return
-        t.retryKey?.let { s.pendingRetries.remove(it) }
-        toast = null
-    }
-
-    /** The toast's button (Deshacer / Reintentar): runs its action and closes it — only while THAT toast
-     *  is the one up. A stale pill (another toast replaced it, its window closed) does nothing: its
-     *  Deshacer can no longer be honored. */
-    fun tapToastAction(t: ToastModel) {
-        if (toast?.id != t.id) return
-        t.action?.invoke()
-        if (toast?.id == t.id) toast = null
-    }
-
-    /**
-     * Runs an API write; on failure offers "Reintentar" (with the error's own text when it says what to
-     * do). `onError` returns true when it handled the failure (reverted, said why).
-     *
-     * `key` serializes writes to the same thing (`WriteKey`): a write with a key waits for the previous
-     * one with that key (success or failure) before it goes out. Everything is bound to the session that
-     * queued it: once the account changes its late failures and "Reintentar" never surface.
-     *
-     * A write about a title (`titleId`) also bumps its write generation (reads that started before it
-     * don't overwrite it) and, when a "Quitar de tus colecciones" is still inside its Deshacer window,
-     * sends that removal NOW and goes out after it (`commitsLibraryRemoval = false` only for removals).
-     */
-    fun sync(
-        key: String? = null,
-        titleId: String? = null,
-        onError: ((KuraApiError) -> Boolean)? = null,
-        commitsLibraryRemoval: Boolean = true,
-        op: suspend (KuraApi) -> Unit,
-    ): Job {
-        val session = s
-        val k = key?.let(session::canonicalWriteKey)
-        val removal = if (titleId != null && commitsLibraryRemoval) commitLibraryRemoval(titleId) else null
-        if (titleId != null) {
-            session.inflight[titleId] = session.inflightCount(titleId) + 1
-            session.bumpWriteGen(titleId)
-        }
-        val previous = k?.let { session.writeChains[it]?.job }
-        val token = Any()
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            var failure: Exception? = null
-            try {
-                previous?.join()
-                removal?.join()
-                op(api)
-            } catch (e: Exception) {
-                failure = e
-            } finally {
-                if (titleId != null) {
-                    val n = session.inflightCount(titleId) - 1
-                    if (n <= 0) session.inflight.remove(titleId) else session.inflight[titleId] = n
-                }
-                // Re-canonicalized: an `adopt` while this ran moved the chain to the server id.
-                if (k != null) {
-                    val now = session.canonicalWriteKey(k)
-                    if (session.writeChains[now]?.token === token) session.writeChains.remove(now)
-                }
-            }
-            if (s !== session) return@launch
-            val f = failure
-            if (f == null) {
-                online()
-                // Only when nothing newer with this key is queued (that one decides).
-                if (k != null && session.writeChains[session.canonicalWriteKey(k)] == null) settleRetry(session, session.canonicalWriteKey(k))
-                return@launch
-            }
-            val e = noteError(f) ?: return@launch
-            if (onError?.invoke(e) == true) return@launch
-            when (e) {
-                KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> Unit
-                // A write without its own revert: the screen still shows it, so Reintentar (and the
-                // network coming back) sends exactly the same op again.
-                else -> retryToast(e.toast, k) { sync(k, titleId, onError, commitsLibraryRemoval, op) }
-            }
-        }
-        if (k != null) session.writeChains[k] = WriteChain(token, job)
-        job.start()
-        return job
-    }
-
     /** Keys for `sync(key)` — writes that contradict each other share one. */
     object WriteKey {
         fun membership(titleId: String, collectionId: String) = "m|$titleId|$collectionId"
@@ -1394,84 +983,10 @@ class AppStore(
         const val ME_PATCH = "me|patch"
     }
 
-    fun patchMe(patch: MePatch) {
-        val session = s
-        sync(key = WriteKey.ME_PATCH) { api ->
-            val m = api.updateMe(patch)
-            on(session) { account = m }
-        }
-    }
-
-    /**
-     * `PATCH /me` for a setting already applied locally. On failure `revert` runs only when
-     * `stillMine()` (this write's value is still the one showing: a newer choice isn't undone by an
-     * older failure), and a toast says what didn't change. Serialized with every `PATCH /me`.
-     */
-    internal fun patchSetting(patch: MePatch, failText: String, stillMine: () -> Boolean, revert: () -> Unit) {
-        val session = s
-        sync(key = WriteKey.ME_PATCH, onError = err@{ e ->
-            if (s !== session) return@err true
-            if (stillMine()) revert()
-            if (e is KuraApiError.Unauthorized) return@err true
-            showToast(ToastModel(e.toast(failText), ToastModel.Kind.Info))
-            true
-        }) { api ->
-            val m = api.updateMe(patch)
-            on(session) { account = m }
-        }
-    }
-
-    // MARK: Sheets & navigation
-
-    /** A new sheet never inherits the lock of the one it replaces. */
-    fun present(route: SheetRoute) {
-        sheetLocked = false
-        sheet = route
-    }
-
-    /** Any close (a button, the write that finished, a sign-out) also drops the lock. */
-    fun dismissSheet() {
-        sheetLocked = false
-        sheet = null
-    }
-
-    /** Scrim tap / handle drag / TalkBack back: ignored while the sheet is mid-write. False = it stays. */
-    fun dismissSheetInteractively(): Boolean {
-        if (sheetLocked) return false
-        dismissSheet()
-        return true
-    }
-
-    fun path(tab: Tab): List<Route> = s.paths[tab] ?: emptyList()
-
-    /** The dock STAYS on a collection, a title, a person and their seguidores; it hides on the other
-     *  pushes (ajustes, recap, avisos…) and while Descubrir is searching. */
-    fun dockVisible(tab: Tab): Boolean {
-        val top = path(tab).lastOrNull() ?: return !(dockHidden && tab == Tab.Discover)
-        return top.keepsDock
-    }
-
-    fun push(route: Route) {
-        s.paths = s.paths + (tab to path(tab) + route)
-    }
-
-    fun pop() {
-        s.paths = s.paths + (tab to path(tab).dropLast(1))
-    }
-
-    /** The dock: tapping the active tab pops to root and closes a hero open over it. */
-    fun select(newTab: Tab) {
-        if (newTab == tab) {
-            s.paths = s.paths + (newTab to emptyList())
-            s.heroResets = s.heroResets + (newTab to (s.heroResets[newTab] ?: 0) + 1)
-        }
-        tab = newTab
-    }
-
     fun enterMain() {
         dismissSheet()
         s.paths = emptyMap()
-        tab = Tab.Collections
+        tab = restoredTab() ?: Tab.Collections
         didBootstrap = false
         // Whatever this device holds for the account that just came in (every exit clears it).
         if (prefs.enabled) {
@@ -1486,6 +1001,8 @@ class AppStore(
         if (didBootstrap) return
         didBootstrap = true
         bootstrap(emptyLibrary = emptyLibrary, keepLoading = keepLoading)
+        // The pages that were open when the system killed the process (now that the library is here).
+        applyRestoredState()
         // Push (iOS `refreshPushRegistration()` + `offerNotificationsIfNeeded()`) runs from
         // `watchPushOnMain` (AppStorePush.kt), wired by `AppStore.create`, once this bootstrap is done.
         pendingPush?.let { route ->
@@ -1576,6 +1093,7 @@ class AppStore(
         resetData()
         disk { prefs.clear() }
         platform.clearWebSession()
+        platform.clearExports()
         // Also marks this install's push token unregistered (`AndroidStorePlatform`), like iOS.
         platform.cancelReleaseNotices()
     }
@@ -1637,6 +1155,15 @@ class AppStore(
         /** "No encontramos este título": `PUT mark` answered 404 for a catalog id. */
         const val UNKNOWN_TITLE_NOTE = "No encontramos este título. Búscalo de nuevo."
 
+        /** A collection write answered 404 (deleted from another device): the change was put back. */
+        const val GONE_COLLECTION_NOTE = "Esa colección ya no existe. No se guardó el cambio."
+
+        /** Saving a title answered 404: the collection or the title is gone; it left the collection again. */
+        const val GONE_SAVE_NOTE = "No se pudo guardar: esa colección o ese título ya no existe."
+
+        /** A write the server can't take (404 / 501) and that Reintentar wouldn't fix. */
+        const val NOT_SAVED_NOTE = "No se pudo guardar. Lo que ves volvió a como estaba."
+
         /** Name ≤ 40 when WRITING (the server still accepts 60 for old names); frase ≤ 80 (server limit). */
         const val COLLECTION_NAME_LIMIT = 40
         const val COLLECTION_VIBE_LIMIT = 80
@@ -1673,11 +1200,13 @@ class AppStore(
 /** Inline text for the entrance screens. */
 val KuraApiError.authText: String
     get() = when (this) {
-        KuraApiError.Offline -> "Sin conexión. Revisa tu red e inténtalo de nuevo."
+        KuraApiError.Offline -> "Sin conexión. Revisa tu red y vuelve a intentarlo."
         is KuraApiError.RateLimited ->
-            retryAfter?.let { "Espera $it s antes de pedir otro código." } ?: "Espera un momento antes de pedir otro código."
+            retryAfter?.takeIf { it > 0 }?.let { "Demasiados intentos seguidos. Espera ${waitText(it)} y vuelve a intentarlo." }
+                ?: "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         is KuraApiError.Invalid -> fields["code"] ?: fields["email"] ?: message.ifEmpty { "Revisa el código." }
-        KuraApiError.Unauthorized, KuraApiError.NotFound -> "El código no coincide o ya caducó."
-        is KuraApiError.Conflict -> message.ifEmpty { "No se pudo entrar. Inténtalo de nuevo." }
-        else -> "No se pudo entrar. Inténtalo de nuevo."
+        KuraApiError.CodeLocked -> "Se intentó demasiadas veces. Pide otro código más tarde."
+        KuraApiError.Unauthorized, KuraApiError.NotFound -> "El código es incorrecto o ya venció. Revísalo o pide otro."
+        is KuraApiError.Conflict -> message.ifEmpty { "No se pudo entrar. Vuelve a intentarlo." }
+        else -> "No se pudo entrar. Vuelve a intentarlo."
     }

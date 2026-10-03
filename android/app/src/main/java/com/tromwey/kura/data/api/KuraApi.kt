@@ -1,6 +1,5 @@
 package com.tromwey.kura.data.api
 
-import com.tromwey.kura.data.models.AppleMusicReport
 import com.tromwey.kura.data.models.AuthProviders
 import com.tromwey.kura.data.models.BlockedAccount
 import com.tromwey.kura.data.models.CollectionDetail
@@ -57,6 +56,8 @@ interface KuraApi {
     val hasSession: Boolean
     /** True when the token expires in < 7 days (the app refreshes on launch). */
     val needsRefresh: Boolean
+    /** The last `Offline` thrown was a timeout, not a dead transport (fakes: never). */
+    val lastOfflineTimedOut: Boolean get() = false
     suspend fun requestCode(email: String)
     suspend fun signIn(email: String, code: String): Me
     suspend fun refresh(): Me
@@ -66,13 +67,8 @@ interface KuraApi {
     suspend fun logout()
     /** Forgets the stored token without telling the server (never touches other devices). */
     fun forgetSession()
-    /** `POST auth/web-session` → a one-shot (60 s) URL that opens the web signed in, landing on `to`
-     *  (server allow-list: `/recap/tarjeta`, `/recap`). Open it in a Custom Tab, never share it. */
-    suspend fun webSession(to: String): String
     /** `GET /auth/providers` (no bearer) — which third-party sign-ins the server can honor. */
     suspend fun authProviders(): AuthProviders
-    /** `POST /auth/apple` — iOS only in practice (Android has no Apple button); kept for parity. */
-    suspend fun signInWithApple(credential: AppleCredential): Me
     /** `POST /auth/google` `{ idToken, nonce?, device }` → `{ token, user }`. `nonce` is looked up in `GoogleNonce`. */
     suspend fun signInWithGoogle(idToken: String): Me
 
@@ -99,8 +95,7 @@ interface KuraApi {
 
     // MARK: Identities and merge (fase 4g)
     suspend fun identities(): Identities
-    /** A 409 `linked_elsewhere` comes back as `Mergeable` (not thrown); a rejected token is `Forbidden("proof_rejected")`. */
-    suspend fun linkApple(credential: AppleCredential): LinkOutcome
+    /** Google only (Apple never exists on Android). A 409 `linked_elsewhere` comes back as `Mergeable` (not thrown); a rejected token is `Forbidden("proof_rejected")`. */
     suspend fun linkGoogle(idToken: String): LinkOutcome
     /** `DELETE /me/identities/{provider}` → 204. 409 `last_way_in` for Apple on a relay email. */
     suspend fun unlinkIdentity(provider: IdentityProvider)
@@ -116,7 +111,9 @@ interface KuraApi {
     suspend fun updateMe(patch: MePatch): Me
     suspend fun checkUsername(username: String): UsernameStatus
     suspend fun claimUsername(username: String): Me
-    suspend fun completeOnboarding(name: String, birthYear: Int): Me
+    /** `POST /me/onboarding` `{ name, birthDate: "YYYY-MM-DD" }`: the server computes the exact age and
+     *  keeps only the year. 400 `invalid` + `fields.birthDate`; 403 `underage`. */
+    suspend fun completeOnboarding(name: String, birthDate: String): Me
     /** Titles offered on "elige 3" before typing (`GET /onboarding/pool?page=1`). */
     suspend fun onboardingGrid(): List<Title>
     suspend fun onboardingPicks(refs: List<TitleRef>): KCollection
@@ -132,7 +129,9 @@ interface KuraApi {
     suspend fun createCollection(name: String, privacy: Privacy): KCollection
     /** `PATCH /collections/{id}` — each field null = untouched; `vibe = ""` clears the frase. */
     suspend fun updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?): KCollection
-    suspend fun deleteCollection(id: String)
+    /** [purge] = `?purge=1`: the titles that were ONLY in this collection also lose their state, your
+     *  reaction and your review. Without it they keep everything (the default). */
+    suspend fun deleteCollection(id: String, purge: Boolean = false)
     /** One pinned per account: the server unpins the rest. */
     suspend fun setCollectionPinned(id: String, pinned: Boolean): KCollection
     /** `titleId = null` is sent as `null` = the automatic cover; a non-member is `400 fields.coverTitleId`. */
@@ -235,8 +234,6 @@ interface KuraApi {
     suspend fun startPartyExport(id: String, provider: MusicProvider): ExportState
     /** One batch (≤ 10 songs) on the server. */
     suspend fun stepTidalExport(id: String): ExportState
-    /** What MusicKit did (iOS). 409 `playlist_exists`. */
-    suspend fun reportAppleMusicExport(id: String, report: AppleMusicReport): ExportState
 }
 
 /** Swift's `T??`: `null` = untouched, `Change(value)` = set it (possibly to `null`). */
@@ -256,14 +253,3 @@ data class MePatch(
     /** Who sees your followers / following lists: `public` | `mutuals` | `private`. */
     val followListsVisibility: String? = null,
 )
-
-/** What Sign in with Apple hands over, ready for `POST /auth/apple` (parity with iOS). */
-data class AppleCredential(
-    val identityToken: String,
-    val rawNonce: String,
-    val authorizationCode: String? = null,
-    val givenName: String? = null,
-    val familyName: String? = null,
-) {
-    override fun toString() = "AppleCredential(<redacted>)"
-}

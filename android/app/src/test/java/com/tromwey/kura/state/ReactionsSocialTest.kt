@@ -88,6 +88,10 @@ class ReactionsSocialTest {
     @Test fun aReviewWithoutReactionIsRefusedWithTheRealRule() = storeTest { h ->
         val store = h.store
         signedIn(h)
+        // The phone has a reaction and the server doesn't (taken off elsewhere): the server's rule wins.
+        // (Without one on the phone nothing is even sent: `AuditRound7Test`.)
+        store.setMark(yhlq, Mark.Liked)
+        runCurrent()
         h.api.failNext("saveReview", KuraApiError.Conflict("reaction_required", ""))
         store.publishReview(yhlq, "sin reacción", spoiler = true)
         assertNotNull(store.myReview(yhlq))
@@ -113,7 +117,7 @@ class ReactionsSocialTest {
 
         store.followFromProfile("nueva") // Siguiendo → unfollow at once, with Deshacer
         assertFalse(store.isFollowing("nueva"))
-        assertEquals("Dejaste de seguir a @nueva", store.toast?.text)
+        assertEquals("Dejaste de seguir a @nueva.", store.toast?.text)
         store.tapToast()
         assertTrue(store.isFollowing("nueva"))
         runCurrent()

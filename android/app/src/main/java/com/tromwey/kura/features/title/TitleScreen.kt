@@ -1,9 +1,12 @@
 package com.tromwey.kura.features.title
 
+import com.tromwey.kura.designsystem.ActiveEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -22,11 +25,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -90,6 +91,9 @@ import com.tromwey.kura.state.releaseSentence
 import com.tromwey.kura.state.setMark
 import com.tromwey.kura.state.toggleAlert
 import kotlinx.coroutines.launch
+import com.tromwey.kura.state.undoToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.pop
 
 // 06 · Obra (flujos-v2 33–35 + 37a/24d/C4/E4/37c) — twin of ios/Kura/Features/Title/TitleDetailView.swift.
 // The PAGE is the title's feed gradient (TintStyle.Feed, span 900: founder's "degradado único",
@@ -100,7 +104,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun TitleScreen(store: AppStore, route: Route.TitleRoute) {
     val id = route.id
-    LaunchedEffect(id) { store.loadTitle(id) }
+    ActiveEffect(id) { store.loadTitle(id) }
     val t = store.title(id)
     val error = store.loadError(LoadKey.TitleKey(id))
     val scope = rememberCoroutineScope()
@@ -108,7 +112,7 @@ fun TitleScreen(store: AppStore, route: Route.TitleRoute) {
         t != null -> TitlePage(store, t)
         id in store.missingTitles -> GoneView(
             onBack = { store.pop() },
-            title = "este título ya no está.",
+            title = "este título ya no está disponible.",
             note = "Se quitó del catálogo o dejó de estar disponible.",
         )
         error != null -> {
@@ -121,7 +125,7 @@ fun TitleScreen(store: AppStore, route: Route.TitleRoute) {
 
 @Composable
 private fun TitlePage(store: AppStore, t: Title) {
-    LaunchedEffect(t.id) { store.noteViewed(t.id) }
+    ActiveEffect(t.id) { store.noteViewed(t.id) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val tail = animatedTintTail(t.palette)
@@ -134,7 +138,7 @@ private fun TitlePage(store: AppStore, t: Title) {
                 val e = store.loadError(LoadKey.TitleKey(t.id))
                 if (e != null) {
                     RetryStrip(
-                        text = if (e == KuraApiError.Offline) "Sin conexión. Ves lo guardado en tu teléfono." else "No se pudo cargar toda la ficha.",
+                        text = if (e == KuraApiError.Offline) "Sin conexión. Ves lo guardado en tu teléfono." else "No se cargó el resto.",
                         onRetry = { scope.launch { store.loadTitle(t.id, force = true) } },
                         modifier = Modifier.padding(horizontal = 12.dp).padding(top = 4.dp),
                         offline = e == KuraApiError.Offline,
@@ -153,7 +157,7 @@ private fun TitlePage(store: AppStore, t: Title) {
             // `/{you}/item/{id}` — only while your profile is public (otherwise it 404s).
             val link = store.myItemLink(t.id)
             if (link != null) {
-                IconChip44(KIcon.Share, "Compartir", { shareLink(context, link, t.name) }, iconSize = 17.dp)
+                IconChip44(KIcon.Share, "Compartir", { shareText(context, link, t.name) }, iconSize = 17.dp)
             }
             IconChip44(KIcon.More, "Opciones", { store.present(SheetRoute.TitleMore(t.id)) }, iconSize = 17.dp)
         }
@@ -346,7 +350,8 @@ private fun Actions(store: AppStore, t: Title, unreleased: Boolean, today: Boole
 /** Me obsesiona straight from the ficha, with Deshacer. Off = back to "Completo" (obsessed implies it). */
 private fun toggleObsessed(store: AppStore, t: Title, on: Boolean, previous: Mark?, preview: Boolean) {
     val next = if (on) Mark.Obsessed else Mark.Completed
-    store.setMark(t.id, next, preview = preview)
+    // False = turning it off would delete your review: the confirmation is on screen, nothing changed.
+    if (!store.setMark(t.id, next, preview = preview)) return
     store.undoToast(if (on) "Ahora te obsesiona" else "Ya no te obsesiona") {
         store.setMark(t.id, previous, haptic = false, preview = preview)
     }
@@ -369,31 +374,8 @@ internal fun AlertButton(store: AppStore, titleId: String, on: String, off: Stri
 
 // MARK: Outside the app ───────────────────────────────────────────────────────────────────
 
-/** The system share sheet with a link (the title's public page). */
-internal fun shareLink(context: Context, url: String, subject: String) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, url)
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-    }
-    try {
-        context.startActivity(Intent.createChooser(send, null))
-    } catch (_: android.content.ActivityNotFoundException) {
-        // No app can share text: nothing to open.
-    }
-}
-
 /** Copies a link to the clipboard (Android 13+ shows its own confirmation). */
 internal fun copyLink(context: Context, url: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     cm.setPrimaryClip(ClipData.newPlainText("kura", url))
-}
-
-/** Opens a web/app link (a streaming service, the music app). */
-internal fun openExternal(context: Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE))
-    } catch (_: android.content.ActivityNotFoundException) {
-        // Nothing installed handles it (no browser): the row stays as it is.
-    }
 }

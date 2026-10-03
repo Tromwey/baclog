@@ -1,16 +1,14 @@
 package com.tromwey.kura.features.collectiondetail
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.shareText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,14 +29,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -62,7 +57,6 @@ import com.tromwey.kura.app.art
 import com.tromwey.kura.app.mark
 import com.tromwey.kura.app.reaction
 import com.tromwey.kura.data.models.CollectionLayout
-import com.tromwey.kura.data.models.KCollection
 import com.tromwey.kura.data.models.MediaFormat
 import com.tromwey.kura.data.models.Privacy
 import com.tromwey.kura.data.models.PublicLinks
@@ -78,7 +72,6 @@ import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KShadow
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
-import com.tromwey.kura.designsystem.UiWeight
 import com.tromwey.kura.designsystem.components.Cover
 import com.tromwey.kura.designsystem.components.FanPickRow
 import com.tromwey.kura.designsystem.components.FanView
@@ -89,7 +82,7 @@ import com.tromwey.kura.designsystem.components.KuraTextField
 import com.tromwey.kura.designsystem.components.NewCollectionRow
 import com.tromwey.kura.designsystem.components.RadioDot
 import com.tromwey.kura.designsystem.components.ReactionGroup
-import com.tromwey.kura.designsystem.components.RowValue
+import com.tromwey.kura.designsystem.components.KuraSwitch
 import com.tromwey.kura.designsystem.components.SettingsRow
 import com.tromwey.kura.designsystem.components.SheetDivider
 import com.tromwey.kura.designsystem.components.SheetHeader
@@ -117,6 +110,9 @@ import com.tromwey.kura.state.toggleAlert
 import com.tromwey.kura.state.toggleLayout
 import com.tromwey.kura.state.togglePin
 import kotlin.math.roundToInt
+import com.tromwey.kura.state.showToast
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.dismissSheet
 
 // Twin of ios/Kura/Features/CollectionDetail/CollectionSheets.swift: ONE options sheet per
 // collection (18a, and 9a without the view rows), Ordenar, Editar el orden, Editar, Quién la ve,
@@ -194,7 +190,6 @@ private fun KuraSheetScope.CollectionOptions(store: AppStore, id: String, full: 
 private fun PrivacySheetRow(p: Privacy, label: String, onClick: () -> Unit, trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}) {
     when (p) {
         Privacy.OnlyMe -> SheetRow(label, onClick, glyph = Glyph.Lock, trailing = trailing)
-        Privacy.Followers -> SheetRow(label, onClick, glyph = Glyph.Users, trailing = trailing)
         Privacy.Link -> SheetRow(label, onClick, icon = KIcon.Link, trailing = trailing)
         Privacy.PublicAccess -> SheetRow(label, onClick, icon = KIcon.Globe, trailing = trailing)
     }
@@ -277,7 +272,7 @@ fun KuraSheetScope.EditCollectionSheet(store: AppStore, sheet: SheetRoute.Rename
             KuraTextField(
                 name,
                 { name = it.take(AppStore.COLLECTION_NAME_LIMIT) },
-                "ponle nombre",
+                "nombre de la colección",
                 Modifier.semantics { contentDescription = "Nombre de la colección" },
                 serif = true,
                 clearable = true,
@@ -336,7 +331,7 @@ fun KuraSheetScope.ShareCollectionSheet(store: AppStore, sheet: SheetRoute.Share
                 when {
                     store.profilePrivate -> AppStore.PRIVATE_PROFILE_SHARE_NOTE
                     c.privacy == Privacy.OnlyMe -> "Está en ${Privacy.OnlyMe.label}: nadie más la puede abrir. Cambia quién la ve para compartirla."
-                    else -> "Todavía se está guardando. Inténtalo en un momento."
+                    else -> "Todavía se está guardando. Vuelve a intentarlo en un momento."
                 },
                 Modifier.padding(horizontal = 8.dp).padding(top = 12.dp, bottom = 4.dp),
                 style = KuraType.ui(14f).copy(color = KColor.text2, lineHeight = 20.sp),
@@ -359,7 +354,7 @@ fun KuraSheetScope.ShareCollectionSheet(store: AppStore, sheet: SheetRoute.Share
                 // Android 13+ confirms a copy itself; a second notice would repeat it.
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) store.showToast(ToastModel("Link copiado", ToastModel.Kind.Info))
             }
-            val send = { shareText(context, c.name, url) }
+            val send: () -> Unit = { shareText(context, url, c.name) }
             SplitActionButton(
                 "Copiar link",
                 copy,
@@ -369,16 +364,6 @@ fun KuraSheetScope.ShareCollectionSheet(store: AppStore, sheet: SheetRoute.Share
             )
         }
     }
-}
-
-/** The system share sheet with the link (Historia and Más both go through it on Android). */
-private fun shareText(context: Context, subject: String, url: String) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, url)
-    }
-    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 /**
@@ -427,21 +412,38 @@ fun KuraSheetScope.DeleteCollectionSheet(store: AppStore, sheet: SheetRoute.Dele
     val dismiss: () -> Unit = this::close
     val c = store.collection(sheet.id) ?: return
     val n = c.titleIds.size
+    // "Borrar también sus títulos": off by default (the founder's default keeps everything).
+    var purge by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 4.dp).padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         BasicText("¿borrar ${c.name}?", Modifier.padding(horizontal = 8.dp).semantics { heading() }, style = KuraType.news(26f))
-        BasicText(
-            if (n == 0) {
-                "Está vacía. Solo se borra esta colección. No se puede deshacer."
-            } else {
-                (if (n == 1) "El título conserva su estado y sigue" else "Los $n títulos conservan su estado y siguen") +
-                    " en tus otras colecciones. Solo se borra esta. No se puede deshacer."
-            },
-            Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 14.dp),
-            style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 21.sp),
-        )
+        // With the option on, its own note says what happens: the "conservan su estado" paragraph
+        // would contradict it, so it leaves.
+        if (!purge) {
+            BasicText(
+                if (n == 0) {
+                    "Está vacía. Solo se borra esta colección. No se puede deshacer."
+                } else {
+                    (if (n == 1) "El título conserva su estado y sigue" else "Los $n títulos conservan su estado y siguen") +
+                        " en tus otras colecciones. Solo se borra esta. No se puede deshacer."
+                },
+                Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = if (n == 0) 14.dp else 4.dp),
+                style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 21.sp),
+            )
+        }
+        // Nothing to choose for an empty collection.
+        if (n > 0) {
+            SettingsRow(
+                "Borrar también sus títulos",
+                Modifier.padding(bottom = 10.dp),
+                note = "Los que solo están en esta colección pierden su estado, tu reacción y tu reseña. No se puede deshacer.",
+                onClick = { purge = !purge },
+            ) {
+                KuraSwitch(purge, { purge = it }, label = "Borrar también sus títulos")
+            }
+        }
         SolidButton("Borrar colección", honey = false, onClick = {
             store.dismissSheet()
-            store.deleteCollection(c.id)
+            store.deleteCollection(c.id, purge = purge && n > 0)
         })
         KuraTextButton("Cancelar", { dismiss() }, Modifier.fillMaxWidth())
     }

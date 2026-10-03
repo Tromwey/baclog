@@ -136,7 +136,7 @@ suspend fun AppStore.loadParty(id: String, force: Boolean = false) {
         when (fail(LoadKey.PartyKey(id), err)) {
             KuraApiError.NotFound -> {
                 // Deleted, you left, or a block with the host (the server never says which). One we
-                // had on screen or in the list: out of every tab + "Esa fiesta ya no está." and the
+                // had on screen or in the list: out of every tab + "Esa fiesta ya no está disponible." and the
                 // list re-read. One we never had (a link to someone else's): the page says so.
                 val known = s.party.parties[id] != null || s.party.cards?.any { it.id == id } == true
                 s.party.missing = s.party.missing + id
@@ -262,7 +262,7 @@ private fun AppStore.setSongPalette(titleId: String, hexes: List<String>) {
 // MARK: Writes
 
 /** The toast for a party write that failed (the server's `message` when it wrote the copy). */
-fun partyText(e: KuraApiError): String = when {
+fun partyText(e: KuraApiError, fallback: String = e.toast): String = when {
     e == KuraApiError.Unavailable -> PartyCopy.UNAVAILABLE
     // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
     e is KuraApiError.Conflict && e.message.isNotEmpty() -> e.message
@@ -271,23 +271,26 @@ fun partyText(e: KuraApiError): String = when {
     e is KuraApiError.Forbidden -> when (e.code) {
         "blocked" -> "Ya no puedes agregar canciones a esta fiesta."
         "view_only" -> "En esta fiesta solo se puede ver la colección."
-        "not_yours" -> "Solo puedes quitar las canciones que pusiste tú."
+        "not_yours" -> "Solo puedes quitar las canciones que agregaste tú."
         else -> "No tienes permiso para hacer eso."
     }
     e == KuraApiError.NotFound -> "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella."
     // A code this build doesn't know: the server's own `message` (never "HTTP 500").
     e is KuraApiError.Server && e.detail.isNotEmpty() && !e.detail.startsWith("HTTP ") && !e.detail.contains("Exception") -> e.detail
-    else -> e.toast
+    // What this write was, when the error has no words of its own (the network's keep theirs).
+    else -> e.toast(fallback)
 }
 
-private fun AppStore.partyToast(e: KuraApiError) {
+private fun AppStore.partyToast(e: KuraApiError, fallback: String = e.toast) {
     if (e == KuraApiError.Unauthorized) return
-    showToast(ToastModel(partyText(e), ToastModel.Kind.Info))
+    // Crear / renombrar con la cuenta a medias: the one handler (toast + `GET /me` + `route`).
+    if (onboardingRequired(e)) return
+    showToast(ToastModel(partyText(e, fallback), ToastModel.Kind.Info))
 }
 
 /**
  * A party write that failed. A 404 is "not there for you": re-read the party, which pops it (with
- * "Esa fiesta ya no está.") when it's really gone; when the party is still there the 404 was about
+ * "Esa fiesta ya no está disponible.") when it's really gone; when the party is still there the 404 was about
  * the song, and [stale] says so. Everything else is the toast.
  */
 private suspend fun AppStore.partyWriteFailed(partyId: String, e: KuraApiError, stale: String = "Eso ya no está en la fiesta. La actualizamos.") {
@@ -319,6 +322,7 @@ suspend fun AppStore.createParty(name: String, perGuestLimit: Int?): Boolean {
         is BoundWrite.Failed -> {
             val e = r.error
             when {
+                onboardingRequired(e) -> Unit
                 e is KuraApiError.Invalid ->
                     showToast(ToastModel(e.fields["name"] ?: e.message.ifEmpty { "Revisa el nombre." }, ToastModel.Kind.Info))
                 e == KuraApiError.Unavailable -> {
@@ -433,7 +437,7 @@ suspend fun AppStore.addPartySong(partyId: String, hit: PartySongHit): SongAdd {
                 dismissToast()
                 present(SheetRoute.PartyCap(partyId))
             } else {
-                showToast(ToastModel("Pusiste ${hit.title}.", ToastModel.Kind.Info))
+                showToast(ToastModel("Agregaste ${hit.title}.", ToastModel.Kind.Info))
             }
             SongAdd.Added
         }
@@ -513,10 +517,12 @@ private val AppStore.readyForLinks: Boolean
     get() = phase == AppPhase.Main && didBootstrap && loadState != LoadState.Loading
 
 /**
- * Signed in: join at once (idempotent) and open the party — "ya estás dentro." the first time (the
- * "returning" variant when the account already existed), no sheet for the host or a member coming
- * back. A dead link opens the landing in its dead shape. Called before the tabs are up it waits in
- * [AppStore.pendingInvite] (`openPendingInvite` opens it).
+ * "Entrar a la fiesta" on the landing (signed in) — the ONLY thing that joins (founder, 2026-10-01: a
+ * link opens the landing, the tap joins; `openLink` never calls this). Idempotent: "ya estás dentro."
+ * the first time (the "returning" variant when the account already existed), no sheet for the host or
+ * a member coming back. A dead link leaves the landing in its dead shape. Called before the tabs are
+ * up it waits in [AppStore.pendingInvite] (`openPendingInvite` runs it — reached only from that tap or
+ * from the signed-out CTA, `signInForInvite`, which is the same consent).
  */
 suspend fun AppStore.openInvite(token: String) {
     if (!readyForLinks) {
@@ -541,10 +547,10 @@ suspend fun AppStore.openInvite(token: String) {
         }
         is BoundWrite.Failed -> {
             val e = r.error
-            if (e is KuraApiError.Forbidden && e.code == "onboarding_required") {
+            if (e is KuraApiError.Forbidden && e.needsOnboarding) {
                 // The link waits for the account to be ready: finishing O1b opens it again, which joins.
                 pendingInvite = token
-                showToast(ToastModel("Termina de crear tu cuenta para entrar a la fiesta.", ToastModel.Kind.Info))
+                onboardingRequired(e, "Termina tu registro para entrar a la fiesta.")
                 return
             }
             when (e) {
@@ -559,7 +565,9 @@ suspend fun AppStore.openInvite(token: String) {
                     // Offline, a 5xx, a rate limit: never lose the link. The landing shows it with the
                     // error and Reintentar (a preview that loads brings back "Entrar a la fiesta").
                     setLoadError(LoadKey.Invite(token), e)
-                    partyToast(e)
+                    // A plain 429 here is "too fast", not `partyText`'s "Creaste varios links".
+                    if (e is KuraApiError.RateLimited) showToast(ToastModel(e.toast, ToastModel.Kind.Info))
+                    else partyToast(e, fallback = PartyCopy.JOIN_FAILED)
                 }
             }
             inviteLanding = token

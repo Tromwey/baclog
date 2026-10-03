@@ -208,7 +208,7 @@ class PartiesTest {
         h.api.party = h.api.guestView(remaining = 3, mine = 0)
         h.store.loadParty(h.api.party.id)
         assertEquals(SongAdd.Added, h.store.addPartySong(h.api.party.id, h.api.hit()))
-        assertEquals("Pusiste Oye mi amor.", h.store.toast?.text)
+        assertEquals("Agregaste Oye mi amor.", h.store.toast?.text)
         assertNull(h.store.sheet)
     }
 

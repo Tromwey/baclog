@@ -27,6 +27,7 @@ import com.tromwey.kura.designsystem.components.TabTitleBar
 import com.tromwey.kura.designsystem.components.kuraTitleScroll
 import com.tromwey.kura.designsystem.components.rememberKuraTitleScroll
 import com.tromwey.kura.state.AppStore
+import com.tromwey.kura.state.pop
 
 // The body every placeholder screen/sheet draws until its lane replaces the file. Temporary by
 // design: a lane that implements a screen drops the call, and when none is left this file goes.

@@ -38,6 +38,7 @@ private fun AppStore.adopt(serverId: String, localId: String) {
     if (serverId == localId) return
     s.collectionAliases[localId] = serverId
     // Pending removals and write queues keyed by the local id follow it to the server id.
+    s.moveWriteSlots(localId, serverId)
     val suffix = "|$localId"
     for (k in s.deferredWrites.keys.filter { it.endsWith(suffix) }) {
         val t = s.deferredWrites.remove(k) ?: continue
@@ -70,6 +71,9 @@ fun AppStore.createCollection(name: String, privacy: Privacy, adding: String? = 
     val trimmed = name.trim()
     val finalName = if (trimmed.isEmpty()) "colección nueva" else trimmed.lowercase().take(AppStore.COLLECTION_NAME_LIMIT)
     val at = now
+    // What the phone knew BEFORE this POST: the retry of a lost answer tells "that POST's collection"
+    // from one that was already here by this, not by what `s.collections` holds when it runs.
+    val known = s.collections.map { it.id }.toSet()
     var c = KCollection(id = AppStore.localId("c"), name = finalName, titleIds = emptyList(), privacy = privacy, createdAt = at)
     if (adding != null) {
         c = c.copy(titleIds = listOf(adding), addedAt = mapOf(adding to at))
@@ -99,17 +103,120 @@ fun AppStore.createCollection(name: String, privacy: Privacy, adding: String? = 
             if (s !== session) return@launch
             session.pendingCollections.remove(localId)
             val e = noteError(err)
+            if (s !== session) return@launch // a 401 replaced the session: nothing of this one to undo
             s.collections = s.collections.filter { it.id != localId }
             if (adding != null) gcUserState(adding)
             if (e == null || e == KuraApiError.Unauthorized) return@launch
-            retryToast(e.toast("No se pudo crear la colección."), "create|$localId") {
-                dismissToast()
-                createCollection(finalName, privacy, adding)
+            // A TIMEOUT is the only failure after which the POST may have landed anyway: only then does
+            // the retry look for it first. A plain offline (nothing went out) or an answered error just
+            // sends the POST again — reading the library to "adopt" a homonym there would take a
+            // collection made on another device for this one.
+            val lost = e == KuraApiError.Offline && api.lastOfflineTimedOut
+            val failedAt = realNow() // not `now`: that one ticks by the minute
+            createFailed(e, "create|$localId") {
+                if (lost) recreateCollection(finalName, privacy, adding, since = at, until = failedAt, known = known)
+                else createCollection(finalName, privacy, adding)
             }
         }
     }
     return c.id
 }
+
+/**
+ * A "crear colección" (or the library read of its retry) failed. `createCollection` doesn't go through
+ * `sync`, so the same rules live here: Reintentar — and the resend when the network is back — ONLY for
+ * what trying again can fix (offline, a 5xx / 503). A definitive answer (400, 403, 409, 429) says why
+ * once, with the server's words, and queues nothing: every reconnection would repeat the POST for the
+ * same refusal. `403 onboarding_required` goes to its one handler.
+ */
+private fun AppStore.createFailed(e: KuraApiError, key: String, redo: () -> Unit) {
+    if (onboardingRequired(e)) return
+    val fallback = "No se pudo crear la colección."
+    when (e) {
+        KuraApiError.Offline, KuraApiError.Unavailable, is KuraApiError.Server, is KuraApiError.ServiceUnavailable ->
+            retryToast(e.toast(fallback), key) {
+                dismissToast()
+                redo()
+            }
+        is KuraApiError.Forbidden -> showToast(ToastModel(e.note.ifEmpty { fallback }, ToastModel.Kind.Info))
+        is KuraApiError.Conflict -> showToast(ToastModel(e.message.ifEmpty { fallback }, ToastModel.Kind.Info))
+        else -> showToast(ToastModel(e.toast(fallback), ToastModel.Kind.Info))
+    }
+}
+
+/** How far before the first attempt a collection's `createdAt` may fall and still be "that POST"
+ *  (the phone's clock against the server's). */
+private val CREATE_WINDOW_SKEW: java.time.Duration = java.time.Duration.ofMinutes(2)
+
+/** How far after the attempt FAILED it may fall: the server can finish a POST whose answer timed out a
+ *  little later, never minutes later. Past it, a homonym is somebody else's (another device). */
+private val CREATE_WINDOW_LATE: java.time.Duration = java.time.Duration.ofMinutes(1)
+
+/** The lost POST's collection was found with another privacy than the one chosen: adopted as it is. */
+internal const val ADOPTED_AS_IS_NOTE = "Esa colección ya existía con otra privacidad. Se quedó como estaba."
+
+/**
+ * Reintentar (or the network coming back) of a "crear colección" whose answer was LOST (a timeout — the
+ * only caller: a plain offline or an answered error just POSTs again). `POST /collections` is NOT
+ * idempotent and takes no idempotency key: the collection may exist already, and a blind second POST
+ * would make a twin. So the library is read first — a collection with this name, created inside the
+ * window of that attempt ([since] − skew … [until] + a short margin), that the phone didn't know WHEN
+ * THAT ATTEMPT WENT OUT ([known]) IS the one: it's adopted (and the title saved in it), never created
+ * again. Compared against [known], not against `s.collections` now: a pull to refresh or the
+ * reconnection's `bootstrap` between the failure and this retry already brought the lost collection in,
+ * and it would read as "one the phone knows" → a twin. A read that fails creates nothing and offers
+ * Reintentar again.
+ *
+ * **Adopting never changes who can see a collection.** A same-name one with the privacy that was chosen
+ * is preferred; one with ANOTHER privacy is adopted exactly as the server has it, with a notice and no
+ * `PATCH` — it may be a collection made Private on purpose on another device, and publishing it because
+ * a name matched is the one thing this must never do. (Fiestas never come in `GET /collections`.)
+ */
+private fun AppStore.recreateCollection(
+    name: String, privacy: Privacy, adding: String?, since: java.time.Instant, until: java.time.Instant, known: Set<String>,
+) {
+    val session = s
+    scope.launch {
+        val server = try {
+            api.collections()
+        } catch (err: Exception) {
+            if (err is kotlinx.coroutines.CancellationException) throw err
+            if (s !== session) return@launch
+            val e = noteError(err)
+            if (e == null || e == KuraApiError.Unauthorized) return@launch
+            if (s !== session) return@launch
+            createFailed(e, "create|$name") { recreateCollection(name, privacy, adding, since, until, known) }
+            return@launch
+        }
+        if (s !== session) return@launch
+        online()
+        // A collection created here with a local id that got its server id since: still "known".
+        val before = known.map { canonicalCollectionId(it) }.toSet()
+        val from = since.minus(CREATE_WINDOW_SKEW)
+        val to = until.plus(CREATE_WINDOW_LATE)
+        val landed = server
+            .filter { it.name == name && it.id !in before && !it.createdAt.isBefore(from) && !it.createdAt.isAfter(to) }
+            .sortedWith(compareByDescending<KCollection> { it.privacy == privacy }.thenByDescending { it.createdAt })
+            .firstOrNull()
+        if (landed == null) {
+            createCollection(name, privacy, adding)
+            return@launch
+        }
+        // Already on screen when a library read came in between: it's adopted as it is, not added twice.
+        if (collection(landed.id) == null) {
+            registerAll(landed.embeddedTitles)
+            s.collections = s.collections + applyLocal(landed)
+            s.loadedCollections = s.loadedCollections + landed.id
+        }
+        lastUsedCollectionId = landed.id
+        if (adding != null && collection(landed.id)?.titleIds?.contains(adding) != true) add(adding, landed.id, toast = false)
+        // The SERVER's privacy stays (see above): said, never written.
+        if (landed.privacy != privacy) showToast(ToastModel(ADOPTED_AS_IS_NOTE, ToastModel.Kind.Info))
+    }
+}
+
+/** The Reintentar key of an edit of collection [id]'s [fields] (see `SessionData.collectionRetries`). */
+private fun collectionRetryKey(id: String, fields: Collection<String>) = "c.${fields.joinToString("+")}|$id"
 
 internal fun AppStore.update(id: String, change: (KCollection) -> KCollection) {
     val cid = canonicalCollectionId(id)
@@ -122,40 +229,79 @@ internal fun AppStore.update(id: String, change: (KCollection) -> KCollection) {
 private data class CollectionWas(val name: String?, val vibe: String?, val privacy: Privacy?)
 
 /**
- * `PATCH /collections/{id}` for a name / frase edit or a privacy change. On ANY failure the collection
- * goes back to what it was — only if it still shows what this write set. A rejected value (400) says
- * why; anything else offers Reintentar, which applies the change again and resends it.
+ * `PATCH /collections/{id}` for a name / frase edit or a privacy change. On ANY failure each field goes
+ * back to what the SERVER last confirmed (`SessionData.beginWrite`: renaming a → b → c offline ends on
+ * "a", not on the optimistic "b") — only if it still shows what this write set and no newer write of
+ * that field is unresolved. A rejected value (400) says why; anything else offers Reintentar, which
+ * applies the change again and resends it. `was` = what each field showed before this write.
  * `vibe` null = untouched, "" = cleared (the server stores an empty frase as `null`).
  */
 private fun AppStore.syncCollection(id: String, name: String? = null, vibe: String? = null, privacy: Privacy? = null, was: CollectionWas) {
-    sync(key = AppStore.WriteKey.collection(canonicalCollectionId(id)), onError = err@{ e ->
+    val session = s
+    // Recomputed at each use: `adopt` moves the slots from the local id to the server's.
+    fun slot(field: String) = "$field|${canonicalCollectionId(id)}"
+    if (name != null) session.beginWrite(slot("cname"), was.name)
+    if (vibe != null) session.beginWrite(slot("cvibe"), was.vibe)
+    if (privacy != null) session.beginWrite(slot("cpriv"), was.privacy)
+    // One Reintentar per field: this write retires the failed ones waiting on the fields IT writes
+    // (they'd be resent over it), and leaves the rest offered.
+    val fields = listOfNotNull("name".takeIf { name != null }, "vibe".takeIf { vibe != null }, "priv".takeIf { privacy != null })
+    for (k in session.collectionRetries(canonicalCollectionId(id), fields.toSet())) settleRetry(session, k)
+    sync(key = AppStore.WriteKey.collection(canonicalCollectionId(id)), retryKey = collectionRetryKey(canonicalCollectionId(id), fields), onError = err@{ e ->
+        val n = if (name != null) session.endWrite(slot("cname")) else null
+        val v = if (vibe != null) session.endWrite(slot("cvibe")) else null
+        val p = if (privacy != null) session.endWrite(slot("cpriv")) else null
+        val baseName = n?.value as? String ?: was.name
+        val baseVibe = v?.value as? String ?: was.vibe
+        val basePrivacy = p?.value as? Privacy ?: was.privacy
         update(id) { c ->
             var out = c
-            if (name != null && c.name == name && was.name != null) out = out.copy(name = was.name)
-            if (vibe != null && (c.vibe ?: "") == vibe && was.vibe != null) out = out.copy(vibe = was.vibe.ifEmpty { null })
-            if (privacy != null && c.privacy == privacy && was.privacy != null) out = out.copy(privacy = was.privacy)
+            if (name != null && c.name == name && n?.newer != true && baseName != null) out = out.copy(name = baseName)
+            if (vibe != null && (c.vibe ?: "") == vibe && v?.newer != true && baseVibe != null) out = out.copy(vibe = baseVibe.ifEmpty { null })
+            if (privacy != null && c.privacy == privacy && p?.newer != true && basePrivacy != null) out = out.copy(privacy = basePrivacy)
             out
         }
+        // What is left to retry: a field the server already has as asked (a → b → a, both lost) isn't,
+        // and neither is one a NEWER write of it is about to decide — offering the old value again
+        // would send it after (over) the newer one.
+        val rName = name?.takeIf { baseName != it && n?.newer != true }
+        val rVibe = vibe?.takeIf { baseVibe != it && v?.newer != true }
+        val rPrivacy = privacy?.takeIf { basePrivacy != it && p?.newer != true }
+        if (rName == null && rVibe == null && rPrivacy == null) return@err true
+        val left = listOfNotNull("name".takeIf { rName != null }, "vibe".takeIf { rVibe != null }, "priv".takeIf { rPrivacy != null })
         when (e) {
-            KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> return@err true
+            KuraApiError.Unauthorized -> return@err true
+            // Reverted above; a 404 / 501 can't be retried into working, so it says so instead of
+            // going quiet (the change looked saved for a moment).
+            KuraApiError.NotFound -> showToast(ToastModel(AppStore.GONE_COLLECTION_NOTE, ToastModel.Kind.Info))
+            KuraApiError.Unsupported -> showToast(ToastModel(AppStore.NOT_SAVED_NOTE, ToastModel.Kind.Info))
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se guardaron los cambios de la colección."), AppStore.WriteKey.collection(canonicalCollectionId(id))) {
-                if (collection(id) == null) return@retryToast
+            else -> retryToast(e.toast("No se pudo guardar la colección."), collectionRetryKey(canonicalCollectionId(id), left)) {
+                val cur = collection(id) ?: return@retryToast
                 dismissToast()
+                // What it shows NOW (the reverted, confirmed values) is what this resend replaces.
+                val before = CollectionWas(
+                    if (rName != null) cur.name else null,
+                    if (rVibe != null) cur.vibe ?: "" else null,
+                    if (rPrivacy != null) cur.privacy else null,
+                )
                 update(id) { c ->
                     var out = c
-                    if (name != null) out = out.copy(name = name)
-                    if (vibe != null) out = out.copy(vibe = vibe.ifEmpty { null })
-                    if (privacy != null) out = out.copy(privacy = privacy)
+                    if (rName != null) out = out.copy(name = rName)
+                    if (rVibe != null) out = out.copy(vibe = rVibe.ifEmpty { null })
+                    if (rPrivacy != null) out = out.copy(privacy = rPrivacy)
                     out
                 }
-                syncCollection(id, name, vibe, privacy, was)
+                syncCollection(id, rName, rVibe, rPrivacy, before)
             }
         }
         true
     }) { api ->
         val sid = resolveCollectionId(id)
         api.updateCollection(sid, name, vibe, privacy)
+        if (name != null) slot("cname").let { session.confirmWrite(it, name); session.endWrite(it) }
+        if (vibe != null) slot("cvibe").let { session.confirmWrite(it, vibe); session.endWrite(it) }
+        if (privacy != null) slot("cpriv").let { session.confirmWrite(it, privacy); session.endWrite(it) }
     }
 }
 
@@ -226,14 +372,21 @@ private fun AppStore.syncCuration(
     stillOurs: (KCollection) -> Boolean,
     revert: () -> Unit,
     reapply: () -> Unit,
+    /** The Reintentar's key when [key] is the collection's whole line (`c|id`): cover and order each
+     *  have theirs, so one doesn't retire the other's (nor a rename's). */
+    retryKey: String = key,
     op: suspend (KuraApi, String) -> Unit,
 ) {
-    sync(key = key, onError = err@{ e ->
+    sync(key = key, retryKey = retryKey, onError = err@{ e ->
         collection(id)?.let { if (stillOurs(it)) revert() }
         when (e) {
-            KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> return@err true
+            KuraApiError.Unauthorized -> return@err true
+            // Reverted above; a 404 / 501 can't be retried into working, so it says so instead of
+            // going quiet (the change looked saved for a moment).
+            KuraApiError.NotFound -> showToast(ToastModel(AppStore.GONE_COLLECTION_NOTE, ToastModel.Kind.Info))
+            KuraApiError.Unsupported -> showToast(ToastModel(AppStore.NOT_SAVED_NOTE, ToastModel.Kind.Info))
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast, key) {
+            else -> retryToast(e.toast, retryKey) {
                 if (collection(id) == null) return@retryToast
                 dismissToast()
                 reapply()
@@ -290,6 +443,7 @@ private fun AppStore.writeCover(id: String, titleId: String?, was: String?) {
         stillOurs = { it.chosenCoverTitleId == titleId },
         revert = { update(id) { it.copy(chosenCoverTitleId = was) } },
         reapply = { writeCover(id, titleId, was) },
+        retryKey = collectionRetryKey(canonicalCollectionId(id), listOf("cover")),
     ) { api, sid -> api.setCollectionCover(sid, titleId) }
 }
 
@@ -319,6 +473,7 @@ private fun AppStore.writeOrder(id: String, order: List<String>, was: List<Strin
         stillOurs = { it.titleIds == order },
         revert = { update(id) { it.copy(titleIds = was) } },
         reapply = { writeOrder(id, order, was) },
+        retryKey = collectionRetryKey(canonicalCollectionId(id), listOf("order")),
     ) { api, sid -> api.reorderCollection(sid, order) }
 }
 
@@ -339,7 +494,17 @@ fun AppStore.toggleLayout(id: String) {
     setLayout(id, if (c.layout == CollectionLayout.List) CollectionLayout.Covers else CollectionLayout.List)
 }
 
-fun AppStore.deleteCollection(id: String) {
+/** What "borrar también sus títulos" took off the phone for one title, to put it back if the DELETE fails. */
+private class PurgedTitle(val id: String, val state: UserTitleState?, val reviews: List<com.tromwey.kura.data.models.Review>)
+
+/**
+ * Borrar colección. Default (`purge = false`): only the collection goes; its titles keep their state,
+ * your reaction and your review. [purge] (`DELETE …?purge=1`, the sheet's "Borrar también sus títulos"):
+ * the titles that are in NO other collection lose all of that too — off the screen at once (state, own
+ * review, your count of reviews) with whatever of theirs waited in the retry queue (`mark|T`,
+ * `review|T`, `m|T|*`), and ALL of it back if the server refuses. A 404 is a success either way.
+ */
+fun AppStore.deleteCollection(id: String, purge: Boolean = false) {
     val cid = canonicalCollectionId(id)
     val index = s.collections.indexOfFirst { it.id == cid }
     val gone = s.collections.getOrNull(index)
@@ -348,23 +513,61 @@ fun AppStore.deleteCollection(id: String) {
     for (key in s.deferredWrites.keys.filter { it.endsWith("|$cid") }) s.deferredWrites.remove(key)?.cancel()
     val session = s
     val key = AppStore.WriteKey.collection(cid)
+    // Its failed edits still waiting (a rename, a cover) have nothing left to edit.
+    // Same for a failed save / quitar of a title in it (`m|…|cid`):
+    // settled, not dropped — a timed-out one must NOT read the collection again (the GET could land
+    // before this DELETE and put the collection back on screen).
+    for (k in session.collectionRetries(cid, null) + session.membershipRetries(cid)) settleRetry(session, k)
+
+    // "Borrar también sus títulos": the ones left in no collection once this one is gone.
+    val meId = me.id
+    val purged = if (purge && gone != null) {
+        gone.titleIds.distinct().filter { !isSaved(it) }.map { t -> PurgedTitle(t, s.userTitles[t], reviewList(t).filter { it.authorId == meId }) }
+    } else {
+        emptyList()
+    }
+    val lostReviews = purged.count { it.reviews.isNotEmpty() || it.state?.reviewId != null }
+    // Their queued writes leave the queue (resent after the DELETE they'd bring the state back); kept
+    // aside for the revert. Writes of theirs still in flight go first, so the server sees them in order.
+    val queued = LinkedHashMap<String, PendingRetry>()
+    val before = ArrayList<Job>()
+    for (p in purged) {
+        for ((k, v) in session.pendingRetries) if (session.retryIsAbout(k, p.id)) queued[k] = v
+        for ((k, chain) in session.writeChains) if (session.retryIsAbout(k, p.id)) before += chain.job
+        dropRetriesAbout(session, p.id)
+        setState(p.id, null)
+        removeReviews(p.id) { it.authorId == meId }
+    }
+    if (lostReviews > 0) account?.let { a -> account = a.copy(stats = a.stats.copy(reviews = maxOf(0, a.stats.reviews - lostReviews))) }
+
     sync(key = key, onError = err@{ e ->
         if (e == KuraApiError.NotFound) return@err true // already gone on the server
-        // The server still has it: it comes back where it was, and Reintentar deletes it again.
+        // The server still has it: it comes back where it was — with everything the purge took — and
+        // Reintentar deletes it again, the same way.
         if (gone != null && s.collections.none { it.id == cid }) {
             s.collections = s.collections.toMutableList().also { it.add(index.coerceIn(0, it.size), gone) }
+            for (p in purged) {
+                if (s.userTitles[p.id] == null) setState(p.id, p.state)
+                val back = p.reviews.filter { review(it.id) == null }
+                if (back.isNotEmpty()) setReviews(p.id, reviewList(p.id) + back)
+            }
+            if (lostReviews > 0) account?.let { a -> account = a.copy(stats = a.stats.copy(reviews = a.stats.reviews + lostReviews)) }
+            for ((k, v) in queued) if (!session.pendingRetries.containsKey(k)) session.pendingRetries[k] = v
             saveLocal()
         }
         when (e) {
-            KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+            KuraApiError.Unauthorized -> Unit
+            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se borró la colección."), ToastModel.Kind.Info))
             else -> retryToast(e.toast("No se borró la colección."), session.canonicalWriteKey(key)) {
                 dismissToast()
-                deleteCollection(cid)
+                deleteCollection(cid, purge)
             }
         }
+        offerPendingRetries()
         true
     }) { api ->
-        api.deleteCollection(resolveCollectionId(cid))
+        before.forEach { it.join() }
+        api.deleteCollection(resolveCollectionId(cid), purge)
     }
     saveLocal()
     showToast(ToastModel("Colección borrada", ToastModel.Kind.Info))
@@ -450,9 +653,12 @@ internal fun AppStore.syncAdd(titleId: String, collectionId: String) {
             gcUserState(titleId)
         }
         when (e) {
-            KuraApiError.Unauthorized, KuraApiError.NotFound, KuraApiError.Unsupported -> Unit
+            KuraApiError.Unauthorized -> Unit
+            // Taken back off the collection above: the collection or the title is gone on the server.
+            KuraApiError.NotFound -> showToast(ToastModel(AppStore.GONE_SAVE_NOTE, ToastModel.Kind.Info))
+            KuraApiError.Unsupported -> showToast(ToastModel(AppStore.NOT_SAVED_NOTE, ToastModel.Kind.Info))
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se guardó en ${collection(cid)?.name ?: "la colección"}."), key) {
+            else -> retryToast(e.toast("No se pudo guardar en ${collection(cid)?.name ?: "la colección"}."), key) {
                 if (collection(cid) == null) return@retryToast
                 dismissToast()
                 add(titleId, cid, toast = false)
@@ -493,7 +699,8 @@ private fun AppStore.syncRemove(titleId: String, collectionId: String, state: Us
                 if (s.userTitles[titleId] == null) setState(titleId, restored ?: UserTitleState(savedAt = now))
             }
             when (e) {
-                KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+                KuraApiError.Unauthorized -> Unit
+                KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}."), ToastModel.Kind.Info))
                 else -> retryToast(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}."), key) {
                     if (collection(cid)?.titleIds?.contains(titleId) != true) return@retryToast
                     dismissToast()
@@ -701,6 +908,7 @@ fun AppStore.removeFromLibrary(titleId: String) {
     }
     val state = s.userTitles[titleId]
     val myReviews = reviewList(titleId).filter { it.authorId == me.id }
+    dropRetriesAbout(session, titleId)
     s.collections = s.collections.map { c -> if (titleId in c.titleIds) c.removing(titleId) else c }
     setState(titleId, null)
     removeReviews(titleId) { it.authorId == me.id }
@@ -745,17 +953,29 @@ fun AppStore.removeFromLibrary(titleId: String) {
     showToast(t)
 }
 
+/**
+ * The title is leaving the library: a failed mark / review / save of it still waiting for the network
+ * (or for its Reintentar) is dropped, toast included. Resent after the `DELETE /me/titles/{id}` it would
+ * bring the title back on the server — with its obsession, and into the feed.
+ */
+private fun AppStore.dropRetriesAbout(session: SessionData, titleId: String) {
+    session.purgeRetries(titleId)
+    if (s === session) offerPendingRetries()
+}
+
 private fun AppStore.sendLibraryRemoval(titleId: String): Job {
     val session = s
     val key = AppStore.WriteKey.library(titleId)
     val putBack = session.libraryRemovals.remove(titleId)
+    dropRetriesAbout(session, titleId)
     return sync(key = key, titleId = titleId, commitsLibraryRemoval = false, onError = err@{ e ->
         if (e == KuraApiError.NotFound) return@err true // nothing of it on the server either
         // The server kept it all: back on screen (unless it was saved again meanwhile), and
         // Reintentar quits it again (with its own Deshacer).
         if (titleId !in libraryIds && session.writeChains[session.canonicalWriteKey(key)] == null) putBack?.invoke()
         when (e) {
-            KuraApiError.Unauthorized, KuraApiError.Unsupported -> Unit
+            KuraApiError.Unauthorized -> Unit
+            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de tus colecciones."), ToastModel.Kind.Info))
             else -> retryToast(e.toast("No se quitó de tus colecciones."), key) {
                 dismissToast()
                 removeFromLibrary(titleId)

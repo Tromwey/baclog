@@ -50,6 +50,8 @@ import com.tromwey.kura.state.fillPaletteIfNeeded
 import com.tromwey.kura.state.isUnreleased
 import com.tromwey.kura.state.label
 import com.tromwey.kura.state.releaseLabel
+import com.tromwey.kura.state.push
+import com.tromwey.kura.state.present
 
 // Pieces every Descubrir page shares (Todo, the three formats, the search): the title's cover with
 // its shared-element key, the section head, the horizontal cover row, the page tint and the labels.

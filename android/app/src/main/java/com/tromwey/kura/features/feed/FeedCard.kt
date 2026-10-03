@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -88,6 +90,7 @@ import com.tromwey.kura.state.AppStore
 import com.tromwey.kura.state.fillPaletteIfNeeded
 import com.tromwey.kura.state.isFollowing
 import com.tromwey.kura.state.toggleFollow
+import com.tromwey.kura.state.push
 
 /** The card's inner rhythm, one source for every variant (iOS `FeedCardInset`): chip at 18, last
  *  line 22 above the edge, 14 between chip · art · text. Cards abut, so card → card is always 40. */
@@ -125,7 +128,10 @@ internal fun FeedCard(store: AppStore, event: FeedEvent, height: Dp, topInset: D
                         Modifier.clickable(interactionSource = null, indication = null, onClickLabel = "Abrir ${title?.name ?: "la obra"}") {
                             store.push(Route.TitleRoute(tid))
                         }
-                    } ?: Modifier,
+                    // A card with no title of its own (burst, suggestion) still TAKES the tap: a card
+                    // with no pointer input isn't hit at all, and the tap went through to the card
+                    // pinned underneath, which opened ITS title.
+                    } ?: Modifier.pointerInput(Unit) { detectTapGestures { } },
                 )
                 .padding(start = 20.dp, end = 20.dp, top = FeedCardInset.top + topInset, bottom = FeedCardInset.bottom),
             verticalArrangement = Arrangement.spacedBy(FeedCardInset.gap),
@@ -184,7 +190,7 @@ private fun FeedReviewMenu(store: AppStore, review: Review) {
 private fun FeedArt(store: AppStore, event: FeedEvent, title: Title?) {
     when (val k = event.kind) {
         is FeedKind.Burst -> BurstStrip(store, k.titleIds.mapNotNull { store.title(it) })
-        is FeedKind.Suggestion -> SuggestionFan(store, k.titleIds.mapNotNull { store.title(it) })
+        is FeedKind.Suggestion -> SuggestionFan(store, k.titleIds.mapNotNull { store.title(it) }, store.person(k.personId)?.handle)
         else -> if (title != null) {
             BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val a = title.format.aspect
@@ -246,16 +252,29 @@ private fun BurstStrip(store: AppStore, titles: List<Title>) {
 
 /** The suggestion's three covers: the one the reason names in front, the others tilted ±8° behind. */
 @Composable
-private fun SuggestionFan(store: AppStore, titles: List<Title>) {
+private fun SuggestionFan(store: AppStore, titles: List<Title>, handle: String?) {
     val order = if (titles.size >= 3) listOf(titles[1], titles[0], titles[2]) else titles
     val front = if (titles.size >= 3) 1 else order.size / 2
-    BoxWithConstraints(Modifier.fillMaxSize().clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val h = maxHeight * 0.64f
         order.forEachIndexed { i, t ->
             val pos = (i - front).toFloat()
+            // The fan is the person's library: any cover opens their profile (web and iOS do the same).
             Cover(
                 t.art,
-                Modifier.zIndex(if (i == front) 3f else 1f).offset(x = 58.dp * pos).rotate(pos * 8f),
+                Modifier
+                    .zIndex(if (i == front) 3f else 1f)
+                    .offset(x = 58.dp * pos)
+                    .rotate(pos * 8f)
+                    .then(
+                        if (handle != null) {
+                            Modifier
+                                .kPressable(onClickLabel = "Ver el perfil") { store.push(Route.PersonRoute(handle)) }
+                                .clearAndSetSemantics { contentDescription = "Ver el perfil de @$handle"; role = Role.Button }
+                        } else {
+                            Modifier.clearAndSetSemantics { }
+                        },
+                    ),
                 height = h,
                 onMissingPalette = { store.fillPaletteIfNeeded(t) },
             )

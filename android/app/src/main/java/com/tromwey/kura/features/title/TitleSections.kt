@@ -1,5 +1,8 @@
 package com.tromwey.kura.features.title
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.tromwey.kura.app.openLink
 import android.os.Build
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -20,14 +23,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -66,6 +68,8 @@ import com.tromwey.kura.designsystem.KRadius
 import com.tromwey.kura.designsystem.KuraType
 import com.tromwey.kura.designsystem.MonoLabel
 import com.tromwey.kura.designsystem.UiWeight
+import com.tromwey.kura.designsystem.components.WindowEnd
+import com.tromwey.kura.designsystem.components.rememberWindow
 import com.tromwey.kura.designsystem.components.Cover
 import com.tromwey.kura.designsystem.components.FanView
 import com.tromwey.kura.designsystem.components.GlassButton
@@ -93,6 +97,8 @@ import com.tromwey.kura.state.toggleEpisode
 import com.tromwey.kura.state.visibleReviews
 import kotlinx.coroutines.launch
 import java.time.ZoneOffset
+import com.tromwey.kura.state.present
+import com.tromwey.kura.state.push
 
 // The ficha's sections (Newsreader 24 headers, 30 apart) — twin of `TitleSections`, `SeriesSections`,
 // `AlbumSections` and `ReviewCard` in ios/Kura/Features/Title/TitleDetailView.swift.
@@ -146,7 +152,7 @@ private fun WhereToWatch(store: AppStore, t: Title) {
                 trailing = kind,
                 trailingColor = if (w.isCinema && label == "hoy") KColor.waiting else KColor.text2,
                 external = label != "hoy" || !w.isCinema,
-                onClick = { openExternal(context, KuraRuntime.resolve(w.url) ?: providerUrl(w)) },
+                onClick = { store.openLink(context, KuraRuntime.resolve(w.url) ?: providerUrl(w)) },
             )
         }
         val note = when {
@@ -273,9 +279,12 @@ private fun Reviews(store: AppStore, t: Title) {
     val scope = rememberCoroutineScope()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("reseñas")
-        reviews.forEach { r -> ReviewCard(store, r) }
+        // Windowed (`Windowed.kt`): pages of reviews pile up as "Más reseñas" brings them.
+        val window = rememberWindow(reviews)
+        window.visible.forEach { r -> key(r.id) { ReviewCard(store, r) } }
+        WindowEnd(window)
         // "Más reseñas" while the server says there's a next page; a failure keeps it and says so.
-        if (store.reviewCursors[t.id] != null) {
+        if (store.reviewCursors[t.id] != null && !window.hasMore) {
             val busy = t.id in store.reviewsPaging
             Column(Modifier.padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassButton(
@@ -288,7 +297,7 @@ private fun Reviews(store: AppStore, t: Title) {
                 val e = store.loadError(LoadKey.MoreReviews(t.id))
                 if (e != null && !busy) {
                     BasicText(
-                        if (e == KuraApiError.Offline) "Sin conexión. Inténtalo de nuevo." else "No se pudieron cargar. Inténtalo de nuevo.",
+                        if (e == KuraApiError.Offline) "Sin conexión. Revisa tu red y vuelve a intentarlo." else "No se pudieron cargar. Vuelve a intentarlo.",
                         style = KuraType.note,
                     )
                 }
@@ -540,7 +549,7 @@ private fun AlbumSections(store: AppStore, t: Title) {
     val context = LocalContext.current
     val unreleased = store.isUnreleased(t)
     val app = store.musicApp
-    val open = { openExternal(context, musicUrl(store, t)) }
+    val open: () -> Unit = { store.openLink(context, musicUrl(store, t)) }
     Column(verticalArrangement = Arrangement.spacedBy(30.dp)) {
         if (unreleased) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

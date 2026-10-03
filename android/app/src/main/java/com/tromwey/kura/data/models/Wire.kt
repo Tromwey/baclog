@@ -39,6 +39,54 @@ internal abstract class WireSerializer<T>(name: String) : KSerializer<T> {
         throw SerializationException("${descriptor.serialName} es un modelo de lectura (el cuerpo de un request es su propio tipo)")
 }
 
+/**
+ * A list read element by element: one the app can't decode (a `format` or an event `kind` a newer server
+ * sends, a row missing its id) is dropped and logged — it must never take the whole list (the feed, a
+ * collection, a search) down with it. A single model read on its own still fails loudly.
+ *
+ * [strict] (the page-level lists: feed, reviews, people, `Items`): when EVERY element of an array of
+ * two or more was dropped that's not "one row this build doesn't know", it's the contract breaking — it
+ * throws [EmptiedList] so the screen says the read failed instead of drawing an empty page as the truth.
+ */
+internal fun <T> lossyList(array: JsonArray, ser: KSerializer<T>, strict: Boolean = false): List<T> {
+    val out = ArrayList<T>(array.size)
+    var dropped = 0
+    var why: String? = null
+    for (e in array) {
+        try {
+            out.add(KuraJson.json.decodeFromJsonElement(ser, e))
+        } catch (x: SerializationException) {
+            dropped += 1
+            if (why == null) why = safeReason(x)
+        }
+    }
+    if (dropped > 0) com.tromwey.kura.data.api.KuraLog.w("KuraModels", "${ser.descriptor.serialName}: $dropped de ${array.size} descartados ($why)")
+    // ONE unknown row alone (a page whose only event is a `kind` this build doesn't know) is still
+    // "a row this build doesn't know": an empty page. Two or more, all dropped, is the contract.
+    if (strict && dropped >= 2 && out.isEmpty()) throw EmptiedList(ser.descriptor.serialName, dropped, why)
+    return out
+}
+
+/**
+ * A decoding error whose message is OURS (`Obj.missing` / `Obj.mismatch`, a bad date, an enum value
+ * this build doesn't know): a key name and a type, never the payload — the only kind of message a log
+ * may quote. kotlinx's own (`JsonDecodingException`, `MissingFieldException`…) cite the offending JSON,
+ * which can carry a name, an email or a review.
+ */
+internal class WireException(message: String) : SerializationException(message)
+
+/** What a log may say about a decoding failure: our own message, else only the exception's class. */
+internal fun safeReason(x: Throwable): String = when (x) {
+    is WireException -> x.message ?: "WireException"
+    is EmptiedList -> x.message ?: "EmptiedList"
+    else -> x.javaClass.simpleName
+}
+
+/** A non-empty page where nothing could be read (see [lossyList]). `ApiClient.decode` logs it with its
+ *  endpoint; the message carries the model, the count and the first reason (our own words, no payload). */
+internal class EmptiedList(model: String, count: Int, first: String?) :
+    SerializationException("$model: los $count elementos descartados (${first?.lineSequence()?.firstOrNull()?.take(120) ?: "-"})")
+
 /** Keyed reads over one JSON object, with Swift's `decodeIfPresent` semantics. */
 internal class Obj(val o: JsonObject) {
     fun has(k: String) = o.containsKey(k)
@@ -66,7 +114,7 @@ internal class Obj(val o: JsonObject) {
     }
 
     fun instant(k: String): Instant? = string(k)?.let {
-        KuraJson.parseDate(it) ?: throw SerializationException("Fecha ISO 8601 inválida en `$k`")
+        KuraJson.parseDate(it) ?: throw WireException("Fecha ISO 8601 inválida en `$k`")
     }
 
     fun array(k: String): JsonArray? = el(k)?.let { it as? JsonArray ?: mismatch(k, "Array") }
@@ -88,7 +136,8 @@ internal class Obj(val o: JsonObject) {
 
     fun <T> decode(k: String, ser: KSerializer<T>): T? = el(k)?.let { KuraJson.json.decodeFromJsonElement(ser, it) }
 
-    fun <T> list(k: String, ser: KSerializer<T>): List<T>? = array(k)?.map { KuraJson.json.decodeFromJsonElement(ser, it) }
+    /** A list of models: an element this build can't read is DROPPED (see [lossyList]), never the list. */
+    fun <T> list(k: String, ser: KSerializer<T>, strict: Boolean = false): List<T>? = array(k)?.let { lossyList(it, ser, strict) }
 
     fun <T> map(k: String, ser: KSerializer<T>): Map<String, T>? = obj(k)?.o?.mapValues { (_, v) ->
         KuraJson.json.decodeFromJsonElement(ser, v)
@@ -96,7 +145,7 @@ internal class Obj(val o: JsonObject) {
 
     fun instants(k: String): Map<String, Instant>? = obj(k)?.o?.mapValues { (key, v) ->
         val s = (v as? JsonPrimitive)?.takeIf { it.isString }?.content ?: mismatch(k, "[String: Date]")
-        KuraJson.parseDate(s) ?: throw SerializationException("Fecha ISO 8601 inválida en `$k.$key`")
+        KuraJson.parseDate(s) ?: throw WireException("Fecha ISO 8601 inválida en `$k.$key`")
     }
 
     fun requireString(k: String): String = string(k) ?: missing(k)
@@ -106,8 +155,8 @@ internal class Obj(val o: JsonObject) {
     fun lenientString(k: String): String? = (el(k) as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     companion object {
-        fun of(e: JsonElement): Obj = Obj(e as? JsonObject ?: throw SerializationException("Se esperaba un objeto JSON"))
-        fun missing(k: String): Nothing = throw SerializationException("Falta la llave `$k`")
-        fun mismatch(k: String, type: String): Nothing = throw SerializationException("`$k` no es $type")
+        fun of(e: JsonElement): Obj = Obj(e as? JsonObject ?: throw WireException("Se esperaba un objeto JSON"))
+        fun missing(k: String): Nothing = throw WireException("Falta la llave `$k`")
+        fun mismatch(k: String, type: String): Nothing = throw WireException("`$k` no es $type")
     }
 }
