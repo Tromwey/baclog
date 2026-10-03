@@ -255,6 +255,8 @@ export async function labMarcador(deviceId: string) {
     top: filas.slice(0, 8).map((f, i) => ({ puesto: i + 1, apodo: f.apodo, sellos: f.sellos, tu: f.deviceId === deviceId })),
     tu: { puesto: puesto || null, sellos: await entregadosDe(deviceId), apodo: player.apodo },
     firmados: filas.length,
+    /** Every signed player who delivered at least one seal, most seals first, one line per nickname — the cast of the final credits. */
+    elenco: [...new Map(filas.map((f) => [normalNombre(f.apodo), f.apodo])).values()].slice(0, 80),
   };
 }
 
