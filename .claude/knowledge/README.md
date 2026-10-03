@@ -28,8 +28,8 @@ Separa el conocimiento por su **ciclo de vida**:
 | La app Android (`android/`: Compose, design system Kura en Kotlin, cliente `/api/v1`, `AppStore`, pantallas) | `state/android.md` + `android/BRIEF.md` | `frontend` / `backend` |
 | Exportar una fiesta a Apple Music / TIDAL ("Llévala a otra app": OAuth TIDAL, MusicKit, `/music/**`, `/parties/{id}/exports/**`) — contrato web + iOS | `state/export-contract.md` | `backend` / `frontend` |
 
-Este repo **no tiene** suite de tests ni CI, así que no hay `state/qa.md`. Si se agrega una capa de
-tests, créalo entonces (y sumá su fila a este router).
+Tests (qué capas hay, cómo se corren, qué queda sin cubrir): `state/qa.md` (desde 2026-10-01; el
+inventario de checks sigue en `guardrails.md`). No hay CI.
 
 Y **siempre**, antes de debuggear: `grep -ri "<keyword del área>" .claude/knowledge/learnings/`.
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { attempt } from "@/components/kura/attempt";
 import { useState } from "react";
 import {
   followUserAction,
@@ -48,12 +49,10 @@ export function GenteFlow({
     const next = !following[username];
     setFailedFor(null);
     setFollowing((f) => ({ ...f, [username]: next }));
-    try {
-      const res = next
-        ? await followUserAction(username)
-        : await unfollowUserAction(username);
-      if ("error" in res) throw new Error(res.error);
-    } catch {
+    const res = await attempt(() =>
+      next ? followUserAction(username) : unfollowUserAction(username),
+    );
+    if (!res.ok) {
       setFollowing((f) => ({ ...f, [username]: !next }));
       setFailedFor(username);
     }
@@ -147,7 +146,7 @@ export function GenteFlow({
                   </div>
                   {failedFor === p.username && (
                     <FailLine align="start" className="pb-2 pl-[58px]">
-                      No se guardó. Toca de nuevo.
+                      No se pudo guardar. Toca de nuevo.
                     </FailLine>
                   )}
                 </li>

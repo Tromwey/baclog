@@ -1,9 +1,8 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { FOLLOW_LISTS_VISIBILITY, preferredServiceEnum, users } from "@/db/schema";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
 
 /**
  * Editable account fields — the ONE write path behind the web's
@@ -34,8 +33,7 @@ export const profilePatchSchema = z.object({
   notifyReleases: z.boolean().optional(),
   /** Phase 4b — the monthly recap email's opt-out (`api/cron/recap`). */
   notifyRecap: z.boolean().optional(),
-  /** Phase 4e — the "@x te sigue" push opt-out. Only writable once migration
-   *  0029 is live (`PATCH /me` answers 503 before; the web has no toggle). */
+  /** Phase 4e — the "@x te sigue" push opt-out (the web has no toggle). */
   notifyFollowers: z.boolean().optional(),
   isPublic: z.boolean().optional(),
   /** 2026-09-27 — `public` · `mutuals` · `private` (follow-lists-policy.ts). */
@@ -43,16 +41,30 @@ export const profilePatchSchema = z.object({
 });
 export type ProfilePatch = z.infer<typeof profilePatchSchema>;
 
+export type UpdateProfileResult =
+  | { ok: true }
+  | { ok: false; error: "onboarding_required" };
+
 /**
  * Applies the given fields (only the ones present) to the caller's own row.
  * An empty patch is a no-op, not an error. `isPublic` is the privacy switch:
  * every public read re-gates on it at query time, so flipping it here is
  * immediate everywhere (the setPublicAction posture).
+ *
+ * F2.2 age gate, enforced HERE (the one write path, web and API): a `name`
+ * and `isPublic: true` are only written to a row that already has a birth
+ * year. `name` is what marks an account as onboarded and `isPublic` is what
+ * publishes it — writable on their own, they let a fresh account skip
+ * `completeOnboarding` (and its under-13 block) entirely. The condition is
+ * in the UPDATE's WHERE, not a prior read: no window, and when it fails
+ * NOTHING in the patch is written (`onboarding_required`). The legitimate
+ * first name comes from `completeOnboarding`, which writes name + birth year
+ * together. Making an account private is never gated.
  */
 export async function updateProfile(
   userId: string,
   patch: ProfilePatch,
-): Promise<void> {
+): Promise<UpdateProfileResult> {
   const set: Partial<typeof users.$inferInsert> = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.preferredService !== undefined) set.preferredService = patch.preferredService;
@@ -64,16 +76,26 @@ export async function updateProfile(
   if (patch.followListsVisibility !== undefined) {
     set.followListsVisibility = patch.followListsVisibility;
   }
+  const needsAgeGate = patch.name !== undefined || patch.isPublic === true;
   if (Object.keys(set).length > 0) {
-    await db.update(users).set(set).where(eq(users.id, userId));
+    const written = await db
+      .update(users)
+      .set(set)
+      .where(
+        needsAgeGate
+          ? and(eq(users.id, userId), isNotNull(users.birthYear))
+          : eq(users.id, userId),
+      )
+      .returning({ id: users.id });
+    if (needsAgeGate && written.length === 0) {
+      return { ok: false, error: "onboarding_required" };
+    }
   }
-  // Raw SQL: the column is commented out in schema.ts until migration 0029
-  // is applied (declaring it early breaks every insert(users)). Skipped
-  // while the switch is off — `PATCH /me` refuses the field with 503 first,
-  // and the web has no toggle for it.
-  if (MIGRATION_0029_LIVE && patch.notifyFollowers !== undefined) {
-    await db.execute(
-      sql`update "user" set "notify_followers" = ${Boolean(patch.notifyFollowers)} where "id" = ${userId}`,
-    );
+  if (patch.notifyFollowers !== undefined) {
+    await db
+      .update(users)
+      .set({ notifyFollowers: patch.notifyFollowers })
+      .where(eq(users.id, userId));
   }
+  return { ok: true };
 }

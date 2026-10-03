@@ -1,21 +1,23 @@
-import { and, eq, inArray } from "drizzle-orm";
 import { assertOwnsBacklog } from "@/authz";
-import { db } from "@/db";
-import { backlogItems } from "@/db/schema";
 import { ThemeColorSync } from "@/components/theme-color-sync";
 import { tintEnds } from "@/components/kura/tint";
 import { visibilityOf } from "@/modules/backlog/visibility";
 import { getRenderInstant } from "@/modules/catalog/release";
-import { getBacklogItems, getBacklogNames, getUserPalette } from "@/modules/backlog/queries";
+import {
+  getBacklogItemByCatalog,
+  getBacklogItemsPage,
+  getBacklogKindCounts,
+  getBacklogNames,
+  getMembershipsOf,
+  getUserPalette,
+  toCollectionItem,
+} from "@/modules/backlog/queries";
 import { firstRunCoach, getFirstRunCounts } from "@/modules/backlog/first-run";
 import { getCollaboratorsForBacklogs } from "@/modules/backlog/collaborators";
 import { fanHexes, fanOf } from "@/modules/backlog/fan";
 import { getCollectionFans } from "@/modules/backlog/shelves";
-import {
-  CollectionScreen,
-  type CollectionItem,
-  type OtherCollection,
-} from "./[backlogId]/collection-screen";
+import { COLLECTION_PAGE_SIZE, encodeCollectionCursor } from "@/modules/backlog/collection-cursor";
+import { CollectionScreen, type OtherCollection } from "./[backlogId]/collection-screen";
 
 /**
  * Shared data loader for the two detail twins ([backlogId]/page.tsx and the
@@ -32,36 +34,37 @@ import {
  * formalizado · 2a): the credits and the owner's palette for their seal. All
  * scoped by the session user id derived from the assert above — never by
  * anything the client sent.
+ *
+ * Colecciones largas (ronda 8): only the FIRST page of titles is read here
+ * (60, in the manual order). The rest comes as the page scrolls
+ * (`getCollectionPageAction`), so everything that speaks for the whole
+ * collection travels apart: the counts per format (an aggregate) and the
+ * chosen cover when it sits past this page (the fan leads with it).
  */
 export async function loadBacklogZoom(backlogId: string) {
-  const itemsP = getBacklogItems(backlogId);
-  itemsP.catch(() => {}); // no unhandled rejection if the assert throws first
+  const pageP = getBacklogItemsPage(backlogId, { sort: "manual", limit: COLLECTION_PAGE_SIZE });
+  const kindsP = getBacklogKindCounts(backlogId);
+  // no unhandled rejection if the assert throws first
+  pageP.catch(() => {});
+  kindsP.catch(() => {});
   const { user, backlog } = await assertOwnsBacklog(backlogId);
-  const items = await itemsP;
-  const catalogIds = items.map((it) => it.catalogItemId);
+  const [page, kinds] = await Promise.all([pageP, kindsP]);
+  const coverId = backlog.coverCatalogItemId;
+  const coverAhead = coverId !== null && !page.rows.some((it) => it.catalogItemId === coverId);
+  const catalogIds = page.rows.map((it) => it.catalogItemId);
+  if (coverAhead) catalogIds.push(coverId);
 
-  const [counts, now, names, fans, memberRows, credits, palette] = await Promise.all([
+  const [counts, now, names, fans, memberships, credits, palette, coverRow] = await Promise.all([
     getFirstRunCounts(user.id),
     getRenderInstant(),
     getBacklogNames(user.id),
     getCollectionFans(user.id),
-    catalogIds.length
-      ? db
-          .select({
-            backlogId: backlogItems.backlogId,
-            catalogItemId: backlogItems.catalogItemId,
-          })
-          .from(backlogItems)
-          .where(
-            and(
-              eq(backlogItems.userId, user.id),
-              inArray(backlogItems.catalogItemId, catalogIds),
-            ),
-          )
-      : Promise.resolve([] as { backlogId: string; catalogItemId: string }[]),
+    // Scoped by the session's user id inside the query.
+    getMembershipsOf(user.id, catalogIds),
     // Scoped: `backlog.id` came out of assertOwnsBacklog above.
     getCollaboratorsForBacklogs(user.id, [backlog.id]),
     getUserPalette(user.id),
+    coverAhead ? getBacklogItemByCatalog(backlog.id, coverId) : null,
   ]);
 
   const others: OtherCollection[] = names
@@ -73,14 +76,14 @@ export async function loadBacklogZoom(backlogId: string) {
       count: fans[n.id]?.count ?? 0,
     }));
 
-  const memberships: Record<string, string[]> = {};
-  for (const r of memberRows) {
-    (memberships[r.catalogItemId] ??= []).push(r.backlogId);
-  }
-
   return {
     backlog,
-    items,
+    items: page.rows.map(toCollectionItem),
+    paging: {
+      counts: kinds,
+      nextCursor: page.next ? encodeCollectionCursor(page.next, backlog.id) : null,
+      cover: coverRow ? toCollectionItem(coverRow) : null,
+    },
     coach: firstRunCoach(counts).grid,
     now,
     others,
@@ -114,25 +117,11 @@ export function BacklogZoomView({
   data: BacklogZoomData;
   overlay?: boolean;
 }) {
-  const { backlog, items, now } = data;
+  const { backlog, items: list, paging, now } = data;
 
-  const list: CollectionItem[] = items.map((it) => ({
-    backlogItemId: it.id,
-    catalogItemId: it.catalogItemId,
-    title: it.title,
-    byline: it.byline,
-    mediaType: it.mediaType,
-    year: it.year,
-    posterUrl: it.posterUrl,
-    paletteHex: it.paletteHex ?? null,
-    status: it.status,
-    verdict: it.verdict,
-    obsessed: it.obsessed,
-    releaseDate: it.releaseDate ? it.releaseDate.toISOString() : null,
-    addedAt: it.addedAt.toISOString(),
-  }));
-
-  const lead = fanHexes(fanOf(list, backlog.coverCatalogItemId), list);
+  // The manual order's first titles + the chosen cover wherever it lives.
+  const head = paging.cover ? [paging.cover, ...list] : list;
+  const lead = fanHexes(fanOf(head, backlog.coverCatalogItemId), head);
 
   return (
     <>
@@ -150,6 +139,7 @@ export function BacklogZoomView({
           coverCatalogItemId: backlog.coverCatalogItemId,
         }}
         items={list}
+        paging={paging}
         now={now}
         others={data.others}
         memberships={data.memberships}

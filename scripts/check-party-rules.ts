@@ -92,7 +92,7 @@ check("tope bajado por el anfitrión (5 puestas, tope 3): remaining 0, nunca neg
   assert.equal(remainingFor(guest({ mineCount: 5 })), 0);
   assert.deepEqual(decideAdd(guest({ mineCount: 5 }), null), { ok: false, reason: "cap_reached" });
 });
-check("duplicado se reporta ANTES que el tope (\"Ya está, la puso @ana\" aun con tus 3)", () => {
+check("duplicado se reporta ANTES que el tope (\"Ya está, la agregó @ana.\" aun con tus 3)", () => {
   assert.deepEqual(decideAdd(guest({ mineCount: 3 }), { mine: false }), { ok: false, reason: "duplicate_other" });
   assert.deepEqual(decideAdd(guest({ mineCount: 1 }), { mine: true }), { ok: false, reason: "duplicate_mine" });
 });
@@ -287,15 +287,15 @@ check("presenceLine (la línea de /party)", () => {
   assert.equal(presenceLine({ songCount: 4, named: [], othersCount: 1 }), "4 canciones · 1 persona ya está dentro");
 });
 check("playlistPitch con el tope real (/party)", () => {
-  assert.equal(playlistPitch(3), "Pon tus 3 canciones. Van a sonar esa noche, y todos verán quién puso cuál.");
-  assert.equal(playlistPitch(1), "Pon tu canción. Va a sonar esa noche, y todos verán quién puso cuál.");
-  assert.equal(playlistPitch(null), "Pon tus canciones. Van a sonar esa noche, y todos verán quién puso cuál.");
+  assert.equal(playlistPitch(3), "Agrega tus 3 canciones. Van a sonar esa noche, y todos verán quién agregó cuál.");
+  assert.equal(playlistPitch(1), "Agrega tu canción. Va a sonar esa noche, y todos verán quién agregó cuál.");
+  assert.equal(playlistPitch(null), "Agrega tus canciones. Van a sonar esa noche, y todos verán quién agregó cuál.");
   assert.ok(!playlistPitch(0).startsWith("Pon"));
 });
 check("duplicateMessage", () => {
-  assert.equal(duplicateMessage(true, "ana"), "Ya la pusiste tú.");
-  assert.equal(duplicateMessage(false, "ana"), "Ya está, la puso @ana");
-  assert.equal(duplicateMessage(false, null), "Ya está, la puso alguien");
+  assert.equal(duplicateMessage(true, "ana"), "Ya la agregaste tú.");
+  assert.equal(duplicateMessage(false, "ana"), "Ya está, la agregó @ana.");
+  assert.equal(duplicateMessage(false, null), "Ya está, la agregó alguien.");
 });
 
 console.log("\nCanciones (iTunes → catálogo)");
@@ -444,8 +444,8 @@ check("toPartyCard / toInvitePreview / toPartySongHit → zod", () => {
   );
 });
 check("error de duplicado lleva addedBy (o null = alguien) en el sobre", () => {
-  ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la puso @ana", reason: "duplicate_other", addedBy: person } });
-  ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la puso alguien", reason: "duplicate_other", addedBy: null } });
+  ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la agregó @ana.", reason: "duplicate_other", addedBy: person } });
+  ErrorBodySchema.parse({ error: { code: "conflict", message: "Ya está, la agregó alguien.", reason: "duplicate_other", addedBy: null } });
 });
 
 console.log("\nFuentes (greps)");
@@ -457,7 +457,7 @@ check("rules.ts es client-safe: sin node:crypto ni server-only (lo importan comp
 });
 check("login: cada entrada propaga ?to=", () => {
   const form = src("src/app/(auth)/login/login-form.tsx");
-  assert.ok(/carryReturnTo\(`\/verify\?email=/.test(form), "login-form: el push a /verify debe pasar por carryReturnTo");
+  assert.ok(/carryReturnTo\("\/verify"\)/.test(form), "login-form: el push a /verify debe pasar por carryReturnTo");
   assert.ok(/type="hidden" name="to"/.test(form), "login-form: el form de Apple debe llevar el input hidden `to`");
   const actions = src("src/app/(auth)/login/actions.ts");
   assert.ok(/formData\.get\("to"\)/.test(actions) && /safeReturnTo\(/.test(actions), "continueWithAppleAction: leer `to` y revalidarlo con safeReturnTo");

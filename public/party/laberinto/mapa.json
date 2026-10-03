@@ -1,0 +1,134 @@
+{
+  "version": 2,
+  "celda": 2,
+  "alturaMuro": 2.8,
+  "grid": [
+    "###########M#########",
+    "#.........#...#.....#",
+    "###.###.#.#.#.#.#.###",
+    "#c#.......#.#...#...#",
+    "#.###.###.#.#.#####.#",
+    "#.....#...#.#z#.....#",
+    "#.#########.###.###.#",
+    "#.................#d#",
+    "#####.#########.#.###",
+    "#........b#...#.#...#",
+    "#.###.#.###.###.#####",
+    "#...#.#.....#y..#.#e#",
+    "#.#.#.###.#.#####.#.#",
+    "#...#.#x#.....#...#.#",
+    "#.#.#.#.#####.#.###.#",
+    "#f#.#.....#a#.#.....#",
+    "###.###.###.#.###.#.#",
+    "#...#.#.....#.#w..#.#",
+    "#.###.###.#.#.#####.#",
+    "#.....#..S..........#",
+    "#####################"
+  ],
+  "lapidas": {
+    "a": {
+      "id": "remedios",
+      "nombre": "Remedios Vargas",
+      "fechas": "1888 – 1931",
+      "epitafio": "Guardó los secretos de todos menos el suyo.",
+      "juego": "memorama",
+      "params": { "pares": 8, "segundos": 50 }
+    },
+    "b": {
+      "id": "ibarra",
+      "nombre": "Tomás Ibarra",
+      "fechas": "1899 – 1937",
+      "epitafio": "Lo buscaron en el río. Se había ido con el viento.",
+      "juego": "almas",
+      "params": { "meta": 22, "segundos": 40, "cenizas": true, "castigo": 2 }
+    },
+    "c": {
+      "id": "salvatierra",
+      "nombre": "Ignacio Salvatierra",
+      "fechas": "1902 – 1950",
+      "epitafio": "Encendía las velas del pueblo. Ninguna lo esperó encendida.",
+      "juego": "simon",
+      "params": { "velas": 5, "largo": 8, "segundos": 60 }
+    },
+    "d": {
+      "id": "anselmo",
+      "nombre": "Fray Anselmo",
+      "fechas": "1840 – 1903",
+      "epitafio": "Echó raíces donde nadie quiso quedarse.",
+      "juego": "raices",
+      "params": { "lado": 5, "segundos": 60 }
+    },
+    "e": {
+      "id": "olmedo",
+      "nombre": "Hermanas Olmedo",
+      "fechas": "1910 – 1944",
+      "epitafio": "Lo que se rompió en vida aquí vuelve a su lugar.",
+      "juego": "deslizante",
+      "params": { "lado": 3, "segundos": 0 }
+    },
+    "f": {
+      "id": "montes",
+      "nombre": "Elvira Montes",
+      "fechas": "1871 – 1919",
+      "epitafio": "Esperó tres noches, siete inviernos y una sola hora.",
+      "juego": "cerradura",
+      "params": { "codigo": "371", "segundos": 60, "castigo": 10, "pistaEn": 35, "pistaTras": 3 }
+    },
+    "z": {
+      "id": "anfitrion",
+      "final": true,
+      "nombre": "Eric Briseño",
+      "fechas": "20/11/1994 – 00/00/0000",
+      "glitch": "00/00/0000",
+      "texto": "¿Cómo y cuándo murió?"
+    },
+    "x": { "id": "echeverria", "leer": true, "nombre": "Rosario Echeverría", "fechas": "1911 – 1979", "epitafio": "Coleccionaba lo que ya nadie fabrica y, cada noche, le daba cuerda." },
+    "y": { "id": "montano", "leer": true, "nombre": "Hilario Montaño", "fechas": "1890 – 1947", "epitafio": "Prefirió el silencio a las malas compañías." },
+    "w": { "id": "saldivar", "leer": true, "nombre": "Teodora Saldívar", "fechas": "1923 – 1988", "epitafio": "Sus rosas siguen creciendo sin ella." }
+  },
+  "pistas": {
+    "foto": { "src": "foto.jpg", "titulo": "Pedazo de fotografía", "texto": "¿Uno de ellos habrá sido el culpable?" },
+    "caja": {
+      "objeto": "Caja de música", "corto": "caja de música", "para": "Todavía le queda cuerda",
+      "hallazgo": "Encontraste una caja de música. Todavía le queda cuerda.",
+      "tumba": "echeverria", "dejar": "Dejar la caja de música",
+      "exito": "La caja vuelve a sonar donde siempre sonó.", "error": "No parece ser aquí."
+    }
+  },
+  "puerta": {
+    "nombre": "Mausoleo"
+  },
+  "velas": [
+    { "id": "vela1", "lugar": "mausoleo" },
+    { "id": "vela2", "lugar": "mausoleo" },
+    { "id": "vela3", "lugar": "borde" },
+    { "id": "vela4", "lugar": "borde" },
+    { "id": "vela5", "lugar": "borde" },
+    { "id": "vela6", "lugar": "suelo" },
+    { "id": "vela7", "lugar": "suelo" }
+  ],
+  "encargos": [
+    {
+      "id": "conejo", "gato": "van", "nombreGato": "Bonnie", "caricia": "Pareciera estar buscando a alguien.", "celda": [19, 1],
+      "objeto": "conejito de peluche azul", "corto": "conejito", "para": "Alguien debe estar buscando a este amiguito",
+      "recoger": "Recoger el conejito azul", "dar": "Darle el conejito a Bonnie",
+      "hallazgo": "Encontraste un conejito de peluche azul. Alguien debe estar buscando a este amiguito.",
+      "gracias": "Los dos parecen peluches."
+    },
+    {
+      "id": "leche", "gato": "carey", "nombreGato": "Cuchito", "caricia": "Pareciera estar exigiendo algo.", "celda": [5, 17], "viene": true,
+      "objeto": "vaso de leche", "corto": "leche", "para": "¿Quién querrá leche en lugares o momentos como este?",
+      "recoger": "Recoger el vaso de leche", "dar": "Darle la leche a Cuchito",
+      "hallazgo": "Encontraste un vaso de leche. ¿Quién querrá leche en lugares o momentos como este?",
+      "gracias": "Ni siquiera esperó a que la buscara.",
+      "despues": "No creo encontrar más leche por aquí."
+    },
+    {
+      "id": "chaleco", "gato": "tuxedo", "nombreGato": "Vaquita", "caricia": "Pareciera estar pasando frío.", "celda": [7, 5],
+      "objeto": "chalequito", "corto": "chalequito", "para": "Alguien debe estar pasando frío",
+      "recoger": "Recoger el chalequito", "dar": "Ponerle el chalequito a Vaquita",
+      "hallazgo": "Encontraste un chalequito para gato. Alguien debe estar pasando frío.",
+      "gracias": "¡Cuánto estilo tiene ese gato!"
+    }
+  ]
+}

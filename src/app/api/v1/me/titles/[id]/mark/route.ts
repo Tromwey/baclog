@@ -25,6 +25,12 @@ const BodySchema = z.object({
  * library (clearing nothing creates nothing). 409 `not_released` when
  * `releaseDate > now` and the app didn't say `preview` — checked BEFORE
  * anything is created.
+ *
+ * The review goes with the reaction (founder, 2026-10-01): a mark that
+ * leaves the title with no reaction (`completed`, `null`) deletes the
+ * caller's review in the same transaction, so the `TitleState` answered here
+ * (re-read after the write) carries `reviewId: null`. `obsessed` ⇄ `liked`
+ * keeps it.
  */
 export const PUT = withApi<{ id: string }>(async (request, { user, params }) => {
   const id = parseId(params.id);

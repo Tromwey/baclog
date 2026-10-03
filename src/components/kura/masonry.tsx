@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import type { MediaType } from "@/modules/catalog/types";
 import { Glyph, type GlyphKind } from "./components";
 import { launchCoverFlight } from "./cover-flight";

@@ -1,5 +1,6 @@
 import "server-only";
 import { loadUserById, type CurrentUser } from "@/auth/session";
+import { isOnboarded } from "@/auth/user-row";
 import { ApiError } from "@/authz/api";
 import { getObsessions, getReactionCounts } from "@/modules/backlog/profile-stats";
 import { profileTint } from "@/modules/backlog/profile-hexes";
@@ -38,7 +39,9 @@ export async function buildMe(user: CurrentUser): Promise<Me> {
     notifyFollowers: user.notifyFollowers,
     followListsVisibility: user.followListsVisibility,
     isFounder: user.isFounder,
-    onboardingComplete: user.name !== null,
+    // Name AND birth year (the F2.2 gate), the same rule the server-side
+    // write gates use — never `name` alone.
+    onboardingComplete: isOnboarded(user),
     hexes: tint.hexes,
     featuredTitleId: tint.featuredTitleId,
     followers: follow.followers,

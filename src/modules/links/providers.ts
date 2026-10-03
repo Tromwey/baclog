@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { env } from "@/lib/env";
 import { tmdbAuth } from "@/modules/catalog/tmdb";
 
@@ -7,6 +8,12 @@ import { tmdbAuth } from "@/modules/catalog/tmdb";
  * not expose direct provider deep links — it exposes a regional JustWatch
  * page listing where to stream, which is the link-out target (with the
  * mandatory JustWatch attribution rendered next to the button).
+ *
+ * `null` is an ANSWER: TMDB has no link for this title/region (or doesn't
+ * know the id — 404), or there is no key (fixtures). A request TMDB did not
+ * answer (timeout, network, 429, 5xx, a body that isn't JSON) THROWS, so the
+ * caller can tell "nothing to link" from "ask again" (resolve.ts caches only
+ * the former).
  */
 export async function getWatchLink(
   tmdbId: string,
@@ -21,8 +28,9 @@ export async function getWatchLink(
   );
   const headers = tmdbAuth(url, env.TMDB_API_KEY);
 
-  const res = await fetch(url, { headers, next: { revalidate: 0 } });
-  if (!res.ok) return null;
+  const res = await fetchWithTimeout(url, { headers, next: { revalidate: 0 } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`tmdb watch/providers: ${res.status}`);
   const data = await res.json();
   const regional = data?.results?.[region] ?? data?.results?.US;
   if (!regional?.link) return null;

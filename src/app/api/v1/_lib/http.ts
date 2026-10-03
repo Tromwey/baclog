@@ -33,7 +33,7 @@ export function noContent(): Response {
   });
 }
 
-const NOT_JSON = "El cuerpo de la petición no es JSON válido.";
+const NOT_JSON = "Los datos enviados no se pudieron leer.";
 
 /**
  * Parse + validate a JSON body. Malformed JSON → 400 `invalid`; a schema
@@ -102,7 +102,7 @@ export function readCursor(
   if (!raw) return null;
   const decoded = decodeCursor(raw);
   if (decoded === null || (opts.uuidId && !UUID_RE.test(decoded.id))) {
-    throw new ApiError("invalid", "El cursor de paginación no es válido. Vuelve a cargar la lista desde el principio.", {
+    throw new ApiError("invalid", "No se pudo continuar la lista. Vuelve a cargarla desde el principio.", {
       fields: { cursor: "Cursor no válido" },
     });
   }

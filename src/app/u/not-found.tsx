@@ -18,8 +18,7 @@ export default function PublicNotFound() {
           esto no existe o es privado.
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-          Este link no lleva a nada que puedas ver. Si te lo compartieron,
-          pídele a esa persona que lo haga público.
+          Este link no lleva a nada que puedas ver. Revisa que esté completo.
         </p>
         <div className="mt-3">
           <Link href="/login" className={GLASS_BUTTON}>

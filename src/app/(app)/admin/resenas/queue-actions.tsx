@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import { attempt } from "@/components/kura/attempt";
 import {
   dismissReviewReportsAction,
   hideReviewAction,
@@ -24,11 +25,27 @@ export function QueueActions({
   const router = useRouter();
   const [busy, start] = useTransition();
 
+  const [failed, setFailed] = useState(false);
+
+  // `attempt`: a rejected action inside the transition would take the whole
+  // Torre to the error boundary, and an `{ error }` used to be ignored (the
+  // row refreshed as if it had worked).
   const run = (fn: (id: string) => Promise<unknown>) => () =>
     start(async () => {
-      await fn(reviewId);
+      setFailed(false);
+      const res = await attempt(() => fn(reviewId));
+      if (!res.ok) {
+        setFailed(true);
+        return;
+      }
       router.refresh();
     });
+
+  const note = failed && (
+    <p role="alert" className="mt-2 font-mono text-[11px] tracking-[0.04em] text-text-2">
+      No se aplicó. Revisa tu conexión y vuelve a intentarlo.
+    </p>
+  );
 
   const primary =
     "rounded-full bg-surface-2 px-[15px] py-[9px] font-mono text-[11px] tracking-[0.06em] text-text transition-opacity disabled:opacity-50";
@@ -37,19 +54,23 @@ export function QueueActions({
 
   if (hidden) {
     return (
-      <div className="mt-[13px] flex gap-2">
-        <button
-          onClick={run(restoreReviewAction)}
-          disabled={busy}
-          className={primary}
-        >
-          RESTAURAR
-        </button>
-      </div>
+      <>
+        <div className="mt-[13px] flex gap-2">
+          <button
+            onClick={run(restoreReviewAction)}
+            disabled={busy}
+            className={primary}
+          >
+            RESTAURAR
+          </button>
+        </div>
+        {note}
+      </>
     );
   }
 
   return (
+    <>
     <div className="mt-[13px] flex gap-2">
       <button
         onClick={run(hideReviewAction)}
@@ -66,5 +87,7 @@ export function QueueActions({
         DESCARTAR
       </button>
     </div>
+    {note}
+    </>
   );
 }

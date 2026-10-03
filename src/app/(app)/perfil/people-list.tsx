@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { AdnAvatar } from "@/components/adn-avatar";
 import { GLASS_BUTTON } from "@/components/kura/components";
+import { attempt } from "@/components/kura/attempt";
 import { FollowButton } from "@/components/follow-button";
 import { loadMorePeopleAction } from "@/app/actions/social-actions";
 import { plural } from "@/lib/plural";
@@ -30,13 +31,20 @@ export function PeopleList({
   const [people, setPeople] = useState(initialPeople);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, startLoading] = useTransition();
+  const [failed, setFailed] = useState(false);
 
   function loadMore() {
     if (!cursor) return;
+    setFailed(false);
     startLoading(async () => {
-      const page = await loadMorePeopleAction({ mode, cursor });
-      setPeople((prev) => [...prev, ...page.people]);
-      setCursor(page.nextCursor);
+      // A rejected read keeps the cursor: the same button retries the page.
+      const page = await attempt(() => loadMorePeopleAction({ mode, cursor }));
+      if (!page.ok) {
+        setFailed(true);
+        return;
+      }
+      setPeople((prev) => [...prev, ...page.value.people]);
+      setCursor(page.value.nextCursor);
     });
   }
 
@@ -53,6 +61,12 @@ export function PeopleList({
         </div>
       )}
 
+      {failed && (
+        <p role="alert" className="pt-3 text-center text-[14px] leading-[1.4] text-text-2">
+          No se cargó el resto.
+        </p>
+      )}
+
       {cursor && (
         <button
           type="button"
@@ -60,7 +74,7 @@ export function PeopleList({
           disabled={loading}
           className={`${GLASS_BUTTON} mt-3 self-center disabled:opacity-60`}
         >
-          {loading ? "Cargando…" : "Ver más"}
+          {loading ? "Cargando…" : failed ? "Reintentar" : "Ver más"}
         </button>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { fetched, requireAdmin } from "@/modules/admin/guard";
 import { PARTY_EVENT } from "@/modules/party/event";
+import { LAB_SEALS, listLabPlayers } from "@/modules/party/lab";
 import { listRsvps } from "@/modules/party/rsvp";
 import { plural } from "@/lib/plural";
 import { Card, CardLabel, EmptyNote, SectionError } from "../ui";
@@ -11,7 +12,7 @@ import { Card, CardLabel, EmptyNote, SectionError } from "../ui";
  */
 export default async function AdminPartyPage() {
   await requireAdmin();
-  const rows = await fetched(listRsvps());
+  const [rows, lab] = await Promise.all([fetched(listRsvps()), fetched(listLabPlayers())]);
 
   if (!rows.ok) {
     return (
@@ -28,6 +29,7 @@ export default async function AdminPartyPage() {
 
   return (
     <div className="flex flex-col gap-3 pt-[4px]">
+      <LabCard lab={lab} />
       <Card>
         <div className="flex items-baseline justify-between gap-2">
           <CardLabel>{PARTY_EVENT.title}</CardLabel>
@@ -76,5 +78,61 @@ export default async function AdminPartyPage() {
         ))
       )}
     </div>
+  );
+}
+
+type LabRows = Awaited<ReturnType<typeof listLabPlayers>>;
+
+/**
+ * The labyrinth's seals (`party_lab_*`): who is playing, how many seals each
+ * holds and delivered, who finished. Players are anonymous — the nickname is
+ * whatever they typed, the short code tells two "Ana"s apart.
+ */
+function LabCard({ lab }: { lab: { ok: true; data: LabRows } | { ok: false } }) {
+  if (!lab.ok) {
+    return (
+      <Card>
+        <CardLabel>Laberinto</CardLabel>
+        <SectionError retryHref="/admin/party" />
+      </Card>
+    );
+  }
+  const rows = lab.data;
+  const ganados = rows.reduce((n, r) => n + r.ganados, 0);
+  const entregados = rows.reduce((n, r) => n + r.entregados, 0);
+  const terminaron = rows.filter((r) => r.ganados >= LAB_SEALS).length;
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between gap-2">
+        <CardLabel>Laberinto</CardLabel>
+        <span className="font-mono text-[10px] tracking-[0.04em] text-text-2">
+          {rows.length} {plural(rows.length, "jugador", "jugadores")} · {terminaron} {plural(terminaron, "terminó", "terminaron")}
+        </span>
+      </div>
+      <div className="mt-[13px] flex items-center gap-[10px]">
+        <span className="font-display text-[30px] font-extrabold leading-none tracking-[-0.02em]">{ganados}</span>
+        <span className="text-xs leading-[1.4] text-text-3">
+          {plural(ganados, "sello ganado", "sellos ganados")} · {entregados} {plural(entregados, "entregado", "entregados")}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <EmptyNote>Nadie ha entrado al laberinto todavía.</EmptyNote>
+      ) : (
+        <div className="mt-3 flex flex-col gap-[6px]">
+          {rows.map((r) => (
+            <div key={r.deviceId} className="flex items-baseline justify-between gap-2 text-[13px] leading-[1.45]">
+              <span className="min-w-0 truncate text-text">
+                {r.apodo ?? "sin apodo"} <span className="font-mono text-[10px] text-text-3">{r.deviceId.slice(0, 4)}</span>
+              </span>
+              <span className={`shrink-0 font-mono text-[10px] tracking-[0.04em] ${r.ganados >= LAB_SEALS ? "text-completed" : "text-text-2"}`}>
+                {r.ganados}/{LAB_SEALS}
+                {r.entregados > 0 ? ` · ${r.entregados} entr.` : ""}
+                {r.ganados >= LAB_SEALS ? " · TERMINÓ" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

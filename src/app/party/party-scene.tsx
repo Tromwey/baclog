@@ -16,6 +16,7 @@
 import { Fragment, type RefObject } from "react";
 import type { SceneVals } from "./party-invitation";
 import { CryptPanel, GateChains, KeyIcon, LandingSky, LandingTree, SealedFace, WorldDecor } from "./party-decor";
+import { CountdownValue, DeathText } from "./party-clock";
 import { PartyPath } from "./party-path";
 import { PartyPlaylistCard } from "./party-playlist-card";
 
@@ -801,7 +802,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
             </div>
           </section>
           {v.showHint ? (
-              <div key={v.hintKey} style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", zIndex: "55", pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 28px", opacity: "0", animation: "pt-hintInOut 6s ease-in-out 1.8s forwards" }}>
+              <div key={v.hintKey} data-pt-run="hint" style={{ position: "fixed", top: "0", bottom: "0", left: "0", right: "0", zIndex: "55", pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 28px", opacity: "0", animation: "pt-hintInOut 6s ease-in-out 1.8s forwards" }}>
                 <div style={{ fontFamily: "var(--pt-creep)", fontSize: "44px", lineHeight: "1.05", letterSpacing: ".03em", textAlign: "center", textWrap: "balance", color: "#b3140f", textShadow: "0 2px 0 #2a0303,0 0 24px rgba(179,20,15,.45)" }}>
                   {v.hintText}
                 </div>
@@ -858,7 +859,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                       <Fragment key={i}>
                         <div style={{ border: "1px solid rgba(236,230,220,.14)", borderRadius: "14px", padding: "14px 4px 12px", display: "flex", flexDirection: "column", gap: "4px", alignItems: "center" }}>
                           <div style={{ fontFamily: "var(--pt-mono)", fontSize: "28px", fontWeight: "500", fontVariantNumeric: "tabular-nums" }}>
-                            {c.v}
+                            <CountdownValue part={c.part} />
                           </div>
                           <div style={{ fontSize: "10px", letterSpacing: ".2em", textTransform: "uppercase", color: "#a79d92" }}>
                             {c.l}
@@ -899,7 +900,7 @@ export function PartyScene({ v, lampRef }: { v: SceneVals; lampRef: RefObject<HT
                     </span>
                     <span style={{ height: "24px", display: "flex", alignItems: "center" }}>
                       <span style={{ position: "relative", whiteSpace: "nowrap", fontFamily: "var(--pt-mono)", fontSize: "15px", color: "#8a7f73", textDecoration: "line-through", textDecorationColor: "#b3140f", textDecorationThickness: "2px", animation: "pt-deathGlitch 3.5s steps(1) infinite" }}>
-                        {v.deathText}
+                        <DeathText />
                       </span>
                     </span>
                   </div>

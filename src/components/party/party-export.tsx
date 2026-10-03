@@ -12,7 +12,7 @@ import {
 } from "@/app/actions/music-export-actions";
 import { KIcon } from "@/components/kura/icons";
 import type { ToastHost } from "@/components/kura/toast";
-import { useDialogFocus } from "@/hooks/use-dialog-focus";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { doneLine, SERVICE_FAILED_MESSAGE, serviceLabel, tidalStartPath } from "@/modules/music-export/rules";
 import type { ExportState, MusicProvider, MusicServices } from "@/modules/music-export/types";
 import { partyPath } from "@/modules/party-collections/rules";
@@ -28,8 +28,7 @@ import { creditOf, PartyFan, songsLabel, SongCover } from "./party-parts";
  * account (D3).
  *
  *  - `ExportSheet`: the sheet body. Asks `getMusicServicesAction` which
- *    services this deploy offers; `available: false` (or the whole export off,
- *    `MIGRATION_0034_LIVE=false` → `unavailable`) = the row says
+ *    services this deploy offers; `available: false` = the row says
  *    "Próximamente" and only answers with a toast.
  *  - `ExportScreen`: the full-screen flow, PORTALED to <body> (AGENTS.md),
  *    with the design's four steps: connect · progress · done · failed.
@@ -54,7 +53,7 @@ type Step =
 type Failure = { error: string; message?: string; retryAfterSeconds?: number; loginPath?: string };
 
 const NETWORK_FAILED =
-  "No pudimos hablar con kura. Revisa tu conexión; tu colección sigue intacta y al reintentar no se duplican canciones.";
+  "Sin conexión. Tu colección sigue intacta en kura; al reintentar no se duplican canciones.";
 
 const HONEY =
   "flex h-14 w-full items-center justify-center rounded-full bg-honey px-5 font-sans text-[16px] font-semibold text-bg bl-press active:bg-honey-press disabled:opacity-60";
@@ -81,6 +80,24 @@ function useHydrated(): boolean {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Bounds on waiting. The server (or the music service behind it) names how
+ * long to wait, and a sheet that obeys any number can sit on "Exportando…"
+ * for an hour with no way out:
+ *  - one wait is never longer than RETRY_SLEEP_MAX_S, whatever
+ *    `retryAfterSeconds` says;
+ *  - one action gives up after CALL_WAIT_MAX_MS of accumulated waiting;
+ *  - the Tidal poll gives up after POLL_STALL_MAX_MS of `busy` answers with
+ *    no progress in between.
+ * Past any of them the sheet goes to "failed" (which carries Reintentar):
+ * the export is resumable server-side, so a retry picks up where it was.
+ */
+const RETRY_SLEEP_MAX_S = 30;
+const CALL_WAIT_MAX_MS = 90_000;
+const POLL_STALL_MAX_MS = 120_000;
+const retryWaitMs = (retryAfterSeconds: number | null | undefined) =>
+  Math.min(RETRY_SLEEP_MAX_S, Math.max(1, retryAfterSeconds ?? 5)) * 1000;
 
 /* ---------------------------------------------------------------- sheet */
 
@@ -137,7 +154,7 @@ export function ExportSheet({
             return;
           }
           if (n === 0) {
-            toast.show({ message: "La pista está vacía. Pon canciones y luego llévala a otra app." });
+            toast.show({ message: "La pista está vacía. Agrega canciones y luego llévala a otra app." });
             return;
           }
           onPick(p, connected);
@@ -241,6 +258,7 @@ export function ExportScreen({
   /** One action, waiting out rate limits; null = handled (or stopped). */
   const call = useCallback(
     async (op: string, fn: () => Promise<unknown>, alive: () => boolean): Promise<ExportState | null> => {
+      let waited = 0;
       for (let attempt = 0; attempt < 10; attempt++) {
         const res = await logged(op, party.id, fn());
         if (!alive()) return null;
@@ -248,7 +266,10 @@ export function ExportScreen({
         if (state) return state;
         const f = failureOf(res);
         if (f && (f.error === "rate_limited" || f.error === "service_rate_limited")) {
-          await sleep(Math.max(1, f.retryAfterSeconds ?? 5) * 1000);
+          const ms = retryWaitMs(f.retryAfterSeconds);
+          if (waited + ms > CALL_WAIT_MAX_MS) break;
+          waited += ms;
+          await sleep(ms);
           if (!alive()) return null;
           continue;
         }
@@ -272,11 +293,19 @@ export function ExportScreen({
     const id = ++run.current;
     const alive = () => run.current === id;
     let state = await call("start tidal export", () => startPartyExportAction(party.id, "tidal"), alive);
+    let stalled = 0;
     while (state && state.status !== "done") {
       if (state.busy) {
+        // Another request holds the export: wait, but not forever.
+        if (stalled >= POLL_STALL_MAX_MS) {
+          setStep({ k: "failed", message: SERVICE_FAILED_MESSAGE("tidal") });
+          return;
+        }
+        stalled += 1000;
         await sleep(1000);
         if (!alive()) return;
       } else {
+        stalled = 0;
         setStep(progressOf(state));
       }
       state = await call("tidal export step", () => stepTidalExportAction(party.id), alive);
@@ -292,13 +321,17 @@ export function ExportScreen({
       let state = await call("start apple export", () => startPartyExportAction(party.id, "apple_music"), alive);
       if (!state) return;
       const report = async (input: { playlistId: string | null; replace?: boolean; added: string[]; missing: string[] }) => {
+        let waited = 0;
         for (let attempt = 0; attempt < 10; attempt++) {
           const res = await logged("apple export report", party.id, reportAppleMusicExportAction(party.id, input));
           const s = stateOf(res);
           if (s) return s;
           const f = failureOf(res);
           if (f?.error === "rate_limited" && alive()) {
-            await sleep(Math.max(1, f.retryAfterSeconds ?? 5) * 1000);
+            const ms = retryWaitMs(f.retryAfterSeconds);
+            if (waited + ms > CALL_WAIT_MAX_MS) break;
+            waited += ms;
+            await sleep(ms);
             continue;
           }
           throw new ActionRefused(res);
@@ -428,7 +461,7 @@ export function ExportScreen({
   const askLeave = leaving && running;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || !isTopDialog(panel.current)) return;
       if (askLeave) setLeaving(false); // Escape on the question = keep going
       else if (running) setLeaving(true);
       else onClose();

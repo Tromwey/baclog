@@ -1,10 +1,9 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { deviceTokens, mobileSessions } from "@/db/schema";
 import { appleKeyConfig, signApnsProviderToken, type AppleKeyConfig } from "@/auth/apple-key";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
-import { MIGRATION_0035_LIVE } from "@/auth/live-0035";
 import {
   isDeadToken,
   isProviderTokenError,
@@ -40,12 +39,10 @@ export type { PushMessage } from "./apns-transport";
  * both already after the response) must not fail because a phone is
  * unreachable. It returns counters for the caller's own log/response.
  *
- * Degrades without breaking: migration 0029 not live → a `[push] …` log
- * line and a no-op. Per provider: APNs without APPLE_TEAM_ID /
+ * Degrades without breaking, per provider: APNs without APPLE_TEAM_ID /
  * APPLE_KEY_ID / APPLE_PRIVATE_KEY, or FCM without FCM_SERVICE_ACCOUNT_JSON
  * → that provider's deliveries are logged and skipped (like the dev mailer
- * without RESEND_API_KEY). Before 0035 every row is APNs (the column does not
- * exist and nothing else could register).
+ * without RESEND_API_KEY).
  *
  * APNs provider token (ES256 JWT, `kid` + `iss`): minted once and reused
  * for ~50 min (Apple accepts it up to 60 and throttles re-minting more than
@@ -97,10 +94,29 @@ export interface PushOutcome {
   /** Dead tokens deleted (APNs 410 / BadDeviceToken / Unregistered, FCM
    *  404 / UNREGISTERED). */
   pruned: number;
-  /** Why nothing was attempted, when nothing was: 0029 not live, or NO
+  /** Why nothing was attempted, when nothing was: NO
    *  provider that could deliver is configured. A provider missing its keys
    *  while the other has them is logged, not reported here. */
-  skipped: "not_live" | "not_configured" | null;
+  skipped: "not_configured" | null;
+  /** Deliveries owed to a LIVE registered device that were not attempted
+   *  because that device's provider has no credentials (APNs keys missing
+   *  while FCM works, or the other way round). Not `failed` — nothing was
+   *  tried — but never invisible either: a batch that reports `sent: 0,
+   *  failed: 0` must not be readable as "everyone was told". */
+  undelivered: number;
+}
+
+/**
+ * Which providers could deliver right now. THE one read of "is push
+ * configured": `pushToUsers` and every caller that wants to skip work (or a
+ * throttle claim) for a push that can't go out use this, so "APNs key
+ * missing" can never be mistaken for "push is off" while FCM is configured.
+ */
+export function pushProviders(): { apns: AppleKeyConfig | null; fcm: FcmConfig | null } {
+  return {
+    apns: appleKeyConfig(),
+    fcm: fcmConfig(),
+  };
 }
 
 type RegisteredRow = Parameters<typeof deviceTokenIsLive>[0] & {
@@ -111,17 +127,11 @@ type RegisteredRow = Parameters<typeof deviceTokenIsLive>[0] & {
 };
 
 export async function pushToUsers(targets: PushTarget[]): Promise<PushOutcome> {
-  const outcome: PushOutcome = { sent: 0, failed: 0, pruned: 0, skipped: null };
+  const outcome: PushOutcome = { sent: 0, failed: 0, pruned: 0, skipped: null, undelivered: 0 };
   if (targets.length === 0) return outcome;
-  if (!MIGRATION_0029_LIVE) {
-    console.log(`[push] migración 0029 sin aplicar: ${targets.length} aviso(s) no enviados`);
-    return { ...outcome, skipped: "not_live" };
-  }
-  const apnsCfg = appleKeyConfig();
-  // Before 0035 no FCM row can exist: don't even parse the account.
-  const fcmCfg = MIGRATION_0035_LIVE ? fcmConfig() : null;
+  const { apns: apnsCfg, fcm: fcmCfg } = pushProviders();
   if (!apnsCfg && !fcmCfg) {
-    console.log(`[push] sin llaves de APNs${MIGRATION_0035_LIVE ? " ni de FCM" : ""}: ${targets.length} aviso(s) no enviados (${targets.map((t) => t.message.data.type ?? "?").join(",")})`);
+    console.log(`[push] sin llaves de APNs ni de FCM: ${targets.length} aviso(s) no enviados (${targets.map((t) => t.message.data.type ?? "?").join(",")})`);
     return { ...outcome, skipped: "not_configured" };
   }
 
@@ -132,11 +142,7 @@ export async function pushToUsers(targets: PushTarget[]): Promise<PushOutcome> {
         token: deviceTokens.token,
         userId: deviceTokens.userId,
         environment: deviceTokens.environment,
-        // Raw: the schema line stays commented until 0035 is applied
-        // (src/auth/live-0035.ts); before it every row is APNs.
-        provider: MIGRATION_0035_LIVE
-          ? sql<PushProvider>`"device_token"."provider"`
-          : sql<PushProvider>`'apns'`,
+        provider: deviceTokens.provider,
         sessionId: deviceTokens.sessionId,
         updatedAt: deviceTokens.updatedAt,
         joinedSessionId: mobileSessions.id,
@@ -172,7 +178,7 @@ export async function pushToUsers(targets: PushTarget[]): Promise<PushOutcome> {
       deliverFcm(fcmDeliveries, fcmCfg, outcome),
     ]);
   } catch (err) {
-    console.error("[push] envío falló:", err);
+    console.error("[push] envío falló:", redactedError(err));
     outcome.failed++;
   }
   return outcome;
@@ -196,7 +202,7 @@ async function pruneToken(
       );
     outcome.pruned++;
   } catch (err) {
-    console.error("[push] no se pudo borrar un token muerto:", err);
+    console.error("[push] no se pudo borrar un token muerto:", redactedError(err));
     outcome.failed++;
   }
 }
@@ -208,7 +214,8 @@ async function deliverApns(
 ): Promise<void> {
   if (deliveries.length === 0) return;
   if (!cfg) {
-    console.log(`[push] sin APPLE_TEAM_ID/APPLE_KEY_ID/APPLE_PRIVATE_KEY: ${deliveries.length} envío(s) APNs no enviados`);
+    console.error(`[push] sin APPLE_TEAM_ID/APPLE_KEY_ID/APPLE_PRIVATE_KEY: ${deliveries.length} envío(s) APNs no enviados`);
+    outcome.undelivered += deliveries.length;
     return;
   }
   try {
@@ -228,7 +235,7 @@ async function deliverApns(
       console.error(`[push] APNs ${r.environment} ${r.status} ${r.reason ?? ""} token=${r.token.slice(0, 8)}…`);
     }
   } catch (err) {
-    console.error("[push] envío APNs falló:", err);
+    console.error("[push] envío APNs falló:", redactedError(err));
     outcome.failed += deliveries.length;
   }
 }
@@ -240,7 +247,8 @@ async function deliverFcm(
 ): Promise<void> {
   if (deliveries.length === 0) return;
   if (!cfg) {
-    console.log(`[push] sin FCM_SERVICE_ACCOUNT_JSON (o no se pudo leer): ${deliveries.length} envío(s) FCM no enviados`);
+    console.error(`[push] sin FCM_SERVICE_ACCOUNT_JSON (o no se pudo leer): ${deliveries.length} envío(s) FCM no enviados`);
+    outcome.undelivered += deliveries.length;
     return;
   }
   try {
@@ -261,7 +269,7 @@ async function deliverFcm(
   } catch (err) {
     // Minting the access token failed (bad key, Google down): nothing sent.
     fcmAccess = null;
-    console.error("[push] envío FCM falló:", err);
+    console.error("[push] envío FCM falló:", redactedError(err));
     outcome.failed += deliveries.length;
   }
 }

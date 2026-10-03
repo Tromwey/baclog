@@ -1,7 +1,6 @@
 import "server-only";
 import { appleMusicProbe } from "./apple-music";
 import { tidalOAuthConfig } from "./config";
-import { assertMusicExportLive } from "./errors";
 import { isTidalConnected } from "./tidal-auth";
 import type { MusicServices } from "./types";
 
@@ -13,7 +12,6 @@ import type { MusicServices } from "./types";
  * the next refresh → `not_connected` then).
  */
 export async function musicServicesFor(userId: string): Promise<MusicServices> {
-  assertMusicExportLive();
   const tidalReady = tidalOAuthConfig() !== null;
   const [apple, connected] = await Promise.all([
     appleMusicProbe(),

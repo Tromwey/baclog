@@ -87,10 +87,24 @@ export type ClaimUsernameResult =
   | { ok: false; error: "invalid" | "taken" };
 
 /**
- * F2.17 — claiming implies opting in to a public page (toggleable later via
- * `updateProfile({ isPublic })`). "Taken" is the unique index on
- * `users.username` saying so: the check-then-write race is settled by the
- * database, never by a prior SELECT.
+ * F2.17 — claiming your FIRST handle implies opting in to a public page
+ * (toggleable later via `updateProfile({ isPublic })`). "Taken" is the unique
+ * index on `users.username` saying so: the check-then-write race is settled
+ * by the database, never by a prior SELECT.
+ *
+ * `isPublic` is only ever turned on here when the PREVIOUS handle was null
+ * (founder, 2026-10-01). A rename keeps whatever the account had: it used to
+ * set `isPublic = true` unconditionally, so someone who had made their
+ * profile private re-published it — every collection on their profile, every
+ * per-title activity — just by changing their @.
+ *
+ * And only once the F2.2 age gate is passed (`birth_year` set). The apps
+ * claim the handle right BEFORE `POST /me/onboarding`; that first claim
+ * reserves the @ but leaves the account private, and `completeOnboarding`
+ * publishes it in the same statement that records the birth year. Without
+ * this, claim-then-never-onboard was a public profile that skipped the gate.
+ * Both conditions are a CASE inside the UPDATE (the row's OLD values), not a
+ * prior read.
  *
  * Fase 4b — a rename carries `analytics_event.target_username` forward
  * (old → new) in the SAME `db.batch` (Neon HTTP batch = one transaction,
@@ -135,7 +149,10 @@ export async function claimUsername(
         ),
       db
         .update(users)
-        .set({ username: normalized, isPublic: true })
+        .set({
+          username: normalized,
+          isPublic: sql`case when ${users.username} is null and ${users.birthYear} is not null then true else ${users.isPublic} end`,
+        })
         .where(eq(users.id, userId)),
     ]);
   } catch (err) {

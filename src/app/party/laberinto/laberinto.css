@@ -1,0 +1,9 @@
+/* /party/laberinto — the design page's own <style> ("Fase 3d - Laberinto cementerio"), scoped to this route. */
+html:has(.lab-host),body:has(.lab-host){margin:0;height:100%;background:#07080b;color:#e8e8e6;overflow:hidden;overscroll-behavior:none}
+.lab-host a{color:#f0a49c}.lab-host a:hover{color:#ffd0ca}
+.lab-err{position:fixed;inset:0;display:grid;place-items:center;margin:0;padding:24px;text-align:center;color:#a8a296;font:500 15px/1.5 "Oswald",system-ui,sans-serif;letter-spacing:.06em}
+
+/* Pasar de una página de /party a otra (reja → laberinto → mausoleo) es un fundido, no un corte: las tres
+   salen y entran en negro. Donde el navegador no lo soporta, queda el corte de siempre. */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.45s}

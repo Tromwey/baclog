@@ -41,6 +41,45 @@ const nextConfig: NextConfig = {
    * drop the bearer on a cross-host redirect), and Apple's CDN refuses a
    * redirected apple-app-site-association. See `src/lib/site.ts`.
    */
+  /**
+   * Security headers on EVERY response (pages, route handlers, static files,
+   * and the redirects/rewrites below — `headers` is matched before the
+   * filesystem and adds to whatever the route sets; it never changes a
+   * status or a Location, so the legacy-host 308s and `/api/*` on baclog.app
+   * behave exactly as before):
+   *  - nothing of ours is meant to be framed, so no other origin may embed
+   *    it (clickjacking on Seguir / Publicar / borrar cuenta). Both forms:
+   *    `frame-ancestors` is the standard, `X-Frame-Options` the legacy twin
+   *    (and the only one on a `/api/avatar/*` 404, which carries no CSP). An
+   *    <img> is not framing: avatars,
+   *    covers and OG cards keep loading everywhere.
+   *  - `nosniff`: a response is what its Content-Type says (the avatar route
+   *    serves user-uploaded bytes under a sniffed image type).
+   * This CSP carries ONLY `frame-ancestors`: it restricts no script, style,
+   * image or connection.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
+        // Everything EXCEPT `/api/avatar/*`, which sends its own, stricter
+        // CSP (`default-src 'none'; sandbox; frame-ancestors 'none'`). A
+        // header set here is already on the response when a route handler's
+        // own headers are copied over, and Next keeps the one that is
+        // already there (`send-response.js`: a single-valued header is only
+        // appended when absent) — so the global value REPLACED the avatar's
+        // and user-uploaded bytes were served without `sandbox`.
+        source: "/((?!api/avatar/).*)",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" }],
+      },
+    ];
+  },
   async redirects() {
     return [...LEGACY_HOSTS, `www.${SITE_HOST}`].map((host) => ({
       source: "/:path((?!api/|\\.well-known/).*)",
@@ -51,6 +90,8 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return {
+      // The Mausoleum of /party is the design's own page, served verbatim from public/ (not a Next route).
+      beforeFiles: [{ source: "/party/mausoleo", destination: "/party/mausoleo/index.html" }],
       fallback: [
         {
           source: "/:username/item/:catalogItemId",

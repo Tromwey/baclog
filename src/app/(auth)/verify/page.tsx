@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 import {
   FIELD,
@@ -12,6 +12,9 @@ import {
   Wordmark,
 } from "@/components/kura/components";
 import { carryReturnTo, returnToParam } from "../return-to-param";
+import { clearPendingEmail, readPendingEmail, stashPendingEmail } from "../pending-email";
+
+const noSubscribe = () => () => {};
 
 /**
  * Kura · the second half of "entrar." — the code the email carries. Same
@@ -22,19 +25,67 @@ import { carryReturnTo, returnToParam } from "../return-to-param";
 function VerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const email = params.get("email") ?? "";
+  // The address comes from sessionStorage (/login put it there). `?email=` is
+  // only still read for a link opened mid-deploy from the old /login, and is
+  // scrubbed from the URL at once. With neither (storage blocked, a new tab),
+  // the form asks for it again instead of failing every code.
+  const legacy = params.get("email") ?? "";
+  const stashed = useSyncExternalStore(noSubscribe, readPendingEmail, () => "");
+  const known = stashed || legacy;
+  // sessionStorage can't be read while hydrating (the server snapshot is ""),
+  // so on a hard load `known` arrives one render late. Until then the page
+  // doesn't know whether it must ask for the address: the email field waits
+  // for `hydrated` instead of flashing in and out.
+  const hydrated = useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+  const [typed, setTyped] = useState("");
+  const email = known || typed.trim();
+  useEffect(() => {
+    if (!legacy) return;
+    stashPendingEmail(legacy);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("email");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [legacy]);
+
   const codeRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState<"idle" | "checking" | "wrong">("idle");
+  // `autoFocus` only acts on mount, and on a hard load the field mounts
+  // before `known` exists: focus it when the address shows up.
+  useEffect(() => {
+    if (known) codeRef.current?.focus();
+  }, [known, codeRef]);
+  const [status, setStatus] = useState<"idle" | "checking" | "wrong" | "locked" | "server" | "offline">("idle");
 
   async function verify(e: React.FormEvent) {
     e.preventDefault();
     setStatus("checking");
-    const res = await signIn("otp", { email, code, redirect: false });
-    if (res?.error) {
-      setStatus("wrong");
+    // No network: signIn REJECTS. The code is still good — say so and let
+    // the same button try again, instead of "Entrando…" forever.
+    const res = await signIn("otp", { email, code, redirect: false }).catch(
+      () => "offline" as const,
+    );
+    if (res === "offline") {
+      setStatus("offline");
       return;
     }
+    if (res?.error) {
+      // What the server lets us tell apart (`src/auth/config.ts`): a
+      // `CredentialsSignin` whose `code` is "locked" = refused for too many
+      // attempts (the code was not even judged: typing it again, or another,
+      // won't help until the wait passes); any other `CredentialsSignin` = a
+      // wrong or spent/expired code. A server that sends no `code` (an older
+      // build) falls in the second sentence, which still covers the limit.
+      // Anything ELSE (`Configuration` = `authorize` threw, a 5xx) is OUR
+      // failure: the code was never judged, so don't call it wrong.
+      const locked = (res as { code?: string }).code === "locked";
+      setStatus(res.error !== "CredentialsSignin" ? "server" : locked ? "locked" : "wrong");
+      return;
+    }
+    clearPendingEmail();
     // Hard navigation on purpose: the client router pre-sign-in has no
     // session and would serve stale redirects from its cache.
     window.location.href = returnToParam() ?? "/backlogs";
@@ -49,11 +100,28 @@ function VerifyForm() {
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo.</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-          Te mandamos un código a{" "}
-          <span className="text-text">{email || "tu correo"}</span>.
+          Te enviamos un código a{" "}
+          <span className="text-text">{known || "tu correo"}</span>.
         </p>
 
         <form onSubmit={verify} className="mt-5 flex flex-col gap-3">
+          {hydrated && !known && (
+            <>
+              <label htmlFor="email" className="sr-only">
+                El correo al que llegó el código
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="tu@correo.com"
+                className={FIELD}
+              />
+            </>
+          )}
           <label htmlFor="code" className="sr-only">
             Código de 6 dígitos
           </label>
@@ -64,7 +132,7 @@ function VerifyForm() {
             pattern="[0-9]{6}"
             maxLength={6}
             required
-            autoFocus
+            autoFocus={Boolean(known)}
             autoComplete="one-time-code"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
@@ -78,10 +146,22 @@ function VerifyForm() {
           >
             {status === "checking" ? "Entrando…" : "Entrar"}
           </button>
-          {status === "wrong" && (
-            <div className="flex flex-col items-center gap-3 pt-1">
-              <p className="text-center text-[13px] leading-[1.5] text-text">
-                Código incorrecto o vencido. Pide otro y vuelve a intentar.
+          {status === "offline" && (
+            <p role="alert" className="pt-1 text-center text-[13px] leading-[1.5] text-text">
+              Sin conexión. Tu código sigue siendo válido: revisa tu red y vuelve a intentarlo.
+            </p>
+          )}
+          {status === "server" && (
+            <p role="alert" className="pt-1 text-center text-[13px] leading-[1.5] text-text">
+              Algo falló de nuestro lado y no pudimos revisar tu código. Vuelve a intentarlo en un momento.
+            </p>
+          )}
+          {(status === "wrong" || status === "locked") && (
+            <div role="alert" className="flex flex-col items-center gap-3 pt-1">
+              <p className="text-center text-[13px] leading-[1.5] text-text text-pretty">
+                {status === "locked"
+                  ? "Se intentó demasiadas veces. Pide otro código más tarde."
+                  : "El código es incorrecto o ya venció. Revísalo o pide otro."}
               </p>
               <button
                 type="button"
@@ -114,7 +194,7 @@ function VerifyFallback() {
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo.</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-          Te mandamos un código a{" "}
+          Te enviamos un código a{" "}
           <span
             aria-hidden
             className={`inline-block h-3.5 w-36 translate-y-0.5 rounded-full bg-surface-1 ${SKELETON_PULSE}`}

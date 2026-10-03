@@ -29,7 +29,9 @@ export function SheetTitle({
       {close && (
         <SheetClose
           aria-label="Cerrar"
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm"
+          // 36 px to the eye (the frames' chip), 44 to the finger: the pseudo-
+          // element widens the hit area by 4 px a side.
+          className="relative flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[var(--glass-bg)] text-text bl-press-sm before:absolute before:-inset-1 before:content-['']"
         >
           <KIcon name="close" size={16} />
         </SheetClose>

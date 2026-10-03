@@ -6,6 +6,7 @@ import {
   removeAvatarAction,
   uploadAvatarAction,
 } from "@/app/actions/avatar-actions";
+import { ATTEMPT_UNREACHED, attempt } from "@/components/kura/attempt";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { prepareAvatarBlob } from "@/modules/avatar/client";
 
@@ -45,30 +46,37 @@ export function AvatarPicker({
     if (!file) return;
     setBusy(true);
     setError(null);
+    // Two different failures, two different sentences: the PHOTO couldn't be
+    // read (pick another one) vs. the upload never landed (same photo, try
+    // again).
+    let blob: Blob;
     try {
-      const blob = await prepareAvatarBlob(file);
-      const form = new FormData();
-      form.append("file", blob, "avatar");
-      const res = await uploadAvatarAction(form);
-      if (res.ok) {
-        setUrl(res.url);
-        router.refresh();
-      } else {
-        setError(
-          res.error === "too_large"
-            ? "La imagen pesa demasiado. Prueba con otra."
-            : "No pudimos usar esa imagen. Prueba con otra.",
-        );
-      }
+      blob = await prepareAvatarBlob(file);
     } catch (err) {
       setError(
         err instanceof Error && err.message === "too-large"
-          ? "La imagen pesa demasiado. Prueba con otra."
-          : "No pudimos leer esa imagen. Prueba con otra.",
+          ? "La foto pesa demasiado. Prueba con otra."
+          : "No se pudo usar esa foto. Prueba con otra.",
       );
-    } finally {
       setBusy(false);
+      return;
     }
+    const form = new FormData();
+    form.append("file", blob, "avatar");
+    const res = await attempt(() => uploadAvatarAction(form));
+    setBusy(false);
+    if (res.ok) {
+      setUrl(res.value.url);
+      router.refresh();
+      return;
+    }
+    setError(
+      res.error === ATTEMPT_UNREACHED
+        ? "No se pudo subir la foto. Revisa tu conexión y vuelve a intentarlo."
+        : res.error === "too_large"
+          ? "La foto pesa demasiado. Prueba con otra."
+          : "No se pudo usar esa foto. Prueba con otra.",
+    );
   }
 
   async function onRemove() {
@@ -79,7 +87,7 @@ export function AvatarPicker({
       setUrl(null);
       router.refresh();
     } catch {
-      setError("No se pudo quitar la foto. Vuelve a intentar.");
+      setError("No se pudo quitar la foto. Vuelve a intentarlo.");
     } finally {
       setBusy(false);
     }
@@ -91,7 +99,7 @@ export function AvatarPicker({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        aria-label={url ? "Cambiar foto" : "Subir foto"}
+        aria-label={url ? "Cambiar foto" : "Agregar foto"}
         className="rounded-full bl-press-lg disabled:opacity-60"
       >
         <ProfileAvatar src={url} hexes={hexes} name={name} size={104} />
@@ -103,7 +111,7 @@ export function AvatarPicker({
           disabled={busy}
           className="flex min-h-11 items-center text-[15px] font-semibold text-text transition-opacity active:opacity-60 disabled:opacity-40"
         >
-          {busy ? "Guardando…" : url ? "Cambiar foto" : "Subir foto"}
+          {busy ? "Guardando…" : url ? "Cambiar foto" : "Agregar foto"}
         </button>
         {url && (
           <button
@@ -116,11 +124,11 @@ export function AvatarPicker({
           </button>
         )}
       </div>
-      {error && (
-        <p role="status" className="text-center text-[13px] leading-[1.4] text-text-2">
-          {error}
-        </p>
-      )}
+      {/* Always mounted: a live region born WITH its text isn't announced.
+          Empty, it gives back the column's gap instead of `display: none`. */}
+      <p role="status" className="text-center text-[13px] leading-[1.4] text-text-2 empty:-mt-2">
+        {error}
+      </p>
       <input
         ref={inputRef}
         type="file"

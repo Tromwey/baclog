@@ -13,7 +13,8 @@ type LinkService = (typeof linkServiceEnum.enumValues)[number];
 
 /**
  * F2.11–F2.13 lazy resolution: cache hit → redirect; miss → resolve the
- * service and cache the answer forever (taps 2+ are cache hits). Never
+ * service and cache the ANSWER forever (taps 2+ are cache hits) — an upstream
+ * that didn't answer is never cached, music or video. Never
  * returns a dead link: the search deep link is the floor, cached with
  * isSearchFallback so a later, better resolver can be told apart from it.
  *
@@ -114,13 +115,22 @@ export async function resolveVideoLink(
   // that same page, which lists providers the moment TMDB has them. Only a
   // non-TMDB video (which the catalog never produces) degrades to a search.
   if (item.source === "tmdb" && item.mediaType !== "album") {
-    const watch = await getWatchLink(
-      item.externalId,
-      item.mediaType,
-      region,
-    ).catch(() => null);
-    const url =
-      watch?.url ?? tmdbWatchPageUrl(item.externalId, item.mediaType, region);
+    const floor = tmdbWatchPageUrl(item.externalId, item.mediaType, region);
+    let watch: Awaited<ReturnType<typeof getWatchLink>>;
+    try {
+      watch = await getWatchLink(item.externalId, item.mediaType, region);
+    } catch (err) {
+      // TMDB didn't answer (timeout, 429, 5xx): serve the floor for THIS tap
+      // and keep the cache empty, like `resolveMusicLink` does on
+      // "unavailable". Persisting it here froze the slugless page for the
+      // (title, region) forever — the cache has no expiry — because of one
+      // 8 s timeout.
+      console.warn(
+        `[links] watch link for ${item.id} (${region}) not resolved, floor served uncached: ${err instanceof Error ? err.message : "error"}`,
+      );
+      return floor;
+    }
+    const url = watch?.url ?? floor;
     await db
       .insert(mediaLinks)
       .values({

@@ -17,6 +17,8 @@ import {
 } from "@/app/actions/backlog-item-actions";
 import { completeItemAction, type CompleteReaction } from "@/app/actions/complete-actions";
 import { SOLID_BUTTON } from "@/components/kura/components";
+import { SHEET_QUIET } from "@/components/kura/sheet-parts";
+import { attempt, DRAFT_KEPT, WRITE_FAILED } from "@/components/kura/attempt";
 import { BG, mixHex } from "@/components/kura/tint";
 import { CHECK_FILL_PATH, FLAME_PATH, LIKE_PATH } from "@/components/glyph-paths";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
@@ -59,11 +61,25 @@ import { useItemReaction, type ItemVerdictValue } from "./reaction-state";
  * text on the plain Completo stop the sheet says so and keeps Guardar off
  * rather than letting the server refuse.
  *
+ * A review LIVES with its reaction (founder, 2026-10-01): the server deletes
+ * it in the same transaction that turns the last reaction off, with no undo.
+ * So when the title HAS a review and Guardar on the Completo stop would drop
+ * the reaction, the sheet swaps to a confirmation first (same dialog — never
+ * two sheets): "Quitar y borrar reseña" / "Conservar". Confirmed, the save
+ * sends NO review text, paints no optimistic review, and clears the own
+ * review from the provider (the block reads it from there) — never waiting
+ * on `revalidatePath` (learnings/2026-09-02-revalidatepath-…).
+ *
  * On an unsaved title, Guardar first asks "guardar en" (pick mode) — this
  * sheet stays mounted and hidden meanwhile (one sheet at a time).
  */
 
 type Stop = 0 | 1 | 2;
+
+/** A save that never landed. With a draft in the field, the sheet adds
+ *  "Tu texto sigue aquí." — the review is never lost to a failed write. */
+const NOT_SAVED = WRITE_FAILED;
+const NOT_SAVED_DRAFT = `${WRITE_FAILED} ${DRAFT_KEPT}`;
 
 const STOPS: { id: "completed" | "liked" | "obsessed"; label: string; d: string; color: string; hex: string }[] = [
   { id: "completed", label: "Completo", d: CHECK_FILL_PATH, color: "var(--st-completed)", hex: "#a0cba0" },
@@ -191,54 +207,96 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
   const hasText = body.trim().length > 0;
   // After saving, the review is unlocked iff there's a reaction left: the
   // slider's, or a legacy dislike the plain Completo stop leaves in place.
-  const needsReaction = hasText && stop === 0 && verdict !== "disliked";
-  const canSave = !saving && !over && !needsReaction;
+  // Guardar on Completo would turn the last reaction off, and the title has
+  // a review: the server deletes it with the reaction. Ask first.
+  const dropsReview =
+    ownReview !== null && stop === 0 && verdict !== "disliked" && (obsessed || verdict === "liked");
+  const needsReaction = hasText && stop === 0 && verdict !== "disliked" && !dropsReview;
+  const canSave = !saving && (dropsReview || !over) && !needsReaction;
+  const [confirming, setConfirming] = useState(false);
 
-  function save() {
+  function save(confirmed = false) {
     if (!canSave) return;
+    if (dropsReview && !confirmed) {
+      setError(null);
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
     setError(null);
+    // With the review going away, its text is not sent (it would be saved
+    // and deleted in the same breath) and no optimistic copy is painted.
+    const sendText = hasText && !dropsReview;
     startSaving(async () => {
-      if (!(await ensureInLibrary())) {
+      // Every await here can REJECT (network, expired session), not just
+      // answer {error}: `attempt` folds both, so the sheet stays open with
+      // the draft in the field instead of handing the ficha to its boundary.
+      const saved = await attempt(ensureInLibrary);
+      if (!saved.ok) {
+        setError(hasText ? NOT_SAVED_DRAFT : NOT_SAVED);
+        return;
+      }
+      if (!saved.value) {
         setError("Elige una colección para guardarla.");
         return;
       }
       const reaction: CompleteReaction = stop === 2 ? "obsessed" : stop === 1 ? "liked" : null;
-      const res = await completeItemAction({
-        catalogItemId,
-        reaction,
-        body: body.trim(),
-        hasSpoiler: allowSpoiler && hasSpoiler,
-      });
-      if ("error" in res) {
+      const res = await attempt(() =>
+        completeItemAction({
+          catalogItemId,
+          reaction,
+          body: sendText ? body.trim() : "",
+          hasSpoiler: allowSpoiler && hasSpoiler,
+        }),
+      );
+      if (!res.ok) {
         setError(
           res.error === "link"
             ? "Los enlaces no van en una reseña. Quítalo y vuelve a intentarlo."
             : res.error === "locked"
               ? "Para reseñar, elige Me gusta o Me obsesiona."
-              : "No se pudo guardar. Tu texto sigue aquí: inténtalo otra vez.",
+              : hasText
+                ? NOT_SAVED_DRAFT
+                : NOT_SAVED,
         );
         return;
       }
 
       let nextVerdict: ItemVerdictValue = verdict;
       let nextObsessed = obsessed;
+      let reactionKept = false;
+      let reviewDeleted = false;
       if (stop === 2) nextObsessed = true;
       else if (stop === 1) {
         nextVerdict = "liked";
         nextObsessed = false;
       } else {
-        // Down to plain Completo: drop what the slider no longer says.
+        // Down to plain Completo: drop what the slider no longer says — and
+        // only settle what the server actually dropped. A reaction that
+        // didn't clear stays lit, and the sheet says so.
         if (obsessed) {
-          await setObsessedAction(catalogItemId, false).catch(() => null);
-          nextObsessed = false;
+          const r = await attempt(() => setObsessedAction(catalogItemId, false));
+          if (r.ok) {
+            nextObsessed = false;
+            if ("reviewDeleted" in r.value && r.value.reviewDeleted) reviewDeleted = true;
+          } else reactionKept = true;
         }
         if (verdict === "liked") {
-          await clearVerdictAction(catalogItemId).catch(() => null);
-          nextVerdict = null;
+          const r = await attempt(() => clearVerdictAction(catalogItemId));
+          if (r.ok) {
+            nextVerdict = null;
+            if (r.value.reviewDeleted) reviewDeleted = true;
+          } else reactionKept = true;
         }
       }
       settleFromComplete({ verdict: nextVerdict, obsessed: nextObsessed, completed: true });
-      if (hasText) {
+      // The server said the review went with the reaction — or every
+      // reaction this save had to drop is off, which is the same fact (a
+      // review exists only while there is one). Drop it here; the reviews
+      // block reads this state.
+      if (reviewDeleted || (dropsReview && !reactionKept)) {
+        setOwnReview(null);
+      } else if (sendText) {
         setOwnReview({
           id: ownReview?.id ?? "own",
           body: body.trim(),
@@ -253,6 +311,13 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
           hidden: ownReview?.hidden ?? false,
         });
       }
+      if (reactionKept) {
+        // Completed (and the review, if any) is saved; the reaction is not
+        // gone. Stay open: Guardar again retries exactly what's missing.
+        setError("Quedó como completo, pero tu reacción no se pudo quitar. Vuelve a intentarlo.");
+        router.refresh();
+        return;
+      }
       dismiss();
       router.refresh();
     });
@@ -261,19 +326,19 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
   function uncomplete() {
     setError(null);
     startSaving(async () => {
-      const res = await setStatusAction(catalogItemId, "on_my_radar").catch(() => null);
-      if (!res || "error" in res) {
-        setError("No se pudo quitar el completado. Inténtalo otra vez.");
+      const res = await attempt(() => setStatusAction(catalogItemId, "on_my_radar"));
+      if (!res.ok) {
+        setError("No se pudo quitar el completado. Vuelve a intentarlo.");
         return;
       }
       settleFromComplete({ verdict, obsessed, completed: false });
       dismiss();
       showToast("Quitaste el completado.", {
         label: "Deshacer",
-        run: () => {
-          void setStatusAction(catalogItemId, "completed").then((r) => {
-            if (!("error" in r)) settleFromComplete({ verdict, obsessed, completed: true });
-          });
+        run: async () => {
+          const r = await attempt(() => setStatusAction(catalogItemId, "completed"));
+          if (r.ok) settleFromComplete({ verdict, obsessed, completed: true });
+          else showToast("No se pudo deshacer. Revisa tu conexión.");
         },
       });
     });
@@ -285,6 +350,27 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
   // shape the old `clip-path: inset(… round 999px)` cut, on the compositor.
   const travel = Math.max(0, trackW - 64) * (value / 2);
   const fillShift = travel + 64 - trackW;
+
+  if (confirming) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2 px-2.5 pb-4 pt-1">
+          <h2 className="font-brand text-[22px] leading-[1.1] text-text text-balance">
+            tu reseña se borra con la reacción.
+          </h2>
+          <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
+            Si quitas la reacción, tu reseña se borra y no se puede recuperar.
+          </p>
+        </div>
+        <button type="button" onClick={() => save(true)} className={`${SOLID_BUTTON} mx-1`}>
+          Quitar y borrar reseña
+        </button>
+        <button type="button" autoFocus onClick={() => setConfirming(false)} className={`${SHEET_QUIET} mt-1`}>
+          Conservar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -417,7 +503,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
         </button>
       )}
 
-      {(needsReaction || over || error) && (
+      {(needsReaction || (over && !dropsReview) || error) && (
         <p role="status" className="mx-1 flex items-start gap-2 px-1 pt-1 text-[14px] leading-[1.4] text-text-2">
           {error && <TriangleGlyph />}
           {error ??
@@ -427,7 +513,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
         </p>
       )}
 
-      <button type="button" onClick={save} disabled={!canSave} className={`${SOLID_BUTTON} mx-1 mt-3.5`}>
+      <button type="button" onClick={() => save()} disabled={!canSave} className={`${SOLID_BUTTON} mx-1 mt-3.5`}>
         {saving ? "Guardando…" : "Guardar"}
       </button>
 

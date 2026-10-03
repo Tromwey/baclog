@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sheet } from "@/components/ui";
 import { submitReportAction } from "@/app/actions/report-actions";
+import { attempt } from "@/components/kura/attempt";
 
 const REASONS = [
   { id: "spam", label: "Spam" },
@@ -21,11 +22,20 @@ export function ReportButton({ username }: { username: string }) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function report(reason: (typeof REASONS)[number]["id"]) {
     setBusy(true);
-    await submitReportAction({ username, reason });
+    setFailed(false);
+    // The action answers `{ ok: true }` always (it never confirms anything);
+    // what CAN happen is that it never answers — then the rows come back and
+    // the sheet says the report did not go out.
+    const res = await attempt(() => submitReportAction({ username, reason }));
     setBusy(false);
+    if (!res.ok) {
+      setFailed(true);
+      return;
+    }
     setSent(true);
     setTimeout(() => setOpen(false), 1500);
   }
@@ -63,6 +73,11 @@ export function ReportButton({ username }: { username: string }) {
                   </button>
                 ))}
               </div>
+              {failed && (
+                <p role="alert" className="mt-3 text-[13px] leading-[1.5] text-text">
+                  No se envió tu reporte. Revisa tu conexión y vuelve a intentarlo.
+                </p>
+              )}
             </>
           )}
         </Sheet>

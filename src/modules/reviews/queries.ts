@@ -279,15 +279,35 @@ export async function getOthersReviewsPage(
   });
 }
 
-/** How many public, non-hidden reviews this title has — the header count. */
+/**
+ * How many public, non-hidden reviews this title has — the header count.
+ *
+ * With a `viewerId` (the signed-in ficha) it counts exactly the population
+ * the list pages over: authors with a block in EITHER direction are left
+ * out, by the same `notBlockedWith` predicate, inside the query. Without it
+ * the header said N while the list could only ever show N − 1 — which told
+ * the viewer that someone they can't see (they blocked them, or were blocked
+ * BY them) reviewed this title. The viewer's own review still counts when it
+ * is public and not hidden (the client derives from that, reviews-block.tsx:
+ * it is pinned above the list, not missing from it).
+ *
+ * Anonymous pages pass no viewer — no block to honor (`/u/**`).
+ */
 export async function countPublicReviews(
   catalogItemId: string,
+  viewerId: string | null = null,
 ): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(itemReviews)
     .innerJoin(users, eq(itemReviews.userId, users.id))
-    .where(and(eq(itemReviews.catalogItemId, catalogItemId), publicAuthor));
+    .where(
+      and(
+        eq(itemReviews.catalogItemId, catalogItemId),
+        publicAuthor,
+        viewerId ? notBlockedWith(viewerId, users.id) : undefined,
+      ),
+    );
   return row?.n ?? 0;
 }
 
@@ -330,7 +350,7 @@ export async function getItemReviewContext(
       )
       .limit(1),
     getOthersReviewsPage(userId, catalogItemId, null, now),
-    countPublicReviews(catalogItemId),
+    countPublicReviews(catalogItemId, userId),
   ]);
 
   const row = ownRows[0];

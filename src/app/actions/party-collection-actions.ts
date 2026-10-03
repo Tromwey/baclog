@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "@/auth";
 import type { CurrentUser } from "@/auth/session";
+import { notOnboarded } from "@/authz";
 import { loginPathFor } from "@/lib/return-to";
 import { paletteHexSchema } from "@/modules/backlog/palette";
-import { PartyUnavailableError } from "@/modules/party-collections/errors";
 import { getPartyDetail, listPartiesForUser } from "@/modules/party-collections/queries";
 import {
   duplicateMessage,
@@ -45,8 +45,11 @@ import {
  *   - `{ error: "signin_required", loginPath }` — no session (expired cookie,
  *     signed out in another tab): the UI navigates to `loginPath`, which
  *     brings the person back to the party (`/login?to=/c/{id}`);
- *   - `{ error: "unavailable" }` while migration 0033 isn't live;
- *   - `{ error: "not_found" }` for a party the caller can't see (no oracle).
+ *   - `{ error: "not_found" }` for a party the caller can't see (no oracle);
+ *   - `{ error: "onboarding_required" }` (F2.2) — creating a party, changing
+ *     it and minting a link need a finished onboarding (name + birth year),
+ *     like joining one. Decided on the caller's own row BEFORE the id is
+ *     looked at. Deleting, revoking the link and leaving are never gated.
  */
 
 const idSchema = z.string().min(1).max(64);
@@ -74,15 +77,6 @@ function isUser(u: CurrentUser | SigninRequired): u is CurrentUser {
   return !("error" in u);
 }
 
-async function guarded<T>(run: () => Promise<T>): Promise<T | { error: "unavailable" }> {
-  try {
-    return await run();
-  } catch (err) {
-    if (err instanceof PartyUnavailableError) return { error: "unavailable" as const };
-    throw err;
-  }
-}
-
 // ---------- reads for client refresh ----------
 
 /** The member view again (after a write elsewhere, or on tab focus). */
@@ -91,17 +85,15 @@ export async function getPartyAction(backlogId: string) {
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    const party = await getPartyDetail(user.id, id.data);
-    return party ? { ok: true as const, party } : { error: "not_found" as const };
-  });
+  const party = await getPartyDetail(user.id, id.data);
+  return party ? { ok: true as const, party } : { error: "not_found" as const };
 }
 
 /** "Tus colecciones · De fiesta": parties the user hosts or joined. */
 export async function listMyPartiesAction() {
   const user = await sessionOr();
   if (!isUser(user)) return user;
-  return guarded(async () => ({ ok: true as const, parties: await listPartiesForUser(user.id) }));
+  return { ok: true as const, parties: await listPartiesForUser(user.id) };
 }
 
 // ---------- host ----------
@@ -110,16 +102,15 @@ export async function listMyPartiesAction() {
 export async function createPartyAction(input: { name: string; perGuestLimit?: number | null }) {
   const user = await sessionOr();
   if (!isUser(user)) return user;
+  if (notOnboarded(user)) return { error: "onboarding_required" as const };
   const parsed = z
     .object({ name: partyNameSchema, perGuestLimit: perGuestLimitSchema.optional() })
     .safeParse(input);
   if (!parsed.success) return { error: "invalid" as const };
-  return guarded(async () => {
-    const res = await createParty(user.id, parsed.data);
-    if (!res.ok) return { error: res.error, message: TOO_MANY_PARTIES_MESSAGE };
-    revalidatePath("/backlogs", "layout");
-    return { ok: true as const, id: res.backlogId, path: partyPath(res.backlogId), invite: res.invite };
-  });
+  const res = await createParty(user.id, parsed.data);
+  if (!res.ok) return { error: res.error, message: TOO_MANY_PARTIES_MESSAGE };
+  revalidatePath("/backlogs", "layout");
+  return { ok: true as const, id: res.backlogId, path: partyPath(res.backlogId), invite: res.invite };
 }
 
 export async function updatePartyAction(
@@ -128,6 +119,7 @@ export async function updatePartyAction(
 ) {
   const user = await sessionOr(backlogId);
   if (!isUser(user)) return user;
+  if (notOnboarded(user)) return { error: "onboarding_required" as const };
   const parsed = z
     .object({
       id: idSchema,
@@ -136,15 +128,13 @@ export async function updatePartyAction(
     })
     .safeParse({ id: backlogId, ...input });
   if (!parsed.success) return { error: "invalid" as const };
-  return guarded(async () => {
-    const ok = await updateParty(user.id, parsed.data.id, {
-      name: parsed.data.name,
-      perGuestLimit: parsed.data.perGuestLimit,
-    });
-    if (!ok) return { error: "not_found" as const };
-    revalidateParty(parsed.data.id);
-    return { ok: true as const };
+  const ok = await updateParty(user.id, parsed.data.id, {
+    name: parsed.data.name,
+    perGuestLimit: parsed.data.perGuestLimit,
   });
+  if (!ok) return { error: "not_found" as const };
+  revalidateParty(parsed.data.id);
+  return { ok: true as const };
 }
 
 export async function deletePartyAction(backlogId: string) {
@@ -152,11 +142,9 @@ export async function deletePartyAction(backlogId: string) {
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    if (!(await deleteParty(user.id, id.data))) return { error: "not_found" as const };
-    revalidatePath("/backlogs", "layout");
-    return { ok: true as const };
-  });
+  if (!(await deleteParty(user.id, id.data))) return { error: "not_found" as const };
+  revalidatePath("/backlogs", "layout");
+  return { ok: true as const };
 }
 
 /** "Crear link nuevo" — the previous link stops working at once. 10 per hour
@@ -164,18 +152,17 @@ export async function deletePartyAction(backlogId: string) {
 export async function rotatePartyInviteAction(backlogId: string) {
   const user = await sessionOr(backlogId);
   if (!isUser(user)) return user;
+  if (notOnboarded(user)) return { error: "onboarding_required" as const };
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    const res = await rotateInvite(user.id, id.data);
-    if (!res.ok) {
-      return res.error === "rate_limited"
-        ? { error: res.error, retryAfterSeconds: res.retryAfterSeconds }
-        : { error: res.error };
-    }
-    revalidateParty(id.data);
-    return { ok: true as const, invite: res.invite };
-  });
+  const res = await rotateInvite(user.id, id.data);
+  if (!res.ok) {
+    return res.error === "rate_limited"
+      ? { error: res.error, retryAfterSeconds: res.retryAfterSeconds }
+      : { error: res.error };
+  }
+  revalidateParty(id.data);
+  return { ok: true as const, invite: res.invite };
 }
 
 /** "Desactivar link" — nobody else can enter; members stay. */
@@ -184,11 +171,9 @@ export async function revokePartyInviteAction(backlogId: string) {
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    if (!(await revokeInvite(user.id, id.data))) return { error: "not_found" as const };
-    revalidateParty(id.data);
-    return { ok: true as const };
-  });
+  if (!(await revokeInvite(user.id, id.data))) return { error: "not_found" as const };
+  revalidateParty(id.data);
+  return { ok: true as const };
 }
 
 /** "Quitar y bloquear a @x" — by the SONG (titleId); its author is blocked. */
@@ -197,13 +182,11 @@ export async function removeAndBlockPartyGuestAction(backlogId: string, titleId:
   if (!isUser(user)) return user;
   const ids = z.tuple([idSchema, titleIdSchema]).safeParse([backlogId, titleId]);
   if (!ids.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    const res = await removeSongAndBlockAuthor(user.id, ids.data[0], ids.data[1]);
-    if (!res.ok) return { error: res.error };
-    revalidateParty(ids.data[0]);
-    const party = await getPartyDetail(user.id, ids.data[0]);
-    return party ? { ok: true as const, party } : { error: "not_found" as const };
-  });
+  const res = await removeSongAndBlockAuthor(user.id, ids.data[0], ids.data[1]);
+  if (!res.ok) return { error: res.error };
+  revalidateParty(ids.data[0]);
+  const party = await getPartyDetail(user.id, ids.data[0]);
+  return party ? { ok: true as const, party } : { error: "not_found" as const };
 }
 
 /** "Desbloquear" — `guestRef` comes from `party.blockedGuests`. */
@@ -212,11 +195,9 @@ export async function unblockPartyGuestAction(backlogId: string, guestRef: strin
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success || !GUEST_REF_RE.test(guestRef)) return { error: "not_found" as const };
-  return guarded(async () => {
-    if (!(await unblockGuest(user.id, id.data, guestRef))) return { error: "not_found" as const };
-    revalidateParty(id.data);
-    return { ok: true as const };
-  });
+  if (!(await unblockGuest(user.id, id.data, guestRef))) return { error: "not_found" as const };
+  revalidateParty(id.data);
+  return { ok: true as const };
 }
 
 // ---------- guests (and the host) ----------
@@ -238,26 +219,24 @@ export async function joinPartyAction(token: string) {
       loginPath: back ? loginPathFor(back) : "/login",
     };
   }
-  return guarded(async () => {
-    const res = await joinParty(user.id, token);
-    if (!res.ok) {
-      if (res.error === "onboarding_required") {
-        return {
-          error: res.error,
-          onboardingPath: back ? `/onboarding?to=${encodeURIComponent(back)}` : "/onboarding",
-        };
-      }
-      return { error: res.error };
+  const res = await joinParty(user.id, token);
+  if (!res.ok) {
+    if (res.error === "onboarding_required") {
+      return {
+        error: res.error,
+        onboardingPath: back ? `/onboarding?to=${encodeURIComponent(back)}` : "/onboarding",
+      };
     }
-    revalidateParty(res.backlogId);
-    return {
-      ok: true as const,
-      id: res.backlogId,
-      path: partyPath(res.backlogId),
-      joined: res.joined,
-      blocked: res.blocked,
-    };
-  });
+    return { error: res.error };
+  }
+  revalidateParty(res.backlogId);
+  return {
+    ok: true as const,
+    id: res.backlogId,
+    path: partyPath(res.backlogId),
+    joined: res.joined,
+    blocked: res.blocked,
+  };
 }
 
 /**
@@ -270,11 +249,9 @@ export async function leavePartyAction(backlogId: string) {
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    if (!(await leaveParty(user.id, id.data))) return { error: "not_found" as const };
-    revalidateParty(id.data);
-    return { ok: true as const };
-  });
+  if (!(await leaveParty(user.id, id.data))) return { error: "not_found" as const };
+  revalidateParty(id.data);
+  return { ok: true as const };
 }
 
 /** "Buscar canción" — iTunes songs annotated against this party. */
@@ -283,10 +260,8 @@ export async function searchPartySongsAction(backlogId: string, query: string) {
   if (!isUser(user)) return user;
   const id = idSchema.safeParse(backlogId);
   if (!id.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    const res = await searchPartySongs(user.id, id.data, query);
-    return res.ok ? { ok: true as const, items: res.items } : res;
-  });
+  const res = await searchPartySongs(user.id, id.data, query);
+  return res.ok ? { ok: true as const, items: res.items } : res;
 }
 
 /**
@@ -302,22 +277,20 @@ export async function addPartySongAction(backlogId: string, titleId: string, pal
   const ids = z.tuple([idSchema, titleIdSchema]).safeParse([backlogId, titleId]);
   if (!ids.success) return { error: "not_found" as const };
   const palette = paletteHexSchema.optional().safeParse(paletteHex);
-  return guarded(async () => {
-    const res = await addSong(user.id, ids.data[0], ids.data[1], palette.success ? palette.data : null);
-    if (!res.ok) {
-      if (res.error === "duplicate_mine" || res.error === "duplicate_other") {
-        return {
-          error: res.error,
-          addedBy: res.addedBy,
-          message: duplicateMessage(res.error === "duplicate_mine", res.addedBy?.handle ?? null),
-        };
-      }
-      return "addedBy" in res ? { error: res.error, addedBy: res.addedBy } : { error: res.error };
+  const res = await addSong(user.id, ids.data[0], ids.data[1], palette.success ? palette.data : null);
+  if (!res.ok) {
+    if (res.error === "duplicate_mine" || res.error === "duplicate_other") {
+      return {
+        error: res.error,
+        addedBy: res.addedBy,
+        message: duplicateMessage(res.error === "duplicate_mine", res.addedBy?.handle ?? null),
+      };
     }
-    revalidateParty(ids.data[0]);
-    const party = await getPartyDetail(user.id, ids.data[0]);
-    return party ? { ok: true as const, party } : { error: "not_found" as const };
-  });
+    return "addedBy" in res ? { error: res.error, addedBy: res.addedBy } : { error: res.error };
+  }
+  revalidateParty(ids.data[0]);
+  const party = await getPartyDetail(user.id, ids.data[0]);
+  return party ? { ok: true as const, party } : { error: "not_found" as const };
 }
 
 /** "Quitar" — host: any song · guest: own songs (also while blocked, C4). */
@@ -326,11 +299,9 @@ export async function removePartySongAction(backlogId: string, titleId: string) 
   if (!isUser(user)) return user;
   const ids = z.tuple([idSchema, titleIdSchema]).safeParse([backlogId, titleId]);
   if (!ids.success) return { error: "not_found" as const };
-  return guarded(async () => {
-    const res = await removeSong(user.id, ids.data[0], ids.data[1]);
-    if (!res.ok) return { error: res.error };
-    revalidateParty(ids.data[0]);
-    const party = await getPartyDetail(user.id, ids.data[0]);
-    return party ? { ok: true as const, party } : { error: "not_found" as const };
-  });
+  const res = await removeSong(user.id, ids.data[0], ids.data[1]);
+  if (!res.ok) return { error: res.error };
+  revalidateParty(ids.data[0]);
+  const party = await getPartyDetail(user.id, ids.data[0]);
+  return party ? { ok: true as const, party } : { error: "not_found" as const };
 }

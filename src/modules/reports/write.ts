@@ -1,5 +1,6 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { checkRateLimit } from "@/authz/rate-limit";
 import { db } from "@/db";
 import { itemReviews, reports, users } from "@/db/schema";
 import type { ProfileReportBody, ReviewReportBody } from "./types";
@@ -15,7 +16,27 @@ import type { ProfileReportBody, ReviewReportBody } from "./types";
  *
  * Neither is gated on blocks: someone you blocked (or who blocked you) is
  * exactly who you may need to report.
+ *
+ * Abuse bounds, both as silent as everything else here (a dropped report
+ * looks exactly like a filed one — a 429 would be the only response that
+ * ever said "the previous ones did something"):
+ *   - `REPORTS_PER_REPORTER_PER_MINUTE` per signed-in reporter, profile and
+ *     review reports together (`checkRateLimit`, in-memory per instance);
+ *     anonymous web reports are limited by IP in the action, which is the
+ *     only caller that has the request.
+ *   - one OPEN profile report per (reporter, target), like the one per
+ *     (reporter, review): re-sending must not flood the table or inflate the
+ *     count the Torre shows.
  */
+
+export const REPORTS_PER_REPORTER_PER_MINUTE = 10;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** False = over the limit: drop the report, say nothing. */
+function reporterMayReport(reporterId: string): boolean {
+  return checkRateLimit(`report:u:${reporterId}`, REPORTS_PER_REPORTER_PER_MINUTE).ok;
+}
 
 /**
  * Report the PUBLIC profile at `username`. Anonymous reports are allowed
@@ -29,6 +50,7 @@ export async function reportProfile(
   username: string,
   body: ProfileReportBody,
 ): Promise<void> {
+  if (reporterId && !reporterMayReport(reporterId)) return;
   const [target] = await db
     .select({ id: users.id })
     .from(users)
@@ -37,6 +59,24 @@ export async function reportProfile(
     )
     .limit(1);
   if (!target || target.id === reporterId) return;
+
+  // One open profile report per (reporter, target). Anonymous reports have
+  // no reporter to key on: the action's per-IP limit is their bound.
+  if (reporterId) {
+    const [existing] = await db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(
+        and(
+          eq(reports.reporterUserId, reporterId),
+          eq(reports.targetUserId, target.id),
+          isNull(reports.targetReviewId),
+          isNull(reports.resolvedAt),
+        ),
+      )
+      .limit(1);
+    if (existing) return;
+  }
 
   await db.insert(reports).values({
     reporterUserId: reporterId,
@@ -59,6 +99,10 @@ export async function reportReview(
   reviewId: string,
   body: ReviewReportBody,
 ): Promise<void> {
+  // Every review id is a UUID: anything else can't exist (and must not reach
+  // the query as free text).
+  if (!UUID_RE.test(reviewId)) return;
+  if (!reporterMayReport(reporterId)) return;
   const [review] = await db
     .select({ id: itemReviews.id, authorId: itemReviews.userId })
     .from(itemReviews)

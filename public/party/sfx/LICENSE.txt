@@ -7,4 +7,8 @@ http://creativecommons.org/publicdomain/zero/1.0/ — trimmed/normalized and con
 - bell-0, toll-0: "Church bell.wav" by Audeption — https://freesound.org/people/Audeption/sounds/425172/
 - gateswing-0, gateclang-0, gatelock-0: "Epic Metal Gate" by qubodup — https://freesound.org/people/qubodup/sounds/184935/
 - scream-0: "Jumpscare Sound 2" by Kierham — https://freesound.org/people/Kierham/sounds/570457/
+- fire-0: "Basic Fire Whoosh 2" by LookIMadeAThing — https://freesound.org/people/LookIMadeAThing/sounds/260555/
+- click-0: "Flashlight Clicking On.wav" by baidonovan — https://freesound.org/people/baidonovan/sounds/187335/
+- static-0: "Static Tele or Radio" by AnusProductions — https://freesound.org/people/AnusProductions/sounds/447405/
+- scurry-0: "Small Animal Scurrying Through Leaves.mp3" by Yin_Yang_Jake007 — https://freesound.org/people/Yin_Yang_Jake007/sounds/415203/
 (CC0 needs no attribution; credited anyway, with thanks.)

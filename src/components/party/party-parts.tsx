@@ -20,11 +20,11 @@ export function songsLabel(n: number): string {
   return `${n} ${n === 1 ? "canción" : "canciones"}`;
 }
 
-/** Hero line under the name: "cada invitado pone 3 canciones". */
+/** Hero line under the name: "cada invitado agrega 3 canciones". */
 export function perGuestPhrase(limit: number | null): string {
-  if (limit === null) return "cada invitado pone las que quiera";
+  if (limit === null) return "cada invitado agrega las que quiera";
   if (limit === 0) return "una colección para escuchar juntos";
-  return `cada invitado pone ${songsLabel(limit)}`;
+  return `cada invitado agrega ${songsLabel(limit)}`;
 }
 
 /** "tus 3 canciones" / "tu canción" / "tus canciones". */
@@ -34,22 +34,22 @@ export function yourSongs(limit: number | null): string {
   return `tus ${limit} canciones`;
 }
 
-/** "Pon hasta 3 canciones" / "Pon las canciones que quieras"; null = solo ver. */
+/** "Agrega hasta 3 canciones" / "Agrega las canciones que quieras"; null = solo ver. */
 export function putPhrase(limit: number | null): string | null {
   if (limit === 0) return null;
-  if (limit === null) return "Pon las canciones que quieras";
-  if (limit === 1) return "Pon 1 canción";
-  return `Pon hasta ${limit} canciones`;
+  if (limit === null) return "Agrega las canciones que quieras";
+  if (limit === 1) return "Agrega 1 canción";
+  return `Agrega hasta ${limit} canciones`;
 }
 
 export function handleOf(p: PartyPerson | null): string {
   return p ? `@${p.handle}` : "alguien";
 }
 
-/** Row credit: "Pusiste tú" / "Puso @ana" / "Puso alguien". */
+/** Row credit: "Agregaste tú" / "Agregó @ana" / "Agregó alguien". */
 export function creditOf(song: Pick<PartySong, "mine" | "addedBy">, short = true): string {
-  if (song.mine) return short ? "Pusiste tú" : "Pusiste";
-  return song.addedBy ? `Puso @${song.addedBy.handle}` : "Puso alguien";
+  if (song.mine) return short ? "Agregaste tú" : "Agregaste";
+  return song.addedBy ? `Agregó @${song.addedBy.handle}` : "Agregó alguien";
 }
 
 /** "20 oct" (es-MX, no dots). */

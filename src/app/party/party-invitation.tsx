@@ -55,7 +55,6 @@ type State = {
   fixedLight: boolean;
   lampX?: number;
   lampY?: number;
-  now: number;
   audio: boolean;
   px: number;
   py: number;
@@ -133,7 +132,6 @@ export default class PartyInvitation extends Component<object, State> {
     lx: null,
     ly: null,
     fixedLight: false,
-    now: Date.now(),
     audio: true, // SONIDO ON by default (founder); it actually starts on the first tap
     dragging: false,
     open: null,
@@ -163,7 +161,18 @@ export default class PartyInvitation extends Component<object, State> {
   mt: ReturnType<typeof setTimeout> | undefined;
   scareT: ReturnType<typeof setTimeout> | undefined;
   dupT: ReturnType<typeof setTimeout> | undefined;
-  t: ReturnType<typeof setInterval> | undefined;
+  /** One-shot timers with no handle of their own: all cleared on unmount, so
+   *  none of them calls `setState` on (or measures) a scene that is gone. */
+  pending = new Set<ReturnType<typeof setTimeout>>();
+  later = (fn: () => void, ms: number) => {
+    const t = setTimeout(() => {
+      this.pending.delete(t);
+      fn();
+    }, ms);
+    this.pending.add(t);
+  };
+  /** Whether the tab going hidden is what suspended the sound (so only that is undone). */
+  pausedByHide = false;
   token = "";
 
   measureLamp = () => {
@@ -210,12 +219,14 @@ export default class PartyInvitation extends Component<object, State> {
     if (params.has("og")) document.documentElement.dataset.partyOg = "1";
     if (window.matchMedia("(hover: none)").matches) this.setState({ fixedLight: true });
     this.measureLamp();
-    setTimeout(this.measureLamp, 400);
+    this.later(this.measureLamp, 400);
     window.addEventListener("resize", this.measureLamp);
     window.addEventListener("pointermove", this.mv);
     window.addEventListener("touchstart", this.mv, { passive: true });
     window.addEventListener("touchmove", this.mv, { passive: true });
-    this.t = setInterval(() => this.setState({ now: Date.now() }), 1000);
+    // The 1 s clock lives in party-clock.tsx (its own leaves), not in this
+    // state: a tick here re-rendered the whole scene.
+    document.addEventListener("visibilitychange", this.onVisibility);
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
       if (s) this.setState({ f: s, submitted: true });
@@ -229,10 +240,13 @@ export default class PartyInvitation extends Component<object, State> {
     window.removeEventListener("pointermove", this.mv);
     window.removeEventListener("touchstart", this.mv);
     window.removeEventListener("touchmove", this.mv);
-    clearInterval(this.t);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.pausedByHide = false;
     clearTimeout(this.mt);
     clearTimeout(this.dupT);
     clearTimeout(this.scareT);
+    this.pending.forEach(clearTimeout);
+    this.pending.clear();
     window.removeEventListener("click", this.unlockAudio, true);
     window.removeEventListener("touchend", this.unlockAudio, true);
     setSfxContext(null);
@@ -258,6 +272,27 @@ export default class PartyInvitation extends Component<object, State> {
     }
     return this.ctx;
   }
+
+  /**
+   * A hidden tab (another tab, the app switcher, a locked phone) must not
+   * keep the drone humming. Suspend on hide; resume on show ONLY if hiding is
+   * what stopped it — never over SONIDO OFF, and never a context that had not
+   * been started by a tap yet. A closed context is left alone (learnings/
+   * 2026-09-29-audiocontext-cerrado-tras-remontar).
+   */
+  onVisibility = () => {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === "closed") return;
+    if (document.hidden) {
+      if (ctx.state !== "running") return;
+      this.pausedByHide = true;
+      ctx.suspend().catch(() => {});
+      return;
+    }
+    if (!this.pausedByHide) return;
+    this.pausedByHide = false;
+    if (!this.userMuted) ctx.resume().catch(() => {});
+  };
 
   unlockAudio = (e: Event) => {
     // The SONIDO button handles itself (it may be turning sound OFF).
@@ -360,7 +395,7 @@ export default class PartyInvitation extends Component<object, State> {
       }
       await navigator.clipboard.writeText(`${text} ${url}`);
       this.setState({ shareLabel: "Liga copiada" });
-      setTimeout(() => this.setState({ shareLabel: "Trae más almas" }), 2200);
+      this.later(() => this.setState({ shareLabel: "Trae más almas" }), 2200);
     } catch {}
   };
 
@@ -392,7 +427,7 @@ export default class PartyInvitation extends Component<object, State> {
         error:
           res?.error === "full"
             ? "La cripta está llena. Escríbele al anfitrión."
-            : "No se pudo enviar. Revisa tu conexión e inténtalo otra vez.",
+            : "No se pudo enviar. Revisa tu conexión y vuelve a intentarlo.",
       });
       return;
     }
@@ -404,7 +439,7 @@ export default class PartyInvitation extends Component<object, State> {
   }
 
   renderVals() {
-    const { f, now, open, seen } = this.state;
+    const { f, open, seen } = this.state;
     const locked = PARTY_EVENT.locked && !this.state.bypassLock;
     const W = window;
     const fixed = this.state.fixedLight;
@@ -413,13 +448,6 @@ export default class PartyInvitation extends Component<object, State> {
     const lightR = fixed ? 150 : 125;
     const { title, venue, address } = PARTY_EVENT;
     const d = new Date(PARTY_EVENT.dateISO);
-    let diff = Math.max(0, d.getTime() - now);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const days = Math.floor(diff / 864e5);
-    diff -= days * 864e5;
-    const h = Math.floor(diff / 36e5);
-    diff -= h * 36e5;
-    const m = Math.floor(diff / 6e4);
     const q = encodeURIComponent(address || venue);
     const on = { border: "#d9573b", bg: "rgba(217,87,59,.15)", color: "#ece6dc" },
       off = { border: "rgba(236,230,220,.18)", bg: "#0d0b0a", color: "#bdb3a8" };
@@ -474,7 +502,6 @@ export default class PartyInvitation extends Component<object, State> {
     })();
 
     return {
-      deathText: this.state.now % 2 ? "ERROR" : "▒▒ de ▒▒▒▒ de 20▒▒",
       notEntered: !this.state.entered,
       entered: this.state.entered,
       revealScale: this.state.revealed ? "scale(1)" : "scale(1.18)",
@@ -492,9 +519,9 @@ export default class PartyInvitation extends Component<object, State> {
         if (this.state.opening) return;
         this.setState({ opening: true });
         if (!this.userMuted) this.startAudio().then(() => sfx.gateOpen());
-        setTimeout(() => {
+        this.later(() => {
           this.setState({ entered: true });
-          setTimeout(() => this.setState({ revealed: true }), 60);
+          this.later(() => this.setState({ revealed: true }), 60);
         }, 1500);
       },
       locked,
@@ -566,7 +593,7 @@ export default class PartyInvitation extends Component<object, State> {
           this.wasDrag = this.drag.moved;
           this.drag = null;
           this.setState({ dragging: false });
-          setTimeout(() => {
+          this.later(() => {
             this.wasDrag = false;
           }, 50);
         }
@@ -632,8 +659,6 @@ export default class PartyInvitation extends Component<object, State> {
           animation: "pt-candle 1.4s ease-in-out infinite",
         },
       }),
-      cdDays: String(days),
-      cdClock: `${pad(h)}:${pad(m)}`, // no seconds (founder, 2026-09-28)
       host: PARTY_EVENT.host,
       venue,
       address,
@@ -667,9 +692,10 @@ export default class PartyInvitation extends Component<object, State> {
         " h",
       ...cal,
       countdown: [
-        { v: pad(days), l: "Días" },
-        { v: pad(h), l: "Horas" },
-        { v: pad(m), l: "Min" },
+        // The numbers tick in party-clock.tsx (`CountdownValue`).
+        { part: "days" as const, l: "Días" },
+        { part: "hours" as const, l: "Horas" },
+        { part: "minutes" as const, l: "Min" },
       ],
       hasAddress: !!address,
       gmapsUrl: `https://www.google.com/maps/search/?api=1&query=${q}`,

@@ -11,7 +11,7 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { loginPathFor } from "@/lib/return-to";
 import { invitePath } from "@/modules/party-collections/rules";
 import type { InvitePreview } from "@/modules/party-collections/types";
-import { logged, partyErrorMessage } from "./party-errors";
+import { logged } from "./party-errors";
 import { DeadLinkScreen } from "./dead-link";
 import { handleOf, PartyHero, songsLabel, SongRowBody, yourSongs } from "./party-parts";
 import { BRIDGE_QUERY, PARTY_TOKENS } from "./party-tokens";
@@ -99,11 +99,9 @@ export function InviteLanding({
       }
     }
     setJoining(false);
-    const code = res && "error" in res ? res.error : null;
-    toast.show({
-      message: (code && partyErrorMessage(code)) ?? "No pudimos entrarte a la fiesta. Inténtalo otra vez.",
-      kind: "error",
-    });
+    // Every refusal `joinPartyAction` can answer returned above: what is left
+    // is a thrown/failed call (`logged` already wrote it down).
+    toast.show({ message: "No se pudo entrar a la fiesta. Vuelve a intentarlo.", kind: "error" });
   }, [router, toast, token, preview.party.id]);
 
   // Back from /login (or the onboarding) with a session: finish what the CTA started.
@@ -134,7 +132,7 @@ export function InviteLanding({
     ? "Entrar a la fiesta"
     : limit === 0
       ? "Entra a kura para ver la colección"
-      : `Entra a kura para poner ${yourSongs(limit)}`;
+      : `Entra a kura para agregar ${yourSongs(limit)}`;
 
   return (
     <main
@@ -177,7 +175,7 @@ export function InviteLanding({
         <div className="flex flex-col items-center gap-2.5 px-8 text-center">
           <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía.</span>
           <span className="max-w-[28ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
-            Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.
+            Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.
           </span>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { db } from "@/db";
 import { llmCallLog } from "@/db/schema";
@@ -44,6 +45,6 @@ export async function logLlmCall(entry: LlmCallEntry): Promise<void> {
       outcome: entry.outcome,
     });
   } catch (err) {
-    console.error("[crossmedia] llm_call_log insert failed:", err);
+    console.error("[crossmedia] llm_call_log insert failed:", redactedError(err));
   }
 }

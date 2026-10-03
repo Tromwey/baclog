@@ -21,6 +21,7 @@ import { GLASS_BUTTON } from "@/components/kura/components";
 import { Toast, useToast } from "@/components/kura/toast";
 import { CHEVRON_DOWN_PATH } from "@/components/glyph-paths";
 import { useKeyboardScrollGuard } from "@/hooks/use-keyboard-scroll-guard";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -146,6 +147,9 @@ export function SearchSheet({
   });
   const resultsRef = useRef<HTMLDivElement>(null);
   useScrollerTouchAction(resultsRef, hydrated);
+  // Modal focus: Tab stays inside the sheet, and focus goes back to whatever
+  // opened it once the exit has played.
+  useDialogFocus(panelRef, hydrated);
 
   const [query, setQuery] = useState(initialQuery);
   const [tab, setTab] = useState<KindTab>("all");
@@ -173,6 +177,7 @@ export function SearchSheet({
   const [newOpen, setNewOpen] = useState(backlogs.length === 0);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createFailed, setCreateFailed] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const toastHost = useToast();
   const { show: showToast, dismiss: dismissToast } = toastHost;
@@ -198,11 +203,12 @@ export function SearchSheet({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
+      // Only the top dialog answers: a sheet stacked over this one closes alone.
+      if (e.key === "Escape" && isTopDialog(panelRef.current)) dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dismiss]);
+  }, [dismiss, panelRef]);
 
   useEffect(() => {
     if (newOpen) newInputRef.current?.focus();
@@ -328,9 +334,10 @@ export function SearchSheet({
         }
       }
     } catch {
-      // Don't fake success: the row keeps its prior state and stays tappable.
-      // Only a failed ADD says so — that's the one the user was told would save.
+      // Don't fake success: the row keeps its prior state and stays tappable —
+      // and says so either way (a ✓ that silently stays ✓ reads as a dead tap).
       if (!existing) setFailed(id);
+      else showToast({ message: `No se pudo quitar de ${t.name}.`, kind: "error" });
     } finally {
       setRowPending(id, false);
     }
@@ -343,7 +350,8 @@ export function SearchSheet({
       record(backlogId, catalogItemId, null);
       setAddsThisVisit((n) => Math.max(0, n - 1));
     } catch {
-      // Left as it is; the ✓ still toggles it out.
+      // Left as it is — said out loud; the ✓ still toggles it out.
+      showToast({ message: "No se pudo deshacer. Revisa tu conexión.", kind: "error" });
     } finally {
       setRowPending(catalogItemId, false);
     }
@@ -354,10 +362,13 @@ export function SearchSheet({
     const name = newName.trim();
     if (!name || creating) return;
     setCreating(true);
+    setCreateFailed(false);
     try {
       const res = await createBacklogAction({ name });
       const id = "id" in res ? res.id : null;
-      if (id) {
+      if (!id) {
+        setCreateFailed(true);
+      } else {
         // A new collection has no cover yet, so no colour (§color: "sin
         // portada no hay color").
         const fresh: SearchBacklog = { id, name, itemCount: 0, paletteHex: [] };
@@ -369,7 +380,9 @@ export function SearchSheet({
         inputRef.current?.focus();
       }
     } catch {
-      // The field stays filled; "Crear" can be tapped again.
+      // The field stays filled; "Crear" can be tapped again — and the note
+      // under it says why nothing happened.
+      setCreateFailed(true);
     } finally {
       setCreating(false);
     }
@@ -399,8 +412,9 @@ export function SearchSheet({
         role="dialog"
         aria-modal="true"
         aria-label={target ? `Agregar a ${target.name}` : "Agregar títulos"}
+        tabIndex={-1}
         {...panelHandlers}
-        className="absolute inset-x-0 bottom-0 top-[calc(54px+env(safe-area-inset-top))] mx-auto flex max-w-md touch-none flex-col overflow-hidden rounded-t-[36px] bg-surface-1 will-change-transform"
+        className="absolute inset-x-0 bottom-0 outline-none top-[calc(54px+env(safe-area-inset-top))] mx-auto flex max-w-md touch-none flex-col overflow-hidden rounded-t-[36px] bg-surface-1 will-change-transform"
         style={keyboardInset > 0 ? { paddingBottom: `${keyboardInset}px` } : undefined}
       >
         <button
@@ -501,6 +515,12 @@ export function SearchSheet({
                   Crear
                 </button>
               </form>
+            )}
+            {newOpen && createFailed && (
+              <p role="alert" className="flex items-center gap-1.5 px-5 text-[14px] leading-[1.4] text-text-2">
+                <TriangleGlyph size={13} />
+                No se creó la colección. Revisa tu conexión y vuelve a intentarlo.
+              </p>
             )}
           </div>
         )}
@@ -668,7 +688,7 @@ export function SearchSheet({
                       className="-mt-2 flex items-center gap-1.5 pb-2 pl-[78px] font-mono text-[11px] uppercase tracking-[0.08em] text-text-2"
                     >
                       <TriangleGlyph size={13} />
-                      No se guardó · toca + para reintentar
+                      No se pudo guardar · toca + para reintentar
                     </p>
                   )}
                 </div>

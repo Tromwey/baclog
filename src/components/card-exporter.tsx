@@ -1,5 +1,6 @@
 "use client";
 
+import { ensureCardFonts } from "@/components/card-fonts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CARD_FONTS,
@@ -47,6 +48,9 @@ export function CardExporter({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // The families' stylesheet first: before it lands, `fonts.check` says
+      // "ready" for a family it has never heard of (card-fonts.ts).
+      await ensureCardFonts();
       const deadline = Date.now() + 6000;
       do {
         await Promise.all(

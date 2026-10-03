@@ -1,4 +1,5 @@
 import "server-only";
+import { budgetLeftMs, StepBudgetError } from "./budget";
 import { TIDAL_API_BASE, TIDAL_SCOPES, TIDAL_TOKEN_URL, type TidalOAuthConfig } from "./config";
 import { isoDurationMs, normalizeIsrc, type TrackCandidate } from "./match";
 import { TIDAL_ADD_CHUNK, tidalPlaylistUrl } from "./rules";
@@ -20,7 +21,9 @@ import { TIDAL_ADD_CHUNK, tidalPlaylistUrl } from "./rules";
  *   - `GET /tracks?filter[isrc]=…` (client credentials OK; several ISRCs →
  *     one track per ISRC), `attributes.isrc`, `duration` ISO 8601;
  *   - `GET /searchResults?filter[query]=…&include=tracks` (client credentials);
- *   - `GET /users/me` (user.read) → `attributes.country`.
+ *   - `GET /users/me` (user.read) → `attributes.country`;
+ *   - `DELETE /playlists/{id}` (playlists.write) → 200 (verified 2026-10-01;
+ *     used only to remove a playlist a step created and could not record).
  * NOT in the OpenAPI (auth server), assumed from TIDAL's SDK docs and to be
  * verified on the first real connection: the token endpoint's form fields
  * (`client_id`, `code`, `code_verifier`, `redirect_uri`,
@@ -38,9 +41,23 @@ export class TidalHttpError extends Error {
   readonly retryAfterSeconds: number | null;
   /** JSON:API `errors[].code` of a 4xx (sanitized; never `detail`, never the body). */
   readonly codes: readonly string[];
-  constructor(what: string, status: number, retryAfterSeconds: number | null = null, codes: readonly string[] = []) {
-    super(`tidal ${what}: ${status}${codes.length ? ` [${codes.join(",")}]` : ""}`);
+  /** Which call failed (`app_token`, `refresh`, `search`…): the label `call` was given. */
+  readonly what: string;
+  /** The auth server's OAuth `error` of a 4xx (RFC 6749 §5.2: `invalid_grant`,
+   *  `invalid_client`…), sanitized like `codes`. Null for API (JSON:API) errors. */
+  readonly oauthError: string | null;
+  constructor(
+    what: string,
+    status: number,
+    retryAfterSeconds: number | null = null,
+    codes: readonly string[] = [],
+    oauthError: string | null = null,
+  ) {
+    const tags = oauthError ? [oauthError, ...codes] : codes;
+    super(`tidal ${what}: ${status}${tags.length ? ` [${tags.join(",")}]` : ""}`);
     this.name = "TidalHttpError";
+    this.what = what;
+    this.oauthError = oauthError;
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
     this.codes = codes;
@@ -49,16 +66,22 @@ export class TidalHttpError extends Error {
 
 const CODE_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 
-/** The `errors[].code` list of a JSON:API error body — codes only, max 5. */
-async function errorCodes(res: Response): Promise<string[]> {
+/**
+ * What a 4xx body says, as identifiers only: the `errors[].code` list of a
+ * JSON:API error (max 5) and the OAuth `error` of the auth server
+ * (`{"error":"invalid_grant"}`). Never `detail`/`error_description`.
+ */
+async function errorCodes(res: Response): Promise<{ codes: string[]; oauthError: string | null }> {
   try {
-    const doc = (await res.json()) as { errors?: { code?: unknown }[] };
-    return (Array.isArray(doc?.errors) ? doc.errors : [])
+    const doc = (await res.json()) as { errors?: { code?: unknown }[]; error?: unknown };
+    const codes = (Array.isArray(doc?.errors) ? doc.errors : [])
       .map((e) => e?.code)
       .filter((c): c is string => typeof c === "string" && CODE_RE.test(c))
       .slice(0, 5);
+    const oauthError = typeof doc?.error === "string" && CODE_RE.test(doc.error) ? doc.error : null;
+    return { codes, oauthError };
   } catch {
-    return [];
+    return { codes: [], oauthError: null };
   }
 }
 
@@ -69,11 +92,33 @@ function retryAfterOf(res: Response): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/**
+ * One request. Its timeout is `TIMEOUT_MS` or what is left of the step's
+ * budget (budget.ts), whichever is shorter. Inside a step, a call that timed
+ * out — or that the budget didn't let start — throws `StepBudgetError`: the
+ * caller decides what stays pending (matching) or fails the step (writes).
+ * Outside a step a timeout is the plain `TimeoutError` it always was.
+ */
 async function call(what: string, url: URL | string, init: RequestInit): Promise<Response> {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+  const left = budgetLeftMs();
+  if (left <= 0) throw new StepBudgetError(what);
+  const timeoutMs = Math.min(TIMEOUT_MS, left);
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
+  } catch (err) {
+    // Inside a step EVERY timeout is the budget's business, the full 6 s
+    // one included: a search that hangs must cost that song a turn (it stays
+    // pending), not throw away the songs that did match in the same batch.
+    if (Number.isFinite(left) && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new StepBudgetError(what);
+    }
+    throw err;
+  }
   if (!res.ok) {
-    const codes = res.status >= 400 && res.status < 500 && res.status !== 429 ? await errorCodes(res) : [];
-    throw new TidalHttpError(what, res.status, retryAfterOf(res), codes);
+    const body =
+      res.status >= 400 && res.status < 500 && res.status !== 429 ? await errorCodes(res) : { codes: [], oauthError: null };
+    throw new TidalHttpError(what, res.status, retryAfterOf(res), body.codes, body.oauthError);
   }
   return res;
 }
@@ -166,6 +211,30 @@ async function getAppToken(cfg: TidalOAuthConfig): Promise<string> {
   return data.access_token;
 }
 
+/**
+ * Runs `fn` with the cached app token; a 401 means TIDAL no longer accepts
+ * it (revoked or rotated before our `expires_in` bookkeeping said so): the
+ * cache is emptied and `fn` runs ONCE more with a fresh token. Without this
+ * every catalog call of the instance failed until the cached expiry.
+ * Only the entry that was refused is dropped, so two concurrent 401s don't
+ * throw away the token the other one just fetched.
+ */
+async function withAppToken<T>(cfg: TidalOAuthConfig, fn: (token: string) => Promise<T>): Promise<T> {
+  const token = await getAppToken(cfg);
+  try {
+    return await fn(token);
+  } catch (err) {
+    if (!(err instanceof TidalHttpError && err.status === 401)) throw err;
+    if (appToken?.value === token) appToken = null;
+    return fn(await getAppToken(cfg));
+  }
+}
+
+/** Test seam (db-harness): forget the cached app token. */
+export function resetTidalAppTokenForTests(): void {
+  appToken = null;
+}
+
 function jsonApi(token: string, extra: Record<string, string> = {}): HeadersInit {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.api+json", ...extra };
 }
@@ -221,12 +290,13 @@ export async function tidalTracksByIsrc(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (isrcs.length === 0) return out;
-  const token = await getAppToken(cfg);
   const url = new URL(`${TIDAL_API_BASE}/tracks`);
   for (const isrc of isrcs) url.searchParams.append("filter[isrc]", isrc);
   url.searchParams.set("countryCode", countryCode);
-  const res = await call("tracks_isrc", url, { headers: jsonApi(token) });
-  const doc = (await res.json()) as Doc;
+  const doc = await withAppToken(
+    cfg,
+    async (token) => (await (await call("tracks_isrc", url, { headers: jsonApi(token) })).json()) as Doc,
+  );
   for (const r of asList(doc.data)) {
     const isrc = normalizeIsrc(r.attributes?.isrc);
     if (r.type === "tracks" && isrc && !out.has(isrc)) out.set(isrc, r.id);
@@ -241,13 +311,14 @@ export async function tidalSearchTracks(
   term: string,
   countryCode: string,
 ): Promise<TrackCandidate[]> {
-  const token = await getAppToken(cfg);
   const url = new URL(`${TIDAL_API_BASE}/searchResults`);
   url.searchParams.set("filter[query]", term.slice(0, 256));
   url.searchParams.set("countryCode", countryCode);
   url.searchParams.set("include", "tracks,tracks.artists");
-  const res = await call("search", url, { headers: jsonApi(token) });
-  const doc = (await res.json()) as Doc;
+  const doc = await withAppToken(
+    cfg,
+    async (token) => (await (await call("search", url, { headers: jsonApi(token) })).json()) as Doc,
+  );
   const tracks = new Map<string, Res>();
   for (const r of doc.included ?? []) if (r.type === "tracks") tracks.set(r.id, r);
   const ordered = asList(doc.data)[0]?.relationships?.tracks?.data?.map((x) => x.id) ?? [...tracks.keys()];
@@ -263,7 +334,10 @@ export async function tidalSearchTracks(
     for (const c of out) ids.searchParams.append("filter[id]", c.id);
     ids.searchParams.set("countryCode", countryCode);
     ids.searchParams.set("include", "artists");
-    const more = (await (await call("tracks_ids", ids, { headers: jsonApi(token) })).json()) as Doc;
+    const more = await withAppToken(
+      cfg,
+      async (token) => (await (await call("tracks_ids", ids, { headers: jsonApi(token) })).json()) as Doc,
+    );
     const moreNames = artistNames(more);
     const filled = new Map(
       asList(more.data)
@@ -324,6 +398,23 @@ export async function tidalPlaylistExists(accessToken: string, playlistId: strin
     return true;
   } catch (err) {
     if (err instanceof TidalHttpError && err.status === 404) return false;
+    throw err;
+  }
+}
+
+/**
+ * Deletes a playlist of the user's (`DELETE /playlists/{id}`, user token).
+ * 404 = already gone = done. Only for a playlist a step created and could
+ * not record (exports.ts): we never delete one the person can see in kura.
+ */
+export async function tidalDeletePlaylist(accessToken: string, playlistId: string): Promise<void> {
+  try {
+    await call("delete_playlist", `${TIDAL_API_BASE}/playlists/${encodeURIComponent(playlistId)}`, {
+      method: "DELETE",
+      headers: jsonApi(accessToken),
+    });
+  } catch (err) {
+    if (err instanceof TidalHttpError && err.status === 404) return;
     throw err;
   }
 }

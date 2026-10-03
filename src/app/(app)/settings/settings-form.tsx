@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { clearRecents } from "@/app/(app)/descubrir/recents";
+import { Fragment, useState, useTransition } from "react";
 import type { FollowListsVisibility } from "@/modules/social/follow-lists-policy";
 import {
   deleteAccountAction,
@@ -9,6 +10,8 @@ import {
   setNotifyReleasesAction,
   setPublicAction,
 } from "@/app/actions/account-actions";
+import { attempt } from "@/components/kura/attempt";
+import { useOptimisticChoice } from "@/hooks/use-optimistic-choice";
 import { Sheet, SheetClose } from "@/components/ui/sheet";
 import { FIELD, GLASS_BUTTON, SOLID_BUTTON } from "@/components/kura/components";
 
@@ -72,34 +75,28 @@ function SwitchRow({
 }) {
   return (
     <div className="flex min-h-[52px] items-center gap-3 py-2 pl-4 pr-3.5">
-      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+      <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-[16px] text-text">{title}</span>
-        {(error ?? note) && (
-          <span role={error ? "status" : undefined} className="text-[13px] leading-[1.4] text-text-2">
-            {error ?? note}
-          </span>
-        )}
+        {/* Always mounted: a live region that appears WITH its message is
+            not announced — it has to exist before the text changes. */}
+        <span role="status" className="text-[13px] leading-[1.4] text-text-2 [&:not(:empty)]:mt-[3px]">
+          {error ?? note}
+        </span>
       </div>
       <KuraSwitch checked={checked} onChange={onChange} label={title} />
     </div>
   );
 }
 
-/** Optimistic boolean setting: flips now, reverts with a sentence on failure. */
+/**
+ * Optimistic boolean setting: flips now, reverts with a sentence on failure —
+ * a rejection OR an `{ error }` the action returned (`attempt`). The revert
+ * only happens if that tap still owns the screen (a slow failure of an
+ * earlier tap must not undo a later one), and it goes back to the last value
+ * the server confirmed.
+ */
 function useSetting(initial: boolean, save: (v: boolean) => Promise<unknown>) {
-  const [value, setValue] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
-  async function set(next: boolean) {
-    setValue(next);
-    setError(null);
-    try {
-      await save(next);
-    } catch {
-      setValue(!next);
-      setError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
-    }
-  }
-  return [value, set, error] as const;
+  return useOptimisticChoice(initial, save);
 }
 
 /**
@@ -141,22 +138,10 @@ const FOLLOW_LISTS_OPTIONS: { id: FollowListsVisibility; label: string }[] = [
  * both. A failure puts the previous choice back and says so.
  */
 export function FollowListsChoice({ initial }: { initial: FollowListsVisibility }) {
-  const [value, setValue] = useState<FollowListsVisibility>(initial);
-  const [error, setError] = useState<string | null>(null);
-
-  async function pick(id: FollowListsVisibility) {
-    if (id === value) return;
-    const prev = value;
-    setValue(id);
-    setError(null);
-    try {
-      const res = await setFollowListsVisibilityAction(id);
-      if ("error" in res) throw new Error(res.error);
-    } catch {
-      setValue(prev);
-      setError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
-    }
-  }
+  const [value, save, error] = useOptimisticChoice<FollowListsVisibility>(initial, setFollowListsVisibilityAction);
+  const pick = (id: FollowListsVisibility) => {
+    if (id !== value) void save(id);
+  };
 
   // Static on purpose: the Perfil privado switch above flips live, and a note
   // keyed on the server's isPublic would lie until the next load.
@@ -167,7 +152,8 @@ export function FollowListsChoice({ initial }: { initial: FollowListsVisibility 
     <>
       <div className="flex min-h-[52px] flex-col justify-center gap-[3px] py-2 pl-4 pr-3.5">
         <span className="text-[16px] text-text">Quién ve tus seguidores y seguidos</span>
-        <span role={error ? "status" : undefined} className="text-[13px] leading-[1.4] text-text-2">
+        {/* Always a live region (mounted before the message changes). */}
+        <span role="status" className="text-[13px] leading-[1.4] text-text-2">
           {error ?? note}
         </span>
       </div>
@@ -252,23 +238,25 @@ export function DeleteAccount({ confirmWord }: { confirmWord: string }) {
 
 function DeleteSheet({ confirmWord, onClose }: { confirmWord: string; onClose: () => void }) {
   const [typed, setTyped] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const matches = typed.trim().replace(/^@/, "").toLowerCase() === confirmWord.toLowerCase();
 
-  async function confirm() {
+  function confirm() {
     if (!matches) return;
-    setBusy(true);
     setError(null);
-    try {
-      // Redirects to /login on success; returning here means it didn't.
-      await deleteAccountAction();
-    } catch (err) {
-      // A redirect surfaces as a thrown NEXT_REDIRECT — that's success.
-      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) throw err;
-      setBusy(false);
-      setError("No se pudo borrar tu cuenta. Revisa tu conexión y vuelve a intentar.");
-    }
+    // What lives only in this browser goes first (the server can't reach
+    // it): if the delete then fails, the cost is a list of recent searches.
+    clearRecents();
+    // In a transition: the action redirects to /login on success, and Next's
+    // redirect signal (which `attempt` lets through) has to reject INSIDE one
+    // for the router to take it — awaited bare, it surfaced as
+    // `Uncaught (in promise) NEXT_REDIRECT`. Getting past the await means the
+    // account is still there.
+    startTransition(async () => {
+      await attempt(() => deleteAccountAction());
+      setError("No se pudo borrar tu cuenta. Revisa tu conexión y vuelve a intentarlo.");
+    });
   }
 
   return (
@@ -292,11 +280,11 @@ function DeleteSheet({ confirmWord, onClose }: { confirmWord: string; onClose: (
             className={FIELD}
           />
         </label>
-        {error && (
-          <p role="status" className="px-1 pt-1 text-[13px] leading-[1.4] text-text-2">
-            {error}
-          </p>
-        )}
+        {/* Always mounted (a live region born with its text isn't announced);
+            empty, it gives back the column's gap. */}
+        <p role="alert" className="px-1 pt-1 text-[13px] leading-[1.4] text-text-2 empty:-mt-1.5 empty:pt-0">
+          {error}
+        </p>
         <div className="mt-2.5 flex flex-col gap-2">
           <button type="button" onClick={confirm} disabled={!matches || busy} className={`${SOLID_BUTTON} w-full`}>
             {busy ? "Borrando…" : "Borrar cuenta"}

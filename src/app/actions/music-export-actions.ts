@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/auth";
 import type { CurrentUser } from "@/auth/session";
 import { loginPathFor } from "@/lib/return-to";
 import { appleWebDeveloperToken } from "@/modules/music-export/apple-music";
-import { assertMusicExportLive, MusicExportError } from "@/modules/music-export/errors";
+import { MusicExportError } from "@/modules/music-export/errors";
 import {
   getExportState,
   reportAppleMusicExport,
@@ -61,7 +61,7 @@ async function guarded<T>(run: () => Promise<T>) {
   } catch (err) {
     if (err instanceof MusicExportError) {
       return {
-        error: err.reason === "migration" ? ("unavailable" as const) : err.reason,
+        error: err.reason,
         message: err.message,
         ...(err.retryAfterSeconds !== undefined ? { retryAfterSeconds: err.retryAfterSeconds } : {}),
       };
@@ -84,7 +84,6 @@ export async function getAppleMusicDeveloperTokenAction() {
   const rl = checkRateLimit(`apple-dev-token:${user.id}`, 30);
   if (!rl.ok) return { error: "rate_limited" as const, retryAfterSeconds: rl.retryAfterSeconds };
   return guarded(async () => {
-    assertMusicExportLive();
     const dev = await appleWebDeveloperToken();
     return { ok: true as const, token: dev.token, expiresAt: dev.expiresAt.toISOString() };
   });

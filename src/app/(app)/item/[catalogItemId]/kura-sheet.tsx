@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -85,15 +86,21 @@ function KuraSheetBody({
   const { panelRef, scrimRef, dismiss, panelHandlers } = useSheetMotion({ onClose });
   const scrollerRef = useRef<HTMLDivElement>(null);
   useScrollerTouchAction(scrollerRef);
+  // Modal focus: in on open, Tab cycles inside, back to the opener after the
+  // exit. Stacked traps are the dialog stack's job (only the top one traps);
+  // `!hidden` here only says "this panel is `display: none`, it is not a
+  // dialog right now" — it leaves the stack and re-enters (taking the focus
+  // back) when it returns.
+  useDialogFocus(panelRef, !hidden);
 
   useEffect(() => {
     if (hidden) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
+      if (e.key === "Escape" && isTopDialog(panelRef.current)) dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dismiss, hidden]);
+  }, [dismiss, hidden, panelRef]);
 
   return createPortal(
     <div className="fixed inset-0 z-50" style={hidden ? { display: "none" } : undefined}>
@@ -103,8 +110,9 @@ function KuraSheetBody({
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         {...panelHandlers}
-        className="absolute inset-x-2 bottom-[calc(8px+env(safe-area-inset-bottom))] mx-auto flex max-h-[calc(100dvh-72px)] max-w-md touch-none flex-col overflow-hidden rounded-[36px] bg-surface-2 pb-[26px] pt-2.5 text-text shadow-float will-change-transform"
+        className="outline-none absolute inset-x-2 bottom-[calc(8px+env(safe-area-inset-bottom))] mx-auto flex max-h-[calc(100dvh-72px)] max-w-md touch-none flex-col overflow-hidden rounded-[36px] bg-surface-2 pb-[26px] pt-2.5 text-text shadow-float will-change-transform"
         style={keyboardInset > 0 ? { bottom: keyboardInset + 8 } : undefined}
       >
         <button

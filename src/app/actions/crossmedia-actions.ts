@@ -1,5 +1,6 @@
 "use server";
 
+import { redactedError } from "@/authz/safe-log";
 import { revalidatePath } from "next/cache";
 import { and, desc, eq } from "drizzle-orm";
 import { assertUser } from "@/authz";
@@ -17,6 +18,22 @@ import {
 import type { DoubleFeatureData } from "@/modules/cards/types";
 import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
 import { notPartyBacklog } from "@/modules/party-collections/gate";
+import { paletteHexSchema } from "@/modules/backlog/palette";
+import { z } from "zod";
+
+/** Ids are UUIDs (`crypto.randomUUID()` defaults in schema.ts). A server
+ *  action's arguments are whatever the client sent, whatever the TS type
+ *  says: anything else answers `{ error: "invalid" }` before any query. */
+const idSchema = z.string().uuid();
+const acceptSchema = z.object({
+  seedCatalogItemId: idSchema,
+  targetCatalogItemId: idSchema,
+  // A palette that doesn't validate is DROPPED, not an error: it is a nicety
+  // extracted on-device and must never cost the save. (`fillCatalogPalette`
+  // validates again at the write — this only keeps junk out of the call.)
+  paletteHex: paletteHexSchema.optional().catch(undefined),
+});
+const acceptToBacklogSchema = acceptSchema.extend({ backlogId: idSchema });
 
 /**
  * F3.5.5 acceptance flow (recomendaciones-multimedia.md — "¿a qué backlog va
@@ -91,6 +108,9 @@ export async function acceptRecoAction(input: {
   paletteHex?: string[];
 }): Promise<AcceptResult | { error: "invalid" }> {
   const user = await assertUser();
+  const parsed = acceptSchema.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+  input = parsed.data;
 
   // Independent lookups (different tables, no data dependency) — run in parallel.
   const [target, sourceCrossMediaRecId] = await Promise.all([
@@ -102,7 +122,7 @@ export async function acceptRecoAction(input: {
     userId: user.id,
     backlogId: target.backlogId,
     catalogItemId: input.targetCatalogItemId,
-    paletteHex: input.paletteHex?.slice(0, 6) ?? null,
+    paletteHex: input.paletteHex ?? null,
     sourceCrossMediaRecId,
   });
 
@@ -121,6 +141,9 @@ export async function acceptRecoToBacklogAction(input: {
   paletteHex?: string[];
 }): Promise<AcceptResult | { error: "invalid" | "not_found" }> {
   const user = await assertUser();
+  const parsed = acceptToBacklogSchema.safeParse(input);
+  if (!parsed.success) return { error: "invalid" };
+  input = parsed.data;
 
   // Independent lookups (different tables, no data dependency) — run in parallel.
   const [[backlog], sourceCrossMediaRecId] = await Promise.all([
@@ -137,7 +160,7 @@ export async function acceptRecoToBacklogAction(input: {
     userId: user.id,
     backlogId: backlog.id,
     catalogItemId: input.targetCatalogItemId,
-    paletteHex: input.paletteHex?.slice(0, 6) ?? null,
+    paletteHex: input.paletteHex ?? null,
     sourceCrossMediaRecId,
   });
 
@@ -176,7 +199,7 @@ export async function discoverNextRecoAction(
     generatedFor = gen.seedCatalogItemId;
   } catch (err) {
     // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
-    console.error("[crossmedia] discover next failed:", err);
+    console.error("[crossmedia] discover next failed:", redactedError(err));
     result = "failed";
   }
   revalidatePath("/descubrir");
@@ -201,7 +224,7 @@ export async function markRecoSeenAction(
     await markRecoSeen(user.id, crossMediaRecId);
   } catch (err) {
     // Bookkeeping must never break the card the user is looking at.
-    console.error("[crossmedia] mark seen failed:", err);
+    console.error("[crossmedia] mark seen failed:", redactedError(err));
   }
 }
 
@@ -220,7 +243,7 @@ export async function dismissRecoAction(
   try {
     await dismissReco(user.id, crossMediaRecId);
   } catch (err) {
-    console.error("[crossmedia] dismiss failed:", err);
+    console.error("[crossmedia] dismiss failed:", redactedError(err));
   }
 }
 
@@ -276,7 +299,7 @@ export async function getDiscoverFeedAction(): Promise<DiscoverFeedResult> {
     feed = await getCrossMediaFeed(user.id);
   } catch (err) {
     // F3.5.5 tables absent / transient failure → degrade, never throw to the UI.
-    console.error("[descubrir] cross-media feed unavailable:", err);
+    console.error("[descubrir] cross-media feed unavailable:", redactedError(err));
     return { kind: "unavailable" };
   }
   if (!feed) return { kind: "unavailable" };

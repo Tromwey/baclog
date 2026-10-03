@@ -1,7 +1,10 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import { appleSearchSongs } from "./apple-catalog";
 import { SONG_SOURCE, toSongItem, type ItunesSongResult, type SongItem, type SongRaw } from "./song-map";
 
 export { SONG_SOURCE, songFactsOf, type SongItem, type SongRaw } from "./song-map";
@@ -45,6 +48,11 @@ export class SongSearchUnavailableError extends Error {
  * query twice, or two guests searching the same hit, costs one call).
  */
 export async function searchSongs(query: string, limit = 25): Promise<SongItem[]> {
+  // Apple Music first (2026-10-02): same ids (song id = trackId), rows already
+  // in iTunes' shape. Null (no key / Apple failed) or empty → iTunes below.
+  const apple = await appleSearchSongs(query, limit, "mx");
+  if (apple && apple.length > 0) return dedupeSongs(apple);
+
   const url = new URL("https://itunes.apple.com/search");
   url.searchParams.set("term", query);
   url.searchParams.set("entity", "song");
@@ -53,16 +61,20 @@ export async function searchSongs(query: string, limit = 25): Promise<SongItem[]
   url.searchParams.set("limit", String(limit));
   let data: { results?: ItunesSongResult[] };
   try {
-    const res = await fetch(url, { next: { revalidate: 300 } });
+    const res = await fetchWithTimeout(url, { next: { revalidate: 300 } });
     if (!res.ok) throw new Error(`iTunes song search: ${res.status}`);
     data = await res.json();
   } catch (err) {
-    console.error("[catalog] iTunes song search failed:", err);
+    console.error("[catalog] iTunes song search failed:", redactedError(err));
     throw new SongSearchUnavailableError(err);
   }
+  return dedupeSongs(data.results ?? []);
+}
+
+function dedupeSongs(results: ItunesSongResult[]): SongItem[] {
   const seen = new Set<string>();
   const out: SongItem[] = [];
-  for (const r of data.results ?? []) {
+  for (const r of results) {
     const song = toSongItem(r);
     if (!song || seen.has(song.externalId)) continue;
     seen.add(song.externalId);
@@ -85,8 +97,7 @@ export interface CachedSong {
  * Upsert songs into `catalog_item` (media_type `track`) in ONE statement and
  * return them in the caller's order. A re-search refreshes the display facts
  * and REPLACES `raw` (it is our whitelist, nothing else writes into a song's
- * `raw`), keeps the palette. Needs migration 0033 (the enum value): the
- * party module only calls it with `MIGRATION_0033_LIVE`.
+ * `raw`), keeps the palette.
  */
 export async function cacheSongs(songs: SongItem[]): Promise<CachedSong[]> {
   if (songs.length === 0) return [];

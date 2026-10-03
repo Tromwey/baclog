@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
@@ -107,7 +108,7 @@ export async function ensureCatalogRows(items: ExternalItem[]): Promise<Map<stri
         });
       }
     } catch (err) {
-      console.error("[descubrir] catalog upsert failed:", err);
+      console.error("[descubrir] catalog upsert failed:", redactedError(err));
     }
   }
   return out;

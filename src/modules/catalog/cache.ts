@@ -1,7 +1,9 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems } from "@/db/schema";
+import { paletteHexSchema } from "@/modules/backlog/palette";
 import type { FilmFactsWrite } from "./film-facts";
 import { libraryMedia } from "./library-media";
 import type { SeriesFactsPatch } from "./series-status";
@@ -48,8 +50,15 @@ export async function getCatalogItem(
  * still NULL: first-writer-wins, so one device's extraction fills it for
  * everyone and nothing (a re-add, a second viewer, a hostile client) ever
  * clobbers a real value. The server never sees the artwork (ADR-007/008): the
- * hexes are extracted on-device. Callers validate with `paletteHexSchema`
- * first; an empty array is a no-op (a failed extraction must not persist).
+ * hexes are extracted on-device, so they are CLIENT input. They are
+ * validated HERE (`paletteHexSchema`: strict `#RRGGBB`, ≤ 6), at the one
+ * write point, and not only by each caller: the column is shared by every
+ * user and rendered into inline styles, and a caller that forgot the check
+ * (the cross-media accept did — it only `slice(0, 6)`-ed) would have stored
+ * arbitrary strings for everyone, forever (first-writer-wins). An invalid
+ * palette is dropped with a warning, never thrown: the palette is a cosmetic
+ * cache and must not fail the add it rides on. An empty array is a no-op (a
+ * failed extraction must not persist).
  *
  * The one write path for a view-or-save palette fill: the add
  * (`ensureUserItemAndMembership`), the web view fill (`cacheItemPaletteAction`)
@@ -60,9 +69,14 @@ export async function fillCatalogPalette(
   paletteHex: string[] | null | undefined,
 ): Promise<void> {
   if (!paletteHex || paletteHex.length === 0) return;
+  const parsed = paletteHexSchema.safeParse(paletteHex);
+  if (!parsed.success) {
+    console.warn(`[catalog] paleta inválida descartada para ${catalogItemId} (no se escribe)`);
+    return;
+  }
   await db
     .update(catalogItems)
-    .set({ paletteHex })
+    .set({ paletteHex: parsed.data })
     .where(and(eq(catalogItems.id, catalogItemId), isNull(catalogItems.paletteHex)));
 }
 
@@ -98,7 +112,7 @@ export async function cacheReleaseDate(
       .where(eq(catalogItems.id, catalogItemId));
   } catch (err) {
     // A cache write must never take the page down with it.
-    console.error("[catalog] release date cache failed:", err);
+    console.error("[catalog] release date cache failed:", redactedError(err));
   }
 }
 
@@ -152,7 +166,7 @@ async function mergeIntoRaw(
       })
       .where(eq(catalogItems.id, catalogItemId));
   } catch (err) {
-    console.error(`[catalog] ${what} cache failed:`, err);
+    console.error(`[catalog] ${what} cache failed:`, redactedError(err));
   }
 }
 

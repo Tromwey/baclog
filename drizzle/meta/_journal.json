@@ -253,6 +253,34 @@
       "when": 1790758447446,
       "tag": "0035_device_token_provider",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790845320977,
+      "tag": "0036_index_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790848876268,
+      "tag": "0037_audit_r3_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790957054652,
+      "tag": "0038_party_lab",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790967830038,
+      "tag": "0039_party_lab_ouija_gen",
+      "breakpoints": true
     }
   ]
 }

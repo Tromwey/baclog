@@ -4,8 +4,10 @@ import { checkRateLimit } from "@/authz/api";
 import { db } from "@/db";
 import { musicConnections, musicOauthStates } from "@/db/schema";
 import { openSecret, sealSecret } from "@/lib/secret-box";
+import { afterResponse } from "@/lib/after-response";
+import { budgetLeftMs, StepBudgetError, withDeadline, withinBudget } from "./budget";
 import { TIDAL_AUTHORIZE_URL, TIDAL_SCOPES, tidalOAuthConfig, type TidalOAuthConfig } from "./config";
-import { assertMusicExportLive, MusicExportError, notConfigured, notConnected, serviceFailed } from "./errors";
+import { MusicExportError, notConfigured, notConnected, serviceFailed } from "./errors";
 import {
   claimMatches,
   clientOfState,
@@ -65,14 +67,13 @@ function requireConfig(): TidalOAuthConfig {
 
 /** A fresh TIDAL consent URL for `userId`. `returnTo` (web) is already allow-listed. */
 export async function startTidalAuth(userId: string, client: OAuthClient, returnTo: string | null): Promise<string> {
-  assertMusicExportLive();
   const cfg = requireConfig();
   const rl = checkRateLimit(`tidal-start:${userId}`, STARTS_PER_MINUTE);
   if (!rl.ok) {
     throw new MusicExportError(
       "rate_limited",
       "rate_limited",
-      "Demasiados intentos seguidos. Espera un momento e inténtalo de nuevo.",
+      "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.",
       rl.retryAfterSeconds,
     );
   }
@@ -182,7 +183,6 @@ export async function handleTidalCallback(
  * spends the owner's parked code.
  */
 export async function completeTidalAuth(userId: string, ref: string, claim: string): Promise<void> {
-  assertMusicExportLive();
   requireConfig();
   const expired = new MusicExportError(
     "conflict",
@@ -275,7 +275,6 @@ export async function isTidalConnected(userId: string): Promise<boolean> {
 }
 
 export async function disconnectTidal(userId: string): Promise<void> {
-  assertMusicExportLive();
   await db
     .delete(musicConnections)
     .where(and(eq(musicConnections.userId, userId), eq(musicConnections.provider, "tidal")));
@@ -289,11 +288,34 @@ export interface TidalAccess {
 }
 
 /**
+ * How long a refresh TIDAL refused waits for the OTHER request's fresh row
+ * before concluding the link is dead. TIDAL rotates refresh tokens: of two
+ * requests that read the same row, one wins the refresh and the other gets a
+ * 4xx for a token that was valid a moment ago. The winner still has to write
+ * its row (one upsert, plus `users/me` when the country is unknown), so the
+ * loser re-reads a few times instead of once.
+ */
+const REFRESH_RACE_WAITS_MS = [150, 350, 750, 1500] as const;
+/** The shared refresh's own time: one token call (6 s timeout) plus the
+ *  race re-reads above. Fixed — never the budget of whoever started it. */
+const REFRESH_BUDGET_MS = 9_000;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** In-flight refresh per user, per instance: concurrent callers share ONE
+ *  refresh (the pool of a step, two tabs on a warm function). Across
+ *  instances the re-read below covers it — neon-http has no session to hold
+ *  an advisory lock across TIDAL's HTTP call. */
+const refreshing = new Map<string, Promise<TidalAccess>>();
+
+/**
  * A usable user token, refreshed when it expires within 2 minutes (or when
- * `force`, after a 401). A refresh TIDAL refuses (4xx) drops the link →
+ * `force`, after a 401). A refresh TIDAL refuses with `invalid_grant` drops
+ * the link (any other 4xx is `service_failed`, link intact) →
  * `not_connected` (the UI offers "Conectar TIDAL" again) — unless another
  * request refreshed it meanwhile (rotating refresh tokens + two steps in
- * flight), in which case the fresh row wins.
+ * flight), in which case the fresh row wins: the row is re-read up to
+ * `REFRESH_RACE_WAITS_MS.length` times (~2.7 s) before giving up, and the
+ * delete itself is still guarded by the `updated_at` we read.
  */
 export async function getTidalAccess(userId: string, force = false): Promise<TidalAccess> {
   const cfg = requireConfig();
@@ -303,6 +325,44 @@ export async function getTidalAccess(userId: string, force = false): Promise<Tid
   if (access && !force && row.expiresAt.getTime() - Date.now() > 2 * 60 * 1000) {
     return { accessToken: access, countryCode: row.countryCode, scope: row.scope };
   }
+  let shared = refreshing.get(userId);
+  if (!shared) {
+    // The shared refresh runs under its OWN fixed deadline, not the budget of
+    // the request that happened to start it: inheriting that one handed every
+    // other caller a `service_failed` the moment the first request's step ran
+    // out, with their own budget untouched.
+    const mine = withDeadline(Date.now() + REFRESH_BUDGET_MS, () => refreshConnection(cfg, userId, row)).finally(() => {
+      if (refreshing.get(userId) === mine) refreshing.delete(userId);
+    });
+    refreshing.set(userId, mine);
+    shared = mine;
+  }
+  try {
+    // Each caller still waits only as long as ITS budget allows.
+    return await withinBudget("refresh", shared);
+  } catch (err) {
+    if (!(err instanceof StepBudgetError)) throw err;
+    // This caller is out of time; the refresh is not. TIDAL rotates refresh
+    // tokens, so the new pair must reach the row even though nobody in this
+    // request waits for it: keep the function alive until it settles.
+    const pending = shared;
+    afterResponse("music-export/tidal-refresh", () => pending.catch(() => {}));
+    console.warn("[music-export] tidal refresh still running with the step budget spent: link kept");
+    throw serviceFailed("tidal");
+  }
+}
+
+type ConnectionRow = NonNullable<Awaited<ReturnType<typeof loadConnection>>>;
+
+/** The row somebody else wrote after we read `seen` (a usable token), or null. */
+async function refreshedByOther(userId: string, seen: ConnectionRow): Promise<TidalAccess | null> {
+  const fresh = await loadConnection(userId);
+  if (!fresh || fresh.updatedAt.getTime() === seen.updatedAt.getTime()) return null;
+  const token = openSecret(fresh.accessTokenEnc, PURPOSE, aadConn(userId, "access"));
+  return token ? { accessToken: token, countryCode: fresh.countryCode, scope: fresh.scope } : null;
+}
+
+async function refreshConnection(cfg: TidalOAuthConfig, userId: string, row: ConnectionRow): Promise<TidalAccess> {
   const refresh = openSecret(row.refreshTokenEnc, PURPOSE, aadConn(userId, "refresh"));
   if (!refresh) {
     await dropConnection(userId, row.updatedAt);
@@ -313,17 +373,31 @@ export async function getTidalAccess(userId: string, force = false): Promise<Tid
     await saveConnection(userId, { ...set, countryCode: set.countryCode ?? row.countryCode }, row.refreshTokenEnc);
     return { accessToken: set.accessToken, countryCode: set.countryCode ?? row.countryCode, scope: set.scope ?? row.scope };
   } catch (err) {
-    if (err instanceof TidalHttpError && err.status >= 400 && err.status < 500 && err.status !== 429) {
-      const fresh = await loadConnection(userId);
-      if (fresh && fresh.updatedAt.getTime() !== row.updatedAt.getTime()) {
-        const token = openSecret(fresh.accessTokenEnc, PURPOSE, aadConn(userId, "access"));
-        if (token) return { accessToken: token, countryCode: fresh.countryCode, scope: fresh.scope };
+    // ONLY `invalid_grant` says "this refresh token is no good" (RFC 6749
+    // §5.2: revoked, expired, or already rotated). Any other 4xx —
+    // `invalid_client` after a secret rotation, `invalid_request`, a WAF's
+    // 403 — is OUR problem or TIDAL's, and dropping the link for it would
+    // disconnect every user at once: it falls through to `service_failed`.
+    if (err instanceof TidalHttpError && err.oauthError === "invalid_grant") {
+      let other = await refreshedByOther(userId, row);
+      for (const wait of REFRESH_RACE_WAITS_MS) {
+        if (other) break;
+        if (budgetLeftMs() < wait) {
+          // Inside a step whose budget can't cover the wait: don't conclude
+          // "dead link" early — the next step re-reads the row.
+          console.warn("[music-export] tidal refresh refused (invalid_grant) with the step budget spent: link kept");
+          throw serviceFailed("tidal");
+        }
+        await sleep(wait);
+        other = await refreshedByOther(userId, row);
       }
-      console.warn(`[music-export] tidal refresh refused (${err.status}): link dropped`);
+      if (other) return other;
+      console.warn(`[music-export] tidal refresh refused (${err.status} invalid_grant): link dropped`);
       await dropConnection(userId, row.updatedAt);
       throw notConnected("tidal");
     }
-    console.warn(`[music-export] tidal refresh failed: ${describe(err)}`);
+    if (err instanceof MusicExportError) throw err;
+    console.warn(`[music-export] tidal refresh failed, link kept: ${describe(err)}`);
     throw serviceFailed("tidal");
   }
 }
@@ -344,7 +418,12 @@ async function loadConnection(userId: string) {
   return row ?? null;
 }
 
-/** Deletes the link only if nobody refreshed it since we read it. */
+/**
+ * Deletes the link only if nobody refreshed it since we read it. Compared at
+ * millisecond precision: `seenUpdatedAt` went through a JS Date, and a row
+ * whose `updated_at` carries microseconds (written by SQL `now()`) would
+ * otherwise never match — a dead link nobody could drop.
+ */
 async function dropConnection(userId: string, seenUpdatedAt: Date): Promise<void> {
   await db
     .delete(musicConnections)
@@ -352,7 +431,7 @@ async function dropConnection(userId: string, seenUpdatedAt: Date): Promise<void
       and(
         eq(musicConnections.userId, userId),
         eq(musicConnections.provider, "tidal"),
-        eq(musicConnections.updatedAt, seenUpdatedAt),
+        sql`date_trunc('milliseconds', ${musicConnections.updatedAt}) = ${seenUpdatedAt.toISOString()}::timestamp`,
       ),
     );
 }

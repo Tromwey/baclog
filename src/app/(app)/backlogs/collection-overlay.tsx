@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import {
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -14,6 +15,7 @@ import {
 import { createPortal } from "react-dom";
 import { Fan } from "@/components/kura/fan";
 import { fanSource, takeFanFlight } from "@/components/kura/fan-flight";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { prefersReducedMotion } from "@/hooks/use-reduced-motion";
 import type { FanCover } from "@/modules/backlog/fan";
 import { SpringValue, VelocityTracker, clamp01, lerp } from "@/lib/spring";
@@ -167,6 +169,30 @@ export function CollectionOverlay({ backlogId, children }: { backlogId: string; 
     [apply, backlogId, leave, restore],
   );
 
+  // It IS a modal: a full-screen layer over the profile. Focus moves in and
+  // cycles inside (and returns to the row on close), Escape closes — unless
+  // a sheet opened from the collection is on top (the dialog stack: it owns
+  // Tab and Escape then) — and the profile underneath is inert, so neither
+  // Tab nor a screen reader can wander into a page nobody sees. The hook
+  // owns `inert` so the order is right: opener remembered → inert on; inert
+  // off → focus back to the row.
+  // The dock is NOT inert: it is lifted above the overlay on purpose
+  // (`useLiftNavDock`) and the pointer reaches it, so the keyboard does too —
+  // its tabs join the Tab cycle after the collection's controls. That is why
+  // this dialog doesn't claim `aria-modal`: the dock is live beside it, and
+  // what IS hidden (the profile) is hidden by `inert`, which is what
+  // assistive tech actually honours.
+  useDialogFocus(rootRef, mounted, { inert: "[data-collection-underlay]", also: '[data-nav-dock="on"]' });
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (isTopDialog(rootRef.current)) close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mounted, close]);
+
   // Once per open: take the recorded tap, hide its fan, and fly.
   useLayoutEffect(() => {
     if (!mounted) return;
@@ -249,7 +275,14 @@ export function CollectionOverlay({ backlogId, children }: { backlogId: string; 
   if (!mounted) return null;
   return createPortal(
     <OverlayExitCtx.Provider value={(then) => close(0, then)}>
-      <div ref={rootRef} className="fixed inset-0 z-40" onPointerDown={onPointerDown}>
+      <div
+        ref={rootRef}
+        role="dialog"
+        aria-label="Colección"
+        tabIndex={-1}
+        className="fixed inset-0 z-40 outline-none"
+        onPointerDown={onPointerDown}
+      >
         <div aria-hidden className="pointer-events-none absolute inset-0 bg-bg" style={{ opacity: "var(--cx-bg, 1)" }} />
         <div ref={scrollRef} className="absolute inset-0 touch-pan-y overflow-y-auto overscroll-contain">
           {children}

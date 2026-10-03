@@ -1,5 +1,6 @@
 "use client";
 
+import { ensureCardFonts } from "@/components/card-fonts";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   CARD_FONTS,
@@ -40,6 +41,7 @@ function useCardFonts() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      await ensureCardFonts();
       const deadline = Date.now() + 6000;
       do {
         await Promise.all(CARD_FONTS.map((f) => document.fonts.load(f))).catch(() => {});

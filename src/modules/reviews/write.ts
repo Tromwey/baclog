@@ -1,11 +1,12 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, notExists, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { catalogItems, itemReviews, userItems } from "@/db/schema";
 import { supportsSpoiler } from "@/modules/reviews/format";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
 import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
+import { titleStateLock } from "@/modules/backlog/membership";
 
 /**
  * F3.9 — the ONE write path for a user's own review, shared by the web's
@@ -65,6 +66,14 @@ export type SaveReviewOutcome = { ok: true; id: string } | { error: SaveReviewEr
  * moderation hid stays hidden however many times its author rewrites it — the
  * only way back into the feed is Restaurar in the Torre. Anything else turns
  * every edit into a free re-publish that skips the queue.
+ *
+ * The write is ONE batch behind `titleStateLock` that ends with
+ * `sweepUnreactedReview` (founder, 2026-10-01: a review exists only while its
+ * reaction does). The `locked` read above is the fast path and decides on a
+ * snapshot; the sweep is the rule, decided by the database on the row as it
+ * is INSIDE the transaction — so a "quitar reacción" (or a remove from the
+ * library) racing this save can't leave a review behind: whoever runs second
+ * sees the other's commit. A swept upsert answers `locked`.
  */
 export async function saveReview(
   userId: string,
@@ -95,23 +104,70 @@ export async function saveReview(
   const hasSpoiler = catalog && supportsSpoiler(catalog.mediaType) ? spoiler.data : false;
 
   const now = new Date();
-  const [row] = await db
-    .insert(itemReviews)
-    .values({
-      userId,
-      catalogItemId,
-      body: body.data,
-      hasSpoiler,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [itemReviews.userId, itemReviews.catalogItemId],
-      // Deliberately no `hiddenAt` here — see the docblock.
-      set: { body: body.data, hasSpoiler, updatedAt: now },
-    })
+  const [, rows, swept] = await db.batch([
+    titleStateLock(userId, catalogItemId),
+    db
+      .insert(itemReviews)
+      .values({
+        userId,
+        catalogItemId,
+        body: body.data,
+        hasSpoiler,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [itemReviews.userId, itemReviews.catalogItemId],
+        // Deliberately no `hiddenAt` here — see the docblock.
+        set: { body: body.data, hasSpoiler, updatedAt: now },
+      })
+      .returning({ id: itemReviews.id }),
+    sweepUnreactedReview(userId, catalogItemId),
+  ]);
+  if (swept.length > 0) return { error: "locked" };
+  return { ok: true, id: rows[0].id };
+}
+
+/**
+ * THE rule of a review's lifetime (founder, 2026-10-01 — "se borra"): an
+ * `item_review` exists only while its author's `user_item` for that title
+ * carries a reaction (`obsessed OR verdict IS NOT NULL`). This is the one
+ * statement that enforces it: delete the caller's review of the title unless
+ * such a row exists — a `user_item` with both axes off AND no `user_item` at
+ * all both sweep. `RETURNING` tells the caller whether a review went away.
+ *
+ * Not awaited here: it is a batch ITEM. Every write that can turn the last
+ * reaction off (`setMark`, `clearVerdict`, `setObsessed(false)` in
+ * modules/backlog/state.ts) runs it in the SAME `db.batch` as its UPDATE,
+ * after `titleStateLock` — the condition is evaluated by the database on the
+ * state that transaction just wrote, never on what the app read earlier.
+ * A new path that clears a reaction MUST end its batch with this.
+ *
+ * Reports on the swept review go with it (`report.target_review_id` is ON
+ * DELETE CASCADE) — the same thing `deleteOwnReview` leaves behind: nothing.
+ */
+export function sweepUnreactedReview(userId: string, catalogItemId: string) {
+  return db
+    .delete(itemReviews)
+    .where(
+      and(
+        eq(itemReviews.userId, userId),
+        eq(itemReviews.catalogItemId, catalogItemId),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(userItems)
+            .where(
+              and(
+                eq(userItems.userId, userId),
+                eq(userItems.catalogItemId, catalogItemId),
+                or(eq(userItems.obsessed, true), isNotNull(userItems.verdict)),
+              ),
+            ),
+        ),
+      ),
+    )
     .returning({ id: itemReviews.id });
-  return { ok: true, id: row.id };
 }
 
 /**

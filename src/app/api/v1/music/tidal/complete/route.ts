@@ -1,4 +1,5 @@
 import { withApi } from "@/authz/api";
+import { parseOutput } from "@/lib/output";
 import { musicServicesFor } from "@/modules/music-export/services";
 import { completeTidalAuth } from "@/modules/music-export/tidal-auth";
 import { json, readJson } from "../../../_lib/http";
@@ -17,5 +18,5 @@ import { MusicServicesSchema, TidalCompleteBodySchema } from "../../../_lib/sche
 export const POST = withApi(async (req, { user }) => {
   const body = await readJson(req, TidalCompleteBodySchema);
   await completeTidalAuth(user.id, body.ref, body.claim ?? "");
-  return json(MusicServicesSchema.parse(await musicServicesFor(user.id)));
+  return json(parseOutput(MusicServicesSchema, await musicServicesFor(user.id), "MusicServices"));
 });

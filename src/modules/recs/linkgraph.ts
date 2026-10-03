@@ -1,8 +1,9 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems, crossMediaLinks, userItems } from "@/db/schema";
-import { unifiedSearch } from "@/modules/catalog/search";
+import { unifiedSearchDetailed } from "@/modules/catalog/search";
 import { videoCatalog } from "@/modules/catalog/tmdb";
 import type { CatalogItemRow as LibraryCatalogItemRow } from "@/modules/catalog/cache";
 import { libraryMedia } from "@/modules/catalog/library-media";
@@ -46,6 +47,25 @@ export interface RankedTarget {
 /** 180d — see catalogItems.linkEdgesCheckedAt. */
 export const LINK_EDGES_STALE_MS = 180 * 24 * 60 * 60 * 1000;
 
+/**
+ * How long a seed whose extraction got NO answer from a provider waits before
+ * the next attempt. Without it every request for that seed re-ran the 1–3
+ * external calls (each up to its timeout) for as long as the provider was
+ * down. It is short on purpose: this is "ask again in a bit", not the 180-day
+ * "this title has no soundtrack".
+ */
+export const LINK_EDGES_RETRY_MS = 15 * 60 * 1000;
+
+/**
+ * The `link_edges_checked_at` that makes a seed read as fresh for exactly
+ * `LINK_EDGES_RETRY_MS` more: a stamp backdated to `STALE − RETRY` ago. One
+ * column carries both TTLs, shared by every instance (an in-memory backoff
+ * would be per lambda), and the stamp expires by itself.
+ */
+export function linkEdgesRetryStamp(now: number = Date.now()): Date {
+  return new Date(now - (LINK_EDGES_STALE_MS - LINK_EDGES_RETRY_MS));
+}
+
 /** Priority when affinity ties: factual authority of the link kind. */
 const LINK_TYPE_RANK: Record<string, number> = {
   soundtrack: 0,
@@ -61,10 +81,18 @@ const LINK_TYPE_RANK: Record<string, number> = {
 /**
  * The seed's edges, extracting them first when never tried or stale. The
  * extraction is 1–3 external calls (same cost class as v2's grounding step)
- * and is NEVER metered. linkEdgesCheckedAt is stamped on every attempt —
- * found or not — so empty seeds don't re-hit iTunes/TMDB per request.
- * Concurrent materialization is safe: edge inserts are onConflictDoNothing
- * on the (video, album, linkType) unique.
+ * and is NEVER metered. Concurrent materialization is safe: edge inserts are
+ * onConflictDoNothing on the (video, album, linkType) unique.
+ *
+ * `linkEdgesCheckedAt` is stamped when the extraction got an ANSWER from
+ * every provider it asked — found or not — so a seed with no edges doesn't
+ * re-hit iTunes/TMDB per request for 180 days. It is NOT stamped when a
+ * provider didn't answer (timeout, network, 5xx) or a write failed: before,
+ * a single 8 s timeout was sealed as "this title has no soundtrack" for six
+ * months. Edges found before the failure are still kept (they are verified).
+ * An unanswered attempt writes the SHORT backoff instead (`linkEdgesRetryStamp`:
+ * fresh for `LINK_EDGES_RETRY_MS`, 15 min), so a provider that is down is
+ * asked again later — not on every request of that seed, and not in 180 days.
  */
 export async function getOrMaterializeLinkEdges(
   seed: CatalogItemRow,
@@ -73,23 +101,36 @@ export async function getOrMaterializeLinkEdges(
     seed.linkEdgesCheckedAt &&
     Date.now() - seed.linkEdgesCheckedAt.getTime() < LINK_EDGES_STALE_MS;
   if (!fresh) {
+    const attempt: ExtractionAttempt = { incomplete: false };
     try {
       const found =
         seed.mediaType === "album"
-          ? await extractAlbumEdges(seed)
-          : await extractVideoEdges(seed);
+          ? await extractAlbumEdges(seed, attempt)
+          : await extractVideoEdges(seed, attempt);
       if (found.length > 0) {
         await db.insert(crossMediaLinks).values(found).onConflictDoNothing();
       }
     } catch (err) {
       // Fail-open to "no new edges": extraction is best-effort; the pipeline
       // degrades to whatever edges exist (or the thematic fallback).
-      console.error("[linkgraph] extraction failed:", err);
+      console.error("[linkgraph] extraction failed:", redactedError(err));
+      attempt.incomplete = true;
     }
-    await db
-      .update(catalogItems)
-      .set({ linkEdgesCheckedAt: new Date() })
-      .where(eq(catalogItems.id, seed.id));
+    if (attempt.incomplete) {
+      console.warn(
+        `[linkgraph] seed ${seed.id}: a provider did not answer — retry in ${LINK_EDGES_RETRY_MS / 60_000} min (not the 180-day stamp)`,
+      );
+    }
+    try {
+      await db
+        .update(catalogItems)
+        .set({ linkEdgesCheckedAt: attempt.incomplete ? linkEdgesRetryStamp() : new Date() })
+        .where(eq(catalogItems.id, seed.id));
+    } catch (err) {
+      // The stamp is bookkeeping: losing it costs one more extraction, never
+      // the edges this request is about to read.
+      console.error("[linkgraph] could not stamp link_edges_checked_at:", redactedError(err));
+    }
   }
 
   const side =
@@ -216,6 +257,12 @@ export function buildLinkClaim(
 
 type NewLinkEdge = typeof crossMediaLinks.$inferInsert;
 
+/** What an extraction learned about ITSELF: `incomplete` = some provider it
+ *  asked did not answer, so "no edges" is not a conclusion to cache. */
+interface ExtractionAttempt {
+  incomplete: boolean;
+}
+
 const SOUNDTRACK_TITLE_RE =
   /original (motion picture|series|game)? ?(soundtrack|score)|music from (the )?(motion picture|film|series|movie)|banda sonora( original)?|\bsoundtrack\b|música original/i;
 
@@ -318,13 +365,17 @@ function edgeTitlesMatch(
   return a === c;
 }
 
-/** Resolve a search query to full catalog rows (unifiedSearch warms/upserts
- *  the shared cache, so the rows always exist right after). */
+/** Resolve a search query to full catalog rows (the unified search
+ *  warms/upserts the shared cache, so the rows always exist right after).
+ *  A provider that failed comes back as zero hits AND marks the attempt
+ *  incomplete — an empty list alone can't say which of the two it was. */
 async function searchCatalogRows(
   query: string,
   tab: "film" | "series" | "album",
+  attempt: ExtractionAttempt,
 ): Promise<CatalogItemRow[]> {
-  const hits = await unifiedSearch(query, tab);
+  const { results: hits, failed } = await unifiedSearchDetailed(query, tab);
+  if (failed.length > 0) attempt.incomplete = true;
   const ids = hits
     .filter((h) => h.mediaType === tab)
     .map((h) => h.catalogItemId);
@@ -341,14 +392,18 @@ async function searchCatalogRows(
  * Video seed → album edges:
  *  (a) iTunes soundtrack search — keyless, always available.
  *  (b) TMDB composer credit → "{composer} {title}" album lookup ("score").
- *      Silently skipped on fixtures (getComposer not implemented) or errors.
+ *      Skipped on fixtures (getComposer not implemented); a lookup TMDB
+ *      didn't answer is logged and marks the attempt incomplete.
  */
-async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
+async function extractVideoEdges(
+  seed: CatalogItemRow,
+  attempt: ExtractionAttempt,
+): Promise<NewLinkEdge[]> {
   const edges: NewLinkEdge[] = [];
   const seen = new Set<string>();
 
   const soundtrackQuery = `${seed.title} soundtrack`;
-  for (const row of await searchCatalogRows(soundtrackQuery, "album")) {
+  for (const row of await searchCatalogRows(soundtrackQuery, "album", attempt)) {
     if (
       !looksLikeSoundtrack(row) ||
       !edgeTitlesMatch(seed.title, row.title, seed.year, row.year)
@@ -367,13 +422,19 @@ async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
   }
 
   if (seed.source === "tmdb" && videoCatalog.getComposer) {
-    const composer = await videoCatalog.getComposer(
-      seed.externalId,
-      seed.mediaType === "series" ? "series" : "film",
-    );
+    // A credits lookup TMDB didn't answer costs the "score" edge this time
+    // and marks the attempt incomplete (so it is asked again); it never
+    // blocks the soundtrack edges found above.
+    const composer = await videoCatalog
+      .getComposer(seed.externalId, seed.mediaType === "series" ? "series" : "film")
+      .catch((err) => {
+        console.error("[linkgraph] TMDB credits failed:", redactedError(err));
+        attempt.incomplete = true;
+        return null;
+      });
     if (composer) {
       const scoreQuery = `${composer} ${seed.title}`;
-      for (const row of await searchCatalogRows(scoreQuery, "album")) {
+      for (const row of await searchCatalogRows(scoreQuery, "album", attempt)) {
         // The album must reference the film (year-checked, franchise-safe)
         // AND the composer must be its artist — both, or a homonymous
         // unrelated album slips through. Derivative albums (covers/lullaby)
@@ -405,13 +466,16 @@ async function extractVideoEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
  * automatic reverse lookup — reserved for the curated pass; the pipeline
  * falls back to the thematic path.
  */
-async function extractAlbumEdges(seed: CatalogItemRow): Promise<NewLinkEdge[]> {
+async function extractAlbumEdges(
+  seed: CatalogItemRow,
+  attempt: ExtractionAttempt,
+): Promise<NewLinkEdge[]> {
   if (!looksLikeSoundtrack(seed)) return [];
   const candidate = stripSoundtrackSuffix(seed.title);
   if (!candidate) return [];
 
   for (const tab of ["film", "series"] as const) {
-    for (const row of await searchCatalogRows(candidate, tab)) {
+    for (const row of await searchCatalogRows(candidate, tab, attempt)) {
       if (isNonPrimaryVideoTitle(row.title)) continue;
       if (!edgeTitlesMatch(candidate, row.title, seed.year, row.year)) continue;
       return [

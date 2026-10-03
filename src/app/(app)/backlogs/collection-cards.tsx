@@ -316,7 +316,9 @@ export function CollectionCards({
         aria-label="Tus colecciones"
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="outline-none"
+        // Keyboard focus is a FILL change (the system has no outlines or
+        // borders): the carousel's surface lifts a touch while it holds it.
+        className="rounded-[var(--r-surface)] outline-none transition-colors duration-200 focus-visible:bg-white/[0.05]"
       >
         {/* ONE drag surface for the fans and the names: both follow the same
             continuous position, 1:1 with the finger. */}

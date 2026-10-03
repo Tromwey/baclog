@@ -1,18 +1,48 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { waitlistEntries, waitlistReferrals } from "@/db/schema";
+import { secretKey } from "@/authz/keys";
 
 /** Queue positions a confirmed referral moves you up. */
 const BOOST_PER_REFERRAL = 3;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
 
+/**
+ * What a join answers. `position` / `referralCode` / `referralCount` are the
+ * entry's OWN data and travel only to someone who is that entry: the caller
+ * who just created it, or one who presents its `proof` (below). For an email
+ * that was already in line and no proof, the answer is `alreadyJoined: true`
+ * and nothing else — the form is anonymous and the email is free text, so
+ * anything more was a lookup of somebody else's place in line, invite count
+ * and invite code by address.
+ */
 export interface WaitlistResult {
-  position: number;
-  referralCode: string;
-  referralCount: number;
   alreadyJoined: boolean;
+  position?: number;
+  referralCode?: string;
+  referralCount?: number;
+}
+
+/**
+ * "This browser is the one that joined with this email": HMAC-SHA256 of the
+ * normalized address under AUTH_SECRET. The action stores it in an httpOnly
+ * cookie when an entry is CREATED and sends it back on a re-join; nothing is
+ * stored in the database and it can't be derived from the invite code (which
+ * is public — it rides in every share link).
+ */
+export function waitlistProof(rawEmail: string): string {
+  return createHmac("sha256", secretKey())
+    .update(`waitlist-proof:${rawEmail.trim().toLowerCase()}`)
+    .digest("hex");
+}
+
+function proofMatches(email: string, proof: string | null | undefined): boolean {
+  if (!proof) return false;
+  const expected = Buffer.from(waitlistProof(email), "hex");
+  const got = Buffer.from(proof, "hex");
+  return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
 function generateCode(len = 8): string {
@@ -38,8 +68,9 @@ function effectiveSeq(sequence: number, referralCount: number): number {
 }
 
 /**
- * F3.1 — idempotent join. Re-joining with the same email returns the
- * existing entry (no duplicate). A valid `refCode` credits the referrer
+ * F3.1 — idempotent join. Re-joining with the same email creates nothing; it
+ * returns the existing entry's data ONLY to a caller holding its `proof`
+ * (see `WaitlistResult`). A valid `refCode` credits the referrer
  * immediately (guarded by the unique index on refereeEntryId — one credit
  * per referee, ever). Credit-on-join gives the real "invita y sube"
  * behavior; abuse is vanity-only (M3 doesn't gate signups on position).
@@ -47,6 +78,7 @@ function effectiveSeq(sequence: number, referralCount: number): number {
 export async function joinWaitlist(
   rawEmail: string,
   refCode?: string,
+  proof?: string | null,
 ): Promise<WaitlistResult> {
   const email = rawEmail.trim().toLowerCase();
 
@@ -56,6 +88,7 @@ export async function joinWaitlist(
     .where(eq(waitlistEntries.email, email))
     .limit(1);
   if (existing) {
+    if (!proofMatches(email, proof)) return { alreadyJoined: true };
     return {
       position: await positionForEffectiveSeq(
         effectiveSeq(existing.sequence, existing.referralCount),

@@ -21,7 +21,7 @@ export function DeadLinkScreen() {
           este link ya no funciona.
         </span>
         <span className="font-sans text-[16px] leading-[1.45] text-text-2 [text-wrap:pretty]">
-          Quien te invitó lo desactivó o creó uno nuevo. Pídele el link otra vez y vuelve a abrirlo.
+          Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo.
         </span>
       </div>
       <div className="flex flex-col gap-2 px-4 pb-[calc(30px+env(safe-area-inset-bottom))] pt-3">

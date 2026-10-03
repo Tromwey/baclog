@@ -25,8 +25,8 @@ import {
 type Params = { provider: string };
 
 /** One copy per provider for every rejected token (no oracle). */
-const APPLE_PROOF_MESSAGE = "No pudimos confirmar tu cuenta de Apple. Inténtalo de nuevo.";
-const GOOGLE_PROOF_MESSAGE = "No pudimos confirmar tu cuenta de Google. Inténtalo de nuevo.";
+const APPLE_PROOF_MESSAGE = "No pudimos confirmar tu cuenta de Apple. Vuelve a intentarlo.";
+const GOOGLE_PROOF_MESSAGE = "No pudimos confirmar tu cuenta de Google. Vuelve a intentarlo.";
 
 const LAST_WAY_IN_MESSAGE =
   "Tu correo es de «Ocultar mi correo» de Apple: si desconectas Apple, puede que no te lleguen los códigos. Conecta Google antes de desconectar Apple.";

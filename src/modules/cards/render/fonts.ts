@@ -8,13 +8,15 @@ import { KANJI_FAMILY, kanjiFontBytes } from "./kanji-font";
  *
  * These are the design-system families (sistema-diseno §3). The card <canvas>
  * needs REAL document fonts (next/font's hashed names are unusable there), so
- * root layout also loads them via a plain <link> stylesheet kept in sync here.
+ * the exporter injects their stylesheet on demand with `ensureCardFonts()`
+ * (src/components/card-fonts.ts, kept in sync here) — awaited BEFORE any
+ * `document.fonts.load/check`.
  */
 
 /** Space Mono — the exportable cards' thermal-printer ink. Deliberately NOT
  *  the UI's --font-mono (Red Hat Mono since 2026-08-28): a card is a printed
- *  object and keeps its own voice; the document <link> in layout.tsx is what
- *  keeps this family loadable by name for the canvas. */
+ *  object and keeps its own voice; the stylesheet `ensureCardFonts()` injects is
+ *  what keeps this family loadable by name for the canvas. */
 export const MONO = (size: number, bold = false) =>
   `${bold ? "700" : "400"} ${size}px "Space Mono", monospace`;
 
@@ -41,7 +43,7 @@ export const RHMONO = (size: number) => `400 ${size}px "Red Hat Mono", monospace
 export const KANJI = (size: number) => `400 ${size}px "${KANJI_FAMILY}", serif`;
 
 /**
- * The kanji isn't on Google Fonts' stylesheet in layout.tsx, so it's added to
+ * The kanji isn't on the Google Fonts stylesheet (`ensureCardFonts()`), so it's added to
  * `document.fonts` here, at module load, before any exporter's
  * `document.fonts.load(CARD_FONTS)` asks for it. Browser-only, once.
  */

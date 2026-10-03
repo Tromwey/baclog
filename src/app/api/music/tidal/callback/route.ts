@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/auth";
 import { checkRateLimit, clientIp } from "@/authz/api";
-import { MIGRATION_0034_LIVE } from "@/modules/music-export/live";
 import {
   iosAuthorizedUrl,
   iosFailedUrl,
@@ -41,7 +40,6 @@ export async function GET(request: NextRequest) {
 
   const rl = checkRateLimit(`tidal-callback-ip:${clientIp(request)}`, 30);
   if (!rl.ok) return redirect(request, fail("rate_limited"));
-  if (!MIGRATION_0034_LIVE) return redirect(request, fail("unavailable"));
 
   try {
     const sessionUser = client === "web" ? await getCurrentUser() : null;

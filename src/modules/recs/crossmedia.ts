@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -972,7 +973,7 @@ async function groundProposal(
     try {
       results = await unifiedSearch(query, proposal.targetMediaType);
     } catch (err) {
-      console.error("[crossmedia] grounding search failed:", err);
+      console.error("[crossmedia] grounding search failed:", redactedError(err));
       continue;
     }
     const match = results.find(

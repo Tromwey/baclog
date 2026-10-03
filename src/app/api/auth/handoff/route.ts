@@ -4,6 +4,7 @@ import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
 import { RATE_LIMIT_WRITES, checkRateLimit, clientIp } from "@/authz/api";
 import { parseHandoffTarget } from "@/authz/handoff";
+import { redactedError } from "@/authz/safe-log";
 
 /**
  * GET /api/auth/handoff?t=<jws>&to=<path> — the web end of the bearer →
@@ -107,7 +108,11 @@ export async function GET(request: NextRequest) {
       // the adapter THROWING — is a server fault: logged as an error, same
       // 302 for the browser.
       if (err.type !== "CredentialsSignin") {
-        console.error(`[auth/handoff] rid=${rid} reason=server_error type=${err.type}`, err.cause ?? err);
+        // `redactedError`, never the object: the cause can be a failed query
+        // with its bound values (`src/authz/safe-log.ts`).
+        console.error(
+          `[auth/handoff] rid=${rid} reason=server_error type=${err.type}\n${redactedError(err.cause ?? err)}`,
+        );
       }
       return landAt(request, "/login", rid);
     }

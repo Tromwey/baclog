@@ -16,7 +16,7 @@ export const POST = withApi<{ token: string }>(async (_req, { user, params }) =>
   const res = await joinParty(user.id, token);
   if (!res.ok) {
     if (res.error === "onboarding_required") {
-      throw new ApiError("forbidden", "Termina de crear tu cuenta para entrar a la fiesta.", {
+      throw new ApiError("forbidden", "Termina tu registro para entrar a la fiesta.", {
         reason: "onboarding_required",
       });
     }

@@ -1,4 +1,6 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { ExternalItem } from "./types";
 
 /**
@@ -39,7 +41,7 @@ export async function mostPlayedAlbums(
 ): Promise<ExternalItem[] | null> {
   const url = `https://rss.marketingtools.apple.com/api/v2/${storefront}/music/most-played/100/albums.json`;
   try {
-    const res = await fetch(url, { next: { revalidate: 60 * 60 } });
+    const res = await fetchWithTimeout(url, { next: { revalidate: 60 * 60 } });
     if (!res.ok) {
       console.error(`[catalog] Apple chart ${storefront} failed: ${res.status}`);
       return null;
@@ -81,7 +83,7 @@ export async function mostPlayedAlbums(
     }
     return out;
   } catch (err) {
-    console.error(`[catalog] Apple chart ${storefront} failed:`, err);
+    console.error(`[catalog] Apple chart ${storefront} failed:`, redactedError(err));
     return null;
   }
 }

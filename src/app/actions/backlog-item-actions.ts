@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   assertOwnsBacklog,
@@ -16,6 +16,7 @@ import {
   removeTitleFromBacklog,
   removeTitleFromLibrary,
 } from "@/modules/backlog/membership";
+import { clearVerdict, setObsessed } from "@/modules/backlog/state";
 
 type ItemStatus = (typeof itemStatusEnum.enumValues)[number];
 
@@ -115,38 +116,48 @@ export async function setVerdictAction(
   return { ok: true as const };
 }
 
-/** Quitar el veredicto (re-tap in the ⋯ menu) — back to "sin veredicto". */
-export async function clearVerdictAction(catalogItemId: string) {
-  const { item } = await assertOwnsUserItem(catalogItemId);
-  await db
-    .update(userItems)
-    .set({ verdict: null, verdictChangedAt: new Date() })
-    .where(and(eq(userItems.id, item.id), isNotNull(userItems.verdict)));
+/**
+ * What the two writes below answer. `reviewDeleted: true` (additive; ABSENT
+ * when there was no review) = this write turned the title's last reaction off
+ * and the caller's review of it was deleted in the same transaction (founder,
+ * 2026-10-01: a review exists only while `obsessed || verdict !== null`).
+ */
+export type ReactionOffResult = { ok: true; reviewDeleted?: true };
+
+function reactionOff(catalogItemId: string, reviewDeleted: boolean): ReactionOffResult {
   revalidatePath("/backlogs", "layout");
-  return { ok: true as const };
+  if (!reviewDeleted) return { ok: true };
+  // The item page pins the caller's own review: it is gone now.
+  revalidatePath(`/item/${catalogItemId}`);
+  return { ok: true, reviewDeleted: true };
+}
+
+/**
+ * Quitar el veredicto (re-tap in the ⋯ menu) — back to "sin veredicto". If
+ * the title isn't obsessed either, the review goes with it (`clearVerdict`,
+ * modules/backlog/state.ts: same batch, behind `titleStateLock`).
+ */
+export async function clearVerdictAction(catalogItemId: string): Promise<ReactionOffResult> {
+  const { user, item } = await assertOwnsUserItem(catalogItemId);
+  const { reviewDeleted } = await clearVerdict(user.id, item.catalogItemId);
+  return reactionOff(item.catalogItemId, reviewDeleted);
 }
 
 /**
  * Obsesión — me obsesiona (F3.7), the prominent detail gesture. `obsessedAt` is
  * stamped when set true and nulled when unset ("obsessedAt is null iff not
- * obsessed").
+ * obsessed"). Turning it OFF on a title with no verdict deletes the review
+ * (`setObsessed`, same batch).
  */
 export async function setObsessedAction(
   catalogItemId: string,
   obsessed: boolean,
-) {
-  const { item } = await assertOwnsUserItem(catalogItemId);
+): Promise<ReactionOffResult | { error: "invalid" }> {
+  const { user, item } = await assertOwnsUserItem(catalogItemId);
   const parsed = z.boolean().safeParse(obsessed);
   if (!parsed.success) return { error: "invalid" as const };
-  await db
-    .update(userItems)
-    .set({
-      obsessed: parsed.data,
-      obsessedAt: parsed.data ? new Date() : null,
-    })
-    .where(and(eq(userItems.id, item.id), ne(userItems.obsessed, parsed.data)));
-  revalidatePath("/backlogs", "layout");
-  return { ok: true as const };
+  const { reviewDeleted } = await setObsessed(user.id, item.catalogItemId, parsed.data);
+  return reactionOff(item.catalogItemId, reviewDeleted);
 }
 
 /**

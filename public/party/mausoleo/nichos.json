@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "nota": "Solo id y umbral: el título y el texto de cada nicho viven en el servidor (src/modules/party/lab-config.ts) y solo se mandan cuando el nicho está abierto.",
+  "nichos": [
+    {
+      "id": "n1",
+      "umbral": 6
+    },
+    {
+      "id": "n2",
+      "umbral": 15
+    },
+    {
+      "id": "n3",
+      "umbral": 30
+    },
+    {
+      "id": "n4",
+      "umbral": 50
+    },
+    {
+      "id": "n5",
+      "umbral": 75
+    },
+    {
+      "id": "n6",
+      "umbral": 100
+    }
+  ]
+}

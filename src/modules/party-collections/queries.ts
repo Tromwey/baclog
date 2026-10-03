@@ -15,8 +15,6 @@ import {
 import { songFactsOf } from "@/modules/catalog/song-map";
 import { notBlockedWith } from "@/modules/social/block-gate";
 import { getPartyAccess, type PartyAccess } from "./access";
-import { assertPartyLive } from "./errors";
-import { MIGRATION_0033_LIVE } from "./live";
 import {
   canAddNow,
   canBlockAuthor,
@@ -296,7 +294,6 @@ interface InviteTarget {
 /** Resolve an ACTIVE invite token to its party. Null for malformed, unknown
  *  or revoked — indistinguishable on purpose. */
 export async function resolveInviteToken(raw: unknown): Promise<InviteTarget | null> {
-  if (!MIGRATION_0033_LIVE) return null;
   const token = parseInviteToken(raw);
   if (!token) return null;
   const [row] = await db
@@ -321,17 +318,11 @@ export async function resolveInviteToken(raw: unknown): Promise<InviteTarget | n
  * malformed, unknown or revoked, AND when a signed-in viewer has a user block
  * with the host in either direction (same answer, no oracle). Songs never
  * carry `canRemove`/`canBlockAuthor` here (the member page does that).
- *
- * THROWS `PartyUnavailableError` while migration 0033 isn't live (contract
- * C1): the API answers 503 `unavailable` for EVERY token (so it's no oracle)
- * and /f/{token} shows "las fiestas llegan muy pronto." — not the dead-link
- * screen, which would tell a guest their valid link is dead.
  */
 export async function getInvitePreview(
   token: string,
   viewerId: string | null,
 ): Promise<InvitePreview | null> {
-  assertPartyLive();
   const target = await resolveInviteToken(token);
   if (!target) return null;
   const blockedWithHost =
@@ -390,12 +381,6 @@ export function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
  * up to 5 artwork URLs. No user ids, no private names.
  */
 export async function getPartySummaryByToken(token: string): Promise<PartySummary | null> {
-  if (!MIGRATION_0033_LIVE) {
-    // /party is configured (PARTY_PLAYLIST_TOKEN) but the tables aren't
-    // there yet: the card hides itself — say so in the log, once per call.
-    console.warn("[party] getPartySummaryByToken: migration 0033 is not live; the /party playlist card stays hidden");
-    return null;
-  }
   const target = await resolveInviteToken(token);
   if (!target) return null;
   const guest = alias(users, "guest");
@@ -452,7 +437,6 @@ export async function getPartySummaryByToken(token: string): Promise<PartySummar
  * way, C2) doesn't get the party.
  */
 export async function listPartiesForUser(userId: string): Promise<PartyCard[]> {
-  assertPartyLive();
   const host = alias(users, "host");
   const rows = await db
     .select({

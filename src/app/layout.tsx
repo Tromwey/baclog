@@ -16,9 +16,9 @@ const hanken = Hanken_Grotesk({
  * The UI's data voice (founder call, 2026-08-28): Red Hat Mono — humanist
  * terminals, same monospace DNA, without Space Mono's thermal-printer edge.
  * Space Mono is NOT gone: it stays the ink of the exportable cards
- * (receipt/ticket/J-card), loaded as a real document font via the
- * fonts.googleapis <link> below because the canvas rasterizer needs it by
- * family name, not CSS var.
+ * (receipt/ticket/J-card), loaded as a real document font by the exporters
+ * (`ensureCardFonts`, src/components/card-fonts.ts) because the canvas
+ * rasterizer needs it by family name, not CSS var.
  */
 const redHatMono = Red_Hat_Mono({
   subsets: ["latin"],
@@ -104,20 +104,12 @@ export default function RootLayout({
             bar) and (b) still collapses its toolbar on first touch,
             triggering iOS's 100dvh recalculation-on-first-scroll bug. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        {/* Card renderers draw these families onto <canvas>, so they must load
-            as real document fonts (next/font's hashed names are unusable
-            there). Kept in sync with CARD_FONTS in src/modules/cards. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font -- app-router root layout loads fonts app-wide; rule targets pages/_document */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400;1,6..72,500&family=Red+Hat+Mono:wght@400&display=swap"
-        />
+        {/* No Google Fonts <link> here any more. Only the card exporters need
+            those families as real document fonts (they draw on <canvas>, where
+            next/font's hashed names are unusable), so the stylesheet is asked
+            for by the exporters themselves — `ensureCardFonts` in
+            src/components/card-fonts.ts — instead of render-blocking every
+            page of the product on a third-party request. */}
       </head>
       <body className="min-h-full flex flex-col bg-bg text-text">
         {children}

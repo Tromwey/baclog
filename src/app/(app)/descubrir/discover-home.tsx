@@ -20,7 +20,7 @@ import type { TrendingTitle } from "@/modules/social/trending";
 import type { LibraryIndex } from "./library";
 import type { SeenWork } from "./recents";
 import type { SaveWork } from "./save-sheet";
-import { FormatPage } from "./format-pages";
+import { FormatPage, type CineFilters } from "./format-pages";
 import { DiscoverTop, KIND_SHORT, type KindTab } from "./kura-bits";
 
 /** One "recomendado para ti" card: a cached reco and the obsession behind it. */
@@ -103,6 +103,10 @@ export function DiscoverHome({
   kuradas,
   followedCollections,
   pending,
+  tab,
+  onTab: setTab,
+  cine,
+  onCine,
   onSearch,
   onSave,
   onOpen,
@@ -129,12 +133,17 @@ export function DiscoverHome({
   /** Showcased collections of people you follow (3a · "colecciones para ti"). */
   followedCollections: CollectionCard[];
   pending: boolean;
+  /** The format track and Cine's filters live in the screen: this component
+   *  unmounts while the search is open, and they have to survive that. */
+  tab: KindTab;
+  onTab: (k: KindTab) => void;
+  cine: CineFilters;
+  onCine: (next: CineFilters) => void;
   onSearch: () => void;
   onSave: (work: SaveWork) => void;
   onOpen: (work: SeenWork) => void;
   onRecomendar: () => void;
 }) {
-  const [tab, setTab] = useState<KindTab>("all");
   /** The recommendation card in view — what the page is tinted with. */
   const [active, setActive] = useState(0);
 
@@ -151,6 +160,8 @@ export function DiscoverHome({
         now={now}
         onSave={onSave}
         onOpen={onOpen}
+        cine={cine}
+        onCine={onCine}
       />
     );
   }

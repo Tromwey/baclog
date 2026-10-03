@@ -1,8 +1,8 @@
 "use client";
 
-import { unstable_rethrow } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { chooseServiceAndFinishAction } from "@/app/actions/onboarding-actions";
+import { attempt } from "@/components/kura/attempt";
 import { BACK_PATH } from "@/components/glyph-paths";
 import { CHIP_44 } from "@/components/kura/components";
 import {
@@ -44,24 +44,20 @@ export function ServiceStep({
   onBack: () => void;
 }) {
   const [choice, setChoice] = useState<ServiceId | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
 
-  async function finish() {
+  function finish() {
     if (!choice || busy) return;
-    setBusy(true);
     setFailed(false);
-    try {
-      const res = await chooseServiceAndFinishAction(choice);
-      // Success never gets here (the action redirects).
-      if (res && "error" in res) setFailed(true);
-    } catch (err) {
-      // A redirect signal is Next's, not a failure: let it through.
-      unstable_rethrow(err);
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
+    // In a transition: success never gets past the await — the action
+    // redirects, `attempt` lets Next's redirect signal through, and that
+    // rejection has to happen INSIDE a transition for the router to take it
+    // (awaited bare it surfaced as `Uncaught (in promise) NEXT_REDIRECT`).
+    startTransition(async () => {
+      const res = await attempt(() => chooseServiceAndFinishAction(choice));
+      if (!res.ok) setFailed(true);
+    });
   }
 
   return (
@@ -126,7 +122,7 @@ export function ServiceStep({
       </div>
 
       <div className="mt-auto flex flex-col gap-2.5 pt-8">
-        {failed && <FailLine>No se guardó. Toca Entrar de nuevo.</FailLine>}
+        {failed && <FailLine>No se pudo guardar. Toca Entrar de nuevo.</FailLine>}
         <FlowCta ready={choice !== null} busy={busy} onClick={finish}>
           {busy
             ? "Entrando…"

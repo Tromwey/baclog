@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import type { MediaType } from "@/modules/catalog/types";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import {
   BACK_PATH,
   BOOKMARK_PATH,
@@ -304,7 +304,7 @@ export function Seal({
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- our own /api/avatar route
-        <img src={src} alt="" draggable={false} className="h-full w-full object-cover" />
+        <img src={src} alt="" loading="lazy" decoding="async" draggable={false} className="h-full w-full object-cover" />
       ) : (
         `${a}${b}`.toLowerCase()
       )}

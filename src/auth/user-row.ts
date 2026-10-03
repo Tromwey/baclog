@@ -2,7 +2,6 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { mobileSessions, users } from "@/db/schema";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
 
 /**
  * The per-request user row, by id — the ONE field list both the cookie
@@ -29,18 +28,20 @@ const USER_COLUMNS = {
   // never on `Person` or any cross-user read.
   notifyRecap: users.notifyRecap,
   // Phase 4e — the "@x te sigue" push opt-out: an own preference (`Me`),
-  // never on `Person`. Raw SQL behind the 0029 switch: the column is
-  // commented out in schema.ts until the migration is applied (declaring it
-  // early breaks every `insert(users)`); before that it reads as its default.
-  notifyFollowers: MIGRATION_0029_LIVE
-    ? sql<boolean>`"user"."notify_followers"`
-    : sql<boolean>`true`,
+  // never on `Person`.
+  notifyFollowers: users.notifyFollowers,
   // 2026-09-27 (migration 0031) — who reads your followers/following lists:
   // an own preference here (Ajustes, `Me`); others see it only on the full
   // `Person` of a public profile. Needs 0031 applied BEFORE deploy.
   followListsVisibility: users.followListsVisibility,
   preferredService: users.preferredService,
   isMinor: users.isMinor,
+  // F2.2 — whether the age gate was passed (`birth_year` written by
+  // `completeOnboarding`). A BOOLEAN, never the year: it is what the
+  // server-side onboarding gate reads (`isOnboarded`) without `birthYear`
+  // ever joining this list. Table-qualified: this list is also selected
+  // inside joins (`loadUserForBearer`).
+  ageVerified: sql<boolean>`"user"."birth_year" is not null`,
   isFounder: users.isFounder,
   founderRank: users.founderRank,
   isAdmin: users.isAdmin,
@@ -58,6 +59,18 @@ export async function loadUserById(id: string) {
 }
 
 export type UserRow = NonNullable<Awaited<ReturnType<typeof loadUserById>>>;
+
+/**
+ * Onboarding is complete = the age gate was passed AND there is a name
+ * (`completeOnboarding` writes both, in one statement, for a 13+ account).
+ * `name` alone is NOT the signal: it used to be, and `PATCH /me { name }`
+ * set it without a birth year — a public, posting account that never met
+ * the F2.2 gate. Server-side gates (UGC and social writes) and `Me.
+ * onboardingComplete` read THIS; the apps and the web only route on it.
+ */
+export function isOnboarded(user: Pick<UserRow, "name" | "ageVerified">): boolean {
+  return user.name !== null && user.ageVerified === true;
+}
 
 /**
  * Phase 4b kill-switch — LIVE since 2026-09-24, when migration
@@ -137,8 +150,7 @@ export async function bumpTokenVersion(id: string): Promise<boolean> {
  * (no second query per request).
  *
  * `sessionOk`: true when the token carries no `sid` (a pre-4d bearer, valid
- * until its `exp` as before) or while `MIGRATION_0029_LIVE` is false (the
- * table may not exist; the gate behaves as in 4b); otherwise the joined row
+ * until its `exp` as before); otherwise the joined row
  * must exist and have no `revoked_at`. `sessionLastSeenAt` feeds the
  * throttled `last_seen_at` bump (null when there is nothing to bump).
  * `sid` must already be UUID-shaped (`verifyMobileToken` refuses anything
@@ -153,7 +165,7 @@ export async function loadUserForBearer(
   sessionOk: boolean;
   sessionLastSeenAt: Date | null;
 } | null> {
-  if (!sid || !MIGRATION_0029_LIVE) {
+  if (!sid) {
     const row = await loadUserWithTokenVersion(id);
     return row ? { ...row, sessionOk: true, sessionLastSeenAt: null } : null;
   }

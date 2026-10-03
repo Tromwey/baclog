@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
@@ -10,7 +10,15 @@ import {
   itemReviews,
   userItems,
 } from "@/db/schema";
+import {
+  CURSOR_ORDER,
+  cursorOf,
+  type CollectionCursor,
+  type CursorKeyName,
+  type PagedSort,
+} from "./collection-cursor";
 import type { MediaType } from "@/modules/cards/types";
+import type { CollectionItem } from "./collection-item";
 import { dominantHexes, groupDominantHexes } from "./palette";
 import { libraryMediaType } from "@/modules/catalog/library-media";
 import { notPartyBacklog } from "@/modules/party-collections/gate";
@@ -357,6 +365,208 @@ export async function getBacklogItems(backlogId: string) {
     )
     .where(eq(backlogItems.backlogId, backlogId))
     .orderBy(...MANUAL_ORDER);
+}
+
+/* ------------------------------------------------------------------------
+ * Colecciones largas (founder, ronda 8) — the collection's titles by pages.
+ * The cursor's shape and its validation live in the pure
+ * `./collection-cursor.ts`; here is only its SQL. Web-only:
+ * `/api/v1` keeps reading `getBacklogItemsWithState` whole.
+ * ---------------------------------------------------------------------- */
+
+/** `added_at` at MILLISECOND precision — what a JS Date (and so the cursor)
+ *  can carry. Ordering AND comparing on the same truncated value keeps two
+ *  rows inside one millisecond from being skipped or repeated across pages
+ *  (the same trap `social/queries.ts`' `olderThan` documents). */
+const ADDED_AT_MS = sql`date_trunc('milliseconds', ${backlogItems.addedAt})`;
+
+/** "Estado": obsesiona · gusta · completo · nada. JS twin: `stateRank`. */
+const STATE_RANK = sql`(case when ${userItems.obsessed} then 0 when ${userItems.verdict} = 'liked' then 1 when ${userItems.status} = 'completed' then 2 else 3 end)`;
+
+interface PageKey {
+  expr: SQL;
+  dir: "asc" | "desc";
+  /** Where NULLs read; omitted = the expression is never null. */
+  nulls?: "first" | "last";
+}
+
+/** The SQL of each key `CURSOR_ORDER` names. */
+const PAGE_KEY: Record<CursorKeyName, PageKey> = {
+  position: { expr: sql`${backlogItems.position}`, dir: "asc", nulls: "first" },
+  rank: { expr: STATE_RANK, dir: "asc" },
+  year: { expr: sql`${catalogItems.year}`, dir: "desc", nulls: "last" },
+  at: { expr: ADDED_AT_MS, dir: "desc" },
+  id: { expr: sql`${backlogItems.id}`, dir: "desc" },
+};
+
+function pageOrder(sort: PagedSort): SQL[] {
+  return CURSOR_ORDER[sort].map((name) => {
+    const k = PAGE_KEY[name];
+    return k.nulls
+      ? sql`${k.expr} ${sql.raw(k.dir)} nulls ${sql.raw(k.nulls)}`
+      : sql`${k.expr} ${sql.raw(k.dir)}`;
+  });
+}
+
+/**
+ * "Strictly after the cursor" as a lexicographic keyset over the order's
+ * keys: for each key, every earlier key EQUAL and this one past the cursor's
+ * value. NULLs follow each key's `nulls` side: after a null that reads first
+ * comes every non-null; after a null that reads last comes nothing (only the
+ * tie, which the next key breaks); after a value whose nulls read last come
+ * the nulls too.
+ */
+function afterCursor(c: CollectionCursor): SQL | undefined {
+  // The cursor's value for each key of the order: `lead` carries the integer
+  // ones in the order's own sequence.
+  let lead = 0;
+  const values: (SQL | null)[] = CURSOR_ORDER[c.sort].map((name) => {
+    // ::timestamp — a raw-sql Date param would carry the process's offset
+    // (learnings/2026-09-02; `social/queries.ts` `atParam`).
+    if (name === "at") return sql`${c.at.toISOString()}::timestamp`;
+    if (name === "id") return sql`${c.id}`;
+    const v = c.lead[lead++];
+    return v === null ? null : sql`${v}`;
+  });
+  const keys = CURSOR_ORDER[c.sort].map((name) => PAGE_KEY[name]);
+  const equal = (k: PageKey, v: SQL | null) => (v === null ? sql`${k.expr} is null` : sql`${k.expr} = ${v}`);
+  const past = (k: PageKey, v: SQL | null): SQL | null => {
+    if (v === null) return k.nulls === "first" ? sql`${k.expr} is not null` : null;
+    const cmp = k.dir === "asc" ? sql`${k.expr} > ${v}` : sql`${k.expr} < ${v}`;
+    return k.nulls === "last" ? sql`(${cmp} or ${k.expr} is null)` : cmp;
+  };
+  const branches: SQL[] = [];
+  keys.forEach((k, i) => {
+    const step = past(k, values[i]);
+    if (!step) return;
+    const ties = keys.slice(0, i).map((prev, j) => equal(prev, values[j]));
+    branches.push(sql`(${sql.join([...ties, step], sql` and `)})`);
+  });
+  return or(...branches);
+}
+
+/**
+ * One page of a collection in `sort`'s order, optionally only one format.
+ * `next` is the cursor of the page's last row when there is more (it reads
+ * `limit + 1` to know). Caller must have verified ownership
+ * (assertOwnsBacklog) first, and must have DECODED the cursor with
+ * `decodeCollectionCursor(raw, sort, backlogId)` — a cursor of another order
+ * would put its values under the wrong keys.
+ */
+export async function getBacklogItemsPage(
+  backlogId: string,
+  opts: { sort: PagedSort; format?: MediaType | null; after?: CollectionCursor | null; limit: number },
+) {
+  const rows = await db
+    .select({ ...backlogItemColumns, position: backlogItems.position })
+    .from(backlogItems)
+    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
+    .where(
+      and(
+        eq(backlogItems.backlogId, backlogId),
+        opts.format ? eq(catalogItems.mediaType, opts.format) : undefined,
+        opts.after ? afterCursor(opts.after) : undefined,
+      ),
+    )
+    .orderBy(...pageOrder(opts.sort))
+    .limit(opts.limit + 1);
+  const page = rows.slice(0, opts.limit);
+  const last = page[page.length - 1];
+  return {
+    rows: page,
+    next: rows.length > opts.limit && last ? cursorOf(opts.sort, last) : null,
+  };
+}
+
+/**
+ * How many titles of each format a collection holds — the header's count
+ * and the format pills, which can no longer come from `items.length` once
+ * the list is paged. Same joins as the page reader, so the two agree.
+ * Caller must have verified ownership first.
+ */
+export async function getBacklogKindCounts(backlogId: string): Promise<Record<MediaType, number>> {
+  const rows = await db
+    .select({ mediaType: libraryMediaType(), n: sql<number>`count(*)::int` })
+    .from(backlogItems)
+    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
+    .where(eq(backlogItems.backlogId, backlogId))
+    .groupBy(catalogItems.mediaType);
+  const counts: Record<MediaType, number> = { film: 0, series: 0, album: 0 };
+  for (const r of rows) if (r.mediaType in counts) counts[r.mediaType] = r.n;
+  return counts;
+}
+
+/** One title of a collection by its catalog id (the chosen cover, when it
+ *  sits past the first page), or null. Caller must have verified ownership. */
+export async function getBacklogItemByCatalog(backlogId: string, catalogItemId: string) {
+  const [row] = await db
+    .select(backlogItemColumns)
+    .from(backlogItems)
+    .innerJoin(catalogItems, eq(backlogItems.catalogItemId, catalogItems.id))
+    .innerJoin(
+      userItems,
+      and(
+        eq(userItems.userId, backlogItems.userId),
+        eq(userItems.catalogItemId, backlogItems.catalogItemId),
+      ),
+    )
+    .where(and(eq(backlogItems.backlogId, backlogId), eq(backlogItems.catalogItemId, catalogItemId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Which of the user's collections each of these titles lives in
+ * (`catalogItemId → backlogId[]`) — what "Mover a" needs so a move never
+ * duplicates and its undo never removes a membership that was already there.
+ * Scoped by `userId` in the query; the caller passes the session's.
+ */
+export async function getMembershipsOf(
+  userId: string,
+  catalogIds: readonly string[],
+): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  if (catalogIds.length === 0) return out;
+  const rows = await db
+    .select({ backlogId: backlogItems.backlogId, catalogItemId: backlogItems.catalogItemId })
+    .from(backlogItems)
+    .where(and(eq(backlogItems.userId, userId), inArray(backlogItems.catalogItemId, [...catalogIds])));
+  for (const r of rows) (out[r.catalogItemId] ??= []).push(r.backlogId);
+  return out;
+}
+
+/** A reader's row as the collection's body draws it (dates as ISO: it
+ *  crosses to the client). */
+export function toCollectionItem(it: BacklogItemWithCatalog): CollectionItem {
+  return {
+    backlogItemId: it.id,
+    catalogItemId: it.catalogItemId,
+    title: it.title,
+    byline: it.byline,
+    mediaType: it.mediaType,
+    year: it.year,
+    posterUrl: it.posterUrl,
+    paletteHex: it.paletteHex ?? null,
+    status: it.status,
+    verdict: it.verdict,
+    obsessed: it.obsessed,
+    releaseDate: it.releaseDate ? it.releaseDate.toISOString() : null,
+    addedAt: it.addedAt.toISOString(),
+  };
 }
 
 /**

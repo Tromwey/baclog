@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { BOOKMARK_PATH, PLAY_PATH } from "@/components/glyph-paths";
-import { CHIP_ART, Cover, SKELETON_PULSE } from "@/components/kura/components";
+import { CHIP_ART, Cover, GLASS_BUTTON, SKELETON_PULSE } from "@/components/kura/components";
 import { Fan } from "@/components/kura/fan";
 import { feedDockBand, feedSurface, feedTail, releaseLabel, tintCard } from "@/components/kura/tint";
 import type { UpcomingItem } from "@/components/upcoming-shelf";
@@ -63,34 +63,87 @@ import { DiscoverTop, type KindTab } from "./kura-bits";
 type Format = Exclude<KindTab, "all">;
 
 /** One shelf per key for the whole visit (they're the same for everyone),
- *  and the fetch in flight so flipping tabs never asks twice. */
+ *  and the fetch in flight so flipping tabs never asks twice. Only a shelf
+ *  that CAME BACK WITH TITLES is kept for the visit. The other two outcomes
+ *  are different things and read differently:
+ *   - the read FAILED (the action rejected: network, session, stale build) →
+ *     `failed`, and the page offers Reintentar;
+ *   - the read came back EMPTY → `data` is `[]` and the page says there is
+ *     nothing for now — no Reintentar pretending something broke. It is not
+ *     cached, so opening the page again asks again.
+ *  The shelf actions THROW when their provider is down, so an outage lands
+ *  in the first case, never in the second. */
 const shelfCache = new Map<string, unknown>();
 const inFlight = new Map<string, Promise<unknown>>();
 
-function useShelf<T>(key: string, load: () => Promise<T>): T | null {
+interface Shelf<T> {
+  /** null while loading (or after a failure — see `failed`); `[]` = the
+   *  shelf answered and has nothing. */
+  data: T[] | null;
+  failed: boolean;
+  retry: () => void;
+}
+
+function useShelf<T>(key: string, load: () => Promise<T[]>): Shelf<T> {
   const [, rerender] = useState(0);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const [emptyKey, setEmptyKey] = useState<string | null>(null);
+  const [tries, setTries] = useState(0);
+  // A NEW read of a key starts clean: coming back to a shelf that failed (or
+  // answered empty) earlier re-asks, and what paints meanwhile is the
+  // skeleton — not the old error. (State adjusted during render, React's
+  // pattern for "reset when a prop changes"; an effect would paint the stale
+  // error for a frame.)
+  const [readKey, setReadKey] = useState(key);
+  if (readKey !== key) {
+    setReadKey(key);
+    setFailedKey(null);
+    setEmptyKey(null);
+  }
   useEffect(() => {
     if (shelfCache.has(key)) return;
     let live = true;
-    let request = inFlight.get(key);
+    let request = inFlight.get(key) as Promise<T[]> | undefined;
     if (!request) {
       request = load().then((value) => {
-        shelfCache.set(key, value);
+        if (value.length > 0) shelfCache.set(key, value);
         return value;
       });
-      request.finally(() => inFlight.delete(key));
-      inFlight.set(key, request);
+      const mine = request;
+      const done = () => {
+        if (inFlight.get(key) === mine) inFlight.delete(key);
+      };
+      mine.then(done, done);
+      inFlight.set(key, mine);
     }
-    request.then(() => {
-      if (live) rerender((n) => n + 1);
-    });
+    request.then(
+      (value) => {
+        if (!live) return;
+        if (value.length === 0) setEmptyKey(key);
+        else rerender((n) => n + 1);
+      },
+      () => {
+        if (live) setFailedKey(key);
+      },
+    );
     return () => {
       live = false;
     };
-    // `load` is a fresh closure every render; the key is what identifies it.
+    // `load` is a fresh closure every render; the key (and a retry) is what
+    // identifies the read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  return (shelfCache.get(key) as T | undefined) ?? null;
+  }, [key, tries]);
+  const cached = (shelfCache.get(key) as T[] | undefined) ?? null;
+  const data = cached ?? (emptyKey === key ? [] : null);
+  return {
+    data,
+    failed: data === null && failedKey === key,
+    retry: () => {
+      setFailedKey(null);
+      setEmptyKey(null);
+      setTries((n) => n + 1);
+    },
+  };
 }
 
 const seenOf = (w: ShelfWork): SeenWork => ({
@@ -122,7 +175,18 @@ export interface FormatPageProps {
   now: number;
   onSave: (work: SaveWork) => void;
   onOpen: (work: SeenWork) => void;
+  /** Cine's two answers. Held by the screen (with `tab`), so opening the
+   *  search and cancelling it comes back to the same page, same filters. */
+  cine: CineFilters;
+  onCine: (next: CineFilters) => void;
 }
+
+export interface CineFilters {
+  time: CineTime;
+  mood: number | null;
+}
+
+export const CINE_DEFAULT: CineFilters = { time: 1, mood: null };
 
 export function FormatPage(props: FormatPageProps) {
   if (props.tab === "film") return <CinePage {...props} />;
@@ -269,6 +333,20 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="m-0 px-5 pt-[26px] text-[15px] leading-[1.5] text-text-2 text-pretty">{children}</p>;
 }
 
+/** The shelf didn't come (§patrones · error): what happened, and Reintentar in glass. */
+function ShelfFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-start gap-3.5 px-5 pt-[26px]">
+      <p className="m-0 text-[15px] leading-[1.5] text-text-2 text-pretty">
+        No pudimos traer {what}.
+      </p>
+      <button type="button" onClick={onRetry} className={GLASS_BUTTON}>
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
 /** A grid tile: the cover (with its pill / chip), italic title, mono meta. */
 function Tile({
   work,
@@ -354,9 +432,11 @@ function MetaGlyph({ d }: { d: string }) {
 /* -------------------------------------------------------------- 2a cine */
 
 function CinePage(props: FormatPageProps) {
-  const [time, setTime] = useState<CineTime>(1);
-  const [mood, setMood] = useState<number | null>(null);
-  const films = useShelf<CineWork[]>(`cine:${time}`, () => getCineShelfAction(time).catch(() => []));
+  const { time, mood } = props.cine;
+  const setTime = (next: CineTime) => props.onCine({ time: next, mood });
+  const setMood = (next: number | null) => props.onCine({ time, mood: next });
+  const shelf = useShelf<CineWork>(`cine:${time}`, () => getCineShelfAction(time));
+  const films = shelf.data;
   const fresh = (films ?? []).filter((f) => !props.owned.has(f.catalogItemId));
   const shown = fresh.filter((f) => inCineMood(mood, f)).slice(0, 12);
   const hexes =
@@ -376,18 +456,22 @@ function CinePage(props: FormatPageProps) {
         moods={CINE_MOODS}
         value={mood}
         label="Humor"
-        onPick={(i) => setMood((m) => (m === i ? null : i))}
+        onPick={(i) => setMood(mood === i ? null : i)}
       />
 
-      {films === null ? (
+      {shelf.failed ? (
+        <ShelfFailed what="películas" onRetry={shelf.retry} />
+      ) : films === null ? (
         <GridSkeleton />
       ) : shown.length === 0 ? (
         <Empty>
           {films.length === 0
-            ? "No pudimos traer películas ahora. Prueba en un rato."
+            ? "No hay películas de este tiempo por ahora. Prueba otra duración."
             : fresh.length === 0
             ? "Ya tienes todas las de este tiempo. Prueba otra duración."
-            : "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor."}
+            : mood === null
+              ? "Nada nuevo en ese tiempo por ahora. Prueba otra duración."
+              : "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor."}
         </Empty>
       ) : (
         <div className="grid grid-cols-2 gap-x-3 gap-y-6 px-5 pt-[26px]">
@@ -421,7 +505,8 @@ function CinePage(props: FormatPageProps) {
 
 function SeriesPage(props: FormatPageProps) {
   const [lens, setLens] = useState(1);
-  const all = useShelf<SeriesWork[]>("series", () => getMaratonShelfAction().catch(() => []));
+  const shelf = useShelf<SeriesWork>("series", () => getMaratonShelfAction());
+  const all = shelf.data;
   const shown = (all ?? [])
     .filter((s) => !props.owned.has(s.catalogItemId) && s.minutes <= SERIES_LENSES[lens].maxMinutes)
     .slice(0, 12);
@@ -430,23 +515,25 @@ function SeriesPage(props: FormatPageProps) {
 
   return (
     <Frame hexes={hexes} tab="series" onTab={props.onTab} onSearch={props.onSearch} kuradas={props.kuradas}>
-      <div className="flex flex-col gap-2 px-5 pb-[18px] pt-8">
-        <p className="m-0 font-display text-[34px] leading-none text-text">para maratonear</p>
-        <p className="m-0 text-[15px] leading-[1.5] text-text-2">Miniseries completas, sin temporadas por venir.</p>
-      </div>
+      <p className="m-0 px-5 pb-[18px] pt-8 font-display text-[34px] leading-none text-text">para maratonear</p>
       <div className="flex gap-2 px-5">
         {SERIES_LENSES.map((l, i) => (
           <ChoicePill key={l.label} label={l.label} sub={l.sub} on={lens === i} onClick={() => setLens(i)} />
         ))}
       </div>
 
-      {all === null ? (
+      {shelf.failed ? (
+        <ShelfFailed what="series" onRetry={shelf.retry} />
+      ) : all === null ? (
         <GridSkeleton />
       ) : shown.length === 0 ? (
         <Empty>
+          {/* Only point at the longer lens while there IS a longer one. */}
           {all.length === 0
-            ? "No pudimos traer series ahora. Prueba en un rato."
-            : "Nada tan corto por ahora. Prueba con un fin de semana."}
+            ? "No hay series para maratonear por ahora. Vuelve en unos días."
+            : lens < SERIES_LENSES.length - 1
+            ? `Nada tan corto por ahora. Prueba con ${SERIES_LENSES[lens + 1].label}.`
+            : "Nada nuevo para maratonear por ahora. Vuelve en unos días."}
         </Empty>
       ) : (
         <div className="grid grid-cols-2 gap-x-3 gap-y-6 px-5 pt-[26px]">
@@ -476,7 +563,8 @@ function SeriesPage(props: FormatPageProps) {
 /* ------------------------------------------------------------ 2c música */
 
 function MusicPage(props: FormatPageProps) {
-  const albums = useShelf<AlbumWork[]>("music", () => getMusicShelfAction().catch(() => []));
+  const shelf = useShelf<AlbumWork>("music", () => getMusicShelfAction());
+  const albums = shelf.data;
   const [picked, setPicked] = useState<number | null>(null);
   // Until a moment is picked, open on the first one the chart can fill.
   const fresh = albums?.filter((a) => !props.owned.has(a.catalogItemId)) ?? null;
@@ -497,12 +585,14 @@ function MusicPage(props: FormatPageProps) {
       <p className={`${QUESTION} pb-[18px] pt-8`}>¿para qué momento?</p>
       <MoodRow moods={MUSIC_MOODS} value={mood} label="Momento" onPick={setPicked} />
 
-      {albums === null ? (
+      {shelf.failed ? (
+        <ShelfFailed what="discos" onRetry={shelf.retry} />
+      ) : albums === null ? (
         <GridSkeleton square />
       ) : shown.length === 0 ? (
         <Empty>
           {albums.length === 0
-            ? "No pudimos traer discos ahora. Prueba en un rato."
+            ? "No hay discos aquí por ahora. Vuelve en unos días."
             : "Nada para ese momento en lo que más suena hoy. Prueba otro."}
         </Empty>
       ) : (
@@ -568,7 +658,8 @@ const FORMAT_WORD: Record<MediaType, string> = { film: "cine", series: "series",
 /**
  * "Colecciones Kuradas · Hechas a mano por nuestros expertos": 300-wide tinted
  * cards that snap sideways — the fan, the name, and the signature (the k seal
- * in miel, the curator and the format, the count in mono). A card opens the
+ * on glass — NOT honey: a seal per card would repeat the screen's one accent —
+ * the curator and the format, the count in mono). A card opens the
  * collection's public page.
  */
 function Kuradas({ cards, format }: { cards: KuradaCard[]; format: MediaType }) {
@@ -595,7 +686,7 @@ function Kuradas({ cards, format }: { cards: KuradaCard[]; format: MediaType }) 
             <span className="flex items-center gap-2">
               <span
                 aria-hidden
-                className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-honey font-serif text-[15px] font-medium italic leading-none text-bg"
+                className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-white/[0.16] font-serif text-[15px] font-medium italic leading-none text-text"
               >
                 k
               </span>

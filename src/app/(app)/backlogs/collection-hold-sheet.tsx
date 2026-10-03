@@ -4,6 +4,7 @@ import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { setBacklogPinnedAction } from "@/app/actions/backlog-actions";
+import { attempt } from "@/components/kura/attempt";
 import { Sheet, useSheetDismiss } from "@/components/ui";
 import { MenuGap, MenuRow } from "@/components/kura/sheet-parts";
 import {
@@ -109,8 +110,8 @@ function HoldMenu({
   function togglePin() {
     setFailed(false);
     startTransition(async () => {
-      const res = await setBacklogPinnedAction(c.id, !c.pinned).catch(() => null);
-      if (!res || !("ok" in res)) {
+      const res = await attempt(() => setBacklogPinnedAction(c.id, !c.pinned));
+      if (!res.ok) {
         setFailed(true);
         return;
       }
@@ -143,7 +144,7 @@ function HoldMenu({
       <MenuRow icon="trash" label="Borrar colección" onClick={() => onStep("delete")} />
       {failed && (
         <p className="px-2.5 pt-1 font-sans text-[13px] text-text-2">
-          No se pudo guardar. Revisa tu conexión e inténtalo otra vez.
+          No se pudo guardar. Revisa tu conexión y vuelve a intentarlo.
         </p>
       )}
     </div>

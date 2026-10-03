@@ -1,4 +1,6 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { env } from "@/lib/env";
 import { releaseDayInstant } from "./release";
 import { TMDB_GENRES, tmdbAuth } from "./tmdb";
@@ -69,7 +71,7 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | 
   const headers = tmdbAuth(url, env.TMDB_API_KEY);
 
   try {
-    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
+    const res = await fetchWithTimeout(url, { headers, next: { revalidate: 60 * 60 } });
     if (!res.ok) {
       console.error(`[catalog] TMDB discover/${kind} failed: ${res.status}`);
       return null;
@@ -97,7 +99,7 @@ export async function discoverVideo(q: DiscoverQuery): Promise<ExternalItem[] | 
         raw: r,
       }));
   } catch (err) {
-    console.error(`[catalog] TMDB discover/${kind} failed:`, err);
+    console.error(`[catalog] TMDB discover/${kind} failed:`, redactedError(err));
     return null;
   }
 }

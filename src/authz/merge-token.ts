@@ -61,22 +61,42 @@ export async function issueMergeToken(destinationId: string, sourceId: string): 
   return token;
 }
 
+/** A burned merge token: who to absorb, and how to un-burn it. */
+export interface RedeemedMergeToken {
+  sourceId: string;
+  /**
+   * Puts the single-use row back (same `jti`, same expiry) so the SAME token
+   * works again until its original `exp`. For ONE case: the merge did not
+   * happen because something transient failed (the database, the network) —
+   * not for a refusal (`MergeRaceError`, underage, source gone), where the
+   * proof must be given again. Without it a hiccup between "token burned"
+   * and "accounts merged" cost the user a whole new code by mail. Idempotent
+   * (`onConflictDoNothing`) and it never extends the token's life.
+   */
+  restore(): Promise<void>;
+}
+
 /**
  * Verify + BURN a merge token for `destinationId` (the bearer's user).
- * Returns the source id, or null on ANY failure — bad signature, other
- * audience, expired, missing claim, `sub` ≠ the caller, `src` = `sub`,
- * already used or never minted. The caller answers one error for all of
- * them. The row is burned only after the claims check out, so a token
- * someone else presents (wrong `sub`) does not kill the owner's ticket.
- * Throws only if the database does.
+ * Returns the source id (and a `restore`), or null on ANY failure — bad
+ * signature, other audience, expired, missing claim, `sub` ≠ the caller,
+ * `src` = `sub`, already used or never minted. The caller answers one error
+ * for all of them. The row is burned only after the claims check out, so a
+ * token someone else presents (wrong `sub`) does not kill the owner's
+ * ticket. Throws only if the database does.
+ *
+ * Burn-first on purpose (the merge runs in its own `db.batch`; the DELETE is
+ * what makes two concurrent requests with one token race on one row and
+ * exactly one proceed). `restore` covers the failure in between.
  */
-export async function consumeMergeToken(
+export async function redeemMergeToken(
   token: string,
   destinationId: string,
-): Promise<string | null> {
+): Promise<RedeemedMergeToken | null> {
   if (!token || token.length > 2048) return null;
   let src: string;
   let jti: string;
+  let exp: number;
   try {
     const { payload } = await jwtVerify(token, secretKey(), {
       algorithms: ["HS256"],
@@ -90,20 +110,32 @@ export async function consumeMergeToken(
     if (typeof payload.src !== "string" || !payload.src || payload.src === destinationId) {
       return null;
     }
+    if (typeof payload.exp !== "number") return null;
     src = payload.src;
     jti = payload.jti;
+    exp = payload.exp;
   } catch {
     return null;
   }
+  const identifier = `${MERGE_TOKEN_IDENTIFIER_PREFIX}${jti}`;
   const consumed = await db
     .delete(verificationTokens)
     .where(
       and(
-        eq(verificationTokens.identifier, `${MERGE_TOKEN_IDENTIFIER_PREFIX}${jti}`),
+        eq(verificationTokens.identifier, identifier),
         eq(verificationTokens.token, jti),
         gt(verificationTokens.expires, new Date()),
       ),
     )
     .returning({ identifier: verificationTokens.identifier });
-  return consumed.length === 1 ? src : null;
+  if (consumed.length !== 1) return null;
+  return {
+    sourceId: src,
+    restore: async () => {
+      await db
+        .insert(verificationTokens)
+        .values({ identifier, token: jti, expires: new Date(exp * 1000) })
+        .onConflictDoNothing();
+    },
+  };
 }

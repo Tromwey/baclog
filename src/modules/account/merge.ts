@@ -3,7 +3,6 @@ import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { identityScrubStatements } from "./scrub";
 import { STATUS_RANK } from "./merge-coverage";
 
@@ -91,23 +90,16 @@ function statusRankSql(col: string): SQL {
  * `backlog_collaborator` (a guest of a party) and `party_song` (who put each
  * song). Runs AFTER the backlogs moved, so "D's own collection" already
  * includes O's parties. `blocked_at`, `left_at` and `party_song` are migration 0033's
- * (collision: a block is never lost; the merged row is "left" only if BOTH were):
- * before it is live only the plain membership move runs (the table itself
- * is 0030's).
+ * (collision: a block is never lost; the merged row is "left" only if BOTH were).
  */
 function collaboratorStatements(D: SQL, O: SQL): BatchItem<"pg">[] {
-  const out: BatchItem<"pg">[] = [];
-  if (MIGRATION_0033_LIVE) {
-    out.push(
-      db.execute(sql`update "backlog_collaborator" as d set
-          created_at = least(d.created_at, o.created_at),
-          blocked_at = coalesce(d.blocked_at, o.blocked_at),
-          left_at = case when d.left_at is null or o.left_at is null then null else greatest(d.left_at, o.left_at) end
-        from "backlog_collaborator" as o
-        where d.user_id = ${D} and o.user_id = ${O} and o.backlog_id = d.backlog_id`),
-    );
-  }
-  out.push(
+  return [
+    db.execute(sql`update "backlog_collaborator" as d set
+        created_at = least(d.created_at, o.created_at),
+        blocked_at = coalesce(d.blocked_at, o.blocked_at),
+        left_at = case when d.left_at is null or o.left_at is null then null else greatest(d.left_at, o.left_at) end
+      from "backlog_collaborator" as o
+      where d.user_id = ${D} and o.user_id = ${O} and o.backlog_id = d.backlog_id`),
     db.execute(sql`delete from "backlog_collaborator" as o
       where o.user_id = ${O}
         and exists (select 1 from "backlog_collaborator" d where d.user_id = ${D} and d.backlog_id = o.backlog_id)`),
@@ -115,11 +107,8 @@ function collaboratorStatements(D: SQL, O: SQL): BatchItem<"pg">[] {
     db.execute(sql`delete from "backlog_collaborator" as c
       where c.user_id = ${D}
         and exists (select 1 from "backlog" b where b.id = c.backlog_id and b.user_id = ${D})`),
-  );
-  if (MIGRATION_0033_LIVE) {
-    out.push(db.execute(sql`update "party_song" set added_by_user_id = ${D} where added_by_user_id = ${O}`));
-  }
-  return out;
+    db.execute(sql`update "party_song" set added_by_user_id = ${D} where added_by_user_id = ${O}`),
+  ];
 }
 
 export async function mergeAccounts(destinationId: string, sourceId: string): Promise<void> {
@@ -150,6 +139,14 @@ export async function mergeAccounts(destinationId: string, sourceId: string): Pr
     db.execute(sql`update "backlog" set is_public = false, show_on_profile = false
       where user_id = ${O}
         and exists (select 1 from "user" where id = ${O} and not (is_public and username is not null))`),
+    // One pinned collection per account (`backlog_one_pinned_per_user`, the
+    // partial unique on user_id WHERE pinned_at IS NOT NULL): if BOTH accounts
+    // have one, the move below would raise 23505 and abort the whole merge.
+    // The destination's pin wins (it is the account that survives); O's is
+    // kept only when D has none.
+    db.execute(sql`update "backlog" set pinned_at = null
+      where user_id = ${O} and pinned_at is not null
+        and exists (select 1 from "backlog" d where d.user_id = ${D} and d.pinned_at is not null)`),
     db.execute(sql`update "backlog" set user_id = ${D} where user_id = ${O}`),
     db.execute(sql`update "backlog_item" set user_id = ${D} where user_id = ${O}`),
 

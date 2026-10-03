@@ -1,5 +1,6 @@
 "use server";
 
+import { redactedError } from "@/authz/safe-log";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertOwnsBacklog } from "@/authz";
@@ -30,9 +31,7 @@ const completeSchema = z.object({
   hasSpoiler: z.boolean(),
 });
 
-export type CompleteResult =
-  | { ok: true }
-  | { error: "invalid" | "link" | "locked" | "failed" };
+export type CompleteResult = SaveReviewResult;
 
 /**
  * Publicar: status → completed, then the chosen reaction, then the review if
@@ -66,7 +65,7 @@ export async function completeItemAction(input: {
       await setObsessedAction(catalogItemId, false);
     }
   } catch (err) {
-    console.error("[08] complete failed:", err);
+    console.error("[08] complete failed:", redactedError(err));
     return { error: "failed" };
   }
 

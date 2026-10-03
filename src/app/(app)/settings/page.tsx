@@ -3,7 +3,7 @@ import { SITE_HOST } from "@/lib/site";
 import { requireUser } from "@/auth";
 import { getUserPalette } from "@/modules/backlog/queries";
 import { getObsessions } from "@/modules/backlog/profile-stats";
-import { signOutAction } from "@/app/actions/account-actions";
+import { SignOutForm } from "@/components/sign-out-form";
 import { BackButton } from "@/components/ui";
 import { CHEVRON_RIGHT_PATH } from "@/components/glyph-paths";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -129,14 +129,14 @@ export default async function SettingsPage() {
         )}
 
         <div className="flex flex-col items-center gap-1 pt-1">
-          <form action={signOutAction}>
+          <SignOutForm>
             <button
               type="submit"
               className="flex min-h-11 items-center text-[16px] font-medium text-text transition-opacity active:opacity-60"
             >
               Cerrar sesión
             </button>
-          </form>
+          </SignOutForm>
           <DeleteAccount confirmWord={user.username ?? user.email} />
           <Link
             href="/creditos"

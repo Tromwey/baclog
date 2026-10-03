@@ -1,9 +1,9 @@
 import "server-only";
 import { cache } from "react";
-import { count, eq, sql } from "drizzle-orm";
+import { count, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { recapSends, reports, users } from "@/db/schema";
-import { previousMonthKey } from "@/modules/backlog/recap";
+import { hadActivityIn, previousMonthKey } from "@/modules/backlog/recap";
 import { BURN_BAD_USD, BURN_WARN_USD, fixedMonthlyCostUsd } from "./costs";
 import {
   TRACTION_GATE_GOAL,
@@ -116,42 +116,75 @@ function llmLatencyCheck(w: { total: number; p95Ms: number | null }): HealthChec
   };
 }
 
-async function recapCronCheck(): Promise<HealthCheck> {
+/** The cron's schedule (`vercel.json` `0 9 1-3 * *`): days 1–3, 09:00 UTC. */
+const RECAP_CRON_HOUR_UTC = 9;
+const RECAP_CRON_LAST_DAY = 3;
+
+/**
+ * Did the monthly recap go out? Measured against the cron's REAL audience
+ * (`notify_recap` + activity in the recapped month — the same `hadActivityIn`
+ * the cron's query uses), not against "there are users": a month in which
+ * nobody was active sends nothing, and that is not an incident. The cron
+ * runs on days 1, 2 and 3 (a run cut short is resumed the next day), so
+ * "nothing yet" is only a PROBLEMA once the day-3 run is behind us.
+ * `now` is a parameter for the DB harness.
+ */
+export async function recapCronCheck(now: Date = new Date()): Promise<HealthCheck> {
   const base = { id: "recap-cron", name: "Cron de recap" };
-  const now = new Date();
   // The cron stamps recap_send rows with the month it RECAPS — the PREVIOUS
   // one (cron/recap/route.ts uses previousMonthKey). Querying the current
   // month here would be a permanent false PROBLEMA.
   const era = previousMonthKey(now);
-  if (now.getUTCDate() === 1) {
-    return { ...base, status: "none", value: "corre hoy · día 1, 9:00 UTC" };
+  const day = now.getUTCDate();
+  const hour = now.getUTCHours();
+  const ranToday = hour > RECAP_CRON_HOUR_UTC; // a full hour of slack for the platform's trigger
+  if (day === 1 && !ranToday) {
+    return { ...base, status: "none", value: `corre hoy · días 1–${RECAP_CRON_LAST_DAY}, 9:00 UTC (recap de ${era})` };
   }
-  const [[sends], [eligible]] = await Promise.all([
-    db
-      .select({ c: count() })
-      .from(recapSends)
-      .where(eq(recapSends.eraKey, era)),
-    db
-      .select({ c: count() })
-      .from(users)
-      .where(sql`${users.createdAt} < date_trunc('month', now())`),
-  ]);
-  if ((eligible?.c ?? 0) === 0) {
-    return { ...base, status: "none", value: "aún sin usuarios que recapear" };
+  const sentRow = sql`exists (select 1 from ${recapSends} where ${recapSends.userId} = ${users.id} and ${recapSends.eraKey} = ${era} and ${recapSends.emailSentAt} is not null)`;
+  const [row] = await db
+    .select({
+      sent: sql<number>`count(*) filter (where ${sentRow})`.mapWith(Number),
+      pending: sql<number>`count(*) filter (where ${users.notifyRecap} and ${hadActivityIn(users.id, era)} and not ${sentRow})`.mapWith(Number),
+    })
+    .from(users);
+  const sent = row?.sent ?? 0;
+  const pending = row?.pending ?? 0;
+  // Runs still to come this month (today's counts once 9:00 UTC has passed).
+  const windowOpen = day < RECAP_CRON_LAST_DAY || (day === RECAP_CRON_LAST_DAY && !ranToday);
+  const runsLeft = windowOpen ? `quedan runs hasta el día ${RECAP_CRON_LAST_DAY}` : "";
+
+  if (pending === 0) {
+    return sent > 0
+      ? { ...base, status: "ok", value: `corrió · ${sent} recaps de ${era}` }
+      : { ...base, status: "none", value: `nadie con actividad en ${era} · nada que enviar` };
   }
-  if ((sends?.c ?? 0) === 0) {
+  if (windowOpen) {
+    return sent > 0
+      ? { ...base, status: "ok", value: `en curso · ${sent} enviados, ${pending} pendientes de ${era} · ${runsLeft}` }
+      : {
+          ...base,
+          status: "warn",
+          value: `día ${day}: aún sin envíos (${pending} pendientes de ${era}) · ${runsLeft}`,
+          action: "Si el run de hoy ya pasó, revisa CRON_SECRET y el estado del cron /api/cron/recap",
+          where: "Vercel › Settings › Cron Jobs",
+        };
+  }
+  if (sent === 0) {
     return {
       ...base,
       status: "bad",
-      value: `no corrió el día 1 (recap de ${era})`,
+      value: `no envió nada en los días 1–${RECAP_CRON_LAST_DAY} (recap de ${era}, ${pending} pendientes)`,
       action: "Revisa CRON_SECRET y el estado del cron /api/cron/recap",
       where: "Vercel › Settings › Cron Jobs",
     };
   }
   return {
     ...base,
-    status: "ok",
-    value: `corrió · ${sends!.c} recaps de ${era}`,
+    status: "warn",
+    value: `${sent} enviados, ${pending} sin enviar de ${era} tras los días 1–${RECAP_CRON_LAST_DAY}`,
+    action: "Busca «[cron/recap]» en los logs: fallos de envío o runs cortados por tiempo",
+    where: "Vercel › Logs",
   };
 }
 

@@ -1,4 +1,4 @@
-import { withApi } from "@/authz/api";
+import { requireOnboarded, withApi } from "@/authz/api";
 import { reportReview } from "@/modules/reports/write";
 import { noContent, readJson, uuidOrNull } from "../../../_lib/http";
 import { ReviewReportBodySchema } from "../../../_lib/schemas";
@@ -15,6 +15,9 @@ import { ReviewReportBodySchema } from "../../../_lib/schemas";
  * vary with the id). Rules in `modules/reports/write.ts`.
  */
 export const POST = withApi<{ reviewId: string }>(async (request, { user, params }) => {
+  // F2.2: needs a finished onboarding (403 `onboarding_required`, the
+  // caller's own row only — no oracle on the review).
+  requireOnboarded(user);
   const body = await readJson(request, ReviewReportBodySchema);
   const reviewId = uuidOrNull(params.reviewId);
   if (reviewId) await reportReview(user.id, reviewId, body);

@@ -1,4 +1,3 @@
-import { MIGRATION_0034_LIVE } from "./live";
 import { serviceLabel, SERVICE_FAILED_MESSAGE } from "./rules";
 import type { MusicProvider } from "./types";
 
@@ -23,17 +22,6 @@ export class MusicExportError extends Error {
     this.code = code;
     this.reason = reason;
     this.retryAfterSeconds = retryAfterSeconds;
-  }
-}
-
-/** Migration 0034 not applied yet → 503 `unavailable` (reason `migration`). */
-export function assertMusicExportLive(): void {
-  if (!MIGRATION_0034_LIVE) {
-    throw new MusicExportError(
-      "unavailable",
-      "migration",
-      "Exportar a otras apps todavía no está disponible. Inténtalo más tarde.",
-    );
   }
 }
 

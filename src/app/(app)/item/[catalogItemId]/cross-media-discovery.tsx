@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { SITE_URL } from "@/lib/site";
 import {
@@ -18,6 +18,18 @@ import type { DoubleFeatureData } from "@/modules/cards/types";
 import { extractPalette } from "@/modules/cards/palette";
 import { MEDIA_TYPE_LABEL } from "@/modules/catalog/types";
 import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
+import { Sheet, useSheetDismiss } from "@/components/ui/sheet";
+import {
+  ChoiceRow,
+  MenuRow,
+  SHEET_FIELD,
+  SHEET_SOLID,
+  SheetTitle,
+} from "@/components/kura/sheet-parts";
+import { GLASS_BUTTON } from "@/components/kura/components";
+import { KIcon } from "@/components/kura/icons";
+import { attempt, WRITE_FAILED } from "@/components/kura/attempt";
+import { ensureCardFonts } from "@/components/card-fonts";
 
 /**
  * F3.5.5 in-app discovery (FRAME B). Surfaces one cross-media reco on a loved
@@ -89,8 +101,8 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [backlogs, setBacklogs] = useState(props.backlogs);
   const [sel, setSel] = useState<string | null>(defaultBacklog?.id ?? null);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
+  // What the last write said when it didn't land: never a silent no-op.
+  const [failed, setFailed] = useState<null | "accept" | "sheet">(null);
   const shareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -99,28 +111,38 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
     };
   }, []);
 
+  // Warm the export's fonts on mount: `navigator.share` needs the tap's user
+  // activation, which a cold stylesheet fetch inside `share` could outlive.
+  useEffect(() => {
+    void ensureCardFonts();
+  }, []);
+
   const accept = useCallback(async () => {
     if (busy) return;
     setBusy(true);
-    try {
-      const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
-      const res = await acceptRecoAction({
+    setFailed(null);
+    // The palette is a nicety (on-device, from the cover): a cover that won't
+    // decode must not cost the save.
+    const paletteHex = reco.posterUrl
+      ? await extractPalette(reco.posterUrl).catch(() => [] as string[])
+      : [];
+    const res = await attempt(() =>
+      acceptRecoAction({
         seedCatalogItemId: seed.catalogItemId,
         targetCatalogItemId: reco.catalogItemId,
         paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
-      });
-      if ("error" in res) return;
-      setStatus("accepted");
-      setAddedTo(res.backlogName);
-      setSel(res.backlogId);
-      setToast(true);
-      router.refresh();
-    } catch {
-      // Action threw (e.g. expired session, FK violation) — swallow so the
-      // buttons re-enable via finally instead of getting stuck disabled.
-    } finally {
-      setBusy(false);
+      }),
+    );
+    setBusy(false);
+    if (!res.ok) {
+      setFailed("accept");
+      return;
     }
+    setStatus("accepted");
+    setAddedTo(res.value.backlogName);
+    setSel(res.value.backlogId);
+    setToast(true);
+    router.refresh();
   }, [busy, reco.catalogItemId, reco.posterUrl, seed.catalogItemId, router]);
 
   const dismiss = useCallback(() => {
@@ -141,7 +163,9 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
     ]);
     const palette = [...seedPalette, ...recoPalette].filter(Boolean);
 
-    // Ensure the brand fonts are loaded before rasterizing.
+    // Ensure the brand fonts are loaded before rasterizing: the families'
+    // stylesheet first (card-fonts.ts), then each face.
+    await ensureCardFonts();
     await Promise.all(CARD_FONTS.map((f) => document.fonts.load(f))).catch(() => {});
 
     const data: DoubleFeatureData = {
@@ -198,48 +222,56 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
     setSheetOpen(true);
   }, [defaultBacklog?.id]);
 
-  const applySheet = useCallback(async () => {
-    if (!sel || busy) return;
-    setBusy(true);
-    try {
-      const paletteHex = reco.posterUrl ? await extractPalette(reco.posterUrl) : [];
-      const res = await acceptRecoToBacklogAction({
-        backlogId: sel,
-        seedCatalogItemId: seed.catalogItemId,
-        targetCatalogItemId: reco.catalogItemId,
-        paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
-      });
-      if ("error" in res) return;
+  /** The sheet's solid action. Resolves true when the title landed. */
+  const applySheet = useCallback(
+    async (backlogId: string): Promise<boolean> => {
+      if (busy) return false;
+      setBusy(true);
+      setFailed(null);
+      const paletteHex = reco.posterUrl
+        ? await extractPalette(reco.posterUrl).catch(() => [] as string[])
+        : [];
+      const res = await attempt(() =>
+        acceptRecoToBacklogAction({
+          backlogId,
+          seedCatalogItemId: seed.catalogItemId,
+          targetCatalogItemId: reco.catalogItemId,
+          paletteHex: paletteHex.length > 0 ? paletteHex : undefined,
+        }),
+      );
+      setBusy(false);
+      if (!res.ok) {
+        setFailed("sheet");
+        return false;
+      }
       setStatus("accepted");
-      setAddedTo(res.backlogName);
+      setAddedTo(res.value.backlogName);
+      setSel(backlogId);
       setToast(true);
-      setSheetOpen(false);
       router.refresh();
-    } catch {
-      // Action threw — re-enable via finally rather than stay stuck disabled.
-    } finally {
-      setBusy(false);
-    }
-  }, [sel, busy, reco.catalogItemId, reco.posterUrl, seed.catalogItemId, router]);
+      return true;
+    },
+    [busy, reco.catalogItemId, reco.posterUrl, seed.catalogItemId, router],
+  );
 
-  const createBacklog = useCallback(async () => {
-    const name = newName.trim();
-    if (!name || busy) return;
-    setBusy(true);
-    try {
-      const res = await createBacklogAction({ name });
-      if ("error" in res) return;
-      const b: DiscoveryBacklog = { id: res.id, name, itemCount: 0 };
-      setBacklogs((prev) => [b, ...prev]);
-      setSel(res.id);
-      setCreating(false);
-      setNewName("");
-    } catch {
-      // Action threw — re-enable via finally rather than stay stuck disabled.
-    } finally {
+  /** "Nueva colección" inside the sheet. Resolves the new row, or null. */
+  const createBacklog = useCallback(
+    async (name: string): Promise<DiscoveryBacklog | null> => {
+      if (busy) return null;
+      setBusy(true);
+      setFailed(null);
+      const res = await attempt(() => createBacklogAction({ name }));
       setBusy(false);
-    }
-  }, [newName, busy]);
+      if (!res.ok) {
+        setFailed("sheet");
+        return null;
+      }
+      const b: DiscoveryBacklog = { id: res.value.id, name, itemCount: 0 };
+      setBacklogs((prev) => [b, ...prev]);
+      return b;
+    },
+    [busy],
+  );
 
   const accepted = status === "accepted";
   const dismissed = status === "dismissed";
@@ -261,7 +293,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       )}
 
       {/* Hook */}
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
         {narrative.hookEyebrow}
       </p>
       <p className="mt-2 font-display text-[22px] font-bold leading-tight tracking-[-0.01em] text-text">
@@ -274,7 +306,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       >
         <span
           aria-hidden
-          className={`pointer-events-none absolute font-display font-extrabold leading-none text-accent/[0.08] ${
+          className={`pointer-events-none absolute font-display font-extrabold leading-none text-text/[0.05] ${
             isPage ? "text-[200px]" : "text-[130px]"
           }`}
         >
@@ -301,7 +333,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
           <p className="mt-0.5">{[seed.byline, seed.year].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="flex-1 text-right">
-          <p className="tracking-[0.14em] text-accent">B · {MEDIA_TYPE_LABEL[reco.type]}</p>
+          <p className="tracking-[0.14em] text-text-3">B · {MEDIA_TYPE_LABEL[reco.type]}</p>
           <p className="mt-1 font-serif text-[15px] italic tracking-normal text-text">
             {reco.title}
           </p>
@@ -312,13 +344,13 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
       {/* Hero narrative */}
       <div className="mt-5 border-t border-line pt-4">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-2">
             {narrative.resultEyebrow}
           </p>
           {props.linkKind && (
             <p
               className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] ${
-                props.linkKind === "factual" ? "text-accent" : "text-text-3"
+                props.linkKind === "factual" ? "text-text" : "text-text-3"
               }`}
             >
               {props.linkKind === "factual" ? "conexión real" : "misma vibra"}
@@ -329,7 +361,7 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
           <span className="font-serif font-normal italic">{reco.title}</span>
           {reco.byline ? (
             <>
-              , de <span className="text-accent">{reco.byline}</span>.
+              , de {reco.byline}.
             </>
           ) : (
             "."
@@ -369,10 +401,21 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         </button>
       </div>
 
+      {failed === "accept" && (
+        <p role="alert" className="mt-3.5 flex items-center gap-2 text-[14px] leading-[1.4] text-text-2">
+          <KIcon name="warning" size={16} className="flex-none text-text" />
+          {WRITE_FAILED}
+        </p>
+      )}
+
       {dismissed && (
-        <p className="mt-3.5 text-center font-mono text-[11px] tracking-[0.08em] text-text-3">
+        <p className="mt-1 text-center font-mono text-[11px] tracking-[0.08em] text-text-3">
           DESCARTADO ·{" "}
-          <button onClick={reset} className="text-accent transition-opacity active:opacity-60">
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex min-h-11 items-center px-2 text-text transition-opacity active:opacity-60"
+          >
             DESHACER
           </button>
         </p>
@@ -385,16 +428,17 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
       {/* Accept toast */}
       {toast && addedTo && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3 text-sm">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 py-1 pl-4 pr-1 text-sm">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-bg">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-text text-xs font-bold text-bg">
               ✓
             </span>
             Guardado en <b className="font-semibold">{addedTo}</b>
           </span>
           <button
+            type="button"
             onClick={openSheet}
-            className="font-mono text-[11px] tracking-[0.08em] text-accent transition-opacity active:opacity-60"
+            className="inline-flex min-h-11 flex-none items-center px-3 font-mono text-[11px] tracking-[0.08em] text-text transition-opacity active:opacity-60"
           >
             CAMBIAR
           </button>
@@ -403,16 +447,17 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
 
       {/* Share toast (download fallback) */}
       {shareToast && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3 text-sm">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface-2 py-1 pl-4 pr-1 text-sm">
           <span className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-soft text-xs text-accent">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--glass-bg)] text-xs text-text">
               ↗
             </span>
-            Tarjeta lista — <b className="font-semibold text-accent">sin portadas</b>
+            Tarjeta lista — <b className="font-semibold text-text">sin portadas</b>
           </span>
           <button
+            type="button"
             onClick={() => setShareToast(false)}
-            className="font-mono text-[11px] tracking-[0.08em] text-text-2 transition-opacity active:opacity-60"
+            className="inline-flex min-h-11 flex-none items-center px-3 font-mono text-[11px] tracking-[0.08em] text-text-2 transition-opacity active:opacity-60"
           >
             OK
           </button>
@@ -428,98 +473,140 @@ export function CrossMediaDiscovery(props: CrossMediaDiscoveryProps) {
         aria-hidden
       />
 
-      {/* Bottom-sheet "guardar en" (Nuevo / Recientes, MIXTO) */}
+      {/* "guardar en" — the app's one sheet: portaled over the dock, a real
+          dialog (Escape, focus in and back to "Cambiar"). */}
       {sheetOpen && (
-        <div
-          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60"
-          onClick={() => setSheetOpen(false)}
+        <Sheet
+          onClose={() => {
+            setSheetOpen(false);
+            setFailed((f) => (f === "sheet" ? null : f));
+          }}
+          label={`Guardar ${reco.title}`}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-t-2xl bg-surface-1 p-5 pb-8"
-          >
-            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-line" />
-            <div className="flex items-baseline justify-between">
-              <h2 className="font-display text-xl font-bold tracking-[-0.01em]">
-                guardar en
-              </h2>
-              <span className="font-mono text-[10px] tracking-[0.1em] text-text-3">
-                MIXTO · CUALQUIER MEDIO
-              </span>
-            </div>
-
-            {/* Nueva colección */}
-            {creating ? (
-              <div className="mt-4 flex gap-2">
-                <input
-                  value={newName}
-                  maxLength={COLLECTION_NAME_MAX}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="nombre de la colección"
-                  className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3.5 py-3 outline-none focus:bg-surface-3"
-                />
-                <button
-                  onClick={createBacklog}
-                  disabled={busy || !newName.trim()}
-                  className="shrink-0 rounded-xl bg-accent px-4 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
-                >
-                  Crear
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setCreating(true)}
-                className="mt-4 flex w-full items-center gap-2 rounded-xl bg-accent-soft px-3.5 py-3.5 font-semibold text-accent bl-press"
-              >
-                <span className="text-xl leading-none">＋</span> Nueva colección
-              </button>
-            )}
-
-            {/* Recientes */}
-            <p className="mb-2 mt-5 font-mono text-[10px] tracking-[0.12em] text-text-3">
-              RECIENTES
-            </p>
-            <div className="space-y-2">
-              {backlogs.length === 0 && (
-                <p className="text-sm text-text-3">
-                  Todavía no tienes colecciones. Crea la primera arriba.
-                </p>
-              )}
-              {backlogs.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => setSel(b.id)}
-                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left transition-colors active:bg-white/[0.12] ${
-                    sel === b.id ? "bg-accent-soft" : "bg-surface-2 hover:bg-surface-3"
-                  }`}
-                >
-                  <span>
-                    <span className="block font-semibold text-text">{b.name}</span>
-                    <span className="block font-mono text-[9.5px] uppercase tracking-[0.06em] text-text-3">
-                      {b.isSeedHome ? `aquí está ${seed.title} · ` : ""}
-                      {b.itemCount} {b.itemCount === 1 ? "título" : "títulos"}
-                    </span>
-                  </span>
-                  <span
-                    className={`h-3 w-3 rounded-full ${
-                      sel === b.id ? "bg-accent" : "bg-surface-3"
-                    }`}
-                  />
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={applySheet}
-              disabled={busy || !sel}
-              className="mt-5 w-full rounded-full bg-accent py-3.5 font-semibold text-bg bl-press active:bg-accent-press disabled:opacity-40"
-            >
-              Guardar
-            </button>
-          </div>
-        </div>
+          <SaveInBody
+            seedTitle={seed.title}
+            backlogs={backlogs}
+            initial={sel}
+            busy={busy}
+            failed={failed === "sheet"}
+            onCreate={createBacklog}
+            onApply={applySheet}
+          />
+        </Sheet>
       )}
     </section>
+  );
+}
+
+/**
+ * The inside of "guardar en" (Kura §hoja): the title, "Nueva colección", one
+ * radio row per collection and the solid action. No honey: the screen's one
+ * accent is the pairing's "Guardar".
+ */
+function SaveInBody({
+  seedTitle,
+  backlogs,
+  initial,
+  busy,
+  failed,
+  onCreate,
+  onApply,
+}: {
+  seedTitle: string;
+  backlogs: DiscoveryBacklog[];
+  initial: string | null;
+  busy: boolean;
+  failed: boolean;
+  onCreate: (name: string) => Promise<DiscoveryBacklog | null>;
+  onApply: (backlogId: string) => Promise<boolean>;
+}) {
+  const dismiss = useSheetDismiss();
+  const [sel, setSel] = useState<string | null>(initial);
+  const [creating, setCreating] = useState(backlogs.length === 0);
+  const [newName, setNewName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (creating) inputRef.current?.focus();
+  }, [creating]);
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name || busy) return;
+    const made = await onCreate(name);
+    if (!made) return; // the name stays in the field; the note says why
+    setSel(made.id);
+    setNewName("");
+    setCreating(false);
+  };
+
+  const apply = async () => {
+    if (!sel || busy) return;
+    if (await onApply(sel)) dismiss?.();
+  };
+
+  return (
+    <>
+      <SheetTitle>guardar en</SheetTitle>
+
+      {creating ? (
+        <form onSubmit={create} className="mt-3 flex items-center gap-2">
+          <input
+            ref={inputRef}
+            value={newName}
+            maxLength={COLLECTION_NAME_MAX}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nombre de la colección"
+            aria-label="Nombre de la nueva colección"
+            enterKeyHint="done"
+            className={`${SHEET_FIELD} min-w-0 flex-1`}
+          />
+          <button
+            type="submit"
+            disabled={busy || !newName.trim()}
+            className={`${GLASS_BUTTON} flex-none disabled:pointer-events-none disabled:opacity-40`}
+          >
+            Crear
+          </button>
+        </form>
+      ) : (
+        <div className="-mx-1.5 mt-2">
+          <MenuRow icon="plus" label="Nueva colección" onClick={() => setCreating(true)} />
+        </div>
+      )}
+
+      {backlogs.length === 0 ? (
+        <p className="mt-4 text-[15px] leading-[1.5] text-text-2">
+          Todavía no tienes colecciones. Crea la primera arriba.
+        </p>
+      ) : (
+        <div role="radiogroup" aria-label="Colección" className="mt-2 flex flex-col">
+          {backlogs.map((b) => (
+            <ChoiceRow
+              key={b.id}
+              label={b.name}
+              description={`${b.isSeedHome ? `Aquí está ${seedTitle} · ` : ""}${b.itemCount} ${
+                b.itemCount === 1 ? "título" : "títulos"
+              }`}
+              on={sel === b.id}
+              onSelect={() => setSel(b.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {failed && (
+        <p role="alert" className="mt-3 flex items-center gap-2 text-[14px] leading-[1.4] text-text-2">
+          <KIcon name="warning" size={16} className="flex-none text-text" />
+          {WRITE_FAILED}
+        </p>
+      )}
+
+      <button type="button" onClick={apply} disabled={busy || !sel} className={`${SHEET_SOLID} mt-4`}>
+        {busy ? "Guardando…" : "Guardar"}
+      </button>
+    </>
   );
 }
 
@@ -562,7 +649,7 @@ function Cover({
         )}
       </div>
       {/* spindle hole */}
-      <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-bg ring-2 ring-white/10" />
+      <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-bg" />
     </div>
   );
 }

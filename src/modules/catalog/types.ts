@@ -75,7 +75,9 @@ export interface VideoCatalog {
    * F3.5.8 (link graph) — the "Original Music Composer" credit (film:
    * /movie/{id}/credits; series: /tv/{id}/aggregate_credits). OPTIONAL:
    * fixtures don't implement it (no crew data), and the link-graph extractor
-   * degrades to iTunes-only edges when it's absent or errors.
+   * degrades to iTunes-only edges when it's absent or errors. `null` = TMDB
+   * answered and there is no composer; an unanswered lookup REJECTS (the
+   * extractor then doesn't cache "no edges" for that seed).
    */
   getComposer?(
     externalId: string,

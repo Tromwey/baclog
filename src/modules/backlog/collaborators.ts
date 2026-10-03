@@ -2,7 +2,6 @@ import "server-only";
 import { and, asc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogCollaborators, users } from "@/db/schema";
-import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { notBlockedWith } from "@/modules/social/block-gate";
 import type { Collaborator } from "./fan";
 
@@ -36,8 +35,7 @@ import type { Collaborator } from "./fan";
  *    `isPublic AND username IS NOT NULL` as any public identity, with the
  *    public field list only.
  * Both drop a party guest the host blocked (`blocked_at`) or who left
- * (`left_at`) — neither is credited — once 0033 is live (the columns don't
- * exist before).
+ * (`left_at`) — neither is credited.
  */
 
 const collaboratorFields = {
@@ -55,8 +53,8 @@ async function read(backlogIds: readonly string[], viewerId: string | null): Pro
     eq(users.isPublic, true),
     isNotNull(users.username),
     viewerId ? notBlockedWith(viewerId, users.id) : undefined,
-    MIGRATION_0033_LIVE ? isNull(backlogCollaborators.blockedAt) : undefined,
-    MIGRATION_0033_LIVE ? isNull(backlogCollaborators.leftAt) : undefined,
+    isNull(backlogCollaborators.blockedAt),
+    isNull(backlogCollaborators.leftAt),
   ];
   const rows = await db
     .select(collaboratorFields)

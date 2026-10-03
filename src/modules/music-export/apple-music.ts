@@ -151,8 +151,12 @@ export async function appleMusicProbe(): Promise<MusicServices["apple_music"]> {
  * found them). A song Apple no longer lists is simply absent from the map.
  * THROWS on HTTP/network failure (the caller decides: the TIDAL step falls
  * back to title+artist search). Null when the deploy has no key.
+ * `timeoutMs` (≤ the default 6 s) lets a TIDAL step keep it inside its budget.
  */
-export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<string, string> | null> {
+export async function appleCatalogIsrcs(
+  ids: readonly string[],
+  timeoutMs: number = TIMEOUT_MS,
+): Promise<Map<string, string> | null> {
   const dev = await appleServerToken();
   if (!dev) return null;
   const out = new Map<string, string>();
@@ -163,7 +167,7 @@ export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<str
     url.searchParams.set("ids", chunk.join(","));
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${dev.token}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(Math.min(TIMEOUT_MS, timeoutMs)),
       cache: "no-store",
     });
     if (res.status === 401 || res.status === 403) {
@@ -182,4 +186,64 @@ export async function appleCatalogIsrcs(ids: readonly string[]): Promise<Map<str
     }
   }
   return out;
+}
+
+/**
+ * Catalog reads for the LIBRARY catalog (album search, album detail, an
+ * artist's discography, the party's song search — `catalog/apple-catalog.ts`),
+ * signed with the SERVER token (never leaves the server).
+ *
+ * `path` is relative to `/v1` (`/catalog/us/search`) or a `next` href Apple
+ * handed back (`/v1/catalog/…?offset=25`). Returns:
+ *   - null when this deploy can't ask Apple (no key, or the key was REJECTED
+ *     in the last hour): the caller falls back to the keyless iTunes API;
+ *   - the parsed JSON on 2xx;
+ * and THROWS on any other answer (HTTP error, network, timeout) — the caller
+ * logs and falls back too. A 401/403 also forgets the token and marks the key
+ * rejected, so the next calls go straight to the fallback for an hour
+ * instead of failing one by one.
+ */
+/** A missing or rejected key would otherwise fall back to iTunes in silence: say it, once per instance. */
+const warned = new Set<string>();
+function warnOnce(key: string, message: string): void {
+  if (warned.has(key)) return;
+  warned.add(key);
+  console.warn(message);
+}
+
+export async function appleCatalogGet<T>(
+  path: string,
+  params: Record<string, string> = {},
+  opts: { revalidate?: number; noStore?: boolean; signal?: AbortSignal } = {},
+): Promise<T | null> {
+  const cfg = appleMusicServerKeyConfig();
+  if (!cfg) {
+    warnOnce("no-key", "[catalog] apple catalog: no server key on this deploy, music falls back to iTunes");
+    return null;
+  }
+  const known = probeCache.get(cfg.keyId);
+  if (known && !known.ok && Date.now() - known.at < PROBE_TTL_MS) {
+    warnOnce(`rejected ${cfg.keyId}`, `[catalog] apple catalog: key=${cfg.source} rejected within the hour, music falls back to iTunes`);
+    return null;
+  }
+  const dev = await appleServerToken(cfg);
+  if (!dev) return null;
+
+  const url = new URL(path.startsWith("/v1/") ? `https://api.music.apple.com${path}` : `${API}${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${dev.token}` },
+    signal: opts.signal ?? AbortSignal.timeout(TIMEOUT_MS),
+    ...(opts.noStore || opts.revalidate == null
+      ? { cache: "no-store" as const }
+      : { next: { revalidate: opts.revalidate } }),
+  });
+  if (res.status === 401 || res.status === 403) {
+    console.warn(`[catalog] apple catalog rejected status=${res.status} key=${cfg.source}`);
+    forgetTokens(cfg.keyId);
+    probeCache.set(cfg.keyId, { ok: false, at: Date.now() });
+    throw new Error(`apple catalog ${url.pathname}: ${res.status}`);
+  }
+  if (!res.ok) throw new Error(`apple catalog ${url.pathname}: ${res.status}`);
+  return (await res.json()) as T;
 }

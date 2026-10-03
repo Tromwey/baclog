@@ -1,5 +1,6 @@
 import "server-only";
 import type { AlbumTrack } from "./itunes";
+import { storefrontOfRaw } from "./apple-music-map";
 import { getAlbumDetail } from "./itunes";
 import { getFilmFacts, getSeriesFacts, getSpanishOverview } from "./tmdb";
 import { cacheFilmFacts, cacheReleaseDate, cacheSeriesFacts } from "./cache";
@@ -112,6 +113,7 @@ export async function getItemDisplayMedia(item: DisplayMediaInput): Promise<{
         !item.releaseDate || item.releaseDate.getTime() > Date.now()
           ? "pending"
           : "settled",
+        storefrontOfRaw(item.raw),
       )
     : {
         tracks: [] as AlbumTrack[],

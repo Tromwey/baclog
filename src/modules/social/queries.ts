@@ -55,6 +55,7 @@ import {
 } from "./types";
 import { BURST_GAP, closedPrefix, groupIntoCards, lastEventOf, liftGems } from "./group";
 import { notBlockedWith } from "./block-gate";
+import { canSeeFollowLists } from "./follow-lists-policy";
 import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media";
 
 /**
@@ -88,6 +89,25 @@ export const publicAuthor = and(
   eq(users.isPublic, true),
   isNotNull(users.username),
 );
+
+/**
+ * "This `user_item` row's title sits in at least one PUBLIC collection of the
+ * row's owner" — the F3.10.1 container gate (`backlog.is_public`), as a
+ * predicate over `user_item`. Anything that shows WHICH titles someone has
+ * (covers on a suggestion card) or counts them against the viewer's library
+ * ("N títulos en común") derives from this set, exactly like `getAffinity`:
+ * `user_item` alone is the whole library, private collections included, and
+ * a count over it is an oracle (add a title, watch the number tick). Only for
+ * WHERE clauses of queries FROM `user_item` — there the columns render
+ * table-qualified, so they bind to the outer row, not to `bi`.
+ */
+const titleInPublicCollection = sql`exists (
+  select 1 from ${backlogItems} bi
+  join ${backlogs} b on b.id = bi.backlog_id
+  where bi.user_id = ${userItems.userId}
+    and bi.catalog_item_id = ${userItems.catalogItemId}
+    and b.is_public = true
+)`;
 
 // ---------- follow graph ----------
 
@@ -624,7 +644,11 @@ function activityBucket(last: number, now: number): "hoy" | "ayer" | null {
 /**
  * Public profiles worth offering: not you, not already followed, most recently
  * active first (their newest library add), so "gente que sí está activa" is
- * literally the sort order. Everything selected is public-safe, and the batch
+ * literally the sort order. NO follow edge takes part in choosing or ordering
+ * them (the only `user_follow` read is the viewer's OWN edge, to leave out
+ * who they already follow) — if a "follows someone you follow" signal is ever
+ * added here, it must go through `followingListOpenTo` like pool 1 of
+ * `getFeedSuggestion`. Everything selected is public-safe, and the batch
  * queries re-gate on `publicAuthor` themselves — the candidate set was gated
  * one query earlier, and a profile that flips private in between must not have
  * its covers or counts served anyway.
@@ -663,9 +687,11 @@ export async function getFollowSuggestions(
   if (candidates.length === 0) return [];
   const ids = candidates.map((c) => c.id);
 
-  // Recent covers per candidate, POSTER-PREFERRED but ranked over the whole
-  // library, so `total` is the real title count — the "+N" tail must not
-  // shrink just because cover art is missing (it reads as library size).
+  // Recent covers per candidate, POSTER-PREFERRED but ranked over every title
+  // they keep in a PUBLIC collection (`titleInPublicCollection`), so `total`
+  // is that count — the "+N" tail must not shrink just because cover art is
+  // missing. Never the whole `user_item`: a cover or a count from a private
+  // collection would show what its owner chose not to.
   const ranked = db
     .select({
       userId: userItems.userId,
@@ -682,7 +708,7 @@ export async function getFollowSuggestions(
     .from(userItems)
     .innerJoin(catalogItems, eq(userItems.catalogItemId, catalogItems.id))
     .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
-    .where(inArray(userItems.userId, ids))
+    .where(and(inArray(userItems.userId, ids), titleInPublicCollection))
     .as("ranked");
 
   const [hexes, backlogCounts, followerCounts, coverRows] = await Promise.all([
@@ -757,6 +783,29 @@ export async function getFollowSuggestions(
 
 // ---------- the in-feed suggestion (feed v3) ----------
 
+/**
+ * `canSeeFollowLists` (follow-lists-policy.ts) as a predicate over the joined
+ * `user` row, for a viewer who is NOT that user and has no block with them
+ * (the caller gates both): "may `viewerId` read this user's following list?"
+ * — `public`, or `mutuals` with both edges. The columns are spelled
+ * table-qualified on purpose (learning 2026-09-27-columna-sin-calificar-en-
+ * subquery-correlacionada: a bare `"id"` inside the EXISTS binds to `f`).
+ * Keep it in step with the policy; `getFeedSuggestion` still runs the policy
+ * itself on the row it finally shows.
+ */
+function followingListOpenTo(viewerId: string): SQL {
+  const ownerId = sql`${users}.${sql.identifier("id")}`;
+  const visibility = sql`${users}.${sql.identifier("follow_lists_visibility")}`;
+  return sql`(
+    ${visibility} = 'public'
+    or (
+      ${visibility} = 'mutuals'
+      and exists (select 1 from ${userFollows} f where f.follower_user_id = ${viewerId} and f.followed_user_id = ${ownerId})
+      and exists (select 1 from ${userFollows} f where f.follower_user_id = ${ownerId} and f.followed_user_id = ${viewerId})
+    )
+  )`;
+}
+
 /** "@a y @b" · "@a, @b y 3 más" — the shared follows a suggestion names. */
 function listHandles(handles: string[], total: number): string {
   const shown = handles.map((h) => `@${h}`);
@@ -778,11 +827,29 @@ function listHandles(handles: string[], total: number): string {
  *     when the graph has nobody to offer — with no overlap line.
  *
  * The reason line is the strongest signal available: a title BOTH obsess
- * over, else how many titles the two libraries share, else their public
- * backlog count. Every read re-gates on `publicAuthor` and selects the
- * public-safe list — a private profile is never named here, not even as a
- * shared follow. Null when nobody qualifies (or the viewer follows nobody —
- * the empty states own that case).
+ * over, else how many titles the viewer shares with the candidate's PUBLIC
+ * collections, else their public backlog count. Every read re-gates on
+ * `publicAuthor` and selects the public-safe list — a private profile is
+ * never named here, not even as a shared follow. Null when nobody qualifies
+ * (or the viewer follows nobody — the empty states own that case).
+ *
+ * Two container/list gates on top of that (2026-10-01):
+ *  - the covers and the "N títulos en común" count come only from titles in
+ *    the candidate's PUBLIC collections (`titleInPublicCollection`);
+ *  - "Sigue a @a y @b" NAMES who the candidate follows, i.e. it reads their
+ *    following list — so the handles appear only when `canSeeFollowLists`
+ *    lets THIS viewer read that list. Otherwise `common` is null: no line,
+ *    not even the count (ciclo 2: the count was an oracle by difference).
+ *    The viewer never follows a candidate, so in practice only `public`
+ *    lists produce the line.
+ *  - the same rule decides WHO is suggested (ciclo 3): pool 1 ranks people
+ *    by how many of the viewer's follows they follow — an edge of THEIR
+ *    following list. With a closed list that edge still picked the candidate
+ *    (follow someone, watch a new face appear: one edge read by difference,
+ *    without any line). So an edge only counts toward choosing a candidate
+ *    when `followingListOpenTo` holds for its owner; everyone else can only
+ *    arrive through pool 2, which looks at no follow edge at all
+ *    (`getFollowSuggestions`: recency of activity).
  */
 export async function getFeedSuggestion(
   viewerId: string,
@@ -802,6 +869,8 @@ export async function getFeedSuggestion(
         eq(users.id, userFollows.followerUserId),
         publicAuthor,
         notBlockedWith(viewerId, users.id),
+        // The edges below are rows of the candidate's following list.
+        followingListOpenTo(viewerId),
       ),
     )
     .where(
@@ -840,7 +909,16 @@ export async function getFeedSuggestion(
   const [[profile], hexes, commonRows, [sharedObsession], [sharedTitles], [backlogCount], coverRows] =
     await Promise.all([
       db
-        .select({ username: users.username, image: users.image })
+        .select({
+          username: users.username,
+          image: users.image,
+          followListsVisibility: users.followListsVisibility,
+          // Params only, no column refs: in a single-table select list a
+          // column inside `sql` renders unqualified and would bind to `f`
+          // (learning 2026-09-27-columna-sin-calificar-en-subquery-correlacionada).
+          viewerFollows: sql<boolean>`exists (select 1 from ${userFollows} f where f.follower_user_id = ${viewerId} and f.followed_user_id = ${cid})`,
+          followsViewer: sql<boolean>`exists (select 1 from ${userFollows} f where f.follower_user_id = ${cid} and f.followed_user_id = ${viewerId})`,
+        })
         .from(users)
         .where(
           and(eq(users.id, cid), publicAuthor, notBlockedWith(viewerId, users.id)),
@@ -889,6 +967,7 @@ export async function getFeedSuggestion(
         .where(
           and(
             eq(userItems.userId, cid),
+            titleInPublicCollection,
             sql`exists (select 1 from ${userItems} mine where mine.user_id = ${viewerId} and mine.catalog_item_id = ${userItems.catalogItemId})`,
           ),
         ),
@@ -906,7 +985,13 @@ export async function getFeedSuggestion(
         .from(userItems)
         .innerJoin(catalogItems, eq(catalogItems.id, userItems.catalogItemId))
         .innerJoin(users, and(eq(users.id, userItems.userId), publicAuthor))
-        .where(and(eq(userItems.userId, cid), isNotNull(catalogItems.posterUrl)))
+        .where(
+          and(
+            eq(userItems.userId, cid),
+            isNotNull(catalogItems.posterUrl),
+            titleInPublicCollection,
+          ),
+        )
         .orderBy(desc(userItems.addedAt))
         .limit(3),
     ]);
@@ -917,10 +1002,27 @@ export async function getFeedSuggestion(
   const handles = commonRows
     .map((r) => r.username)
     .filter((u): u is string => Boolean(u));
+  // The handles are the candidate's FOLLOWING list: named only for a viewer
+  // that list is open to (the one policy, follow-lists-policy.ts; the block
+  // case is already out — the profile row above is gated). Otherwise NO
+  // line at all: the bare count ("Sigue a 3 personas que tú sigues") was an
+  // oracle by difference — follow someone, watch the number move, and you
+  // have read one edge of a list that is closed to you. The count survives
+  // only where the list itself is readable and the shared follows just
+  // aren't nameable (private / no handle: the anonymous count of F3.10).
+  const mayNameFollows = canSeeFollowLists({
+    visibility: profile.followListsVisibility,
+    isOwner: false,
+    blocked: false,
+    viewerFollowsOwner: profile.viewerFollows === true,
+    ownerFollowsViewer: profile.followsViewer === true,
+  });
   const common =
-    sharedCount > 0 && handles.length > 0
-      ? `Sigue a ${listHandles(handles, sharedCount)}`
-      : null;
+    sharedCount <= 0 || !mayNameFollows
+      ? null
+      : handles.length > 0
+        ? `Sigue a ${listHandles(handles, sharedCount)}`
+        : `Sigue a ${sharedCount} ${plural(sharedCount, "persona", "personas")} que tú sigues`;
 
   const inCommon = sharedTitles?.n ?? 0;
   const shelves = backlogCount?.n ?? 0;

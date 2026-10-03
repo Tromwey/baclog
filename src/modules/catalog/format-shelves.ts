@@ -33,9 +33,28 @@ import { libraryMedia, libraryMediaType } from "@/modules/catalog/library-media"
  * onto its row the first time (`getFilmRuntime`), so a warm shelf costs the
  * DB upsert and nothing else.
  *
- * Every fetcher is fail-open: a dead provider is an empty shelf, which the
- * page words as "nada por aquí", never an error.
+ * A shelf that comes back `[]` ANSWERED and has nothing ("nada por aquí").
+ * A provider that didn't answer is NOT that: when every call the shelf made
+ * to its provider failed, the shelf THROWS `ShelfUnavailableError` — the web
+ * shows "falló · Reintentar" (`useShelf`) and v1 answers 503 when it has
+ * nothing else to show. Before, both read as an empty shelf and the empty
+ * answer was what the client cached. A PARTIAL answer (one of two pages, one
+ * of two storefronts) is still a shelf.
  */
+
+/** The shelf's provider didn't answer any of the calls it was asked. */
+export class ShelfUnavailableError extends Error {
+  constructor(readonly shelf: "cine" | "series" | "music") {
+    super(`shelf "${shelf}": the provider did not answer`);
+    this.name = "ShelfUnavailableError";
+  }
+}
+
+/** The pages that answered, flattened — or a throw when none did. */
+function answered(shelf: ShelfUnavailableError["shelf"], pages: (ExternalItem[] | null)[]): ExternalItem[] {
+  if (pages.every((p) => p === null)) throw new ShelfUnavailableError(shelf);
+  return pages.flatMap((p) => p ?? []);
+}
 
 /** Released within this long before now = "En cines" on the meta line. */
 const IN_CINEMAS_MS = 45 * 24 * 60 * 60 * 1000;
@@ -95,7 +114,7 @@ export async function getCineShelf(time: CineTime, now: number): Promise<CineWor
       }),
     ),
   );
-  const pairs = await cacheWithSource(pages.flatMap((p) => p ?? []));
+  const pairs = await cacheWithSource(answered("cine", pages));
   if (pairs.length === 0) return [];
 
   // The runtime lives in `raw` once fetched; read those rows back and fill
@@ -153,7 +172,7 @@ export async function getMaratonShelf(): Promise<SeriesWork[]> {
       }),
     ),
   );
-  const pairs = await cacheWithSource(pages.flatMap((p) => p ?? []));
+  const pairs = await cacheWithSource(answered("series", pages));
   const longest = SERIES_LENSES[SERIES_LENSES.length - 1].maxMinutes;
   const sized = await Promise.all(
     pairs.map(async ({ row }) => {
@@ -171,7 +190,7 @@ export async function getMaratonShelf(): Promise<SeriesWork[]> {
  * moment is matched against on the client.
  */
 export async function getMusicShelf(): Promise<AlbumWork[]> {
-  const [mx, us] = await Promise.all([mostPlayedAlbums("mx"), mostPlayedAlbums("us")]);
-  const pairs = await cacheWithSource([...(mx ?? []), ...(us ?? [])]);
+  const charts = await Promise.all([mostPlayedAlbums("mx"), mostPlayedAlbums("us")]);
+  const pairs = await cacheWithSource(answered("music", charts));
   return pairs.map(({ row, ext }) => ({ ...work(row), genre: ext.genre }));
 }

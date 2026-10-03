@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useScrollIntoViewOnKeyboard } from "@/hooks/use-scroll-into-view-on-keyboard";
 import { FIELD, GLASS_BUTTON, SOLID_BUTTON, Wordmark } from "@/components/kura/components";
 import { carryReturnTo } from "../return-to-param";
+import { stashPendingEmail } from "../pending-email";
 import { continueWithAppleAction } from "./actions";
 
 /**
@@ -35,23 +36,70 @@ export function LoginForm({
   const router = useRouter();
   const emailRef = useScrollIntoViewOnKeyboard<HTMLInputElement>();
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "error" | "cooldown">(
-    "idle",
-  );
+  const [status, setStatus] = useState<
+    "idle" | "sending" | "error" | "offline" | "cooldown" | "limited" | "network"
+  >("idle");
+  /** Seconds the server asked to wait (429 `retryAfterSeconds` / `Retry-After`). */
+  const [waitSeconds, setWaitSeconds] = useState(60);
 
   async function requestCode(e: React.FormEvent) {
     e.preventDefault();
     setStatus("sending");
-    const res = await fetch("/api/auth/otp/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (res.ok) {
-      router.push(carryReturnTo(`/verify?email=${encodeURIComponent(email)}`));
+    let res: Response;
+    try {
+      res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // No network: `fetch` REJECTS. Without this the button stayed on
+      // "Enviando…" forever, disabled — now it's a retry.
+      setStatus("offline");
       return;
     }
-    setStatus(res.status === 429 ? "cooldown" : "error");
+    if (res.ok) {
+      toVerify();
+      return;
+    }
+    if (res.status !== 429) {
+      setStatus("error");
+      return;
+    }
+    // 429 comes in three kinds (`reason`), and only ONE of them means a code
+    // is sitting in the inbox:
+    //  - "cooldown": a code was just sent to this address → offer /verify.
+    //  - "hourly_cap" / "ip_limit" (or anything else): nothing was sent, and
+    //    there may be no live code at all → never claim there is one; say
+    //    how long the wait really is.
+    // A server that doesn't send `reason` yet is read as a cooldown only
+    // when the wait is the cooldown's (≤ 60 s).
+    const body: unknown = await res.json().catch(() => null);
+    const field = (key: string): unknown =>
+      body !== null && typeof body === "object" ? (body as Record<string, unknown>)[key] : undefined;
+    const reason = typeof field("reason") === "string" ? (field("reason") as string) : null;
+    const fromBody = Number(field("retryAfterSeconds"));
+    const fromHeader = Number(res.headers.get("Retry-After"));
+    const wait =
+      Number.isFinite(fromBody) && fromBody > 0
+        ? fromBody
+        : Number.isFinite(fromHeader) && fromHeader > 0
+          ? fromHeader
+          : 60;
+    setWaitSeconds(wait);
+    setStatus(
+      reason === "cooldown" || (reason === null && wait <= 60)
+        ? "cooldown"
+        : reason === "ip_limit"
+          ? "network"
+          : "limited",
+    );
+  }
+
+  /** On to the code. The address goes by sessionStorage, never the URL. */
+  function toVerify() {
+    stashPendingEmail(email);
+    router.push(carryReturnTo("/verify"));
   }
 
   return (
@@ -76,7 +124,7 @@ export function LoginForm({
             </button>
             {error && (
               <p className="text-center text-[13px] leading-[1.5] text-text">
-                No pudimos confirmar tu cuenta de Apple. Inténtalo de nuevo o entra con tu correo.
+                No pudimos confirmar tu cuenta de Apple. Vuelve a intentarlo o entra con tu correo.
               </p>
             )}
           </form>
@@ -109,17 +157,41 @@ export function LoginForm({
             {status === "sending" ? "Enviando…" : "Enviarme un código"}
           </button>
           {status === "error" && (
-            <p className="text-center text-[13px] leading-[1.5] text-text">
-              No pudimos enviar el código. Revisa el correo e intenta de nuevo.
+            <p role="alert" className="text-center text-[13px] leading-[1.5] text-text">
+              No pudimos enviar el código. Revisa el correo y vuelve a intentarlo.
+            </p>
+          )}
+          {status === "offline" && (
+            <p role="alert" className="text-center text-[13px] leading-[1.5] text-text">
+              Sin conexión. Revisa tu red y vuelve a intentarlo.
             </p>
           )}
           {status === "cooldown" && (
-            <p className="text-center text-[13px] leading-[1.5] text-text">
-              Ya te enviamos un código hace poco. Espera un minuto.
+            // This 429 means a code IS already in the inbox: the way to use
+            // it has to be right here, not a minute away.
+            <div role="alert" className="flex flex-col items-center gap-3">
+              <p className="text-center text-[13px] leading-[1.5] text-text">
+                Ya te enviamos un código hace poco y sigue siendo válido. Revisa tu correo o espera {waitLabel(waitSeconds)} para pedir otro.
+              </p>
+              <button type="button" onClick={toVerify} className={GLASS_BUTTON}>
+                Ya tengo el código
+              </button>
+            </div>
+          )}
+          {status === "limited" && (
+            // Hourly cap for this address: no code was sent and none is promised.
+            <p role="alert" className="text-center text-[13px] leading-[1.5] text-text">
+              Se pidieron demasiados códigos para este correo. Podrás pedir otro en {waitLabel(waitSeconds)}.
+            </p>
+          )}
+          {status === "network" && (
+            // Per-IP limit: it says nothing about this address.
+            <p role="alert" className="text-center text-[13px] leading-[1.5] text-text">
+              Demasiados intentos desde esta red. Podrás pedir un código en {waitLabel(waitSeconds)}.
             </p>
           )}
           <p className="text-center text-[13px] leading-[1.5] text-text-2 text-pretty">
-            Sin contraseña: te mandamos un código de 6 dígitos. Si es tu
+            Sin contraseña: te enviamos un código de 6 dígitos. Si es tu
             primera vez, ese mismo correo crea tu cuenta.
           </p>
         </form>
@@ -139,6 +211,17 @@ export function LoginForm({
       </p>
     </main>
   );
+}
+
+/** "40 segundos" · "1 minuto" · "12 minutos" — minutes once the wait passes 60 s. */
+function waitLabel(seconds: number): string {
+  if (seconds > 60) {
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minutos`;
+  }
+  if (seconds === 60) return "1 minuto";
+  const s = Math.max(1, Math.ceil(seconds));
+  return s === 1 ? "1 segundo" : `${s} segundos`;
 }
 
 /** The Apple mark of the mock's "Continuar con Apple" (18 px, currentColor). */

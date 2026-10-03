@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
-import { assertUser } from "@/authz";
+import { assertUser, notOnboarded } from "@/authz";
 import { deleteAccount } from "@/modules/account/delete";
 import { completeOnboarding, onboardingSchema } from "@/modules/account/onboarding";
 import {
@@ -26,18 +26,46 @@ import { checkUsername, claimUsername } from "@/modules/account/username";
  * F2.1 step 3 + F2.2 minor gate. Under-13: the module marks the account
  * blocked (getCurrentUser() returns null everywhere from now on) and we
  * bail to /blocked.
+ *
+ * The age is exact (founder, 2026-10-01): send `birthDate` ("YYYY-MM-DD").
+ * `birthYear` is still accepted — the legacy field, same three tiers as
+ * `POST /api/v1/me/onboarding` (modules/account/age.ts); `birthDate` wins
+ * when both are sent. A birth input that can't be used answers `invalid`
+ * with `fields.birthDate` / `fields.birthYear` (final copy) and writes
+ * nothing; a missing name stays a bare `invalid`.
  */
 export async function completeOnboardingAction(input: {
-  name: string;
-  birthYear: number;
-}) {
+  /** Optional ONLY for an account that already has a name (an older one
+   *  passing the age gate late): it completes with the date alone and its
+   *  stored name is left as is. A new account without a valid name gets
+   *  `invalid` and nothing is written (`completeOnboarding`). */
+  name?: string;
+  birthDate?: string;
+  /** Legacy (year only). */
+  birthYear?: number;
+}): Promise<
+  // `error?: undefined` / `ok?: undefined`: the shape TypeScript used to infer
+  // here — callers read `res.error` without narrowing first.
+  | { ok: true; error?: undefined }
+  | {
+      error: "invalid";
+      ok?: undefined;
+      fields?: Partial<Record<"birthDate" | "birthYear", string>>;
+    }
+> {
   const user = await assertUser();
   const parsed = onboardingSchema.safeParse(input);
-  if (!parsed.success) return { error: "invalid" as const };
+  if (!parsed.success) return { error: "invalid" };
 
   const result = await completeOnboarding(user.id, parsed.data);
-  if (!result.ok) redirect("/blocked");
-  return { ok: true as const };
+  if (!result.ok) {
+    if (result.error === "name_required") return { error: "invalid" };
+    if (result.error === "invalid_birth") {
+      return { error: "invalid", fields: { [result.field]: result.message } };
+    }
+    redirect("/blocked");
+  }
+  return { ok: true };
 }
 
 export async function setPreferredServiceAction(service: PreferredService) {
@@ -59,24 +87,35 @@ export async function updateDisplayNameAction(name: string) {
   const user = await assertUser();
   const parsed = displayNameSchema.safeParse(name);
   if (!parsed.success) return { error: "invalid" as const };
-  await updateProfile(user.id, { name: parsed.data });
+  // F2.2: a name is only written to an account that passed the age gate
+  // (enforced in `updateProfile`); the first name comes from onboarding.
+  const result = await updateProfile(user.id, { name: parsed.data });
+  if (!result.ok) return { error: result.error };
   return { ok: true as const };
 }
 
 /**
- * F2.17 — claiming implies opting in to a public page (toggleable).
+ * F2.17 — claiming your FIRST handle implies opting in to a public page
+ * (toggleable); a rename leaves `isPublic` alone (modules/account/username.ts).
  *
  * `refresh: false` (onboarding, 2026-09-03): skips the `revalidatePath`. The
  * public tree is dynamic (never ISR-cached) so the revalidate only ever acted
  * as a router refresh — and during onboarding that refresh re-requests the
  * URL the client router still holds from the login redirect chain (`/`),
  * which now resolves to /backlogs and yanks the user out of step 1.
+ *
+ * F2.2: needs a finished onboarding (`onboarding_required`). The web has no
+ * "claim before onboarding" order to protect — `username-step.tsx` calls
+ * `completeOnboardingAction` FIRST and claims after — so, unlike
+ * `PUT /api/v1/me/username` (the apps claim before `POST /me/onboarding`),
+ * this action is gated outright.
  */
 export async function claimUsernameAction(
   username: string,
   { refresh = true }: { refresh?: boolean } = {},
 ) {
   const user = await assertUser();
+  if (notOnboarded(user)) return { error: "onboarding_required" as const };
   const result = await claimUsername(user.id, username);
   if (!result.ok) return { error: result.error };
   if (refresh) revalidatePath(`/u/${result.username}`, "layout");
@@ -95,7 +134,9 @@ export async function checkUsernameAction(username: string) {
 
 export async function setPublicAction(isPublic: boolean) {
   const user = await assertUser();
-  await updateProfile(user.id, { isPublic: Boolean(isPublic) });
+  // F2.2: going public needs a finished onboarding (`updateProfile`).
+  const result = await updateProfile(user.id, { isPublic: Boolean(isPublic) });
+  if (!result.ok) return { error: result.error };
   // Privacy must be immediate — bust the ISR cache for the public tree
   if (user.username) revalidatePath(`/u/${user.username}`, "layout");
   return { ok: true as const };

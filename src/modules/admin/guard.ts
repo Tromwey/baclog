@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
@@ -29,7 +30,7 @@ export async function fetched<T>(p: Promise<T>): Promise<Fetched<T>> {
   try {
     return { ok: true, data: await p };
   } catch (err) {
-    console.error("[admin] metrics query failed:", err);
+    console.error("[admin] metrics query failed:", redactedError(err));
     return { ok: false };
   }
 }

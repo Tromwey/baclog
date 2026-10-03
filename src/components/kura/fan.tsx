@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import type { FanCover } from "@/modules/backlog/fan";
 import { KIcon } from "./icons";
 

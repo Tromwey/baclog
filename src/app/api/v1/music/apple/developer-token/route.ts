@@ -1,6 +1,5 @@
 import { ApiError, checkRateLimit, withApi } from "@/authz/api";
 import { appleWebDeveloperToken } from "@/modules/music-export/apple-music";
-import { assertMusicExportLive } from "@/modules/music-export/errors";
 import { isoDate } from "../../../_lib/schemas";
 import { json } from "../../../_lib/http";
 
@@ -16,7 +15,6 @@ import { json } from "../../../_lib/http";
  * key OR when Apple rejected it (`services.apple_music.reason: key_rejected`).
  */
 export const GET = withApi(async (_req, { user }) => {
-  assertMusicExportLive();
   const rl = checkRateLimit(`apple-dev-token:${user.id}`, 30);
   if (!rl.ok) throw new ApiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds });
   const dev = await appleWebDeveloperToken();

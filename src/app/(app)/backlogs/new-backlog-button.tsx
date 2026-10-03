@@ -3,15 +3,12 @@
 import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import {
-  createBacklogAction,
-  setBacklogVisibilityAction,
-} from "@/app/actions/backlog-actions";
+import { createBacklogAction } from "@/app/actions/backlog-actions";
+import { attempt } from "@/components/kura/attempt";
 import { createPartyAction } from "@/app/actions/party-collection-actions";
 import { LimitStepper } from "@/components/party/limit-stepper";
-import { partyErrorMessage } from "@/components/party/party-errors";
+import { partyErrorMessage, partyOnboardingPath } from "@/components/party/party-errors";
 import { DEFAULT_PER_GUEST_LIMIT } from "@/modules/party-collections/rules";
-import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { Sheet, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, PEOPLE_FILL } from "@/components/kura/icons";
 import { SHEET_FIELD, SHEET_SOLID, SheetTitle } from "@/components/kura/sheet-parts";
@@ -58,15 +55,14 @@ export function NewBacklogTrigger({
  * O2a: "nueva colección" + close, the name field, "Quién la ve" (swaps the
  * sheet to the K1a choices — one sheet, two steps) and the solid "Crear".
  * New collections are Pública by default (the product's default:
- * is_public AND show_on_profile); anything else is applied right after the
- * create. Lands on the new, empty collection (15d).
+ * is_public AND show_on_profile); the choice travels in the create itself
+ * (one write). Lands on the new, empty collection (15d).
  *
  * Colecciones de fiesta (fiesta-app-v2 · create): above the name, the type —
  * Colección | Fiesta ("Cada invitado agrega canciones."). A fiesta has no
  * "Quién la ve" (always private: only its members and whoever holds the
  * link) and instead "Canciones por invitado" (default 3). "Crear fiesta"
- * opens the party with "invita a la fiesta." up. The type row only shows
- * once migration 0033 is live (`MIGRATION_0033_LIVE`).
+ * opens the party with "invita a la fiesta." up.
  */
 function NewCollectionBody() {
   const router = useRouter();
@@ -80,12 +76,15 @@ function NewCollectionBody() {
   const [failed, setFailed] = useState(false);
   /** A refusal with its own sentence (party: `too_many_parties`, …). */
   const [failMessage, setFailMessage] = useState<string | null>(null);
+  /** F2.2 (`onboarding_required`): retrying refuses forever — offer the way out. */
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setFailed(false);
     setFailMessage(null);
+    setNeedsOnboarding(false);
     try {
       if (kind === "party") {
         const res = await createPartyAction({ name: name.trim(), perGuestLimit: limit });
@@ -101,17 +100,23 @@ function NewCollectionBody() {
         const code = "error" in res ? res.error : "unknown";
         console.error("[party] createPartyAction refused", { error: code });
         setFailMessage(("message" in res && res.message) || partyErrorMessage(code));
+        setNeedsOnboarding(code === "onboarding_required");
         setFailed(true);
         setBusy(false);
         return;
       }
-      const res = await createBacklogAction({ name });
-      if (!("id" in res) || !res.id) throw new Error("invalid");
-      if (visibility !== "featured") {
-        await setBacklogVisibilityAction(res.id, visibility);
+      // ONE write: the visibility travels with the create, so "Solo yo" is
+      // never public for an instant and a failure leaves nothing to duplicate.
+      const res = await attempt(() => createBacklogAction({ name, visibility }));
+      if (!res.ok) {
+        console.error("[collections] createBacklogAction refused", { error: res.error });
+        if (res.error === "invalid") setFailMessage("Ese nombre no es válido. Prueba con otro.");
+        setFailed(true);
+        setBusy(false);
+        return;
       }
       dismiss?.();
-      router.push(`/backlogs/${res.id}`);
+      router.push(`/backlogs/${res.value.id}`);
     } catch (err) {
       console.error(`[collections] create ${kind} failed`, err);
       setFailed(true);
@@ -138,22 +143,20 @@ function NewCollectionBody() {
     <form onSubmit={create} className="flex flex-col gap-1.5">
       <SheetTitle>nueva colección</SheetTitle>
       <div className="mt-1.5 flex flex-col gap-3.5">
-        {MIGRATION_0033_LIVE && (
-          <div role="radiogroup" aria-label="Tipo" className="flex flex-col gap-2">
-            <KindChoice
-              on={kind === "collection"}
-              title="Colección"
-              description="Agrega series, películas o álbumes."
-              onSelect={() => setKind("collection")}
-            />
-            <KindChoice
-              on={kind === "party"}
-              title="Fiesta"
-              description="Cada invitado agrega canciones."
-              onSelect={() => setKind("party")}
-            />
-          </div>
-        )}
+        <div role="radiogroup" aria-label="Tipo" className="flex flex-col gap-2">
+          <KindChoice
+            on={kind === "collection"}
+            title="Colección"
+            description="Agrega series, películas o álbumes."
+            onSelect={() => setKind("collection")}
+          />
+          <KindChoice
+            on={kind === "party"}
+            title="Fiesta"
+            description="Cada invitado agrega canciones."
+            onSelect={() => setKind("party")}
+          />
+        </div>
         <input
           autoFocus
           required
@@ -161,7 +164,7 @@ function NewCollectionBody() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-label={kind === "party" ? "Nombre de la fiesta" : "Nombre de la colección"}
-          placeholder={kind === "party" ? "la fiesta de…" : "Ponle nombre"}
+          placeholder={kind === "party" ? "la fiesta de…" : "nombre de la colección"}
           className={SHEET_FIELD}
         />
         {kind === "party" ? (
@@ -181,11 +184,25 @@ function NewCollectionBody() {
             <KIcon name="chevron" size={16} className="text-text-2" />
           </button>
         )}
-        {failed && (
-          <p className="px-1 font-sans text-[13px] text-text-2">
-            {failMessage ?? "No se pudo crear. Revisa tu conexión e inténtalo otra vez."}
-          </p>
-        )}
+        <div role="alert" className="flex flex-col gap-2 empty:-mt-3.5">
+          {failed && (
+            <p className="px-1 font-sans text-[13px] text-text-2">
+              {failMessage ?? "No se pudo crear. Revisa tu conexión y vuelve a intentarlo."}
+            </p>
+          )}
+          {failed && needsOnboarding && (
+            <button
+              type="button"
+              onClick={() => {
+                dismiss?.();
+                router.push(partyOnboardingPath());
+              }}
+              className="self-start px-1 font-sans text-[14px] font-semibold text-text underline underline-offset-4"
+            >
+              Terminar
+            </button>
+          )}
+        </div>
         <button type="submit" disabled={busy || !name.trim()} className={SHEET_SOLID}>
           {busy ? "Creando…" : kind === "party" ? "Crear fiesta" : "Crear"}
         </button>

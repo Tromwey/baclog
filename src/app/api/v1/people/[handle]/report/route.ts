@@ -1,4 +1,4 @@
-import { withApi } from "@/authz/api";
+import { requireOnboarded, withApi } from "@/authz/api";
 import { parseHandleOrNull } from "@/modules/account/username";
 import { reportProfile } from "@/modules/reports/write";
 import { noContent, readJson } from "../../../_lib/http";
@@ -18,6 +18,10 @@ import { ProfileReportBodySchema } from "../../../_lib/schemas";
  * gated on blocks: you can report someone you blocked or who blocked you.
  */
 export const POST = withApi<{ handle: string }>(async (request, { user, params }) => {
+  // F2.2: reporting (free-text `details`) needs a finished onboarding — 403
+  // `onboarding_required`, decided on the CALLER's row only, so it is still
+  // no oracle on the handle.
+  requireOnboarded(user);
   const body = await readJson(request, ProfileReportBodySchema);
   const handle = parseHandleOrNull(typeof params.handle === "string" ? params.handle : null);
   if (handle) await reportProfile(user.id, handle, body);

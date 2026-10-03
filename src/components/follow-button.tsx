@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useTransition, useState } from "react";
 import {
   FOLLOW_HONEY_BASE,
@@ -9,6 +10,7 @@ import {
   FOLLOW_ROW_OFF,
   FOLLOW_ROW_ON,
 } from "./follow-pill";
+import { attempt, ONBOARDING_EXIT_LABEL, ONBOARDING_TO_FOLLOW } from "@/components/kura/attempt";
 import { Toast, useToast } from "@/components/kura/toast";
 import {
   followUserAction,
@@ -53,6 +55,7 @@ export function FollowButton({
   toastBottom?: number;
   className?: string;
 }) {
+  const router = useRouter();
   const [following, setFollowing] = useState(initialFollowing);
   const [, startTransition] = useTransition();
   const toastHost = useToast();
@@ -75,20 +78,28 @@ export function FollowButton({
   function run(next: boolean) {
     setFollowing(next);
     startTransition(async () => {
-      // The try/catch is load-bearing: an action can REJECT (expired session,
-      // network drop, stale build), not just return {error} — and /u/* has no
-      // error boundary, so an unhandled rejection would take the whole page.
-      let ok = false;
-      try {
-        const result = next
-          ? await followUserAction(username)
-          : await unfollowUserAction(username);
-        ok = !("error" in result);
-      } catch {
-        ok = false;
-      }
-      if (!ok) {
+      // `attempt` is load-bearing: an action can REJECT (expired session,
+      // network drop, stale build), not just return {error}. Inside a
+      // transition an unhandled rejection goes to the nearest error boundary
+      // (`u/error.tsx`, `(app)/error.tsx`) and takes the whole screen for
+      // what is one pill's failure.
+      const res = await attempt(() =>
+        next ? followUserAction(username) : unfollowUserAction(username),
+      );
+      if (!res.ok) {
         setFollowing(!next);
+        if (res.error === "onboarding_required") {
+          // F2.2: an account that never gave its birth year can't follow.
+          // Retrying would refuse forever — the way out is finishing the
+          // sign-up, so that is the action.
+          announce({
+            kind: "error",
+            message: ONBOARDING_TO_FOLLOW,
+            actionLabel: ONBOARDING_EXIT_LABEL,
+            onAction: () => router.push("/onboarding"),
+          });
+          return;
+        }
         announce({
           kind: "error",
           message: next
@@ -102,7 +113,7 @@ export function FollowButton({
       if (!next) {
         announce({
           kind: "undo",
-          message: `Dejaste de seguir a @${username}`,
+          message: `Dejaste de seguir a @${username}.`,
           actionLabel: "Deshacer",
           onAction: () => run(true),
         });

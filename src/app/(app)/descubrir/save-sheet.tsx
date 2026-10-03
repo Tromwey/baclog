@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import type { MediaType } from "@/modules/catalog/types";
 import { SOLID_BUTTON } from "@/components/kura/components";
 import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -90,6 +91,8 @@ function SaveSheetBody({
   const { panelRef, scrimRef, dismiss, panelHandlers } = useSheetMotion({ onClose });
   const listRef = useRef<HTMLDivElement>(null);
   useScrollerTouchAction(listRef);
+  // Modal focus: in on open, Tab cycles inside, back to the opener after.
+  useDialogFocus(panelRef);
 
   const current = (library.byTitle[work.catalogItemId] ?? []).map((m) => m.backlogId);
   const wasSaved = current.length > 0;
@@ -109,11 +112,12 @@ function SaveSheetBody({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
+      // Only the top dialog answers: a sheet stacked over this one closes alone.
+      if (e.key === "Escape" && isTopDialog(panelRef.current)) dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dismiss]);
+  }, [dismiss, panelRef]);
 
   useEffect(() => {
     if (creating) newInputRef.current?.focus();
@@ -142,7 +146,7 @@ function SaveSheetBody({
     }
     setBusy(true);
     setFailed(false);
-    const ok = await onSave(work, [...checked]);
+    const ok = await onSave(work, [...checked]).catch(() => false);
     setBusy(false);
     if (ok) dismiss();
     else setFailed(true);
@@ -153,7 +157,8 @@ function SaveSheetBody({
     const name = newName.trim();
     if (!name || busy) return;
     setBusy(true);
-    const made = await onCreate(name);
+    setFailed(false);
+    const made = await onCreate(name).catch(() => null);
     setBusy(false);
     if (made) {
       setChecked((s) => new Set(s).add(made.id));
@@ -179,8 +184,9 @@ function SaveSheetBody({
         role="dialog"
         aria-modal="true"
         aria-label={`Guardar ${work.title}`}
+        tabIndex={-1}
         {...panelHandlers}
-        className="absolute inset-x-2 bottom-[calc(8px+env(safe-area-inset-bottom))] mx-auto flex max-h-[calc(100dvh-72px)] max-w-md touch-none flex-col gap-1 rounded-[36px] bg-surface-2 px-3 pb-[26px] pt-2.5 shadow-float will-change-transform"
+        className="outline-none absolute inset-x-2 bottom-[calc(8px+env(safe-area-inset-bottom))] mx-auto flex max-h-[calc(100dvh-72px)] max-w-md touch-none flex-col gap-1 rounded-[36px] bg-surface-2 px-3 pb-[26px] pt-2.5 shadow-float will-change-transform"
         style={keyboardInset > 0 ? { bottom: keyboardInset + 8 } : undefined}
       >
         <button
@@ -246,7 +252,7 @@ function SaveSheetBody({
         {failed && (
           <p role="status" className="flex items-center gap-2 px-2 pt-2 text-[14px] text-text-2">
             <TriangleGlyph size={16} />
-            No se guardó. Revisa tu conexión y vuelve a intentarlo.
+            No se pudo guardar. Revisa tu conexión y vuelve a intentarlo.
           </p>
         )}
 

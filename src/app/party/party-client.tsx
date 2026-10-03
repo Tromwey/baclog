@@ -2,9 +2,9 @@
 
 import dynamic from "next/dynamic";
 
-/** Client-only: the scene reads window size and Date.now() on every render (no SSR to hydrate). */
-const PartyInvitation = dynamic(() => import("./party-invitation"), { ssr: false });
+/** Client-only: the landing picks 3D vs. fallback and teaser vs. revealed from the device and Date.now() (no SSR to hydrate). */
+const PartyLanding = dynamic(() => import("./party-landing"), { ssr: false });
 
 export function PartyClient() {
-  return <PartyInvitation />;
+  return <PartyLanding />;
 }

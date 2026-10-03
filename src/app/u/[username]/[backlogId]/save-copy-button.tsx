@@ -1,5 +1,6 @@
 "use client";
 
+import { attempt } from "@/components/kura/attempt";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { saveSharedCollectionAction } from "@/app/actions/shared-collection-actions";
@@ -25,12 +26,12 @@ export function SaveCopyButton({ username, backlogId }: { username: string; back
         onClick={() =>
           startTransition(async () => {
             setFailed(false);
-            const res = await saveSharedCollectionAction(username, backlogId).catch(() => null);
-            if (!res || !("id" in res)) {
+            const res = await attempt(() => saveSharedCollectionAction(username, backlogId));
+            if (!res.ok) {
               setFailed(true);
               return;
             }
-            router.push(`/backlogs/${res.id}`);
+            router.push(`/backlogs/${res.value.id}`);
           })
         }
         className={HONEY}
@@ -39,7 +40,7 @@ export function SaveCopyButton({ username, backlogId }: { username: string; back
       </button>
       {failed && (
         <span role="status" className="text-[13px] text-text-2">
-          No se pudo guardar. Inténtalo otra vez.
+          No se pudo guardar. Vuelve a intentarlo.
         </span>
       )}
     </div>

@@ -1,0 +1,1103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>El Mausoleo</title>
+<!-- [Kura] Página del diseño "proto/Fase 3e - Mausoleo v2.html" servida tal cual desde public/ (ver
+     .claude/knowledge/state/frontend.md). Cambios locales marcados [Kura]: rutas absolutas, three local,
+     servidor real de sellos, sin ?volver/?api/?red, barra dev solo con ?dev=1, y este bloque. -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#07080b">
+<meta name="description" content="Si te atreves.">
+<meta property="og:title" content="El Mausoleo">
+<meta property="og:description" content="Si te atreves.">
+<meta property="og:image" content="/party/og-dark.jpg">
+<script>
+// [Kura] Un fundido entre páginas que el navegador se salta rechaza una promesa que nadie espera: sin ruido en consola.
+addEventListener('pagereveal', function (e) { if (e.viewTransition) e.viewTransition.finished.catch(function () {}); });
+// [Kura] Detrás de la reja: antes de la apertura (sáb 3 oct, 00:00 hora local) aquí no hay nada. ?estado=revelado para pruebas.
+(function(){
+  var q = new URLSearchParams(location.search);
+  if (Date.now() < new Date(q.get('abre') || '2026-10-03T00:00:00').getTime() && q.get('estado') !== 'revelado') location.replace('/party');
+})();
+</script>
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches, gl = false;
+  try { var c = document.createElement('canvas'); gl = !!(c.getContext('webgl2') || c.getContext('webgl')); } catch(e){}
+  var weak = (navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
+  var reason = !gl ? 'sin WebGL' : reduce ? 'prefers-reduced-motion' : weak ? 'dispositivo débil' : '';
+  var m = q.get('modo'); m = m === '2d' ? 'fallback' : m;
+  document.documentElement.dataset.modo = m || (reason ? 'fallback' : '3d');
+  window.__boot = { reason: m ? 'forzado por URL' : reason };
+})();
+</script>
+<script type="importmap">
+{ "imports": { "three": "/party/vendor/three.module.min.js" } }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Oswald:wght@500;600&family=Cinzel:wght@400;700&display=swap">
+<link rel="stylesheet" href="/party/laberinto/app.css">
+<style>
+html,body{margin:0;height:100%;background:#07080b;color:#e8e8e6;overflow:hidden;overscroll-behavior:none}
+a{color:#f0a49c}a:hover{color:#ffd0ca}
+html[data-modo="fallback"],html[data-modo="fallback"] body{overflow:auto;height:auto}
+html[data-modo="fallback"] #ui{display:none}
+html[data-modo="3d"] #plano{display:none}
+
+/* Etiqueta en hover: misma pastilla que la reja */
+.mau-tag{position:absolute;left:0;top:0;z-index:3;padding:5px 10px;border-radius:999px;background:rgba(10,10,12,.6);border:0;color:#c9c3b6;font:500 12px/1.2 "Oswald",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.14em;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .15s}
+.mau-tag.on{opacity:1}
+/* Cuenta grupal */
+.lab-hud > .mau-total{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:5px;padding:10px 14px 11px;border-radius:12px;background:rgba(10,10,12,.62);border:1px solid #2c2c31;text-align:right;pointer-events:none}
+.mau-total b{font:500 34px/1 "Oswald",system-ui,sans-serif;color:#e6e0d4;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.mau-total.sube b{animation:lab-estampa .42s cubic-bezier(.2,.8,.3,1) both}
+.mau-k{font:500 10px/1.2 "Oswald",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#8d877b}
+.mau-sig{font:500 11px/1.2 "Oswald",system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#c9a08f}
+.mau-sig:empty{display:none}
+/* Indicación contextual */
+.mau-pista{position:absolute;left:50%;bottom:max(64px,calc(env(safe-area-inset-bottom) + 52px));transform:translateX(-50%);z-index:4;margin:0;font:500 12px/1.4 "Oswald",system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#ddd7ca;text-shadow:0 0 12px #000,0 0 3px #000;pointer-events:none;opacity:0;transition:opacity .4s;text-align:center;width:max-content;max-width:calc(100% - 48px)}
+.mau-pista.on{opacity:1}
+/* Ficha del nicho: a la derecha en escritorio, abajo en móvil */
+.mau-ficha{position:absolute;z-index:7;right:max(20px,env(safe-area-inset-right));top:50%;width:min(360px,calc(100% - 40px));padding:26px 22px 18px;border-radius:12px;background:rgba(14,14,17,.94);border:1px solid #2c2c31;display:flex;flex-direction:column;gap:12px;text-align:center;transform:translateY(-50%);opacity:0;transition:opacity .35s ease-out .25s}
+.mau-ficha.on{opacity:1}
+.mau-ficha-n{margin:0;font:500 11px/1 "Oswald",system-ui,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#8d877b}
+.mau-ficha h2{margin:0;font:700 clamp(22px,3.4vw,27px)/1.15 "Cinzel",Georgia,serif;letter-spacing:.06em;color:#c9c3b6;text-wrap:balance}
+.mau-ficha-txt{margin:0;font:400 17px/1.55 "Cinzel",Georgia,serif;color:#b9b3a6;text-wrap:pretty}
+.mau-ficha-txt:empty,.mau-ficha-estado:empty{display:none}
+.mau-ficha-estado{margin:0;font:500 12px/1 "Oswald",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#c9a08f}
+.mau-ficha.sellado h2{color:#8d877b}
+.mau-ficha-nav{display:flex;gap:10px;margin-top:4px}
+.mau-ficha-nav .lab-pill{flex:1}
+@media (max-width:760px){
+  .mau-ficha{left:12px;right:12px;width:auto;top:auto;bottom:max(12px,env(safe-area-inset-bottom));transform:none;padding:20px 18px 14px;gap:10px}
+  .mau-ficha-txt{font-size:16px}
+}
+.mau-traes{margin:0;font:500 13px/1 "Oswald",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.2em;color:#c9a08f}
+.mau-traes:empty{display:none}
+.lab-entrada{transition:opacity .55s ease-out .1s}
+.lab-entrada.out{opacity:0;pointer-events:none}
+
+/* Vista sin 3D: misma información, en una columna */
+.mau-plano{max-width:640px;margin:0 auto;padding:max(32px,env(safe-area-inset-top)) 20px 48px;display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.mau-plano h1{margin:0;font:400 clamp(40px,9vw,64px)/1 "Creepster",system-ui,sans-serif;letter-spacing:.04em;color:#9e3b30}
+.mau-plano .mau-total{display:flex;flex-direction:column;align-items:center;gap:6px}
+.mau-plano .mau-total b{font-size:48px}
+.mau-plano-urna{display:flex;flex-direction:column;align-items:center;gap:12px}
+.mau-plano-urna p{margin:0;font:500 13px/1.3 "Oswald",system-ui,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#c9c3b6}
+.mau-plano [hidden]{display:none!important}
+.mau-plano #p-nichos{list-style:none;margin:0;padding:0;width:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr));gap:12px}
+.mau-plano #p-nichos li{display:flex;flex-direction:column;gap:8px;padding:18px 16px;border-radius:12px;background:#0e0e11;border:1px solid #2c2c31}
+.mau-plano #p-nichos li h2{margin:0;font:700 19px/1.2 "Cinzel",Georgia,serif;color:#c9c3b6}
+.mau-plano #p-nichos li.sellado h2{color:#77777c}
+.mau-plano #p-nichos li p{margin:0;font:400 15px/1.5 "Cinzel",Georgia,serif;color:#b9b3a6}
+.mau-plano .mau-ficha-n{color:#8d877b}
+.mau-plano .lab-pill{min-height:44px;padding:0 18px;border-radius:999px;background:rgba(10,10,12,.6);border:1px solid #6e2c25;color:#c9c3b6;font:500 12px/1 "Oswald",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.14em;cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
+.mau-plano .lab-pill:hover{background:#6e2c25;color:#e6e0d4}
+.mau-plano .lab-pill:disabled{opacity:.4;cursor:default}
+.mau-plano-nota{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#77777c}
+/* Ouija y marcador */
+.mau-ouija-letras{margin:0;font:700 clamp(20px,2.6vw,26px)/1.4 "Cinzel",Georgia,serif;letter-spacing:.22em;color:#e6e0d4;text-wrap:balance;overflow-wrap:anywhere}
+.mau-ouija-letras:empty{display:none}
+.mau-ouija-letras.nuevo{animation:mau-aparece .9s ease-out both}
+@keyframes mau-aparece{from{opacity:0;filter:blur(8px)}to{opacity:1;filter:blur(0)}}
+@media (prefers-reduced-motion:reduce){.mau-ouija-letras.nuevo{animation:none}}
+.mau-nombre{display:flex;flex-direction:column;gap:8px;text-align:left}
+.mau-nombre label{font:500 12px/1 "Oswald",system-ui,sans-serif;text-transform:uppercase;letter-spacing:.14em;color:#8d877b}
+.mau-nombre-fila{display:flex;gap:8px}
+.mau-nombre input{flex:1;min-width:0;min-height:44px;padding:0 12px;border-radius:8px;border:1px solid #44444a;background:#0e0e11;color:#e6e0d4;font:500 16px/1 "Oswald",system-ui,sans-serif;letter-spacing:.04em;-webkit-user-select:text;user-select:text}
+.mau-nombre input:focus{border-color:#6e2c25;outline:none}
+.mau-lista{list-style:none;margin:0;padding:0;width:100%;display:flex;flex-direction:column;gap:7px;text-align:left}
+.mau-lista li{display:flex;align-items:baseline;gap:10px;font:700 15px/1.3 "Cinzel",Georgia,serif;color:#b9b3a6}
+.mau-lista li b{min-width:1.8em;text-align:right;color:#8d877b}
+.mau-lista li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mau-lista li i{font-style:normal;color:#c9c3b6;font-variant-numeric:tabular-nums}
+.mau-lista li.tu,.mau-lista li.tu b,.mau-lista li.tu i{color:#d9b98a}
+.mau-lista li.vacio{justify-content:center;color:#77777c}
+.mau-plano section{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
+.mau-plano section > h2{margin:0;font:500 13px/1 "Oswald",system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#8d877b}
+.mau-plano .mau-lista{max-width:420px}
+.mau-plano .mau-nombre{width:100%;max-width:420px}
+/* [Kura] Fundido entre páginas de /party (reja → laberinto → mausoleo) */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.45s}
+</style>
+</head>
+<body>
+<div class="lab" id="ui" data-input="mouse">
+  <div class="lab-stage" id="stage" aria-hidden="true"></div>
+  <div class="mau-tag" id="tag" aria-hidden="true"></div>
+  <div class="lab-hud">
+    <div class="lab-izq"><button class="lab-pill" type="button" id="btn-volver">Salir</button></div>
+    <div class="mau-total" id="total" role="status" aria-live="polite">
+      <span class="mau-k">Entre todos</span>
+      <b id="total-n">0</b>
+      <span class="mau-k" id="total-u">sellos entregados</span>
+      <span class="mau-sig" id="total-sig"></span>
+    </div>
+  </div>
+  <div class="lab-inv"><div class="lab-inv-sello" id="inv" role="status" hidden><div class="lab-sello lab-sello-inv" aria-hidden="true"></div><b id="inv-n" aria-hidden="true">0</b></div></div>
+  <nav class="lab-sr" id="nav" aria-label="Lugares del Mausoleo"></nav>
+  <p class="mau-pista" id="pista" aria-hidden="true"></p>
+  <section class="mau-ficha" id="ficha" aria-labelledby="ficha-t" hidden>
+    <p class="mau-ficha-n" id="ficha-n"></p>
+    <h2 id="ficha-t"></h2>
+    <p class="mau-ficha-txt" id="ficha-txt"></p>
+    <p class="mau-ficha-estado" id="ficha-estado"></p>
+    <div class="mau-ficha-nav"><button class="lab-pill" type="button" id="ficha-prev">Anterior</button><button class="lab-pill" type="button" id="ficha-next">Siguiente</button></div>
+  </section>
+  <section class="mau-ficha" id="marcador-p" aria-labelledby="marcador-t" hidden>
+    <p class="mau-ficha-n">El marcador</p>
+    <h2 id="marcador-t">Los que más sellos dejaron</h2>
+    <ol class="mau-lista" id="marcador-l"></ol>
+    <form class="mau-nombre" id="firma-form" hidden><label for="firma-in">Firma para aparecer con tus sellos</label><div class="mau-nombre-fila"><input id="firma-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Firmar</button></div></form>
+  </section>
+  <!-- [Kura] La urna no acepta sellos sin firma (founder, 2026-10-02): así todo el que entrega tiene nombre -->
+  <section class="mau-ficha" id="urna-p" aria-labelledby="urna-t" hidden>
+    <p class="mau-ficha-n">La urna</p>
+    <h2 id="urna-t">Firma tus sellos</h2>
+    <form class="mau-nombre" id="urna-form"><label for="urna-in">Tu nombre o apodo</label><div class="mau-nombre-fila"><input id="urna-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Firmar y dejar</button></div></form>
+  </section>
+  <section class="mau-ficha" id="ouija-p" aria-labelledby="ouija-t" hidden>
+    <p class="mau-ficha-n">La ouija</p>
+    <h2 id="ouija-t">¿Hay alguien ahí?</h2>
+    <p class="mau-ouija-letras" id="ouija-letras"></p>
+    <form class="mau-nombre" id="ouija-form" hidden><label for="ouija-in">¿Quién pregunta?</label><div class="mau-nombre-fila"><input id="ouija-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Preguntar</button></div></form>
+    <p class="mau-ficha-estado" id="ouija-quien"></p>
+    <div class="mau-ficha-nav" id="ouija-acc"><button class="lab-pill" type="button" id="ouija-btn">Preguntar</button><button class="lab-pill" type="button" id="ouija-otro">Cambiar nombre</button></div>
+  </section>
+  <div class="lab-msg" id="msg"></div>
+  <p class="lab-sr" id="live" aria-live="polite"></p>
+  <section class="lab-capa lab-entrada" id="entrada" role="button" tabindex="0" aria-label="El Mausoleo. Haz clic o toca para entrar." hidden>
+    <h2>El Mausoleo</h2>
+    <p class="mau-traes" id="traes"></p>
+    <p class="lab-cta"><span class="lab-solo-mouse">Haz clic para entrar</span><span class="lab-solo-touch">Toca para entrar</span></p>
+  </section>
+  <div class="lab-dev" id="dev" hidden>
+    <button type="button" class="lab-dev-t" id="dev-t" aria-expanded="false">Dev</button>
+    <span class="lab-badge lab-mono">FASE 3E · MAUSOLEO</span>
+    <div class="lab-seg" role="group" aria-label="Red simulada"><button type="button" data-red="ok">Red ok</button><button type="button" data-red="lenta">Lenta</button><button type="button" data-red="falla">Sin red</button></div>
+    <div class="lab-seg" role="group" aria-label="Luz"><button type="button" data-luz="noche">Noche</button><button type="button" data-luz="prueba">Luz de prueba</button></div>
+    <button type="button" id="dev-sellos">Darme los 6 sellos</button>
+    <div class="lab-seg" role="group" aria-label="Otros jugadores"><button type="button" data-otros="1">Otros +1</button><button type="button" data-otros="5">+5</button><button type="button" data-otros="25">+25</button></div>
+    <button type="button" id="dev-mias">Borrar mis entregas</button>
+    <button type="button" id="dev-todo">Reiniciar mausoleo</button>
+  </div>
+  <div class="lab-velo" id="velo"></div>
+</div>
+
+<main class="mau-plano" id="plano">
+  <h1>El Mausoleo</h1>
+  <div class="mau-total" role="status" aria-live="polite">
+    <span class="mau-k">Entre todos</span>
+    <b id="p-total">0</b>
+    <span class="mau-k" id="p-u">sellos entregados</span>
+    <span class="mau-sig" id="p-sig"></span>
+  </div>
+  <div class="mau-plano-urna">
+    <p id="p-traes"></p>
+    <button class="lab-pill" type="button" id="p-entregar" hidden>Dejar mis sellos en la urna</button>
+  </div>
+  <ol id="p-nichos"></ol>
+  <section><h2>Los que más sellos dejaron</h2><ol class="mau-lista" id="p-marcador"></ol></section>
+  <section>
+    <h2>La ouija</h2>
+    <form class="mau-nombre" id="p-ouija"><label for="p-ouija-in">¿Quién pregunta?</label><div class="mau-nombre-fila"><input id="p-ouija-in" maxlength="24" autocomplete="nickname" required><button class="lab-pill" type="submit">Preguntar</button></div></form>
+    <p class="mau-ouija-letras" id="p-ouija-r" aria-live="polite"></p>
+  </section>
+  <a class="lab-pill" id="p-salir" href="#">Volver al laberinto</a>
+  <p class="mau-plano-nota" id="p-nota"></p>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { crearApi } from '/party/laberinto/api.js';
+import { crearSfx } from '/party/laberinto/sfx.js';
+import { texMuro, texAdoquin, texPiedra, texSuelo, texLetrero, fbm, rng } from '/party/laberinto/texturas.js';
+
+const q = new URLSearchParams(location.search), root = document.documentElement;
+const LABERINTO_URL = '/party/laberinto' + (q.get('estado') === 'revelado' ? '?estado=revelado' : '');   // [Kura] sin ?volver= (sería un redirect abierto)
+const KEY = 'lab.v1', ROMANOS = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+const $ = id => document.getElementById(id);
+const espera = ms => new Promise(r => setTimeout(r, ms));
+const coarse = matchMedia('(pointer:coarse)').matches, reducido = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- Datos ----------
+const [mapa, cfg, ouijaCfg] = await Promise.all([
+  fetch('/party/laberinto/mapa.json', { cache: 'no-cache' }).then(r => r.json()),
+  fetch('/party/mausoleo/nichos.json', { cache: 'no-cache' }).then(r => r.json()),
+  null,   // [Kura] los mensajes de la ouija viven solo en el servidor (src/modules/party/lab-config.ts)
+  Promise.race([Promise.all(['700 20px Cinzel', '400 20px Cinzel', '500 12px Oswald'].map(f => document.fonts.load(f))), espera(2500)]).catch(() => {}),
+]);
+const LAPIDAS = Object.values(mapa.lapidas).filter(l => l.juego);
+const nombreDe = id => (LAPIDAS.find(l => l.id === id) || {}).nombre || id;
+const inicial = n => (n.replace(/^(Fray|Hermanas|Doña|Don)\s+/i, '')[0] || '?').toUpperCase();
+
+const cache = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (_) { return {}; } })();
+const guardar = () => { try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (_) {} };
+if (!cache.dispositivo) cache.dispositivo = crypto.randomUUID ? crypto.randomUUID() : 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+cache.mau = Object.assign({ vistos: [], contenido: {}, total: 0 }, cache.mau);
+guardar();
+
+const api = crearApi({ base: '/api/party/lab', red: 'ok',   /* [Kura] servidor real; sin ?api= ni ?red= */ cache, guardar, lapidas: LAPIDAS.map(l => l.id), nichos: cfg.nichos, ouija: ouijaCfg });
+const sfx = crearSfx();
+const NICHOS = cfg.nichos.slice(0, 6).map((n, i) => ({ id: n.id, umbral: n.umbral, i, num: ROMANOS[i], abierto: false }));
+const misSellos = () => (cache.progreso && cache.progreso.sellos) || {};
+const porEntregar = () => Object.entries(misSellos()).filter(([id, s]) => LAPIDAS.some(l => l.id === id) && !s.entregado).map(([id]) => id);
+const misEntregados = () => Object.values(misSellos()).filter(s => s.entregado).length;
+
+let total = cache.mau.total || 0, enLinea = true;
+async function cargarEstado() {
+  try { await api.sincronizar(); await api.progreso(); const r = await api.mausoleo(); guardarMausoleo(r); enLinea = true; return r; }
+  catch (e) { enLinea = false; return null; }
+}
+function guardarMausoleo(r) {
+  cache.mau.total = r.total;
+  (r.nichos || []).forEach(n => { if (n.abierto && n.titulo != null) cache.mau.contenido[n.id] = { titulo: n.titulo, texto: n.texto }; });
+  guardar();
+}
+const estado0 = await cargarEstado();
+const totalServidor = () => cache.mau.total || 0;
+
+// ---------- Textos compartidos ----------
+const plural = (n, a, b) => n === 1 ? a : b;
+const siguiente = t => NICHOS.find(n => n.umbral > t);
+const textoSig = t => { const s = siguiente(t); return s ? `Faltan ${s.umbral - t} para el nicho ${s.num}` : 'Todos los nichos están abiertos'; };
+function contenidoNicho(n) {
+  if (!n.abierto) return { titulo: 'Sellado', texto: `Se abre cuando, entre todos, entreguen ${n.umbral} sellos.`, estado: `Faltan ${Math.max(0, n.umbral - total)}` };
+  const c = cache.mau.contenido[n.id];
+  return c ? { titulo: c.titulo, texto: c.texto, estado: '' } : { titulo: 'Abierto', texto: 'Sin conexión para leerlo. Vuelve a intentarlo en un momento.', estado: '' };
+}
+let msgT = 0;
+function mensaje(t, ms = 3000) { const m = $('msg'); m.textContent = t; $('live').textContent = t; m.classList.add('on'); clearTimeout(msgT); msgT = setTimeout(() => m.classList.remove('on'), ms); }
+// Marcador: última respuesta guardada para mostrar algo sin conexión
+let marc = cache.mau.marcador || null;
+async function cargarMarcador() {
+  try { marc = await api.marcador(); cache.mau.marcador = marc; guardar(); } catch (_) {}
+  return marc;
+}
+function listaMarcador(ol, d) {
+  ol.innerHTML = '';
+  const filas = d ? d.top.slice() : [];
+  if (d && d.tu && d.tu.apodo && d.tu.puesto && !filas.some(f => f.tu)) filas.push({ puesto: d.tu.puesto, apodo: d.tu.apodo, sellos: d.tu.sellos, tu: true });
+  if (!filas.length) { const li = document.createElement('li'); li.className = 'vacio'; li.textContent = d ? 'Nadie ha firmado todavía' : 'Sin conexión'; ol.appendChild(li); return; }
+  filas.forEach(f => { const li = document.createElement('li'); li.className = f.tu ? 'tu' : ''; li.innerHTML = '<b></b><span></span><i></i>'; li.children[0].textContent = f.puesto + '.'; li.children[1].textContent = f.apodo + (f.tu ? ' (tú)' : ''); li.children[2].textContent = f.sellos; ol.appendChild(li); });
+}
+async function firmar(v) {
+  v = v.trim().slice(0, 24); if (!v) return false;
+  cache.apodo = v; guardar();
+  try { await api.setApodo(v); } catch (_) {}
+  await cargarMarcador(); return true;
+}
+// La ouija solo deletrea letras (con Ñ), números y espacios
+const deletreable = t => String(t || '').toUpperCase().replace(/Ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'Ñ').replace(/[^A-ZÑ0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// ---------- Vista sin 3D ----------
+function pintarPlano() {
+  $('p-total').textContent = total; $('p-u').textContent = plural(total, 'sello entregado', 'sellos entregados');
+  $('p-sig').textContent = textoSig(total);
+  const n = porEntregar().length;
+  $('p-traes').textContent = n ? `Traes ${n} ${plural(n, 'sello', 'sellos')}` : misEntregados() ? `Ya dejaste tus ${misEntregados()} ${plural(misEntregados(), 'sello', 'sellos')} en la urna` : 'No traes sellos. Se ganan en las lápidas del laberinto.';
+  $('p-entregar').hidden = !n;
+  $('p-nichos').innerHTML = '';
+  NICHOS.forEach(x => {
+    const c = contenidoNicho(x), li = document.createElement('li');
+    li.className = x.abierto ? '' : 'sellado';
+    li.innerHTML = `<span class="mau-ficha-n">Nicho ${x.num}</span><h2></h2><p></p>${c.estado ? '<span class="mau-ficha-estado"></span>' : ''}`;
+    li.querySelector('h2').textContent = c.titulo; li.querySelector('p').textContent = c.texto;
+    if (c.estado) li.querySelector('.mau-ficha-estado').textContent = c.estado;
+    $('p-nichos').appendChild(li);
+  });
+  listaMarcador($('p-marcador'), marc);
+}
+function iniciarPlano(nota) {
+  total = totalServidor(); NICHOS.forEach(n => { n.abierto = total >= n.umbral; });
+  $('p-salir').href = LABERINTO_URL;
+  $('p-nota').textContent = (nota || '') + (enLinea ? '' : ' · Sin conexión: datos guardados.');
+  pintarPlano();
+  cargarMarcador().then(() => listaMarcador($('p-marcador'), marc));
+  if (cache.apodo) $('p-ouija-in').value = cache.apodo;
+  $('p-ouija').onsubmit = async e => {
+    e.preventDefault(); const v = $('p-ouija-in').value.trim(); if (!v) return;
+    if (v !== cache.apodo) await firmar(v);
+    $('p-ouija-r').textContent = '…';
+    try { const r = await api.ouija(v); $('p-ouija-r').textContent = r.texto; } catch (_) { $('p-ouija-r').textContent = 'La ouija no responde.'; }
+    listaMarcador($('p-marcador'), marc);
+  };
+  $('p-entregar').onclick = async () => {
+    // [Kura] tampoco sin firma en la vista 2D
+    if (!cache.apodo) { const v = prompt('Firma tus sellos: tu nombre o apodo'); if (!v || !(await firmar(v))) return; }
+    const b = $('p-entregar'); b.disabled = true;
+    try { const r = await api.entregar(); guardarMausoleo(r); total = r.total; NICHOS.forEach(n => { n.abierto = total >= n.umbral; }); $('p-traes').textContent = ''; pintarPlano(); cargarMarcador().then(() => listaMarcador($('p-marcador'), marc)); }
+    catch (e) { $('p-traes').textContent = 'No se pudo entregar. Revisa tu conexión.'; }
+    finally { b.disabled = false; }
+  };
+}
+
+if (root.dataset.modo !== '3d') iniciarPlano('Vista sin 3D (' + (window.__boot.reason || '—') + '). Forzar 3D: ?modo=3d');
+else {
+  try { iniciar3D(); }
+  catch (e) { console.warn('3D falló, usando la vista sin 3D', e); root.dataset.modo = 'fallback'; iniciarPlano('Error al iniciar 3D'); }
+}
+
+function iniciar3D() {
+  const ui = $('ui'), stage = $('stage');
+  ui.dataset.input = coarse ? 'touch' : 'mouse';
+  addEventListener('pointerdown', e => { const t = e.pointerType === 'mouse' ? 'mouse' : 'touch'; if (ui.dataset.input !== t) { ui.dataset.input = t; if (typeof pintarUI === 'function' && cur) pintarUI(); } }, true);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
+  stage.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); renderer.setAnimationLoop(null); root.dataset.modo = 'fallback'; iniciarPlano('Se perdió el contexto WebGL'); });
+
+  const BG = 0x07080b, D2R = Math.PI / 180, V3 = THREE.Vector3;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(BG); scene.fog = new THREE.Fog(BG, 3, 15);
+  const hemi = new THREE.HemisphereLight(0x3a4356, 0x08080a, 0.2); scene.add(hemi);
+
+  // ---------- Texturas y materiales (procedurales, 0 KB) ----------
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const tex = (c, rx = 1, ry = 1, srgb = true, clamp = false) => {
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+    t.repeat.set(rx, ry); t.anisotropy = aniso; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  const projUV = g => {
+    const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
+    for (let i = 0; i < p.count; i++) {
+      const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), az = Math.abs(n.getZ(i));
+      if (ay >= ax && ay >= az) uv.setXY(i, p.getX(i), p.getZ(i)); else if (ax >= az) uv.setXY(i, p.getZ(i), p.getY(i)); else uv.setXY(i, p.getX(i), p.getY(i));
+    }
+    return g;
+  };
+  const [muroC, muroH] = texMuro(41), [pisoC, pisoH] = texAdoquin(13), [tierraC, tierraH] = texSuelo(5), piedraC = texPiedra(9);
+  const lienzo = (W, H) => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+  const grabar = (g, t, x, y, font, a = 0.88) => { g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(255,255,255,.2)'; g.fillText(t, x + 1, y + 1.5); g.fillStyle = `rgba(26,25,28,${a})`; g.fillText(t, x, y); };
+  const fondoPiedra = (g, W, H, borde = 0) => {
+    g.fillStyle = g.createPattern(piedraC, 'repeat'); g.fillRect(0, 0, W, H);
+    if (borde) { g.strokeStyle = 'rgba(28,27,30,.5)'; g.lineWidth = 3; g.strokeRect(borde, borde, W - borde * 2, H - borde * 2); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1; g.strokeRect(borde + 2, borde + 2, W - borde * 2 - 4, H - borde * 2 - 4); }
+  };
+  const radial = (pw = 1.6) => { const S = 64, c = lienzo(S, S), g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, '#fff'); gr.addColorStop(0.35, `rgba(255,255,255,${0.55 / pw})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, S, S); return tex(c, 1, 1, false, true); };
+  const HALO = radial();
+
+  const M = {
+    muro: new THREE.MeshLambertMaterial({ map: tex(muroC, .5, .5), bumpMap: tex(muroH, .5, .5, false), bumpScale: 2.5, name: 'muro' }),
+    boveda: new THREE.MeshLambertMaterial({ map: tex(muroC, 3.4, 5.15), bumpMap: tex(muroH, 3.4, 5.15, false), bumpScale: 2, side: THREE.BackSide, color: 0xb0aca4, name: 'boveda' }),
+    bovedaC: new THREE.MeshLambertMaterial({ map: tex(muroC, 2.2, 1.7), bumpMap: tex(muroH, 2.2, 1.7, false), bumpScale: 2, side: THREE.BackSide, color: 0xb0aca4, name: 'boveda_capilla' }),
+    piso: new THREE.MeshLambertMaterial({ map: tex(pisoC, .5, .5), bumpMap: tex(pisoH, .5, .5, false), bumpScale: 2, name: 'piso' }),
+    tierra: new THREE.MeshLambertMaterial({ map: tex(tierraC, .5, .5), bumpMap: tex(tierraH, .5, .5, false), bumpScale: 1.5, color: 0x9a968e, name: 'tierra' }),
+    piedra: new THREE.MeshLambertMaterial({ map: tex(piedraC, 2, 2), color: 0x9d988e, name: 'piedra' }),
+    piedraOsc: new THREE.MeshLambertMaterial({ map: tex(piedraC, 2, 2), color: 0x6e6a64, name: 'piedra_oscura' }),
+    fondo: new THREE.MeshLambertMaterial({ map: tex(piedraC, 2, 2), color: 0x3a3631, name: 'fondo_nicho' }),
+    bronce: new THREE.MeshPhongMaterial({ color: 0x5f4630, specular: 0x6a4c2c, shininess: 38, name: 'bronce' }),
+    cera: new THREE.MeshLambertMaterial({ color: 0x6e2c25, name: 'cera' }),
+    vela: new THREE.MeshLambertMaterial({ color: 0xd8cdb4, name: 'vela' }),
+    papel: new THREE.MeshLambertMaterial({ color: 0xc9b994, name: 'pergamino' }),
+    cinta: new THREE.MeshLambertMaterial({ color: 0x7a2a22, name: 'cinta' }),
+    boca: new THREE.MeshBasicMaterial({ color: 0x050403, name: 'boca_urna' }),
+    petalo: new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, name: 'petalo' }),
+    hueso: new THREE.MeshLambertMaterial({ color: 0xd9cfb8, name: 'planchette' }),
+  };
+  M.madera = new THREE.MeshLambertMaterial({ name: 'madera', map: tex((() => {
+    const S = 256, c = lienzo(S, S), g = c.getContext('2d'), img = g.createImageData(S, S), n = fbm(rng(8), S, S, 3, 12, 4);
+    for (let i = 0; i < S * S; i++) { const y = (i / S) | 0, v = 0.5 + 0.5 * Math.sin(y * 0.22 + n[i] * 14), l = 0.15 + v * 0.06 + n[i] * 0.06; img.data[i * 4] = l * 320; img.data[i * 4 + 1] = l * 225; img.data[i * 4 + 2] = l * 150; img.data[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0); return c;
+  })(), 2, 2) });
+  const add = o => (scene.add(o), o);
+  const box = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(projUV(new THREE.BoxGeometry(w, h, d)), m); o.position.set(x, y, z); return add(o); };
+  const cyl = (rt, rb, h, m, x, y, z, seg = 16) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m); o.position.set(x, y, z); return add(o); };
+  const plano = (w, h, m, x, y, z) => { const o = new THREE.Mesh(projUV(new THREE.PlaneGeometry(w, h)), m); o.position.set(x, y, z); return add(o); };
+
+  // ---------- Cámara mortuoria: nave, dos capillas laterales y bóveda ----------
+  // Fondo en z = -3 (cara), puerta en z = 7. Nave de 5.2 m; a cada lado una capilla de 3.4 × 3.4 m centrada en z = 2.6,
+  // abierta a la nave por un arco. Izquierda: el marcador. Derecha: la ouija.
+  const ZW = -3, ZD = 7, XW = 2.6, HM = 3.6, ZC = 2.6, XC = 6.0, CW = 3.4, HC = 3.2, AR = 1.25, AH = 2.1;
+  const LARGO = ZD - ZW + 0.3, ZM = (ZW + ZD) / 2, z0c = ZC - CW / 2, z1c = ZC + CW / 2, XM = (XW + XC) / 2;
+  plano(5.2, ZD - ZW, M.piso, 0, 0, ZM).rotation.x = -Math.PI / 2;
+  const afuera = plano(40, 26, M.tierra, 0, -0.005, ZD + 13); afuera.rotation.x = -Math.PI / 2;
+  box(5.6, 5.4, 0.3, M.muro, 0, 2.7, ZW - 0.15);
+  [-1, 1].forEach(s => {
+    const x = s * (XW + 0.15);
+    box(0.3, HM, z0c - (ZW - 0.15), M.muro, x, HM / 2, (ZW - 0.15 + z0c) / 2);
+    box(0.3, HM, ZD + 0.15 - z1c, M.muro, x, HM / 2, (z1c + ZD + 0.15) / 2);
+  });
+  // Tramo del arco: una sola pieza extruida (contorno en z, y) girada para que el grosor quede en x
+  const arco = new THREE.Shape();
+  arco.moveTo(z0c, 0); arco.lineTo(ZC - AR, 0); arco.lineTo(ZC - AR, AH); arco.absarc(ZC, AH, AR, Math.PI, 0, true);
+  arco.lineTo(ZC + AR, 0); arco.lineTo(z1c, 0); arco.lineTo(z1c, HM); arco.lineTo(z0c, HM); arco.closePath();
+  const gArco = projUV(new THREE.ExtrudeGeometry(arco, { depth: 0.3, bevelEnabled: false, curveSegments: 18 }).rotateY(-Math.PI / 2));
+  [-1, 1].forEach(s => {
+    const m = new THREE.Mesh(gArco, M.muro); m.position.x = s < 0 ? -XW : XW + 0.3; add(m);
+    [XW - 0.02, XW + 0.32].forEach(x => { const a = new THREE.Mesh(new THREE.TorusGeometry(AR + 0.06, 0.07, 6, 22, Math.PI), M.piedra); a.rotation.y = Math.PI / 2; a.position.set(s * x, AH, ZC); add(a); });
+    [-1, 1].forEach(t => box(0.38, AH, 0.14, M.piedra, s * (XW + 0.15), AH / 2, ZC + t * (AR + 0.06)));
+  });
+  const bov = new THREE.CylinderGeometry(XW, XW, LARGO, 36, 1, true, -Math.PI / 2, Math.PI);
+  bov.rotateX(-Math.PI / 2); bov.scale(1, 0.55, 1); bov.translate(0, HM, ZM);
+  add(new THREE.Mesh(bov, M.boveda));
+  // Arcos fajones sobre pilastras
+  [-0.9, 5.3].forEach(z => {
+    const a = new THREE.Mesh(new THREE.TorusGeometry(XW - 0.08, 0.12, 6, 28, Math.PI), M.piedra); a.scale.set(1, 0.55, 1); a.position.set(0, HM, z); add(a);
+    [-1, 1].forEach(s => box(0.14, HM, 0.32, M.piedra, s * (XW - 0.07), HM / 2, z));
+  });
+  // Cornisa a la altura del arranque de la bóveda
+  [-1, 1].forEach(s => box(0.12, 0.1, LARGO - 0.3, M.piedraOsc, s * (XW - 0.06), HM - 0.05, ZM));
+  // Capillas: piso, muros, bóveda transversal y techo (por fuera)
+  const bovC = new THREE.CylinderGeometry(CW / 2, CW / 2, XC - XW, 24, 1, true, Math.PI, Math.PI);
+  bovC.rotateZ(-Math.PI / 2); bovC.scale(1, 0.55, 1);
+  [-1, 1].forEach(s => {
+    plano(XC - XW, CW, M.piso, s * XM, 0, ZC).rotation.x = -Math.PI / 2;
+    box(0.3, 4.6, CW + 0.6, M.muro, s * (XC + 0.15), 2.3, ZC);
+    [z0c - 0.15, z1c + 0.15].forEach(z => box(XC - XW, 4.35, 0.3, M.muro, s * (XM + 0.3), 2.175, z));
+    box(XC - XW + 0.3, 0.2, CW + 0.6, M.piedraOsc, s * (XM + 0.15), 4.45, ZC);
+    const b = new THREE.Mesh(bovC, M.bovedaC); b.position.set(s * XM, HC, ZC); add(b);
+    [z0c + 0.06, z1c - 0.06].forEach(z => box(XC - XW - 0.32, 0.1, 0.12, M.piedraOsc, s * (XM + 0.16), HC - 0.05, z));
+  });
+
+  // Columbario lateral: placas viejas, todas selladas
+  const placaVieja = (() => {
+    const W = 128, H = 108, c = lienzo(W, H), g = c.getContext('2d'), R = rng(77);
+    fondoPiedra(g, W, H, 7);
+    grabar(g, '✝', W / 2, 26, '700 16px Cinzel, Georgia, serif', 0.7);
+    g.fillStyle = 'rgba(28,27,30,.45)';
+    [48, 62, 74].forEach((y, i) => { const w = (i === 0 ? 60 : 36) + R() * 20; g.fillRect(W / 2 - w / 2, y, w, i === 0 ? 4 : 3); });
+    return c;
+  })();
+  const mVieja = new THREE.MeshLambertMaterial({ map: tex(placaVieja, 1, 1, true, true), name: 'placa_vieja' });
+  const viejas = [], R0 = rng(5);
+  [-1, 1].forEach(s => [-2.3, -1.6, -0.2, 0.5, 4.7, 5.9, 6.6].forEach(z => [0.75, 1.4, 2.05, 2.7].forEach(y => { if (R0() < 0.1) return; viejas.push([s * (XW - 0.02), y, z, s]); })));
+  const imV = new THREE.InstancedMesh(new THREE.BoxGeometry(0.04, 0.52, 0.6), mVieja, viejas.length), tmp = new THREE.Object3D(), col = new THREE.Color();
+  viejas.forEach(([x, y, z, s], i) => { tmp.position.set(x, y, z); tmp.rotation.set((R0() - .5) * 0.02, s < 0 ? 0 : Math.PI, (R0() - .5) * 0.02); tmp.updateMatrix(); imV.setMatrixAt(i, tmp.matrix); const k = 0.55 + R0() * 0.3; imV.setColorAt(i, col.setRGB(k, k * 0.98, k * 0.94)); });
+  add(imV);
+
+  // ---------- Fachada (se ve al llegar) ----------
+  box(2.25, 5.2, 0.3, M.muro, -1.775, 2.6, ZD + 0.15); box(2.25, 5.2, 0.3, M.muro, 1.775, 2.6, ZD + 0.15);
+  box(1.3, 2.7, 0.3, M.muro, 0, 3.85, ZD + 0.15);
+  box(1.5, 0.06, 0.5, M.piedraOsc, 0, 0.03, ZD + 0.15);
+  [-1, 1].forEach(s => { box(0.3, 2.9, 0.12, M.piedra, s * 0.86, 1.45, ZD + 0.36); box(0.34, 5.2, 0.14, M.piedra, s * 2.82, 2.6, ZD + 0.37); });
+  box(2.1, 0.22, 0.16, M.piedra, 0, 2.95, ZD + 0.38);
+  const letrero = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.21), new THREE.MeshLambertMaterial({ map: tex(texLetrero(((mapa.puerta && mapa.puerta.nombre) || 'Mausoleo').toUpperCase(), piedraC), 1, 1, true, true) }));
+  letrero.position.set(0, 2.95, ZD + 0.465); add(letrero);
+  const fr = new THREE.Shape(); fr.moveTo(-3.05, 0); fr.lineTo(3.05, 0); fr.lineTo(0, 1); fr.closePath();
+  const fronton = new THREE.Mesh(projUV(new THREE.ExtrudeGeometry(fr, { depth: 0.5, bevelEnabled: false })), M.piedra); fronton.position.set(0, 5.2, ZD - 0.05); add(fronton);
+  box(0.12, 0.8, 0.12, M.piedra, 0, 6.55, ZD + 0.2); box(0.46, 0.12, 0.12, M.piedra, 0, 6.7, ZD + 0.2);
+  const tumbas = [], R1 = rng(23);
+  while (tumbas.length < 16) { const x = (R1() * 2 - 1) * 9, z = ZD + 2.5 + R1() * 9; if (Math.abs(x) < 2.2) continue; const h = 0.6 + R1() * 0.5; tumbas.push([x, h, z, (R1() - .5) * 0.5, (R1() - .5) * 0.15]); }
+  const imT = new THREE.InstancedMesh(projUV(new THREE.BoxGeometry(0.55, 1, 0.14)), M.piedraOsc, tumbas.length);
+  tumbas.forEach(([x, h, z, ry, rz], i) => { tmp.position.set(x, h / 2, z); tmp.rotation.set(0, ry, rz); tmp.scale.set(1, h, 1); tmp.updateMatrix(); imT.setMatrixAt(i, tmp.matrix); });
+  tmp.scale.set(1, 1, 1); add(imT);
+  const luna = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0x55607a, fog: false, depthWrite: false, transparent: true })); luna.scale.setScalar(9); luna.position.set(7, 11, 34); add(luna);
+  const lunaLuz = new THREE.SpotLight(0x9fb0d6, 7, 15, 17 * D2R, 0.65, 1.2); lunaLuz.position.set(0.5, 4.4, ZD + 5.8); lunaLuz.target.position.set(0, 0, ZD - 1.8); add(lunaLuz); add(lunaLuz.target);
+
+  // ---------- Altar, urna y contador ----------
+  box(2.0, 0.12, 0.95, M.piedraOsc, 0, 0.06, ZW + 0.475);
+  box(1.8, 0.86, 0.8, M.piedra, 0, 0.55, ZW + 0.4);
+  box(2.0, 0.1, 0.95, M.piedraOsc, 0, 1.03, ZW + 0.475);
+  const contC = lienzo(512, 224), contG = contC.getContext('2d'), contT = tex(contC, 1, 1, true, true);
+  function pintarContador(n) {
+    const g = contG; g.clearRect(0, 0, 512, 224); fondoPiedra(g, 512, 224, 10);
+    grabar(g, 'ENTRE TODOS', 256, 46, '700 26px Cinzel, Georgia, serif');
+    grabar(g, String(n), 256, 118, '700 92px Cinzel, Georgia, serif');
+    grabar(g, n === 1 ? 'SELLO ENTREGADO' : 'SELLOS ENTREGADOS', 256, 186, '700 24px Cinzel, Georgia, serif');
+    contT.needsUpdate = true;
+  }
+  const cont = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.48), new THREE.MeshLambertMaterial({ map: contT, name: 'contador' })); cont.position.set(0, 0.56, ZW + 0.802); add(cont);
+
+  const URNA = new V3(0, 1.08, ZW + 0.45), BOCA_Y = URNA.y + 0.67, GIRO = 1.75;
+  box(0.36, 0.06, 0.36, M.piedraOsc, URNA.x, URNA.y + 0.03, URNA.z);
+  const perfil = [[0, 0], [0.11, 0], [0.12, 0.02], [0.075, 0.06], [0.07, 0.1], [0.12, 0.18], [0.165, 0.29], [0.17, 0.36], [0.15, 0.44], [0.1, 0.52], [0.085, 0.555], [0.1, 0.59], [0.112, 0.61], [0.095, 0.61]].map(([r, y]) => new THREE.Vector2(r, y));
+  const urna = new THREE.Group(); urna.position.set(URNA.x, URNA.y + 0.06, URNA.z); add(urna);
+  urna.add(new THREE.Mesh(new THREE.LatheGeometry(perfil, 36), Object.assign(M.bronce.clone(), { side: THREE.DoubleSide })));
+  const boca = new THREE.Mesh(new THREE.CircleGeometry(0.094, 28), M.boca); boca.rotation.x = -Math.PI / 2; boca.position.y = 0.585; urna.add(boca);
+  [-1, 1].forEach(s => { const a = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.011, 6, 16, Math.PI * 1.2), M.bronce); a.position.set(s * 0.17, 0.4, 0); a.rotation.set(0, s < 0 ? Math.PI : 0, -0.9); urna.add(a); });
+  const brillo = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0xff9a4a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
+  brillo.position.set(0, 0.66, 0); brillo.scale.setScalar(0.5); urna.add(brillo);
+  let brilloK = 0;
+
+  // ---------- Velas: altar, rincones y dentro de cada nicho ----------
+  const llamas = [];
+  function vela(x, y, z, h = 0.24, r = 0.032, encendida = true) {
+    const g = new THREE.Group(); g.position.set(x, y, z); add(g);
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, h, 12), M.vela); c.position.y = h / 2; g.add(c);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0xffc27a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+    s.position.y = h + 0.035; s.scale.set(0.07, 0.12, 1); g.add(s);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: 0xff9a4a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.22 }));
+    halo.position.y = h + 0.03; halo.scale.setScalar(0.42); g.add(halo);
+    const L = { g, s, halo, ph: Math.random() * 10, k: encendida ? 1 : 0, t: encendida ? 1 : -1 };
+    s.visible = halo.visible = encendida; llamas.push(L); return L;
+  }
+  [-0.72, 0.72].forEach(x => { box(0.12, 0.04, 0.12, M.bronce, x, 1.1, ZW + 0.42); cyl(0.014, 0.02, 0.14, M.bronce, x, 1.19, ZW + 0.42, 8); box(0.1, 0.02, 0.1, M.bronce, x, 1.27, ZW + 0.42); vela(x, 1.28, ZW + 0.42, 0.26, 0.03); });
+  [[-2.15, 5.6], [-1.95, 5.85], [-2.3, 6.05], [2.2, -1.9], [2.0, -1.65]].forEach(([x, z], i) => vela(x, 0, z, 0.12 + (i * 0.37 % 1) * 0.22, 0.04));
+  const luzAltar = add(new THREE.PointLight(0xffb36a, 4.2, 6.5, 1.6)); luzAltar.position.set(0, 1.75, ZW + 0.85);
+  const luzRincon = add(new THREE.PointLight(0xffa860, 1.6, 3.8, 2)); luzRincon.position.set(-2.1, 0.5, 5.85);
+  const luzRincon2 = coarse ? null : add(new THREE.PointLight(0xffa860, 1.1, 3.2, 2)); if (luzRincon2) luzRincon2.position.set(2.05, 0.45, -1.75);
+
+  // ---------- Nichos: 2 filas × 3, I–III abajo ----------
+  const NW = 1.0, NH = 0.72, ND = 0.36, ZF = ZW + ND, COLS = [-1.45, 0, 1.45], FILAS = [2.15, 3.1];
+  NICHOS.forEach((n, i) => { n.x = COLS[i % 3]; n.y = FILAS[Math.floor(i / 3)]; });
+  const tira = (x0, x1, y0, y1) => box(x1 - x0, y1 - y0, ND, M.piedra, (x0 + x1) / 2, (y0 + y1) / 2, ZW + ND / 2);
+  box(4.7, 0.1, ND + 0.1, M.piedraOsc, 0, 1.6, ZW + (ND + 0.1) / 2);
+  tira(-2.25, 2.25, 1.65, 1.79); tira(-2.25, 2.25, 2.51, 2.74); tira(-2.25, 2.25, 3.46, 3.6);
+  FILAS.forEach(y => [[-2.25, -1.95], [-0.95, -0.5], [0.5, 0.95], [1.95, 2.25]].forEach(([a, b]) => tira(a, b, y - NH / 2, y + NH / 2)));
+  box(4.7, 0.1, ND + 0.1, M.piedraOsc, 0, 3.6, ZW + (ND + 0.1) / 2);
+  function texPlaca(n) {
+    const W = 256, H = 184, c = lienzo(W, H), g = c.getContext('2d');
+    fondoPiedra(g, W, H, 12);
+    grabar(g, n.num, W / 2, 82, '700 64px Cinzel, Georgia, serif');
+    g.fillStyle = 'rgba(28,27,30,.4)'; g.fillRect(W / 2 - 30, 124, 60, 2);
+    grabar(g, String(n.umbral), W / 2, 148, '400 24px Cinzel, Georgia, serif', 0.8);
+    return tex(c, 1, 1, true, true);
+  }
+  const luzNicho = [];
+  NICHOS.forEach(n => {
+    plano(NW, NH, M.fondo, n.x, n.y, ZW + 0.004);
+    const piv = new THREE.Group(); piv.position.set(n.x - NW / 2 + 0.015, n.y, ZF); add(piv);
+    const mf = new THREE.MeshLambertMaterial({ map: texPlaca(n), color: 0xb4afa5 });
+    const placa = new THREE.Mesh(new THREE.BoxGeometry(NW - 0.03, NH - 0.03, 0.05), [M.piedra, M.piedra, M.piedra, M.piedra, mf, M.piedra]);
+    placa.position.set((NW - 0.03) / 2, 0, -0.025); piv.add(placa);
+    const asa = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.007, 6, 16), M.bronce); asa.position.set(NW - 0.11, 0, 0.008); piv.add(asa);
+    const y0 = n.y - NH / 2;
+    n.vela = vela(n.x + 0.26, y0, ZW + 0.17, 0.11, 0.028, false);
+    const rollo = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.34, 12), M.papel); rollo.rotation.z = Math.PI / 2; rollo.position.set(n.x - 0.1, y0 + 0.028, ZW + 0.17); add(rollo);
+    const lazo = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.025, 12), M.cinta); lazo.rotation.z = Math.PI / 2; lazo.position.copy(rollo.position); add(lazo);
+    if (!coarse) { const L = add(new THREE.PointLight(0xffc27a, 0, 1.7, 2)); L.position.set(n.x + 0.1, y0 + 0.3, ZW + 0.3); luzNicho.push(L); n.luz = L; }
+    Object.assign(n, { piv, placa, sale: 0, giro: 0 });
+  });
+  const ponerNicho = n => { n.piv.position.z = ZF + n.sale; n.piv.rotation.y = -n.giro; };
+
+  // ---------- Pétalos de cempasúchil: siguen desde la puerta hasta la urna ----------
+  const petalos = [], R2 = rng(61);
+  for (let i = 0; i < 210; i++) { const t = Math.pow(R2(), 0.7), z = ZD - 0.2 - t * (ZD - ZW - 1.0); petalos.push([(R2() - .5) * (0.5 + t * 0.5), 0.004, z]); }
+  for (let i = 0; i < 90; i++) petalos.push([(R2() - .5) * 2.0, 0.004, ZW + 0.85 + R2() * 0.6]);
+  for (let i = 0; i < 36; i++) { const a = R2() * 6.28, r = 0.22 + R2() * 0.5; petalos.push([URNA.x + Math.cos(a) * r, 1.083, URNA.z + Math.sin(a) * r * 0.7]); }
+  const imP = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.034, 0.024), M.petalo, petalos.length);
+  petalos.forEach(([x, y, z], i) => { tmp.position.set(x, y, z); tmp.rotation.set(-Math.PI / 2 + (R2() - .5) * 0.5, 0, R2() * 6.28); tmp.updateMatrix(); imP.setMatrixAt(i, tmp.matrix); imP.setColorAt(i, col.setHSL(0.075 + R2() * 0.03, 0.85, 0.42 + R2() * 0.12)); });
+  add(imP);
+
+  // ---------- Capilla izquierda: el marcador ----------
+  box(0.1, 2.36, 2.76, M.piedraOsc, -XC + 0.05, 1.85, ZC);
+  box(0.16, 0.14, 2.96, M.piedra, -XC + 0.08, 3.1, ZC);
+  box(0.16, 0.12, 2.86, M.piedra, -XC + 0.08, 0.61, ZC);
+  box(0.12, 0.7, 0.12, M.piedra, -XC + 0.06, 3.55, ZC); box(0.12, 0.12, 0.42, M.piedra, -XC + 0.06, 3.68, ZC);
+  const marC = lienzo(1024, 860), marG = marC.getContext('2d'), marT = tex(marC, 1, 1, true, true);
+  const tablero = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.1), new THREE.MeshLambertMaterial({ map: marT, name: 'marcador' }));
+  tablero.rotation.y = Math.PI / 2; tablero.position.set(-XC + 0.102, 1.85, ZC); add(tablero);
+  function filaMarcador(g, f, y) {
+    const color = f.tu ? 'rgba(214,176,118,.98)' : 'rgba(26,25,28,.88)', F = '700 40px Cinzel, Georgia, serif';
+    const t = (s, x, al, font = F) => { g.font = font; g.textAlign = al; g.textBaseline = 'middle'; g.fillStyle = 'rgba(255,255,255,.2)'; g.fillText(s, x + 1, y + 1.5); g.fillStyle = color; g.fillText(s, x, y); };
+    let nombre = f.apodo.toUpperCase(); g.font = F; while (g.measureText(nombre).width > 540 && nombre.length > 3) nombre = nombre.slice(0, -2) + '…';
+    t(f.puesto + '.', 156, 'right', '700 36px Cinzel, Georgia, serif'); t(nombre, 186, 'left'); t(String(f.sellos), 872, 'right');
+    g.font = F; const x0 = 186 + g.measureText(nombre).width + 20, x1 = 872 - g.measureText(String(f.sellos)).width - 20;
+    g.fillStyle = f.tu ? 'rgba(214,176,118,.6)' : 'rgba(28,27,30,.35)'; for (let x = x0; x < x1; x += 16) g.fillRect(x, y + 10, 4, 4);
+  }
+  function pintarMarcador(d) {
+    const g = marG, W = 1024, H = 860; g.clearRect(0, 0, W, H); fondoPiedra(g, W, H, 18);
+    grabar(g, 'LOS QUE MÁS SELLOS DEJARON', W / 2, 72, '700 40px Cinzel, Georgia, serif');
+    g.fillStyle = 'rgba(28,27,30,.4)'; g.fillRect(W / 2 - 160, 112, 320, 3);
+    const filas = (d && d.top) || [];
+    if (!filas.length) grabar(g, d ? 'NADIE HA FIRMADO TODAVÍA' : 'SIN CONEXIÓN', W / 2, H / 2, '700 34px Cinzel, Georgia, serif', 0.7);
+    filas.forEach((f, i) => filaMarcador(g, f, 176 + i * 70));
+    if (d && d.tu && !filas.some(f => f.tu)) {
+      const y = 176 + 8 * 70 + 18;
+      if (d.tu.apodo && d.tu.puesto) filaMarcador(g, { puesto: d.tu.puesto, apodo: d.tu.apodo, sellos: d.tu.sellos, tu: true }, y);
+      else if (d.tu.sellos) grabar(g, `TUS ${d.tu.sellos} ${d.tu.sellos === 1 ? 'SELLO NO LLEVA' : 'SELLOS NO LLEVAN'} NOMBRE`, W / 2, y, '700 30px Cinzel, Georgia, serif', 0.7);
+    }
+    marT.needsUpdate = true;
+  }
+  [-1, 1].forEach(t => { const z = ZC + t * 1.45, x = -XC + 0.5; cyl(0.12, 0.16, 0.05, M.bronce, x, 0.025, z, 12); cyl(0.018, 0.026, 1.0, M.bronce, x, 0.55, z, 8); cyl(0.07, 0.04, 0.04, M.bronce, x, 1.07, z, 12); vela(x, 1.09, z, 0.3, 0.035); });
+  const luzMarcador = add(new THREE.PointLight(0xffb36a, 2.4, 5, 1.6)); luzMarcador.position.set(-XC + 1.0, 1.7, ZC);
+
+  // ---------- Capilla derecha: la ouija ----------
+  const MESA = new V3(XC - 1.25, 0, ZC), TAB_Y = 0.777;
+  cyl(0.3, 0.34, 0.04, M.madera, MESA.x, 0.02, MESA.z, 24);
+  cyl(0.045, 0.07, 0.7, M.madera, MESA.x, 0.39, MESA.z, 12);
+  cyl(0.58, 0.58, 0.04, M.madera, MESA.x, 0.745, MESA.z, 40);
+  const OW = 1200, OH = 800, ouC = lienzo(OW, OH), og = ouC.getContext('2d'), GLIFO = {};
+  og.fillStyle = '#a5845a'; og.fillRect(0, 0, OW, OH);
+  og.globalAlpha = 0.35; og.drawImage(M.madera.map.image, 0, 0, OW, OH); og.globalAlpha = 1;
+  const vg = og.createRadialGradient(OW / 2, OH / 2, OH * 0.25, OW / 2, OH / 2, OW * 0.62); vg.addColorStop(0, 'rgba(60,36,18,0)'); vg.addColorStop(1, 'rgba(40,22,10,.75)'); og.fillStyle = vg; og.fillRect(0, 0, OW, OH);
+  og.strokeStyle = 'rgba(32,18,8,.8)'; og.lineWidth = 6; og.strokeRect(26, 26, OW - 52, OH - 52); og.lineWidth = 2; og.strokeRect(42, 42, OW - 84, OH - 84);
+  const tinta = (t, x, y, px, rot = 0) => { og.save(); og.translate(x, y); og.rotate(rot); og.font = `700 ${px}px Cinzel, Georgia, serif`; og.textAlign = 'center'; og.textBaseline = 'middle'; og.fillStyle = 'rgba(255,236,200,.18)'; og.fillText(t, 1.5, 2); og.fillStyle = '#1e130a'; og.fillText(t, 0, 0); og.restore(); };
+  const arcoL = (letras, rx, ry, cy, a0, a1, px) => [...letras].forEach((ch, i) => { const a = Math.PI + (a0 + (a1 - a0) * i / (letras.length - 1)) * Math.PI, x = OW / 2 + rx * Math.cos(a), y = cy + ry * Math.sin(a); tinta(ch, x, y, px, a + Math.PI / 2); GLIFO[ch] = [x, y]; });
+  arcoL('ABCDEFGHIJKLM', 470, 300, 520, 0.16, 0.84, 66);
+  arcoL('NÑOPQRSTUVWXYZ', 380, 215, 545, 0.15, 0.85, 58);
+  [...'1234567890'].forEach((ch, i) => { const x = 330 + i * 60; tinta(ch, x, 645, 46); GLIFO[ch] = [x, 645]; });
+  tinta('SÍ', 150, 122, 58); GLIFO.SI = [150, 122]; tinta('NO', 1050, 122, 58); GLIFO.NO = [1050, 122];
+  tinta('ADIÓS', 600, 735, 48); GLIFO.ADIOS = [600, 735]; tinta('✝', 600, 104, 40); GLIFO.CENTRO = [600, 500];
+  const tabla = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.012, 0.6), [M.madera, M.madera, new THREE.MeshLambertMaterial({ map: tex(ouC, 1, 1, true, true), name: 'ouija' }), M.madera, M.madera, M.madera]);
+  tabla.rotation.y = Math.PI / 2; tabla.position.set(MESA.x, TAB_Y - 0.006, MESA.z); add(tabla);
+  const enTabla = ([x, y]) => new V3(MESA.x + (0.5 - y / OH) * 0.6, TAB_Y + 0.004, MESA.z - (x / OW - 0.5) * 0.9);
+  const ps = new THREE.Shape(); ps.moveTo(0, 0.088); ps.bezierCurveTo(0.036, 0.072, 0.072, 0.012, 0.064, -0.03); ps.bezierCurveTo(0.056, -0.068, -0.056, -0.068, -0.064, -0.03); ps.bezierCurveTo(-0.072, 0.012, -0.036, 0.072, 0, 0.088);
+  const ph = new THREE.Path(); ph.absarc(0, 0, 0.027, 0, Math.PI * 2, true); ps.holes.push(ph);
+  const pg = new THREE.ExtrudeGeometry(ps, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2, curveSegments: 16 }); pg.rotateX(-Math.PI / 2);
+  const planch = new THREE.Mesh(pg, M.hueso); planch.rotation.y = -Math.PI / 2; planch.position.copy(enTabla(GLIFO.CENTRO)); add(planch);
+  [[0.4, -0.3, 0.16], [0.42, 0.26, 0.2], [-0.05, 0.5, 0.13]].forEach(([dx, dz, h]) => vela(MESA.x + dx, 0.765, MESA.z + dz, h, 0.03));
+  const luzOuija = add(new THREE.PointLight(0xffb070, 2.2, 3.6, 1.8)); luzOuija.position.set(MESA.x + 0.3, 1.2, ZC);
+  // ---------- Sellos de cera (los que vuelan a la urna) ----------
+  const selloGeo = new THREE.CylinderGeometry(0.048, 0.048, 0.014, 28), selloMats = {};
+  function matInicial(id) {
+    if (selloMats[id]) return selloMats[id];
+    const S = 128, c = lienzo(S, S), g = c.getContext('2d');
+    g.fillStyle = '#6e2c25'; g.fillRect(0, 0, S, S);
+    g.strokeStyle = '#55211b'; g.lineWidth = 10; g.beginPath(); g.arc(64, 64, 54, 0, 6.29); g.stroke();
+    g.strokeStyle = '#84392f'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 47, 0, 6.29); g.stroke();
+    g.font = '700 54px Cinzel, Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e8cbbd'; g.fillText(inicial(nombreDe(id)), 64, 68);
+    return (selloMats[id] = new THREE.MeshLambertMaterial({ map: tex(c, 1, 1, true, true), emissive: 0x2a0d09 }));
+  }
+
+  // ---------- Zonas que se tocan ----------
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false }), hits = [];
+  function zona(id, w, h, d, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), hitMat); m.position.set(x, y, z); m.userData = { id, anchor: new V3(x, y + h / 2 + 0.05, z) }; add(m); hits.push(m); return m; }
+  zona('urna', 1.9, 1.62, 0.95, 0, 0.94, ZW + 0.48);
+  NICHOS.forEach((n, i) => { const z = zona('n' + i, NW, NH, 0.3, n.x, n.y, ZF + 0.05); z.userData.anchor.set(n.x, n.y + NH / 2 + 0.03, ZF + 0.1); });
+  [['marcador', -1], ['ouija', 1]].forEach(([id, s]) => zona(id, 0.5, AH + AR, AR * 2, s * (XW + 0.15), (AH + AR) / 2, ZC));
+  zona('marcador', 0.2, 2.2, 2.6, -XC + 0.2, 1.85, ZC);
+  zona('ouija', 1.0, 0.25, 1.2, MESA.x, 0.85, ZC).userData.anchor.set(MESA.x - 0.2, 1.05, ZC);
+
+  // ---------- Linterna ----------
+  const cam = new THREE.PerspectiveCamera(55, 1, 0.05, 80); add(cam);
+  const linterna = new THREE.SpotLight(0xfff0d8, 0, 26, 20 * D2R, 0.55, 1.5); linterna.position.set(0.15, -0.22, 0.05); cam.add(linterna); add(linterna.target);
+  const LIN = Object.assign({ grados: 20, pct: 70, alcance: 26, borde: 55 }, cache.linterna && cache.linterna.v === 2 ? cache.linterna : {});
+  linterna.angle = LIN.grados * D2R; linterna.distance = LIN.alcance; linterna.penumbra = LIN.borde / 100;
+  const linBase = 28 * LIN.pct / 100;
+  const titileo = t => t < 0 ? 0 : t < 0.05 ? 1 : t < 0.11 ? 0.12 : t < 0.19 ? 0.75 : t < 0.25 ? 0.2 : 1;
+  let linT = null;
+  const aim = new THREE.Vector2(0, -0.1), aimT = aim.clone(), aimV = new V3();
+
+  // ---------- Vistas: umbral → altar → nicho; desde el umbral también las dos capillas ----------
+  const EYE = 1.65;
+  const VISTAS = {
+    afuera: () => ({ pos: [0, EYE, ZD + 3.7], target: [0, 1.8, ZD - 4], fit: [3, 3], fmin: 56, fmax: 56 }),
+    umbral: () => ({ pos: [0, EYE, ZD - 0.7], target: [0, 1.95, ZW], fit: [5.2, 4.0], fmin: 56, fmax: 72, back: 0.4, lim: { yaw: 0.85, up: 0.45, down: 0.35, fwd: 1.6, bwd: 0.3 } }),
+    altar: () => ({ pos: [0, EYE, 0.4], target: [0, 2.25, ZF], fit: [4.9, 2.7], fmin: 46, fmax: 68, back: 1.6, lim: { yaw: 0.55, up: 0.4, down: 0.45, fwd: 0.8, bwd: 0.8 } }),
+    nicho: i => { const n = NICHOS[i]; return { pos: [n.x * 0.8, Math.min(n.y - 0.1, 2.25), -0.6], target: [n.x, n.y, ZF], fit: [NW + 0.5, NH + 0.5], fmin: 26, fmax: 60, back: 1.2, lim: { yaw: 0.2, up: 0.15, down: 0.15, fwd: 0.3, bwd: 0.4 } }; },
+    marcador: () => ({ pos: [-3.4, EYE, ZC], target: [-XC, 1.85, ZC], fit: [2.6, 2.2], fmin: 40, fmax: 66, back: 0.7, lim: { yaw: 0.35, up: 0.25, down: 0.25, fwd: 0.6, bwd: 0.5 } }),
+    ouija: () => ({ pos: [MESA.x - 1.55, 1.75, ZC], target: [MESA.x + 0.05, TAB_Y, ZC], fit: [1.0, 1.0], fmin: 34, fmax: 64, back: 0.5, lim: { yaw: 0.3, up: 0.25, down: 0.2, fwd: 0.4, bwd: 0.3 } }),
+  };
+  let vista = { k: 'afuera' };
+  const defVista = () => vista.k === 'nicho' ? VISTAS.nicho(vista.i) : VISTAS[vista.k]();
+  const ficha = $('ficha'), marP = $('marcador-p'), ouP = $('ouija-p'), urnaP = $('urna-p'), btnVolver = $('btn-volver'), tag = $('tag');
+  const PANELES = [ficha, marP, ouP];
+  function libre() {
+    const W = stage.clientWidth, H = stage.clientHeight; let l = 0, r = W, t = 0, b = H;
+    if (W < 760) t = Math.max(btnVolver.getBoundingClientRect().bottom, $('total').getBoundingClientRect().bottom) + 8;
+    const p = PANELES.find(x => !x.hidden);
+    if (p) { const f = p.getBoundingClientRect(); if (W >= 760) r = f.left - 16; else b = f.top - 12; }
+    return { l, r, t, b, w: Math.max(80, r - l), h: Math.max(80, b - t) };
+  }
+  function base(def) {
+    const W = stage.clientWidth, H = stage.clientHeight, fr = libre();
+    const P = new V3(...def.pos), T = new V3(...def.target), dir = T.clone().sub(P); let d = dir.length(); dir.normalize();
+    const tv = Math.max(def.fit[1] / (2 * d) * H / fr.h, def.fit[0] / (2 * d) * H / fr.w) / 0.92;
+    let fov = 2 * Math.atan(tv) / D2R;
+    if (fov > def.fmax) { const d2 = Math.min(d + (def.back || 0), d * tv / Math.tan(def.fmax / 2 * D2R)); P.addScaledVector(dir, -(d2 - d)); }
+    fov = THREE.MathUtils.clamp(fov, def.fmin, def.fmax);
+    const tV = Math.tan(fov / 2 * D2R), tH = tV * W / H, cx = (fr.l + fr.r) / W - 1, cy = 1 - (fr.t + fr.b) / H;
+    return { pos: P, yaw: Math.atan2(-dir.x, -dir.z) + Math.atan(cx * tH), pitch: Math.atan2(dir.y, Math.hypot(dir.x, dir.z)) - Math.atan(cy * tV), fov };
+  }
+  let meta = null, cur = null, trans = null;
+  const look = { yaw: 0, pitch: 0, z: 0 }, lookT = { yaw: 0, pitch: 0, z: 0 }, par = { x: 0, y: 0 };
+  function encuadrar() {
+    const W = stage.clientWidth, H = stage.clientHeight; if (!W || !H) return;
+    renderer.setSize(W, H, false); cam.aspect = W / H;
+    meta = base(defVista());
+    if (!cur) cur = { pos: meta.pos.clone(), yaw: meta.yaw, pitch: meta.pitch, fov: meta.fov };
+  }
+  new ResizeObserver(encuadrar).observe(stage); PANELES.forEach(p => new ResizeObserver(() => { if (!p.hidden) encuadrar(); }).observe(p));
+  encuadrar();
+  const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const clampLook = () => {
+    const L = defVista().lim || { yaw: 0, up: 0, down: 0, fwd: 0, bwd: 0 };
+    lookT.yaw = THREE.MathUtils.clamp(lookT.yaw, -L.yaw, L.yaw); lookT.pitch = THREE.MathUtils.clamp(lookT.pitch, -L.down, L.up); lookT.z = THREE.MathUtils.clamp(lookT.z, -L.bwd, L.fwd);
+  };
+  const mostrar = (p, on) => { if (on) { if (p.hidden) { p.hidden = false; requestAnimationFrame(() => p.classList.add('on')); } } else { p.classList.remove('on'); p.hidden = true; } };
+  const conPanelMarcador = () => stage.clientWidth < 760 || !cache.apodo;
+  function ir(k, i, dur) {
+    const prev = vista; vista = { k, i };
+    if (prev.k === 'ouija' && k !== 'ouija') ouTok++;
+    if (k === 'nicho') pintarFicha(i);
+    if (k === 'marcador') { pintarPanelMarcador(); cargarMarcador().then(() => { pintarMarcador(marc); pintarPanelMarcador(); }); }
+    if (k === 'ouija') pintarOuija();
+    mostrar(ficha, k === 'nicho'); mostrar(marP, k === 'marcador' && conPanelMarcador()); mostrar(ouP, k === 'ouija'); mostrar(urnaP, false);
+    encuadrar();
+    const p0 = cur.pos.clone().addScaledVector(new V3(-Math.sin(cur.yaw), 0, -Math.cos(cur.yaw)), look.z);
+    trans = { t: 0, dur: reducido ? 0.01 : dur || (k === 'nicho' && prev.k === 'nicho' ? 0.75 : (k === 'marcador' || k === 'ouija' || prev.k === 'marcador' || prev.k === 'ouija') ? 1.9 : 1.5), from: { pos: p0, yaw: cur.yaw + look.yaw, pitch: cur.pitch + look.pitch, fov: cur.fov } };
+    look.yaw = look.pitch = look.z = 0; lookT.yaw = lookT.pitch = lookT.z = 0;
+    setHover(null); pintarUI();
+  }
+  function volver() {
+    if (trans && vista.k === 'afuera') return;
+    if (vista.k === 'nicho') return ir('altar');
+    if (vista.k === 'altar' || vista.k === 'marcador' || vista.k === 'ouija') return ir('umbral');
+    salir();
+  }
+  function salir() { $('velo').classList.remove('fuera'); setTimeout(() => { location.href = LABERINTO_URL; }, 650); }
+  btnVolver.addEventListener('click', volver);
+
+  // ---------- UI: etiquetas, pista, ficha ----------
+  const n2 = () => porEntregar().length;
+  function etiqueta(id) {
+    if (id === 'urna') { if (vista.k !== 'altar') return 'Altar'; const n = n2(); return n ? `Dejar ${n} ${plural(n, 'sello', 'sellos')}` : 'La urna'; }
+    if (id === 'marcador') return 'El marcador';
+    if (id === 'ouija') return vista.k === 'ouija' ? 'Preguntar' : 'La ouija';
+    const n = NICHOS[+id.slice(1)]; return `Nicho ${n.num}` + (n.abierto ? '' : ` · ${n.umbral} sellos`);
+  }
+  function pintarFicha(i) {
+    const n = NICHOS[i], c = contenidoNicho(n);
+    $('ficha-n').textContent = `Nicho ${n.num}`; $('ficha-t').textContent = c.titulo; $('ficha-txt').textContent = c.texto; $('ficha-estado').textContent = c.estado;
+    ficha.classList.toggle('sellado', !n.abierto);
+    $('ficha-prev').disabled = i === 0; $('ficha-next').disabled = i === NICHOS.length - 1;
+    $('live').textContent = `Nicho ${n.num}. ${c.titulo}. ${c.texto} ${c.estado}`;
+  }
+  $('ficha-prev').addEventListener('click', () => { if (vista.k === 'nicho' && vista.i > 0) ir('nicho', vista.i - 1); });
+  $('ficha-next').addEventListener('click', () => { if (vista.k === 'nicho' && vista.i < NICHOS.length - 1) ir('nicho', vista.i + 1); });
+  // Marcador: en móvil la lista también va en el panel (la lápida queda chica); sin apodo, se pide firmar
+  function pintarPanelMarcador() {
+    const movil = stage.clientWidth < 760;
+    $('marcador-t').textContent = movil ? 'Los que más sellos dejaron' : 'Tu nombre no aparece';
+    $('marcador-l').hidden = !movil; if (movil) listaMarcador($('marcador-l'), marc);
+    $('firma-form').hidden = !!cache.apodo;
+  }
+  $('firma-form').addEventListener('submit', async e => {
+    e.preventDefault(); const b = $('firma-form').querySelector('button'); b.disabled = true;
+    if (await firmar($('firma-in').value)) { pintarMarcador(marc); pintarPanelMarcador(); mensaje(`Firmaste como ${cache.apodo}.`); if (!conPanelMarcador()) { mostrar(marP, false); encuadrar(); } }
+    b.disabled = false;
+  });
+  // [Kura] Firmar en la urna y, en el mismo gesto, dejar los sellos
+  $('urna-form').addEventListener('submit', async e => {
+    e.preventDefault(); const b = $('urna-form').querySelector('button'); b.disabled = true;
+    if (await firmar($('urna-in').value)) { mostrar(urnaP, false); mensaje(`Firmaste como ${cache.apodo}.`); depositar(); }
+    b.disabled = false;
+  });
+  // Ouija
+  let ultimoOuija = '';
+  function pintarOuija(pedirNombre) {
+    const sin = (!cache.apodo || pedirNombre) && !hablando;
+    $('ouija-form').hidden = !sin; $('ouija-acc').hidden = sin;
+    if (sin) $('ouija-in').value = cache.apodo || '';
+    $('ouija-quien').textContent = hablando ? 'Escucha…' : !sin && cache.apodo ? `Pregunta ${cache.apodo}` : '';
+    $('ouija-btn').textContent = ultimoOuija ? 'Preguntar otra vez' : 'Preguntar'; $('ouija-btn').disabled = hablando;
+    $('ouija-otro').disabled = hablando;
+    if (!hablando) $('ouija-letras').textContent = ultimoOuija;
+  }
+  $('ouija-btn').addEventListener('click', () => preguntar());
+  $('ouija-otro').addEventListener('click', () => { pintarOuija(true); $('ouija-in').focus(); });
+  $('ouija-form').addEventListener('submit', async e => { e.preventDefault(); const v = $('ouija-in').value.trim(); if (!v) return; if (v !== cache.apodo) await firmar(v); pintarOuija(); preguntar(); });
+  const verbo = () => ui.dataset.input === 'mouse' ? 'Haz clic en' : 'Toca';
+  function pintarUI() {
+    btnVolver.textContent = vista.k === 'umbral' ? 'Salir' : 'Volver';
+    btnVolver.hidden = $('total').hidden = vista.k === 'afuera';
+    const n = n2(), p = $('pista');
+    p.textContent = vista.k === 'umbral' ? (n ? `Lleva tus sellos a la urna del altar` : `${verbo()} el altar o una de las capillas`)
+      : vista.k === 'altar' ? (n ? `${verbo()} la urna para dejar ${plural(n, 'tu sello', `tus ${n} sellos`)}` : `${verbo()} un nicho para leerlo`) : '';
+    p.classList.toggle('on', !!p.textContent && !trans && !ocupado);
+    $('inv').hidden = !n; $('inv-n').textContent = n; $('inv').setAttribute('aria-label', `Traes ${n} ${plural(n, 'sello', 'sellos')} por entregar`);
+    $('nav').querySelectorAll('button').forEach(b => { b.textContent = etiqueta(b.dataset.id); });
+    if (vista.k === 'nicho') pintarFicha(vista.i);
+  }
+  function pintarTotal(sube) {
+    $('total-n').textContent = total; $('total-u').textContent = `${plural(total, 'sello entregado', 'sellos entregados')}` + (misEntregados() ? ` · ${misEntregados()} ${plural(misEntregados(), 'tuyo', 'tuyos')}` : '');
+    $('total-sig').textContent = textoSig(total); pintarContador(total);
+    if (sube && !reducido) { const t = $('total'); t.classList.remove('sube'); void t.offsetWidth; t.classList.add('sube'); }
+  }
+  // Navegación con teclado: un botón por zona; al enfocarlo se ve la etiqueta en la escena
+  ['urna', 'marcador', 'ouija', ...NICHOS.map((_, i) => 'n' + i)].forEach(id => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.id = id;
+    b.addEventListener('focus', () => setHover(id, true)); b.addEventListener('blur', () => setHover(null)); b.addEventListener('click', () => act(id));
+    $('nav').appendChild(b);
+  });
+
+  // ---------- Input: arrastrar = mirar, rueda/pinch = acercarse, tocar = ir ----------
+  const el = renderer.domElement, ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), pointers = new Map();
+  let tapStart = null, pinch0 = 0, hovered = null, pointerDirty = false, mouseIn = false;
+  const conMouse = () => mouseIn && ui.dataset.input === 'mouse';
+  const toNdc = (x, y) => { const r = el.getBoundingClientRect(); ndc.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1); };
+  const pick = () => { ray.setFromCamera(ndc, cam); const h = ray.intersectObjects(hits, false)[0]; return h ? h.object : null; };
+  const setAim = (x, y) => { const r = el.getBoundingClientRect(); aimT.set((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1); };
+  // h: zona tocada, id (desde el teclado: se elige la zona con ese id que está a la vista) o null
+  function setHover(h, forzar) {
+    if (typeof h === 'string') { const vs = hits.filter(x => x.userData.id === h), p = new V3(); h = vs.find(x => { p.copy(x.userData.anchor).project(cam); return p.z < 1 && Math.abs(p.x) < 1 && Math.abs(p.y) < 1; }) || vs[0]; }
+    if (hovered === h && !forzar) return; hovered = h;
+    if (h) tag.textContent = etiqueta(h.userData.id);
+    tag.classList.toggle('on', !!h); el.style.cursor = h ? 'pointer' : '';
+  }
+  el.addEventListener('pointerdown', e => {
+    el.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); setAim(e.clientX, e.clientY);
+    if (pointers.size === 1) tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); tapStart = null; }
+  });
+  el.addEventListener('pointermove', e => {
+    if (e.isPrimary) setAim(e.clientX, e.clientY);
+    if (e.pointerType === 'mouse' && !pointers.size) { mouseIn = true; toNdc(e.clientX, e.clientY); pointerDirty = true; par.x = -ndc.x * 0.04; par.y = ndc.y * 0.025; return; }
+    const p = pointers.get(e.pointerId); if (!p || trans) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 1) { const k = cam.fov * D2R / stage.clientHeight; lookT.yaw += dx * k; lookT.pitch += dy * k; }
+    else if (pointers.size === 2) { const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y); lookT.z += (d - pinch0) * 0.01; pinch0 = d; }
+    clampLook();
+  });
+  const fin = e => {
+    pointers.delete(e.pointerId);
+    if (tapStart && !pointers.size) {
+      const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), dt = performance.now() - tapStart.t; tapStart = null;
+      if (moved < 8 && dt < 500) { toNdc(e.clientX, e.clientY); const h = pick(); setHover(e.pointerType === 'mouse' ? h : null); act(h && h.userData.id); }
+    }
+  };
+  el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+  el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { mouseIn = false; setHover(null); par.x = par.y = 0; } });
+  el.addEventListener('wheel', e => { e.preventDefault(); if (trans) return; lookT.z -= e.deltaY * 0.003; clampLook(); }, { passive: false });
+  addEventListener('keydown', e => {
+    if (vista.k === 'afuera' || e.target.closest('input')) return;
+    if (e.key === 'Escape') { e.preventDefault(); volver(); }
+    else if (vista.k === 'nicho' && e.key === 'ArrowLeft') $('ficha-prev').click();
+    else if (vista.k === 'nicho' && e.key === 'ArrowRight') $('ficha-next').click();
+  });
+
+  function act(id) {
+    if (!id || vista.k === 'afuera') return;
+    if (id === 'ouija' && vista.k === 'ouija') return preguntar();
+    if (trans) return;
+    if (id === 'urna') return vista.k === 'altar' ? depositar() : ir('altar');
+    if (id === 'marcador') return vista.k === 'marcador' ? undefined : ir('marcador');
+    if (id === 'ouija') return ir('ouija');
+    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) return;
+    ir('nicho', i);
+  }
+
+  // ---------- Sonidos propios: piedra que se arrastra ----------
+  function arrastre(dur = 0.8, vol = 1) {
+    const c = window.__audio && window.__audio.ctx; if (!c) return;
+    const sr = c.sampleRate, n = Math.round(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0); let b = 0;
+    for (let i = 0; i < n; i++) {
+      const s = i / sr; b = b * 0.985 + (Math.random() * 2 - 1) * 0.015;
+      const env = Math.min(1, s / 0.06) * Math.min(1, (dur - s) / 0.18), gr = 0.7 + 0.3 * Math.sin(s * 2 * Math.PI * (5 + 2 * Math.sin(s * 3)));
+      d[i] = b * 4 * gr * env;
+    }
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = buf; f.type = 'lowpass'; f.frequency.value = 900; g.gain.value = 0.8 * vol; s.connect(f).connect(g).connect(c.destination); s.start(c.currentTime + 0.01);
+  }
+
+  // ---------- Animaciones ----------
+  const tweens = [];
+  const tween = (dur, fn) => new Promise(res => { if (reducido) { fn(1); return res(); } tweens.push({ t: 0, dur, fn, res }); });
+  let shake = 0, ocupado = false, hablando = false, sesion = false, rapido = false, ouTok = 0, linDim = 1;
+
+  // La planchette va de glifo en glifo, de fondo. Su roce es un solo sonido continuo que sigue la velocidad (sin cortes).
+  let roce = null;
+  function rocePrender() {
+    const c = window.__audio && window.__audio.ctx; if (!c || roce) return;
+    const sr = c.sampleRate, buf = c.createBuffer(1, sr * 2, sr), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const s = c.createBufferSource(), lp = c.createBiquadFilter(), bp = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = buf; s.loop = true; lp.type = 'lowpass'; lp.frequency.value = 900; bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.6; g.gain.value = 0;
+    s.connect(lp).connect(bp).connect(g).connect(c.destination); s.start();
+    roce = { s, g, c };
+  }
+  function roceApagar() { if (!roce) return; const { s, g, c } = roce; g.gain.setTargetAtTime(0, c.currentTime, 0.1); s.stop(c.currentTime + 0.6); roce = null; }
+  const planchAntes = new V3();
+  function mover(key, f = 1) {
+    const A = planch.position.clone(), B = enTabla(GLIFO[key]), d = A.distanceTo(B);
+    const dur = (rapido ? 0.16 : 0.32 + d * 1.6) * f, r0 = planch.rotation.y, r1 = -Math.PI / 2 + (Math.random() - 0.5) * 0.3;
+    return tween(dur, k => { const e = ease(k); planch.position.lerpVectors(A, B, e); planch.rotation.y = r0 + (r1 - r0) * e; });
+  }
+  // El mensaje aparece completo; la planchette recorre algunas letras de fondo y termina en ADIÓS
+  async function preguntar() {
+    if (hablando) return;
+    if (!cache.apodo) { pintarOuija(true); $('ouija-in').focus(); return; }
+    const tok = ++ouTok, vivo = () => tok === ouTok;
+    hablando = true; ultimoOuija = ''; $('ouija-letras').textContent = ''; pintarOuija(); setHover(null);
+    sfx.susurro(1);
+    let r = null;
+    try { [r] = await Promise.all([api.ouija(cache.apodo), espera(reducido ? 0 : 900)]); } catch (_) { mensaje('La ouija no responde. Revisa tu conexión.'); }
+    hablando = false;
+    if (r && vivo()) {
+      ultimoOuija = r.texto; $('live').textContent = `La ouija dice: ${r.texto}`; sfx('toll', 0.35);
+      const el = $('ouija-letras'); el.classList.remove('nuevo'); void el.offsetWidth; el.classList.add('nuevo');
+    }
+    pintarOuija(); pintarUI();
+    if (r && vivo()) moverFondo(r.texto, vivo);
+  }
+  async function moverFondo(texto, vivo) {
+    sesion = true; rocePrender();
+    const letras = [...deletreable(texto).replace(/ /g, '')].filter(ch => GLIFO[ch]).slice(0, 10);
+    for (const k of ['SI', ...letras, 'ADIOS', 'CENTRO']) { if (!vivo()) break; await mover(k, 0.7); await espera(140); }
+    roceApagar();
+    if (vivo()) sesion = false;
+  }
+  const refrescarMarcador = () => cargarMarcador().then(() => { pintarMarcador(marc); if (!marP.hidden) pintarPanelMarcador(); });
+
+  function lanzarSello(id, retraso, alSalir) {
+    return new Promise(res => setTimeout(() => {
+      if (alSalir) alSalir();
+      const m = new THREE.Mesh(selloGeo, [M.cera, matInicial(id), M.cera]);
+      cam.updateMatrixWorld(); const A = cam.localToWorld(new V3(-0.3, -0.06, -0.75)), Bm = new V3(URNA.x + 0.05, BOCA_Y + 0.55, URNA.z + 0.25), C = new V3(URNA.x, BOCA_Y + 0.02, URNA.z);
+      m.position.copy(A); add(m); sfx('flip', 0.6);
+      const q0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)).premultiply(cam.quaternion), q1 = new THREE.Quaternion();
+      tween(0.85, k => {
+        const e = 1 - Math.pow(1 - k, 2), u = 1 - e;
+        m.position.set(u * u * A.x + 2 * u * e * Bm.x + e * e * C.x, u * u * A.y + 2 * u * e * Bm.y + e * e * C.y, u * u * A.z + 2 * u * e * Bm.z + e * e * C.z);
+        m.quaternion.slerpQuaternions(q0, q1, Math.min(1, k * 1.3)); m.rotateY(k * 5);
+      }).then(() => tween(0.18, k => { m.position.y = BOCA_Y + 0.02 - k * 0.14; })).then(() => {
+        scene.remove(m); sfx('tink', 0.45); setTimeout(() => sfx('thud', 0.3), 70);
+        brilloK = 1; res();
+      });
+    }, retraso));
+  }
+  async function depositar() {
+    if (ocupado) return;
+    const ids = porEntregar();
+    if (!ids.length) { mensaje(misEntregados() ? 'Ya dejaste todos tus sellos en la urna.' : 'No traes sellos. Se ganan en las lápidas del laberinto.'); return; }
+    if (!cache.apodo) { mostrar(urnaP, true); setTimeout(() => $('urna-in').focus({ preventScroll: true }), 60); return; }   // [Kura] firma primero
+    mostrar(urnaP, false);
+    ocupado = true; pintarUI(); setHover(null);
+    let r;
+    try { r = await api.entregar(); guardarMausoleo(r); enLinea = true; }
+    catch (e) { ocupado = false; pintarUI(); mensaje('No se pudo entregar. Revisa tu conexión e inténtalo otra vez.'); return; }
+    const mios = r.entregados.length, otros = Math.max(0, r.total - total - mios);
+    if (otros) { total += otros; pintarTotal(); }
+    let quedan = ids.length;
+    const salir1 = () => { quedan--; $('inv').hidden = !quedan; $('inv-n').textContent = quedan; };
+    await Promise.all(r.entregados.map((id, k) => lanzarSello(id, k * 340, salir1).then(() => { total++; pintarTotal(true); })));
+    total = r.total; pintarTotal();
+    mensaje(mios === 1 ? 'Tu sello está en la urna.' : `Tus ${mios} sellos están en la urna.`);
+    await espera(reducido ? 0 : 700);
+    await revisarNichos(true);
+    ocupado = false; pintarUI(); refrescarMarcador();
+  }
+
+  function abrirNicho(n, animar) {
+    n.abierto = true;
+    if (!cache.mau.vistos.includes(n.id)) { cache.mau.vistos.push(n.id); guardar(); }
+    if (!animar || reducido) { n.sale = 0.06; n.giro = GIRO; ponerNicho(n); encenderVela(n, false); return Promise.resolve(); }
+    arrastre(0.75, 1); shake = 0.6;
+    return tween(0.75, k => { n.sale = 0.06 * k; ponerNicho(n); })
+      .then(() => { arrastre(1.1, 0.5); return tween(1.15, k => { const e = 1 - Math.pow(1 - k, 3); n.giro = GIRO * e + Math.sin(k * Math.PI) * 0.06; ponerNicho(n); }); })
+      .then(() => { sfx('thud', 0.5); shake = 0.25; return espera(250); })
+      .then(() => { sfx.cerillo(); encenderVela(n, true); return espera(350); })
+      .then(() => { sfx('toll', 0.7); pintarUI(); });
+  }
+  function cerrarNicho(n) { n.abierto = false; n.sale = 0; n.giro = 0; ponerNicho(n); n.vela.t = -1; n.vela.k = 0; n.vela.s.visible = n.vela.halo.visible = false; if (n.luz) n.luz.intensity = 0; }
+  function encenderVela(n, animar) { const L = n.vela; L.s.visible = L.halo.visible = true; L.t = animar ? 0 : 1; }
+  // Abre (animado) los nichos que ya alcanzó el total; cierra al instante los que no (solo pasa en pruebas)
+  async function revisarNichos(animar) {
+    const nuevos = NICHOS.filter(n => !n.abierto && total >= n.umbral);
+    NICHOS.filter(n => n.abierto && total < n.umbral).forEach(cerrarNicho);
+    for (const n of nuevos) { await abrirNicho(n, animar); if (animar && n !== nuevos[nuevos.length - 1]) await espera(400); }
+    if (animar && nuevos.length) mensaje(nuevos.length === 1 ? `Se abrió el nicho ${nuevos[0].num}. ${verbo()} el nicho para leerlo.` : `Se abrieron ${nuevos.length} nichos.`, 4200);
+    pintarUI(); return nuevos.length;
+  }
+
+  // ---------- Estado inicial ----------
+  total = totalServidor();
+  NICHOS.forEach(n => { if (total >= n.umbral && cache.mau.vistos.includes(n.id)) abrirNicho(n, false); });
+  pintarTotal(); pintarUI(); pintarMarcador(marc); refrescarMarcador();
+  if (!enLinea) mensaje('Sin conexión. Se muestra lo último que se guardó.', 4000);
+
+  // Los demás también entregan: se consulta cada 15 s
+  async function consultar() {
+    if (ocupado || document.hidden || vista.k === 'afuera') return;
+    let r; try { r = await api.mausoleo(); guardarMausoleo(r); enLinea = true; } catch (_) { enLinea = false; return; }
+    if (ocupado || r.total === total) return;
+    const dif = r.total - total; total = r.total; pintarTotal(dif > 0); refrescarMarcador();
+    if (dif > 0) { brilloK = 0.7; sfx('tink', 0.25); mensaje(dif === 1 ? 'Alguien más dejó un sello en la urna.' : `Otros dejaron ${dif} sellos en la urna.`); }
+    await revisarNichos(dif > 0);
+  }
+  setInterval(consultar, 15000);
+
+  // ---------- Entrada: tocar desbloquea el audio y se cruza la puerta ----------
+  // [Kura] Quien llega caminando desde el laberinto no se detiene en "clic para entrar".
+  const deParty = (() => { try { const r = new URL(document.referrer); return r.origin === location.origin && r.pathname.startsWith('/party') && r.pathname !== location.pathname; } catch (_) { return false; } })();
+  const entrada = $('entrada'), saltar = q.get('entrada') === '0';
+  const nT = n2(); $('traes').textContent = nT ? `Traes ${nT} ${plural(nT, 'sello', 'sellos')}` : '';
+  function llegar() {
+    pintarUI();
+    const nuevos = NICHOS.filter(n => !n.abierto && total >= n.umbral).length;
+    setTimeout(async () => {
+      if (nuevos) mensaje(nuevos === 1 ? 'Mientras no estabas, se abrió un nicho.' : `Mientras no estabas, se abrieron ${nuevos} nichos.`, 3200);
+      await revisarNichos(true);
+    }, saltar ? 400 : 600);
+  }
+  function entrar(e) {
+    if (entrada.classList.contains('out')) return;
+    sfx.desbloquear(); sfx.linterna(0.3); linT = -0.3;
+    if (e && e.detail) { setAim(e.clientX, e.clientY); aim.copy(aimT); }
+    entrada.classList.add('out'); setTimeout(() => { entrada.hidden = true; }, 650);
+    ir('umbral', null, 2.8); trans.onEnd = llegar;
+  }
+  // [Kura] viene del laberinto: sin pantalla de entrada, pero SÍ cruza la puerta caminando (linterna ya encendida)
+  if (deParty && !saltar) { entrada.hidden = true; linT = 1; ir('umbral', null, 2.8); trans.onEnd = llegar; }
+  else if (saltar) { vista = { k: 'umbral' }; encuadrar(); cur = { pos: meta.pos.clone(), yaw: meta.yaw, pitch: meta.pitch, fov: meta.fov }; linT = 1; pintarUI(); llegar(); }
+  else { entrada.hidden = false; entrada.addEventListener('click', entrar); entrada.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); entrar(e); } }); entrada.focus({ preventScroll: true }); }
+
+  // ---------- Barra de desarrollo ----------
+  const dev = $('dev');
+  if (q.get('dev') === '1' || q.get('dev') === 'abierta') {   // [Kura] la barra de desarrollo no sale por defecto
+    dev.hidden = false;
+    if (q.get('dev') === 'abierta') dev.classList.add('abierta');
+    $('dev-t').addEventListener('click', () => { const a = dev.classList.toggle('abierta'); $('dev-t').setAttribute('aria-expanded', a); });
+    const marcarSeg = (attr, v) => dev.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', b.dataset[attr] === v));
+    dev.querySelectorAll('[data-red]').forEach(b => b.addEventListener('click', () => { api.red = b.dataset.red; marcarSeg('red', api.red); }));
+    marcarSeg('red', api.red);
+    const LUZ = { noche: [0.2, 3, 15], prueba: [2.6, 8, 30] };
+    dev.querySelectorAll('[data-luz]').forEach(b => b.addEventListener('click', () => { const [h, n, f] = LUZ[b.dataset.luz]; hemi.intensity = h; scene.fog.near = n; scene.fog.far = f; marcarSeg('luz', b.dataset.luz); }));
+    marcarSeg('luz', 'noche');
+    const sinMock = () => { if (!api.dev) { mensaje('Solo con el servidor de prueba.'); return true; } };
+    $('dev-sellos').addEventListener('click', async () => { if (sinMock()) return; api.dev.darSellos(LAPIDAS.map(l => l.id)); await api.progreso(); pintarTotal(); pintarUI(); $('traes').textContent = ''; mensaje(`Traes ${n2()} sellos por entregar.`); });
+    dev.querySelectorAll('[data-otros]').forEach(b => b.addEventListener('click', () => { if (sinMock()) return; api.dev.otros(+b.dataset.otros); consultar(); }));
+    $('dev-mias').addEventListener('click', async () => { if (sinMock()) return; api.dev.borrarEntregas(); await api.progreso(); const r = await api.mausoleo(); guardarMausoleo(r); total = r.total; pintarTotal(); revisarNichos(false); pintarUI(); refrescarMarcador(); mensaje('Tus sellos vuelven a estar por entregar.'); });
+    $('dev-todo').addEventListener('click', () => { if (sinMock()) return; api.dev.reiniciar(); cache.mau = { vistos: [], contenido: {}, total: 0 }; guardar(); location.reload(); });
+  }
+
+  // ---------- Loop ----------
+  const timer = new THREE.Timer(), v = new V3(), fwd = new V3();
+  let primero = true;
+  renderer.setAnimationLoop(cuadro);
+  function cuadro() {
+    timer.update(); const dt = Math.min(timer.getDelta(), 0.1), T = timer.getElapsed();
+    for (let i = tweens.length - 1; i >= 0; i--) { const w = tweens[i]; w.t += dt; const k = Math.min(1, w.t / w.dur); w.fn(k); if (k >= 1) { tweens.splice(i, 1); w.res(); } }
+    if (trans) {
+      trans.t += dt; const k = ease(Math.min(1, trans.t / trans.dur)), f = trans.from;
+      cur.pos.lerpVectors(f.pos, meta.pos, k); cur.yaw = THREE.MathUtils.lerp(f.yaw, meta.yaw, k); cur.pitch = THREE.MathUtils.lerp(f.pitch, meta.pitch, k); cur.fov = THREE.MathUtils.lerp(f.fov, meta.fov, k);
+      if (k >= 1) { const cb = trans.onEnd; trans = null; pintarUI(); if (conMouse()) pointerDirty = true; if (cb) cb(); }
+    } else {
+      const s = 1 - Math.exp(-dt * 4);
+      cur.pos.lerp(meta.pos, s); cur.yaw += (meta.yaw - cur.yaw) * s; cur.pitch += (meta.pitch - cur.pitch) * s; cur.fov += (meta.fov - cur.fov) * s;
+      const s2 = 1 - Math.exp(-dt * 7);
+      look.yaw += (lookT.yaw - look.yaw) * s2; look.pitch += (lookT.pitch - look.pitch) * s2; look.z += (lookT.z - look.z) * s2;
+    }
+    if (Math.abs(cam.fov - cur.fov) > 1e-3 || cam.userData.a !== cam.aspect) { cam.fov = cur.fov; cam.userData.a = cam.aspect; cam.updateProjectionMatrix(); }
+    fwd.set(-Math.sin(cur.yaw), 0, -Math.cos(cur.yaw));
+    cam.position.copy(cur.pos).addScaledVector(fwd, look.z);
+    par.sx = (par.sx || 0) + (par.x - (par.sx || 0)) * (1 - Math.exp(-dt * 5)); par.sy = (par.sy || 0) + (par.y - (par.sy || 0)) * (1 - Math.exp(-dt * 5));
+    cam.rotation.set(cur.pitch + look.pitch + par.sy, cur.yaw + look.yaw + par.sx, 0, 'YXZ');
+    if (shake > 0) { shake = Math.max(0, shake - dt * 1.6); cam.position.x += Math.sin(T * 63) * 0.008 * shake; cam.position.y += Math.sin(T * 47) * 0.005 * shake; }
+    aim.lerp(aimT, 1 - Math.exp(-dt * 10));
+    cam.updateMatrixWorld();
+    aimV.set(aim.x, aim.y, 0.5).unproject(cam).sub(cam.position).normalize().multiplyScalar(8).add(cam.position);
+    linterna.target.position.copy(aimV);
+    if (linT !== null) linT += dt;
+    linDim += ((sesion || hablando ? 0.5 : 1) - linDim) * (1 - Math.exp(-dt * 3));
+    linterna.intensity = linT === null ? 0 : linBase * titileo(linT) * linDim;
+    // Llamas: vibración + caídas cortas; las de los nichos prenden con titileo
+    llamas.forEach(L => {
+      if (L.t < 0) return; if (L.t < 1) L.t = Math.min(1, L.t + dt / 0.6);
+      const f = (0.86 + 0.08 * Math.sin(T * 9.1 + L.ph) + 0.06 * Math.sin(T * 23.3 + L.ph * 2)) * (L.t < 1 ? titileo(L.t * 0.3) * L.t : 1);
+      L.s.scale.set(0.07 * (0.9 + 0.1 * f), 0.12 * f, 1); L.s.material.opacity = f; L.halo.material.opacity = 0.22 * f; L.k = f;
+    });
+    const fa = 0.88 + 0.07 * Math.sin(T * 8.3) + 0.05 * Math.sin(T * 19.7 + 1.3);
+    luzAltar.intensity = 4.2 * fa; luzRincon.intensity = 1.6 * (0.9 + 0.1 * Math.sin(T * 11 + 2)); if (luzRincon2) luzRincon2.intensity = 1.1 * (0.9 + 0.1 * Math.sin(T * 13 + 4));
+    luzMarcador.intensity = 2.4 * (0.9 + 0.1 * Math.sin(T * 10 + 1));
+    if (roce) { const vel = planch.position.distanceTo(planchAntes) / Math.max(dt, 1e-3); roce.g.gain.setTargetAtTime(Math.min(0.1, vel * 0.22), roce.c.currentTime, 0.06); }
+    planchAntes.copy(planch.position);
+    luzOuija.intensity = 2.2 * (sesion || hablando ? 0.62 + 0.38 * Math.abs(Math.sin(T * 17)) * (0.6 + 0.4 * Math.sin(T * 5.3)) : 0.9 + 0.1 * Math.sin(T * 9 + 3));
+    NICHOS.forEach(n => { if (n.luz) n.luz.intensity = n.vela.t < 0 ? 0 : 0.9 * n.vela.k; });
+    brilloK = Math.max(0, brilloK - dt * 1.4); brillo.material.opacity = brilloK * 0.9; M.boca.color.setRGB(0.02 + brilloK * 0.45, 0.015 + brilloK * 0.2, 0.01 + brilloK * 0.06);
+    if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(pick()); }
+    if (hovered) { v.copy(hovered.userData.anchor).project(cam); tag.classList.toggle('on', v.z < 1); tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * stage.clientWidth}px, ${(-v.y * 0.5 + 0.5) * stage.clientHeight}px) translate(-50%, -100%)`; }
+    renderer.render(scene, cam);
+    if (primero) { primero = false; $('velo').classList.add('fuera'); }
+  }
+  window.__mau = { scene, cam, NICHOS, ir, depositar, consultar, revisarNichos, preguntar, get total() { return total; } };
+}
+</script>
+</body>
+</html>

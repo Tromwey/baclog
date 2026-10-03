@@ -4,7 +4,8 @@
 > No es un changelog — si algo dejó de ser cierto, se borra, no se tacha.
 > Los errores ya resueltos NO van aquí: van a `learnings/` (append-only).
 >
-> Actualizado: 2026-09-30 (Android: `/.well-known/assetlinks.json` + `ANDROID_CERT_SHA256`, `GOOGLE_WEB_CLIENT_ID`, `FCM_SERVICE_ACCOUNT_JSON`; migración 0035 aplicada el 2026-09-30) · 2026-09-29 (dominio get-kura.app)
+> Actualizado: 2026-10-01 ronda 5 — «Orden de despliegue» del release; la fila de `FCM_SERVICE_ACCOUNT_JSON` ya no dice que 0035 está sin aplicar.
+> Actualizado: 2026-10-01 (`next` 16.3.8, `next-auth` 5.0.0-beta.32, `pnpm audit --prod` limpio; scripts `check` / `test` / `typecheck` / `test:db`) · 2026-09-30 (Android: `/.well-known/assetlinks.json` + `ANDROID_CERT_SHA256`, `GOOGLE_WEB_CLIENT_ID`, `FCM_SERVICE_ACCOUNT_JSON`; migración 0035 aplicada el 2026-09-30) · 2026-09-29 (dominio get-kura.app)
 
 ## Qué cubre este dominio
 <!-- Build, deploy, entornos, variables de entorno y dependencias.
@@ -15,7 +16,7 @@
 
 | Ruta | Qué hay |
 |---|---|
-| `package.json` | Scripts: `dev`, `build`, `start`, `lint`, `beta`, `ship`, `eval:recos`. Gestor: **pnpm**. Dependencia directa nueva (2026-09-24): **`jose` ^6.2.12** (JWT HS256 de la API v1, `src/authz/api.ts`; antes solo llegaba como transitiva de next-auth — pnpm dedupe una sola copia) |
+| `package.json` | Scripts: `dev`, `build`, `start`, `lint`, `typecheck` (`tsc --noEmit`), `test` (`scripts/run-tests.sh`: todo `src/**/*.test.ts` con `tsx --test`; Node 20 no acepta globs en `--test`), `check:guardrails` (`scripts/run-guardrails.sh`: todos los `scripts/check-*.ts|.sh`, corre todos y falla si alguno falló), **`check`** (= typecheck → lint → guardrails → test; lo que se corre antes de desplegar), `test:db` (harness con Postgres LOCAL desechable, ver `guardrails.md`), `beta`, `ship`, `eval:recos`. Gestor: **pnpm**. **Versiones (2026-10-01)**: `next` 16.3.8 + `eslint-config-next` 16.3.8, `next-auth` 5.0.0-beta.32 (`@auth/core` 0.41.3), `@auth/drizzle-adapter` ^1.11.3; transitivas `browserslist`/`baseline-browser-mapping` subidas con `pnpm update --depth 99` → `pnpm audit --prod` sin vulnerabilidades (venía de 30: 6 críticas, 14 altas). Ojo 16.3: `next dev` con un agente detectado auto-genera `AGENTS.md`/`CLAUDE.md` si no encuentra su bloque gestionado (docs `02-guides/ai-agents.md`) — revisar el diff de esos dos archivos tras el primer `next dev`. Dependencia directa nueva (2026-09-24): **`jose` ^6.2.12** (JWT HS256 de la API v1, `src/authz/api.ts`; antes solo llegaba como transitiva de next-auth — pnpm dedupe una sola copia) |
 | `pnpm-workspace.yaml` · `pnpm-lock.yaml` | Workspace y lockfile de pnpm |
 | `next.config.ts` | `experimental.staleTimes` y los `rewrites` de fallback que sirven `/{username}` |
 | `vercel.json` · `.vercel/` | Config y vínculo del proyecto en Vercel |
@@ -24,7 +25,7 @@
 | `TIDAL_OAUTH_REDIRECT_URI` · `APPLE_MUSIC_KEY_ID` · `APPLE_MUSIC_PRIVATE_KEY` · `MUSIC_TOKEN_KEY` (env opcionales, 2026-09-29) | Exportar una fiesta. `TIDAL_OAUTH_REDIRECT_URI` = el callback EXACTO registrado en developer.tidal.com para la MISMA app del link-out (prod `https://get-kura.app/api/music/tidal/callback`, Preview `https://beta.get-kura.app/…`, local `http://localhost:3010/…`); sin ella TIDAL sale "Próximamente". `APPLE_MUSIC_*` = llave `.p8` dedicada con Media Services (MusicKit): la ÚNICA que firma el developer token del navegador (1 h, `origin` get-kura.app + beta — Apple Music web NO funciona en `baclog-beta.vercel.app`); sin ella `services.apple_music.webAvailable: false` (web "Próximamente") y la compartida `APPLE_KEY_ID`/`APPLE_PRIVATE_KEY` (MusicKit habilitado) sigue sirviendo a iOS y al lookup de ISRC, solo servidor. `MUSIC_TOKEN_KEY` **recomendada en producción** (si no, se deriva de `AUTH_SECRET` y rotarlo desconecta TIDAL; cambiarla obliga a reconectar). Pasos completos en `state/export-contract.md` §11. |
 | `APPLE_WEB_CLIENT_ID` (env opcional, 2026-09-29) | **Services ID** de Sign in with Apple para la web (p. ej. `com.tromwey.kura.web`). Alta en developer.apple.com › Identifiers › + › Services IDs: identificador, descripción "Kura web", habilitar Sign in with Apple › Configure: Primary App ID `com.tromwey.kura`, Domains `get-kura.app` y `beta.get-kura.app`, Return URLs `https://get-kura.app/api/auth/callback/apple` y `https://beta.get-kura.app/api/auth/callback/apple` (Apple exige https; localhost no se puede registrar → la prueba real es en beta). Usa la MISMA llave `.p8` que APNs (`APPLE_TEAM_ID/KEY_ID/PRIVATE_KEY`, hoy solo en Production: darla de alta también en Preview para probar en beta). Sin la var (o sin la llave) no hay botón en `/login`. Si Apple manda correo a un relay `@privaterelay.appleid.com` (OTP a una cuenta creada con "ocultar mi correo"), el dominio remitente tiene que estar en Sign in with Apple › Email Communication (SPF) o el relay lo descarta |
 | `GOOGLE_WEB_CLIENT_ID` (env opcional, 2026-09-30) | Client id OAuth tipo "Aplicación web" del proyecto GCP "kura" (418089003955), el mismo proyecto que `GOOGLE_IOS_CLIENT_ID`. No es secreto. Es el `serverClientId` que la app Android pasa a Credential Manager: `auth/google` y `me/identities/google` aceptan su `aud`, y `auth/providers` lo devuelve como `google.androidClientId`. Cargada en Vercel production + preview y en `.env.local`. Sin ella: Android no pinta Google (iOS no cambia) |
-| `FCM_SERVICE_ACCOUNT_JSON` (env opcional, **sensitive**, 2026-09-30) | JSON completo de la cuenta de servicio del proyecto Firebase `kura-a1f94` con permiso de FCM. Cargada en Vercel production + preview (sensitive) y en `.env.local`. La lee solo `fcmConfig()` (`src/modules/push/fcm-transport.ts`). Sin ella (o ilegible) el envío FCM es un no-op con log `[push] …`. Además hace falta la **migración 0035 aplicada** + `MIGRATION_0035_LIVE = true` para que Android pueda registrar su token: **0035 está GENERADA y SIN APLICAR** (`drizzle/0035_device_token_provider.sql`; pasos en `data.md` › En progreso). Verificada el 2026-09-30 con `validate_only` contra FCM real (el OAuth acuña y FCM acepta el payload) |
+| `FCM_SERVICE_ACCOUNT_JSON` (env opcional, **sensitive**, 2026-09-30) | JSON completo de la cuenta de servicio del proyecto Firebase `kura-a1f94` con permiso de FCM. Cargada en Vercel production + preview (sensitive) y en `.env.local`. La lee solo `fcmConfig()` (`src/modules/push/fcm-transport.ts`). Sin ella (o ilegible) el envío FCM es un no-op con log `[push] …`. La columna `device_token.provider` (0035) está aplicada desde el 2026-09-30 y el switch `MIGRATION_0035_LIVE` se retiró el 2026-10-01: Android registra su token sin más pasos. Verificada el 2026-09-30 con `validate_only` contra FCM real (el OAuth acuña y FCM acepta el payload) |
 | `KURADA_HANDLES` (env opcional, 2026-09-29) | Usernames (coma) de las cuentas del equipo cuyas colecciones públicas salen como "Colecciones Kuradas" en Descubrir por formato (`modules/social/kurada.ts`). Sin definir = la sección no aparece. Hay que darla de alta en Vercel (Production y Preview) cuando existan esas cuentas |
 | `eslint.config.mjs` · `postcss.config.mjs` · `tsconfig.json` | Lint, PostCSS/Tailwind v4 y TypeScript |
 | `.claude/launch.json` | Config del dev server para el runner de preview (`pnpm dev`, puerto 3000, `autoPort`) |
@@ -60,6 +61,13 @@
 - **OTP cuando el dev server lo levantó otro proceso**: sin stdout propio, el `[dev-mailer]` queda en
   `.next/dev/logs/next-development.log` (líneas JSON con `"message":"[dev-mailer] OTP para …"`); el
   `--log` de `scripts/api-smoke.ts` lo lee tal cual.
+
+### Orden de despliegue (release del 2026-10-01)
+
+1. **Confirmar que 0000–0035 están en producción** (`select count(*) from drizzle.__drizzle_migrations` = 36 en la DB compartida). El servidor ya no lleva switches `MIGRATION_00xx_LIVE`: da por hechas las columnas de 0029/0033/0034/0035 y sin ellas responde 500 (42703).
+2. **Deploy del servidor, beta y prod SEGUIDOS** (`pnpm beta` → smoke → `pnpm ship`): comparten la DB, así que no hay ventana útil con uno adelantado.
+3. **0036 y 0037 en hora valle** (`pnpm exec drizzle-kit migrate`): solo índices, el código no depende de ellas; bloqueos y alternativa `CONCURRENTLY` en `data.md` › «Aplicar 0036 y 0037».
+4. **Apps** (iOS / Android) al final: hablan con el servidor ya desplegado.
 
 ## Decisiones tomadas (y por qué)
 

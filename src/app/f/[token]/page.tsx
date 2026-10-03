@@ -5,8 +5,6 @@ import { getCurrentUser } from "@/auth";
 import { DeadLinkScreen } from "@/components/party/dead-link";
 import { InviteLanding } from "@/components/party/invite-landing";
 import { perGuestPhrase } from "@/components/party/party-parts";
-import { PartySoonScreen } from "@/components/party/party-soon";
-import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { getInvitePreview } from "@/modules/party-collections/queries";
 import { parseInviteToken, partyPath } from "@/modules/party-collections/rules";
 
@@ -14,9 +12,6 @@ import { parseInviteToken, partyPath } from "@/modules/party-collections/rules";
  * /f/{token} — the invite landing (fiesta-app-v2 · landing; contract §2–§3).
  * Anyone holding an ACTIVE link sees the party live, signed in or not.
  *
- *  - Migration 0033 not live yet → "las fiestas llegan muy pronto." for EVERY
- *    token (contract C1 — checked before the token is looked at, so it
- *    confirms nothing; a good link must not read as dead).
  *  - Malformed / unknown / revoked token or a block with the host →
  *    `getInvitePreview` is null → "este link ya no funciona." (one screen for
  *    all of them: no oracle).
@@ -39,7 +34,14 @@ export async function generateMetadata({
   params: Promise<{ token: string }>;
 }): Promise<Metadata> {
   const { token } = await params;
-  const p = MIGRATION_0033_LIVE && parseInviteToken(token) ? await preview(token, null) : null;
+  // The SAME viewer the page resolves, never `null`: `getInvitePreview` is
+  // null for a viewer with a block with the host (one dead-link screen for
+  // every refusal), and a preview read as "nobody" skipped that gate — the
+  // tab title and description handed the party's name to exactly the person
+  // the page refuses. Same args as the page → one `cache` entry, no extra
+  // query. No preview for THIS viewer = the generic metadata.
+  const user = parseInviteToken(token) ? await getCurrentUser() : null;
+  const p = parseInviteToken(token) ? await preview(token, user?.id ?? null) : null;
   return {
     title: p ? `${p.party.name} · kura` : "kura",
     description: p ? `Colección de fiesta: ${perGuestPhrase(p.party.perGuestLimit)}.` : undefined,
@@ -56,7 +58,6 @@ export default async function InvitePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ token }, sp, user] = await Promise.all([params, searchParams, getCurrentUser()]);
-  if (!MIGRATION_0033_LIVE) return <PartySoonScreen />;
   if (!parseInviteToken(token)) return <DeadLinkScreen />;
 
   const p = await preview(token, user?.id ?? null);

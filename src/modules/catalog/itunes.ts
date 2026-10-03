@@ -1,4 +1,7 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { appleAlbumLookup, appleArtistAlbums, appleSearchAlbums } from "./apple-catalog";
 import type { ExternalItem } from "./types";
 
 /**
@@ -34,7 +37,24 @@ interface ItunesCollection {
  * reports as `failed`, so the mobile API can answer 503 instead of an honest
  * looking empty result. The web search catches it (`safe`) and stays [].
  */
-export async function searchAlbums(query: string): Promise<ExternalItem[]> {
+export async function searchAlbums(
+  query: string,
+  storefront?: string,
+): Promise<ExternalItem[]> {
+  // Apple Music first (2026-10-02, `apple-catalog.ts`): its index is the
+  // app's, current where iTunes' lags, searched in the viewer's store
+  // (`storefront`, from their country). Null (no key / Apple failed) or an
+  // empty answer → the iTunes path below, unchanged (US store).
+  const apple = await appleSearchAlbums(query, storefront);
+  if (apple && apple.length > 0) {
+    const byId = new Map<string, ExternalItem>();
+    for (const c of apple) {
+      const externalId = String(c.collectionId);
+      if (!byId.has(externalId)) byId.set(externalId, toAlbumItem(c, externalId));
+    }
+    return [...byId.values()];
+  }
+
   const [albums, songs] = await Promise.all([
     fetchAlbums(query, "album"),
     fetchAlbums(query, "song"),
@@ -69,7 +89,7 @@ async function fetchAlbums(
   url.searchParams.set("media", "music");
 
   try {
-    const res = await fetch(url, { next: { revalidate: 0 } });
+    const res = await fetchWithTimeout(url, { next: { revalidate: 0 } });
     if (!res.ok) throw new Error(`iTunes ${entity} search: ${res.status}`);
     const data = await res.json();
 
@@ -86,7 +106,7 @@ async function fetchAlbums(
     }
     return out;
   } catch (err) {
-    console.error(`[catalog] iTunes ${entity} search failed:`, err);
+    console.error(`[catalog] iTunes ${entity} search failed:`, redactedError(err));
     return null;
   }
 }
@@ -152,8 +172,9 @@ function toAlbumViewUrl(viewUrl: string | undefined): string | undefined {
 export async function getArtistUpcoming(
   artistId: number,
   now: number = Date.now(),
+  storefront?: string,
 ): Promise<ExternalItem[]> {
-  const lookup = await lookupArtistAlbums(artistId);
+  const lookup = await lookupArtistAlbums(artistId, undefined, storefront);
   if (!lookup) return [];
   return lookup.albums
     .filter((r) => new Date(r.releaseDate as string).getTime() > now)
@@ -191,8 +212,9 @@ export async function getArtistReleases(
   now: number,
   pastDays = 120,
   timeoutMs = 4000,
+  storefront?: string,
 ): Promise<ArtistReleases> {
-  const lookup = await lookupArtistAlbums(artistId, AbortSignal.timeout(timeoutMs));
+  const lookup = await lookupArtistAlbums(artistId, AbortSignal.timeout(timeoutMs), storefront);
   if (!lookup) return { artistName: null, items: [] };
   const since = now - pastDays * 24 * 60 * 60 * 1000;
   const seen = new Set<string>();
@@ -218,10 +240,22 @@ export async function getArtistReleases(
 async function lookupArtistAlbums(
   artistId: number,
   signal?: AbortSignal,
+  /** The store of the album the artist id came from (`storefrontOfRaw`). */
+  storefront?: string,
 ): Promise<{
   artistName: string | null;
   albums: Array<ItunesCollection & { wrapperType?: string }>;
 } | null> {
+  // Apple Music first; its rows are already collection-shaped. Same filter as
+  // the iTunes rows below (a dateless album can't be placed in time).
+  const apple = await appleArtistAlbums(artistId, signal, storefront);
+  if (apple) {
+    return {
+      artistName: apple.artistName,
+      albums: apple.albums.filter((r) => Boolean(r.releaseDate)),
+    };
+  }
+
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", String(artistId));
   url.searchParams.set("entity", "album");
@@ -251,7 +285,7 @@ async function lookupArtistAlbums(
       ),
     };
   } catch (err) {
-    console.error(`[catalog] iTunes artist lookup ${artistId} failed:`, err);
+    console.error(`[catalog] iTunes artist lookup ${artistId} failed:`, redactedError(err));
     return null;
   }
 }
@@ -325,6 +359,8 @@ function isPlaceholderTrack(name: string, streamable: boolean): boolean {
 export async function getAlbumDetail(
   collectionId: string,
   freshness: DetailFreshness = "pending",
+  /** The store the album was found in (`storefrontOfRaw(item.raw)`). */
+  storefront?: string,
 ): Promise<AlbumDetail> {
   const FAILED: AlbumDetail = {
     releaseDate: null,
@@ -333,90 +369,94 @@ export async function getAlbumDetail(
     tracks: [],
     unavailable: true,
   };
+  const revalidate =
+    freshness === "fresh" ? null : freshness === "pending" ? 60 * 60 * 24 : 60 * 60 * 24 * 30;
+  // Apple Music first (same freshness); null → the iTunes lookup below.
+  const apple = await appleAlbumLookup(collectionId, revalidate, storefront);
+  if (apple) return albumDetailFromRows(apple);
+
   const url = new URL("https://itunes.apple.com/lookup");
   url.searchParams.set("id", collectionId);
   url.searchParams.set("entity", "song");
   url.searchParams.set("limit", "300");
 
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       url,
-      freshness === "fresh"
-        ? { cache: "no-store" }
-        : {
-            next: {
-              revalidate:
-                freshness === "pending" ? 60 * 60 * 24 : 60 * 60 * 24 * 30,
-            },
-          },
+      revalidate == null ? { cache: "no-store" } : { next: { revalidate } },
     );
     if (!res.ok) {
       console.error(`[catalog] iTunes lookup ${collectionId} (${freshness}) failed: ${res.status}`);
       return FAILED;
     }
     const data = await res.json();
-    const rows = (data.results ?? []) as Array<{
-      wrapperType?: string;
-      collectionType?: string;
-      releaseDate?: string;
-      artworkUrl100?: string;
-      trackCount?: number;
-      trackNumber?: number;
-      discNumber?: number;
-      trackName?: string;
-      trackTimeMillis?: number;
-      isStreamable?: boolean;
-    }>;
-
-    const collection = rows.find((r) => r.wrapperType === "collection");
-    const parsed = collection?.releaseDate
-      ? new Date(collection.releaseDate)
-      : null;
-
-    const tracks = rows
-      .filter((r) => r.wrapperType === "track" && Boolean(r.trackName))
-      .sort(
-        (a, b) =>
-          (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
-          (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
-      )
-      // "Track 4" never reaches the screen (design 1f): a muted placeholder row
-      // says nothing the "N canciones más" divider doesn't say better. The
-      // partial tracklist splits on trackCount. Streamability is half of that
-      // test, and it also rides on every surviving track as `available` (a
-      // named track that isn't playable yet stays listed — the API tells the
-      // app so; the web renders it like any other row).
-      // ONE semantic for a missing `isStreamable`, on purpose asymmetric:
-      //  - `available` reads it as PLAYABLE (`!== false`): iTunes omits the
-      //    flag on plenty of released catalog, and "pronto" on a playable song
-      //    is the worse lie;
-      //  - the placeholder test needs positive proof (`=== true`) to KEEP a
-      //    "Track N" row: only a pre-order placeholder is named like that, so
-      //    without the flag it is dropped. A real song literally called
-      //    "Track 5" on a released album comes with `isStreamable: true` and
-      //    survives (with `available: true`).
-      // So a surviving track is never "placeholder AND unavailable".
-      .filter((t) => !isPlaceholderTrack(t.trackName as string, t.isStreamable === true))
-      .map((t) => ({
-        n: t.trackNumber ?? 0,
-        name: t.trackName as string,
-        durationMs:
-          typeof t.trackTimeMillis === "number" ? t.trackTimeMillis : null,
-        available: t.isStreamable !== false,
-      }));
-
-    return {
-      releaseDate: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
-      posterUrl:
-        collection?.artworkUrl100?.replace("100x100bb", "600x600bb") ?? null,
-      // The collection's count is the truth about how many songs the album HAS;
-      // `tracks` is only what iTunes is willing to name today.
-      trackCount: collection?.trackCount ?? tracks.length,
-      tracks,
-      unavailable: false,
-    };
+    return albumDetailFromRows(data.results ?? []);
   } catch (err) {
-    console.error(`[catalog] iTunes lookup ${collectionId} (${freshness}) failed:`, err);
+    console.error(`[catalog] iTunes lookup ${collectionId} (${freshness}) failed:`, redactedError(err));
     return FAILED;
   }
+}
+
+/** The lookup rows (iTunes', or Apple Music's translated to them) → the detail. */
+function albumDetailFromRows(results: unknown[]): AlbumDetail {
+  const rows = results as Array<{
+    wrapperType?: string;
+    collectionType?: string;
+    releaseDate?: string;
+    artworkUrl100?: string;
+    trackCount?: number;
+    trackNumber?: number;
+    discNumber?: number;
+    trackName?: string;
+    trackTimeMillis?: number;
+    isStreamable?: boolean;
+  }>;
+
+  const collection = rows.find((r) => r.wrapperType === "collection");
+  const parsed = collection?.releaseDate
+    ? new Date(collection.releaseDate)
+    : null;
+
+  const tracks = rows
+    .filter((r) => r.wrapperType === "track" && Boolean(r.trackName))
+    .sort(
+      (a, b) =>
+        (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
+        (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
+    )
+    // "Track 4" never reaches the screen (design 1f): a muted placeholder row
+    // says nothing the "N canciones más" divider doesn't say better. The
+    // partial tracklist splits on trackCount. Streamability is half of that
+    // test, and it also rides on every surviving track as `available` (a
+    // named track that isn't playable yet stays listed — the API tells the
+    // app so; the web renders it like any other row).
+    // ONE semantic for a missing `isStreamable`, on purpose asymmetric:
+    //  - `available` reads it as PLAYABLE (`!== false`): iTunes omits the
+    //    flag on plenty of released catalog, and "pronto" on a playable song
+    //    is the worse lie;
+    //  - the placeholder test needs positive proof (`=== true`) to KEEP a
+    //    "Track N" row: only a pre-order placeholder is named like that, so
+    //    without the flag it is dropped. A real song literally called
+    //    "Track 5" on a released album comes with `isStreamable: true` and
+    //    survives (with `available: true`).
+    // So a surviving track is never "placeholder AND unavailable".
+    .filter((t) => !isPlaceholderTrack(t.trackName as string, t.isStreamable === true))
+    .map((t) => ({
+      n: t.trackNumber ?? 0,
+      name: t.trackName as string,
+      durationMs:
+        typeof t.trackTimeMillis === "number" ? t.trackTimeMillis : null,
+      available: t.isStreamable !== false,
+    }));
+
+  return {
+    releaseDate: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+    posterUrl:
+      collection?.artworkUrl100?.replace("100x100bb", "600x600bb") ?? null,
+    // The collection's count is the truth about how many songs the album HAS;
+    // `tracks` is only what iTunes is willing to name today.
+    trackCount: collection?.trackCount ?? tracks.length,
+    tracks,
+    unavailable: false,
+  };
 }

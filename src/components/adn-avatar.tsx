@@ -48,7 +48,7 @@ export function AdnAvatar({
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- our own route, fixed square, no optimizer needed
-        <img src={src} alt="" draggable={false} className="h-full w-full object-cover" />
+        <img src={src} alt="" loading="lazy" decoding="async" draggable={false} className="h-full w-full object-cover" />
       ) : letters ? (
         <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden>
           <text

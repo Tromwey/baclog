@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertOwnsUserItem } from "@/authz";
-import { ApiError, withApi } from "@/authz/api";
+import { ApiError, requireOnboarded, withApi } from "@/authz/api";
 import { publicMarkOf } from "@/modules/backlog/mark";
 import { deleteOwnReview, getOwnReview, saveReview } from "@/modules/reviews/write";
 import { REVIEW_MAX_LENGTH } from "@/modules/reviews/types";
@@ -33,6 +33,9 @@ const NO_LINKS = "Las reseñas no llevan enlaces.";
 const BAD_BODY = `Escribe entre 1 y ${REVIEW_MAX_LENGTH} caracteres.`;
 
 export const PUT = withApi<{ id: string }>(async (request, { user, params }) => {
+  // F2.2: publishing text needs a finished onboarding (403
+  // `onboarding_required`). Deleting your own review is never gated.
+  requireOnboarded(user);
   const { item } = await assertOwnsUserItem(parseId(params.id));
   const input = await readJson(request, PutReviewBody);
 

@@ -7,8 +7,7 @@ import { tidalStartPath } from "@/modules/music-export/rules";
 
 /**
  * Ajustes › música: the TIDAL link that "Llévala a otra app" uses (export
- * contract §4.1.5). Draws NOTHING while the export is off
- * (`MIGRATION_0034_LIVE=false` → `unavailable`) or TIDAL isn't configured on
+ * contract §4.1.5). Draws NOTHING while TIDAL isn't configured on
  * this deploy — no "Próximamente" row in settings. Connecting is a plain
  * navigation to `/api/music/tidal/start?return=/settings/musica`; the
  * callback lands back here with `?music=tidal&connected=…` (`landing`).

@@ -1,6 +1,5 @@
 import { revokeMobileSession } from "@/auth/mobile-sessions";
 import { ApiError, withApi } from "@/authz/api";
-import { SESSIONS_UNAVAILABLE, requireMigration0029 } from "../../../_lib/devices";
 import { noContent, parseId } from "../../../_lib/http";
 
 const NOT_FOUND_MSG = "No encontramos esa sesión. Puede que ya se haya cerrado.";
@@ -12,10 +11,8 @@ const NOT_FOUND_MSG = "No encontramos esa sesión. Puede que ya se haya cerrado.
  * The caller's CURRENT session can be revoked too (this bearer dies with
  * it). Another account's id, an unknown id, a malformed id and an already
  * revoked session are the SAME 404 (no oracle for other people's sessions).
- * 503 `unavailable` until migration 0029.
  */
 export const DELETE = withApi<{ id: string }>(async (_request, { user, params }) => {
-  requireMigration0029(SESSIONS_UNAVAILABLE);
   let id: string;
   try {
     id = parseId(params.id);

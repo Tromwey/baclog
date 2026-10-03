@@ -107,7 +107,7 @@ export function PartyPlaylistCard({
         className="text-center font-brand text-[26px] leading-[1.1] [text-wrap:balance]"
         style={{ color: "var(--p-bone)" }}
       >
-        Arma la playlist de la fiesta en kura
+        Crea la playlist de la fiesta en kura
       </div>
       <div
         className="text-center font-sans text-[15px] leading-[1.45] [text-wrap:pretty]"

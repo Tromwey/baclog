@@ -19,16 +19,16 @@
 
 ## 0. Estado de despliegue — LEER PRIMERO
 
-- Migración **`drizzle/0033_party_collections.sql`** (aditiva). Hasta aplicarla, el switch
-  **`MIGRATION_0033_LIVE = false`** (`src/modules/party-collections/live.ts`) hace que TODO lo de fiestas
-  responda "no disponible": server actions → `{ error: "unavailable" }`; API → **503 `unavailable`**
-  (incluida `GET /invites/{token}`, para todo token); web `/f/*` y `/c/*` → "las fiestas llegan muy pronto."
-  (`components/party/party-soon.tsx`); `getInvitePreview` LANZA `PartyUnavailableError`;
-  `getPartySummaryByToken` → `null` + `console.warn` (la tarjeta de /party no se pinta).
-  El resto de la app funciona igual con o sin la migración.
-- Orden: `drizzle-kit migrate` (founder, DB compartida) → poner `MIGRATION_0033_LIVE = true` → deploy. **HECHO 2026-09-29**: 0033 aplicada, switch en `true`, prod + beta desplegados.
-  Nunca `true` sin la tabla (Colecciones daría 500 en todas sus pantallas).
-- Exportar a Apple Music/TIDAL ("Llévala a otra app"): **backend listo detrás de `MIGRATION_0034_LIVE = false`** (0034 sin aplicar) — contrato aparte en **`state/export-contract.md`**. Mientras esté apagado todo responde `unavailable` → la UI sigue mostrando "Próximamente". `PartySong` gana `appleMusicId` (aditivo, ya vivo).
+- Migración **`drizzle/0033_party_collections.sql`** (aditiva): **APLICADA el 2026-09-29** (prod + beta).
+  **El switch `MIGRATION_0033_LIVE` y todo su camino "apagado" se RETIRARON del código el 2026-10-01**
+  (`party-collections/live.ts`, `errors.ts` `assertPartyLive`/`PartyUnavailableError`, la pantalla
+  `components/party/party-soon.tsx` "las fiestas llegan muy pronto.", el `{ error: "unavailable" }` de las
+  server actions y el 503 de `/parties/**` e `/invites/**`). Lo que este documento describa como "con el switch
+  apagado" (C1 incluido) es HISTORIA: hoy no existe ese estado. `unavailable` solo queda en la búsqueda de
+  canciones (iTunes caído). Las apps instaladas que aún toleran ese 503 no se rompen: no vuelven a verlo.
+- Exportar a Apple Music/TIDAL ("Llévala a otra app"): **encendido** (0034 aplicada; su switch también se retiró
+  el 2026-10-01) — contrato aparte en **`state/export-contract.md`**. "Próximamente" ya solo sale de
+  `available: false` (servicio sin configurar). `PartySong` gana `appleMusicId` (aditivo, ya vivo).
 
 ## 1. Modelo de datos
 
@@ -41,7 +41,7 @@ Una fiesta ES una colección (`backlog`) con una fila en `party`. Nada nuevo en 
 | `party_invite` (nueva) | `id uuid` · `backlog_id` · `token text UNIQUE` (16 chars base64url, 96 bits) · `created_at` · `revoked_at NULL`. **Un solo link activo** por fiesta (índice único parcial). Los revocados se quedan (su token nunca vuelve a funcionar). |
 | `backlog_collaborator` (0030) + `blocked_at` + `left_at` (nuevas col.) | Miembro = invitado que entró por el link. `blocked_at` = "Quitar y bloquear" del anfitrión (sigue VIENDO, no agrega; SÍ quita las suyas). `left_at` = un invitado BLOQUEADO que salió (la fila se conserva para que el bloqueo sobreviva); un invitado no bloqueado que sale se BORRA. Toda lectura de membresía filtra `left_at IS NULL`. |
 | `backlog_item` | La canción en la fiesta (membresía). `user_id` = **el anfitrión** siempre (invariante de dueño de la casa). Único `(backlog_id, catalog_item_id)` = una canción una vez por fiesta. |
-| `party_song` (nueva) | **Quién la puso**: `backlog_item_id` PK→backlog_item CASCADE · `backlog_id` · `added_by_user_id`→user **SET NULL** · `added_at`. Autor borra su cuenta → la canción queda, "Puso alguien". |
+| `party_song` (nueva) | **Quién la agregó**: `backlog_item_id` PK→backlog_item CASCADE · `backlog_id` · `added_by_user_id`→user **SET NULL** · `added_at`. Autor borra su cuenta → la canción queda, "Agregó alguien". |
 | `catalog_item` | La canción: `media_type = 'track'` (valor nuevo del enum), `source = "itunes-track"`, `external_id = trackId`, `title`, `byline` = artista, `poster_url` 600×600, `raw` = lista blanca (`previewUrl`, `trackViewUrl`, `collectionName`, `trackTimeMillis`, …), `palette_hex` (on-device, compartida). Nunca `release_date`. |
 
 Reglas de modelo:
@@ -161,8 +161,8 @@ unblockPartyGuestAction(backlogId: string, guestRef: string)                // g
 Portada/aura: la paleta de una canción se llena con la action existente `cacheItemPaletteAction(titleId, hexes)`
 (primer escritor gana) o pasando `paletteHex` al agregar.
 
-Copy del diseño ya resuelto en servidor: `duplicateMessage(mine, handle)` → `"Ya la pusiste tú."` /
-`"Ya está, la puso @ana"` / `"Ya está, la puso alguien"`.
+Copy del diseño ya resuelto en servidor: `duplicateMessage(mine, handle)` → `"Ya la agregaste tú."` /
+`"Ya está, la agregó @ana."` / `"Ya está, la agregó alguien."`.
 
 ## 5. API v1 (iOS)
 
@@ -190,6 +190,8 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 | GET | `/invites/{token}` | — | `InvitePreview` — **pública** (bucket propio `invite-ip`, 60/min por IP); bearer OPCIONAL llena `viewer` | 404 `"Este link ya no funciona. Pídele a quien te invitó uno nuevo."` (malformado = desconocido = revocado = bloqueo con el anfitrión) · **503 `unavailable` sin 0033, para todo token (C1)** |
 | POST | `/invites/{token}/join` | — | `{ party: Party, joined: "new" \| "already" \| "host" }` | 404 (mismo texto) · 403 `onboarding_required` |
 
+> **Gate de edad (ciclo 2, 2026-10-01)**: `POST /parties`, `PATCH /parties/{id}` y `POST /parties/{id}/invite` responden 403 `forbidden` + `reason: "onboarding_required"` si la cuenta no terminó el onboarding (se decide antes de mirar el id). Las acciones web equivalentes (`createPartyAction`, `updatePartyAction`, `rotatePartyInviteAction`) devuelven `{ error: "onboarding_required" }` (sin `onboardingPath`: el layout `(app)` ya manda al onboarding). Borrar, desactivar link y salir no se gatean.
+
 `message` de cada error es el copy final en español: muéstralo tal cual. Zod exacto en
 `src/app/api/v1/_lib/schemas.ts` (sección "Parties"); serializadores en `_lib/wire/party.ts`.
 
@@ -206,7 +208,7 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
   "appleMusicId": "1440833098" | null,   // id de CATÁLOGO de Apple Music (= trackId de iTunes, mx) — export-contract.md
   "palette": ["#211c28", …],            // [] hasta que alguien la extraiga
   "addedAt": "2026-10-20T18:00:00Z",
-  "addedBy": PartyPerson | null,        // null → "Puso alguien"
+  "addedBy": PartyPerson | null,        // null → "Agregó alguien"
   "mine": true,                          // → "Pusiste"
   "byHost": false, "canRemove": true, "canBlockAuthor": false }
 
@@ -233,10 +235,10 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 
 // PartySongHit (búsqueda)
 { "titleId", "title", "artist", "album", "artworkUrl", "previewUrl", "durationMs", "appleMusicUrl", "palette",
-  "inParty": null | { "mine": true, "addedBy": PartyPerson | null } }  // null → "Agregar"; mine → "Ya la pusiste"; si no → "Ya está · la puso @x"
+  "inParty": null | { "mine": true, "addedBy": PartyPerson | null } }  // null → "Agregar"; mine → "Ya la agregaste"; si no → "Ya está, la agregó @x."
 
 // 409 duplicate_other
-{ "error": { "code": "conflict", "reason": "duplicate_other", "message": "Ya está, la puso @ana",
+{ "error": { "code": "conflict", "reason": "duplicate_other", "message": "Ya está, la agregó @ana.",
              "addedBy": PartyPerson | null } }
 ```
 
@@ -246,9 +248,9 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
    Default al crear: 3. **El anfitrión no tiene tope** (decisión: el que organiza pone lo que quiera; `remaining: null`).
    Bajar el tope no borra canciones: el invitado queda en `remaining: 0` hasta quitar.
 2. **Orden de chequeo al agregar** (`decideAdd`): bloqueado → solo ver → **duplicado** → tope. Un duplicado se
-   reporta aunque ya hayas usado tus 3 (el diseño dice "Ya está, la puso @ana").
-3. **Duplicados**: una canción una vez por fiesta (`(backlog, catalog_item)` único). "Ya la pusiste tú." vs
-   "Ya está, la puso @x" / "alguien".
+   reporta aunque ya hayas usado tus 3 (el diseño dice "Ya está, la agregó @ana.").
+3. **Duplicados**: una canción una vez por fiesta (`(backlog, catalog_item)` único). "Ya la agregaste tú." vs
+   "Ya está, la agregó @x." / "alguien".
 4. **Quitar**: anfitrión cualquier canción ("sale de la colección para todos"); invitado solo las suyas —
    **también estando bloqueado** (C4).
 5. **Quitar y bloquear a @x** (anfitrión, por canción): quita ESA canción y bloquea a su autor en ESTA fiesta.
@@ -270,7 +272,7 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
    con el viewer; si no, "alguien". `mine` (Pusiste) no depende de eso. Nunca viajan ids de usuario.
 10. **Visibilidad**: fiesta siempre privada. La ven: anfitrión, miembros (incl. bloqueados) y quien tenga un
     link ACTIVO (preview). No aparece en perfil, feed, tendencias, búsqueda, recap ni `GET /collections`.
-11. Borrar la cuenta de un invitado: sus canciones quedan como "Puso alguien"; sale de miembros. Borrar la
+11. Borrar la cuenta de un invitado: sus canciones quedan como "Agregó alguien"; sale de miembros. Borrar la
     cuenta del anfitrión borra la fiesta entera.
 12. **Salir de la fiesta** (C3, `POST /parties/{id}/leave`, solo invitado; anfitrión = 404): la fiesta sale de
     sus listas; sus canciones se quedan, atribuidas. **Regla de regreso** (`rules.ts` `leaveEffect` /
@@ -296,4 +298,4 @@ Un `{id}` o `{titleId}` que no es UUID = 404. Fiesta no visible (no miembro / in
 
 - **/party**: `PartyPlaylistCard` ya se monta tras un RSVP de "sí voy" (`showPlaylist` en party-invitation.tsx → party-scene.tsx). Falta `PARTY_PLAYLIST_TOKEN` en Vercel (el token de 16 del link `/f/…` de la fiesta del founder); sin él la tarjeta no se pinta.
 - **URL de la App Store**: la tarjeta "kura para iPhone." no trae "Ver en App Store" hasta tener la URL.
-- Exportar a Apple Music/TIDAL: backend en `state/export-contract.md` (0034 sin aplicar); falta la UI web/iOS.
+- Exportar a Apple Music/TIDAL: backend y UI en `state/export-contract.md` (0034 aplicada, switch retirado 2026-10-01).

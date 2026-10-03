@@ -169,3 +169,62 @@ export function tidalForbiddenMessage(codes: readonly string[]): string {
 export const TIDAL_STEP_BATCH = 10;
 /** TIDAL caps `POST /playlists/{id}/relationships/items` at 50 per call. */
 export const TIDAL_ADD_CHUNK = 50;
+
+// ---------- anomalous song rows ----------
+
+/** The fields of a party song the export's wire is strict about. */
+export interface ExportableSong {
+  titleId: string;
+  title: string;
+  artworkUrl: string | null;
+  durationMs: number | null;
+  appleMusicId: string | null;
+}
+
+function httpUrlOrNull(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One anomalous catalog row must not turn the whole export into a 500 (the
+ * wire's `ExportSongSchema` is strict and `parseOutput` fails the response).
+ * So the export reads its songs through here:
+ *   - a song with a blank title is DROPPED (nothing to show, nothing to
+ *     search on the service) — and since the plan is computed over what is
+ *     left, totals and "N de M" stay consistent;
+ *   - `durationMs` that isn't a non-negative integer is rounded, or null;
+ *   - `artworkUrl` that isn't an http(s) URL and `appleMusicId` that isn't
+ *     all digits become null (the client already handles both as absent).
+ * `dropped` / `repaired` carry the title ids for the caller's log line.
+ */
+export function sanitizeExportSongs<T extends ExportableSong>(
+  songs: readonly T[],
+): { songs: T[]; dropped: string[]; repaired: string[] } {
+  const out: T[] = [];
+  const dropped: string[] = [];
+  const repaired: string[] = [];
+  for (const s of songs) {
+    const title = typeof s.title === "string" ? s.title.trim() : "";
+    if (!s.titleId || !title) {
+      dropped.push(String(s.titleId));
+      continue;
+    }
+    const d = s.durationMs;
+    const durationMs = typeof d === "number" && Number.isFinite(d) && d >= 0 ? Math.round(d) : null;
+    const artworkUrl = httpUrlOrNull(s.artworkUrl);
+    const appleMusicId = typeof s.appleMusicId === "string" && /^\d+$/.test(s.appleMusicId) ? s.appleMusicId : null;
+    if (title === s.title && durationMs === s.durationMs && artworkUrl === s.artworkUrl && appleMusicId === s.appleMusicId) {
+      out.push(s);
+    } else {
+      repaired.push(s.titleId);
+      out.push({ ...s, title, durationMs, artworkUrl, appleMusicId });
+    }
+  }
+  return { songs: out, dropped, repaired };
+}

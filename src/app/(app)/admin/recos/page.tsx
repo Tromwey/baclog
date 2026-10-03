@@ -279,7 +279,7 @@ function FeedbackBars({
         {negative.length === 0 ? (
           <span className="text-[12.5px] text-text-3">— todavía nada</span>
         ) : (
-          negative.map((f) => <Row key={f.label} item={f} fillClass="bg-bad" />)
+          negative.map((f) => <Row key={f.label} item={f} fillClass="bg-hot" />)
         )}
       </div>
     </>

@@ -1,12 +1,14 @@
 import { cookies } from "next/headers";
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from "next-auth";
 import Apple from "next-auth/providers/apple";
 import Credentials from "next-auth/providers/credentials";
+import { checkRateLimit, clientIp } from "@/authz/rate-limit";
 import { consumeWebHandoff } from "@/authz/handoff";
+import { errorTag, redactedError } from "@/authz/safe-log";
 import { afterResponse } from "@/lib/after-response";
 import { safeReturnTo } from "@/lib/return-to";
 import { appleWebClientId, appleWebClientSecret, appleWebSignInEnabled } from "./apple-web";
-import { verifyOtp } from "./otp";
+import { OtpLockedError, verifyOtp } from "./otp";
 import { linkOwner, saveAppleRefreshToken, signInWithIdentity } from "./social";
 import type { VerifiedIdentity } from "./social-tokens";
 import { readTokenVersion } from "./user-row";
@@ -19,6 +21,33 @@ const RID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  *  log-injection vector — otherwise a fresh one. */
 function handoffRid(raw: unknown): string {
   return typeof raw === "string" && RID_RE.test(raw) ? raw : crypto.randomUUID();
+}
+
+/** Code guesses one IP may make per minute at `POST /api/auth/callback/otp`
+ *  (reachable directly with any form body), across ALL emails: each email
+ *  already caps at 5 guesses per code and 5 codes an hour in the DB
+ *  (`src/auth/otp.ts`); this stops one client from spending those budgets
+ *  for many addresses at once. In-memory, per instance (`checkRateLimit`). */
+const OTP_VERIFY_PER_IP_PER_MINUTE = 20;
+
+/**
+ * The refusal of a code that NO retyping can fix (ronda 4): this network's
+ * code has spent its attempts, a guess budget is exhausted, or the per-IP
+ * limiter said no. Auth.js puts a `CredentialsSignin`'s `code` in the URL it
+ * answers with (`…/login?error=CredentialsSignin&code=locked`), and
+ * `signIn("otp", { redirect: false })` of `next-auth/react` hands it back as
+ * `res.code` — so `/verify` reads:
+ *   - `res.error === "CredentialsSignin" && res.code === "locked"` → locked
+ *     ("pide un código nuevo"), and
+ *   - `res.code === "credentials"` (Auth.js's default, what `return null`
+ *     produces) → wrong or expired code.
+ * The code goes in a URL, so it says nothing but the kind: it is NOT an
+ * account-existence oracle — every limit behind it is keyed by (email,
+ * network) rows that exist for any well-formed address (`otp-policy.ts`
+ * `missVerdict`).
+ */
+class OtpLockedSignin extends CredentialsSignin {
+  code = "locked";
 }
 
 /**
@@ -85,7 +114,7 @@ async function appleErrorUrl(): Promise<string> {
     const to = safeReturnTo(new URL(value, "https://kura.invalid").pathname);
     return to ? `${APPLE_WEB_ERROR}&to=${encodeURIComponent(to)}` : APPLE_WEB_ERROR;
   } catch (err) {
-    console.warn("[auth/apple] could not read the callback-url cookie for the error return", err);
+    console.warn(`[auth/apple] could not read the callback-url cookie for the error return: ${errorTag(err)}`);
     return APPLE_WEB_ERROR;
   }
 }
@@ -134,13 +163,15 @@ const otpProvider = Credentials({
        * gets the one uniform refusal.
        * Both modes return `tv` (the account's `token_version`) for the cookie.
        */
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (credentials?.handoff !== undefined) {
           const rid = handoffRid(credentials.rid);
           const result = await consumeWebHandoff(String(credentials.handoff));
           if (!result.ok) {
             const line = `[auth/handoff] rid=${rid} reason=${result.reason}`;
-            if (result.reason === "db_error") console.error(line, result.cause);
+            // Never the error object: a failed handoff statement carries the
+            // row's `jti` as a param (`safe-log.ts`).
+            if (result.reason === "db_error") console.error(`${line}\n${redactedError(result.cause)}`);
             else console.warn(line);
             return null;
           }
@@ -150,7 +181,27 @@ const otpProvider = Credentials({
         const email = String(credentials?.email ?? "");
         const code = String(credentials?.code ?? "");
         if (!email || !code) return null;
-        const user = await verifyOtp(email, code);
+        // Over the limit costs neither a query nor one of the code's 5
+        // attempts, and is answered as `locked` (it depends on the caller's
+        // network alone — nothing about the address).
+        const ip = clientIp(request);
+        const rl = checkRateLimit(`otp-verify-ip:${ip}`, OTP_VERIFY_PER_IP_PER_MINUTE);
+        if (!rl.ok) {
+          console.warn("[auth/otp] verify rate limited");
+          throw new OtpLockedSignin();
+        }
+        let user: Awaited<ReturnType<typeof verifyOtp>>;
+        try {
+          user = await verifyOtp(email, code, ip);
+        } catch (err) {
+          // An attempt limit, not a failure: Auth.js rethrows an `AuthError`
+          // from `authorize` as is (anything else becomes `Configuration`).
+          if (err instanceof OtpLockedError) throw new OtpLockedSignin();
+          // Auth.js logs whatever `authorize` throws, whole — and a failed
+          // OTP statement carries the email and the code's hash as params.
+          // Re-throw a bare tag (name + code); the outcome is unchanged.
+          throw new Error(`[auth/otp] verify failed: ${errorTag(err)}`);
+        }
         if (!user) return null;
         return { id: user.id, email: user.email, name: user.name, tv: await readTokenVersion(user.id) };
       },

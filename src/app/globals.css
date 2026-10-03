@@ -31,10 +31,10 @@
   --hot: #ec8e76;
   --hot-soft: rgba(236, 142, 118, 0.16);
 
-  /* Semáforo Torre de Control (/admin) — ok = accent, sin-señal = text-3.
-     Apagados a propósito: nada neón salvo la lima (diseño Torre de Control). */
+  /* Semáforo Torre de Control (/admin) — ok = accent, sin-señal = text-3,
+     mal = --hot (coral): el rojo `--bad` salió también de la Torre (founder,
+     ronda 8 — "sin rojo en ninguna parte"). */
   --warn: #e8b23a;
-  --bad: #c4494e;
 
   /* Matices de estado Kura — glifo + color, un significado cada uno */
   --radar: #9cbae1; /* pizarra — me gusta / aviso */
@@ -222,7 +222,6 @@
   --color-accent-press: var(--accent-press);
   --color-hot: var(--hot);
   --color-warn: var(--warn);
-  --color-bad: var(--bad);
   --color-radar: var(--radar);
   --color-obsessing: var(--obsessing);
   --color-completed: var(--completed);

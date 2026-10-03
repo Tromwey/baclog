@@ -1,4 +1,6 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { env } from "@/lib/env";
 import { releaseDateOf, runtimeMinutesOf, type FilmFacts } from "./film-facts";
 import { releaseDayInstant } from "./release";
@@ -44,6 +46,14 @@ interface TmdbResult {
   genre_ids?: number[];
 }
 
+/** A non-2xx from TMDB, with the status (a 404 is an answer; a 5xx is not). */
+class TmdbHttpError extends Error {
+  constructor(path: string, readonly status: number) {
+    super(`TMDB ${path}: ${status}`);
+    this.name = "TmdbHttpError";
+  }
+}
+
 class TmdbApi implements VideoCatalog {
   constructor(private apiKey: string) {}
 
@@ -51,15 +61,18 @@ class TmdbApi implements VideoCatalog {
     const url = new URL(`https://api.themoviedb.org/3${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     const headers = tmdbAuth(url, this.apiKey);
-    const res = await fetch(url, { headers, next: { revalidate: 0 } });
-    if (!res.ok) throw new Error(`TMDB ${path}: ${res.status}`);
+    const res = await fetchWithTimeout(url, { headers, next: { revalidate: 0 } });
+    if (!res.ok) throw new TmdbHttpError(path, res.status);
     return res.json();
   }
 
   /**
    * F3.5.8 — composer credit for the link graph. Series use aggregate_credits
-   * (per-season crew flattened by TMDB). Fail-open to null: a credits error
-   * only costs a "score" edge, never blocks the pipeline.
+   * (per-season crew flattened by TMDB). `null` is an ANSWER: TMDB lists no
+   * composer, or no longer has the title (404). A lookup TMDB did not answer
+   * (timeout, network, 429/5xx) THROWS — the caller must be able to tell "no
+   * composer" from "nobody answered", or it caches the second as the first
+   * for 180 days (linkgraph `getOrMaterializeLinkEdges`).
    */
   async getComposer(
     externalId: string,
@@ -83,8 +96,8 @@ class TmdbApi implements VideoCatalog {
       );
       return composer?.name ?? null;
     } catch (err) {
-      console.error("[catalog] TMDB credits failed:", err);
-      return null;
+      if (err instanceof TmdbHttpError && err.status === 404) return null;
+      throw err;
     }
   }
 
@@ -147,7 +160,7 @@ export async function getSpanishOverview(
   );
   const headers = tmdbAuth(url, env.TMDB_API_KEY);
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers,
       next: { revalidate: 60 * 60 * 24 * 30 },
     });
@@ -189,7 +202,7 @@ export async function getSeriesFacts(tmdbId: string): Promise<SeriesFacts | null
   try {
     // Short fetch cache: the DB row is the real cache; this only dedupes a
     // burst of views between the fetch and the persisted write.
-    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
+    const res = await fetchWithTimeout(url, { headers, next: { revalidate: 60 * 60 } });
     if (!res.ok) {
       console.error(`[catalog] TMDB /tv/${tmdbId} failed: ${res.status}`);
       return null;
@@ -210,7 +223,7 @@ export async function getSeriesFacts(tmdbId: string): Promise<SeriesFacts | null
       last_air_date: typeof d.last_air_date === "string" ? d.last_air_date : null,
     };
   } catch (err) {
-    console.error(`[catalog] TMDB /tv/${tmdbId} failed:`, err);
+    console.error(`[catalog] TMDB /tv/${tmdbId} failed:`, redactedError(err));
     return null;
   }
 }
@@ -237,7 +250,7 @@ export async function getSeriesLength(tmdbId: string): Promise<SeriesLength | nu
   url.searchParams.set("language", "es-MX");
   const headers = tmdbAuth(url, env.TMDB_API_KEY);
   try {
-    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 * 24 * 7 } });
+    const res = await fetchWithTimeout(url, { headers, next: { revalidate: 60 * 60 * 24 * 7 } });
     if (!res.ok) {
       console.warn(`[catalog] TMDB /tv/${tmdbId} (length) failed: ${res.status}`);
       return null;
@@ -266,7 +279,7 @@ export async function getSeriesLength(tmdbId: string): Promise<SeriesLength | nu
       network: typeof network === "string" && network ? network : null,
     };
   } catch (err) {
-    console.warn(`[catalog] TMDB /tv/${tmdbId} (length) failed:`, err);
+    console.warn(`[catalog] TMDB /tv/${tmdbId} (length) failed:`, redactedError(err));
     return null;
   }
 }
@@ -296,7 +309,7 @@ export async function getFilmFacts(tmdbId: string): Promise<FilmFacts | null> {
   try {
     // Short fetch cache: the DB row is the real cache; this only dedupes a
     // burst of views between the fetch and the persisted write.
-    const res = await fetch(url, { headers, next: { revalidate: 60 * 60 } });
+    const res = await fetchWithTimeout(url, { headers, next: { revalidate: 60 * 60 } });
     if (res.status === 404) return { runtime: null, release_date: null };
     if (!res.ok) {
       console.warn(`[catalog] TMDB /movie/${tmdbId} failed: ${res.status} (transitorio, se reintenta)`);
@@ -308,7 +321,7 @@ export async function getFilmFacts(tmdbId: string): Promise<FilmFacts | null> {
       release_date: releaseDateOf(d.release_date),
     };
   } catch (err) {
-    console.warn(`[catalog] TMDB /movie/${tmdbId} failed (transitorio, se reintenta):`, err);
+    console.warn(`[catalog] TMDB /movie/${tmdbId} failed (transitorio, se reintenta):`, redactedError(err));
     return null;
   }
 }
@@ -358,7 +371,7 @@ async function tmdbFanoutJson(
     }
     return await res.json();
   } catch (err) {
-    console.warn(`[catalog] TMDB ${path} failed:`, err);
+    console.warn(`[catalog] TMDB ${path} failed:`, redactedError(err));
     return null;
   }
 }

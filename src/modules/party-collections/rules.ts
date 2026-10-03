@@ -97,7 +97,7 @@ export type AddRefusal =
 /**
  * Can this viewer add THIS song now? The order is the design's: a blocked
  * guest can't do anything; a duplicate is reported before the cap (the
- * design says "Ya está, la puso @ana" even when your 3 are used up); then the
+ * design says "Ya está, la agregó @ana." even when your 3 are used up); then the
  * cap. The host has no cap and is never blocked.
  */
 export function decideAdd(
@@ -251,22 +251,22 @@ export function presenceLine(s: { songCount: number; named: string[]; othersCoun
   return `${head} · ${who} ${verb}`;
 }
 
-/** Duplicate toast: "Ya la pusiste tú." / "Ya está, la puso @ana" / "… alguien". */
+/** Duplicate toast: "Ya la agregaste tú." / "Ya está, la agregó @ana." / "… alguien". */
 export function duplicateMessage(mine: boolean, byHandle: string | null): string {
-  if (mine) return "Ya la pusiste tú.";
-  return `Ya está, la puso ${byHandle ? `@${byHandle}` : "alguien"}`;
+  if (mine) return "Ya la agregaste tú.";
+  return `Ya está, la agregó ${byHandle ? `@${byHandle}` : "alguien"}.`;
 }
 
 /**
- * /party's card body with the party's REAL cap (C6 — it used to say "Pon tus
- * canciones" whatever the cap): "Pon tus 3 canciones. Van a sonar…" · one →
- * "Pon tu canción. Va a sonar…" · ilimitadas → "Pon tus canciones. …" ·
+ * /party's card body with the party's REAL cap (C6 — it used to say "Agrega tus
+ * canciones" whatever the cap): "Agrega tus 3 canciones. Van a sonar…" · one →
+ * "Agrega tu canción. Va a sonar…" · ilimitadas → "Agrega tus canciones. …" ·
  * solo ver (0) → nothing to put, only to look.
  */
 export function playlistPitch(perGuestLimit: number | null): string {
-  const tail = "y todos verán quién puso cuál.";
+  const tail = "y todos verán quién agregó cuál.";
   if (perGuestLimit === 0) return `Mira lo que va a sonar esa noche ${tail}`;
-  if (perGuestLimit === 1) return `Pon tu canción. Va a sonar esa noche, ${tail}`;
-  if (perGuestLimit === null) return `Pon tus canciones. Van a sonar esa noche, ${tail}`;
-  return `Pon tus ${perGuestLimit} canciones. Van a sonar esa noche, ${tail}`;
+  if (perGuestLimit === 1) return `Agrega tu canción. Va a sonar esa noche, ${tail}`;
+  if (perGuestLimit === null) return `Agrega tus canciones. Van a sonar esa noche, ${tail}`;
+  return `Agrega tus ${perGuestLimit} canciones. Van a sonar esa noche, ${tail}`;
 }

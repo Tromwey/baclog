@@ -1,0 +1,103 @@
+/*
+ * /party 3D landing — the design's stylesheet (Claude Design 383601c9…, "Fase 2c -
+ * Intro linterna"), scoped under .pl instead of html/body. Outside Kura's
+ * design system on purpose (borders included).
+ */
+body:has(.pl){margin:0;background:#1c1c1f}
+.pl,.pl *,.pl *::before,.pl *::after{box-sizing:border-box}
+.pl{min-height:100dvh;background:#1c1c1f;color:#e8e8e6;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.pl a{color:#f0a49c}.pl a:hover{color:#ffd0ca}
+.pl button{font:inherit;color:inherit}
+.pl .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pl .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.pl-stage{display:none}
+.pl-fallback{display:block;max-width:1200px;margin:0 auto}
+.pl-fallback img{display:block;width:100%;height:auto}
+.pl .top{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding:14px 16px}
+.pl .hero{text-align:center;padding:24px 16px 32px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.pl .hero h1{margin:0;font-size:clamp(40px,7vw,72px);line-height:.95;text-transform:uppercase;letter-spacing:.01em}
+.pl .count{display:flex;gap:10px;justify-content:center;margin:0;padding:0;list-style:none}
+.pl .count li{display:flex;flex-direction:column;align-items:center;min-width:56px}
+.pl .count b{font:600 clamp(28px,4.4vw,40px)/1 ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.pl .count .sep{min-width:0;font:600 clamp(28px,4.4vw,40px)/1 ui-monospace,monospace;color:#55555c}
+.pl .cta{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 30px;border-radius:999px;background:#e0443a;color:#fff;text-decoration:none;font-weight:600}
+.pl .cta:hover{background:#f05a50;color:#fff}
+.pl[data-estado="teaser"] .cta,.pl[data-estado="revelado"] .count{display:none}
+.pl .devbar,.pl-hud,.pl .tag,.pl-veil,.pl-msg{display:none}
+.pl .fb-note{max-width:1200px;margin:8px auto 0;padding:0 16px;font-size:12px;color:#8d8d8a}
+
+/* Tipografía: goteo (Creepster + Oswald, por defecto) · lápida (Cinzel + Oswald) · gótico (Pirata One + Space Mono)
+   Paleta apagada (sangre seca, hueso, hierro) para que el texto acompañe la escena sin competir con ella */
+.pl .hero h1{font-family:var(--pl-creep),system-ui,sans-serif;font-weight:400;font-size:clamp(34px,5.4vw,58px);letter-spacing:.04em;color:#9e3b30;text-shadow:0 0 18px rgba(0,0,0,.75)}
+.pl .count b,.pl .count .sep{font-family:var(--pl-oswald),system-ui,sans-serif;font-weight:500;font-size:clamp(22px,3.2vw,30px);font-variant-numeric:tabular-nums;color:#a8a296;text-shadow:0 0 14px rgba(0,0,0,.8)}
+.pl .count .sep{color:#4c4c52}
+.pl .cta{font-family:var(--pl-oswald),system-ui,sans-serif;font-weight:500;text-transform:uppercase;letter-spacing:.14em;font-size:15px;min-height:44px;background:rgba(10,10,12,.35);color:#c9c3b6;border:1px solid #6e2c25;backdrop-filter:blur(2px)}
+.pl .cta:hover{background:#6e2c25;color:#e6e0d4}
+.pl[data-tipo="lapida"] .hero h1{font-family:var(--pl-cinzel),Georgia,serif;font-weight:700;font-size:clamp(28px,4.6vw,50px);letter-spacing:.1em;color:#a39e92;text-shadow:0 0 18px rgba(0,0,0,.8)}
+.pl[data-tipo="gotico"] .hero h1{font-family:var(--pl-pirata),Georgia,serif;font-weight:400;font-size:clamp(38px,6.2vw,66px);text-transform:none;letter-spacing:.01em;color:#9e3b30}
+.pl[data-tipo="gotico"] .count b,.pl[data-tipo="gotico"] .count .sep{font-family:var(--pl-spacemono),ui-monospace,monospace;font-weight:700}
+.pl[data-tipo="gotico"] .cta{font-family:var(--pl-spacemono),ui-monospace,monospace;font-weight:700;letter-spacing:.08em;font-size:14px}
+
+body:has(.pl[data-modo="3d"]){overflow:hidden;height:100dvh}
+/* Las barras de Safari en iOS (arriba y abajo) toman el color del fondo de la página: en 3D es la noche de
+   la escena, no el gris del fallback, para que no se vean como dos franjas (founder, 2026-10-01). */
+html:has(.pl[data-modo="3d"]),body:has(.pl[data-modo="3d"]),.pl[data-modo="3d"]{background:#08090c}
+.pl[data-modo="3d"] .pl-stage{display:block;position:fixed;inset:0;touch-action:none;cursor:grab}
+.pl[data-modo="3d"] .pl-stage.dragging{cursor:grabbing}
+.pl[data-modo="3d"] .pl-stage canvas{display:block;width:100%;height:100%;outline:none}
+.pl[data-modo="3d"] .pl-fallback,.pl[data-modo="3d"] .fb-note{display:none}
+.pl[data-modo="3d"] .top{position:fixed;top:0;left:0;right:0;z-index:5;pointer-events:none}
+.pl[data-modo="3d"] .top > *{pointer-events:auto}
+.pl[data-modo="3d"] .hero{position:fixed;left:50%;transform:translateX(-50%);bottom:max(28px,env(safe-area-inset-bottom));z-index:4;width:min(900px,100% - 24px);padding:0;pointer-events:none}
+.pl[data-modo="3d"] .hero .cta{pointer-events:auto}
+.pl[data-modo="3d"] .pl-veil{display:block;position:fixed;inset:0;z-index:8;background:#000;opacity:0;pointer-events:none;transition:opacity .5s}
+.pl[data-modo="3d"] .pl-veil.on{opacity:1}
+.pl[data-modo="3d"] .devbar{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.pl .devbar .seg{display:flex;border:1px solid #44444a;border-radius:8px;overflow:hidden}
+.pl .devbar button{min-height:32px;padding:0 10px;border:0;background:rgba(28,28,31,.85);font-size:12px;cursor:pointer}
+.pl .devbar .seg button + button{border-left:1px solid #44444a}
+.pl .devbar button[aria-pressed="true"]{background:#e0443a;color:#fff}
+.pl .devbar > button{border:1px solid #44444a;border-radius:8px}
+.pl .devbar .rng{display:flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:1px solid #44444a;border-radius:8px;background:rgba(28,28,31,.85);font-size:12px}
+.pl .devbar .rng input{width:84px;accent-color:#e0443a;margin:0}
+.pl .devbar .rng output{min-width:34px;font-size:11px;color:#b9b9b6}
+.pl .badge{font-size:11px;padding:3px 7px;border:1px solid #55555c;border-radius:6px;color:#b9b9b6;align-self:center}
+/* Intro: entrega la linterna y desbloquea el audio (gesto requerido por el navegador) */
+.pl-intro{display:none}
+.pl[data-modo="3d"] .pl-intro{display:grid;place-items:center;position:fixed;inset:0;z-index:7;padding:24px;background:rgba(4,4,6,.84);backdrop-filter:blur(2px);transition:opacity .55s ease-out .1s;cursor:pointer;outline:none}
+.pl[data-modo="3d"] .pl-intro[hidden]{display:none}
+.pl-intro.out{opacity:0;pointer-events:none}
+.pl-intro .box{display:flex;flex-direction:column;align-items:center;gap:12px;max-width:560px;text-align:center}
+.pl-intro h2{margin:0;font-family:var(--pl-creep),system-ui,sans-serif;font-weight:400;font-size:clamp(32px,5.4vw,54px);line-height:1.02;letter-spacing:.04em;text-transform:uppercase;color:#9e3b30;text-shadow:0 0 18px rgba(0,0,0,.75);text-wrap:balance}
+.pl[data-tipo="lapida"] .pl-intro h2{font-family:var(--pl-cinzel),Georgia,serif;font-weight:700;font-size:clamp(26px,4.4vw,46px);letter-spacing:.1em;color:#a39e92}
+.pl[data-tipo="gotico"] .pl-intro h2{font-family:var(--pl-pirata),Georgia,serif;font-size:clamp(36px,6vw,62px);text-transform:none;letter-spacing:.01em}
+.pl-intro p{margin:0;font:500 clamp(16px,2vw,19px)/1.3 var(--pl-oswald),system-ui,sans-serif;text-transform:uppercase;letter-spacing:.2em;color:#ddd7ca}
+.pl-intro-item{width:min(280px,64vw);aspect-ratio:1;margin-top:4px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,226,176,.09),rgba(255,226,176,0));transition:transform .5s cubic-bezier(.55,0,.8,.2),opacity .5s ease-in}
+.pl-intro-item canvas{display:block;width:100%;height:100%}
+.pl-intro:hover .pl-intro-item{background:radial-gradient(closest-side,rgba(255,226,176,.14),rgba(255,226,176,0))}
+/* sin contorno de foco en la linterna (founder, 2026-10-01): iOS lo pintaba al cargar, porque la capa recibe el foco sola */
+.pl-intro.out .pl-intro-item{transform:translate(26vw,40vh) scale(1.5);opacity:0}
+.pl[data-modo="3d"] .pl-hud{display:block;position:fixed;right:12px;bottom:12px;z-index:5;padding:8px 10px;background:rgba(0,0,0,.6);border-radius:8px;font-size:11px;line-height:1.5;white-space:pre;pointer-events:none}
+.pl[data-modo="3d"] .pl-hud.off{display:none}
+.pl[data-modo="3d"] .tag{display:block;position:fixed;left:0;top:0;z-index:3;padding:5px 10px;border-radius:999px;background:rgba(10,10,12,.6);color:#c9c3b6;font:500 12px/1.2 var(--pl-oswald),system-ui,sans-serif;text-transform:uppercase;letter-spacing:.14em;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .15s}
+/* Mensaje al tocar: objeto (junto a la reja) · contador (reemplaza el titular + pulso en la cuenta) · subtitulo (línea sobre el hero) */
+.pl[data-modo="3d"] .pl-msg{display:block;position:fixed;left:0;top:0;z-index:4;pointer-events:none;white-space:nowrap;opacity:0;translate:0 8px;transition:opacity .3s,translate .3s;font-family:var(--pl-oswald),system-ui,sans-serif;font-weight:500;color:#ddd7ca;text-shadow:0 0 14px #000,0 0 4px #000,0 0 2px #000}
+.pl[data-modo="3d"] .pl-msg.show{opacity:1;translate:0 0}
+.pl[data-msg="objeto"] .pl-msg{font-size:16px;text-transform:uppercase;letter-spacing:.18em}
+.pl[data-msg="subtitulo"] .pl-msg{font-size:20px;letter-spacing:.03em}
+.pl .hero.flash h1{white-space:nowrap;display:flex;align-items:center;justify-content:center;animation:pl-msgIn .45s ease-out}
+.pl .hero.flash .count b{animation:pl-cuenta 1.6s ease-out}
+@keyframes pl-msgIn{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+@keyframes pl-cuenta{0%,25%{color:#e6e0d4;text-shadow:0 0 18px rgba(190,70,56,.9),0 0 4px #000}}
+.pl[data-modo="3d"] .tag.show{opacity:1}
+@media (max-width:700px){
+  .pl .count{gap:6px}.pl .count li{min-width:46px}
+  .pl[data-modo="3d"] .pl-hud{bottom:auto;top:96px}
+  .pl .devbar button{font-size:11px;padding:0 8px}
+}
+
+/* Pasar de una página de /party a otra (reja → laberinto → mausoleo) es un fundido, no un corte: las tres
+   salen y entran en negro. Donde el navegador no lo soporta, queda el corte de siempre. */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.45s}

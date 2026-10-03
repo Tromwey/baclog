@@ -13,7 +13,6 @@ import { shouldAnnounce } from "@/modules/announcements";
 import { getReviewInvitation } from "@/modules/reviews/queries";
 import { NovedadesModal } from "@/components/novedades-modal";
 import { PartyFlash } from "@/components/party/party-flash";
-import { PartyUnavailableError } from "@/modules/party-collections/errors";
 import { listPartiesForUser } from "@/modules/party-collections/queries";
 import { NewBacklogTrigger } from "./new-backlog-button";
 import { CollectionCards } from "./collection-cards";
@@ -33,11 +32,8 @@ export default async function BacklogsPage() {
     getShelvesForUser(user.id),
     getRenderInstant(),
     // Colecciones de fiesta the user hosts or joined (their own read: the
-    // generic shelves exclude parties). Before migration 0033 there are none.
-    listPartiesForUser(user.id).catch((err) => {
-      if (err instanceof PartyUnavailableError) return [];
-      throw err;
-    }),
+    // generic shelves exclude parties).
+    listPartiesForUser(user.id),
   ]);
 
   if (shelves.length === 0 && parties.length === 0) {

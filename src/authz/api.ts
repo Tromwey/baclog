@@ -5,13 +5,14 @@ import { SignJWT, jwtVerify } from "jose";
 import { ZodError } from "zod";
 import { MOBILE_TOKEN_TTL_SECONDS } from "./token-ttl";
 import type { CurrentUser } from "@/auth/session";
-import { loadUserForBearer } from "@/auth/user-row";
+import { isOnboarded, loadUserForBearer } from "@/auth/user-row";
 import { SESSION_TOUCH_INTERVAL_MS, touchMobileSession } from "@/auth/mobile-sessions";
 import { afterResponse } from "@/lib/after-response";
 import { apiContext } from "./api-context";
+import { checkRateLimit, clientIp } from "./rate-limit";
+import { errorTag, redactedError } from "./safe-log";
 import { secretKey } from "./keys";
 import { NotFoundError, UnauthorizedError } from "./errors";
-import { PartyUnavailableError } from "@/modules/party-collections/errors";
 import { MusicExportError } from "@/modules/music-export/errors";
 
 export { apiContext } from "./api-context";
@@ -89,22 +90,23 @@ const STATUS: Record<ApiErrorCode, number> = {
  * message when they know more; the default is what the wrapper uses.
  */
 export const API_MESSAGES: Record<ApiErrorCode, string> = {
-  unauthorized: "Tu sesión no es válida. Entra de nuevo con tu correo.",
-  forbidden: "Esta cuenta no puede hacer eso.",
+  unauthorized: "Tu sesión terminó. Entra de nuevo.",
+  forbidden: "No tienes permiso para hacer eso.",
   not_found: "No encontramos lo que buscas. Puede que ya no exista.",
   invalid: "Revisa los datos que enviaste.",
-  conflict: "Eso ya no se puede hacer así. Vuelve a cargar e inténtalo otra vez.",
+  conflict: "Eso cambió mientras tanto. Recarga y vuelve a intentarlo.",
   rate_limited:
-    "Demasiadas peticiones seguidas. Espera un momento e inténtalo de nuevo.",
+    "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.",
   unsupported: "Esta versión de la app todavía no puede hacer eso.",
   unavailable:
-    "El catálogo no responde en este momento. Inténtalo de nuevo en unos minutos.",
-  internal: "Algo falló de nuestro lado. Inténtalo de nuevo en un momento.",
+    "El catálogo no responde. Vuelve a intentarlo en unos minutos.",
+  internal: "Algo falló de nuestro lado. Vuelve a intentarlo.",
 };
 
 export interface ApiErrorExtra {
   /** Sub-code for a `forbidden`/`conflict` the app branches on
-   *  ("underage" · "not_released", "reaction_required", "taken"). */
+   *  ("underage" · "onboarding_required" · "not_released",
+   *  "reaction_required", "taken"). */
   reason?: string;
   /** `invalid` only: field → message. */
   fields?: Record<string, string>;
@@ -144,6 +146,31 @@ export class ApiError extends Error {
     this.code = code;
     this.extra = extra;
   }
+}
+
+/**
+ * F2.2 age gate on the SERVER: the UGC / social writes of v1 (follow, review,
+ * report, a `name`, going public) need a finished onboarding — a name AND a
+ * birth year (`isOnboarded`, src/auth/user-row.ts). Before this, "onboarded"
+ * was only where the apps routed; the API accepted every write from an
+ * account that never met the 13+ gate.
+ *
+ * 403 `forbidden` + `reason: "onboarding_required"`. Says nothing about
+ * anyone else: it depends only on the caller's own row, so it is checked
+ * BEFORE the handle / id is looked at and can't be an oracle. `PUT
+ * /me/username` is NOT behind it on purpose — the apps claim the handle
+ * right before `POST /me/onboarding` — the claim just doesn't publish the
+ * profile until that POST succeeds (modules/account/username.ts).
+ */
+export const ONBOARDING_REQUIRED_MESSAGE =
+  "Termina tu registro para continuar.";
+
+export function onboardingRequiredError(): ApiError {
+  return new ApiError("forbidden", ONBOARDING_REQUIRED_MESSAGE, { reason: "onboarding_required" });
+}
+
+export function requireOnboarded(user: CurrentUser): void {
+  if (!isOnboarded(user)) throw onboardingRequiredError();
 }
 
 const NO_STORE = "private, no-store";
@@ -198,10 +225,6 @@ export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   if (err instanceof ApiError) return apiError(err.code, err.message, err.extra);
   if (err instanceof UnauthorizedError) return apiError("unauthorized");
   if (err instanceof NotFoundError) return apiError("not_found");
-  // Colecciones de fiesta before migration 0033 is live (party-collections/live.ts).
-  if (err instanceof PartyUnavailableError) {
-    return apiError("unavailable", "Las colecciones de fiesta todavía no están disponibles. Inténtalo más tarde.");
-  }
   // "Llévala a otra app" (music-export/errors.ts): each carries its code + reason.
   if (err instanceof MusicExportError) {
     return apiError(err.code, err.message, {
@@ -221,14 +244,20 @@ export function errorToResponse(err: unknown, meta?: RequestMeta): Response {
   // Anything else is a bug. The line carries what a log search needs to
   // find this request again (rid = the X-Request-Id the client saw), and
   // the user id so the founder can reach out — never the token.
+  //
+  // The error itself is NOT handed to `console.error`: a Drizzle query
+  // failure prints its bound values (`params`) — emails, tokens, the sha256
+  // of a 6-digit code. `redactedError` keeps name, code, the statement text
+  // and the stack frames and cuts the values out; on the OTP routes (login
+  // and merge codes) only the name and code are logged (`errorTag`).
+  const otpRoute = /\/otp\//.test(meta?.path ?? "");
   console.error(
     `[api/v1] 500 ${JSON.stringify({
       rid: meta?.rid ?? null,
       method: meta?.method ?? null,
       path: meta?.path ?? null,
       userId: meta?.userId ?? null,
-    })}`,
-    err,
+    })}\n${otpRoute ? errorTag(err) : redactedError(err)}`,
   );
   return apiError("internal");
 }
@@ -248,7 +277,7 @@ export const MOBILE_TOKEN_AUDIENCE = "kura-ios";
 /** A fresh 30-day bearer for `userId` at the account's current
  *  `token_version` (new `jti` every call — refresh rotates it), bound to the
  *  device session `sessionId` when there is one (`sid`; null = a legacy,
- *  session-less bearer — only while migration 0029 is not live). */
+ *  session-less bearer: no sign-in mints one any more). */
 export async function issueMobileToken(
   userId: string,
   tokenVersion: number,
@@ -401,61 +430,13 @@ export async function readApiUser(request: Request): Promise<CurrentUser | null>
 
 // ---------- rate limit ----------
 
-/**
- * Sliding 60 s window, in-memory, PER INSTANCE. On Vercel each function
- * instance keeps its own Map, so the effective ceiling is limit × warm
- * instances and a cold start resets it — good enough to blunt a runaway
- * client or a script, NOT a global quota and NOT a security boundary (the
- * OTP flow has its own DB-backed cooldown + attempt cap in src/auth/otp.ts).
- * Replace with a shared store (Upstash / Postgres) if it ever needs to be
- * global. Keys: `u:<sub>` for bearer routes, `ip:<addr>` for auth/*.
- */
-const RATE_WINDOW_MS = 60_000;
+// The limiter itself lives in `./rate-limit` (pure: also used by the Auth.js
+// config, the pre-v1 route handlers, server actions and modules, none of
+// which should pull this file in). Re-exported so v1 imports don't change.
+export { checkRateLimit, clientIp } from "./rate-limit";
 export const RATE_LIMIT_WRITES = 60;
 export const RATE_LIMIT_READS = 300;
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-
-const hits = new Map<string, number[]>();
-let lastSweep = 0;
-
-function sweep(now: number) {
-  if (now - lastSweep < RATE_WINDOW_MS) return;
-  lastSweep = now;
-  for (const [key, stamps] of hits) {
-    const live = stamps.filter((t) => now - t < RATE_WINDOW_MS);
-    if (live.length === 0) hits.delete(key);
-    else hits.set(key, live);
-  }
-}
-
-/** Records one hit; returns how long to wait when over the limit. */
-export function checkRateLimit(
-  key: string,
-  limit: number,
-  now = Date.now(),
-): { ok: true } | { ok: false; retryAfterSeconds: number } {
-  sweep(now);
-  const live = (hits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  if (live.length >= limit) {
-    const oldest = live[0];
-    hits.set(key, live);
-    return {
-      ok: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((oldest + RATE_WINDOW_MS - now) / 1000)),
-    };
-  }
-  live.push(now);
-  hits.set(key, live);
-  return { ok: true };
-}
-
-/** First hop of `x-forwarded-for` (Vercel sets it), else `x-real-ip`. For
- *  rate-limit keys only — never for identity. */
-export function clientIp(request: Request): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim() || "unknown";
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
 
 function limitFor(method: string) {
   return WRITE_METHODS.has(method.toUpperCase()) ? RATE_LIMIT_WRITES : RATE_LIMIT_READS;
@@ -573,6 +554,10 @@ export interface PublicApiOptions {
   bucket?: string;
   /** Hits per 60 s window in that bucket. */
   limit?: number;
+  /** Copy of THIS route's `ip_limit` 429, given the real wait in seconds
+   *  (copy-unificado.md A6: `auth/otp/request` says a code can't be asked
+   *  for from this network yet). Absent = the generic A7 line. */
+  limitMessage?: (retryAfterSeconds: number) => string;
 }
 
 /**
@@ -601,8 +586,14 @@ export function withPublicApi<P extends ApiParams = ApiParams>(
     try {
       const rl = checkRateLimit(`${bucket}:${clientIp(request)}`, limit);
       if (!rl.ok) {
+        // `reason: "ip_limit"` — the handler never ran. On `auth/otp/request`
+        // it is what tells the app that NO code was sent (a bare 429 with a
+        // wait ≤ 60 s reads as "cooldown: go check your inbox").
         return withRequestId(
-          apiError("rate_limited", undefined, { retryAfterSeconds: rl.retryAfterSeconds }),
+          apiError("rate_limited", options.limitMessage?.(rl.retryAfterSeconds), {
+            reason: "ip_limit",
+            retryAfterSeconds: rl.retryAfterSeconds,
+          }),
           requestId,
         );
       }

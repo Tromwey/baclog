@@ -19,14 +19,12 @@
 ## 0. Estado de despliegue — LEER PRIMERO
 
 - Migración **`drizzle/0034_music_export.sql`** (aditiva: 4 tablas nuevas, nada en tablas existentes).
-  **SIN aplicar.** Switch **`MIGRATION_0034_LIVE = false`** (`src/modules/music-export/live.ts`). Apagado:
-  - API (`/api/v1/music/**`, `/api/v1/parties/{id}/exports/**`) → **503 `unavailable`, `reason: "migration"`**;
-  - web actions (`music-export-actions.ts`) → `{ error: "unavailable", message }`;
-  - `/api/music/tidal/start|callback` → 302 de regreso con `?music=tidal&connected=0&reason=unavailable`
-    (iOS: `kura://music/tidal/connected?ok=0&reason=unavailable`).
-  - La UI debe tratar `unavailable` como **"Próximamente"** (igual que hoy).
-- Orden: `drizzle-kit migrate` (founder) → `MIGRATION_0034_LIVE = true` → deploy. Nunca `true` sin las tablas.
-- **Segundo gate, por configuración** (con el switch encendido): `GET /api/v1/music/services` dice qué
+  **APLICADA** (va antes de 0035, aplicada el 2026-09-30 con las 36 migraciones). **El switch
+  `MIGRATION_0034_LIVE` (`music-export/live.ts`) y `assertMusicExportLive` se RETIRARON del código el
+  2026-10-01**: ya no existe el estado "apagado" — ni el 503 `unavailable` con `reason: "migration"`, ni su
+  `{ error: "unavailable" }` en las web actions, ni el 302 `reason=unavailable` del callback por esa causa.
+  Donde este documento diga "con el switch apagado" es historia.
+- **El único gate que queda es por configuración**: `GET /api/v1/music/services` dice qué
   servicio está disponible. `available: false` → "Próximamente" en ese botón (nunca falla a mitad del flujo).
 - `PartySong.appleMusicId` (nuevo, aditivo) ya viaja en `GET /parties/{id}` y en `PartyDetail` web
   **sin depender del switch** (sale de `catalog_item.raw.trackId`).
@@ -130,10 +128,32 @@ loop:
   si state.busy        → esperar ~1 s y volver a llamar step
   si state.status == "in_progress":
      pintar barra processed/total y "Buscando {state.current.title} en TIDAL…"
-     POST /api/v1/parties/{id}/exports/tidal/step → ExportState   (≤ 10 canciones por paso)
+     POST /api/v1/parties/{id}/exports/tidal/step → ExportState   (≤ 10 canciones por paso; menos si se acabó el presupuesto)
   si state.status == "done" → pantalla "lista."
 ```
 Web: `startPartyExportAction(backlogId, "tidal")` y `stepTidalExportAction(backlogId)` (mismo `state`).
+
+- **Presupuesto del paso (2026-10-01, ronda 4).** iOS y Android cortan la petición a 20 s y no la reintentan,
+  así que el paso contesta dentro de **~12 s** de tiempo de TIDAL (`STEP_BUDGET_MS`, `modules/music-export/budget.ts`;
+  el refresh del token y su espera de carrera cuentan). El emparejamiento (ISRC + búsquedas) se corta a los 7 s
+  (`STEP_MATCH_BUDGET_MS`); lo que queda es para crear + agregar. Cada llamada a TIDAL lleva como plazo
+  `min(6 s, lo que queda)`.
+  - **Respuesta parcial = un `ExportState` normal**, sin campo nuevo: `status: "in_progress"`, `busy: false`,
+    `processed`/`exported` avanzaron por MENOS de 10 y `current` apunta a la siguiente pendiente. El cliente no
+    hace nada especial: vuelve a llamar `step` (su bucle ya lo hace). Una canción que el presupuesto no alcanzó
+    (búsqueda colgada o no empezada, o no reenviada en el reintento canción por canción) queda **`pending`,
+    nunca `missing`**.
+  - Un paso que agota el presupuesto **sin registrar ninguna canción** responde 503 `service_failed`
+    (no un `in_progress` que no avanza): el cliente pinta "no se pudo exportar." y Reintentar llama `step` otra vez.
+  - `maxDuration = 60` en los DOS caminos del paso: la ruta v1 y la página `/c/[backlogId]` (una server action
+    corre bajo el `maxDuration` de la página que la llama). `LEASE_MS = 60 s`: un paso nunca sobrevive a su lease.
+    `check-music-export` ata presupuesto, lease y los dos `maxDuration`.
+- **Abort por cambio de generación.** Si entre el lease y el registro de la playlist recién creada la fila cambió
+  de generación (otro start/step confirmó que la playlist anterior se borró), el paso NO sigue: **borra en TIDAL
+  la playlist vacía que acababa de crear** (`DELETE /playlists/{id}`; el único borrado que hacemos allá, nunca una
+  playlist registrada en kura; si el borrado falla queda vacía y se loguea con su id) y responde el estado fresco
+  con `busy: true` — el cliente espera ~1 s y vuelve a llamar. La limpieza tiene 4 s propios aunque el
+  presupuesto esté gastado.
 
 - Pantalla "lista.": `doneLine("tidal", state.exported, state.total)` = "N de M canciones ya están en tu playlist de
   TIDAL." + lista **"No están en TIDAL"** = `state.missing` (portada `artworkUrl`, `title`, `artist`,
@@ -144,8 +164,10 @@ Web: `startPartyExportAction(backlogId, "tidal")` y `stepTidalExportAction(backl
     ("TIDAL dejó de responder a mitad del proceso. Tu colección sigue intacta en kura; al reintentar no se duplican canciones.");
   - 429 `rate_limited` `reason: "service_rate_limited"` + `retryAfterSeconds` → esperar y seguir solo;
   - 429 `rate_limited` `reason: "rate_limited"` (nuestro límite: 30 pasos/min, 20 starts/min) → esperar `retryAfterSeconds`;
-  - 409 `conflict` `reason: "not_connected"` → el vínculo murió (refresh rechazado, 401 tras refrescar, o
-    un 403 de TIDAL por auth/scope) → paso "conecta tidal.".
+  - 409 `conflict` `reason: "not_connected"` → el vínculo murió (refresh rechazado con **`invalid_grant`**, 401
+    tras refrescar, o un 403 de TIDAL por auth/scope) → paso "conecta tidal.". Cualquier OTRO 4xx del refresh
+    (`invalid_client`, `invalid_request`, 403 de un WAF) es 503 `service_failed` con el vínculo intacto.
+  - Un 4xx al pedir el token de APLICACIÓN (catálogo) es 503 `service_failed`, nunca "no están en TIDAL".
   - Un 403 de TIDAL que NO es de auth (términos nuevos sin aceptar, cuota, otro) **no** desconecta: 503
     `service_failed` con un `message` específico ("TIDAL pide que aceptes sus términos nuevos…", "Tu cuenta
     de TIDAL llegó a su límite…", "TIDAL no dejó escribir en tu cuenta…"). Pintar `message` tal cual.
@@ -155,7 +177,9 @@ Web: `startPartyExportAction(backlogId, "tidal")` y `stepTidalExportAction(backl
     una segunda desaparición en ese lapso = 503 `service_failed` ("TIDAL no encuentra la playlist que
     acabamos de crear. Espera unos minutos…"), progreso intacto.
   - `POST …/exports/tidal` (start) con todo agregado verifica la playlist antes de responder: si TIDAL la
-    borró, responde `in_progress` con `playlist: null` (nunca `done` con un link muerto).
+    borró, responde `in_progress` con `playlist: null` (nunca `done` con un link muerto). Dos starts
+    simultáneos sobre la misma playlist borrada: uno sube la generación y el otro responde esa misma fila
+    fresca (no el 503 del tope de 10 min, que sigue valiendo para una segunda desaparición real).
 - Solo `tidal` tiene `/step` (`/exports/apple_music/step` = 404).
 
 ## 6. Exportar a Apple Music (cliente con MusicKit, reporta al servidor)
@@ -249,7 +273,7 @@ Helpers client-safe en `@/modules/music-export/rules`: `tidalStartPath`, `servic
 ## 8. API v1 (iOS)
 
 Convenciones de siempre (bearer, `{ error: { code, message, reason?, retryAfterSeconds? } }`, `private, no-store`).
-Todo 503 `unavailable` (`reason: "migration"`) con el switch apagado. `{id}` no-UUID o fiesta no visible =
+El 503 `reason: "migration"` ya no existe (switch retirado el 2026-10-01). `{id}` no-UUID o fiesta no visible =
 el 404 de fiesta. Provider desconocido = 404.
 
 | Método | Path | Body | 200 | Errores |
@@ -351,6 +375,6 @@ Zod exacto: `src/app/api/v1/_lib/schemas.ts` › "Music export"; serializador `_
       `openssl rand -base64 48`) — sin ella la llave de cifrado se deriva de `AUTH_SECRET` y rotarlo
       desconectaría TIDAL a todos. Ponerla ANTES de la primera conexión real (cambiarla después obliga a
       reconectar).
-3. `drizzle-kit migrate` (aplica 0034) → `MIGRATION_0034_LIVE = true` → deploy (`pnpm ship` desde el repo padre).
+3. ~~`drizzle-kit migrate` (aplica 0034) → switch a `true` → deploy~~ — hecho; el switch ya no existe (2026-10-01).
 4. Smoke: `scripts/api-smoke.ts --only reads` (casos "GET /music/services" y "/exports").
 5. Primera conexión real a TIDAL (web) y un export pequeño; revisar el log por `[music-export]`.

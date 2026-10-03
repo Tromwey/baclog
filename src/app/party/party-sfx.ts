@@ -1,6 +1,6 @@
 /*
  * Sound effects for /party. Real recordings where we have them — all CC0:
- * Kenney's "Impact Sounds" + "RPG Audio", and from Freesound a real chain
+ * Kenney's "Impact Sounds" + "RPG Audio", and from Freesound (see LICENSE.txt) a real chain
  * (nettimato), a church bell (Audeption), an iron gate (qubodup) and the
  * jumpscare screech ("Jumpscare Sound 2", Kierham), trimmed
  * into /public/party/sfx (sources in its LICENSE.txt),
@@ -18,6 +18,7 @@ let ctx: AudioContext | null = null;
 const SAMPLES = {
   scream: 1, chain: 8, bell: 1, toll: 1, gateswing: 1, gateclang: 1, gatelock: 1,
   gate: 5, link: 5, stone: 5, thud: 3, tink: 3, flip: 3, latch: 2, creak: 2,
+  fire: 1, click: 1, static: 1, scurry: 1,
 } as const;
 type SampleName = keyof typeof SAMPLES;
 const buffers: Partial<Record<SampleName, AudioBuffer[]>> = {};
@@ -183,6 +184,27 @@ export const sfx = {
     noise(0.9, 0.8, "bandpass", 3200, 6500);
     tone(95, 0.8, 0.45, "sawtooth", 60);
     tone(1300, 0.45, 0.22, "sawtooth", 2800, 0.05);
+  },
+  /** Radio static (something in the fog): a recording, synthesized noise as fallback. */
+  static() {
+    if (sample("static", 0.5)) return;
+    noise(0.5, 0.12, "bandpass", 2400, 1800);
+    noise(0.35, 0.1, "highpass", 3000, undefined, 0.45);
+    noise(0.6, 0.1, "bandpass", 1500, 2600, 0.8);
+  },
+  /** The lantern catching fire (the "bonfire"). */
+  bonfire() {
+    if (sample("fire", 0.8)) return;
+    sfx.chime();
+  },
+  /** Something small bolting through the leaves (the eyes flee). */
+  scurry() {
+    if (sample("scurry", 0.7)) return;
+    sfx.flip();
+  },
+  /** The flashlight's switch. False if the recording isn't loaded yet (the caller synthesizes it). */
+  click(delay = 0): boolean {
+    return sample("click", 0.9, delay);
   },
   /** The gate swinging open (entering the cemetery). */
   gateOpen() {

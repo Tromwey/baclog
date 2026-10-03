@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { db } from "@/db";
 import { analyticsEvents, analyticsEventTypeEnum, deviceClassEnum } from "@/db/schema";
@@ -51,6 +52,6 @@ export function captureView(input: {
   headers: Headers;
 }): void {
   void recordEvent(input).catch((err) =>
-    console.error("[analytics] capture failed:", err),
+    console.error("[analytics] capture failed:", redactedError(err)),
   );
 }

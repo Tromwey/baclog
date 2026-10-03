@@ -105,8 +105,8 @@ export function WelcomeSheet({
   const put = putPhrase(party.perGuestLimit);
   const title = back && handle ? `ya estás dentro, @${handle}.` : "ya estás dentro.";
   const body = back
-    ? `Entraste con tu cuenta de kura. ${put ? `${put} en ${host}; todos ven quién puso cuál.` : `Ya ves ${host} en vivo.`}`
-    : `Eres parte de ${host}. ${put ? `${put}; todos ven quién puso cuál y las escuchan esa noche.` : "Aquí ves la colección en vivo."}`;
+    ? `Entraste con tu cuenta de kura. ${put ? `${put} en ${host}; todos ven quién agregó cuál.` : `Ya ves ${host} en vivo.`}`
+    : `Eres parte de ${host}. ${put ? `${put}; todos ven quién agregó cuál y las escuchan esa noche.` : "Aquí ves la colección en vivo."}`;
   return (
     <div className="flex flex-col">
       <PartyFan songs={party.songs} empty={party.songs.length === 0} lead={50} />
@@ -130,7 +130,7 @@ export function WelcomeSheet({
 
 /* ------------------------------------------------------------------- cap */
 
-/** "ya pusiste tus 3." — Quitar per own song, and Listo. */
+/** "ya agregaste tus 3." — Quitar per own song, and Listo. */
 export function CapSheet({
   party,
   onParty,
@@ -158,11 +158,11 @@ export function CapSheet({
       onRemoved();
       return;
     }
-    fail(res, "No pudimos quitarla. Inténtalo otra vez.");
+    fail(res, "No pudimos quitarla. Vuelve a intentarlo.");
   };
   return (
     <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>ya pusiste {yourSongs(party.perGuestLimit)}.</h2>
+      <h2 className={BIG_TITLE}>ya agregaste {yourSongs(party.perGuestLimit)}.</h2>
       <p className={BODY}>
         Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.
       </p>
@@ -211,7 +211,7 @@ export function RemoveSheet({
   const dismiss = useSheetDismiss();
   const fail = usePartyFailure(toast);
   const [busy, setBusy] = useState(false);
-  const author = song.addedBy ? `@${song.addedBy.handle}` : "quien la puso";
+  const author = song.addedBy ? `@${song.addedBy.handle}` : "quien la agregó";
   const blockable = party.viewer.role === "host" && song.canBlockAuthor;
 
   const act = async (block: boolean) => {
@@ -228,7 +228,7 @@ export function RemoveSheet({
       return;
     }
     setBusy(false);
-    fail(res, "No pudimos quitarla. Inténtalo otra vez.", () => {
+    fail(res, "No pudimos quitarla. Vuelve a intentarlo.", () => {
       dismiss?.();
       onStale();
     });
@@ -262,7 +262,7 @@ export function RemoveSheet({
       </div>
       <p className="mt-2 text-center font-sans text-[12px] leading-[1.4] text-text-3">
         {blockable
-          ? `${author[0] === "@" ? author : "Quien la puso"} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones (sí quitar las suyas).`
+          ? `${author[0] === "@" ? author : "Quien la agregó"} no recibe aviso. Si lo bloqueas, ya no podrá agregar canciones (sí quitar las suyas).`
           : "La canción sale de la colección para todos."}
       </p>
     </div>
@@ -292,7 +292,7 @@ export function ShareSheet({
     limit === 0
       ? "Quien abra el link ve la colección en vivo."
       : `Quien abra el link ve la colección en vivo. Con cuenta en kura, ${
-          limit === null ? "pone las canciones que quiera" : `pone hasta ${songsLabel(limit)}`
+          limit === null ? "agrega las canciones que quiera" : `agrega hasta ${songsLabel(limit)}`
         }.`;
 
   const doCopy = async () => {
@@ -302,7 +302,7 @@ export function ShareSheet({
   };
   const share = async () => {
     if (!url) return;
-    const data = { title: party.name, text: `Pon tus canciones en ${party.name}`, url };
+    const data = { title: party.name, text: `Agrega tus canciones en ${party.name}`, url };
     if (typeof navigator.share === "function") {
       try {
         await navigator.share(data);
@@ -326,7 +326,7 @@ export function ShareSheet({
       onParty({ ...party, invite: res.invite });
       return;
     }
-    fail(res, "No pudimos crear el link. Inténtalo otra vez.");
+    fail(res, "No pudimos crear el link. Vuelve a intentarlo.");
   };
 
   return (
@@ -398,10 +398,10 @@ export function LinkSheet({
       return;
     }
     if (res && "error" in res && res.error === "rate_limited") {
-      toast.show({ message: "Ya creaste muchos links en poco tiempo. Espera un rato para crear otro.", kind: "error" });
+      toast.show({ message: "Creaste varios links seguidos. Espera un momento para crear otro.", kind: "error" });
       return;
     }
-    fail(res, "No pudimos crear el link. Inténtalo otra vez.");
+    fail(res, "No pudimos crear el link. Vuelve a intentarlo.");
   };
   const revoke = async () => {
     setBusy(true);
@@ -411,7 +411,7 @@ export function LinkSheet({
       onParty({ ...party, invite: { active: false, token: null, url: null, createdAt: null } });
       return;
     }
-    fail(res, "No pudimos desactivar el link. Inténtalo otra vez.");
+    fail(res, "No pudimos desactivar el link. Vuelve a intentarlo.");
   };
 
   return (
@@ -521,7 +521,7 @@ export function EditSheet({
       dismiss?.();
       return;
     }
-    fail(res, "No pudimos guardar. Inténtalo otra vez.");
+    fail(res, "No se pudo guardar. Vuelve a intentarlo.");
   };
   return (
     <form onSubmit={save} className="flex flex-col gap-1.5">
@@ -539,7 +539,7 @@ export function EditSheet({
       <span className="mt-4 font-sans text-[14px] font-semibold text-text">Canciones por invitado</span>
       <LimitStepper value={limit} onChange={setLimit} />
       <p className="px-1 font-sans text-[13px] leading-[1.4] text-text-3">
-        Bajar el número no quita canciones: quien ya puso más solo no podrá agregar.
+        Bajar el número no quita canciones: quien ya agregó más solo no podrá agregar.
       </p>
       <button type="submit" disabled={busy || !name.trim()} className={`mt-3 ${SHEET_SOLID}`}>
         {busy ? "Guardando…" : "Guardar"}
@@ -570,7 +570,7 @@ export function DeleteSheet({
       return;
     }
     setBusy(false);
-    fail(res, "No pudimos borrarla. Inténtalo otra vez.");
+    fail(res, "No pudimos borrarla. Vuelve a intentarlo.");
   };
   return (
     <div className="flex flex-col">
@@ -611,7 +611,7 @@ export function BlockedSheet({
       return;
     }
     // not_found here = that ref is stale (already unblocked elsewhere): re-read.
-    fail(res, "No pudimos desbloquear. Inténtalo otra vez.", onChanged);
+    fail(res, "No pudimos desbloquear. Vuelve a intentarlo.", onChanged);
   };
   return (
     <div className="flex flex-col">
@@ -689,7 +689,7 @@ export function LeaveSheet({
       return;
     }
     setBusy(false);
-    fail(res, "No pudimos sacarte de la fiesta. Inténtalo otra vez.");
+    fail(res, "No pudimos sacarte de la fiesta. Vuelve a intentarlo.");
   };
   return (
     <div className="flex flex-col">

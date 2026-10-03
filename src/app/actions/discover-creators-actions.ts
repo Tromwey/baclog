@@ -1,5 +1,6 @@
 "use server";
 
+import { redactedError } from "@/authz/safe-log";
 import { assertUser } from "@/authz";
 import { getNewFromCreators, type CreatorNewItem } from "@/modules/discover/creators-new";
 
@@ -14,7 +15,7 @@ export async function getNewFromCreatorsAction(): Promise<CreatorNewItem[]> {
   try {
     return await getNewFromCreators(user.id, Date.now());
   } catch (err) {
-    console.error("[descubrir] new from creators unavailable:", err);
+    console.error("[descubrir] new from creators unavailable:", redactedError(err));
     return [];
   }
 }

@@ -17,7 +17,7 @@ export const POST = withApi(async (request, { user }) => {
   const { email, code } = await readJson(request, MergeOtpVerifyBodySchema);
   const sourceId = await verifyMergeOtp(user.id, email, code);
   if (!sourceId) {
-    throw invalidProof("El código no es válido o ya venció. Pide uno nuevo.");
+    throw invalidProof("El código es incorrecto o ya venció. Revísalo o pide otro.");
   }
   return json(await mergeProofFor(user.id, sourceId));
 });

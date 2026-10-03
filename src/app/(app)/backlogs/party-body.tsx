@@ -61,12 +61,12 @@ export function PartyBody({
       {(detail === "error" || detail === "gone") && (
         <div role="status" className="flex flex-col items-center gap-2.5 px-8 pt-2 text-center">
           <h2 className="font-brand text-[22px] font-normal leading-[1.15] text-text-2 [text-wrap:balance]">
-            {detail === "gone" ? "esta fiesta ya no está." : "no se cargaron las canciones."}
+            {detail === "gone" ? "esta fiesta ya no está disponible." : "no se cargaron las canciones."}
           </h2>
           <p className="font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {detail === "gone"
-              ? "La borraron o ya no eres parte de ella."
-              : "Revisa tu conexión e inténtalo otra vez."}
+              ? "Puede que ya no exista o que ya no seas parte de ella."
+              : "Revisa tu conexión y vuelve a intentarlo."}
           </p>
           {detail === "error" && (
             <button
@@ -103,8 +103,8 @@ export function PartyBody({
           </h2>
           <p className="max-w-[30ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {host
-              ? "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga las suyas."
-              : "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista."}
+              ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue las suyas."
+              : "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista."}
           </p>
         </div>
       )}

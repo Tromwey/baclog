@@ -1,6 +1,5 @@
 import { listMobileSessions } from "@/auth/mobile-sessions";
 import { withApi } from "@/authz/api";
-import { SESSIONS_UNAVAILABLE, requireMigration0029 } from "../../_lib/devices";
 import { json } from "../../_lib/http";
 import { isoDate, type MobileSession } from "../../_lib/schemas";
 
@@ -9,10 +8,9 @@ import { isoDate, type MobileSession } from "../../_lib/schemas";
  * caller's live (non-revoked) device sessions, `lastSeenAt desc`; `current`
  * marks the one this bearer belongs to (a pre-4d bearer without `sid` has
  * none — every row reads `current: false`). `deviceName` is the owner's own
- * free text: shown back only here. 503 `unavailable` until migration 0029.
+ * free text: shown back only here.
  */
 export const GET = withApi(async (_request, { user, bearer }) => {
-  requireMigration0029(SESSIONS_UNAVAILABLE);
   const rows = await listMobileSessions(user.id);
   const items: MobileSession[] = rows.map((r) => ({
     id: r.id,

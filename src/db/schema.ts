@@ -207,10 +207,7 @@ export const users = pgTable(
      * Phase 4e — consent for the "@x te sigue" push (APNs). Default TRUE like
      * the other notify flags. Own preference: `Me` + `PATCH /me`, never on
      * `Person`. The only reader is `modules/push/follower.ts`.
-     *
-     * Migration 0029 was applied to the shared DB on 2026-09-24; the code still
-     * reads/writes it with raw SQL behind `MIGRATION_0029_LIVE`
-     * (src/auth/live-0029.ts), which is now true.
+     * Migration 0029 (applied 2026-09-24).
      */
     notifyFollowers: boolean("notify_followers").notNull().default(true),
     /**
@@ -254,7 +251,12 @@ export const verificationTokens = pgTable(
     /** Failed verification attempts — token invalidated at the cap */
     attempts: smallint("attempts").notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+  (t) => [
+    primaryKey({ columns: [t.identifier, t.token] }),
+    // The expired-token sweep (`delete … where expires < now()`) — without it
+    // every sweep is a sequential scan of the OTP table.
+    index("verification_token_expires_idx").on(t.expires),
+  ],
 );
 
 /** DB session strategy: account deletion must revoke sessions instantly. */
@@ -330,9 +332,12 @@ export const catalogItems = pgTable(
      * F3.5.8 (link graph) — last time link-edge extraction ran FROM this item
      * as a seed (as video: soundtrack/score lookup; as album: soundtrack→film
      * resolution). Null = never tried → materialize lazily on next seed use.
-     * Stamped on EVERY attempt (found or not) so a seed with zero edges never
-     * re-hits iTunes/TMDB on each request. 180d TTL (cultural-link facts
-     * barely change, but a soundtrack can get indexed later).
+     * Stamped on every ANSWERED attempt (found or not) so a seed with zero
+     * edges never re-hits iTunes/TMDB on each request. 180d TTL (cultural-link
+     * facts barely change, but a soundtrack can get indexed later). An attempt
+     * a provider did NOT answer writes a stamp backdated to `180d − 15 min`
+     * ago (`linkEdgesRetryStamp`, recs/linkgraph.ts): fresh for 15 minutes,
+     * then retried — so a value ~180 days old is "retry soon", not history.
      */
     linkEdgesCheckedAt: timestamp("link_edges_checked_at"),
     /**
@@ -462,8 +467,15 @@ export const backlogItems = pgTable(
     position: integer("position"),
   },
   (t) => [
-    index("backlog_item_backlog_id_idx").on(t.backlogId),
+    // No index on (backlog_id) alone: it is the leading column of
+    // `backlog_item_unique_per_backlog` below, which serves every lookup by
+    // backlog (dropped in 0036 — one index less to maintain per write).
     index("backlog_item_user_id_idx").on(t.userId),
+    // "Who has this title" — reads that start from the CATALOG row and no
+    // user: title stats, trending, `notInLibrary`, the release cron's
+    // audience, the FK check when a catalog row is deleted (ON DELETE
+    // RESTRICT scans this table). Neither unique leads with this column.
+    index("backlog_item_catalog_item_idx").on(t.catalogItemId),
     uniqueIndex("backlog_item_unique_per_backlog").on(
       t.backlogId,
       t.catalogItemId,
@@ -647,7 +659,12 @@ export const userItems = pgTable(
   (t) => [
     // At most one state row per (user, title) — the join key from backlog_item.
     uniqueIndex("user_item_user_catalog_unique").on(t.userId, t.catalogItemId),
-    index("user_item_user_id_idx").on(t.userId),
+    // No index on (user_id) alone: `user_item_user_catalog_unique` above
+    // leads with it (dropped in 0036).
+    // By title, across users: `getTitleStats`, most-anticipated `waiting`,
+    // trending, the release cron's `pendingRecipient`, and the cascade when a
+    // catalog row is deleted. The unique can't serve it (user_id leads).
+    index("user_item_catalog_item_idx").on(t.catalogItemId),
     index("user_item_source_cross_media_rec_id_idx").on(
       t.sourceCrossMediaRecId,
     ),
@@ -708,7 +725,8 @@ export const itemReviews = pgTable(
     uniqueIndex("item_review_user_catalog_unique").on(t.userId, t.catalogItemId),
     // THE feed index: "reviews of this title, newest first".
     index("item_review_catalog_created_idx").on(t.catalogItemId, t.createdAt),
-    index("item_review_user_id_idx").on(t.userId),
+    // (user_id) alone is the unique's leading column — no second index
+    // (dropped in 0036).
     // The moderation queue's "what's currently hidden" scan.
     index("item_review_hidden_at_idx").on(t.hiddenAt),
   ],
@@ -837,14 +855,9 @@ export const deviceTokens = pgTable(
       onDelete: "cascade",
     }),
     environment: apnsEnvironmentEnum("environment").notNull(),
-    // Android push (2026-09-30), migración 0035 GENERADA, sin aplicar:
-    // "apns" | "fcm" (`modules/push/devices.ts` `PushProvider`). COMENTADA
-    // hasta aplicar 0035 — Drizzle nombra cada columna declarada en cada
-    // `insert(deviceTokens)` (learning 2026-09-24-columna-declarada-sin-
-    // migrar-rompe-inserts); el código la lee/escribe con SQL crudo detrás de
-    // `MIGRATION_0035_LIVE` (src/auth/live-0035.ts). Con la línea comentada
-    // NADIE corre `drizzle-kit generate` (emitiría un DROP COLUMN).
-    provider: text("provider").notNull().default("apns"),
+    // Android push (2026-09-30, migración 0035 aplicada): "apns" | "fcm"
+    // (`modules/push/devices.ts` `PushProvider`).
+    provider: text("provider").$type<"apns" | "fcm">().notNull().default("apns"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -947,7 +960,8 @@ export const mediaLinks = pgTable(
   },
   (t) => [
     uniqueIndex("media_link_unique").on(t.catalogItemId, t.service, t.region),
-    index("media_link_catalog_item_idx").on(t.catalogItemId),
+    // (catalog_item_id) alone is the unique's leading column — no second
+    // index (dropped in 0036).
   ],
 );
 
@@ -1081,6 +1095,65 @@ export const partyRsvps = pgTable(
   (t) => [
     uniqueIndex("party_rsvp_event_guest_unique").on(t.eventSlug, t.guestToken),
   ],
+);
+
+// ---------- /party labyrinth seals (migration 0038) ----------
+
+/**
+ * A player of the /party labyrinth (src/modules/party/lab.ts). ANONYMOUS like
+ * `party_rsvp` — no user FK: everyone gets the same link, the page mints a
+ * random device id and the player types a nickname after the first seal. The
+ * nickname is NOT an identity (anyone can type any name); `apodo_key` is its
+ * case/accent-insensitive form, for the host's name-based surprises.
+ */
+export const partyLabPlayers = pgTable(
+  "party_lab_player",
+  {
+    deviceId: text("device_id").primaryKey(),
+    eventSlug: text("event_slug").notNull(),
+    apodo: text("apodo"),
+    apodoKey: text("apodo_key"),
+    /** Ouija (0039): how many times each message group has answered this player, to hand out the next text. */
+    ouija: jsonb("ouija").$type<Record<string, number>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  },
+  (t) => [index("party_lab_player_event_idx").on(t.eventSlug)],
+);
+
+/** One seal per (player, tombstone): won by beating that tombstone's minigame, delivered later at the Mausoleum. */
+export const partyLabSeals = pgTable(
+  "party_lab_seal",
+  {
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => partyLabPlayers.deviceId, { onDelete: "cascade" }),
+    lapida: text("lapida").notNull(),
+    wonAt: timestamp("won_at").notNull().defaultNow(),
+    deliveredAt: timestamp("delivered_at"),
+    /** How long the winning game took, as the client reported it (not validated). */
+    ms: integer("ms"),
+  },
+  (t) => [primaryKey({ columns: [t.deviceId, t.lapida] })],
+);
+
+/**
+ * A minigame attempt. The token only makes saving the result idempotent (the
+ * design's contract: no cheat validation) — `respuesta` is what the first
+ * result call answered, replayed verbatim on a retry.
+ */
+export const partyLabAttempts = pgTable(
+  "party_lab_attempt",
+  {
+    token: text("token").primaryKey(),
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => partyLabPlayers.deviceId, { onDelete: "cascade" }),
+    lapida: text("lapida").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    respuesta: jsonb("respuesta"),
+  },
+  (t) => [index("party_lab_attempt_device_idx").on(t.deviceId, t.createdAt)],
 );
 
 // ---------- music export ("Llévala a otra app", migration 0034) ----------
@@ -1577,6 +1650,9 @@ export const analyticsEvents = pgTable(
   (t) => [
     index("analytics_event_type_created_idx").on(t.eventType, t.createdAt),
     index("analytics_event_country_idx").on(t.country),
+    // Per-user reads/joins (Torre de Control funnels) and the FK's
+    // ON DELETE SET NULL when an account is deleted.
+    index("analytics_event_user_idx").on(t.userId),
   ],
 );
 

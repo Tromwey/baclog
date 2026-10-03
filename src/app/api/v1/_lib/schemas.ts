@@ -73,10 +73,23 @@ export type PreferredService = z.infer<typeof PreferredServiceSchema>;
 export const VisibilitySchema = z.enum(["private", "link", "profile"]);
 export type Visibility = z.infer<typeof VisibilitySchema>;
 
-/** `{ source, externalId }` — a catalog title not yet cached locally. */
+/**
+ * `{ source, externalId }` — a catalog title not yet cached locally.
+ *
+ * `externalId` is bounded (ronda 4): it used to be any non-empty string, and
+ * it goes straight into a `catalog_item` lookup. Every id the catalog writes
+ * today is a provider's decimal id — TMDB `String(r.id)` (`tmdb.ts`,
+ * `tmdb-discover.ts`), iTunes `collectionId` / `trackId` / the chart feed's
+ * `id` (`itunes.ts`, `song-map.ts`, `itunes-charts.ts`), all ≤ 10 digits.
+ * The pattern is wider than digits on purpose — `[A-Za-z0-9_-]`, ≤ 64, the
+ * shape of a UUID or a TIDAL-style id — so a provider with alphanumeric ids
+ * doesn't need a contract change; anything else can't name a row and is a
+ * 400 instead of a query.
+ */
+export const EXTERNAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const ExternalRefSchema = z.object({
   source: z.enum(["tmdb", "itunes"]),
-  externalId: z.string().min(1),
+  externalId: z.string().max(64).regex(EXTERNAL_ID_RE),
 });
 export type ExternalRef = z.infer<typeof ExternalRefSchema>;
 
@@ -107,9 +120,7 @@ export const ErrorBodySchema = z.object({
      *  "not_released", "reaction_required", "taken", "linked_elsewhere",
      *  "provider_already_linked", "merge_token_invalid", "last_way_in" · `invalid` (HTTP
      *  422, phase 4g): "invalid_proof" = a rejected provider token / merge
-     *  code on an authenticated route (the ONLY `invalid` that isn't 400) ·
-     *  `unavailable`: "fcm_pending" (`PUT /me/devices/{token}` with
-     *  `provider: "fcm"` before migration 0035). */
+     *  code on an authenticated route (the ONLY `invalid` that isn't 400). */
     reason: z.string().optional(),
     /** `invalid` only: field → message. */
     fields: z.record(z.string(), z.string()).optional(),
@@ -386,7 +397,7 @@ export const MeSchema = z.object({
    *  preference: never on `Person`. */
   notifyRecap: z.boolean(),
   /** Phase 4e — the "@x te sigue" push opt-out (`PATCH /me`). Own
-   *  preference: never on `Person`. `true` until migration 0029 is live. */
+   *  preference: never on `Person`. */
   notifyFollowers: z.boolean(),
   /** 2026-09-27 — who reads the caller's followers/following lists
    *  (`PATCH /me { followListsVisibility }`). Default `private`. */
@@ -926,8 +937,7 @@ export const PartySongPaletteBodySchema = z.object({
 });
 
 // ---------- Music export ("Llévala a otra app", 2026-09-29, migration 0034) ----------
-// Contract: .claude/knowledge/state/export-contract.md. Every route answers
-// 503 `unavailable` (reason `migration`) while MIGRATION_0034_LIVE is false.
+// Contract: .claude/knowledge/state/export-contract.md.
 
 export const MusicProviderSchema = z.enum(["apple_music", "tidal"]);
 

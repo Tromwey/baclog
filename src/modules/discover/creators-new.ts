@@ -1,7 +1,9 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems, userItems } from "@/db/schema";
+import { storefrontOr } from "@/modules/catalog/apple-music-map";
 import { getArtistReleases } from "@/modules/catalog/itunes";
 import {
   getCreatorSeries,
@@ -85,6 +87,8 @@ export async function getNewFromCreators(
       externalId: catalogItems.externalId,
       mediaType: catalogItems.mediaType,
       artistId: sql<string | null>`${catalogItems.raw}->>'artistId'`,
+      // The Apple Music store that album came from: its artist is looked up there.
+      storefront: sql<string | null>`${catalogItems.raw}->>'_storefront'`,
       verdict: userItems.verdict,
     })
     .from(userItems)
@@ -99,6 +103,7 @@ export async function getNewFromCreators(
   if (library.length === 0) return [];
 
   const artistIds: number[] = [];
+  const artistStore = new Map<number, string>();
   const films: string[] = [];
   const series: string[] = [];
   for (const r of library) {
@@ -108,6 +113,7 @@ export async function getNewFromCreators(
       const id = Number(r.artistId);
       if (Number.isSafeInteger(id) && id > 0 && !artistIds.includes(id) && artistIds.length < ALBUM_SEEDS) {
         artistIds.push(id);
+        artistStore.set(id, storefrontOr(r.storefront));
       }
     } else if (r.source === "tmdb" && r.mediaType === "film" && films.length < FILM_SEEDS) {
       films.push(r.externalId);
@@ -118,7 +124,13 @@ export async function getNewFromCreators(
 
   const artistsRun = settled(
     artistIds.map(async (artistId): Promise<Found[]> => {
-      const { artistName, items } = await getArtistReleases(artistId, now, ALBUM_WINDOW_DAYS);
+      const { artistName, items } = await getArtistReleases(
+        artistId,
+        now,
+        ALBUM_WINDOW_DAYS,
+        undefined,
+        artistStore.get(artistId),
+      );
       return items.map((item) => ({
         item,
         creator: { name: artistName ?? item.byline ?? "", role: "artist" as const },
@@ -206,7 +218,7 @@ async function settled<T>(tasks: Promise<T>[]): Promise<T[]> {
   const out: T[] = [];
   for (const r of results) {
     if (r.status === "fulfilled") out.push(r.value);
-    else console.error("[descubrir] creators: a lookup failed:", r.reason);
+    else console.error("[descubrir] creators: a lookup failed:", redactedError(r.reason));
   }
   return out;
 }

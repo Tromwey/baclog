@@ -558,10 +558,11 @@ export function SuggestCard({ s, first = false }: { s: FeedSuggestion; first?: b
       </div>
       <Art>
         {order.map((c, i) => (
-          <span
+          // The fan is the person's library: any cover opens their profile (iOS and Android do the same).
+          <Link
             key={c.catalogItemId}
-            role="img"
-            aria-hidden
+            href={`/u/${s.username}`}
+            aria-label={`Ver el perfil de @${s.username}`}
             className="absolute left-1/2 top-1/2 h-[64%] rounded-[var(--r-cover-l)] bg-surface-2 bg-cover bg-center bg-no-repeat shadow-cover"
             style={{
               aspectRatio: aspectOf(c.mediaType),

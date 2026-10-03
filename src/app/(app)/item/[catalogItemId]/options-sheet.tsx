@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { dismissRecoAction } from "@/app/actions/crossmedia-actions";
+import { attempt } from "@/components/kura/attempt";
 import { CHIP_44 } from "@/components/kura/components";
 import { SHARE_PATH } from "@/components/glyph-paths";
 import { KuraSheet, SheetIcon, SheetRow, useKuraSheetDismiss } from "./kura-sheet";
@@ -148,8 +149,16 @@ function OptionsBody({
           onClick={() => {
             dismiss();
             setRecoHidden(true);
-            void dismissRecoAction(recId);
-            showToast("No volverá a aparecer en Descubrir.");
+            // Optimistic; a dismiss that never landed must not read as done
+            // (the row comes back so it can be tried again).
+            void attempt(() => dismissRecoAction(recId)).then((res) => {
+              if (res.ok) {
+                showToast("No volverá a aparecer en Descubrir.");
+                return;
+              }
+              setRecoHidden(false);
+              showToast("No se pudo ocultar la recomendación. Revisa tu conexión.");
+            });
           }}
         />
       )}

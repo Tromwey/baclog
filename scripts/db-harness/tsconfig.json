@@ -1,0 +1,3 @@
+{ "extends": "../../tsconfig.json",
+  "compilerOptions": { "baseUrl": "../..", "paths": { "@/db": ["./scripts/db-harness/db.ts"], "@/auth/mailer": ["./scripts/db-harness/mailer.ts"], "@/auth/session": ["./scripts/db-harness/session.ts"], "@/*": ["./src/*"] } },
+  "include": ["./*.ts"] }

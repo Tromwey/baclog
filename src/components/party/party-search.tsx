@@ -6,7 +6,8 @@ import { addPartySongAction, searchPartySongsAction } from "@/app/actions/party-
 import { SKELETON_PULSE } from "@/components/kura/components";
 import { KIcon } from "@/components/kura/icons";
 import type { ToastHost } from "@/components/kura/toast";
-import { useDialogFocus } from "@/hooks/use-dialog-focus";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
+import { duplicateMessage } from "@/modules/party-collections/rules";
 import type { PartyDetail, PartySongHit } from "@/modules/party-collections/types";
 import { logged, usePartyFailure } from "./party-errors";
 import { SongCover, SongRowsSkeleton } from "./party-parts";
@@ -17,7 +18,7 @@ import { paletteFor } from "./use-party-tint";
  * error): a full-screen panel over the party, PORTALED to <body> (AGENTS.md:
  * never trapped under anything). iTunes songs through
  * `searchPartySongsAction`, each hit already annotated against the party:
- * "Agregar" / "Ya está" with "Ya la pusiste" or "Ya está · la puso @ana".
+ * "Agregar" / "Ya está" with "Ya la agregaste" or "Ya está · la agregó @ana".
  *
  * Failures (party-errors.ts): `not_found` = the party is gone for this
  * person → `onGone` (the room closes the search and re-reads, which sends
@@ -34,7 +35,7 @@ export function remainLabel(party: PartyDetail): string {
   const v = party.viewer;
   if (v.role === "host" || v.remaining === null) return "Sin límite";
   const limit = party.perGuestLimit ?? 0;
-  if (v.remaining <= 0) return limit === 1 ? "Ya pusiste tu canción" : `Ya pusiste tus ${limit}`;
+  if (v.remaining <= 0) return limit === 1 ? "Ya agregaste tu canción" : `Ya agregaste tus ${limit}`;
   return `Te ${v.remaining === 1 ? "queda" : "quedan"} ${v.remaining} de ${limit}`;
 }
 
@@ -45,7 +46,6 @@ export function PartySearch({
   onClose,
   onGone,
   toast,
-  covered = false,
 }: {
   party: PartyDetail;
   onParty: (p: PartyDetail) => void;
@@ -55,8 +55,6 @@ export function PartySearch({
   /** `not_found`: the party is no longer this person's — close and re-read. */
   onGone: () => void;
   toast: ToastHost;
-  /** A sheet sits on top (the cap sheet): it owns focus and Escape. */
-  covered?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -66,7 +64,7 @@ export function PartySearch({
   const seq = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panel = useRef<HTMLDivElement>(null);
-  useDialogFocus(panel, !covered);
+  useDialogFocus(panel);
 
   const run = (query: string) => {
     const id = ++seq.current;
@@ -90,10 +88,10 @@ export function PartySearch({
       switch (res.error) {
         case "rate_limited":
           setStatus(hits.length ? "results" : "idle");
-          toast.show({ message: "Vas muy rápido. Espera un momento y vuelve a buscar.", kind: "error" });
+          toast.show({ message: "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar.", kind: "error" });
           return;
         case "unavailable":
-          // iTunes down (or 0033 not live): the "no pudimos buscar." state.
+          // iTunes down: the "no pudimos buscar." state.
           setStatus("error");
           return;
         case "invalid":
@@ -104,7 +102,7 @@ export function PartySearch({
           return;
         default:
           setStatus(hits.length ? "results" : "idle");
-          fail(res, "No pudimos buscar. Inténtalo otra vez.");
+          fail(res, "No pudimos buscar. Vuelve a intentarlo.");
       }
     });
   };
@@ -119,11 +117,11 @@ export function PartySearch({
   }, []);
 
   useEffect(() => {
-    if (covered) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // A sheet on top (the cap sheet) owns Escape: the dialog stack says so.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && isTopDialog(panel.current) && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, covered]);
+  }, [onClose]);
 
   const mark = (titleId: string, inParty: PartySongHit["inParty"]) =>
     setHits((hs) => hs.map((h) => (h.titleId === titleId ? { ...h, inParty } : h)));
@@ -131,9 +129,8 @@ export function PartySearch({
   async function add(hit: PartySongHit) {
     if (hit.inParty) {
       toast.show({
-        message: hit.inParty.mine
-          ? "Ya la pusiste tú."
-          : `Ya está, la puso ${hit.inParty.addedBy ? `@${hit.inParty.addedBy.handle}` : "alguien"}`,
+        // The server's own sentence (rules.ts), so both can't drift.
+        message: duplicateMessage(hit.inParty.mine, hit.inParty.addedBy?.handle ?? null),
       });
       return;
     }
@@ -146,7 +143,7 @@ export function PartySearch({
       mark(hit.titleId, { mine: true, addedBy: null });
       const v = res.party.viewer;
       if (v.role === "guest" && v.remaining === 0) onCap();
-      else toast.show({ message: `Pusiste ${hit.title}.` });
+      else toast.show({ message: `Agregaste ${hit.title}.` });
       return;
     }
     if (res && "error" in res) {
@@ -163,14 +160,14 @@ export function PartySearch({
           toast.show({ message: "Ya no puedes agregar canciones." });
           return;
         case "view_only":
-          toast.show({ message: "En esta fiesta solo se ve la colección." });
+          toast.show({ message: "En esta fiesta solo se puede ver la colección." });
           return;
         case "not_found":
           onGone();
           return;
       }
     }
-    fail(res, "No pudimos agregarla. Inténtalo otra vez.");
+    fail(res, "No pudimos agregarla. Vuelve a intentarlo.");
   }
 
   return createPortal(
@@ -249,8 +246,8 @@ export function PartySearch({
                 const dup = !!h.inParty;
                 const sub = h.inParty
                   ? h.inParty.mine
-                    ? "Ya la pusiste"
-                    : `Ya está · la puso ${h.inParty.addedBy ? `@${h.inParty.addedBy.handle}` : "alguien"}`
+                    ? "Ya la agregaste"
+                    : `Ya está · la agregó ${h.inParty.addedBy ? `@${h.inParty.addedBy.handle}` : "alguien"}`
                   : null;
                 const line = [h.artist, h.album].filter(Boolean).join(" · ");
                 return (

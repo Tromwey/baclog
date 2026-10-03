@@ -83,7 +83,7 @@ export default async function AdminReviewsPage() {
  */
 function QueueCard({ entry }: { entry: QueueEntry }) {
   const dotClass = entry.hidden
-    ? "bg-bad"
+    ? "bg-hot"
     : entry.reportCount > 1
       ? "bg-warn"
       : "bg-text-3";

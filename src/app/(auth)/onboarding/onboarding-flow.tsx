@@ -27,19 +27,40 @@ export function OnboardingFlow({
   initialNextPage,
   initialStep,
   returnTo = null,
+  resumeName = null,
+  afterUser = "picks",
 }: {
   initialPool: OnboardingPoolItem[];
   initialNextPage: number | null;
   initialStep: OnboardingStep;
   /** A party to go back to (`safeReturnTo`): the user step ends there, not in "elige 3". */
   returnTo?: string | null;
+  /** An older account's existing name: the user step only asks for the year. */
+  resumeName?: string | null;
+  /** Where the user step leads without a `returnTo`: "elige 3", or — an
+   *  older account, which only owed its birth year — the app itself. */
+  afterUser?: "picks" | "app";
 }) {
   const router = useRouter();
   const [step, setStep] = useState<OnboardingStep>(initialStep);
 
   if (step === "usuario") {
     return (
-      <UsernameStep onDone={() => (returnTo ? window.location.assign(returnTo) : setStep("picks"))} />
+      <UsernameStep
+        resumeName={resumeName}
+        onDone={() => {
+          // Full navigations on purpose: the router may hold the
+          // "/backlogs → /onboarding" redirect it saw before the year was saved.
+          if (returnTo) {
+            window.location.assign(returnTo);
+          } else if (afterUser === "app") {
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate hard navigation (stale redirect in the router cache)
+            window.location.href = "/backlogs";
+          } else {
+            setStep("picks");
+          }
+        }}
+      />
     );
   }
 

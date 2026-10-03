@@ -25,6 +25,19 @@
  *                     `--grep "W1|E1 DELETE /me →"` · `--grep "W2|W3|E1 DELETE /me →"`.
  *   --verbose         print every request line
  *
+ * OTP budget (2026-10-01): production caps login codes at 5 per email per
+ * rolling hour (`LOGIN_CODES_PER_EMAIL_PER_HOUR`, src/auth/otp-policy.ts) and
+ * the smoke does NOT get an exemption — it runs against the shared DB. One
+ * run spends 1 code (`auth`/`reads`) or 3 of the same email (`writes`: the
+ * sign-in plus the two sign-backs after W2 logout and W4 session revoke). So:
+ *   - `writes`: a NEW `qa-api-<epoch>@baclog.dev` every run (`$(date +%s)`).
+ *     The account is deleted at the end anyway; never re-run with the same one.
+ *   - `auth`/`reads` on a fixed account: at most 5 runs an hour with --email;
+ *     to iterate, reuse a session with `--token <jwt>` (no code is requested).
+ * A 429 from `otp/request` that asks to wait MORE than the 60 s resend
+ * cooldown is that cap: the smoke stops with this explanation instead of
+ * reusing an old code from the log (which would fail on verify, opaquely).
+ *
  * Structure: phases 1–2 ADD cases to `reads` / `writes` below (each case is a
  * `{ name, run }` that throws on failure). `reads` must never mutate. `writes`
  * runs only against a disposable QA account (the DB is prod) — it is empty
@@ -249,42 +262,8 @@ function sidOf(token: string): string | null {
   return typeof payload.sid === "string" ? payload.sid : null;
 }
 
-/** `MIGRATION_0029_LIVE` as written in src/auth/live-0029.ts (parsed, like
- *  `TOKEN_VERSION_LIVE`: the smoke never imports server code). */
-async function migration0029LiveInSource(): Promise<boolean> {
-  const src = await readFile(resolvePath("src/auth/live-0029.ts"), "utf8");
-  const m = /^export const MIGRATION_0029_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
-  assert.ok(m, "no encuentro `export const MIGRATION_0029_LIVE = true|false;` en src/auth/live-0029.ts");
-  return m[1] === "true";
-}
-
-/** `MIGRATION_0035_LIVE` as written in src/auth/live-0035.ts
- *  (`device_token.provider`, push FCM de Android), parsed like 0029's. */
-async function migration0035LiveInSource(): Promise<boolean> {
-  const src = await readFile(resolvePath("src/auth/live-0035.ts"), "utf8");
-  const m = /^export const MIGRATION_0035_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
-  assert.ok(m, "no encuentro `export const MIGRATION_0035_LIVE = true|false;` en src/auth/live-0035.ts");
-  return m[1] === "true";
-}
-
 /** An FCM-shaped registration token (never a real one: FCM would 404 it). */
 const SMOKE_FCM_TOKEN = `smoke-fcm_${"Ab9".repeat(12)}:APA91b${"Zy8-".repeat(10)}`;
-
-/** `MIGRATION_0033_LIVE` as written in src/modules/party-collections/live.ts
- *  (colecciones de fiesta), parsed like 0029's. */
-async function migration0034LiveInSource(): Promise<boolean> {
-  const src = await readFile(resolvePath("src/modules/music-export/live.ts"), "utf8");
-  const m = /^export const MIGRATION_0034_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
-  assert.ok(m, "no encuentro `export const MIGRATION_0034_LIVE = true|false;` en src/modules/music-export/live.ts");
-  return m[1] === "true";
-}
-
-async function migration0033LiveInSource(): Promise<boolean> {
-  const src = await readFile(resolvePath("src/modules/party-collections/live.ts"), "utf8");
-  const m = /^export const MIGRATION_0033_LIVE\s*=\s*(true|false)\s*;/m.exec(src);
-  assert.ok(m, "no encuentro `export const MIGRATION_0033_LIVE = true|false;` en src/modules/party-collections/live.ts");
-  return m[1] === "true";
-}
 
 // L3 — what crosses between the people/feed cases, and the leak scan.
 const l3: { ownPerson: z.infer<typeof PersonSchema> | null } = { ownPerson: null };
@@ -342,6 +321,19 @@ const smoke: { collections: z.infer<typeof CollectionSchema>[]; titleIds: string
   titleIds: [],
 };
 
+/** The resend cooldown's ceiling (`RESEND_COOLDOWN_MS`, src/auth/otp-policy.ts):
+ *  a longer `retryAfterSeconds` can only be the hourly cap per email. */
+const OTP_COOLDOWN_MAX_SECONDS = 60;
+
+/** Stops the run, with the way out, when `otp/request` hit the hourly cap. */
+function failOnOtpHourlyCap(email: string, retryAfterSeconds: number | undefined): void {
+  if (retryAfterSeconds === undefined || retryAfterSeconds <= OTP_COOLDOWN_MAX_SECONDS) return;
+  assert.fail(
+    `otp/request(${email}): tope de 5 códigos por hora por correo (faltan ~${Math.ceil(retryAfterSeconds / 60)} min). ` +
+      `No es un bug: usa un correo QA nuevo (${QA_PREFIX}$(date +%s)@baclog.dev) o reutiliza una sesión con --token. Ver "OTP budget" arriba.`,
+  );
+}
+
 async function signIn(): Promise<void> {
   const before = opts.log ? (await lastCodeInLog(opts.log, opts.email))?.count ?? 0 : 0;
 
@@ -350,6 +342,7 @@ async function signIn(): Promise<void> {
   if (req.status === 429) {
     const err = expectError(req, 429, "rate_limited");
     assert.ok(err.retryAfterSeconds && err.retryAfterSeconds > 0, "429 lleva retryAfterSeconds");
+    failOnOtpHourlyCap(opts.email, err.retryAfterSeconds);
     console.log(`   (cooldown de OTP activo — reutilizo el último código del log)`);
     reuseLast = true;
   } else {
@@ -605,9 +598,6 @@ const auth: Case[] = [
       ] as const) {
         expectSameError(await call("GET", "/me", { token: await mint(claims) }), none, 401, "unauthorized", `${label}: el 401 no dice qué falló`);
       }
-      if (!(await migration0029LiveInSource())) {
-        skip("MIGRATION_0029_LIVE = false: un sid bien formado se ignora (sin tabla de sesiones todavía)");
-      }
       const ghost = await mint({ sid: "00000000-0000-4000-8000-000000000000" });
       expectSameError(await call("GET", "/me", { token: ghost }), none, 401, "unauthorized", "sid de una sesión que no existe = sin bearer");
     },
@@ -774,6 +764,9 @@ const KuradaSchema = z.object({
   covers: z.array(TitleSchema).max(3),
 });
 const MoodSchema = z.object({ label: z.string().min(1), palette: z.array(z.string()).length(2) });
+/** ADDITIVE: present (and `true`) only when the shelf THREW and `titles: []`
+ *  is "couldn't ask", not "there is nothing". Never `false`. */
+const TitlesUnavailableSchema = z.literal(true).optional();
 const DiscoverFormatSchemas = {
   film: z.object({
     format: z.literal("film"),
@@ -790,6 +783,7 @@ const DiscoverFormatSchemas = {
       }),
     ),
     kuradas: z.array(KuradaSchema),
+    titlesUnavailable: TitlesUnavailableSchema,
   }),
   series: z.object({
     format: z.literal("series"),
@@ -803,12 +797,14 @@ const DiscoverFormatSchemas = {
       }),
     ),
     kuradas: z.array(KuradaSchema),
+    titlesUnavailable: TitlesUnavailableSchema,
   }),
   album: z.object({
     format: z.literal("album"),
     moods: z.array(MoodSchema).min(1),
     titles: z.array(z.object({ title: TitleSchema, moods: z.array(z.number().int().min(0)).min(1) })),
     kuradas: z.array(KuradaSchema),
+    titlesUnavailable: TitlesUnavailableSchema,
   }),
 } as const;
 const l2 = { titleIds: [] as string[] };
@@ -912,15 +908,13 @@ const reads: Case[] = [
       ctx.me = me;
     },
   },
-  // Android push (0035). Read-only on purpose: with 0035 OFF the FCM PUT is
-  // refused BEFORE any write (503 fcm_pending), and the rejected bodies
-  // below are 400s that write nothing either. With 0035 ON the FCM PUT
-  // would write, so the happy path lives in `writes` (W5).
+  // Android push (0035). Read-only on purpose: the rejected bodies below are
+  // 400s that write nothing. The FCM PUT writes, so its happy path lives in
+  // `writes` (W5).
   {
-    name: "PUT /me/devices/{token} provider fcm → 503 fcm_pending sin la migración 0035 · apns sin environment / provider inválido = 400",
+    name: "PUT /me/devices/{token}: apns sin environment / provider inválido = 400",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
-      if (!(await migration0029LiveInSource())) skip("MIGRATION_0029_LIVE = false: /me/devices entero responde 503");
       const hex = "cd".repeat(32);
       const noEnv = expectError(await call("PUT", `/me/devices/${hex}`, { token: ctx.token, body: {} }), 400, "invalid");
       assert.ok(noEnv.fields?.environment, "apns (el default) exige fields.environment");
@@ -930,33 +924,13 @@ const reads: Case[] = [
         "invalid",
       );
       assert.ok(badProv.fields?.provider, "fields.provider");
-      if (await migration0035LiveInSource()) {
-        skip("MIGRATION_0035_LIVE = true: el registro FCM escribe; su camino feliz está en writes (W5)");
-      }
-      const tables = await smokeSql<{ n: number }>(
-        `select count(*)::int as n from information_schema.columns where table_name = 'device_token' and column_name = 'provider'`,
-      );
-      const fcm = await call("PUT", `/me/devices/${encodeURIComponent(SMOKE_FCM_TOKEN)}`, {
-        token: ctx.token,
-        body: { provider: "fcm" },
-      });
-      const err = expectError(fcm, 503, "unavailable");
-      assert.equal(err.reason, "fcm_pending", "reason: fcm_pending");
-      if (tables !== null) {
-        const n = await smokeSql<{ n: number }>(`select count(*)::int as n from device_token where token = $1`, [SMOKE_FCM_TOKEN]);
-        assert.equal(n?.[0]?.n, 0, "el 503 no escribió nada");
-      }
     },
   },
   {
-    name: "GET /me/sessions → { items: [MobileSession] } con la sesión de este bearer como current (503 sin la migración 0029)",
+    name: "GET /me/sessions → { items: [MobileSession] } con la sesión de este bearer como current",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const res = await call("GET", "/me/sessions", { token: ctx.token });
-      if (!(await migration0029LiveInSource())) {
-        expectError(res, 503, "unavailable");
-        skip("MIGRATION_0029_LIVE = false: /me/sessions responde 503 (verificado)");
-      }
       const { items } = expectOk(res, 200, z.object({ items: z.array(MobileSessionSchema) }));
       const sid = sidOf(ctx.token);
       const current = items.filter((i) => i.current);
@@ -1041,14 +1015,10 @@ const reads: Case[] = [
   },
   // Colecciones de fiesta (0033)
   {
-    name: "GET /parties → { items: [PartyCard] } (503 sin la migración 0033)",
+    name: "GET /parties → { items: [PartyCard] }",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const res = await call("GET", "/parties", { token: ctx.token });
-      if (!(await migration0033LiveInSource())) {
-        expectError(res, 503, "unavailable");
-        skip("MIGRATION_0033_LIVE = false: /parties responde 503 (verificado)");
-      }
       expectOk(res, 200, z.object({ items: z.array(PartyCardSchema) }));
     },
   },
@@ -1060,21 +1030,16 @@ const reads: Case[] = [
       expectError(dead, 404, "not_found");
       const malformed = await call("GET", "/invites/no-es-token", {});
       expectSameError(dead, malformed, 404, "not_found", "token malformado = token desconocido");
-      if (!(await migration0033LiveInSource())) skip("MIGRATION_0033_LIVE = false: /parties/{id} responde 503");
       const res = await call("GET", "/parties/00000000-0000-4000-8000-000000000000", { token: ctx.token });
       expectError(res, 404, "not_found");
     },
   },
   // Exportar una fiesta (0034)
   {
-    name: "GET /music/services → MusicServices (503 sin la migración 0034)",
+    name: "GET /music/services → MusicServices",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const res = await call("GET", "/music/services", { token: ctx.token });
-      if (!(await migration0034LiveInSource())) {
-        expectError(res, 503, "unavailable");
-        skip("MIGRATION_0034_LIVE = false: /music/services responde 503 (verificado)");
-      }
       expectOk(res, 200, MusicServicesSchema);
     },
   },
@@ -1082,10 +1047,6 @@ const reads: Case[] = [
     name: "GET /parties/{id}/exports/{provider}: fiesta ajena = 404; proveedor desconocido = 404",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
-      if (!(await migration0034LiveInSource())) {
-        expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/tidal", { token: ctx.token }), 503, "unavailable");
-        skip("MIGRATION_0034_LIVE = false: /exports responde 503 (verificado)");
-      }
       expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/tidal", { token: ctx.token }), 404, "not_found");
       expectError(await call("GET", "/parties/00000000-0000-4000-8000-000000000000/exports/spotify", { token: ctx.token }), 404, "not_found");
     },
@@ -2052,6 +2013,7 @@ async function e1SignInAs(email: string): Promise<{ token: string; me: Me }> {
   assert.ok(opts.log, "hace falta --log para leer el OTP de la segunda cuenta");
   const before = (await lastCodeInLog(opts.log, email))?.count ?? 0;
   const req = await call("POST", "/auth/otp/request", { body: { email } });
+  if (req.status === 429) failOnOtpHourlyCap(email, expectError(req, 429, "rate_limited").retryAfterSeconds);
   assert.equal(req.status, 204, `otp/request(${email}): ${req.status} ${req.text}`);
   const code = await waitForNewCode(opts.log, email, before);
   const ver = await call("POST", "/auth/otp/verify", {
@@ -2248,7 +2210,7 @@ const writes: Case[] = [
   // QA account that `signIn()` created; the underage case signs in a second
   // one and removes it from the DB itself.
   {
-    name: "E1 POST /me/onboarding (mayor de edad) → Me con onboardingComplete",
+    name: "E1 POST /me/onboarding con birthDate (mayor de edad) → Me con onboardingComplete; fecha imposible → 400 fields.birthDate",
     run: async () => {
       assert.ok(ctx.token, "hace falta un token");
       const bad = await call("POST", "/me/onboarding", {
@@ -2257,10 +2219,20 @@ const writes: Case[] = [
       });
       const err = expectError(bad, 400, "invalid");
       assert.ok(err.fields && "name" in err.fields, "fields.name presente");
+      // The exact-age gate: a day that isn't on the calendar writes nothing.
+      const badDate = expectError(
+        await call("POST", "/me/onboarding", { token: ctx.token, body: { name: "QA API", birthDate: "2023-02-29" } }),
+        400,
+        "invalid",
+      );
+      assert.ok(badDate.fields && "birthDate" in badDate.fields, "fields.birthDate presente");
+      const still = expectOk(await call("GET", "/me", { token: ctx.token }), 200, MeSchema);
+      assert.equal(still.onboardingComplete, false, "una fecha inválida no completa el onboarding");
       const res = await call("POST", "/me/onboarding", {
         token: ctx.token,
-        body: { name: "QA API", birthYear: 1990 },
+        body: { name: "QA API", birthDate: "1990-05-17" },
       });
+      assert.ok(!res.text.includes("05-17"), "el día y el mes no vuelven en la respuesta");
       const me = expectOk(res, 200, MeSchema);
       assert.equal(me.name, "QA API");
       assert.equal(me.onboardingComplete, true);
@@ -2341,7 +2313,7 @@ const writes: Case[] = [
   // picks must still find an account with no collection (so they create
   // "Obsesiones") and an empty library.
   {
-    name: "R0 reseña sin handle → authorHandle null en PUT /me/titles/{id}/review y en GET /titles/{id}",
+    name: "R0 reseña sin handle → authorHandle null en PUT /me/titles/{id}/review y en GET /titles/{id}; PUT mark completed → reviewId null",
     run: async () => {
       const me = expectOk(await e3call("GET", "/me"), 200, MeSchema);
       assert.equal(me.handle, null, "este caso corre antes de reclamar el handle");
@@ -2386,6 +2358,19 @@ const writes: Case[] = [
         // The paged list never repeats the own review (pinned above it).
         const rest = expectOk(await e3call("GET", `/titles/${titleId}/reviews`), 200, paginated(ReviewSchema));
         assert.ok(!rest.items.some((r) => r.id === review.id), "GET /titles/{id}/reviews excluye la propia");
+
+        // The review goes with the reaction: `completed` leaves no reaction,
+        // so the same write deletes the review and the answer says so.
+        const completed = expectOk(
+          await e3call("PUT", `/me/titles/${titleId}/mark`, { body: { mark: "completed" } }),
+          200,
+          TitleStateSchema,
+        );
+        assert.equal(completed.mark, "completed");
+        assert.strictEqual(completed.reviewId, null, "PUT mark completed con reseña → reviewId null");
+        const after = expectOk(await e3call("GET", `/titles/${titleId}`), 200, TitleDetailResponseSchema);
+        assert.strictEqual(after.state?.reviewId, null, "GET /titles/{id}: la reseña ya no existe");
+        assert.ok(!after.reviews.items.some((r) => r.id === review.id), "la reseña borrada no vuelve en la ficha");
       } catch (err) {
         caseError = err;
       }
@@ -3160,6 +3145,38 @@ const writes: Case[] = [
       assert.equal(lib.get(e2.plain)?.mark, null);
     },
   },
+  {
+    name: "E2 DELETE /collections/{id}?purge=1 → 204: lo que solo estaba ahí sale de la biblioteca, lo demás se conserva",
+    run: async () => {
+      // picks[2] left the library two cases above (only here after the PUT);
+      // `plain` is also in Obsesiones, so the purge must not touch it.
+      const only = e2.picks[2];
+      const created = expectOk(
+        await e2call("POST", "/collections", { body: { name: "Smoke purge", visibility: "private" } }),
+        200,
+        CollectionSchema,
+      );
+      for (const id of [only, e2.plain]) {
+        assert.equal((await e2call("PUT", `/collections/${created.id}/titles/${id}`)).status, 200);
+      }
+      const before = await e2Library();
+      assert.ok(before.has(only) && before.has(e2.plain));
+      for (const bad of ["purge=0", "purge=true", "purge=", "purge=1&purge=1"]) {
+        expectError(await e2call("DELETE", `/collections/${created.id}?${bad}`), 400, "invalid");
+      }
+      assert.ok((await e2Collections()).some((c) => c.id === created.id), "un purge inválido no borra nada");
+      const res = await e2call("DELETE", `/collections/${created.id}?purge=1`);
+      assert.equal(res.status, 204, res.text);
+      expectNoStore(res);
+      expectError(await e2call("GET", `/collections/${created.id}`), 404, "not_found");
+      expectError(await e2call("DELETE", `/collections/${created.id}?purge=1`), 404, "not_found");
+      const after = await e2Library();
+      assert.ok(!after.has(only), "el título que solo estaba ahí sale de GET /me/titles");
+      assert.equal(after.get(e2.plain)?.savedAt, before.get(e2.plain)?.savedAt, "el que sigue en otra colección no se toca");
+      assert.equal(after.get(e2.plain)?.mark, null);
+      assert.equal(after.get(e2.picks[0])?.mark, "obsessed");
+    },
+  },
   // E3 — PUT|DELETE /me/titles/{id}/review (ios/API.md §4). Needs, in the QA
   // account's library, one title WITH a reaction (mark != null) and one
   // WITHOUT (a plain save) — seeded by SQL or by the E2 cases above.
@@ -3446,30 +3463,16 @@ const writes: Case[] = [
     },
   },
   // W4 (fase 4d/4e) — per-device sessions + APNs tokens + notifyFollowers,
-  // on the QA account. Without migration 0029 it checks the 503 contract
-  // and skips; with it, it revokes its OWN current session at the end and
+  // on the QA account. It revokes its OWN current session at the end and
   // signs back in (like W2), so E1 DELETE /me still has a live token.
   {
     name: "W4 sesiones y dispositivos: GET /me/sessions, PUT/DELETE /me/devices, PATCH notifyFollowers, DELETE /me/sessions/{id} (ajena/inexistente = 404 idéntico; la propia → 401 y sus tokens APNs borrados)",
     run: async () => {
       const hex = "ab".repeat(32);
-      const live = await migration0029LiveInSource();
       const tables = await smokeSql<{ n: number }>(
         `select count(*)::int as n from information_schema.tables where table_name in ('mobile_session', 'device_token', 'follow_push_notice')`,
       );
-      if (tables !== null && tables[0]?.n !== 3) {
-        assert.equal(live, false, "MIGRATION_0029_LIVE = true pero faltan las tablas de 0029: aplica la migración o regresa el switch a false");
-      }
-      if (!live) {
-        expectError(await qaCall("GET", "/me/sessions"), 503, "unavailable");
-        expectError(await qaCall("PUT", `/me/devices/${hex}`, { body: { environment: "sandbox" } }), 503, "unavailable");
-        expectError(await qaCall("DELETE", `/me/devices/${hex}`), 503, "unavailable");
-        expectError(await qaCall("PATCH", "/me", { body: { notifyFollowers: false, name: "No Debe Escribirse" } }), 503, "unavailable");
-        const me = expectOk(await qaCall("GET", "/me"), 200, MeSchema);
-        assert.equal(me.notifyFollowers, true, "sin la migración notifyFollowers lee su default");
-        assert.notEqual(me.name, "No Debe Escribirse", "un PATCH rechazado por notifyFollowers no escribe NADA");
-        skip("MIGRATION_0029_LIVE = false: contrato 503 verificado; el resto espera a la migración 0029");
-      }
+      if (tables !== null) assert.equal(tables[0]?.n, 3, "faltan las tablas de 0029 (mobile_session, device_token, follow_push_notice)");
       if (!opts.email || !opts.log) skip("hace falta --email y --log para volver a entrar tras revocar la sesión");
       const sid = sidOf(ctx.token!);
       assert.ok(sid, "con 0029 viva, otp/verify acuña con sid");
@@ -3538,28 +3541,17 @@ const writes: Case[] = [
       assert.ok(after.items.some((i) => i.current && i.id === sidOf(ctx.token!)), "la sesión nueva sí, como current");
     },
   },
-  // W5 (Android push, 0035) — FCM registration on the QA account. Without
-  // 0035 it re-checks the 503 contract (nothing written) and skips; with it,
+  // W5 (Android push, 0035) — FCM registration on the QA account:
   // PUT/DELETE of an FCM-shaped token (never a real one) and the row's
   // provider. E1 DELETE /me cascades whatever is left.
   {
-    name: "W5 PUT/DELETE /me/devices/{token} provider fcm (0035): 204 idempotente, fila provider=fcm ligada al sid, token mal formado = 400; sin 0035 = 503 fcm_pending",
+    name: "W5 PUT/DELETE /me/devices/{token} provider fcm (0035): 204 idempotente, fila provider=fcm ligada al sid, token mal formado = 400",
     run: async () => {
-      if (!(await migration0029LiveInSource())) skip("MIGRATION_0029_LIVE = false: /me/devices entero responde 503");
-      const live = await migration0035LiveInSource();
       const column = await smokeSql<{ n: number }>(
         `select count(*)::int as n from information_schema.columns where table_name = 'device_token' and column_name = 'provider'`,
       );
-      if (column !== null && column[0]?.n !== 1) {
-        assert.equal(live, false, "MIGRATION_0035_LIVE = true pero falta device_token.provider: aplica 0035 o regresa el switch a false");
-      }
+      if (column !== null) assert.equal(column[0]?.n, 1, "falta device_token.provider (migración 0035)");
       const path = `/me/devices/${encodeURIComponent(SMOKE_FCM_TOKEN)}`;
-      if (!live) {
-        const err = expectError(await qaCall("PUT", path, { body: { provider: "fcm" } }), 503, "unavailable");
-        assert.equal(err.reason, "fcm_pending");
-        assert.equal((await qaCall("DELETE", path)).status, 204, "DELETE de un token FCM funciona sin 0035 (no hay fila)");
-        skip("MIGRATION_0035_LIVE = false: contrato 503 fcm_pending verificado; el resto espera a la migración 0035");
-      }
       const short = expectError(await qaCall("PUT", "/me/devices/abc:def", { body: { provider: "fcm" } }), 400, "invalid");
       assert.ok(short.fields?.token, "fields.token");
       for (let i = 0; i < 2; i++) {

@@ -1,0 +1,2 @@
+CREATE INDEX "analytics_event_user_idx" ON "analytics_event" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "verification_token_expires_idx" ON "verificationToken" USING btree ("expires");

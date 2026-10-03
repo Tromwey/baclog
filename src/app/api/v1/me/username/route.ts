@@ -7,8 +7,11 @@ import { freshMe } from "../../_lib/me";
 const bodySchema = z.object({ username: z.string().max(200) });
 
 /**
- * PUT /api/v1/me/username { username } → Me (§4 Cuenta). F2.17: claiming
- * also sets `isPublic = true`, and the `Me` returned reflects it. 400
+ * PUT /api/v1/me/username { username } → Me (§4 Cuenta). F2.17: the FIRST
+ * claim of an onboarded account also sets `isPublic = true`; a rename keeps
+ * `isPublic` as it was, and a claim made before `POST /me/onboarding` only
+ * reserves the handle (that POST publishes it). The `Me` returned reflects
+ * whichever happened. 400
  * `invalid` for a handle that can never be claimed (shape or RESERVED), 409
  * `conflict` + `reason: "taken"` when the unique index says someone owns it.
  */

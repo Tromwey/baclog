@@ -1,5 +1,6 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, exists, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { itemReviews, userItems } from "@/db/schema";
 import { deriveEras } from "./era";
@@ -33,6 +34,31 @@ function labelFor(eraKey: string): string {
 }
 
 // ---------- F3.3 monthly email (cron) ----------
+
+/**
+ * "This user has activity in `eraKey`" as SQL, correlated on a user id column
+ * — the audience filter of the recap cron. It is `deriveEras` (era.ts) asked
+ * in Postgres: a title belongs to the month of the later of `added_at` /
+ * `status_changed_at`, both `timestamp` without zone stored in UTC (the same
+ * `to_char` bucket `getRecapMonths` uses for reviews). So a user this
+ * predicate lets through is one `buildMonthlyRecap` has something to say to,
+ * and a user with nothing that month never takes a `recap_send` claim — which
+ * is what lets a claim without `email_sent_at` mean ONE thing: unfinished.
+ * `pnpm test:db` runs both sides against the same rows.
+ */
+export function hadActivityIn(userId: AnyPgColumn, eraKey: string): SQL {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(userItems)
+      .where(
+        and(
+          eq(userItems.userId, userId),
+          sql`to_char(greatest(${userItems.addedAt}, ${userItems.statusChangedAt}), 'YYYY-MM') = ${eraKey}`,
+        ),
+      ),
+  );
+}
 
 export interface MonthlyRecap {
   eraKey: string;

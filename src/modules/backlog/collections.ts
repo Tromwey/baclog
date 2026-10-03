@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { backlogItems, backlogs } from "@/db/schema";
+import { backlogItems, backlogs, itemReviews, userItems } from "@/db/schema";
+import { noMembershipLeft, titleStateLocks } from "./membership";
 import {
   getCollectionsWithMemberships,
   type CollectionWithMemberships,
@@ -241,16 +242,71 @@ async function renumberBacklog(
 }
 
 /**
- * Drop the backlog; its memberships cascade (FK). NO GC of `user_item` here,
- * same as the web: a title that lived only in this backlog keeps its per-title
- * state (status/verdict/obsession) and its review, orphaned from any shelf.
- * Returns false when nothing matched.
+ * Drop the backlog; its memberships cascade (FK). Returns false when nothing
+ * matched. What happens to the titles that lived ONLY here is the person's
+ * choice (founder, 2026-10-01 — "como default está bien, deberíamos darle la
+ * opción de elegir qué hacer, si borrar todo o conservarlo"):
+ *
+ * - `purge: false` (the default, and the rule until now): NO GC of
+ *   `user_item`. Such a title keeps its per-title state
+ *   (status/verdict/obsession) and its review, orphaned from any shelf.
+ * - `purge: true`: every title that is left with NO membership in any other
+ *   collection of the user loses its `user_item` (which cascades its reco
+ *   feedback) and its `item_review` (which cascades its reports) — the same
+ *   GC as `removeTitleFromBacklog`, the same `noMembershipLeft`, set-based.
+ *   A title that is also in another collection is not touched.
+ *
+ * The purge is ONE `db.batch` (one transaction) that first takes every
+ * title's `titleStateLock` (in id order), so an add of one of those titles
+ * to another collection lands entirely before (its membership is seen: no
+ * GC) or entirely after (it re-creates the state). The title list is read
+ * just before the batch: a title added to THIS collection in that gap is not
+ * in the list, so it keeps its state — the conservative side, never a
+ * membership left without state.
+ *
+ * A party collection holds songs, which never have a `user_item`
+ * (`LIBRARY_MEDIA_TYPES`): the GC statements match nothing there.
  */
-export async function deleteBacklog(userId: string, backlogId: string): Promise<boolean> {
-  const deleted = await db
+export async function deleteBacklog(
+  userId: string,
+  backlogId: string,
+  opts: { purge?: boolean } = {},
+): Promise<boolean> {
+  const drop = db
     .delete(backlogs)
     .where(and(eq(backlogs.id, backlogId), eq(backlogs.userId, userId)))
     .returning({ id: backlogs.id });
+  if (!opts.purge) return (await drop).length > 0;
+
+  const members = await db
+    .select({ catalogItemId: backlogItems.catalogItemId })
+    .from(backlogItems)
+    .where(and(eq(backlogItems.backlogId, backlogId), eq(backlogItems.userId, userId)));
+  const ids = members.map((m) => m.catalogItemId);
+  if (ids.length === 0) return (await drop).length > 0;
+
+  const [, deleted] = await db.batch([
+    titleStateLocks(userId, ids),
+    drop,
+    db
+      .delete(userItems)
+      .where(
+        and(
+          eq(userItems.userId, userId),
+          inArray(userItems.catalogItemId, ids),
+          noMembershipLeft(userId, sql`${userItems.catalogItemId}`),
+        ),
+      ),
+    db
+      .delete(itemReviews)
+      .where(
+        and(
+          eq(itemReviews.userId, userId),
+          inArray(itemReviews.catalogItemId, ids),
+          noMembershipLeft(userId, sql`${itemReviews.catalogItemId}`),
+        ),
+      ),
+  ]);
   return deleted.length > 0;
 }
 

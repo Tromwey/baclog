@@ -11,14 +11,14 @@ import type { CheckStatus } from "@/modules/admin/checks";
 export const STATUS_TEXT_CLASS: Record<CheckStatus, string> = {
   ok: "text-accent",
   warn: "text-warn",
-  bad: "text-bad",
+  bad: "text-hot",
   none: "text-text-3",
 };
 
 export const STATUS_BG_CLASS: Record<CheckStatus, string> = {
   ok: "bg-accent",
   warn: "bg-warn",
-  bad: "bg-bad",
+  bad: "bg-hot",
   none: "bg-text-3",
 };
 
@@ -26,7 +26,7 @@ export const STATUS_BG_CLASS: Record<CheckStatus, string> = {
 export const STATUS_WASH_CLASS: Record<CheckStatus, string> = {
   ok: "bg-[rgba(216,255,62,0.06)]",
   warn: "bg-[rgba(232,178,58,0.09)]",
-  bad: "bg-[rgba(196,73,78,0.10)]",
+  bad: "bg-[color-mix(in_srgb,var(--hot)_10%,transparent)]",
   none: "bg-surface-1",
 };
 

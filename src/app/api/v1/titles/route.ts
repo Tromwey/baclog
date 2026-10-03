@@ -8,11 +8,15 @@ import { toTitleSummary } from "../_lib/wire";
  * GET /api/v1/titles?ids=a,b,c → { items: [Title] } (§4 Títulos) — summary
  * hydration for collections and the feed. ≤ 50 ids; unknown ids are omitted
  * (the app treats a missing id as "no longer in the catalog"); no ids → empty.
+ * An id that isn't a UUID is unknown by construction (every catalog id is
+ * one) and is omitted the same way, BEFORE the query — never free text into
+ * the lookup.
  * Shared catalog facts only, so the bearer gate is the only gate.
  * `GET /titles/{id}` (detail) is its own route.
  */
 
 const MAX_IDS = 50;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const QuerySchema = z.object({
   ids: z
@@ -33,7 +37,7 @@ const QuerySchema = z.object({
 
 export const GET = withApi(async (req) => {
   const { ids } = readQuery(req, QuerySchema);
-  const unique = [...new Set(ids)];
+  const unique = [...new Set(ids.filter((id) => UUID_RE.test(id)))];
   if (unique.length === 0) return json({ items: [] });
 
   const rows = await getCatalogItems(unique);

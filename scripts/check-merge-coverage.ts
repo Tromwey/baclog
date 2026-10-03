@@ -116,6 +116,44 @@ for (const [table, entry] of Object.entries(MERGE_COVERAGE).sort()) {
   }
 }
 
+// A table that is only MOVED (re-keyed O → D, no collision handling) can
+// still collide if a UNIQUE index includes the user column: both accounts
+// may hold "the one row per user". It happened with
+// `backlog_one_pinned_per_user` (partial unique on backlog.user_id): two
+// accounts with a pinned collection each aborted the whole merge with 23505.
+// So every such index must be NAMED in merge.ts next to the statement that
+// resolves the collision. (`merge` tables declare collision handling by
+// definition; `cascade`/`scrub` rows never change owner.)
+for (const { config } of tables) {
+  const entry = MERGE_COVERAGE[config.name];
+  if (!entry || !entry.actions.includes("move") || entry.actions.includes("merge")) continue;
+  const uniques: { name: string; columns: string[] }[] = [
+    ...config.indexes
+      .filter((i) => i.config.unique)
+      .map((i) => ({
+        name: i.config.name ?? "(sin nombre)",
+        columns: i.config.columns.map((c) => ("name" in c ? String(c.name) : "")),
+      })),
+    ...config.primaryKeys.map((p) => ({ name: p.getName(), columns: p.columns.map((c) => c.name) })),
+    ...config.uniqueConstraints.map((u) => ({
+      name: u.name ?? "(sin nombre)",
+      columns: u.columns.map((c) => c.name),
+    })),
+    ...config.columns
+      .filter((c) => c.isUnique || c.primary)
+      .map((c) => ({ name: c.uniqueName ?? `${config.name}.${c.name}`, columns: [c.name] })),
+  ];
+  for (const u of uniques) {
+    if (!u.columns.some((c) => USER_ID_COLUMN.test(c))) continue;
+    check(`${config.name} (move): el único ${u.name} (${u.columns.join(",")}) está resuelto en merge.ts`, () => {
+      assert.ok(
+        mergeSrc.includes(u.name),
+        `"${config.name}" se MUEVE al destino y su índice único ${u.name} incluye la columna de usuario: dos cuentas con una fila cada una chocan (23505) y abortan la fusión. Resuelve el choque ANTES del move en merge.ts y nombra el índice ahí`,
+      );
+    });
+  }
+}
+
 check("orden de estado: on_my_radar < in_progress (= custom) < completed; empate gana el destino", () => {
   assert.ok(STATUS_RANK.on_my_radar < STATUS_RANK.in_progress);
   assert.ok(STATUS_RANK.in_progress < STATUS_RANK.completed);

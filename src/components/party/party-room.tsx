@@ -41,7 +41,7 @@ import { usePartyHexes } from "./use-party-tint";
  * server's `PartyDetail` (`viewer.canAdd`, `song.canRemove`,
  * `song.canBlockAuthor`): the UI only draws the rules (contract §6).
  *
- *  - Guest: the slots card ("Pusiste 1 de 3" · "Te quedan 2"), the bottom
+ *  - Guest: the slots card ("Agregaste 1 de 3" · "Te quedan 2"), the bottom
  *    bar "Buscar canción" / "Buscar otra canción" / "Cambiar una canción",
  *    the dismissible "kura para iPhone." once the cap is full, the blocked
  *    notice. Tapping one of their own songs opens "Quitar".
@@ -133,7 +133,9 @@ export function PartyRoom({
         setPartyFlash(PARTY_GONE_MESSAGE);
         router.replace("/backlogs");
       } else {
-        console.error("[party] refresh refused", { partyId: party.id, error: res.error });
+        // Unreachable today (both refusals are handled above); kept so a new
+        // refusal added to `getPartyAction` is logged instead of swallowed.
+        console.error("[party] refresh refused", { partyId: party.id, error: (res as { error: string }).error });
       }
     }
   }, [party.id, router, setParty]);
@@ -218,7 +220,7 @@ export function PartyRoom({
       {!host && v.blocked && (
         <Notice title="Ya no puedes agregar canciones">
           {party.host ? `@${party.host.handle}` : "Quien organiza"} te quitó de los colaboradores. Puedes seguir
-          viendo la colección{mine.length > 0 ? " y quitar las canciones que pusiste" : ""}.
+          viendo la colección{mine.length > 0 ? " y quitar las canciones que agregaste" : ""}.
         </Notice>
       )}
       {!host && !v.blocked && limit === 0 && (
@@ -267,8 +269,8 @@ export function PartyRoom({
           <span className="font-brand text-[28px] leading-[1.1]">la pista está vacía.</span>
           <span className="max-w-[28ch] font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
             {host
-              ? "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga las suyas."
-              : "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista."}
+              ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue las suyas."
+              : "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista."}
           </span>
         </div>
       )}
@@ -340,7 +342,6 @@ export function PartyRoom({
             void refresh();
           }}
           toast={toast}
-          covered={!!sheet}
         />
       )}
 
@@ -449,7 +450,7 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
   );
 }
 
-/** "Pusiste 1 de 3" · "Te quedan 2" with one slot per song of the cap. */
+/** "Agregaste 1 de 3" · "Te quedan 2" with one slot per song of the cap. */
 function SlotsCard({ mine, limit }: { mine: PartySong[]; limit: number }) {
   const n = mine.length;
   const left = Math.max(0, limit - n);
@@ -461,12 +462,12 @@ function SlotsCard({ mine, limit }: { mine: PartySong[]; limit: number }) {
         : `Tus ${limit} canciones`
       : n >= limit
         ? limit === 1
-          ? "Pusiste tu canción"
-          : `Pusiste tus ${limit}`
-        : `Pusiste ${n} de ${limit}`;
+          ? "Agregaste tu canción"
+          : `Agregaste tus ${limit}`
+        : `Agregaste ${n} de ${limit}`;
   const sub =
     n === 0
-      ? "Todavía no pones ninguna"
+      ? "Todavía no agregas ninguna"
       : n >= limit
         ? limit === 1
           ? "Quítala para cambiarla"
@@ -499,9 +500,9 @@ function OpenSlotsCard({ mine }: { mine: PartySong[] }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="font-sans text-[15px] font-semibold text-text">
-          {n === 0 ? "Tus canciones" : `Pusiste ${songsLabel(n)}`}
+          {n === 0 ? "Tus canciones" : `Agregaste ${songsLabel(n)}`}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">Pon las que quieras</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">Agrega las que quieras</span>
       </div>
     </div>
   );

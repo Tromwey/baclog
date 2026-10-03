@@ -169,7 +169,7 @@ function SaveSheetBody({ work }: { work: SheetWork }) {
       {failed && (
         <p role="status" className="flex items-center gap-2 px-2 pt-2 text-[14px] text-text-2">
           <TriangleGlyph />
-          No se guardó. Revisa tu conexión y vuelve a intentarlo.
+          No se pudo guardar. Revisa tu conexión y vuelve a intentarlo.
         </p>
       )}
 

@@ -3,8 +3,6 @@ import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { backlogCollaborators, backlogs, parties } from "@/db/schema";
 import { notBlockedWith } from "@/modules/social/block-gate";
-import { assertPartyLive } from "./errors";
-import { MIGRATION_0033_LIVE } from "./live";
 import { partyPath } from "./rules";
 import type { PartyRole } from "./types";
 
@@ -48,7 +46,6 @@ export async function getPartyAccess(
   userId: string,
   backlogId: string,
 ): Promise<PartyAccess | null> {
-  assertPartyLive();
   const [row] = await db
     .select({
       backlogId: backlogs.id,
@@ -99,11 +96,9 @@ export async function getPartyAccess(
 /**
  * `/backlogs/{id}` (the NORMAL collection zoom) opened on a party: the member
  * page `/c/{id}` if this user may see it, else null (and the zoom answers
- * its usual 404 — a non-member never learns the id is a party). Null while
- * 0033 isn't live (no party can exist).
+ * its usual 404 — a non-member never learns the id is a party).
  */
 export async function partyPathForMember(userId: string, backlogId: string): Promise<string | null> {
-  if (!MIGRATION_0033_LIVE) return null;
   const access = await getPartyAccess(userId, backlogId);
   return access ? partyPath(access.backlogId) : null;
 }

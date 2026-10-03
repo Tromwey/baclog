@@ -10,7 +10,7 @@ import { toParty } from "../../_lib/wire";
  */
 
 /** A dead invite link (malformed, unknown, revoked, or blocked with the host). */
-export const LINK_DEAD = "Este link ya no funciona. Pídele a quien te invitó uno nuevo.";
+export const LINK_DEAD = "Este link ya no funciona. Pide uno nuevo a quien te invitó.";
 
 export const PARTY_NOT_FOUND = "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella.";
 

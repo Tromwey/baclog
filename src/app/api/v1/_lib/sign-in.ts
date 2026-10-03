@@ -12,8 +12,7 @@ export const UNDERAGE_MESSAGE = "kura es para personas de 13 años o más. Esta 
  * The shared tail of every app sign-in (`auth/otp/verify`, `auth/apple`,
  * `auth/google`) once the credential proved WHO this is: a minor is the
  * 403 `underage`; otherwise a `mobile_session` row for this install
- * (phase 4d — null while migration 0029 isn't live, then the bearer is a
- * legacy one without `sid`), a bearer at the account's current
+ * (phase 4d), a bearer at the account's current
  * `token_version`, and the `Me` that `GET /me` will return next.
  *
  * The user is re-read through the one loader (explicit field list, never

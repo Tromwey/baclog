@@ -18,8 +18,11 @@ import { publicAuthor } from "./queries";
  * Kurada is an ordinary collection that is:
  *  - owned by a TEAM account — a username listed in `KURADA_HANDLES`
  *    (env.ts; never `isAdmin`, which is the Torre de Control's gate);
- *  - public (`backlog.is_public`), under the same `publicAuthor` gate as every
- *    cross-user read, and not blocked either way with the viewer;
+ *  - ON THE CURATOR'S PROFILE (`backlog.is_public AND show_on_profile`, the
+ *    derived "featured" of F3.10.1 — a public-by-link collection is reachable
+ *    only by whoever has its URL, and listing it here would publish it),
+ *    under the same `publicAuthor` gate as every cross-user read, and not
+ *    blocked either way with the viewer;
  *  - filed under the format most of its titles are (`collection-cards.ts`).
  * Cross-user read WITH a viewer: whitelisted fields only (name, curator's
  * public name/handle, count, the fan's covers).
@@ -61,6 +64,7 @@ export async function getKuradas(viewerId: string): Promise<KuradaShelves> {
     .where(
       and(
         eq(backlogs.isPublic, true),
+        eq(backlogs.showOnProfile, true),
         inArray(sql`lower(${users.username})`, handles),
       ),
     )

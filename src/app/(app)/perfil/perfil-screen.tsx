@@ -129,12 +129,15 @@ export function PerfilScreen({
           {/* F3.10 — counts here; the LISTS are behind the links and only ever
               rendered for you (counts public, lists private). */}
           <div className="flex gap-4 text-[14px] text-text-2">
-            <Link href="/perfil/seguidores" className="transition-[color,opacity] hover:text-text active:opacity-60">
-              <b className="font-semibold text-text">{followCounts.followers}</b>{" "}
+            {/* 44 tall to the finger; the negative margin gives the line
+                back its own height, so the header doesn't grow. */}
+            <Link href="/perfil/seguidores" className="-my-3 inline-flex min-h-11 items-center gap-1 transition-[color,opacity] hover:text-text active:opacity-60">
+              <b className="font-semibold text-text">{followCounts.followers}</b>
               {plural(followCounts.followers, "seguidor", "seguidores")}
             </Link>
-            <Link href="/perfil/siguiendo" className="transition-[color,opacity] hover:text-text active:opacity-60">
-              <b className="font-semibold text-text">{followCounts.following}</b> siguiendo
+            <Link href="/perfil/siguiendo" className="-my-3 inline-flex min-h-11 items-center gap-1 transition-[color,opacity] hover:text-text active:opacity-60">
+              <b className="font-semibold text-text">{followCounts.following}</b>
+              siguiendo
             </Link>
           </div>
         </div>

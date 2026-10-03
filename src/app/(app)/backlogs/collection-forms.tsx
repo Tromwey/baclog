@@ -8,6 +8,7 @@ import {
   renameBacklogAction,
   setBacklogVisibilityAction,
 } from "@/app/actions/backlog-actions";
+import { attempt } from "@/components/kura/attempt";
 import { SheetClose, useSheetDismiss } from "@/components/ui";
 import { FillIcon, KIcon, LOCK_FILL } from "@/components/kura/icons";
 import {
@@ -119,8 +120,8 @@ export function PrivacyBody({
     setCurrent(v);
     setFailed(false);
     startTransition(async () => {
-      const res = await setBacklogVisibilityAction(backlogId, v).catch(() => null);
-      if (!res || !("ok" in res)) {
+      const res = await attempt(() => setBacklogVisibilityAction(backlogId, v));
+      if (!res.ok) {
         setCurrent(prev);
         setFailed(true);
         return;
@@ -173,8 +174,8 @@ export function RenameBody({
   function save() {
     setFailed(false);
     startTransition(async () => {
-      const res = await renameBacklogAction(backlogId, name, vibe).catch(() => null);
-      if (!res || !("ok" in res)) {
+      const res = await attempt(() => renameBacklogAction(backlogId, name, vibe));
+      if (!res.ok) {
         setFailed(true);
         return;
       }
@@ -212,7 +213,7 @@ export function RenameBody({
                 type="button"
                 aria-label="Borrar el nombre"
                 onClick={() => setName("")}
-                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-text-2"
+                className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-text-2"
               >
                 <KIcon name="close" size={14} />
               </button>
@@ -246,7 +247,7 @@ export function RenameBody({
         </label>
         <span className="px-1 font-sans text-[13px] leading-[1.5] text-text-2">
           {failed
-            ? "No se pudo guardar. Revisa tu conexión e inténtalo otra vez."
+            ? "No se pudo guardar. Revisa tu conexión y vuelve a intentarlo."
             : "Los links que ya compartiste siguen funcionando."}
         </span>
         <button type="submit" disabled={pending || !name.trim()} className={SHEET_SOLID}>
@@ -370,33 +371,82 @@ export function ShareBody({
 export function DeleteBody({ backlogId, name, count }: { backlogId: string; name: string; count: number }) {
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
+  // "Borrar también sus títulos" (founder, ronda 8): off = today's default
+  // (the titles keep their state, reaction and review); on = the titles that
+  // ONLY live here lose them (`deleteBacklogAction(…, { purge: true })`).
+  const [purge, setPurge] = useState(false);
+  /** The option is on: the titles do NOT keep their state. */
+  const keeps = purge && count > 0;
   return (
     <div role="alertdialog" aria-label="Borrar colección" className="flex flex-col gap-1.5 px-0">
       <h2 className="font-brand text-[26px] font-normal leading-[1.1] [text-wrap:balance]">
         ¿borrar {name}?
       </h2>
-      <p className="pb-3.5 pt-1 font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty]">
+      {/* With the option ON the "conservan su estado" line would contradict
+          the option's own note, so it leaves (same as iOS); a failure is
+          always said. `role="status"` stays mounted either way. */}
+      <p
+        role="status"
+        className={`font-sans text-[15px] leading-[1.5] text-text-2 [text-wrap:pretty] ${
+          failed || !keeps ? "pb-3.5 pt-1" : "pb-2"
+        }`}
+      >
         {failed
-          ? "No se pudo borrar. Revisa tu conexión e inténtalo otra vez."
-          : count > 0
-            ? `Sus ${count} ${count === 1 ? "título conserva su estado" : "títulos conservan su estado"} en tus otras colecciones. Solo se borra esta. No se puede deshacer.`
-            : "Solo se borra esta. No se puede deshacer."}
+          ? "No se pudo borrar. Revisa tu conexión y vuelve a intentarlo."
+          : keeps
+            ? null
+            : count > 0
+              ? `Sus ${count} ${count === 1 ? "título conserva su estado" : "títulos conservan su estado"} en tus otras colecciones. Solo se borra esta. No se puede deshacer.`
+              : "Solo se borra esta. No se puede deshacer."}
       </p>
+      {count > 0 && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={purge}
+          aria-describedby="delete-purge-note"
+          disabled={pending}
+          onClick={() => setPurge((v) => !v)}
+          className="mb-3.5 flex min-h-[52px] items-center gap-3.5 rounded-[var(--r-surface)] bg-[var(--glass-bg)] px-4 py-3 text-left transition-colors disabled:opacity-60"
+        >
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="font-sans text-[16px] font-medium text-text">Borrar también sus títulos</span>
+            <span
+              id="delete-purge-note"
+              className="font-sans text-[13px] leading-[1.45] text-text-2 [text-wrap:pretty]"
+            >
+              Los que solo están en esta colección pierden su estado, tu reacción y tu reseña. No se puede
+              deshacer.
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className={`relative block h-[31px] w-[51px] flex-none rounded-full transition-colors duration-200 ${
+              purge ? "bg-text" : "bg-white/[0.16]"
+            }`}
+          >
+            <span
+              className={`absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full transition-[translate,background-color] duration-200 motion-reduce:transition-none ${
+                purge ? "translate-x-5 bg-bg" : "translate-x-0 bg-text"
+              }`}
+            />
+          </span>
+        </button>
+      )}
       <button
         type="button"
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
             setFailed(false);
-            try {
-              await deleteBacklogAction(backlogId);
-            } catch (err) {
-              // redirect() can surface as a thrown NEXT_REDIRECT — that's success.
-              const digest =
-                err && typeof err === "object" && "digest" in err ? String(err.digest) : "";
-              if (digest.startsWith("NEXT_REDIRECT")) return;
-              setFailed(true);
-            }
+            // Success redirects, and `attempt` lets that signal through:
+            // what comes back here is only a refusal or a write that never landed.
+            const res = await attempt(() =>
+              purge && count > 0
+                ? deleteBacklogAction(backlogId, { purge: true })
+                : deleteBacklogAction(backlogId),
+            );
+            if (!res.ok) setFailed(true);
           })
         }
         className={SHEET_SOLID}

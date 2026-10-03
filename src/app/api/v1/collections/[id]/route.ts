@@ -89,13 +89,22 @@ export const PATCH = withApi<{ id: string }>(async (request, { user, params }) =
 });
 
 /**
- * DELETE /api/v1/collections/{id} → 204. Memberships cascade; the per-title
- * state of the titles that lived only here is NOT garbage-collected (same as
- * the web's `deleteBacklogAction`). The destructive confirmation lives in
- * the app.
+ * DELETE /api/v1/collections/{id}[?purge=1] → 204. Memberships cascade.
+ * Without the parameter the per-title state of the titles that lived only
+ * here is KEPT (the default, same as the web's `deleteBacklogAction`). With
+ * `?purge=1` those titles also lose their state, reaction and review
+ * (`deleteBacklog({ purge: true })`); titles that are in another collection
+ * are never touched. Any other value of `purge` is 400 `invalid` — a typo
+ * must not silently pick one of the two. The choice and its confirmation
+ * live in the app. Ownership is asserted before anything is read or written.
  */
-export const DELETE = withApi<{ id: string }>(async (_req, { user, params }) => {
+export const DELETE = withApi<{ id: string }>(async (request, { user, params }) => {
   const { backlog } = await assertOwnsBacklog(parseId(params.id));
-  await deleteBacklog(user.id, backlog.id);
+  const raw = new URL(request.url).searchParams.getAll("purge");
+  if (raw.length > 1 || (raw.length === 1 && raw[0] !== "1")) {
+    const message = "`purge` solo acepta 1.";
+    throw new ApiError("invalid", undefined, { fields: { purge: message } });
+  }
+  await deleteBacklog(user.id, backlog.id, { purge: raw.length === 1 });
   return noContent();
 });

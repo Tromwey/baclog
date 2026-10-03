@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { SOLID_BUTTON } from "@/components/kura/components";
 import {
   KuraSheet,
@@ -39,7 +39,7 @@ export function ReviewSheet({
   allowSpoiler: boolean;
   saving: boolean;
   /** Copy for a failed save. The sheet stays open and keeps the draft. */
-  error: string | null;
+  error: ReactNode;
   onCancel: () => void;
   onSave: (body: string, hasSpoiler: boolean) => void;
 }) {
@@ -110,7 +110,7 @@ function EditBody({
   over: boolean;
   disabled: boolean;
   saving: boolean;
-  error: string | null;
+  error: ReactNode;
   fieldRef: React.RefObject<HTMLTextAreaElement | null>;
   mirrorRef: React.RefObject<HTMLDivElement | null>;
   onSave: (body: string, hasSpoiler: boolean) => void;

@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import { isOnboarded } from "@/auth/user-row";
 import { db } from "@/db";
 import {
   backlogCollaborators,
@@ -14,7 +15,6 @@ import {
 } from "@/db/schema";
 import { fillCatalogPalette } from "@/modules/catalog/cache";
 import { getPartyAccess } from "./access";
-import { assertPartyLive } from "./errors";
 import { findPartySong, getActiveInvite, resolveInviteToken, rowsOf } from "./queries";
 import {
   DEFAULT_PER_GUEST_LIMIT,
@@ -67,7 +67,6 @@ export type CreatePartyResult =
  * re-counts inside its own SELECT — so two tabs can't both be the 20th.
  */
 export async function createParty(userId: string, input: CreatePartyInput): Promise<CreatePartyResult> {
-  assertPartyLive();
   const name = partyNameSchema.parse(input.name);
   const perGuestLimit = perGuestLimitSchema.parse(
     input.perGuestLimit === undefined ? DEFAULT_PER_GUEST_LIMIT : input.perGuestLimit,
@@ -153,7 +152,6 @@ export async function updateParty(
  *  (songs, `party_song`, `party`, invites, members). No `user_item` to GC —
  *  party songs never had one. */
 export async function deleteParty(userId: string, backlogId: string): Promise<boolean> {
-  assertPartyLive();
   const deleted = await db
     .delete(backlogs)
     .where(
@@ -246,12 +244,11 @@ export type JoinResult =
   | { ok: false; error: "onboarding_required" };
 
 export async function joinParty(userId: string, token: string): Promise<JoinResult> {
-  assertPartyLive();
   const target = await resolveInviteToken(token);
   if (!target) return { ok: false, error: "invalid_link" };
 
   const [me] = await db
-    .select({ name: users.name, isMinor: users.isMinor })
+    .select({ name: users.name, isMinor: users.isMinor, ageVerified: sql<boolean>`"user"."birth_year" is not null` })
     .from(users)
     .where(sql`${users}.${sql.identifier("id")} = ${userId}`)
     .limit(1);
@@ -261,7 +258,7 @@ export async function joinParty(userId: string, token: string): Promise<JoinResu
     console.warn("[party] joinParty refused", { reason: me ? "minor" : "no_user_row", backlogId: target.backlogId });
     return { ok: false, error: "invalid_link" };
   }
-  if (!me.name) return { ok: false, error: "onboarding_required" };
+  if (!isOnboarded(me)) return { ok: false, error: "onboarding_required" };
 
   if (target.hostId === userId) {
     return { ok: true, backlogId: target.backlogId, joined: "host", blocked: false };

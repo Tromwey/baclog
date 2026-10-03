@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { GLASS_BUTTON } from "@/components/kura/components";
+import { EndCoverFlight } from "@/components/kura/cover-flight";
 import { BackChip } from "./close-chip";
 
 /**
@@ -9,14 +10,16 @@ import { BackChip } from "./close-chip";
  * nuestro. Frase en Newsreader («no pudimos traer esta ficha.») y una
  * indicación literal. Reintentar en vidrio."). No tint — there's no cover to
  * take colour from. Volver stays where it always is, at 64/24, so the way
- * out doesn't move. `unstable_retry` (Next 16.2) re-fetches the segment.
+ * out doesn't move. `retry` re-fetches the segment — that is the prop the
+ * installed Next (16.3) passes; `unstable_retry` was its 16.2 name and is
+ * `undefined` now (node_modules/next/dist/docs/…/error.md).
  */
 export default function ItemError({
   error,
-  unstable_retry,
+  retry,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error(error);
@@ -24,6 +27,8 @@ export default function ItemError({
 
   return (
     <main className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col bg-bg px-6 text-text">
+      {/* A cover may be mid-flight towards a ficha that never arrived. */}
+      <EndCoverFlight />
       <div className="absolute inset-x-6 top-[calc(64px+env(safe-area-inset-top))]">
         <BackChip />
       </div>
@@ -34,7 +39,7 @@ export default function ItemError({
         <p className="max-w-[300px] text-[15px] leading-[1.5] text-text-2 text-pretty">
           Revisa tu conexión y vuelve a intentarlo.
         </p>
-        <button type="button" onClick={() => unstable_retry()} className={`${GLASS_BUTTON} mt-2`}>
+        <button type="button" onClick={() => retry()} className={`${GLASS_BUTTON} mt-2`}>
           Reintentar
         </button>
       </div>

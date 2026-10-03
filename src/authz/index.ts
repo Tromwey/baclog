@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getCurrentUser, type CurrentUser } from "@/auth/session";
+import { isOnboarded } from "@/auth/user-row";
 import { db } from "@/db";
 import { backlogItems, backlogs, userItems } from "@/db/schema";
 import { NotFoundError, UnauthorizedError } from "./errors";
@@ -24,6 +25,20 @@ export async function assertUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new UnauthorizedError();
   return user;
+}
+
+/**
+ * F2.2 — the web twin of `requireOnboarded` (authz/api.ts): whether THIS
+ * session's account finished onboarding (name AND birth year, `isOnboarded`).
+ * The `(app)` layout only ROUTES on it; a server action is an RPC reachable
+ * with the cookie alone, so every UGC/social write (follow, review, report,
+ * handle claim) re-checks it here and refuses with `onboarding_required`
+ * BEFORE looking at the handle/id it was given (decided on the caller's own
+ * row: no oracle). Un-follow, deleting your review and going private are
+ * never gated.
+ */
+export function notOnboarded(user: CurrentUser): boolean {
+  return !isOnboarded(user);
 }
 
 export async function assertOwnsBacklog(backlogId: string) {

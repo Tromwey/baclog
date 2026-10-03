@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
+import { isOnboarded } from "@/auth/user-row";
 import { CoverFlightLayer } from "@/components/kura/cover-flight";
 import { NavDock, NavDockVisibilityProvider } from "./nav-dock";
 
@@ -25,7 +26,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
-  if (!user.name) redirect("/onboarding");
+  // Name AND birth year (F2.2). An older account with a name but no year is
+  // sent to /onboarding too: its user step asks for both and never bounces
+  // back here until they are saved (see (auth)/onboarding/page.tsx).
+  if (!isOnboarded(user)) redirect("/onboarding");
   // Each page owns its own bottom clearance (pb-dock-clearance) — the dock is
   // fixed, so padding on a flow sibling wouldn't clear it anyway.
   return (

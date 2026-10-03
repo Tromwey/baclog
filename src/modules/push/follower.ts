@@ -2,10 +2,8 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { followPushNotices, users } from "@/db/schema";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
-import { appleKeyConfig } from "@/auth/apple-key";
 import { publicAuthor } from "@/modules/social/queries";
-import { pushToUser } from "./apns";
+import { pushProviders, pushToUser } from "./apns";
 
 /** At most one "te sigue" push per (follower, followed) pair per window. */
 export const FOLLOW_PUSH_WINDOW_HOURS = 24;
@@ -17,9 +15,11 @@ export const FOLLOW_PUSH_WINDOW_HOURS = 24;
  * every failure is only logged.
  *
  * Sent only when ALL hold, in this order (cheapest refusal first):
- *   1. migration 0029 live and the APNs key configured (else a logged no-op
- *      in `pushToUsers` — checked here too, so no throttle row is claimed
- *      for a push that can't go out);
+ *   1. AT LEAST ONE provider configured — APNs or
+ *      FCM (`pushProviders`, the same read `pushToUsers` does; checked here
+ *      too, so no throttle row is claimed for a push that can't go out). The
+ *      Apple key alone must not gate it: an Android follower target is
+ *      reachable through FCM without it;
  *   2. the FOLLOWER is a public profile with a handle (`publicAuthor`, the
  *      feed's own gate): a private follower is never named — the same
  *      posture as follower lists, where they are an anonymous count;
@@ -30,8 +30,9 @@ export const FOLLOW_PUSH_WINDOW_HOURS = 24;
  *      phone, and two concurrent follows can't both send.
  */
 export async function notifyNewFollower(followerId: string, followedId: string): Promise<void> {
-  if (!MIGRATION_0029_LIVE || !appleKeyConfig()) {
-    console.log("[push] aviso de seguidor omitido: migración 0029 sin aplicar o sin llave de APNs");
+  const providers = pushProviders();
+  if (!providers.apns && !providers.fcm) {
+    console.log("[push] aviso de seguidor omitido: sin llaves de APNs ni de FCM");
     return;
   }
 
@@ -43,7 +44,7 @@ export async function notifyNewFollower(followerId: string, followedId: string):
   if (!follower?.handle) return;
 
   const [followed] = await db
-    .select({ on: sql<boolean>`"user"."notify_followers"` })
+    .select({ on: users.notifyFollowers })
     .from(users)
     .where(eq(users.id, followedId))
     .limit(1);
@@ -64,7 +65,9 @@ export async function notifyNewFollower(followerId: string, followedId: string):
     title: `@${follower.handle} te sigue`,
     data: { type: "follower", handle: follower.handle },
   });
-  if (outcome.failed > 0) {
-    console.error(`[push] aviso de seguidor ${followerId} → ${followedId}: ${outcome.failed} envío(s) fallaron`);
+  if (outcome.failed > 0 || outcome.undelivered > 0) {
+    console.error(
+      `[push] aviso de seguidor ${followerId} → ${followedId}: ${outcome.failed} envío(s) fallaron, ${outcome.undelivered} sin credenciales del proveedor`,
+    );
   }
 }

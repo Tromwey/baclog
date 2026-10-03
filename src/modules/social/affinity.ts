@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import type { MediaType } from "@/modules/catalog/types";
 import { notBlockedWith } from "./block-gate";
+import { getFollowListsAccess } from "./follow-lists";
 import { publicAuthor } from "./queries";
 import { libraryMediaType } from "@/modules/catalog/library-media";
 
@@ -23,7 +24,12 @@ import { libraryMediaType } from "@/modules/catalog/library-media";
  * Runs WITH a session (the viewer) but reads the PROFILE owner's rows, so it
  * follows the social module's rules (AGENTS.md F3.10): the profile is
  * resolved by handle under `publicAuthor` inside the query, the shared
- * follows are only named when they are public themselves, and — the part
+ * follows are only named when they are public themselves AND the viewer may
+ * read the profile's follow lists at all (`getFollowListsAccess`, the one
+ * gate: "Siguen a @x" names who the PROFILE follows — with lists set to
+ * `private` or `mutuals` it leaked one entry of a list the owner closed;
+ * founder 2026-10-01: otherwise at most a count, and this shape has no
+ * count-only form, so `shared` is null), and — the part
  * that matters most — the titles in common are counted and listed ONLY where
  * the profile owner keeps them in a PUBLIC backlog (`backlog.is_public`).
  * The count and the strip come from the same gated set on purpose: a count
@@ -44,7 +50,8 @@ export interface CommonTitle {
 }
 
 export interface Affinity {
-  /** Public accounts BOTH follow: the first handle to name and the rest. */
+  /** Public accounts BOTH follow: the first handle to name and the rest.
+   *  Null too when the profile's follow lists aren't open to this viewer. */
   shared: { firstUsername: string; more: number } | null;
   /** Distinct titles in common, gated on the owner's public backlogs. */
   commonTitles: number;
@@ -92,7 +99,8 @@ export async function getAffinity(
       and b.is_public = true
   )`;
 
-  const [sharedRows, [countRow], commonRows] = await Promise.all([
+  const [listsAccess, sharedRows, [countRow], commonRows] = await Promise.all([
+    getFollowListsAccess(viewerId, username),
     // Accounts the viewer follows that the profile also follows — named only
     // when public (a private account is an anonymous count, never a handle).
     db
@@ -134,9 +142,10 @@ export async function getAffinity(
       .limit(8),
   ]);
 
-  const handles = sharedRows
-    .map((r) => r.username)
-    .filter((u): u is string => Boolean(u));
+  const handles =
+    listsAccess?.allowed === true
+      ? sharedRows.map((r) => r.username).filter((u): u is string => Boolean(u))
+      : [];
 
   return {
     shared:

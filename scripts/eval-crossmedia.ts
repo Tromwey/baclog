@@ -6,10 +6,13 @@
  *
  * Usage:
  *   pnpm eval:recos                  # active provider (fixture off-key), no grounding
- *   pnpm eval:recos -- --ground      # also ground each proposal (hits DB + TMDB/iTunes)
+ *   pnpm eval:recos -- --ground --yes  # also ground each proposal (hits DB + TMDB/iTunes)
  *   pnpm eval:recos -- --narrate     # F3.5.8 narrate path: synthetic edges, no DB/red
- *   pnpm eval:recos -- --edges       # F3.5.8 edge extraction against known-link seeds
+ *   pnpm eval:recos -- --edges --yes # F3.5.8 edge extraction against known-link seeds
  *                                    # (hits DB + iTunes/TMDB; warms the shared cache)
+ *   `--ground` and `--edges` WRITE to the database in `.env.local` (catalog
+ *   rows, link edges): they print its host and stop without `--yes`
+ *   (`db-write-guard.ts`). The other modes never open the database.
  *   pnpm eval:recos -- --moderation  # deterministic screenNarrative gate: no red,
  *                                    # no DB, no LLM — fixed pass/fail cases
  *   pnpm eval:recos -- --out run.json
@@ -33,10 +36,10 @@
  * what it measures is what prod runs. `server-only` requires the react-server
  * condition — the pnpm script passes --conditions=react-server.
  */
-import { config } from "dotenv";
 import type { CatalogItemRow } from "@/modules/catalog/cache";
+import { confirmDbWrite, loadScriptEnv } from "./db-write-guard";
 
-config({ path: ".env.local" });
+loadScriptEnv();
 
 interface GoldenSeed {
   title: string;
@@ -412,6 +415,7 @@ async function runNarrateMode(): Promise<void> {
 async function runEdgesMode(): Promise<void> {
   // Hits the shared DB (unifiedSearch warms catalog_item + edges persist) and
   // iTunes/TMDB — run consciously, like --ground.
+  confirmDbWrite("eval-crossmedia --edges: escribe catalog_item y cross_media_link (caché compartida)");
   const { unifiedSearch } = await import("@/modules/catalog/search");
   const { getOrMaterializeLinkEdges } = await import("@/modules/recs/linkgraph");
   const { db } = await import("@/db");
@@ -485,6 +489,7 @@ async function main() {
   if (argv.includes("--narrate")) return runNarrateMode();
   if (argv.includes("--edges")) return runEdgesMode();
   const doGround = argv.includes("--ground");
+  if (doGround) confirmDbWrite("eval-crossmedia --ground: escribe catalog_item (caché compartida)");
   const outIdx = argv.indexOf("--out");
   const outPath = outIdx >= 0 ? argv[outIdx + 1] : null;
   const paceIdx = argv.indexOf("--pace");

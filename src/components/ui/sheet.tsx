@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useDialogFocus } from "@/hooks/use-dialog-focus";
+import { isTopDialog, useDialogFocus } from "@/hooks/use-dialog-focus";
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset";
 import {
   useScrollerTouchAction,
@@ -157,11 +157,11 @@ function SheetBody({
   // Escape closes, matching every other dismissible surface in the app.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") dismiss();
+      if (e.key === "Escape" && isTopDialog(panelRef.current)) dismiss();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dismiss]);
+  }, [dismiss, panelRef]);
 
   const scrollerRef = useRef<HTMLDivElement>(null);
   useScrollerTouchAction(scrollerRef);

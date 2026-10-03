@@ -1,10 +1,12 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { catalogItems, itemReviews, userItems } from "@/db/schema";
 import { getCatalogItem } from "@/modules/catalog/cache";
 import { backfillPreorderDate } from "@/modules/catalog/preorder";
 import { isUpcoming } from "@/modules/catalog/release";
+import { sweepUnreactedReview } from "@/modules/reviews/write";
+import { titleStateLock } from "./membership";
 import type { KuraMark } from "./mark";
 
 /**
@@ -44,9 +46,21 @@ import type { KuraMark } from "./mark";
  * that isn't in the library must never create a row. The web actions don't
  * go through here and still require a saved title. `removeTitleFromLibrary`
  * (DELETE /me/titles/{id}) removes such a row like any other.
+ *
+ * The review goes with the reaction (founder, 2026-10-01): the UPDATE runs in
+ * ONE `db.batch` behind `titleStateLock` that ends with
+ * `sweepUnreactedReview` — `completed` and `null` (and any write that leaves
+ * `obsessed = false AND verdict IS NULL`) delete the caller's review of the
+ * title in the same transaction; `obsessed` ⇄ `liked` never does (one of the
+ * two axes stays on). The sweep is decided by the database on the row the
+ * batch just wrote, not on `readMarkRow`'s snapshot, and it also runs on a
+ * repeated `completed`/`null` whose patch is empty, so a retry converges.
+ * `reviewDeleted` says a review actually went away.
  */
 
-export type SetMarkResult = { ok: true } | { error: "not_found" | "not_released" };
+export type SetMarkResult =
+  | { ok: true; reviewDeleted: boolean }
+  | { error: "not_found" | "not_released" };
 
 export async function setMark(
   userId: string,
@@ -98,12 +112,80 @@ export async function setMark(
   }
 
   if (Object.keys(patch).length > 0) {
-    await db
-      .update(userItems)
-      .set(patch)
-      .where(and(eq(userItems.id, row.id), eq(userItems.userId, userId)));
+    const [, , swept] = await db.batch([
+      titleStateLock(userId, catalogItemId),
+      db
+        .update(userItems)
+        .set(patch)
+        .where(and(eq(userItems.id, row.id), eq(userItems.userId, userId))),
+      sweepUnreactedReview(userId, catalogItemId),
+    ]);
+    return { ok: true, reviewDeleted: swept.length > 0 };
   }
-  return { ok: true };
+  // Nothing to write. A mark that carries a reaction leaves the review alone;
+  // `completed` / `null` still sweep, so a retried PUT converges.
+  if (mark === "obsessed" || mark === "liked") return { ok: true, reviewDeleted: false };
+  const [, swept] = await db.batch([
+    titleStateLock(userId, catalogItemId),
+    sweepUnreactedReview(userId, catalogItemId),
+  ]);
+  return { ok: true, reviewDeleted: swept.length > 0 };
+}
+
+/**
+ * The web's two per-axis writes that can turn a reaction OFF (`clearVerdict
+ * Action` / `setObsessedAction` — backlog-item-actions.ts), here so they share
+ * the batch shape above: lock → UPDATE (guarded by "the value changes", so a
+ * re-tap moves no timestamp) → `sweepUnreactedReview`. Clearing ONE axis only
+ * deletes the review when the OTHER is off too — "me gusta" + "me obsesiona"
+ * minus one keeps it. Keyed on (userId, catalogItemId): the caller proves
+ * ownership (`assertOwnsUserItem`), and a pair with no row matches nothing.
+ */
+export async function clearVerdict(
+  userId: string,
+  catalogItemId: string,
+  now: Date = new Date(),
+): Promise<{ reviewDeleted: boolean }> {
+  const [, , swept] = await db.batch([
+    titleStateLock(userId, catalogItemId),
+    db
+      .update(userItems)
+      .set({ verdict: null, verdictChangedAt: now })
+      .where(
+        and(
+          eq(userItems.userId, userId),
+          eq(userItems.catalogItemId, catalogItemId),
+          isNotNull(userItems.verdict),
+        ),
+      ),
+    sweepUnreactedReview(userId, catalogItemId),
+  ]);
+  return { reviewDeleted: swept.length > 0 };
+}
+
+/** `obsessedAt` is null iff not obsessed. Setting it TRUE can't orphan a
+ *  review, but it goes through the same batch: one shape, one lock order. */
+export async function setObsessed(
+  userId: string,
+  catalogItemId: string,
+  obsessed: boolean,
+  now: Date = new Date(),
+): Promise<{ reviewDeleted: boolean }> {
+  const [, , swept] = await db.batch([
+    titleStateLock(userId, catalogItemId),
+    db
+      .update(userItems)
+      .set({ obsessed, obsessedAt: obsessed ? now : null })
+      .where(
+        and(
+          eq(userItems.userId, userId),
+          eq(userItems.catalogItemId, catalogItemId),
+          ne(userItems.obsessed, obsessed),
+        ),
+      ),
+    sweepUnreactedReview(userId, catalogItemId),
+  ]);
+  return { reviewDeleted: swept.length > 0 };
 }
 
 async function readMarkRow(userId: string, catalogItemId: string) {

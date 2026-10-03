@@ -1,30 +1,23 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
+import { useOptimisticChoice } from "@/hooks/use-optimistic-choice";
 import { setPreferredServiceAction } from "@/app/actions/account-actions";
 import { SERVICES, type ServiceId } from "../services";
 
 /**
  * The radio list of 30b: tapping a row saves at once (no Guardar); the
  * chosen one carries the check. A failure puts the previous choice back and
- * says so under the list.
+ * says so under the list — but only if that tap still owns the screen: a
+ * slow failure of an EARLIER tap must not undo a later choice (it used to
+ * put back a value two taps old). The fallback is the last choice the server
+ * confirmed, never "whatever was on screen when this tap started".
  */
 export function MusicPicker({ initial }: { initial: ServiceId | null }) {
-  const [service, setService] = useState<ServiceId | null>(initial);
-  const [error, setError] = useState<string | null>(null);
-
-  async function pick(id: ServiceId) {
-    const prev = service;
-    setService(id);
-    setError(null);
-    try {
-      const res = await setPreferredServiceAction(id);
-      if ("error" in res) throw new Error(res.error);
-    } catch {
-      setService(prev);
-      setError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
-    }
-  }
+  const [service, save, error] = useOptimisticChoice<ServiceId | null>(initial, (id) =>
+    id ? setPreferredServiceAction(id) : Promise.resolve(),
+  );
+  const pick = (id: ServiceId) => void save(id);
 
   return (
     <div className="flex flex-col gap-2">

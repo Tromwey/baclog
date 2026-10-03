@@ -293,13 +293,18 @@ function MapGame({ onWin }: GameProps) {
   const [rot, setRot] = useState(() => [1, 3, 2, 1].map((r) => r + 4));
   const solved = rot.every((r) => r % 4 === 0);
   const done = useRef(false);
+  const winT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (solved && !done.current) {
       done.current = true;
-      setTimeout(onWin, 350);
+      winT.current = setTimeout(onWin, 350);
     }
   }, [solved, onWin]);
+  // Cleared on UNMOUNT only (closing the game inside those 350 ms): cleaning
+  // up in the effect above would cancel the win whenever `onWin` changes
+  // identity, and `done` would never let it be scheduled again.
+  useEffect(() => () => clearTimeout(winT.current), []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>

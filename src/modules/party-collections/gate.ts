@@ -1,5 +1,4 @@
 import { getTableName, is, Column, sql, type AnyColumn, type SQL } from "drizzle-orm";
-import { MIGRATION_0033_LIVE } from "./live";
 
 /**
  * Colecciones de fiesta — the predicates the GENERIC collection code uses to
@@ -14,9 +13,6 @@ import { MIGRATION_0033_LIVE } from "./live";
  *     `GET /collections`, stats) filter with `notPartyBacklog(backlogs.id)`;
  *   - the generic membership writes probe `isPartyBacklogSql` and refuse.
  * Parties are listed and read ONLY through `modules/party-collections`.
- *
- * Both are `true`/`false` constants while `MIGRATION_0033_LIVE` is false: no
- * reference to the `party` table can reach a database that doesn't have it.
  */
 
 /**
@@ -33,14 +29,12 @@ function qualified(col: AnyColumn | SQL): SQL {
   return sql`${col}`;
 }
 
-/** `NOT EXISTS (party for this backlog)` — `true` before migration 0033. */
+/** `NOT EXISTS (party for this backlog)`. */
 export function notPartyBacklog(backlogIdCol: AnyColumn | SQL): SQL {
-  if (!MIGRATION_0033_LIVE) return sql`true`;
   return sql`not exists (select 1 from "party" p where p.backlog_id = ${qualified(backlogIdCol)})`;
 }
 
-/** `EXISTS (party for this backlog)` as a boolean expression — `false` before 0033. */
+/** `EXISTS (party for this backlog)` as a boolean expression. */
 export function isPartyBacklogSql(backlogIdCol: AnyColumn | SQL): SQL<boolean> {
-  if (!MIGRATION_0033_LIVE) return sql<boolean>`false`;
   return sql<boolean>`exists (select 1 from "party" p where p.backlog_id = ${qualified(backlogIdCol)})`;
 }

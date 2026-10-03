@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { SITE_URL } from "@/lib/site";
 import type { MediaType } from "@/modules/catalog/types";
 import { monthName } from "@/modules/backlog/recap-format";
+import { MailerError, fetchFailureCode } from "./mail-failure";
 
 /**
  * Every email closes with a small signature, so §marca · B "sello": KURA.
@@ -13,10 +14,24 @@ import { monthName } from "@/modules/backlog/recap-format";
  */
 const SIGNATURE = "\n\n— KURA";
 
+/** A hung Resend call must not hold a sign-in request (or a cron) open. */
+const RESEND_TIMEOUT_MS = 10_000;
+
 /**
- * Email transport seam (launch dep: founder provides RESEND_API_KEY).
- * Console transport keeps flows buildable/testable today; Resend swaps in
- * behind the same function with zero call-site changes.
+ * Email transport seam. With `RESEND_API_KEY` it sends through Resend (and
+ * gives up after `RESEND_TIMEOUT_MS`). Without the key:
+ *   - `NODE_ENV=development` → the console transport (the body, code
+ *     included, in the dev server's log — how a local sign-in works);
+ *   - anywhere else (production, preview, `next start`, tests) → it THROWS.
+ *     A deploy that lost its key used to "send" every login code to the
+ *     function logs: codes readable by whoever reads logs, and sign-in
+ *     silently broken. Now the request fails and `issueOtp` withdraws the
+ *     code.
+ *
+ * Every failure is a `MailerError` (`mail-failure.ts`) whose `code` says
+ * which one — `no_api_key`, `resend_<status>`, `timeout`, `network` — and
+ * nothing else: never the address, never Resend's response body (it can
+ * quote the recipient). That code is what the logs print.
  */
 async function send(
   to: string,
@@ -26,27 +41,36 @@ async function send(
 ): Promise<void> {
   const text = body + SIGNATURE;
   if (env.RESEND_API_KEY) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        // Display name entre comillas: los paréntesis son sintaxis de comentario en RFC 5322.
-        // El remitente sigue en baclog.app A PROPÓSITO: Resend solo manda desde un
-        // dominio verificado (DKIM/SPF), y get-kura.app aún no está verificado ahí.
-        // Cuando el founder lo verifique en Resend, cambiar a auth@get-kura.app.
-        from: `"kura (anteriormente Baclog)" <auth@baclog.app>`,
-        to: [to],
-        subject,
-        text,
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          // Display name entre comillas: los paréntesis son sintaxis de comentario en RFC 5322.
+          // El remitente sigue en baclog.app A PROPÓSITO: Resend solo manda desde un
+          // dominio verificado (DKIM/SPF), y get-kura.app aún no está verificado ahí.
+          // Cuando el founder lo verifique en Resend, cambiar a auth@get-kura.app.
+          from: `"kura (anteriormente Baclog)" <auth@baclog.app>`,
+          to: [to],
+          subject,
+          text,
+        }),
+        signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw new MailerError(fetchFailureCode(err));
+    }
     if (!res.ok) {
-      throw new Error(`Resend failed: ${res.status} ${await res.text()}`);
+      throw new MailerError(`resend_${res.status}`);
     }
     return;
+  }
+  if (process.env.NODE_ENV !== "development") {
+    throw new MailerError("no_api_key");
   }
   console.log(`[dev-mailer] ${devLabel} para ${to}: ${text}`);
 }

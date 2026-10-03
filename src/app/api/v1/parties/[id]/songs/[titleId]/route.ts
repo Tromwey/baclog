@@ -41,7 +41,7 @@ export const PUT = withApi<{ id: string; titleId: string }>(async (request, { us
         addedBy: res.addedBy,
       });
     case "cap_reached":
-      throw new ApiError("conflict", "Ya pusiste todas tus canciones. Quita una para cambiarla.", {
+      throw new ApiError("conflict", "Ya agregaste todas tus canciones. Quita una para cambiarla.", {
         reason: "cap_reached",
       });
     case "conflict":
@@ -64,7 +64,7 @@ export const DELETE = withApi<{ id: string; titleId: string }>(async (_req, { us
   const res = await removeSong(user.id, id, titleId);
   if (!res.ok) {
     if (res.error === "forbidden") {
-      throw new ApiError("forbidden", "Solo puedes quitar las canciones que pusiste tú.", { reason: "not_yours" });
+      throw new ApiError("forbidden", "Solo puedes quitar las canciones que agregaste tú.", { reason: "not_yours" });
     }
     if (res.error === "conflict") throw new ApiError("conflict");
     throw new ApiError("not_found", PARTY_NOT_FOUND);

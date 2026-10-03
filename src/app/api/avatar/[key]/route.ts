@@ -46,7 +46,10 @@ export async function GET(
       // The bytes were sniffed on upload, but belt and braces: never let a
       // browser reinterpret them, and never let them run anything.
       "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; sandbox",
+      // The ONLY CSP on this response: `next.config.ts` leaves `/api/avatar/*`
+      // out of the global one (it would replace this), so `frame-ancestors`
+      // is repeated here.
+      "Content-Security-Policy": "default-src 'none'; sandbox; frame-ancestors 'none'",
       "Content-Disposition": "inline",
     },
   });

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { assertUser } from "@/authz";
+import { assertUser, notOnboarded } from "@/authz";
+import { checkRateLimit } from "@/authz/rate-limit";
 import {
   followUser,
   unfollowUser,
@@ -32,11 +33,17 @@ import type {
 // (learnings/2026-09-27-export-type-en-use-server-rompe-turbopack.md). Import the type from
 // `@/modules/social/follow` instead.
 
-/** Follow the public profile at `username` (see modules/social/follow.ts). */
+/**
+ * Follow the public profile at `username` (see modules/social/follow.ts).
+ * F2.2: needs a finished onboarding (`onboarding_required`, decided on the
+ * caller's row before the handle is looked at) — same rule as
+ * `PUT /api/v1/me/following/{handle}`.
+ */
 export async function followUserAction(
   username: string,
-): Promise<FollowResult> {
+): Promise<FollowResult | { error: "onboarding_required" }> {
   const user = await assertUser();
+  if (notOnboarded(user)) return { error: "onboarding_required" };
   const result = await followUser(user.id, username);
   if ("error" in result) return result;
   revalidateFollowSurfaces(username);
@@ -90,13 +97,20 @@ export async function loadMorePeopleAction(input: {
  * Buscar gente — live search over PUBLIC profiles for the caller. The gate
  * lives inside searchProfiles (publicAuthor + public-safe fields); this only
  * bounds the needle. Too short or malformed → an empty list, never an error:
- * the screen treats "nothing yet" and "nothing found" the same way.
+ * the screen treats "nothing yet" and "nothing found" the same way. Rate
+ * limited per user (a scripted loop over needles is how the public directory
+ * would be scraped); over the limit is the same empty list.
  */
+const PROFILE_SEARCHES_PER_USER_PER_MINUTE = 60;
+
 export async function searchProfilesAction(input: {
   q: string;
 }): Promise<PersonRow[]> {
   const user = await assertUser();
   const parsed = z.string().max(60).safeParse(input.q);
   if (!parsed.success) return [];
+  if (!checkRateLimit(`profile-search:u:${user.id}`, PROFILE_SEARCHES_PER_USER_PER_MINUTE).ok) {
+    return [];
+  }
   return searchProfiles(user.id, parsed.data);
 }

@@ -120,7 +120,7 @@ export function FeedList({
               {loading
                 ? "Cargando…"
                 : failed
-                  ? "No se pudo cargar · Reintentar"
+                  ? "No se cargó lo anterior · Reintentar"
                   : "Ver más"}
             </button>
           </div>

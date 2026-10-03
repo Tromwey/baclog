@@ -4,11 +4,11 @@ import { removeAvatar, storeAvatar } from "@/modules/avatar/write";
 import { json } from "../../_lib/http";
 import { freshMe } from "../../_lib/me";
 
+const UNREADABLE_FORM_MSG = "El formulario no se pudo leer.";
+const NO_FILE_MSG = "No llegó ninguna foto. Elige una y vuelve a intentarlo.";
 const INVALID_MSG =
-  "La foto tiene que ser WebP, JPEG o PNG. Elige otra imagen.";
-const TOO_LARGE_MSG = `La foto pesa demasiado. Tiene que quedar por debajo de ${Math.round(
-  AVATAR_MAX_BYTES / 1024,
-)} KB.`;
+  "La foto tiene que ser JPEG, PNG o WebP. Prueba con otra.";
+const TOO_LARGE_MSG = "La foto pesa demasiado. Prueba con otra.";
 
 /**
  * PUT /api/v1/me/avatar → Me (§4 Cuenta). Two ways to send the bytes:
@@ -23,11 +23,9 @@ export const PUT = withApi(async (request, { user }) => {
   const bytes = await readImageBody(request);
   const result = await storeAvatar(user.id, bytes);
   if (!result.ok) {
-    throw new ApiError(
-      "invalid",
-      result.error === "too_large" ? TOO_LARGE_MSG : INVALID_MSG,
-      { fields: { file: result.error } },
-    );
+    // `fields` is field → message in Spanish (the §1 convention), not a code.
+    const message = result.error === "too_large" ? TOO_LARGE_MSG : INVALID_MSG;
+    throw new ApiError("invalid", message, { fields: { file: message } });
   }
   return json(await freshMe(user.id));
 });
@@ -49,7 +47,7 @@ async function readImageBody(request: Request): Promise<Uint8Array> {
   // body; the real cap is re-applied on the bytes in storeAvatar.
   const length = Number.parseInt(request.headers.get("content-length") ?? "", 10);
   if (Number.isFinite(length) && length > AVATAR_MAX_BYTES * 2) {
-    throw new ApiError("invalid", TOO_LARGE_MSG, { fields: { file: "too_large" } });
+    throw new ApiError("invalid", TOO_LARGE_MSG, { fields: { file: TOO_LARGE_MSG } });
   }
 
   if (declared === "multipart/form-data") {
@@ -57,18 +55,14 @@ async function readImageBody(request: Request): Promise<Uint8Array> {
     try {
       form = await request.formData();
     } catch {
-      throw new ApiError("invalid", "El formulario no se pudo leer.", {
-        fields: { file: "invalid" },
-      });
+      throw new ApiError("invalid", UNREADABLE_FORM_MSG, { fields: { file: UNREADABLE_FORM_MSG } });
     }
     const file = form.get("file");
     if (!(file instanceof File)) {
-      throw new ApiError("invalid", "No llegó ninguna imagen. Elige una foto e inténtalo de nuevo.", {
-        fields: { file: "invalid" },
-      });
+      throw new ApiError("invalid", NO_FILE_MSG, { fields: { file: NO_FILE_MSG } });
     }
     if (file.size > AVATAR_MAX_BYTES) {
-      throw new ApiError("invalid", TOO_LARGE_MSG, { fields: { file: "too_large" } });
+      throw new ApiError("invalid", TOO_LARGE_MSG, { fields: { file: TOO_LARGE_MSG } });
     }
     return new Uint8Array(await file.arrayBuffer());
   }
@@ -78,5 +72,5 @@ async function readImageBody(request: Request): Promise<Uint8Array> {
   }
 
   // Neither a form nor an image body: the app sent something we can't read.
-  throw new ApiError("invalid", INVALID_MSG, { fields: { file: "invalid" } });
+  throw new ApiError("invalid", INVALID_MSG, { fields: { file: INVALID_MSG } });
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { followUserAction } from "@/app/actions/social-actions";
+import { attempt, ONBOARDING_EXIT_LABEL, ONBOARDING_TO_FOLLOW } from "@/components/kura/attempt";
 
 /**
  * E1 "Seguir a los 3" — the honey action of the empty feed (the one honey of
@@ -12,14 +14,21 @@ import { followUserAction } from "@/app/actions/social-actions";
  */
 export function FollowAllButton({ usernames }: { usernames: string[] }) {
   const [pending, startTransition] = useTransition();
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<"some" | "onboarding" | null>(null);
 
   function followAll() {
-    setFailed(false);
+    setFailed(null);
     startTransition(async () => {
-      const results = await Promise.allSettled(usernames.map((u) => followUserAction(u)));
-      const ok = results.every((r) => r.status === "fulfilled" && !("error" in r.value));
-      if (!ok) setFailed(true);
+      const results = await Promise.all(
+        usernames.map((u) => attempt(() => followUserAction(u))),
+      );
+      // F2.2: without a finished sign-up every follow is refused, and a retry
+      // would be refused again — say what to do instead.
+      if (results.some((r) => !r.ok && r.error === "onboarding_required")) {
+        setFailed("onboarding");
+      } else if (results.some((r) => !r.ok)) {
+        setFailed("some");
+      }
     });
   }
 
@@ -34,9 +43,20 @@ export function FollowAllButton({ usernames }: { usernames: string[] }) {
       >
         {pending ? "Siguiendo…" : n === 1 ? "Seguir" : `Seguir a los ${n}`}
       </button>
-      {failed && (
-        <p role="status" className="text-[13px] leading-[1.4] text-text-2">
+      {failed === "some" && (
+        <p role="alert" className="text-[13px] leading-[1.4] text-text-2">
           No se pudo seguir a todos. Vuelve a intentarlo.
+        </p>
+      )}
+      {failed === "onboarding" && (
+        <p role="alert" className="text-[13px] leading-[1.4] text-text-2">
+          {ONBOARDING_TO_FOLLOW}{" "}
+          <Link
+            href="/onboarding"
+            className="font-medium text-text underline underline-offset-2 transition-opacity active:opacity-60"
+          >
+            {ONBOARDING_EXIT_LABEL}
+          </Link>
         </p>
       )}
     </div>

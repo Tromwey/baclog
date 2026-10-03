@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -188,7 +189,7 @@ async function providerStage(now: number, mediaType: MediaType | undefined): Pro
   const provider = await providerCandidates(now, mediaType);
   if (provider.length === 0) return [];
   const refs = await ensureCatalogRows(provider.map((p) => p.item)).catch((err) => {
-    console.error("[descubrir] anticipated: catalog rows failed:", err);
+    console.error("[descubrir] anticipated: catalog rows failed:", redactedError(err));
     return new Map<string, CatalogRef>();
   });
   return provider.flatMap((p, rank) => {
@@ -224,7 +225,7 @@ async function providerCandidates(now: number, mediaType: MediaType | undefined)
   const lists = await Promise.all(
     types.map((t) =>
       discoverUpcomingVideo(t, tomorrow).catch((err) => {
-        console.error(`[descubrir] anticipated: TMDB ${t} failed:`, err);
+        console.error(`[descubrir] anticipated: TMDB ${t} failed:`, redactedError(err));
         return [] as RankedVideo[];
       }),
     ),

@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI, Type, type Schema } from "@google/genai";
@@ -308,6 +309,19 @@ class FixtureProvider implements CrossMediaRecProvider {
 const LLM_MODEL = "claude-opus-4-8";
 
 /**
+ * Explicit deadlines for both LLM clients. The SDK defaults are a 10-minute
+ * timeout with 2 retries (Anthropic) and no timeout at all (Gemini): a
+ * provider that stalls would hold the server action — and the user's
+ * "descubre otra conexión" spinner — until the platform kills the function,
+ * with no log. These calls are short structured outputs (≤ 1024 tokens); a
+ * healthy one answers in a few seconds. One retry, because a timed-out
+ * attempt is retried too and the worst case is `timeout × (retries + 1)`.
+ * A timeout surfaces as the existing `transient` outcome.
+ */
+const LLM_TIMEOUT_MS = 20_000;
+const LLM_MAX_RETRIES = 1;
+
+/**
  * SECURITY NOTE (prompt injection): seed.title/byline are user-influenced
  * catalog strings that enter the prompt. They're wrapped in an explicit
  * `<seed>` data block and the system prompt tells the model to treat that
@@ -558,7 +572,11 @@ class LlmProvider implements CrossMediaRecProvider {
   private client: Anthropic;
 
   constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({
+      apiKey,
+      timeout: LLM_TIMEOUT_MS,
+      maxRetries: LLM_MAX_RETRIES,
+    });
   }
 
   async propose(seed: CrossMediaSeed): Promise<ProposalOutcome> {
@@ -585,7 +603,7 @@ class LlmProvider implements CrossMediaRecProvider {
         messages: [{ role: "user", content: seedUserContent(seed) }],
       });
     } catch (err) {
-      console.error("[crossmedia] Anthropic provider failed:", err);
+      console.error("[crossmedia] Anthropic provider failed:", redactedError(err));
       return { ok: false, error: "transient" };
     }
 
@@ -627,7 +645,7 @@ class LlmProvider implements CrossMediaRecProvider {
         ],
       });
     } catch (err) {
-      console.error("[crossmedia] Anthropic narrate failed:", err);
+      console.error("[crossmedia] Anthropic narrate failed:", redactedError(err));
       return { ok: false, error: "transient" };
     }
     const usage = anthropicUsage(message);
@@ -718,7 +736,14 @@ class GeminiProvider implements CrossMediaRecProvider {
   private client: GoogleGenAI;
 
   constructor(apiKey: string) {
-    this.client = new GoogleGenAI({ apiKey });
+    this.client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        timeout: LLM_TIMEOUT_MS,
+        // `attempts` counts the first try: 2 = one retry.
+        retryOptions: { attempts: LLM_MAX_RETRIES + 1 },
+      },
+    });
   }
 
   async narrate(
@@ -743,7 +768,7 @@ class GeminiProvider implements CrossMediaRecProvider {
       text = res.text;
       usage = geminiUsage(res.usageMetadata);
     } catch (err) {
-      console.error("[crossmedia] Gemini narrate failed:", err);
+      console.error("[crossmedia] Gemini narrate failed:", redactedError(err));
       return { ok: false, error: "transient", usage };
     }
     if (!text) return { ok: false, error: "transient", usage };
@@ -782,7 +807,7 @@ class GeminiProvider implements CrossMediaRecProvider {
       text = res.text;
       usage = geminiUsage(res.usageMetadata);
     } catch (err) {
-      console.error("[crossmedia] Gemini provider failed:", err);
+      console.error("[crossmedia] Gemini provider failed:", redactedError(err));
       return { ok: false, error: "transient", usage };
     }
     if (!text) return { ok: false, error: "transient", usage };
@@ -827,6 +852,20 @@ function pickProvider(): CrossMediaRecProvider {
   }
   if (forced === "anthropic" && env.ANTHROPIC_API_KEY) {
     return new LlmProvider(env.ANTHROPIC_API_KEY);
+  }
+  if (forced) {
+    // CROSSMEDIA_PROVIDER asked for something this deploy can't give: a
+    // provider whose key is missing, or a name that isn't one. Falling through
+    // to "auto" is still the right behavior (recos keep working), but it must
+    // be SAID: before, forcing "anthropic" without its key silently ran
+    // Gemini — or the fixture — and nothing anywhere showed it. Logged once
+    // per instance (the choice is cached).
+    const known = forced === "gemini" || forced === "anthropic";
+    console.warn(
+      known
+        ? `[crossmedia] CROSSMEDIA_PROVIDER="${forced}" pero falta su API key (${forced === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY"}): se elige proveedor en automático`
+        : `[crossmedia] CROSSMEDIA_PROVIDER="${forced}" no es un proveedor conocido (gemini | anthropic | fixture): se elige proveedor en automático`,
+    );
   }
   // Auto: prefer the free Gemini tier, then Anthropic, then the fixture.
   if (env.GEMINI_API_KEY) return new GeminiProvider(env.GEMINI_API_KEY);

@@ -1,6 +1,5 @@
 "use server";
 
-import { PartyUnavailableError } from "@/modules/party-collections/errors";
 import { getPartySummaryByToken } from "@/modules/party-collections/queries";
 import { invitePath, parseInviteToken, playlistPitch, presenceLine } from "@/modules/party-collections/rules";
 
@@ -13,7 +12,7 @@ import { invitePath, parseInviteToken, playlistPitch, presenceLine } from "@/mod
  *
  * The token is configuration, not code: env `PARTY_PLAYLIST_TOKEN` (the 16
  * characters after `/f/` in the host's "invita a la fiesta." link). Unset,
- * malformed, revoked, or migration 0033 not live → null (each logged: a card
+ * malformed or revoked → null (each logged: a card
  * that silently never shows is how a typo in the env goes unnoticed).
  *
  * Security (accepted, state/security.md): this hands the ACTIVE invite link
@@ -33,20 +32,15 @@ export async function getPartyPlaylistAction(): Promise<{
     console.warn("[party] PARTY_PLAYLIST_TOKEN is set but malformed (want the 16 chars after /f/)");
     return null;
   }
-  try {
-    const s = await getPartySummaryByToken(token);
-    if (!s) {
-      console.warn("[party] PARTY_PLAYLIST_TOKEN does not open a party (revoked, rotated or unknown)");
-      return null;
-    }
-    return {
-      href: invitePath(token),
-      line: presenceLine(s),
-      pitch: playlistPitch(s.perGuestLimit),
-      artworkUrls: s.artworkUrls,
-    };
-  } catch (err) {
-    if (err instanceof PartyUnavailableError) return null;
-    throw err;
+  const s = await getPartySummaryByToken(token);
+  if (!s) {
+    console.warn("[party] PARTY_PLAYLIST_TOKEN does not open a party (revoked, rotated or unknown)");
+    return null;
   }
+  return {
+    href: invitePath(token),
+    line: presenceLine(s),
+    pitch: playlistPitch(s.perGuestLimit),
+    artworkUrls: s.artworkUrls,
+  };
 }

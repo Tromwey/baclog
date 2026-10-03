@@ -21,6 +21,26 @@ export const PARTY_EVENT = {
 } as const;
 
 /**
+ * The 3D landing at /party (design: Claude Design project 383601c9…, "Fase 2 -
+ * Texturas y deco"). The gate stays chained ("Muy pronto" + countdown) until
+ * `opensISO` — no offset on purpose: 00:00 of Saturday Oct 3 in the visitor's
+ * local time — and then opens on its own ("Entra si te atreves").
+ */
+export const PARTY_LANDING = {
+  opensISO: "2026-10-03T00:00:00",
+  /** Where walking through the open gate leads: the labyrinth (design "Fase 3d - Laberinto cementerio"). */
+  gamesUrl: "/party/laberinto",
+  /** Where the labyrinth's door leads: the Mausoleum (design "Fase 3e - Mausoleo v2", public/party/mausoleo). */
+  mausoleoUrl: "/party/mausoleo" as string | null,
+  /**
+   * Migration 0038 (`party_lab_*`) switch. false = the labyrinth keeps the design's localStorage mock
+   * (seals live on the device only); true = the real seal server at /api/party/lab. Flip it only AFTER
+   * the migration is applied — without the tables no minigame can start.
+   */
+  labServerLive: true as boolean,
+} as const;
+
+/**
  * What the crypt reveals, in order, as the party collects sacrifices (people
  * going, counted party-wide — see countSacrifices). `at` = sacrifices needed.
  */

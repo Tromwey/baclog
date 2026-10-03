@@ -109,8 +109,7 @@ export const env = {
    * FCM messages (`project_id`, `client_email`, `private_key`). Read ONLY
    * through `fcmConfig()` in src/modules/push/fcm-transport.ts; never
    * logged. Absent/unparseable → FCM deliveries are a logged no-op (like
-   * APNs without APPLE_*). Registering FCM tokens also needs migration 0035
-   * (`MIGRATION_0035_LIVE`, src/auth/live-0035.ts).
+   * APNs without APPLE_*).
    */
   FCM_SERVICE_ACCOUNT_JSON: process.env.FCM_SERVICE_ACCOUNT_JSON,
   /**

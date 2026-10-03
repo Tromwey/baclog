@@ -23,7 +23,7 @@ import {
   tidalOAuthConfig,
   TIDAL_SCOPES,
 } from "../src/modules/music-export/config";
-import { MIGRATION_0034_LIVE } from "../src/modules/music-export/live";
+import { budgetLeftMs, STEP_BUDGET_MS, STEP_MATCH_BUDGET_MS, withDeadline } from "../src/modules/music-export/budget";
 import { isoDurationMs, normalizeIsrc, pickTrackMatch, type TrackCandidate } from "../src/modules/music-export/match";
 import {
   claimMatches,
@@ -49,6 +49,7 @@ import {
   musicLanding,
   parseProvider,
   planExport,
+  sanitizeExportSongs,
   reportItems,
   safeMusicReturn,
   SERVICE_FAILED_MESSAGE,
@@ -572,6 +573,90 @@ async function main() {
       }
     }
   });
+  await check("una fila de canción anómala no tumba el export: se omite/normaliza y el wire estricto pasa", async () => {
+    const { ExportSongSchema } = await import("../src/app/api/v1/_lib/schemas");
+    const base = { artist: null, album: null, isrc: null, state: "pending" as const, addedBy: null, mine: false };
+    const good = { titleId: "t1", title: "Bien", artworkUrl: "https://is1.mzstatic.com/a.jpg", durationMs: 1000, appleMusicId: "123" };
+    const rows = [
+      good,
+      { titleId: "t2", title: "   ", artworkUrl: null, durationMs: 1, appleMusicId: null },
+      { titleId: "t3", title: " Rara ", artworkUrl: "no-es-url", durationMs: 215000.4, appleMusicId: "id-9" },
+      { titleId: "t4", title: "Negativa", artworkUrl: "javascript:alert(1)", durationMs: -5, appleMusicId: null },
+      { titleId: "t5", title: "NaN", artworkUrl: null, durationMs: Number.NaN, appleMusicId: "42" },
+    ];
+    assert.ok(!ExportSongSchema.safeParse({ ...base, ...rows[2] }).success, "la fila cruda SÍ rompería el wire");
+    const { songs, dropped, repaired } = sanitizeExportSongs(rows);
+    assert.deepEqual(dropped, ["t2"]);
+    assert.deepEqual(repaired, ["t3", "t4", "t5"]);
+    assert.equal(songs[0], good, "una fila sana pasa intacta (misma referencia)");
+    assert.deepEqual(songs[1], { titleId: "t3", title: "Rara", artworkUrl: null, durationMs: 215000, appleMusicId: null });
+    assert.equal(songs[2].durationMs, null); assert.equal(songs[2].artworkUrl, null);
+    assert.equal(songs[3].durationMs, null); assert.equal(songs[3].appleMusicId, "42");
+    for (const s of songs) assert.ok(ExportSongSchema.safeParse({ ...base, ...s }).success, s.titleId);
+    assert.ok(/sanitizeExportSongs\(party\.songs\)/.test(src("src/modules/music-export/exports.ts")), "partyFor es el único lector de canciones del export");
+  });
+  await check("step: presupuesto < corte de las apps, y los DOS caminos (ruta v1 + action web) declaran maxDuration ≤ lease", async () => {
+    const exp = src("src/modules/music-export/exports.ts");
+    const lease = Number(/const LEASE_MS = ([\d_]+);/.exec(exp)?.[1].replace(/_/g, ""));
+    // The two ways a step is reached: the v1 route (iOS/Android) and the
+    // server action, which runs under the maxDuration of the PAGE that calls it.
+    const hosts = [
+      "src/app/api/v1/parties/[id]/exports/[provider]/step/route.ts",
+      "src/app/c/[backlogId]/page.tsx",
+    ];
+    for (const file of hosts) {
+      const max = Number(/^export const maxDuration = (\d+);/m.exec(src(file))?.[1]);
+      assert.ok(Number.isFinite(max), `${file} no declara maxDuration`);
+      assert.ok(max * 1000 <= lease, `${file}: maxDuration ${max}s > lease ${lease}ms — un step podría sobrevivir a su lease`);
+      assert.ok(max * 1000 > STEP_BUDGET_MS * 2, `${file}: maxDuration ${max}s no deja margen sobre el presupuesto`);
+    }
+    assert.ok(/<PartyRoom\b/.test(src("src/app/c/[backlogId]/page.tsx")), "la página que declara maxDuration es la que hospeda el export");
+    assert.ok(/stepTidalExportAction/.test(src("src/components/party/party-export.tsx")), "la action del step se llama desde party-export");
+    // The apps cut the request at 20 s and don't retry: budget + the abort's
+    // cleanup must leave room for the DB work under that.
+    const cleanup = Number(/const ABORT_CLEANUP_MS = ([\d_]+);/.exec(exp)?.[1].replace(/_/g, ""));
+    assert.ok(STEP_BUDGET_MS <= 12_000 && STEP_BUDGET_MS + cleanup <= 16_000, "presupuesto + limpieza ≤ 16 s (corte del cliente: 20 s)");
+    assert.ok(STEP_MATCH_BUDGET_MS < STEP_BUDGET_MS && STEP_BUDGET_MS - STEP_MATCH_BUDGET_MS >= 4_000, "queda presupuesto para crear + agregar");
+    // The step runs under the deadline, matching under its own slice, and
+    // every TIDAL call is capped by what is left.
+    assert.ok(/withDeadline\(now\.getTime\(\) \+ STEP_BUDGET_MS, \(\) => runTidalStep\(/.test(exp), "el step corre bajo su presupuesto");
+    assert.ok(/withDeadline\(startedAt \+ STEP_MATCH_BUDGET_MS, \(\) => matchOnTidal\(/.test(exp), "el matching tiene su tramo");
+    const api = src("src/modules/music-export/tidal-api.ts");
+    assert.ok(/Math\.min\(TIMEOUT_MS, left\)/.test(api) && /if \(left <= 0\) throw new StepBudgetError/.test(api), "cada llamada a TIDAL respeta el presupuesto");
+    assert.ok(/budgetLeftMs\(\) < wait/.test(src("src/modules/music-export/tidal-auth.ts")), "la espera del refresh entra en el presupuesto");
+    // A song the budget didn't reach is undecided (pending), never `missing`;
+    // a step that recorded nothing fails instead of answering a frozen in_progress.
+    assert.ok(/if \(err instanceof StepBudgetError\) return undefined;/.test(exp));
+    assert.ok(/if \(!matches\.has\(s\.titleId\)\) return \[\];/.test(exp), "lo no decidido no se escribe");
+    assert.ok(/if \(decided\.length === 0\) \{[\s\S]{0,200}throw serviceFailed\("tidal"\)/.test(exp));
+    // The budget itself: scoped to the async context, absent outside a step.
+    assert.equal(budgetLeftMs(), Infinity);
+    await withDeadline(Date.now() + 5_000, async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      const left = budgetLeftMs();
+      assert.ok(left > 4_000 && left < 5_000, `dentro del step: ${left}`);
+      await withDeadline(Date.now() + 1_000, async () => assert.ok(budgetLeftMs() <= 1_000, "el tramo interno manda"));
+      assert.ok(budgetLeftMs() > 4_000, "y al salir vuelve el del step");
+    });
+    assert.equal(budgetLeftMs(), Infinity);
+  });
+  await check("refresh: solo invalid_grant suelta el vínculo; app_token nunca es «no encontrada»", () => {
+    const auth = src("src/modules/music-export/tidal-auth.ts");
+    const refresh = auth.slice(auth.indexOf("async function refreshConnection"), auth.indexOf("async function loadConnection"));
+    const drops = refresh.split("dropConnection(").length - 1;
+    assert.equal(drops, 2, "dos caminos sueltan: sin refresh token legible, e invalid_grant");
+    assert.ok(/err\.oauthError === "invalid_grant"/.test(refresh));
+    assert.ok(!/err\.status >= 400/.test(refresh), "ningún 4xx genérico decide el borrado");
+    const exp = src("src/modules/music-export/exports.ts");
+    assert.ok(/err\.what !== "app_token"/.test(exp.slice(exp.indexOf("function isNoResult"), exp.indexOf("async function pool"))));
+  });
+  await check("step abortado por cambio de generación: borra la playlist que creó y no registró", () => {
+    const exp = src("src/modules/music-export/exports.ts");
+    const abort = exp.slice(exp.indexOf("if (!saved) {"), exp.indexOf("current = saved;"));
+    assert.ok(/tidalDeletePlaylist\(token, created\.id\)/.test(abort));
+    assert.ok(abort.indexOf("tidalDeletePlaylist") < abort.indexOf("stateOf("), "borra ANTES de responder");
+    assert.ok(/method: "DELETE"/.test(src("src/modules/music-export/tidal-api.ts")));
+  });
   await check("borde API: MusicExportError mapeado en errorToResponse", () => {
     const api = src("src/authz/api.ts");
     assert.ok(/err instanceof MusicExportError/.test(api));
@@ -580,10 +665,6 @@ async function main() {
     for (const t of ["music_connection", "music_oauth_state", "party_export"]) {
       assert.deepEqual(MERGE_COVERAGE[t]?.actions, ["cascade"], t);
     }
-  });
-  await check("switch 0034: apagado hasta aplicar la migración (recordatorio)", () => {
-    assert.equal(typeof MIGRATION_0034_LIVE, "boolean");
-    if (MIGRATION_0034_LIVE) console.log("     (MIGRATION_0034_LIVE = true: la 0034 debe estar aplicada)");
   });
 
   console.log(failures === 0 ? "\ncheck-music-export ok" : `\n${failures} fallos`);

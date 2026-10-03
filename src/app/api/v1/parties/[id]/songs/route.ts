@@ -26,7 +26,7 @@ export const GET = withApi<{ id: string }>(async (request, { user, params }) => 
     case "unavailable":
       throw new ApiError(
         "unavailable",
-        "No pudimos buscar canciones en este momento. Inténtalo de nuevo en unos segundos.",
+        "No pudimos buscar canciones en este momento. Vuelve a intentarlo en unos segundos.",
       );
     case "rate_limited":
       throw new ApiError("rate_limited", undefined, { retryAfterSeconds: res.retryAfterSeconds });

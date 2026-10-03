@@ -1,7 +1,6 @@
 import "server-only";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { isNotNull } from "drizzle-orm";
 import {
   catalogItems,
   crossMediaLinks,
@@ -11,6 +10,7 @@ import {
   userItems,
 } from "@/db/schema";
 import { POSITIVE_REASONS } from "./feedback-reasons";
+import { linkEdgesRetryStamp } from "./linkgraph";
 
 /**
  * The continuous-improvement readout: reco outcomes aggregated by
@@ -100,7 +100,14 @@ export async function getRecoVersionMetrics(): Promise<RecoVersionMetrics[]> {
 /** F3.5.8 — link-graph health: coverage + how often recos ride a verified
  *  edge vs. fall back to thematic (the "spent_no_match disappears" proof). */
 export interface LinkGraphMetrics {
-  /** Seeds that have been through extraction at least once. */
+  /**
+   * Seeds whose extraction ANSWERED and is still in force. A seed in backoff
+   * (a provider didn't answer: `linkEdgesRetryStamp`, a stamp backdated to
+   * `STALE − RETRY` ago) is not "checked" — it is waiting for its retry — and
+   * counting it made a provider outage look like coverage. The same cut-off
+   * leaves out a real check in its last 15 minutes of life or already stale
+   * (> 180 days): one column carries both TTLs, and those are due again anyway.
+   */
   seedsChecked: number;
   edgesByType: { linkType: string; source: string; count: number }[];
   recsByLinkType: { linkType: string | null; count: number }[];
@@ -111,7 +118,9 @@ export async function getLinkGraphMetrics(): Promise<LinkGraphMetrics> {
     db
       .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(catalogItems)
-      .where(isNotNull(catalogItems.linkEdgesCheckedAt)),
+      // Strictly newer than the stamp a backoff written right now would get
+      // (JS clock on both sides: the column is written from JS).
+      .where(gt(catalogItems.linkEdgesCheckedAt, linkEdgesRetryStamp())),
     db
       .select({
         linkType: crossMediaLinks.linkType,

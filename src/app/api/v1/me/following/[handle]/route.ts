@@ -1,4 +1,4 @@
-import { ApiError, withApi } from "@/authz/api";
+import { ApiError, requireOnboarded, withApi } from "@/authz/api";
 import { parseHandleOrNull } from "@/modules/account/username";
 import { followUser, unfollowUser } from "@/modules/social/follow";
 import { noContent } from "../../../_lib/http";
@@ -18,8 +18,12 @@ function handleOf(raw: string | string[] | undefined): string {
  * are followable; own, private, nonexistent AND malformed handles are the
  * SAME 404 (`modules/account/username.ts` grammar + `modules/social/follow.ts`,
  * no enumeration oracle). Idempotent: following twice is one row.
+ * Needs a finished onboarding (403 `onboarding_required`, checked on the
+ * caller's own row BEFORE the handle is looked at — it says nothing about
+ * the handle). Unfollowing is never gated.
  */
 export const PUT = withApi<{ handle: string }>(async (_request, { user, params }) => {
+  requireOnboarded(user);
   const result = await followUser(user.id, handleOf(params.handle));
   if ("error" in result) throw new ApiError("not_found", NOT_FOUND_MSG);
   return noContent();

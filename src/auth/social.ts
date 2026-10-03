@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
+import { errorTag, redactedError } from "@/authz/safe-log";
 import { KURA_BUNDLE_ID, appleKeyConfig, signAppleClientSecret } from "./apple-key";
 import { appleWebClientId } from "./apple-web";
 import { findOrCreateUserByVerifiedEmail } from "./otp";
@@ -320,7 +321,9 @@ export async function revokeAppleTokens(userId: string, tokens: string[]): Promi
         }
         console.error(`[auth/apple] revocación falló para ${userId} (${clientId}): ${res.status} ${(await res.text()).slice(0, 200)}`);
       } catch (err) {
-        console.error(`[auth/apple] revocación falló para ${userId} (${clientId}):`, err);
+        // Tag only (name + code): never the error object — keep the token
+        // out of the log whatever the runtime puts in a fetch failure.
+        console.error(`[auth/apple] revocación falló para ${userId} (${clientId}): ${errorTag(err)}`);
       }
     }
     if (!revoked) console.error(`[auth/apple] ningún cliente pudo revocar el token de ${userId}`);
@@ -344,7 +347,8 @@ export async function prepareAppleRevocation(userId: string): Promise<() => Prom
     }
     return () => revokeAppleTokens(userId, tokens);
   } catch (err) {
-    console.error(`[auth/apple] no se pudo leer el vínculo de Apple de ${userId}:`, err);
+    // A failed read is a Drizzle query error: its `params` are not for logs.
+    console.error(`[auth/apple] no se pudo leer el vínculo de Apple de ${userId}: ${redactedError(err)}`);
     return async () => {};
   }
 }

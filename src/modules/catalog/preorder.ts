@@ -1,5 +1,7 @@
+import { redactedError } from "@/authz/safe-log";
 import "server-only";
 import { cacheReleaseDate, getCatalogItem } from "./cache";
+import { storefrontOfRaw } from "./apple-music-map";
 import { getAlbumDetail } from "./itunes";
 
 /**
@@ -28,9 +30,9 @@ export async function backfillPreorderDate(catalogItemId: string): Promise<void>
     ) {
       return;
     }
-    const detail = await getAlbumDetail(item.externalId);
+    const detail = await getAlbumDetail(item.externalId, "pending", storefrontOfRaw(item.raw));
     await cacheReleaseDate(catalogItemId, detail.releaseDate, null);
   } catch (err) {
-    console.error("[F3.8] pre-order date backfill failed:", err);
+    console.error("[F3.8] pre-order date backfill failed:", redactedError(err));
   }
 }

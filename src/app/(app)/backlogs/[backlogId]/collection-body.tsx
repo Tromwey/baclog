@@ -2,48 +2,31 @@
 
 import type { BacklogVisibility } from "@/modules/backlog/visibility";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import {
-  createBacklogAction,
-  reorderBacklogItemsAction,
-  setBacklogCoverAction,
-  setBacklogPinnedAction,
-} from "@/app/actions/backlog-actions";
-import {
-  addItemAction,
-  removeMembershipAction,
-} from "@/app/actions/backlog-item-actions";
-import { CoachNote, Sheet, useSheetDismiss } from "@/components/ui";
-import { Glyph, Seal, type GlyphKind } from "@/components/kura/components";
-import { FanPickRow, NewCollectionRow } from "@/components/kura/fan-row";
-import { KIcon, type KIconName } from "@/components/kura/icons";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { CoachNote, Sheet } from "@/components/ui";
+import { GLASS_BUTTON, Glyph, SKELETON_PULSE, Seal } from "@/components/kura/components";
+import { KIcon } from "@/components/kura/icons";
 import { Masonry, type MasonryItem } from "@/components/kura/masonry";
-import {
-  ChoiceRow,
-  MenuGap,
-  MenuRow,
-  SHEET_FIELD,
-  SHEET_SOLID,
-  SheetTitle,
-} from "@/components/kura/sheet-parts";
 import { releaseLabel } from "@/components/kura/tint";
 import { Toast, useToast } from "@/components/kura/toast";
 import { useHold } from "@/components/kura/use-hold";
 import { usePref } from "@/components/kura/use-pref";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import type { CollectionItem, OtherCollection } from "@/modules/backlog/collection-item";
 import { fanHexes, fanOf, ownCreditLine, type Collaborator } from "@/modules/backlog/fan";
-import type { MediaType } from "@/modules/catalog/types";
+import { MEDIA_TYPES, type MediaType } from "@/modules/catalog/types";
+import { COLLECTION_PAGE_SIZE, isPagedSort, stateRank } from "@/modules/backlog/collection-cursor";
 import {
-  CollectionSheetHead,
   DeleteBody,
   PrivacyBody,
   RenameBody,
   ShareBody,
   VISIBILITY_LABEL,
 } from "../collection-forms";
-import { COLLECTION_NAME_MAX } from "@/modules/backlog/name-limit";
+import { FORMAT, REACTION, SORTS, glyphOf, type Sort } from "./collection-shared";
+import { ItemBody, MoveBody, OptionsBody, ReorderBody, ReorderLoader, SortBody } from "./collection-sheets";
+import { arrange, useCollectionMutations, type CuratedOrder } from "./use-collection-mutations";
+import { useCollectionPages, type CollectionPaging } from "./use-collection-pages";
 
 export type { CollectionItem, OtherCollection };
 
@@ -87,46 +70,33 @@ export type { CollectionItem, OtherCollection };
  * `mode="auto"` is the automatic collection "no puedo esperar" (5a): the
  * countdown on every cover, no membership actions, Opciones only switches the
  * view.
+ *
+ * COLECCIONES LARGAS (founder, ronda 8): titles mount by pages of 60 as the
+ * page scrolls (a sentinel under the list). Two ways, one footer:
+ *  - `paging` given (the collection's page and its overlay from the
+ *    profile): `items` is only the FIRST page, in the manual order; the rest
+ *    comes from the server per order and format (use-collection-pages.ts).
+ *    Nothing that speaks for the whole collection reads `items.length` then:
+ *    the counts and the pills come from the server's aggregate, the fan from
+ *    the manual head + the chosen cover, Reordenar reads the collection whole
+ *    when it opens.
+ *  - no `paging` (Tus colecciones and the automatic one, whose loaders hand
+ *    the whole collection): the list is windowed in the client — same
+ *    sentinel, nothing fetched. The "Título" order of a paged collection
+ *    works this way too (it has no cursor: collection-cursor.ts).
  */
 
-type Sort = "manual" | "recent" | "title" | "state" | "year";
-const SORTS: { id: Sort; label: string }[] = [
-  { id: "manual", label: "Manual" },
-  { id: "recent", label: "Recientes" },
-  { id: "title", label: "Título" },
-  { id: "state", label: "Estado" },
-  { id: "year", label: "Año" },
-];
 const SORT_IDS = SORTS.map((s) => s.id);
+const NO_MEMBERSHIPS: Record<string, string[]> = {};
 const VIEWS = ["shelf", "list"] as const;
-
-const FORMAT: Record<MediaType, { icon: KIconName; singular: string; plural: string; one: string }> = {
-  film: { icon: "film", singular: "película", plural: "películas", one: "Cine" },
-  series: { icon: "series", singular: "serie", plural: "series", one: "Serie" },
-  album: { icon: "music", singular: "álbum", plural: "álbumes", one: "Álbum" },
-};
 
 /** Holding a title (18c) — Colecciones · transiciones §4: the sheet's
  *  spring at .4 in / .3 out (18 px, scale .97 are the hook's defaults). */
 const HOLD_SHEET_MOTION = { enter: 0.4, exit: 0.3 } as const;
 
-const REACTION: Record<"obsessed" | "liked" | "completed", string> = {
-  obsessed: "Me obsesiona",
-  liked: "Me gusta",
-  completed: "Completo",
-};
-
-function glyphOf(it: CollectionItem): "obsessed" | "liked" | "completed" | null {
-  if (it.obsessed) return "obsessed";
-  if (it.verdict === "liked") return "liked";
-  if (it.status === "completed") return "completed";
-  return null;
-}
-
-function stateRank(it: CollectionItem): number {
-  const g = glyphOf(it);
-  return g === "obsessed" ? 0 : g === "liked" ? 1 : g === "completed" ? 2 : 3;
-}
+/** How many titles the client-windowed list shows, per collection — module
+ *  memory, so coming back from a ficha finds the tile it left from. */
+const windowOf = new Map<string, number>();
 
 function waitOf(it: CollectionItem, now: number): string | null {
   if (!it.releaseDate) return null;
@@ -147,20 +117,6 @@ function sortItems(items: CollectionItem[], sort: Sort): CollectionItem[] {
     default:
       return out; // the loader's order: the owner's manual order
   }
-}
-
-/**
- * The titles still present in the manual order a Guardar orden just wrote
- * (backlogItemIds): titles that arrived meanwhile stay on top (unplaced
- * first, as `byManualOrder` reads them), gone ones drop out.
- */
-function arrange(items: CollectionItem[], order: readonly string[]): CollectionItem[] {
-  const at = new Map(order.map((id, i) => [id, i]));
-  const unplaced = items.filter((it) => !at.has(it.backlogItemId));
-  const placed = items
-    .filter((it) => at.has(it.backlogItemId))
-    .sort((a, b) => at.get(a.backlogItemId)! - at.get(b.backlogItemId)!);
-  return [...unplaced, ...placed];
 }
 
 type SheetState =
@@ -200,6 +156,8 @@ export interface CollectionBodyProps {
     coverCatalogItemId?: string | null;
   };
   items: CollectionItem[];
+  /** Given = `items` is the first page only (see "colecciones largas"). */
+  paging?: CollectionPaging;
   now: number;
   others?: OtherCollection[];
   memberships?: Record<string, string[]>;
@@ -227,9 +185,10 @@ export function CollectionBody({
   mode,
   backlog,
   items,
+  paging,
   now,
   others = [],
-  memberships = {},
+  memberships: seedMemberships = NO_MEMBERSHIPS,
   owner = null,
   collaborators = [],
   username = null,
@@ -244,7 +203,6 @@ export function CollectionBody({
   ref?: Ref<CollectionControls>;
   children?: (api: CollectionApi) => ReactNode;
 }) {
-  const router = useRouter();
   const owned = mode === "owned";
   const [format, setFormat] = useState<MediaType | null>(null);
   const [view, setView] = usePref(`kura:col:${backlog.id}:view`, "shelf", VIEWS);
@@ -261,181 +219,116 @@ export function CollectionBody({
   // Guardar orden, painted before the server answers. It holds only while
   // `items` is the array it was made against: the refresh that follows the
   // write brings the server's (identical) order and drops it.
-  const [curated, setCurated] = useState<{
-    base: CollectionItem[];
-    order: string[];
-    cover: string | null;
-  } | null>(null);
+  const [curated, setCurated] = useState<CuratedOrder | null>(null);
   const live = curated && curated.base === items ? curated : null;
 
+  const pages = useCollectionPages({
+    backlogId: backlog.id,
+    seed: items,
+    paging,
+    seedMemberships,
+    sort: owned ? sort : "manual",
+    format,
+  });
+  const { remote, memberships } = pages;
+  /** The server sorted and filtered these rows; the client only shows them. */
+  const serverPaged = remote && owned && isPagedSort(sort);
+
+  // What is loaded and still here (a deferred Quitar hides at once).
   const present = useMemo(() => {
-    const kept = items.filter((it) => !hidden.has(it.backlogItemId));
-    return live ? arrange(kept, live.order) : kept;
-  }, [items, hidden, live]);
+    const kept = pages.rows.filter((it) => !hidden.has(it.backlogItemId));
+    // A paged list is painted in its new order by `pages.paint`.
+    return live && !remote ? arrange(kept, live.order) : kept;
+  }, [pages.rows, hidden, live, remote]);
+
+  // The fan reads the MANUAL order's first titles (+ the chosen cover, which
+  // may live past the first page) — never the list on screen, which can be
+  // another order or one format.
+  const head = useMemo(() => {
+    if (!remote) return present;
+    const base = live?.head ?? (paging?.cover ? [paging.cover, ...items] : items);
+    return base.filter((it) => !hidden.has(it.backlogItemId));
+  }, [remote, present, live, paging, items, hidden]);
   const coverId = live ? live.cover : (backlog.coverCatalogItemId ?? null);
-  const fan = fanOf(present, coverId);
-  const hexes = fanHexes(fan, present);
+  const fan = fanOf(head, coverId);
+  const hexes = fanHexes(fan, head);
 
   const counts = useMemo(() => {
+    if (pages.counts) {
+      // The server's aggregate, minus what a pending Quitar hid from THIS
+      // list (rows and counts are one snapshot: use-collection-pages.ts).
+      const c = { ...pages.counts };
+      for (const it of pages.rows) {
+        if (hidden.has(it.backlogItemId)) c[it.mediaType] = Math.max(0, c[it.mediaType] - 1);
+      }
+      return c;
+    }
     const c: Record<MediaType, number> = { film: 0, series: 0, album: 0 };
     for (const it of present) c[it.mediaType] += 1;
     return c;
-  }, [present]);
-  // Pills in the order each format first appears.
+  }, [pages.counts, pages.rows, hidden, present]);
+  const total = counts.film + counts.series + counts.album;
+  // Pills in the order each format first appears (a paged collection knows
+  // that from its manual head; a format further down follows in the canon's).
   const formats = useMemo(() => {
     const seen: MediaType[] = [];
-    for (const it of present) if (!seen.includes(it.mediaType)) seen.push(it.mediaType);
-    return seen;
-  }, [present]);
+    for (const it of head) if (!seen.includes(it.mediaType)) seen.push(it.mediaType);
+    if (!remote) return seen;
+    for (const k of MEDIA_TYPES) if (!seen.includes(k)) seen.push(k);
+    return seen.filter((k) => counts[k] > 0);
+  }, [head, remote, counts]);
 
+  // A filter whose format emptied out (its last title left) lets go.
+  if (format && counts[format] === 0 && !pages.loadingFirst) setFormat(null);
   const activeFormat = format && counts[format] > 0 ? format : null;
-  const shown = useMemo(() => {
+  const listed = useMemo(() => {
+    if (serverPaged) return present;
     const base = activeFormat ? present.filter((it) => it.mediaType === activeFormat) : present;
     return owned ? sortItems(base, sort) : base;
-  }, [present, activeFormat, sort, owned]);
+  }, [present, activeFormat, sort, owned, serverPaged]);
+
+  // The client's window over a list it holds whole.
+  const [limit, setLimit] = useState(() => windowOf.get(backlog.id) ?? COLLECTION_PAGE_SIZE);
+  const shown = useMemo(
+    () => (serverPaged || listed.length <= limit ? listed : listed.slice(0, limit)),
+    [serverPaged, listed, limit],
+  );
+  const hasMore = serverPaged ? pages.hasMore : listed.length > limit;
+  const { loadMore } = pages;
+  const more = () => {
+    if (serverPaged) return loadMore();
+    const next = limit + COLLECTION_PAGE_SIZE;
+    windowOf.set(backlog.id, next);
+    setLimit(next);
+  };
 
   // 18c on every title; the automatic collection's is the reduced one (9b).
   const hold = (it: CollectionItem) => () => setSheet({ kind: "item", item: it });
   const addHref = `/descubrir?buscar=1&to=${backlog.id}`;
 
-  /* ---------------------------------------------------------- mutations */
-
-  function unhide(id: string) {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  function commitRemove(it: CollectionItem) {
-    void removeMembershipAction(it.backlogItemId)
-      .then(() => router.refresh())
-      .catch(() => {
-        unhide(it.backlogItemId);
-        show({
-          kind: "error",
-          message: "No se pudo quitar",
-          actionLabel: "Reintentar",
-          onAction: () => remove(it),
-        });
-      });
-  }
-
-  function remove(it: CollectionItem) {
-    setHidden((prev) => new Set(prev).add(it.backlogItemId));
-    show({
-      message: `Quitado de ${backlog.name}`,
-      actionLabel: "Deshacer",
-      onAction: () => unhide(it.backlogItemId),
-      onExpire: () => commitRemove(it),
-    });
-  }
-
-  async function move(it: CollectionItem, targets: OtherCollection[]) {
-    setHidden((prev) => new Set(prev).add(it.backlogItemId));
-    const before = new Set(memberships[it.catalogItemId] ?? []);
-    const created: string[] = [];
-    try {
-      for (const t of targets) {
-        const res = await addItemAction({ backlogId: t.id, catalogItemId: it.catalogItemId });
-        if (!("id" in res)) throw new Error("add failed");
-        if (!before.has(t.id) && res.id) created.push(res.id);
-      }
-      await removeMembershipAction(it.backlogItemId);
-      router.refresh();
-      show({
-        message:
-          targets.length === 1 ? `Movido a ${targets[0].name}` : `Movido a ${targets.length} colecciones`,
-        actionLabel: "Deshacer",
-        onAction: () => {
-          void (async () => {
-            try {
-              await addItemAction({ backlogId: backlog.id, catalogItemId: it.catalogItemId });
-              for (const id of created) await removeMembershipAction(id);
-              router.refresh();
-            } catch {
-              show({ kind: "error", message: "No se pudo deshacer" });
-            }
-          })();
-        },
-      });
-    } catch {
-      // Roll back what this attempt created, then say so.
-      for (const id of created) await removeMembershipAction(id).catch(() => {});
-      unhide(it.backlogItemId);
-      show({
-        kind: "error",
-        message: "No se pudo mover",
-        actionLabel: "Reintentar",
-        onAction: () => void move(it, targets),
-      });
-    }
-  }
-
-  async function setCover(it: CollectionItem | null) {
-    const res = await setBacklogCoverAction(backlog.id, it?.catalogItemId ?? null).catch(() => null);
-    if (!res || !("ok" in res)) {
-      show({ kind: "error", message: "No se pudo cambiar la portada" });
-      return;
-    }
-    router.refresh();
-    show({ message: it ? "Nueva portada" : "Portada automática" });
-  }
-
-  /**
-   * Reordenar › Guardar orden. The new #1 leads the fan (founder,
-   * 2026-09-27): the fan puts a chosen cover in front of the order, so a new
-   * order whose #1 isn't that cover also sends the cover back to automatic.
-   * Both paint at once; a failed write goes back to the server's and offers
-   * Reintentar.
-   */
-  function saveOrder(order: string[]) {
-    setSort("manual");
-    setFormat(null);
-    const next = arrange(present, order);
-    if (next.every((it, i) => it.backlogItemId === present[i]?.backlogItemId)) return;
-    const clearCover = coverId !== null && coverId !== next[0]?.catalogItemId;
-    const cover = clearCover ? null : coverId;
-    setCurated({ base: items, order, cover });
-    const fan = fanOf(next, cover);
-    onFanChange?.({ fan, hexes: fanHexes(fan, next) });
-
-    void (async () => {
-      const res = await reorderBacklogItemsAction(backlog.id, order).catch(() => null);
-      if (!res || !("ok" in res)) {
-        setCurated(null);
-        onFanChange?.(null);
-        show({
-          kind: "error",
-          message: "No se pudo guardar el orden",
-          actionLabel: "Reintentar",
-          onAction: () => saveOrder(order),
-        });
-        return;
-      }
-      if (clearCover) {
-        const c = await setBacklogCoverAction(backlog.id, null).catch(() => null);
-        if (!c || !("ok" in c)) show({ kind: "error", message: "No se pudo cambiar la portada" });
-      }
-      router.refresh();
-    })();
-  }
-
-  async function togglePin() {
-    const pinned = !backlog.pinned;
-    const res = await setBacklogPinnedAction(backlog.id, pinned).catch(() => null);
-    if (!res || !("ok" in res)) {
-      show({ kind: "error", message: "No se pudo guardar" });
-      return;
-    }
-    router.refresh();
-    show({ message: pinned ? "Fijada" : "Ya no está fijada" });
-  }
+  const { remove, move, setCover, saveOrder, togglePin } = useCollectionMutations({
+    backlog,
+    items,
+    present,
+    coverId,
+    memberships,
+    show,
+    setHidden,
+    setCurated,
+    setSort,
+    setFormat,
+    onFanChange,
+    // A paged list keeps as many rows on screen as it had.
+    paint: (next) => pages.paint(next.slice(0, Math.max(COLLECTION_PAGE_SIZE, pages.rows.length))),
+    restore: pages.refresh,
+  });
 
   /* -------------------------------------------------------------- render */
 
-  const empty = present.length === 0;
+  const empty = total === 0;
+  // A new order or format of a paged collection: its first page is coming.
+  const pending = remote && pages.loadingFirst;
+  const firstFailed = remote && pages.failed === "first";
   const masonry: MasonryItem[] = shown.map((it) => ({
     key: it.backlogItemId,
     href: `/item/${it.catalogItemId}`,
@@ -503,7 +396,9 @@ export function CollectionBody({
         <EmptyCollection addHref={addHref} auto={!owned} />
       ) : (
         <>
-          {view === "list" ? (
+          {pending ? (
+            <RowsSkeleton view={view} label="Cargando títulos" />
+          ) : view === "list" ? (
             <ListBody items={shown} now={now} hold={hold} />
           ) : (
             <Masonry
@@ -514,6 +409,21 @@ export function CollectionBody({
               }}
             />
           )}
+          <ListFooter
+            view={view}
+            // Auto-load only while nothing failed: a failure waits for its Reintentar.
+            watch={hasMore && !pending && !pages.failed ? shown.length : null}
+            onMore={more}
+            loading={pages.loadingMore}
+            failed={
+              firstFailed
+                ? "No pudimos cargar los títulos."
+                : pages.failed === "more" || (pages.failed === "refresh" && pages.rows.length < total)
+                  ? "No se cargó el resto."
+                  : null
+            }
+            onRetry={pages.retry}
+          />
         </>
       )}
 
@@ -556,7 +466,7 @@ export function CollectionBody({
             <OptionsBody
               owned={owned}
               name={backlog.name}
-              count={present.length}
+              count={total}
               view={view}
               pinned={!!backlog.pinned}
               sortLabel={SORTS.find((s) => s.id === sort)?.label ?? ""}
@@ -568,9 +478,12 @@ export function CollectionBody({
             />
           )}
           {sheet.kind === "sort" && <SortBody value={sort} onPick={setSort} />}
-          {sheet.kind === "reorder" && (
-            <ReorderBody items={present} onSave={saveOrder} />
-          )}
+          {sheet.kind === "reorder" &&
+            (remote ? (
+              <ReorderLoader load={pages.all} skip={hidden} onSave={saveOrder} />
+            ) : (
+              <ReorderBody items={present} onSave={(order) => saveOrder(order)} />
+            ))}
           {sheet.kind === "rename" && (
             <RenameBody backlogId={backlog.id} name={backlog.name} vibe={backlog.vibe} />
           )}
@@ -592,7 +505,7 @@ export function CollectionBody({
             />
           )}
           {sheet.kind === "delete" && (
-            <DeleteBody backlogId={backlog.id} name={backlog.name} count={present.length} />
+            <DeleteBody backlogId={backlog.id} name={backlog.name} count={total} />
           )}
           {sheet.kind === "item" && (
             <ItemBody
@@ -607,7 +520,7 @@ export function CollectionBody({
           {sheet.kind === "move" && (
             <MoveBody
               it={sheet.item}
-              current={{ id: backlog.id, name: backlog.name, fan, count: present.length }}
+              current={{ id: backlog.id, name: backlog.name, fan, count: total }}
               others={others}
               already={memberships[sheet.item.catalogItemId] ?? []}
               onMove={(targets) => void move(sheet.item, targets)}
@@ -709,6 +622,9 @@ function ListRow({
     <Link
       href={`/item/${it.catalogItemId}`}
       {...(onHold ? handlers : {})}
+      // No `content-visibility` here: its paint containment clips the cover's
+      // `shadow-cover` at the row's edge. Long collections mount by pages
+      // instead (ronda 8 — see "colecciones largas" above).
       className="flex min-h-20 select-none items-center gap-3.5 transition-opacity active:opacity-70 [-webkit-touch-callout:none]"
     >
       <span className="flex w-[60px] flex-none justify-center">
@@ -718,7 +634,7 @@ function ListRow({
         >
           {it.posterUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- hotlinked CDN (ADR-007)
-            <img src={it.posterUrl} alt="" loading="lazy" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+            <img src={it.posterUrl} alt="" loading="lazy" decoding="async" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
           )}
         </span>
       </span>
@@ -745,6 +661,102 @@ function ListBody({ items, now, hold }: BodyProps) {
     <div className="flex flex-col px-5 pt-2">
       {items.map((it) => (
         <ListRow key={it.backlogItemId} it={it} now={now} hold={hold} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Under the titles (colecciones largas): the sentinel that asks for the next
+ * page as the list's end comes within ~900 px of the viewport, the skeleton
+ * of the rows on their way, and the failure with its Reintentar. The probe
+ * is a tall box ending at the list's end rather than an observer margin: a
+ * margin only grows the ROOT, and inside the profile's overlay the list
+ * scrolls in its own box.
+ */
+function ListFooter({
+  view,
+  watch,
+  onMore,
+  loading,
+  failed,
+  onRetry,
+}: {
+  view: "shelf" | "list";
+  /** Rows on screen while there is more to ask for; null = don't ask. */
+  watch: number | null;
+  onMore: () => void;
+  loading: boolean;
+  failed: string | null;
+  onRetry: () => void;
+}) {
+  const probe = useRef<HTMLDivElement>(null);
+  const ask = useRef(onMore);
+  useEffect(() => {
+    ask.current = onMore;
+  });
+  // Re-observed whenever the row count changes: a fresh observer reports the
+  // current state at once, so a page that didn't fill the viewport asks again.
+  useEffect(() => {
+    const el = probe.current;
+    if (watch === null || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) ask.current();
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [watch]);
+
+  return (
+    <>
+      <div aria-hidden className="relative h-px">
+        <div ref={probe} className="pointer-events-none absolute inset-x-0 bottom-0 h-[900px]" />
+      </div>
+      {loading && <RowsSkeleton view={view} label="Cargando más títulos" />}
+      {/* The region is always mounted (regla de la ronda 3). */}
+      <div className={`flex flex-col items-center gap-3 px-6 text-center ${failed ? "pb-2 pt-4" : ""}`}>
+        <p role="status" className="font-sans text-[14px] leading-[1.45] text-text-2 empty:hidden">
+          {failed}
+        </p>
+        {failed && (
+          <button type="button" onClick={onRetry} className={GLASS_BUTTON}>
+            Reintentar
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** The rows on their way, in the shape of the view (one run of three
+ *  columns / three list rows) — `--s1`, the one pulse the system allows. */
+function RowsSkeleton({ view, label }: { view: "shelf" | "list"; label: string }) {
+  if (view === "list") {
+    return (
+      <div aria-busy="true" aria-label={label} className={`flex flex-col px-5 pt-2 ${SKELETON_PULSE}`}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex min-h-20 items-center gap-3.5">
+            <span className="flex w-[60px] flex-none justify-center">
+              <span className="block h-[66px] w-11 rounded-[var(--r-cover-s)] bg-surface-1" />
+            </span>
+            <span className="flex flex-1 flex-col gap-2">
+              <span className="h-3.5 w-3/5 rounded-full bg-surface-1" />
+              <span className="h-2.5 w-2/5 rounded-full bg-surface-1" />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div aria-busy="true" aria-label={label} className={`grid grid-cols-3 gap-x-3 px-5 ${SKELETON_PULSE}`}>
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="mb-[18px] flex flex-col gap-1.5">
+          <span className="aspect-[2/3] rounded-[var(--r-cover-l)] bg-surface-1" />
+          <span className="flex h-4 items-center">
+            <span className="h-3 w-4/5 rounded-full bg-surface-1" />
+          </span>
+        </div>
       ))}
     </div>
   );
@@ -781,439 +793,6 @@ function EmptyCollection({ addHref, auto }: { addHref: string; auto: boolean }) 
         <KIcon name="plus" size={18} />
         Agregar títulos
       </Link>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------- sheets */
-
-/** 18a Más — the collection's Opciones. */
-function OptionsBody({
-  owned,
-  name,
-  count,
-  view,
-  pinned,
-  sortLabel,
-  visibilityLabel,
-  addHref,
-  onView,
-  onPin,
-  go,
-}: {
-  owned: boolean;
-  name: string;
-  count: number;
-  view: "shelf" | "list";
-  pinned: boolean;
-  sortLabel: string;
-  visibilityLabel: string;
-  addHref: string;
-  onView: () => void;
-  onPin: () => void;
-  go: (kind: "sort" | "reorder" | "rename" | "privacy" | "share" | "delete") => void;
-}) {
-  const dismiss = useSheetDismiss();
-  const viewRow = (
-    <MenuRow
-      icon={view === "list" ? "film" : "list"}
-      label={view === "list" ? "Ver en columnas" : "Ver como lista"}
-      onClick={() => {
-        onView();
-        dismiss?.();
-      }}
-    />
-  );
-  const head = <CollectionSheetHead name={name} count={count} />;
-  if (!owned) {
-    return (
-      <div className="flex flex-col gap-0.5">
-        {head}
-        {viewRow}
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-0.5">
-      {head}
-      <MenuRow icon="plus" label="Agregar títulos" href={addHref} />
-      <MenuRow icon="share" label="Compartir" onClick={() => go("share")} />
-      <MenuRow
-        icon="pin"
-        label={pinned ? "Desfijar" : "Fijar"}
-        aside={pinned ? "fijada" : undefined}
-        onClick={() => {
-          onPin();
-          dismiss?.();
-        }}
-      />
-      <MenuGap />
-      {viewRow}
-      <MenuRow icon="sort" label="Ordenar" aside={sortLabel} onClick={() => go("sort")} />
-      {/* Right after Ordenar: Ordenar picks how you LOOK at it (Manual is one
-          of the modes), Reordenar edits that manual order — the one everyone
-          sees. It left the body (founder, 2026-09-27). */}
-      {/* Not "Reordenar" beside "Ordenar" (critique 2026-09-27): two near-
-          identical verbs. The aside says whose order it is. */}
-      {count > 1 && (
-        <MenuRow icon="grip" label="Editar el orden" aside="el que ven todos" onClick={() => go("reorder")} />
-      )}
-      <MenuRow icon="pencil" label="Editar" onClick={() => go("rename")} />
-      <MenuRow icon="lock" label="Quién la ve" aside={visibilityLabel} onClick={() => go("privacy")} />
-      <MenuGap />
-      <MenuRow icon="trash" label="Borrar colección" onClick={() => go("delete")} />
-    </div>
-  );
-}
-
-/** O3a — ordenar. Manual is the owner's order (Reordenar). */
-function SortBody({ value, onPick }: { value: Sort; onPick: (s: Sort) => void }) {
-  const dismiss = useSheetDismiss();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <SheetTitle close={false}>ordenar</SheetTitle>
-      <div role="radiogroup" className="flex flex-col">
-        {SORTS.map((s) => (
-          <ChoiceRow
-            key={s.id}
-            label={s.label}
-            on={value === s.id}
-            onSelect={() => {
-              onPick(s.id);
-              dismiss?.();
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const ROW_H = 64;
-
-/**
- * O3b — Reordenar: every title of the collection in its manual order, each
- * row with a grip. Drag the grip (the row follows the finger and the others
- * make room) or focus it and use ↑/↓. "Guardar orden" hands the whole order
- * to the body (`saveOrder`: optimistic, one write, Reintentar in the toast)
- * and closes; closing the sheet any other way discards it.
- */
-function ReorderBody({
-  items,
-  onSave,
-}: {
-  items: CollectionItem[];
-  onSave: (order: string[]) => void;
-}) {
-  const dismiss = useSheetDismiss();
-  const [order, setOrder] = useState(items);
-  const [drag, setDrag] = useState<{ from: number; dy: number } | null>(null);
-  const startY = useRef(0);
-
-  const to = drag
-    ? Math.max(0, Math.min(order.length - 1, drag.from + Math.round(drag.dy / ROW_H)))
-    : -1;
-
-  function moveItem(from: number, target: number) {
-    if (from === target) return;
-    setOrder((o) => {
-      const next = [...o];
-      const [it] = next.splice(from, 1);
-      next.splice(target, 0, it);
-      return next;
-    });
-  }
-
-  function save() {
-    onSave(order.map((it) => it.backlogItemId));
-    dismiss?.();
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <SheetTitle>editar el orden</SheetTitle>
-      <p className="pb-2 font-sans text-[13px] leading-[1.45] text-text-2">
-        Arrastra desde las rayas. Así se ve la colección para todos.
-      </p>
-      <ol className="relative flex flex-col">
-        {order.map((it, i) => {
-          const dragging = drag?.from === i;
-          let shift = 0;
-          if (drag && !dragging) {
-            if (drag.from < i && i <= to) shift = -ROW_H;
-            else if (to <= i && i < drag.from) shift = ROW_H;
-          }
-          const album = it.mediaType === "album";
-          return (
-            <li
-              key={it.backlogItemId}
-              className={`flex items-center gap-3.5 rounded-[var(--r-surface)] px-1 ${
-                dragging ? "z-10 bg-surface-1 shadow-float" : "transition-transform duration-200"
-              }`}
-              style={{
-                height: ROW_H,
-                transform: `translateY(${dragging ? drag.dy : shift}px)`,
-              }}
-            >
-              <span className="flex w-11 flex-none justify-center">
-              <span
-                className="relative block flex-none overflow-hidden rounded-[var(--r-cover-s)] bg-surface-2"
-                style={{
-                  width: album ? 44 : 34,
-                  height: album ? 44 : 51,
-                  ...(it.posterUrl ? null : posterFallbackStyle(it.paletteHex)),
-                }}
-              >
-                {it.posterUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- hotlinked CDN (ADR-007)
-                  <img src={it.posterUrl} alt="" loading="lazy" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
-                )}
-              </span>
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="truncate font-brand text-[17px] italic leading-[1.1] text-text">{it.title}</span>
-                {/* The list row's meta (creator, or the format): no position —
-                    the order IS the position — and no year (founder, 2026-09-27). */}
-                <span className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-text-2">
-                  {it.byline || FORMAT[it.mediaType].one}
-                </span>
-              </span>
-              <button
-                type="button"
-                aria-label={`Mover ${it.title}. Posición ${i + 1} de ${order.length}. Usa las flechas.`}
-                onPointerDown={(e) => {
-                  e.stopPropagation(); // the sheet's own drag-to-dismiss stays out of it
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  startY.current = e.clientY;
-                  setDrag({ from: i, dy: 0 });
-                }}
-                onPointerMove={(e) => {
-                  if (drag?.from === i) setDrag({ from: i, dy: e.clientY - startY.current });
-                }}
-                onPointerUp={() => {
-                  if (drag) moveItem(drag.from, to);
-                  setDrag(null);
-                }}
-                onPointerCancel={() => setDrag(null)}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp" && i > 0) {
-                    e.preventDefault();
-                    moveItem(i, i - 1);
-                  } else if (e.key === "ArrowDown" && i < order.length - 1) {
-                    e.preventDefault();
-                    moveItem(i, i + 1);
-                  }
-                }}
-                className="flex h-11 w-11 flex-none cursor-grab touch-none items-center justify-center text-text-2 active:cursor-grabbing"
-              >
-                <KIcon name="grip" size={20} strokeWidth={3} />
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-      <button type="button" onClick={save} className={`${SHEET_SOLID} mt-2.5`}>
-        Guardar orden
-      </button>
-    </div>
-  );
-}
-
-/**
- * 18c — holding a title. `reduced` (9b, the automatic "no puedo esperar"):
- * only Tu reacción and Reseñar — a title there isn't a membership, so there
- * is no cover, no move and nothing to remove.
- */
-function ItemBody({
-  it,
-  reduced = false,
-  isCover,
-  onCover,
-  onMove,
-  onRemove,
-}: {
-  it: CollectionItem;
-  reduced?: boolean;
-  /** It is the CHOSEN cover (not just first in the order). */
-  isCover: boolean;
-  onCover: (on: boolean) => void;
-  onMove: () => void;
-  onRemove: () => void;
-}) {
-  const dismiss = useSheetDismiss();
-  const glyph = glyphOf(it);
-  const meta = [FORMAT[it.mediaType].one, it.year, it.byline].filter(Boolean).join(" · ");
-  const reactionIcon = glyph ? <Glyph kind={glyph as GlyphKind} size={18} /> : "review";
-  return (
-    <div className="flex flex-col gap-0.5">
-      <div className="flex flex-col gap-[5px] px-2.5 pb-2.5">
-        <span className="font-brand text-[22px] italic leading-[1.1] text-text">{it.title}</span>
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{meta}</span>
-      </div>
-      <MenuRow
-        icon={reactionIcon}
-        label="Tu reacción"
-        aside={glyph ? REACTION[glyph] : undefined}
-        href={`/item/${it.catalogItemId}`}
-      />
-      <MenuRow icon="review" label="Reseñar" href={`/item/${it.catalogItemId}`} />
-      {!reduced && (
-        <>
-      <MenuRow
-        icon="image"
-        label={isCover ? "Portada automática" : "Usar como portada"}
-        aside={isCover ? "portada" : undefined}
-        onClick={() => {
-          onCover(!isCover);
-          dismiss?.();
-        }}
-      />
-      <MenuRow icon="arrow" label="Mover a otra colección" onClick={onMove} />
-      <MenuGap />
-      <MenuRow
-        icon="minus"
-        label="Quitar de la colección"
-        onClick={() => {
-          onRemove();
-          dismiss?.();
-        }}
-      />
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * O4a — mover a (one or more collections; "Nueva colección" creates one
- * inline). Each row is a mini fan, the name and its count (7a).
- */
-function MoveBody({
-  it,
-  current,
-  others,
-  already,
-  onMove,
-}: {
-  it: CollectionItem;
-  current: OtherCollection;
-  others: OtherCollection[];
-  already: string[];
-  onMove: (targets: OtherCollection[]) => void;
-}) {
-  const dismiss = useSheetDismiss();
-  const [list, setList] = useState(others);
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const album = it.mediaType === "album";
-  const meta = [FORMAT[it.mediaType].one, it.year].filter(Boolean).join(" · ");
-
-  async function createTarget(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    const res = await createBacklogAction({ name: newName }).catch(() => null);
-    setBusy(false);
-    if (!res || !("id" in res) || !res.id) return;
-    const id = res.id;
-    const created: OtherCollection = { id, name: newName.trim(), fan: [], count: 0 };
-    setList((l) => [created, ...l]);
-    setPicked((p) => new Set(p).add(id));
-    setCreating(false);
-    setNewName("");
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-3.5 pb-3">
-        <span
-          className="relative block flex-none overflow-hidden rounded-[var(--r-cover-s)] bg-surface-2 shadow-cover"
-          style={{
-            width: album ? 56 : 44,
-            height: album ? 56 : 66,
-            ...(it.posterUrl ? null : posterFallbackStyle(it.paletteHex)),
-          }}
-        >
-          {it.posterUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- hotlinked CDN (ADR-007)
-            <img src={it.posterUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          )}
-        </span>
-        <span className="flex min-w-0 flex-col gap-[5px]">
-          <span className="truncate font-brand text-[20px] italic text-text">{it.title}</span>
-          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{meta}</span>
-        </span>
-      </div>
-      <span className="pb-1 font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">mover a</span>
-
-      {creating ? (
-        <form onSubmit={createTarget} className="flex items-center gap-2 py-1">
-          <input
-            autoFocus
-            required
-            maxLength={COLLECTION_NAME_MAX}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            aria-label="Nombre de la nueva colección"
-            placeholder="Ponle nombre"
-            className={SHEET_FIELD}
-          />
-          <button
-            type="submit"
-            disabled={busy || !newName.trim()}
-            className="h-[52px] flex-none rounded-full bg-[var(--glass-bg)] px-4 font-sans text-[15px] font-semibold text-text bl-press disabled:opacity-40"
-          >
-            {busy ? "…" : "Crear"}
-          </button>
-        </form>
-      ) : (
-        <NewCollectionRow onClick={() => setCreating(true)} />
-      )}
-
-      {/* No inner scroller: the Sheet's own scroller (with its touch-action
-          hook) carries a long list — a nested one would be pan-blocked by the
-          panel's touch-none (learnings 2026-09-17). */}
-      <div className="flex flex-col">
-        <FanPickRow name={current.name} covers={current.fan} count={current.count} on note="aquí está" disabled onClick={() => {}} />
-        {list.map((c) => {
-          const there = already.includes(c.id);
-          return (
-            <FanPickRow
-              key={c.id}
-              name={c.name}
-              covers={c.fan}
-              count={c.count}
-              on={there || picked.has(c.id)}
-              note={there ? "ya está" : undefined}
-              disabled={there}
-              onClick={() =>
-                setPicked((p) => {
-                  const n = new Set(p);
-                  if (n.has(c.id)) n.delete(c.id);
-                  else n.add(c.id);
-                  return n;
-                })
-              }
-            />
-          );
-        })}
-      </div>
-
-      <div className="mt-2.5">
-        <button
-          type="button"
-          disabled={picked.size === 0}
-          onClick={() => {
-            const targets = list.filter((c) => picked.has(c.id));
-            onMove(targets);
-            dismiss?.();
-          }}
-          className={SHEET_SOLID}
-        >
-          Mover
-        </button>
-      </div>
     </div>
   );
 }

@@ -7,14 +7,15 @@ import { GLASS_BUTTON } from "@/components/kura/components";
  * /feed error boundary (§patrones · error): says what happened and what to
  * do, no wink, the triangle beside it and "Reintentar" in glass. The promise
  * is real: nothing was lost, because the feed is derived — retry re-derives
- * the same one. "Reintentar" is Next's reset(); the quiet exit goes to your
- * collections.
+ * the same one. "Reintentar" is Next's `retry()` (16.3: re-fetches and re-renders
+ * the segment; `reset()` only clears the boundary and would re-throw the
+ * same failed read). The quiet exit goes to your collections.
  */
 export default function FeedError({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-bg pb-dock-clearance text-text">
@@ -30,10 +31,10 @@ export default function FeedError({
           no pudimos cargar tu feed.
         </h2>
         <p className="text-[15px] leading-[1.5] text-pretty text-text-2">
-          Nada se perdió: la actividad de tu gente sigue ahí. Revisa tu conexión y vuelve a intentar.
+          Nada se perdió: la actividad de tu gente sigue ahí. Revisa tu conexión y vuelve a intentarlo.
         </p>
         <div className="mt-3 flex items-center gap-2">
-          <button type="button" onClick={reset} className={GLASS_BUTTON}>
+          <button type="button" onClick={() => retry()} className={GLASS_BUTTON}>
             Reintentar
           </button>
           <Link

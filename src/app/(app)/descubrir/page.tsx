@@ -64,6 +64,7 @@ export default async function DescubrirPage() {
 
   return (
     <DescubrirScreen
+      viewerId={user.id}
       username={user.username ?? ""}
       backlogs={backlogs}
       library={library}

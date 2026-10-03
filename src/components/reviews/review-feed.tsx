@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { attempt } from "@/components/kura/attempt";
 import { LoadMoreButton } from "@/components/ui";
 import { KuraSheet } from "@/app/(app)/item/[catalogItemId]/kura-sheet";
 import {
@@ -21,7 +22,11 @@ const MAX_PAGES_PER_TAP = 5;
 export interface ReviewPaging {
   hasMore: boolean;
   loading: boolean;
-  /** Loads the next page; with `renderHeader`, keeps going until the end. */
+  /** The last "ver más" didn't arrive (the feed says so below the list and
+   *  offers the retry); cleared by the next attempt. */
+  failed: boolean;
+  /** Loads the next page; with `renderHeader`, keeps going until the end.
+   *  After a failure it retries the page that failed. */
   loadMore: () => void;
 }
 
@@ -71,28 +76,35 @@ export function ReviewFeed({
   const [reported, setReported] = useState<Record<string, true>>({});
   const [target, setTarget] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
+  const [failed, setFailed] = useState(false);
   const [, startReport] = useTransition();
+  const [reportFailed, setReportFailed] = useState(false);
 
   function loadMore() {
     if (!cursor) return;
     const drain = renderHeader !== undefined;
+    setFailed(false);
     startLoading(async () => {
       let next: string | null = cursor;
       let pages = 0;
-      try {
-        do {
-          const page = await loadMoreReviewsAction({
-            catalogItemId,
-            cursor: next,
-            excludeUsername,
-          });
-          setReviews((prev) => [...prev, ...page.reviews]);
-          next = page.nextCursor;
-          pages += 1;
-        } while (drain && next && pages < MAX_PAGES_PER_TAP);
-      } finally {
-        setCursor(next);
-      }
+      do {
+        const at: string = next;
+        const res = await attempt(() =>
+          loadMoreReviewsAction({ catalogItemId, cursor: at, excludeUsername }),
+        );
+        if (!res.ok) {
+          // A page that didn't arrive keeps what already loaded and leaves
+          // the cursor ON it: the note below says so and the retry asks for
+          // that same page (never a silent stop that reads as "no hay más").
+          setFailed(true);
+          break;
+        }
+        const page = res.value;
+        setReviews((prev) => [...prev, ...page.reviews]);
+        next = page.nextCursor;
+        pages += 1;
+      } while (drain && next && pages < MAX_PAGES_PER_TAP);
+      setCursor(next);
     });
   }
 
@@ -103,8 +115,18 @@ export function ReviewFeed({
     // Local to this session: for everyone else the review is still there until
     // an admin hides it. The acknowledgement is immediate either way.
     setReported((prev) => ({ ...prev, [reviewId]: true }));
-    startReport(() => {
-      void reportReviewAction({ reviewId, reason });
+    setReportFailed(false);
+    startReport(async () => {
+      // The acknowledgement is optimistic; a report that never reached the
+      // server must not stay "reportada" — the card comes back and says so.
+      const res = await attempt(() => reportReviewAction({ reviewId, reason }));
+      if (res.ok) return;
+      setReported((prev) => {
+        const rest = { ...prev };
+        delete rest[reviewId];
+        return rest;
+      });
+      setReportFailed(true);
     });
   }
 
@@ -136,15 +158,40 @@ export function ReviewFeed({
 
   return (
     <>
-      {renderHeader?.({ hasMore: cursor !== null, loading, loadMore })}
+      {renderHeader?.({ hasMore: cursor !== null, loading, failed, loadMore })}
       {pinned}
       {list}
+
+      {reportFailed && (
+        <p role="alert" className="mt-[10px] text-[14px] leading-[1.4] text-text-2">
+          No se envió tu reporte. Revisa tu conexión y vuelve a intentarlo.
+        </p>
+      )}
+
+      {failed && cursor && (
+        <p role="status" className="mt-[10px] text-[14px] leading-[1.4] text-text-2">
+          No se cargó el resto.
+          {renderHeader && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loading}
+                className="font-medium text-text underline underline-offset-2 transition-opacity active:opacity-60 disabled:opacity-50"
+              >
+                Reintentar
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       {!renderHeader && cursor && (
         <LoadMoreButton
           onClick={loadMore}
           loading={loading}
-          label="Ver más reseñas"
+          label={failed ? "Reintentar" : "Ver más reseñas"}
           className="mt-[10px]"
         />
       )}

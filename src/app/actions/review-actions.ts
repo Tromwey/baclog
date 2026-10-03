@@ -1,10 +1,11 @@
 "use server";
 
+import { redactedError } from "@/authz/safe-log";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentUser } from "@/auth";
-import { assertOwnsUserItem, assertUser } from "@/authz";
-import { getReviewFeedPage } from "@/modules/reviews/queries";
+import { assertOwnsUserItem, assertUser, notOnboarded } from "@/authz";
+import { decodeCursor, getReviewFeedPage } from "@/modules/reviews/queries";
 import { deleteOwnReview, saveReview } from "@/modules/reviews/write";
 import { reviewReportBodySchema } from "@/modules/reports/types";
 import { reportReview } from "@/modules/reports/write";
@@ -13,6 +14,11 @@ import {
   type ReviewFeedPage,
   type ReviewReportReason,
 } from "@/modules/reviews/types";
+
+/** Every catalog item / review id is a UUID (stored as text): anything else
+ *  can't exist, so it never reaches a query. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuidSchema = z.string().regex(UUID_RE);
 
 /**
  * F3.9 — the review mutations. Every one of them keys on the catalog item and
@@ -23,7 +29,7 @@ import {
 
 export type SaveReviewResult =
   | { ok: true }
-  | { error: "invalid" | "link" | "locked" | "failed" };
+  | { error: "invalid" | "link" | "locked" | "failed" | "onboarding_required" };
 
 /**
  * Publish or edit the caller's review of a title. The rules (react first,
@@ -31,12 +37,15 @@ export type SaveReviewResult =
  * `hiddenAt`) live in `modules/reviews/write.ts` — the same code the API's
  * `PUT /me/titles/{id}/review` runs. This wrapper only proves ownership
  * (`assertOwnsUserItem`: the title is in their library) and revalidates.
+ * F2.2: needs a finished onboarding (`onboarding_required`, checked on the
+ * caller's row BEFORE the title is looked at). Deleting is never gated.
  */
 export async function saveReviewAction(input: {
   catalogItemId: string;
   body: string;
   hasSpoiler: boolean;
 }): Promise<SaveReviewResult> {
+  if (notOnboarded(await assertUser())) return { error: "onboarding_required" };
   const { user, item } = await assertOwnsUserItem(input.catalogItemId);
 
   let result: Awaited<ReturnType<typeof saveReview>>;
@@ -46,7 +55,7 @@ export async function saveReviewAction(input: {
       hasSpoiler: input.hasSpoiler,
     });
   } catch (err) {
-    console.error("[F3.9] save review failed:", err);
+    console.error("[F3.9] save review failed:", redactedError(err));
     return { error: "failed" };
   }
   if ("error" in result) {
@@ -79,12 +88,16 @@ export async function loadMoreReviewsAction(input: {
   /** The pinned review on the public item page, kept out of the pages below it. */
   excludeUsername?: string;
 }): Promise<ReviewFeedPage> {
-  const id = z.string().min(1).max(64).safeParse(input.catalogItemId);
+  const id = uuidSchema.safeParse(input.catalogItemId);
   const cursor = z.string().min(1).max(120).safeParse(input.cursor);
   const owner = z.string().max(30).optional().safeParse(input.excludeUsername);
   if (!id.success || !cursor.success || !owner.success) {
     return { reviews: [], nextCursor: null };
   }
+  // A cursor we didn't mint (undecodable, or whose id half isn't a review
+  // id) is an empty page — never page 1 again, never a query on free text.
+  const decoded = decodeCursor(cursor.data);
+  if (!decoded || !UUID_RE.test(decoded.id)) return { reviews: [], nextCursor: null };
 
   const viewer = await getCurrentUser();
   return getReviewFeedPage(id.data, {
@@ -102,14 +115,17 @@ export async function loadMoreReviewsAction(input: {
  * already-reported skipped) live in `modules/reports/write.ts`, shared with
  * `POST /api/v1/reviews/{id}/report`. Like the profile report, the response is
  * always the same: it never confirms whether the review exists, whether it was
- * already reported, or whether anything happened.
+ * already reported, or whether anything happened — which includes the F2.2
+ * gate: an account that hasn't finished onboarding gets the same `{ ok: true }`
+ * and nothing is written.
  */
 export async function reportReviewAction(input: {
   reviewId: string;
   reason: ReviewReportReason;
 }) {
   const user = await assertUser();
-  const reviewId = z.string().min(1).safeParse(input.reviewId);
+  if (notOnboarded(user)) return { ok: true as const };
+  const reviewId = uuidSchema.safeParse(input.reviewId);
   const body = reviewReportBodySchema.safeParse({ reason: input.reason });
   if (!reviewId.success || !body.success) return { ok: true as const };
 

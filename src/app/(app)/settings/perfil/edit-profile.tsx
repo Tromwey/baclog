@@ -7,6 +7,7 @@ import {
   claimUsernameAction,
   updateDisplayNameAction,
 } from "@/app/actions/account-actions";
+import { ONBOARDING_TO_EDIT_PROFILE, WRITE_FAILED } from "@/components/kura/attempt";
 import { CHIP_44 } from "@/components/kura/components";
 import { AvatarPicker } from "../avatar-picker";
 
@@ -17,10 +18,17 @@ import { AvatarPicker } from "../avatar-picker";
  * (AvatarPicker), it is not part of Guardar.
  *
  * A claimed @usuario is read-only here, as it was in the old Ajustes: it is
- * the path of your public page and of every link already shared, and
- * claiming re-opens the page (claimUsernameAction sets isPublic) — changing
- * it needs its own decision, not a text field.
+ * the path of your public page and of every link already shared — changing
+ * it needs its own decision, not a text field. Only the FIRST claim makes
+ * the page public (`claimUsername`: a rename keeps whatever `isPublic` was,
+ * founder 2026-10-01), which is what the note under the field says.
+ *
+ * `onboarding_required` (F2.2, an account without birth year) can't normally
+ * get here — the `(app)` layout sends it to /onboarding first — but the
+ * actions answer it, so it has its own sentence instead of a wrong one.
  */
+const ONBOARDING_FIRST = ONBOARDING_TO_EDIT_PROFILE;
+
 export function EditProfile({
   hexes,
   initialName,
@@ -53,7 +61,9 @@ export function EditProfile({
       if (nameChanged) {
         const res = await updateDisplayNameAction(name);
         if ("error" in res) {
-          setNameError("El nombre va de 1 a 50 caracteres.");
+          setNameError(
+            res.error === "onboarding_required" ? ONBOARDING_FIRST : "El nombre va de 1 a 50 caracteres.",
+          );
           setBusy(false);
           return;
         }
@@ -64,7 +74,9 @@ export function EditProfile({
           setUserError(
             res.error === "taken"
               ? "Ese @usuario ya existe. Prueba con otro."
-              : "De 3 a 30: minúsculas, números, _ y punto.",
+              : res.error === "onboarding_required"
+                ? ONBOARDING_FIRST
+                : "De 3 a 30: minúsculas, números, _ y punto.",
           );
           setBusy(false);
           return;
@@ -74,7 +86,7 @@ export function EditProfile({
       router.refresh();
     } catch {
       setBusy(false);
-      setNameError("No se pudo guardar. Revisa tu conexión y vuelve a intentar.");
+      setNameError(WRITE_FAILED);
     }
   }
 
@@ -135,7 +147,8 @@ export function EditProfile({
             </label>
           )}
         </div>
-        <p role={nameError || userError ? "status" : undefined} className="px-3 text-[13px] leading-[1.45] text-pretty text-text-2">
+        {/* Always a live region: mounted before the message changes. */}
+        <p role="status" className="px-3 text-[13px] leading-[1.45] text-pretty text-text-2">
           {nameError ??
             userError ??
             (initialUsername

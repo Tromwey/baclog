@@ -26,7 +26,8 @@ const QuerySchema = z.object({
 export const GET = withApi(async (req) => {
   const { q, kind } = readQuery(req, QuerySchema);
   const asked = kind === "all" ? 3 : 1;
-  const { results, failed } = await unifiedSearchDetailed(q, kind);
+  // Music searches the viewer's Apple Music store (Vercel's country header).
+  const { results, failed } = await unifiedSearchDetailed(q, kind, req.headers.get("x-vercel-ip-country"));
   if (results.length === 0 && failed.length >= asked) {
     throw new ApiError("unavailable");
   }

@@ -17,6 +17,9 @@ const eslintConfig = defineConfig([
     ".claude/worktrees/**",
     // Copias exportadas de Claude Design (runtime ajeno, no es código de la app).
     "design/**",
+    // El laberinto de /party y su three.js: módulos de Claude Design servidos tal cual desde public/.
+    "public/party/laberinto/**",
+    "public/party/vendor/**",
   ]),
 ]);
 

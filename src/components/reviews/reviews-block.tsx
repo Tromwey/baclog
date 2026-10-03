@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import {
   deleteReviewAction,
   saveReviewAction,
@@ -12,6 +12,13 @@ import {
   type ItemReviewContext,
   type ReviewMark,
 } from "@/modules/reviews/types";
+import {
+  attempt,
+  DRAFT_KEPT,
+  ONBOARDING_EXIT_LABEL,
+  ONBOARDING_TO_REVIEW,
+  WRITE_FAILED,
+} from "@/components/kura/attempt";
 import { ReviewCard } from "./review-card";
 import { ReviewFeed } from "./review-feed";
 import { ReviewSheet } from "./review-sheet";
@@ -33,6 +40,20 @@ import { ReviewSheet } from "./review-sheet";
  * The whole section hides when there's nothing to read and nothing you can
  * write yet (24d draws no reseñas block on a title nobody reviewed).
  */
+/** F2.2: retrying refuses forever — the note carries the way out, and the
+ *  draft stays in the sheet meanwhile. */
+const ONBOARDING_NOTE = (
+  <>
+    {ONBOARDING_TO_REVIEW} {DRAFT_KEPT}{" "}
+    <Link
+      href="/onboarding"
+      className="font-medium text-text underline underline-offset-2 transition-opacity active:opacity-60"
+    >
+      {ONBOARDING_EXIT_LABEL}
+    </Link>
+  </>
+);
+
 export function ReviewsBlock({
   catalogItemId,
   itemTitle,
@@ -72,7 +93,7 @@ export function ReviewsBlock({
     setReviewSheet: setSheet,
   } = useItemReaction();
   const [armed, setArmed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
   const [saving, startSaving] = useTransition();
 
   const unlocked = obsessed || verdict !== null;
@@ -98,14 +119,18 @@ export function ReviewsBlock({
   function save(body: string, hasSpoiler: boolean) {
     setError(null);
     startSaving(async () => {
-      const res = await saveReviewAction({ catalogItemId, body, hasSpoiler });
-      if ("error" in res) {
+      // `attempt`: a rejected action (network, expired session) lands in the
+      // same branch as {error} — the sheet stays open with the text in it.
+      const res = await attempt(() => saveReviewAction({ catalogItemId, body, hasSpoiler }));
+      if (!res.ok) {
         setError(
           res.error === "link"
             ? "Los enlaces no van en una reseña. Quítalo y vuelve a intentarlo."
             : res.error === "locked"
               ? "Para reseñar, elige Me gusta o Me obsesiona."
-              : "No se pudo guardar. Tu texto sigue aquí: inténtalo otra vez.",
+              : res.error === "onboarding_required"
+                ? ONBOARDING_NOTE
+                : `${WRITE_FAILED} ${DRAFT_KEPT}`,
         );
         return;
       }
@@ -133,14 +158,15 @@ export function ReviewsBlock({
       return;
     }
     startSaving(async () => {
-      try {
-        await deleteReviewAction(catalogItemId);
-        setOwn(null);
-        setSheet(null);
+      const res = await attempt(() => deleteReviewAction(catalogItemId));
+      if (!res.ok) {
         setArmed(false);
-      } catch {
-        setError("No se pudo borrar tu reseña. Inténtalo otra vez.");
+        setError("No se pudo borrar tu reseña. Vuelve a intentarlo.");
+        return;
       }
+      setOwn(null);
+      setSheet(null);
+      setArmed(false);
     });
   }
 
@@ -201,6 +227,7 @@ export function ReviewsBlock({
             menuLabel="Opciones de tu reseña"
             onMenu={() => {
               setArmed(false);
+              setError(null);
               setSheet("menu");
             }}
           >
@@ -293,6 +320,11 @@ export function ReviewsBlock({
           >
             {armed ? "Toca de nuevo para borrarla" : "Borrar reseña"}
           </button>
+          {error && (
+            <p role="alert" className="pt-1 text-[14px] leading-[1.4] text-text-2">
+              {error}
+            </p>
+          )}
         </KuraSheet>
       )}
     </section>

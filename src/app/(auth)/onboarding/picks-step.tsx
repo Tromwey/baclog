@@ -270,7 +270,7 @@ export function PicksStep({
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Borrar búsqueda"
-                className="-mr-1.5 flex h-8 w-8 flex-none items-center justify-center rounded-full text-text-2 bl-press-sm hover:text-text"
+                className="relative -mr-1.5 flex h-8 w-8 flex-none items-center justify-center rounded-full text-text-2 bl-press-sm hover:text-text before:absolute before:-inset-1.5 before:content-['']"
               >
                 <Stroke d={CLEAR_PATH} size={16} />
               </button>
@@ -340,13 +340,13 @@ export function PicksStep({
 
               {grid.length === 0 && loadState !== "loading" && (
                 <p className="py-6 text-center text-[15px] leading-[1.5] text-text-2">
-                  No cargaron sugerencias. Busca las tuyas arriba.
+                  No se cargaron las sugerencias. Busca las tuyas arriba.
                 </p>
               )}
 
               {loadState === "error" && (
                 <div className="flex flex-col items-center gap-3 pt-2">
-                  <FailLine>No cargaron más títulos.</FailLine>
+                  <FailLine>No se cargó el resto.</FailLine>
                   <button
                     type="button"
                     onClick={() => void loadMore()}

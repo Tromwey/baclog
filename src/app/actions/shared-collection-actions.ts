@@ -1,14 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { assertUser, NotFoundError } from "@/authz";
-import { db } from "@/db";
-import { backlogItems } from "@/db/schema";
-import { createBacklog, reorderBacklogItems, setBacklogCover } from "@/modules/backlog/collections";
 import { byManualOrder, fanOf } from "@/modules/backlog/fan";
-import { ensureUserItemAndMembership } from "@/modules/backlog/membership";
+import { saveCollectionCopy } from "@/modules/backlog/membership";
 import { getPublicBacklog } from "@/modules/backlog/public";
 
 /**
@@ -30,9 +26,10 @@ const SAVE_SHARED_MAX = 300;
  * Reads the source ONLY through `getPublicBacklog` — the same gate as the
  * page that shows the button (owner public, collection public) — so this can
  * never copy a private collection. The owner saving their own gets their
- * collection back, untouched. Each title enters through
- * `ensureUserItemAndMembership` (the one way a title enters a library), so an
- * existing per-title state of the visitor is kept, never overwritten.
+ * collection back, untouched. The write is `saveCollectionCopy`
+ * (modules/backlog/membership.ts): one atomic statement, idempotent on a
+ * deterministic id — a double tap opens the same copy, never a second one —
+ * and an existing per-title state of the visitor is kept, never overwritten.
  */
 export async function saveSharedCollectionAction(username: string, backlogId: string) {
   const user = await assertUser();
@@ -46,38 +43,17 @@ export async function saveSharedCollectionAction(username: string, backlogId: st
   if (source.ownerUsername === user.username) return { id: source.backlogId };
 
   const ordered = [...source.items].sort(byManualOrder).slice(0, SAVE_SHARED_MAX);
-  const created = await createBacklog(user.id, {
-    name: source.backlogName.slice(0, 60),
-    vibe: source.vibe ? source.vibe.slice(0, 80) : null,
-    visibility: "private",
-  });
-
-  // Small parallel batches: each title is a few round trips over HTTP.
-  for (let i = 0; i < ordered.length; i += 8) {
-    await Promise.all(
-      ordered.slice(i, i + 8).map((it) =>
-        ensureUserItemAndMembership({
-          userId: user.id,
-          backlogId: created.id,
-          catalogItemId: it.catalogItemId,
-          paletteHex: it.paletteHex ?? null,
-        }),
-      ),
-    );
-  }
-
-  // The copy keeps the source's order and cover.
-  const rows = await db
-    .select({ id: backlogItems.id, catalogItemId: backlogItems.catalogItemId })
-    .from(backlogItems)
-    .where(and(eq(backlogItems.backlogId, created.id), eq(backlogItems.userId, user.id)));
-  const idOf = new Map(rows.map((r) => [r.catalogItemId, r.id]));
-  const order = ordered.flatMap((it) => idOf.get(it.catalogItemId) ?? []);
-  if (order.length > 0) await reorderBacklogItems(user.id, created.id, order);
+  // The copy keeps the source's order and (if the owner chose one) its cover.
   const lead = fanOf(ordered, source.coverCatalogItemId)[0];
-  if (lead && source.coverCatalogItemId === lead.catalogItemId) {
-    await setBacklogCover(user.id, created.id, lead.catalogItemId);
-  }
+  const name = source.backlogName.trim().slice(0, 60);
+  const created = await saveCollectionCopy(user.id, {
+    backlogId: source.backlogId,
+    name: name.length > 0 ? name : "Colección",
+    vibe: source.vibe ? source.vibe.trim().slice(0, 80) || null : null,
+    catalogItemIds: ordered.map((it) => it.catalogItemId),
+    coverCatalogItemId:
+      lead && source.coverCatalogItemId === lead.catalogItemId ? lead.catalogItemId : null,
+  });
 
   revalidatePath("/backlogs", "layout");
   return { id: created.id };

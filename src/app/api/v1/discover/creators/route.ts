@@ -1,3 +1,4 @@
+import { redactedError } from "@/authz/safe-log";
 import { withApi } from "@/authz/api";
 import { getCatalogItems } from "@/modules/catalog/cache";
 import { getNewFromCreators } from "@/modules/discover/creators-new";
@@ -19,7 +20,7 @@ import { toTitleSummary } from "../../_lib/wire";
  */
 export const GET = withApi(async (_req, { user }) => {
   const found = await getNewFromCreators(user.id, Date.now(), 12).catch((err) => {
-    console.error("[api] discover/creators unavailable:", err);
+    console.error("[api] discover/creators unavailable:", redactedError(err));
     return [];
   });
   const rows = await getCatalogItems(found.map((f) => f.catalogItemId));

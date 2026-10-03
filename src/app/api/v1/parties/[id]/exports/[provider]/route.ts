@@ -4,6 +4,7 @@ import {
   reportAppleMusicExport,
   startExport,
 } from "@/modules/music-export/exports";
+import { parseOutput } from "@/lib/output";
 import { parseProvider } from "@/modules/music-export/rules";
 import type { MusicProvider } from "@/modules/music-export/types";
 import { json, parseId, readJson } from "../../../../_lib/http";
@@ -32,12 +33,12 @@ type Params = { id: string; provider: string };
 
 export const GET = withApi<Params>(async (_req, { user, params }) => {
   const state = await getExportState(user.id, parseId(params.id), provider(params.provider));
-  return json(ExportStateSchema.parse(toExportState(state)));
+  return json(parseOutput(ExportStateSchema, toExportState(state), "ExportState"));
 });
 
 export const POST = withApi<Params>(async (_req, { user, params }) => {
   const state = await startExport(user.id, parseId(params.id), provider(params.provider));
-  return json(ExportStateSchema.parse(toExportState(state)));
+  return json(parseOutput(ExportStateSchema, toExportState(state), "ExportState"));
 });
 
 export const PUT = withApi<Params>(async (req, { user, params }) => {
@@ -45,5 +46,5 @@ export const PUT = withApi<Params>(async (req, { user, params }) => {
   if (provider(params.provider) !== "apple_music") throw new ApiError("not_found");
   const body = await readJson(req, AppleMusicReportBodySchema);
   const state = await reportAppleMusicExport(user.id, id, body);
-  return json(ExportStateSchema.parse(toExportState(state)));
+  return json(parseOutput(ExportStateSchema, toExportState(state), "ExportState"));
 });

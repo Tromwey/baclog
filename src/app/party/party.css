@@ -54,3 +54,17 @@ html[data-party-og] .party [aria-label="Audio"], html[data-party-og] nextjs-port
 html[data-party-og] .party section[data-screen-label="01 Portada"] { padding-top: 26px !important; padding-bottom: 0 !important; gap: 6px !important; justify-content: flex-start !important; }
 html[data-party-og] .party section[data-screen-label="01 Portada"] > div[style*="width: 300px"] { zoom: .82; }
 html[data-party-og] .party section[data-screen-label="01 Portada"] > div[style*="blur("] { opacity: .35; }
+
+/* prefers-reduced-motion: the scene holds still. Every loop here is an inline
+   `animation:` (fog, flicker, sway, bats, glitch…), so one rule freezes them
+   all on the same good frame the `?og` capture uses (2 s in: lamps lit, the
+   dark overlay and the glitch layers at 0), and one-shot entrances land on
+   their end state at once. No per-component flag to forget.
+   The one exception is the hint (`data-pt-run="hint"`): it APPEARS and LEAVES
+   by its animation, so freezing it would pin it over the scene — it keeps its
+   timing and trades the blur and the travel for a plain fade. */
+@keyframes pt-hintFade{0%{opacity:0}22%{opacity:1}78%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce) {
+  .party *:not([data-pt-run]) { animation-delay: -2s !important; animation-play-state: paused !important; transition: none !important; }
+  .party [data-pt-run="hint"] { animation-name: pt-hintFade !important; }
+}

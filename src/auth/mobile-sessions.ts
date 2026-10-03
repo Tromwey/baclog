@@ -2,8 +2,7 @@ import "server-only";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { deviceTokens, mobileSessions, users } from "@/db/schema";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
-import { TOKEN_VERSION_LIVE, bumpTokenVersion } from "./user-row";
+import { TOKEN_VERSION_LIVE } from "./user-row";
 
 /**
  * Phase 4d — device sessions for the Kura iOS bearer (`mobile_session`).
@@ -16,9 +15,7 @@ import { TOKEN_VERSION_LIVE, bumpTokenVersion } from "./user-row";
  * session stamped revoked and every device token of the account deleted.
  *
  * Every function takes a `userId` that the caller derived from the bearer:
- * never a "use server" file, never a userId from the client. While
- * `MIGRATION_0029_LIVE` is false the writers are no-ops that say so
- * (`createMobileSession` → null = mint a token without `sid`).
+ * never a "use server" file, never a userId from the client.
  */
 
 export interface DeviceInfo {
@@ -38,13 +35,11 @@ export const LEGACY_DEVICE: DeviceInfo = {
   appVersion: "desconocida",
 };
 
-/** New session row → its id (the `sid` claim), or null while the table is
- *  not live (the caller then mints a legacy, `sid`-less bearer). */
+/** New session row → its id (the `sid` claim). */
 export async function createMobileSession(
   userId: string,
   device: DeviceInfo,
-): Promise<string | null> {
-  if (!MIGRATION_0029_LIVE) return null;
+): Promise<string> {
   const [row] = await db
     .insert(mobileSessions)
     .values({
@@ -64,7 +59,6 @@ export async function updateMobileSessionDevice(
   sessionId: string,
   device: DeviceInfo,
 ): Promise<void> {
-  if (!MIGRATION_0029_LIVE) return;
   await db
     .update(mobileSessions)
     .set({
@@ -83,7 +77,6 @@ export async function updateMobileSessionDevice(
  * normal request costs no write at all.
  */
 export async function touchMobileSession(sessionId: string): Promise<void> {
-  if (!MIGRATION_0029_LIVE) return;
   await db
     .update(mobileSessions)
     .set({ lastSeenAt: sql`now()` })
@@ -161,10 +154,6 @@ export async function logoutEverywhere(userId: string): Promise<void> {
     .set({ revokedAt: sql`now()` })
     .where(and(eq(mobileSessions.userId, userId), isNull(mobileSessions.revokedAt)));
   const dropTokens = db.delete(deviceTokens).where(eq(deviceTokens.userId, userId));
-  if (!MIGRATION_0029_LIVE) {
-    await bumpTokenVersion(userId);
-    return;
-  }
   if (!TOKEN_VERSION_LIVE) {
     await db.batch([revokeSessions, dropTokens]);
     return;

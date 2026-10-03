@@ -1,6 +1,6 @@
 import "server-only";
 import { ImageResponse } from "next/og";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import { BG, sealColors, sealInitials, tintEnds } from "@/components/kura/tint";
 import { LOCKUP_C } from "@/components/kura/lockup-c";
 import { OG_KANJI, loadOgFonts } from "@/lib/og";

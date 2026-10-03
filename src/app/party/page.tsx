@@ -1,60 +1,51 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Creepster, JetBrains_Mono, Manrope } from "next/font/google";
-import { PARTY_EVENT } from "@/modules/party/event";
+import { Cinzel, Creepster, Oswald, Pirata_One, Space_Mono } from "next/font/google";
+import { PARTY_LANDING } from "@/modules/party/event";
 import { PartyClient } from "./party-client";
-import "./party.css";
+import "./party-landing.css";
 
 /*
- * /party — an interactive invitation hosted inside Kura but outside its
- * design system on purpose: it's its own world (the design's fonts and
- * palette, borders and glows included). Public, no session; RSVPs land in
- * `party_rsvp` and the host reads them in Torre › /admin/party.
+ * /party — the 3D landing (see party-landing.tsx), hosted inside Kura but
+ * outside its design system on purpose: it's its own world (the design's
+ * fonts and palette). Public, no session.
  */
 
-const serif = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--pt-serif",
-  display: "swap",
-});
-const sans = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--pt-sans", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--pt-mono", display: "swap" });
-const creep = Creepster({ subsets: ["latin"], weight: "400", variable: "--pt-creep", display: "swap" });
+const creep = Creepster({ subsets: ["latin"], weight: "400", variable: "--pl-creep", display: "swap" });
+const oswald = Oswald({ subsets: ["latin"], weight: ["500", "600"], variable: "--pl-oswald", display: "swap" });
+// The design's two alternate type sets (`?tipo=lapida|gotico`): not preloaded.
+const cinzel = Cinzel({ subsets: ["latin"], weight: "700", variable: "--pl-cinzel", display: "swap", preload: false });
+const pirata = Pirata_One({ subsets: ["latin"], weight: "400", variable: "--pl-pirata", display: "swap", preload: false });
+const spaceMono = Space_Mono({ subsets: ["latin"], weight: "700", variable: "--pl-spacemono", display: "swap", preload: false });
+
+/** Teaser until the gate opens; rendered per request so the title flips on its own. */
+export const dynamic = "force-dynamic";
 
 /**
- * The link preview (WhatsApp & co.): a capture of the landing itself — chained
- * gate + MUY PRONTO while `PARTY_EVENT.locked`, the open gate after. Both are
- * static files in public/party, captured at 1200×630 from `/party?og`
- * (`&abrir` for the open one) with headless Chrome; redo them if the landing
- * changes. Messaging apps cache previews per URL for a while.
+ * The link preview gives nothing away (founder, 2026-10-01): a pair of eyes in
+ * the dark, in both states — never a capture of the scene. The alt stays as
+ * vague as the image.
  */
-const OG_IMAGE = {
-  url: PARTY_EVENT.locked ? "/party/og-teaser.jpg" : "/party/og.jpg",
-  width: 1200,
-  height: 630,
-  alt: PARTY_EVENT.locked ? "La reja del cementerio encadenada: muy pronto." : "La reja del cementerio: entra si te atreves.",
-};
+const PREVIEW = { url: "/party/og-dark.jpg", width: 1200, height: 630, alt: "Algo te mira desde la oscuridad." };
 
-export const metadata: Metadata = {
-  title: `${PARTY_EVENT.title} · Entra si te atreves`,
-  description: "Estás invitado. Cruza la reja, encuentra las 5 llaves entre las tumbas y confirma.",
-  robots: { index: false, follow: false },
-  openGraph: {
-    title: `${PARTY_EVENT.title} — entra si te atreves`,
-    description: "Estás invitado. Cruza la reja y encuentra las 5 llaves entre las tumbas.",
-    url: "/party",
-    images: [OG_IMAGE],
-  },
-  twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
-};
+export function generateMetadata(): Metadata {
+  const open = Date.now() >= new Date(PARTY_LANDING.opensISO).getTime();
+  const title = open ? "Entra si te atreves" : "Muy pronto";
+  const description = open ? "Si te atreves." : "Muy pronto.";
+  return {
+    title,
+    description,
+    robots: { index: false, follow: false },
+    openGraph: { title, description, url: "/party", images: [PREVIEW] },
+    twitter: { card: "summary_large_image", title, description, images: [PREVIEW.url] },
+  };
+}
 
-/** Safari's bars take the invitation's black instead of Kura's. */
-export const viewport: Viewport = { themeColor: "#050404" };
+/** Safari's bars take the scene's night instead of Kura's. */
+export const viewport: Viewport = { themeColor: "#08090c" };
 
 export default function PartyPage() {
   return (
-    <div className={`party ${serif.variable} ${sans.variable} ${mono.variable} ${creep.variable}`}>
+    <div className={`${creep.variable} ${oswald.variable} ${cinzel.variable} ${pirata.variable} ${spaceMono.variable}`}>
       <PartyClient />
     </div>
   );

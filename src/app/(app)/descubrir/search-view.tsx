@@ -60,12 +60,15 @@ const MIN_QUERY = 2;
  * "usuarios" section — and their filter pills — don't exist here.
  */
 export function SearchView({
+  owner,
   inputRef,
   initialQuery,
   library,
   onCancel,
   onSave,
 }: {
+  /** The viewer's id: whose recents these are (recents.ts keys by account). */
+  owner: string;
   /** Owned by the parent so the opening tap can focus it inside the gesture (iOS). */
   inputRef: RefObject<HTMLInputElement | null>;
   /** From ?q= — a search restored after closing an item (re-runs on mount). */
@@ -85,10 +88,10 @@ export function SearchView({
   // Read once on mount: this view only ever renders after a tap (or a ?q=
   // restore, which lands on results, not on the recents).
   const [recents, setRecents] = useState<string[]>(() =>
-    typeof window === "undefined" ? [] : readRecentQueries(),
+    typeof window === "undefined" ? [] : readRecentQueries(owner),
   );
   const [seen] = useState<SeenWork[]>(() =>
-    typeof window === "undefined" ? [] : readSeen(),
+    typeof window === "undefined" ? [] : readSeen(owner),
   );
   const abortRef = useRef<AbortController | null>(null);
 
@@ -140,7 +143,7 @@ export function SearchView({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (q.length >= MIN_QUERY) setRecents(pushRecentQuery(q));
+    if (q.length >= MIN_QUERY) setRecents(pushRecentQuery(owner, q));
     // "buscar" on the keyboard: put the keyboard away so the results show.
     inputRef.current?.blur();
   };
@@ -151,9 +154,9 @@ export function SearchView({
   const openResult = (r: CatalogSearchResult) => {
     if (q.length >= MIN_QUERY) {
       window.history.replaceState(null, "", `/descubrir?q=${encodeURIComponent(q)}`);
-      pushRecentQuery(q);
+      pushRecentQuery(owner, q);
     }
-    pushSeen({
+    pushSeen(owner, {
       catalogItemId: r.catalogItemId,
       title: r.title,
       mediaType: r.mediaType,
@@ -225,7 +228,7 @@ export function SearchView({
                       <button
                         type="button"
                         onClick={() => {
-                          clearRecentQueries();
+                          clearRecentQueries(owner);
                           setRecents([]);
                         }}
                         className="-my-3 py-3 uppercase text-text-3 transition-colors hover:text-text-2"
@@ -256,7 +259,7 @@ export function SearchView({
                     {!typedOne && (
                       <button
                         type="button"
-                        onClick={() => setRecents(removeRecentQuery(r))}
+                        onClick={() => setRecents(removeRecentQuery(owner, r))}
                         aria-label={`Quitar ${r}`}
                         className="flex h-11 w-11 flex-none items-center justify-center text-text-2"
                       >

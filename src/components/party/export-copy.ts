@@ -10,7 +10,7 @@ const TIDAL_CONNECT_FAILED: Record<string, string> = {
   expired: "La conexión con TIDAL caducó. Vuelve a intentarlo.",
   exchange: "La conexión con TIDAL caducó. Vuelve a intentarlo.",
   unavailable: "TIDAL todavía no está disponible en kura.",
-  rate_limited: "Demasiados intentos. Espera un momento.",
+  rate_limited: "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.",
 };
 
 /** The toast after `?music=tidal&connected=0&reason=…`. */

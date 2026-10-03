@@ -175,11 +175,15 @@ export function NavDock({ feedDot = false }: { feedDot?: boolean }) {
   return (
     <nav
       aria-label="Navegación principal"
+      // The collection overlay's Tab cycle includes the dock while it is
+      // lifted over it (`useDialogFocus` · `also`).
+      data-nav-dock={hidden ? "hidden" : "on"}
       className={`pointer-events-none fixed inset-x-0 bottom-[calc(var(--dock-offset)+env(safe-area-inset-bottom))] flex justify-center ${
         lifted ? "z-[41]" : "z-10"
       }`}
     >
       <div
+        inert={hidden}
         className={`bl-dock-glass flex gap-1.5 rounded-full p-1.5 shadow-float transition-[opacity,transform] duration-300 ease-out ${
           hidden
             ? "pointer-events-none translate-y-1 opacity-0"

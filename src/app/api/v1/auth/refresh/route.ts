@@ -45,13 +45,8 @@ export const POST = withApi(async (request, { user, bearer }) => {
       token = await issueMobileToken(user.id, tv, sid);
     }
   } else {
-    // null while migration 0029 is not live: the legacy token then follows
-    // the plain 4b window rule below.
     const newSid = await createMobileSession(user.id, device ?? LEGACY_DEVICE);
-    const remaining = exp - Math.floor(Date.now() / 1000);
-    if (newSid || remaining < MOBILE_TOKEN_REFRESH_WINDOW_SECONDS) {
-      token = await issueMobileToken(user.id, tv, newSid);
-    }
+    token = await issueMobileToken(user.id, tv, newSid);
   }
   const body: AuthSession = { token, user: await buildMe(user) };
   return json(body);

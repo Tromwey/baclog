@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { loadMoreReviewsAction } from "@/app/actions/review-actions";
 import { ReviewCard } from "@/components/reviews/review-card";
+import { attempt } from "@/components/kura/attempt";
 import { markLabel } from "@/modules/reviews/format";
 import type { FeedReview } from "@/modules/reviews/types";
 
@@ -36,17 +37,22 @@ export function PublicReviews({
   const [reviews, setReviews] = useState(initialReviews);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, startLoading] = useTransition();
+  const [failed, setFailed] = useState(false);
 
   function loadAll() {
     if (!cursor) return;
+    setFailed(false);
     startLoading(async () => {
-      const page = await loadMoreReviewsAction({
-        catalogItemId,
-        cursor,
-        excludeUsername,
-      });
-      setReviews((prev) => [...prev, ...page.reviews]);
-      setCursor(page.nextCursor);
+      // A rejected read keeps the cursor: the same control retries the page.
+      const page = await attempt(() =>
+        loadMoreReviewsAction({ catalogItemId, cursor, excludeUsername }),
+      );
+      if (!page.ok) {
+        setFailed(true);
+        return;
+      }
+      setReviews((prev) => [...prev, ...page.value.reviews]);
+      setCursor(page.value.nextCursor);
     });
   }
 
@@ -64,12 +70,17 @@ export function PublicReviews({
             disabled={loading}
             className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2 transition-[color,opacity] hover:text-text active:opacity-60 disabled:opacity-60"
           >
-            {loading ? "Cargando…" : `Ver las ${count} reseñas`}
+            {loading ? "Cargando…" : failed ? "Reintentar" : `Ver las ${count} reseñas`}
           </button>
         ) : (
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-2">{count}</span>
         )}
       </div>
+      {failed && (
+        <p role="alert" className="text-[14px] leading-[1.4] text-text-2">
+          No se cargó el resto.
+        </p>
+      )}
       {all.map((review) => (
         <ReviewCard
           key={review.id}

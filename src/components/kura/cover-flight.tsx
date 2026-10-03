@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { posterFallbackStyle } from "@/components/cover-tile";
+import { posterFallbackStyle } from "@/components/kura/poster-fallback";
 import { prefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { SpringValue, clamp01, lerp } from "@/lib/spring";
 import type { MediaType } from "@/modules/catalog/types";
@@ -44,6 +44,8 @@ interface Layer {
   open: (f: Flight & { el: HTMLElement; mediaType: MediaType }) => void;
   back: (key: string, navigate: () => void) => boolean;
   target: (key: string, el: HTMLElement | null) => void;
+  /** Ends an OPEN flight now: the ficha it was flying to will never mount. */
+  end: () => void;
 }
 
 let layer: Layer | null = null;
@@ -60,6 +62,20 @@ export function launchCoverFlight(f: Flight & { el: HTMLElement; mediaType: Medi
  */
 export function returnCoverFlight(key: string, navigate: () => void): boolean {
   return layer?.back(key, navigate) ?? false;
+}
+
+/**
+ * For the screens a ficha route can resolve to INSTEAD of the ficha (its
+ * `error.tsx`, its `not-found.tsx`): no `CoverFlightTarget` will ever
+ * register, so the flight would hold its opaque backdrop over them until the
+ * 6 s watchdog — the error was on screen and nobody could see it. Mounting
+ * this ends the flight at once.
+ */
+export function EndCoverFlight() {
+  useLayoutEffect(() => {
+    layer?.end();
+  }, []);
+  return null;
 }
 
 /** The ficha's cover — where a flight lands and where a return starts. */
@@ -278,6 +294,12 @@ export function CoverFlightLayer() {
           if ((s.p?.value ?? 0) >= 0.999) finish();
         });
         apply();
+      },
+      end() {
+        if (s.mode !== "open") return;
+        // Nothing to fly back from: the ficha never showed.
+        s.last = null;
+        finish();
       },
     };
     return () => {

@@ -25,19 +25,29 @@ import type { BacklogVisibility } from "@/modules/backlog/visibility";
 
 const nameSchema = backlogNameSchema;
 const vibeSchema = backlogVibeSchema.optional();
+const visibilitySchema = z.enum(["private", "public", "featured"]);
 
+/**
+ * `visibility` (F3.10.1: private · public · featured) travels WITH the create
+ * — one insert, so a collection asked for as "Solo yo" is never public for an
+ * instant, and a failure leaves nothing behind for "Reintentar" to duplicate.
+ * Omitted = the table's default, as before.
+ */
 export async function createBacklogAction(input: {
   name: string;
   vibe?: string;
+  visibility?: BacklogVisibility;
 }) {
   const user = await assertUser();
   const name = nameSchema.safeParse(input.name);
   const vibe = vibeSchema.safeParse(input.vibe);
-  if (!name.success || !vibe.success) return { error: "invalid" as const };
+  const visibility = visibilitySchema.optional().safeParse(input.visibility);
+  if (!name.success || !vibe.success || !visibility.success) return { error: "invalid" as const };
 
   const created = await createBacklog(user.id, {
     name: name.data,
     vibe: vibe.data || null,
+    ...(visibility.data ? { visibility: visibility.data } : {}),
   });
   revalidatePath("/backlogs");
   return { id: created.id };
@@ -81,7 +91,7 @@ export async function setBacklogVisibilityAction(
   visibility: BacklogVisibility,
 ) {
   const { user, backlog } = await assertOwnsBacklog(backlogId);
-  const parsed = z.enum(["private", "public", "featured"]).safeParse(visibility);
+  const parsed = visibilitySchema.safeParse(visibility);
   if (!parsed.success) return { error: "invalid" as const };
 
   const ok = await updateBacklog(user.id, backlog.id, { visibility: parsed.data });
@@ -95,10 +105,20 @@ export async function setBacklogVisibilityAction(
   return { ok: true as const };
 }
 
-export async function deleteBacklogAction(backlogId: string) {
+/**
+ * Borrar una colección. `opts.purge` (founder, 2026-10-01) = borrar también
+ * el estado, la reacción y la reseña de los títulos que SOLO estaban aquí;
+ * sin él se conservan (el default). Strict `=== true`: the argument crosses
+ * an RPC boundary, anything else is the conservative default.
+ */
+export async function deleteBacklogAction(backlogId: string, opts?: { purge?: boolean }) {
   const { user, backlog } = await assertOwnsBacklog(backlogId);
-  await deleteBacklog(user.id, backlog.id);
+  const purge = opts?.purge === true;
+  await deleteBacklog(user.id, backlog.id, { purge });
   revalidatePath("/backlogs");
+  // The purged titles left the library: same invalidation as
+  // `removeFromLibraryAction`.
+  if (purge) revalidatePath("/backlogs", "layout");
   redirect("/backlogs");
 }
 

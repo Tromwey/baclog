@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/auth";
+import { isOnboarded } from "@/auth/user-row";
 import { parseTidalReturn } from "@/components/party/export-copy";
 import { PartyRoom } from "@/components/party/party-room";
-import { PartySoonScreen } from "@/components/party/party-soon";
 import { loginPathFor, safeReturnTo } from "@/lib/return-to";
-import { PartyUnavailableError } from "@/modules/party-collections/errors";
-import { MIGRATION_0033_LIVE } from "@/modules/party-collections/live";
 import { getPartyDetail } from "@/modules/party-collections/queries";
 import { partyPath } from "@/modules/party-collections/rules";
 
 /**
  * /c/{id} — a party's member page (contract §2): host + members only; anyone
- * else, an unknown id or a non-UUID → the same 404 (no oracle). Migration
- * 0033 not live yet → "las fiestas llegan muy pronto." for every id (C1),
- * after the session check (it says nothing about the id).
+ * else, an unknown id or a non-UUID → the same 404 (no oracle).
  *
  * Lives OUTSIDE `(app)` on purpose (desviación registrada en
  * state/frontend.md): the `(app)` layout's `requireUser()` sends a signed-out
@@ -29,6 +25,15 @@ import { partyPath } from "@/modules/party-collections/rules";
  * landing of the TIDAL OAuth callback (export contract §4.1): 1 reopens the
  * export, 0 says why in a toast.
  */
+
+/**
+ * This page hosts the TIDAL export's server action (`stepTidalExportAction`,
+ * called from party-export.tsx): a server action runs under the `maxDuration`
+ * of the page it is called from. Same number as the v1 step route and no
+ * longer than the step's lease (`LEASE_MS`, modules/music-export/exports.ts)
+ * — `check-music-export` keeps the three together.
+ */
+export const maxDuration = 60;
 
 export const metadata: Metadata = {
   title: "fiesta · kura",
@@ -47,20 +52,13 @@ export default async function PartyPage({
   const [{ backlogId }, sp, user] = await Promise.all([params, searchParams, getCurrentUser()]);
   const path = partyPath(backlogId);
   if (!user) redirect(loginPathFor(path));
-  if (!user.name) {
+  if (!isOnboarded(user)) {
     const to = safeReturnTo(path);
     redirect(to ? `/onboarding?to=${encodeURIComponent(to)}` : "/onboarding");
   }
-  if (!MIGRATION_0033_LIVE) return <PartySoonScreen />;
   if (!UUID_RE.test(backlogId)) notFound();
 
-  let party;
-  try {
-    party = await getPartyDetail(user.id, backlogId);
-  } catch (err) {
-    if (err instanceof PartyUnavailableError) return <PartySoonScreen />;
-    throw err;
-  }
+  const party = await getPartyDetail(user.id, backlogId);
   if (!party) notFound();
 
   const w = sp.w === "new" || sp.w === "back" ? sp.w : null;

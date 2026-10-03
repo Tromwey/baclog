@@ -2,8 +2,6 @@ import "server-only";
 import { and, eq, gte, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { deviceTokens, mobileSessions } from "@/db/schema";
-import { MIGRATION_0029_LIVE } from "@/auth/live-0029";
-import { MIGRATION_0035_LIVE } from "@/auth/live-0035";
 import { DEVICE_TOKEN_LIVE_WINDOW_MS } from "./liveness";
 
 /**
@@ -61,12 +59,6 @@ export type ApnsEnvironment = "sandbox" | "production";
  * Upsert: new row, or the existing token moved to this user/session/env
  * (and provider). `environment` only means something for APNs; FCM rows
  * store "production" (the column is NOT NULL and nothing reads it for them).
- *
- * Before 0035 (`MIGRATION_0035_LIVE` false) only APNs can get here (the
- * route answers 503 `fcm_pending` for FCM) and the column does not exist:
- * the Drizzle upsert of 4e. After it, one raw statement that names
- * `provider` — raw so it compiles with the schema line still commented
- * (see src/auth/live-0035.ts for the migration order).
  */
 export async function registerDeviceToken(
   userId: string,
@@ -75,41 +67,19 @@ export async function registerDeviceToken(
   provider: PushProvider,
   environment: ApnsEnvironment,
 ): Promise<void> {
-  if (!MIGRATION_0035_LIVE) {
-    if (provider !== "apns") {
-      throw new Error("registerDeviceToken: FCM token before migration 0035");
-    }
-    await db
-      .insert(deviceTokens)
-      .values({ token, userId, sessionId, environment })
-      .onConflictDoUpdate({
-        target: deviceTokens.token,
-        set: {
-          userId,
-          sessionId,
-          environment,
-          updatedAt: sql`now()`,
-        },
-      });
-    return;
-  }
   const env: ApnsEnvironment = provider === "fcm" ? "production" : environment;
-  await db.execute(sql`
-    insert into "device_token" ("token", "user_id", "session_id", "environment", "provider")
-    values (${token}, ${userId}, ${sessionId}::uuid, ${env}::"apns_environment", ${provider})
-    on conflict ("token") do update set
-      "user_id" = excluded."user_id",
-      "session_id" = excluded."session_id",
-      "environment" = excluded."environment",
-      "provider" = excluded."provider",
-      "updated_at" = now()
-  `);
+  await db
+    .insert(deviceTokens)
+    .values({ token, userId, sessionId, environment: env, provider })
+    .onConflictDoUpdate({
+      target: deviceTokens.token,
+      set: { userId, sessionId, environment: env, provider, updatedAt: sql`now()` },
+    });
 }
 
 /** Idempotent; only ever deletes the caller's own row (another account's
  *  token — or an unknown one — is a silent no-op). `tokens` = the stored
- *  forms the path token could have (`deviceTokenCandidates`). Never reads
- *  `provider`: works the same before and after 0035. */
+ *  forms the path token could have (`deviceTokenCandidates`). */
 export async function unregisterDeviceToken(userId: string, tokens: string[]): Promise<void> {
   if (tokens.length === 0) return;
   await db
@@ -124,10 +94,8 @@ export async function unregisterDeviceToken(userId: string, tokens: string[]): P
  * and not re-registered within it. `pushToUsers` already skips those rows;
  * this keeps the table from growing with dead installs. Returns the number
  * deleted; throws on a DB error (the cron reports it, never swallows it).
- * No-op (0) while migration 0029 is not live.
  */
 export async function pruneStaleDeviceTokens(now: Date = new Date()): Promise<number> {
-  if (!MIGRATION_0029_LIVE) return 0;
   // Column-bound operators (not a raw Date in a sql`` template): the columns
   // are `timestamp` without zone (learning 2026-09-02-date-crudo-en-sql…).
   const cutoff = new Date(now.getTime() - DEVICE_TOKEN_LIVE_WINDOW_MS);
