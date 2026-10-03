@@ -17,7 +17,18 @@ export const LAB_NICHOS = [
   { id: "n3", umbral: 30, titulo: "Lugar", texto: "Residencial Unio" },
   { id: "n4", umbral: 50, titulo: "Vestimenta", texto: "Disfrazados" },
   { id: "n5", umbral: 75, titulo: "Qué llevar", texto: "Brebajes y golosinas a tu gusto" },
-  { id: "n6", umbral: 100, titulo: "Pista", texto: "¿Quién mató a Eric?" },
+  /*
+   * The last niche holds an instant photo, not a text (founder, 2026-10-03): the host's tombstone with the
+   * death date the labyrinth glitches out, and the question handwritten on the back. The Mausoleum draws it
+   * in 3D from `foto`; `texto` is only the hint under the title.
+   */
+  {
+    id: "n6",
+    umbral: 100,
+    titulo: "Pista",
+    texto: "Una instantánea. Arrástrala o tócala para darle la vuelta.",
+    foto: { nombre: "Eric Briseño", fechas: "20/11/1994 – 31/10/2026", reverso: "¿¡Quién mató a Eric!?" },
+  },
 ] as const;
 
 /**

@@ -56,7 +56,7 @@ pauseAmbienceWhenHidden(() => au.ctx);
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Oswald:wght@500;600&family=Cinzel:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Creepster&family=Oswald:wght@500;600&family=Cinzel:wght@400;700&family=Caveat:wght@600&display=swap">
 <link rel="stylesheet" href="/party/laberinto/app.css">
 <style>
 html,body{margin:0;height:100%;background:#07080b;color:#e8e8e6;overflow:hidden;overscroll-behavior:none}
@@ -248,7 +248,7 @@ html[data-modo="3d"] #plano{display:none}
 import * as THREE from 'three';
 import { crearApi } from '/party/laberinto/api.js';
 import { crearSfx } from '/party/laberinto/sfx.js';
-import { texMuro, texAdoquin, texPiedra, texSuelo, texLetrero, fbm, rng } from '/party/laberinto/texturas.js';
+import { texMuro, texAdoquin, texPiedra, texSuelo, texLetrero, texGrabado, fbm, rng } from '/party/laberinto/texturas.js';
 import { mallaCarta, lineas } from '/party/laberinto/cartas.js';
 import { crearLogros, crearAvisoLogros } from '/party/laberinto/logros.js';
 
@@ -295,7 +295,7 @@ async function cargarEstado() {
 }
 function guardarMausoleo(r) {
   cache.mau.total = r.total;
-  (r.nichos || []).forEach(n => { if (n.abierto && n.titulo != null) cache.mau.contenido[n.id] = { titulo: n.titulo, texto: n.texto }; });
+  (r.nichos || []).forEach(n => { if (n.abierto && n.titulo != null) cache.mau.contenido[n.id] = { titulo: n.titulo, texto: n.texto, foto: n.foto || null };   /* [Kura] instantánea */ });
   guardar();
 }
 const estado0 = await cargarEstado();
@@ -308,7 +308,7 @@ const textoSig = t => { const s = siguiente(t); return s ? `Faltan ${s.umbral - 
 function contenidoNicho(n) {
   if (!n.abierto) return { titulo: 'Sellado', texto: `Se abre cuando, entre todos, entreguen ${n.umbral} sellos.`, estado: `Faltan ${Math.max(0, n.umbral - total)}` };
   const c = cache.mau.contenido[n.id];
-  return c ? { titulo: c.titulo, texto: c.texto, estado: '' } : { titulo: 'Abierto', texto: 'Sin conexión para leerlo. Vuelve a intentarlo en un momento.', estado: '' };
+  return c ? { titulo: c.titulo, texto: c.texto, estado: '', foto: c.foto || null } : { titulo: 'Abierto', texto: 'Sin conexión para leerlo. Vuelve a intentarlo en un momento.', estado: '' };
 }
 let msgT = 0;
 function mensaje(t, ms = 3000) { const m = $('msg'); m.textContent = t; $('live').textContent = t; m.classList.add('on'); clearTimeout(msgT); msgT = setTimeout(() => m.classList.remove('on'), ms); }
@@ -385,7 +385,7 @@ function pintarPlano() {
     const c = contenidoNicho(x), li = document.createElement('li');
     li.className = x.abierto ? '' : 'sellado';
     li.innerHTML = `<span class="mau-ficha-n">Nicho ${x.num}</span><h2></h2><p></p>${c.estado ? '<span class="mau-ficha-estado"></span>' : ''}`;
-    li.querySelector('h2').textContent = c.titulo; li.querySelector('p').textContent = c.texto;
+    li.querySelector('h2').textContent = c.titulo; li.querySelector('p').textContent = c.foto ? `Una instantánea de la lápida de ${c.foto.nombre}: ${c.foto.fechas}. Al reverso, escrito a mano: ${c.foto.reverso}` : c.texto;   /* [Kura] */
     if (c.estado) li.querySelector('.mau-ficha-estado').textContent = c.estado;
     $('p-nichos').appendChild(li);
   });
@@ -1152,7 +1152,8 @@ function iniciar3D() {
     if (e.pointerType === 'mouse' && !pointers.size) { mouseIn = true; toNdc(e.clientX, e.clientY); pointerDirty = true; par.x = -ndc.x * 0.04; par.y = ndc.y * 0.025; return; }
     const p = pointers.get(e.pointerId); if (!p || trans) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
-    if (pointers.size === 1) { const k = cam.fov * D2R / stage.clientHeight; lookT.yaw += dx * k; lookT.pitch += dy * k; }
+    if (pointers.size === 1 && fotoVisible()) fotoRotT += dx * 0.011;   /* [Kura] arrastrar gira la instantánea */
+    else if (pointers.size === 1) { const k = cam.fov * D2R / stage.clientHeight; lookT.yaw += dx * k; lookT.pitch += dy * k; }
     else if (pointers.size === 2) { const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y); lookT.z += (d - pinch0) * 0.01; pinch0 = d; }
     clampLook();
   });
@@ -1160,6 +1161,7 @@ function iniciar3D() {
     pointers.delete(e.pointerId);
     if (tapStart && !pointers.size) {
       const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y), dt = performance.now() - tapStart.t; tapStart = null;
+      if (fotoVisible()) { if (moved < 8 && dt < 500) fotoGirar(); else fotoAsentar(); return; }   /* [Kura] */
       if (moved < 8 && dt < 500) { toNdc(e.clientX, e.clientY); const h = pick(); setHover(e.pointerType === 'mouse' ? h : null); act(h && h.userData.id, h && h.userData.k); }
     }
   };
@@ -1183,6 +1185,77 @@ function iniciar3D() {
     else if (vista.k === 'cartas' && e.key === 'ArrowLeft') ir('ouija');
   });
 
+  // [Kura] ---------- Instantánea del último nicho: la lápida del anfitrión con su fecha, y la pregunta al reverso ----------
+  const fotoDe = i => { const n = NICHOS[i]; return (n && n.abierto && (cache.mau.contenido[n.id] || {}).foto) || null; };
+  const fotoVisible = () => vista.k === 'nicho' && !trans && !!fotoDe(vista.i);
+  let foto3D = null, fotoClave = '', fotoRot = 0, fotoRotT = 0, fotoK = 0;
+  function texFoto(d) {
+    const W = 660, H = 800, X = 40, Y = 40, S = 580;
+    const papel = (g, a, b) => { const p = g.createLinearGradient(0, 0, W, H); p.addColorStop(0, a); p.addColorStop(1, b); g.fillStyle = p; g.fillRect(0, 0, W, H); };
+    const f = lienzo(W, H), g = f.getContext('2d'); papel(g, '#efe9dc', '#ded6c6');
+    g.save(); g.beginPath(); g.rect(X, Y, S, S); g.clip();
+    const cielo = g.createLinearGradient(0, Y, 0, Y + S); cielo.addColorStop(0, '#07090f'); cielo.addColorStop(0.7, '#12161f'); cielo.addColorStop(1, '#0d0f12'); g.fillStyle = cielo; g.fillRect(X, Y, S, S);
+    const R = rng(77);
+    for (let i = 0; i < 5; i++) { g.fillStyle = `rgba(150,160,175,${0.03 + R() * 0.03})`; g.beginPath(); g.ellipse(X + R() * S, Y + S * (0.45 + R() * 0.3), 150 + R() * 160, 30 + R() * 30, 0, 0, 6.29); g.fill(); }
+    // La losa: la misma cara grabada del laberinto, con su remate redondo
+    const cara = texGrabado(d.nombre, d.fechas, piedraC), LW = 330, LH = LW * cara.height / cara.width, LX = W / 2 - LW / 2, LB = Y + S - 74, LY = LB - LH;
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.beginPath(); g.ellipse(W / 2 + 26, LB + 6, LW * 0.72, 30, 0, 0, 6.29); g.fill();
+    g.save(); g.beginPath(); g.arc(W / 2, LY + 2, LW / 2, Math.PI, 0); g.closePath(); g.fillStyle = g.createPattern(piedraC, 'repeat'); g.fill(); g.restore();
+    g.drawImage(cara, LX, LY, LW, LH);
+    g.fillStyle = 'rgba(20,22,30,.16)'; g.beginPath(); g.arc(W / 2, LY + 2, LW / 2, Math.PI, 0); g.rect(LX, LY, LW, LH); g.fill();
+    const sombra = g.createLinearGradient(LX, 0, LX + LW, 0); sombra.addColorStop(0, 'rgba(0,0,0,0)'); sombra.addColorStop(1, 'rgba(0,0,0,.4)'); g.fillStyle = sombra; g.fillRect(LX, LY - LW / 2, LW, LH + LW / 2);
+    // Tierra y pasto al pie
+    const suelo = g.createLinearGradient(0, LB - 14, 0, Y + S); suelo.addColorStop(0, '#191a14'); suelo.addColorStop(1, '#0a0b08'); g.fillStyle = suelo; g.fillRect(X, LB - 6, S, Y + S - LB + 6);
+    for (let i = 0; i < 150; i++) { const x = X + R() * S, y = LB - 8 + R() * 26, h = 8 + R() * 18; g.strokeStyle = `rgba(${44 + R() * 24},${56 + R() * 26},${34 + R() * 14},.85)`; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 8, y - h); g.stroke(); }
+    // Flash de cámara: claro al centro, viñeta y grano
+    const flash = g.createRadialGradient(W / 2, LY + LH * 0.45, 30, W / 2, LY + LH * 0.45, S * 0.86); flash.addColorStop(0, 'rgba(255,238,205,.14)'); flash.addColorStop(0.55, 'rgba(255,238,205,.04)'); flash.addColorStop(1, 'rgba(0,0,0,.5)'); g.fillStyle = flash; g.fillRect(X, Y, S, S);
+    for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${R() < 0.5 ? '255,255,255' : '0,0,0'},${R() * 0.07})`; g.fillRect(X + R() * S, Y + R() * S, 1.6, 1.6); }
+    g.restore();
+    g.strokeStyle = 'rgba(60,50,40,.35)'; g.lineWidth = 2; g.strokeRect(X, Y, S, S);
+    const r = lienzo(W, H), h = r.getContext('2d');
+    const pintarReverso = () => {
+      papel(h, '#d6cfbf', '#c4bcab');
+      h.fillStyle = 'rgba(60,52,44,.1)'; h.fillRect(X, Y, S, S); h.strokeStyle = 'rgba(60,50,40,.22)'; h.lineWidth = 2; h.strokeRect(X, Y, S, S);
+      let fs = 118; const fuente = () => `600 ${fs}px Caveat, "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive`, palabras = d.reverso.split(' ');
+      const partir = () => { const ls = []; let l = ''; h.font = fuente(); for (const w of palabras) { const t = l ? l + ' ' + w : w; if (l && h.measureText(t).width > S - 90) { ls.push(l); l = w; } else l = t; } ls.push(l); return ls; };
+      let ls = partir(); while (fs > 48 && (ls.length > 3 || ls.some(l => h.measureText(l).width > S - 70))) { fs -= 6; ls = partir(); }
+      h.save(); h.translate(W / 2, Y + S / 2); h.rotate(-0.07); h.textAlign = 'center'; h.textBaseline = 'middle'; h.fillStyle = '#231c1a';
+      ls.forEach((l, i) => h.fillText(l, (i % 2 ? 14 : -10), (i - (ls.length - 1) / 2) * fs * 1.02));
+      const wU = Math.min(S - 120, h.measureText(ls[ls.length - 1]).width), yU = ((ls.length - 1) / 2) * fs * 1.02 + fs * 0.58;
+      h.strokeStyle = '#231c1a'; h.lineWidth = 5; h.lineCap = 'round'; h.beginPath(); h.moveTo(-wU / 2, yU + 6); h.quadraticCurveTo(0, yU - 8, wU / 2, yU + 2); h.stroke();
+      h.restore();
+    };
+    pintarReverso();
+    return { f, r, pintarReverso };
+  }
+  function crearFoto(d) {
+    if (foto3D) { cam.remove(foto3D); foto3D.traverse(o => { if (o.material) { o.material.map.dispose(); o.material.dispose(); } }); }
+    const t = texFoto(d), AN = 0.825, geo = new THREE.PlaneGeometry(AN, 1);
+    const mat = c => new THREE.MeshBasicMaterial({ map: tex(c, 1, 1, true, true), color: 0xe2ddd2, toneMapped: false, fog: false, depthTest: false, depthWrite: false, transparent: true });
+    const frente = new THREE.Mesh(geo, mat(t.f)), reverso = new THREE.Mesh(geo, mat(t.r)); reverso.rotation.y = Math.PI;
+    foto3D = new THREE.Group(); foto3D.name = 'instantanea'; foto3D.add(frente, reverso); frente.renderOrder = reverso.renderOrder = 999; foto3D.visible = false; cam.add(foto3D);
+    // La letra a mano llega después: se vuelve a pintar el reverso cuando carga la fuente
+    document.fonts.load('600 60px Caveat').then(() => { t.pintarReverso(); reverso.material.map.needsUpdate = true; }).catch(() => {});
+  }
+  const fotoCara = () => Math.abs(Math.round(fotoRotT / Math.PI)) % 2;   // 0 frente, 1 reverso
+  function fotoDecir() { const d = fotoDe(vista.i); if (d) $('live').textContent = fotoCara() ? `Al reverso, escrito a mano: ${d.reverso}` : `Una instantánea de la lápida de ${d.nombre}: ${d.fechas}`; }
+  function fotoGirar() { fotoRotT = (Math.round(fotoRotT / Math.PI) + 1) * Math.PI; sfx('flip', 0.4); fotoDecir(); }
+  function fotoAsentar() { const antes = fotoCara(); fotoRotT = Math.round(fotoRotT / Math.PI) * Math.PI; sfx('flip', 0.25); fotoDecir(); return antes; }
+  function fotoTick(dt) {
+    const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
+    if (d) { const clave = d.nombre + '|' + d.fechas + '|' + d.reverso; if (clave !== fotoClave) { fotoClave = clave; crearFoto(d); } }
+    if (!foto3D) return;
+    fotoK += ((on ? 1 : 0) - fotoK) * (1 - Math.exp(-dt * (on ? 5 : 9)));
+    if (!on && fotoK < 0.01) { fotoK = 0; fotoRot = fotoRotT = 0; foto3D.visible = false; return; }
+    fotoRot += (fotoRotT - fotoRot) * (1 - Math.exp(-dt * 9));
+    const W = stage.clientWidth, H = stage.clientHeight, fr = libre(), D = 0.6, tV = Math.tan(cam.fov / 2 * D2R), tH = tV * W / H;
+    const s = Math.min(fr.h / H * 2 * D * tV * 0.74, fr.w / W * 2 * D * tH * 0.82 / 0.825), e = reducido ? 1 : fotoK;
+    foto3D.visible = true; foto3D.scale.setScalar(s * (0.7 + 0.3 * e));
+    foto3D.position.set(((fr.l + fr.r) / W - 1) * tH * D, (1 - (fr.t + fr.b) / H) * tV * D - (1 - e) * 0.12, -D);
+    foto3D.rotation.set(0, fotoRot, -0.035 * Math.cos(fotoRot));
+    foto3D.children.forEach(m => { m.material.opacity = Math.min(1, e * 1.4); });
+  }
+
   function act(id, k) {
     if (!id || vista.k === 'afuera') return;
     if (id === 'ouija' && vista.k === 'ouija') return preguntar();
@@ -1198,7 +1271,7 @@ function iniciar3D() {
     if (id === 'logros') return ir('logros');
     if (id === 'logro') return vista.k === 'logro' && vista.i === k ? undefined : ir('logro', k);
     if (id === 'sello-logro') return tomarSelloLogro(k);
-    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) return;
+    const i = +id.slice(1); if (vista.k === 'nicho' && vista.i === i) { if (fotoVisible()) fotoGirar(); return; }   /* [Kura] */
     ir('nicho', i);
   }
 
@@ -1551,7 +1624,8 @@ function iniciar3D() {
     luzOuija.intensity = 2.2 * (sesion || hablando ? 0.62 + 0.38 * Math.abs(Math.sin(T * 17)) * (0.6 + 0.4 * Math.sin(T * 5.3)) : 0.9 + 0.1 * Math.sin(T * 9 + 3));
     NICHOS.forEach(n => { if (n.luz) n.luz.intensity = n.vela.t < 0 ? 0 : 0.9 * n.vela.k; });
     brilloK = Math.max(0, brilloK - dt * 1.4); brillo.material.opacity = brilloK * 0.9; M.boca.color.setRGB(0.02 + brilloK * 0.45, 0.015 + brilloK * 0.2, 0.01 + brilloK * 0.06);
-    if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(pick()); }
+    fotoTick(dt);   /* [Kura] */
+    if (pointerDirty && !trans) { pointerDirty = false; if (conMouse()) setHover(fotoVisible() ? null : pick()); }
     if (hovered) { v.copy(hovered.userData.anchor).project(cam); tag.classList.toggle('on', v.z < 1 && !!tag.textContent); tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * stage.clientWidth}px, ${(-v.y * 0.5 + 0.5) * stage.clientHeight}px) translate(-50%, -100%)`; }
     renderer.render(scene, cam);
     if (primero) { primero = false; $('velo').classList.add('fuera'); }
