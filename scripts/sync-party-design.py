@@ -629,7 +629,6 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     bloque('En memoria de', [d.nombre || '', d.fechas || '']);
     NICHOS.slice(0, 5).forEach(n => { const c = cache.mau.contenido[n.id]; if (c && c.titulo) bloque(c.titulo, [c.texto]); });
     const nombres = await elenco; if (nombres.length) bloque('Quienes abrieron los nichos', nombres);
-    bloque('Sellos entregados', [String(total)]);
     bloque('', ['El culpable estará en la fiesta.'], 'chico');
     const fecha = (cache.mau.contenido[NICHOS[0].id] || {}).texto, fin = el('div', 'mau-final-fin'), volverB = el('button', 'lab-pill', 'Volver al Mausoleo'); volverB.type = 'button';
     const calB = el('a', 'lab-pill', 'Agregar al calendario'); calB.href = '/api/party/lab/calendario';
@@ -644,7 +643,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     sonar();
     if (reducido) { v.classList.add('quieto'); rollo.classList.add('on'); fin.classList.add('on'); saltar.remove(); return; }
     await espera(60); const alto = rollo.scrollHeight, vh = v.clientHeight;
-    const anim = rollo.animate([{ transform: `translateY(${vh}px)` }, { transform: `translateY(${-alto}px)` }], { duration: (vh + alto) / 62 * 1000, easing: 'linear', fill: 'both' });
+    const anim = rollo.animate([{ transform: `translateY(${vh}px)` }, { transform: `translateY(${-alto}px)` }], { duration: (vh + alto) / 42 * 1000, easing: 'linear', fill: 'both' });
     rollo.classList.add('on'); saltar.classList.add('on');
     anim.onfinish = terminar; saltar.addEventListener('click', () => { anim.cancel(); rollo.style.transform = `translateY(${-alto}px)`; terminar(); });
   }
