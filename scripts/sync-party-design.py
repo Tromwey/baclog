@@ -648,7 +648,7 @@ addEventListener('pagereveal', function (e) {{ if (e.viewTransition) e.viewTrans
     const d = vista.k === 'nicho' ? fotoDe(vista.i) : null, on = !!d && !trans;
     // Con la instantánea a la vista no queda nada más en pantalla (founder 2026-10-03): ni inventario, ni contador,
     // ni ficha (ver ir()); solo la foto, lo que dice el personaje y el botón de volver.
-    if (!!d !== fotoInv) { fotoInv = !!d; ['.lab-inv', '#total', '#pista', '#tag'].forEach(q => { const x = ui.querySelector(q); if (x) { x.style.transition = 'opacity .4s'; x.style.opacity = d ? '0' : ''; x.style.pointerEvents = d ? 'none' : ''; } }); if (!d) callar(); }
+    if (!!d !== fotoInv) { fotoInv = !!d; ['.lab-inv', '#total', '#pista', '#tag'].forEach(q => { const x = ui.querySelector(q); if (x) { x.style.transition = 'opacity .4s'; x.style.opacity = d ? '0' : ''; x.style.pointerEvents = d ? 'none' : ''; } }); $('msg').style.bottom = d && stage.clientWidth <= 520 ? 'max(28px, env(safe-area-inset-bottom))' : ''; if (!d) callar(); }
     if (d) { const clave = d.nombre + '|' + d.fechas + '|' + d.reverso; if (clave !== fotoClave) { fotoClave = clave; crearFoto(d); } }
     if (!foto3D) return;
     fotoK += ((on ? 1 : 0) - fotoK) * (1 - Math.exp(-dt * (on ? 5 : 9)));
