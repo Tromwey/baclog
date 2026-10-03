@@ -208,7 +208,7 @@ class PartiesTest {
         h.api.party = h.api.guestView(remaining = 3, mine = 0)
         h.store.loadParty(h.api.party.id)
         assertEquals(SongAdd.Added, h.store.addPartySong(h.api.party.id, h.api.hit()))
-        assertEquals("Agregaste Oye mi amor.", h.store.toast?.text)
+        assertEquals("Agregaste Oye mi amor", h.store.toast?.text)
         assertNull(h.store.sheet)
     }
 
@@ -257,7 +257,7 @@ class PartiesTest {
         h.store.loadParty(h.api.party.id)
         h.api.failNext("addPartySong", KuraApiError.Forbidden("blocked"))
         assertEquals(SongAdd.Failed, h.store.addPartySong(h.api.party.id, h.api.hit()))
-        assertEquals("Ya no puedes agregar canciones a esta fiesta.", h.store.toast?.text)
+        assertEquals("Ya no puedes agregar canciones a esta fiesta", h.store.toast?.text)
         assertEquals(2, h.api.callsOf("party").size)
     }
 

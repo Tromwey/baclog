@@ -46,7 +46,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 07 · O1c el código: "tu código." + where it went, six digits (entering the sixth sends it), Entrar,
+ * 07 · O1c el código: "tu código" + where it went, six digits (entering the sixth sends it), Entrar,
  * "Enviar otro código" (counting down the server's minute per code). Errors inline, in the voice,
  * without a wink (`authText`: "El código es incorrecto o ya venció. Revísalo o pide otro."). Opened by a 429 too
  * (`codeAlreadySent`): the code that already went out is the one to type.
@@ -89,7 +89,7 @@ fun CodeScreen(store: AppStore) {
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 170.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BasicText("tu código.", modifier = Modifier.semantics { heading() }, style = KuraType.news(40f))
+            BasicText("tu código", modifier = Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Lo enviamos a ") }

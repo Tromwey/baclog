@@ -60,7 +60,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 06 · 32b Tu gente: the three picks at 120 over their tint (fading into bg under the first rows),
- * "gente con tus obsesiones.", 72 rows (seal 44, @handle, "Le obsesiona X" with the flame) with
+ * "gente con tus obsesiones", 72 rows (seal 44, @handle, "Le obsesiona X" with the flame) with
  * Seguir ↔ Siguiendo, and "Entrar a kura" — following is optional.
  */
 @Composable
@@ -131,7 +131,7 @@ private fun Hero(store: AppStore) {
         ) {
             picked.forEach { t -> Cover(t.art, height = 120.dp) }
         }
-        BasicText("gente con tus obsesiones.", modifier = Modifier.semantics { heading() }, style = KuraType.news(32f))
+        BasicText("gente con tus obsesiones", modifier = Modifier.semantics { heading() }, style = KuraType.news(32f))
         BasicText("Síguela para llenar tu feed. Puedes hacerlo después.", style = KuraType.ui(15f).copy(color = KColor.text2))
     }
 }

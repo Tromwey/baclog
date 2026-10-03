@@ -337,7 +337,7 @@ export function SearchSheet({
       // Don't fake success: the row keeps its prior state and stays tappable —
       // and says so either way (a ✓ that silently stays ✓ reads as a dead tap).
       if (!existing) setFailed(id);
-      else showToast({ message: `No se pudo quitar de ${t.name}.`, kind: "error" });
+      else showToast({ message: `No se pudo quitar de ${t.name}`, kind: "error" });
     } finally {
       setRowPending(id, false);
     }

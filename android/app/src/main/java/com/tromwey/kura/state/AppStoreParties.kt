@@ -263,16 +263,16 @@ private fun AppStore.setSongPalette(titleId: String, hexes: List<String>) {
 
 /** The toast for a party write that failed (the server's `message` when it wrote the copy). */
 fun partyText(e: KuraApiError, fallback: String = e.toast): String = when {
-    e == KuraApiError.Unavailable -> PartyCopy.UNAVAILABLE
+    e == KuraApiError.Unavailable -> PartyCopy.UNAVAILABLE.removeSuffix(".")
     // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
     e is KuraApiError.Conflict && e.message.isNotEmpty() -> e.message
     e is KuraApiError.Conflict && e.code == "too_many_parties" -> PartyCopy.TOO_MANY_PARTIES
     e is KuraApiError.RateLimited -> PartyCopy.ROTATE_LIMITED
     e is KuraApiError.Forbidden -> when (e.code) {
-        "blocked" -> "Ya no puedes agregar canciones a esta fiesta."
-        "view_only" -> "En esta fiesta solo se puede ver la colección."
-        "not_yours" -> "Solo puedes quitar las canciones que agregaste tú."
-        else -> "No tienes permiso para hacer eso."
+        "blocked" -> "Ya no puedes agregar canciones a esta fiesta"
+        "view_only" -> "En esta fiesta solo se puede ver la colección"
+        "not_yours" -> "Solo puedes quitar las canciones que agregaste tú"
+        else -> "No tienes permiso para hacer eso"
     }
     e == KuraApiError.NotFound -> "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella."
     // A code this build doesn't know: the server's own `message` (never "HTTP 500").
@@ -324,7 +324,7 @@ suspend fun AppStore.createParty(name: String, perGuestLimit: Int?): Boolean {
             when {
                 onboardingRequired(e) -> Unit
                 e is KuraApiError.Invalid ->
-                    showToast(ToastModel(e.fields["name"] ?: e.message.ifEmpty { "Revisa el nombre." }, ToastModel.Kind.Info))
+                    showToast(ToastModel(e.fields["name"] ?: e.message.ifEmpty { "Revisa el nombre" }, ToastModel.Kind.Info))
                 e == KuraApiError.Unavailable -> {
                     s.party.unavailable = true
                     partyToast(e)
@@ -350,7 +350,7 @@ suspend fun AppStore.deleteParty(id: String): Boolean =
         is BoundWrite.Ok -> {
             dismissSheet()
             dropParty(id)
-            showToast(ToastModel("Borraste la fiesta.", ToastModel.Kind.Info))
+            showToast(ToastModel("Borraste la fiesta", ToastModel.Kind.Info))
             true
         }
         is BoundWrite.Failed -> { partyWriteFailed(id, r.error); false }
@@ -437,7 +437,7 @@ suspend fun AppStore.addPartySong(partyId: String, hit: PartySongHit): SongAdd {
                 dismissToast()
                 present(SheetRoute.PartyCap(partyId))
             } else {
-                showToast(ToastModel("Agregaste ${hit.title}.", ToastModel.Kind.Info))
+                showToast(ToastModel("Agregaste ${hit.title}", ToastModel.Kind.Info))
             }
             SongAdd.Added
         }
@@ -470,7 +470,7 @@ suspend fun AppStore.removePartySong(partyId: String, song: PartySong): Boolean 
     when (val r = boundWrite { api.removePartySong(partyId, song.titleId) }) {
         is BoundWrite.Ok -> {
             applyParty(r.value)
-            showToast(ToastModel("Quitaste ${song.title}.", ToastModel.Kind.Info))
+            showToast(ToastModel("Quitaste ${song.title}", ToastModel.Kind.Info))
             true
         }
         is BoundWrite.Failed -> {
@@ -486,7 +486,7 @@ suspend fun AppStore.removeAndBlockPartyGuest(partyId: String, song: PartySong):
     when (val r = boundWrite { api.removeAndBlockPartyGuest(partyId, song.titleId) }) {
         is BoundWrite.Ok -> {
             applyParty(r.value)
-            showToast(ToastModel("Quitaste ${song.title} y bloqueaste a ${song.addedBy.atOrSomeone}.", ToastModel.Kind.Info))
+            showToast(ToastModel("Quitaste ${song.title} y bloqueaste a ${song.addedBy.atOrSomeone}", ToastModel.Kind.Info))
             true
         }
         is BoundWrite.Failed -> {
@@ -502,7 +502,7 @@ suspend fun AppStore.unblockPartyGuest(partyId: String, guestRef: String): Boole
     return when (val r = boundWrite { api.unblockPartyGuest(partyId, guestRef) }) {
         is BoundWrite.Ok -> {
             applyParty(r.value)
-            showToast(ToastModel("Desbloqueaste a ${guest?.person.atOrSomeone}.", ToastModel.Kind.Info))
+            showToast(ToastModel("Desbloqueaste a ${guest?.person.atOrSomeone}", ToastModel.Kind.Info))
             true
         }
         is BoundWrite.Failed -> { partyWriteFailed(partyId, r.error, stale = "Esa persona ya no estaba bloqueada."); false }

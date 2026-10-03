@@ -127,7 +127,7 @@ suspend fun AppStore.connectGoogle(fromMerge: Boolean = false, credential: suspe
             is GoogleCredential.Token -> c.idToken
             GoogleCredential.Cancelled -> return
             GoogleCredential.NoAccount -> {
-                if (s === session) showToast(ToastModel("No hay una cuenta de Google en este teléfono.", ToastModel.Kind.Info))
+                if (s === session) showToast(ToastModel("No hay una cuenta de Google en este teléfono", ToastModel.Kind.Info))
                 return
             }
             GoogleCredential.Failed -> {
@@ -213,7 +213,7 @@ suspend fun AppStore.disconnect(p: IdentityProvider): Boolean {
                         false
                     }
                     else -> {
-                        val text = if (e == KuraApiError.Offline) "Sin conexión. ${p.label} sigue conectada." else "No se pudo desconectar ${p.label}."
+                        val text = if (e == KuraApiError.Offline) "Sin conexión. ${p.label} sigue conectada." else "No se pudo desconectar ${p.label}"
                         showToast(ToastModel(text, ToastModel.Kind.Retry) {
                             dismissToast()
                             scope.launch { disconnect(p) }
@@ -469,7 +469,7 @@ suspend fun AppStore.revokeSession(device: DeviceSession): Boolean {
         is BoundWrite.Ok -> {
             dropSession(session, device.id)
             haptic(StoreHaptic.Success)
-            showToast(ToastModel("Cerraste la sesión en ${device.title}.", ToastModel.Kind.Info))
+            showToast(ToastModel("Cerraste la sesión en ${device.title}", ToastModel.Kind.Info))
             true
         }
         is BoundWrite.Failed -> when (r.error) {
@@ -479,7 +479,7 @@ suspend fun AppStore.revokeSession(device: DeviceSession): Boolean {
                 true
             }
             else -> {
-                val text = if (r.error == KuraApiError.Offline) "Sin conexión. La sesión sigue abierta." else "No se pudo cerrar esa sesión."
+                val text = if (r.error == KuraApiError.Offline) "Sin conexión. La sesión sigue abierta." else "No se pudo cerrar esa sesión"
                 showToast(ToastModel(text, ToastModel.Kind.Retry) {
                     dismissToast()
                     scope.launch { revokeSession(device) }

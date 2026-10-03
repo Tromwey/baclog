@@ -91,7 +91,7 @@ private val exportOrder = listOf(MusicProvider.Tidal, MusicProvider.AppleMusic)
 private enum class RowState { Loading, Ready, Soon, Empty, NotHere }
 
 /**
- * "llévala a otra app." — for the host AND the guests, each into their own account.
+ * "llévala a otra app" — for the host AND the guests, each into their own account.
  * `GET /music/services` decides each button: `available: false` (or the 503 of
  * `MIGRATION_0034_LIVE`) → dimmed with "Próximamente". A linked TIDAL can be unlinked here.
  */
@@ -104,7 +104,7 @@ fun KuraSheetScope.PartyExportSheet(store: AppStore, sheet: SheetRoute.PartyExpo
     val sv = store.musicServices
     val error = store.musicServicesError
     Column(Modifier.padding(horizontal = 8.dp).padding(top = 8.dp)) {
-        PartySheetTitle("llévala a otra app.")
+        PartySheetTitle("llévala a otra app")
         PartySheetBody(
             if (n == 0) "La fiesta todavía no tiene canciones. Cuando tenga, la pasas a tu cuenta."
             else "Creamos una playlist con ${if (n == 1) "la canción" else "las $n canciones"} en tu cuenta. La colección sigue viva en kura.",
@@ -251,7 +251,7 @@ fun PartyExportScreen(store: AppStore, f: PartyExportFlow) {
                                 AuthTabIntent.Builder().build().launch(launcher, Uri.parse(url), "kura")
                             } catch (_: ActivityNotFoundException) {
                                 store.tidalAuthResult(null)
-                                store.showToast(ToastModel("No encontramos un navegador para abrir TIDAL.", ToastModel.Kind.Info))
+                                store.showToast(ToastModel("No encontramos un navegador para abrir TIDAL", ToastModel.Kind.Info))
                             }
                         }
                     },

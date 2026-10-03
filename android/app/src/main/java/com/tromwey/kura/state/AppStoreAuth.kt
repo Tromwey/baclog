@@ -225,15 +225,15 @@ fun AppStore.googleFailureText(type: String?, message: String?, elapsedMs: Long?
         // CANCELED, source: REMOTE_PROVIDER`) before any sheet was drawn. Nobody closes a sheet that
         // fast: a cancel under `GOOGLE_SILENT_CANCEL_MS` is that, and it gets its words.
         has("USER_CANCELED", "CANCELLATION", "CANCELED") && elapsedMs != null && elapsedMs < GOOGLE_SILENT_CANCEL_MS ->
-            "No hay una cuenta de Google en este teléfono."
+            "No hay una cuenta de Google en este teléfono"
         has("USER_CANCELED", "CANCELLATION", "CANCELED") -> null
-        has("NO_CREDENTIAL", "NoCredential") -> "No hay una cuenta de Google en este teléfono."
+        has("NO_CREDENTIAL", "NoCredential") -> "No hay una cuenta de Google en este teléfono"
         // A client id / SHA-1 that doesn't match this build: Play services says 10 (DEVELOPER_ERROR) or
         // 16 in brackets, or the provider isn't configured at all.
         has("PROVIDER_CONFIGURATION", "ProviderConfiguration", "DEVELOPER_ERROR") ||
             GOOGLE_CONFIG_CODE.containsMatchIn(m) || GOOGLE_CONFIG_CODE.containsMatchIn(t) || m.contains("DEVELOPER_ERROR") ->
-            "Google no está configurado para esta versión de la app."
-        else -> "No se pudo entrar con Google."
+            "Google no está configurado para esta versión de la app"
+        else -> "No se pudo entrar con Google"
     }
 }
 

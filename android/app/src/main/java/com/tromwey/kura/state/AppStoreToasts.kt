@@ -129,7 +129,7 @@ internal const val RETRY_QUEUE_LIMIT = 50
 internal const val RETRY_QUEUE_KEY = "queue"
 
 /** The one notice for several queued writes (the canonical "No se pudo guardar", with its object). */
-internal fun retryQueueText(n: Int) = "No se pudieron guardar $n cambios."
+internal fun retryQueueText(n: Int) = "No se pudieron guardar $n cambios"
 
 /**
  * A failure that trying again can fix: no network, a timeout, a 5xx / 503, a rate limit. Only these

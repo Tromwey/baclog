@@ -10,7 +10,7 @@ import {
   FOLLOW_ROW_OFF,
   FOLLOW_ROW_ON,
 } from "./follow-pill";
-import { attempt, ONBOARDING_EXIT_LABEL, ONBOARDING_TO_FOLLOW } from "@/components/kura/attempt";
+import { attempt, ONBOARDING_EXIT_LABEL, ONBOARDING_TO_FOLLOW, toastText } from "@/components/kura/attempt";
 import { Toast, useToast } from "@/components/kura/toast";
 import {
   followUserAction,
@@ -94,7 +94,7 @@ export function FollowButton({
           // sign-up, so that is the action.
           announce({
             kind: "error",
-            message: ONBOARDING_TO_FOLLOW,
+            message: toastText(ONBOARDING_TO_FOLLOW),
             actionLabel: ONBOARDING_EXIT_LABEL,
             onAction: () => router.push("/onboarding"),
           });
@@ -103,8 +103,8 @@ export function FollowButton({
         announce({
           kind: "error",
           message: next
-            ? `No se pudo seguir a @${username}.`
-            : `No se pudo dejar de seguir a @${username}.`,
+            ? `No se pudo seguir a @${username}`
+            : `No se pudo dejar de seguir a @${username}`,
           actionLabel: "Reintentar",
           onAction: () => run(next),
         });
@@ -113,7 +113,7 @@ export function FollowButton({
       if (!next) {
         announce({
           kind: "undo",
-          message: `Dejaste de seguir a @${username}.`,
+          message: `Dejaste de seguir a @${username}`,
           actionLabel: "Deshacer",
           onAction: () => run(true),
         });

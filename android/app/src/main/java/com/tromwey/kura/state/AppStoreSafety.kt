@@ -38,12 +38,12 @@ suspend fun AppStore.report(target: ReportTarget, reason: String, details: Strin
             when (e) {
                 KuraApiError.Unauthorized -> Unit
                 KuraApiError.NotFound -> showToast(ToastModel(
-                    if (target.isReview) "Esa reseña ya no existe." else "Ese perfil no existe o es privado.", ToastModel.Kind.Info))
+                    if (target.isReview) "Esa reseña ya no existe" else "Ese perfil no existe o es privado", ToastModel.Kind.Info))
                 else -> {
                     val text = when {
                         e == KuraApiError.Offline -> "Sin conexión. No se envió tu reporte."
                         e.isRateLimit -> e.toast
-                        else -> "No se envió tu reporte."
+                        else -> "No se envió tu reporte"
                     }
                     showToast(ToastModel(text, ToastModel.Kind.Retry) {
                         dismissToast()
@@ -63,15 +63,15 @@ suspend fun AppStore.block(handle: String): Boolean = when (val r = boundWrite {
     is BoundWrite.Ok -> {
         applyBlock(handle)
         haptic(StoreHaptic.Success)
-        showToast(ToastModel("Bloqueaste a @$handle.", ToastModel.Kind.Info))
+        showToast(ToastModel("Bloqueaste a @$handle", ToastModel.Kind.Info))
         true
     }
     is BoundWrite.Failed -> {
         when (r.error) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado.", ToastModel.Kind.Info))
+            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado", ToastModel.Kind.Info))
             else -> {
-                val text = if (r.error == KuraApiError.Offline) "Sin conexión. No se bloqueó a @$handle." else "No se pudo bloquear a @$handle."
+                val text = if (r.error == KuraApiError.Offline) "Sin conexión. No se bloqueó a @$handle." else "No se pudo bloquear a @$handle"
                 showToast(ToastModel(text, ToastModel.Kind.Retry) {
                     dismissToast()
                     scope.launch { block(handle) }
@@ -128,7 +128,7 @@ suspend fun AppStore.unblock(key: String, handle: String?): Boolean {
             s.feedDirty = true
             s.loadedTitles = emptySet() // fichas re-read their reviews on the next visit
             haptic(StoreHaptic.Success)
-            showToast(ToastModel("Desbloqueaste a $shown.", ToastModel.Kind.Info))
+            showToast(ToastModel("Desbloqueaste a $shown", ToastModel.Kind.Info))
             if (handle != null && s.people[handle] != null) loadPerson(handle, force = true)
             true
         }
@@ -141,7 +141,7 @@ suspend fun AppStore.unblock(key: String, handle: String?): Boolean {
                     s.blockedAccounts = s.blockedAccounts?.filterNot { it.key == key || it.id == key }
                 }
                 else -> {
-                    val text = if (r.error == KuraApiError.Offline) "Sin conexión. No se desbloqueó a $shown." else "No se pudo desbloquear a $shown."
+                    val text = if (r.error == KuraApiError.Offline) "Sin conexión. No se desbloqueó a $shown." else "No se pudo desbloquear a $shown"
                     showToast(ToastModel(text, ToastModel.Kind.Retry) {
                         dismissToast()
                         scope.launch { unblock(key, handle) }

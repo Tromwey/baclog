@@ -561,7 +561,7 @@ fun KuraSheetScope.NotificationsAskSheet(store: AppStore) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) close() else denied = true
     }
-    SheetHeader(if (denied) "avisos apagados." else "¿te avisamos?", onClose = { close() })
+    SheetHeader(if (denied) "avisos apagados" else "¿te avisamos?", onClose = { close() })
     BasicText(
         if (denied) {
             "kura no puede avisarte en este teléfono. Si cambias de idea, actívalos en los ajustes del teléfono."

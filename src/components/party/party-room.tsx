@@ -13,6 +13,7 @@ import { Sheet } from "@/components/ui";
 import type { MusicProvider } from "@/modules/music-export/types";
 import type { PartyDetail, PartySong } from "@/modules/party-collections/types";
 import { logged, PARTY_GONE_MESSAGE } from "./party-errors";
+import { toastText } from "@/components/kura/attempt";
 import { setPartyFlash } from "./party-flash";
 import { handleOf, PartyHero, songsLabel, SongCover, SongRowBody } from "./party-parts";
 import { type TidalReturn, tidalConnectFailed } from "./export-copy";
@@ -115,7 +116,7 @@ export function PartyRoom({
   // A failed TIDAL connection says why, once (the query already left the URL).
   const tidalFailed = tidalReturn && !tidalReturn.ok ? tidalConnectFailed(tidalReturn.reason) : null;
   useEffect(() => {
-    if (tidalFailed) toast.show({ message: tidalFailed, kind: "error" });
+    if (tidalFailed) toast.show({ message: toastText(tidalFailed), kind: "error" });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
 
@@ -278,7 +279,7 @@ export function PartyRoom({
       {full && !iosOff && !sheet && (
         <div className="mx-3 mt-7 flex items-center gap-3 rounded-[26px] bg-[var(--glass-bg)] py-4 pl-[18px] pr-2">
           <div className="flex flex-1 flex-col gap-[3px]">
-            <span className="font-brand text-[20px] text-text">kura para iPhone.</span>
+            <span className="font-brand text-[20px] text-text">kura para iPhone</span>
             <span className="font-sans text-[14px] leading-[1.4] text-text-2">
               Sigue la colección desde tu teléfono la noche de la fiesta.
             </span>
@@ -424,7 +425,7 @@ export function PartyRoom({
             <LeaveSheet
               party={party}
               onLeft={() => {
-                setPartyFlash(`Saliste de ${party.name}.`);
+                setPartyFlash(`Saliste de ${party.name}`);
                 router.replace("/backlogs");
               }}
               toast={toast}

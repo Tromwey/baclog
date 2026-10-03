@@ -109,7 +109,7 @@ export function LoginForm({
       </header>
 
       <div className="mt-[62px] flex flex-col gap-3">
-        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">entrar.</h1>
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">entrar</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Guarda películas, series y álbumes en colecciones, y mira lo que
           obsesiona a tu gente.

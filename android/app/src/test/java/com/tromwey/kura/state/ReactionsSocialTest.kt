@@ -97,7 +97,7 @@ class ReactionsSocialTest {
         assertNotNull(store.myReview(yhlq))
         runCurrent()
         assertNull(store.myReview(yhlq))
-        assertEquals("Para reseñar, elige Me gusta o Me obsesiona.", store.toast?.text)
+        assertEquals("Para reseñar, elige Me gusta o Me obsesiona", store.toast?.text)
         assertEquals(ToastModel.Kind.Info, store.toast?.kind)
     }
 
@@ -117,7 +117,7 @@ class ReactionsSocialTest {
 
         store.followFromProfile("nueva") // Siguiendo → unfollow at once, with Deshacer
         assertFalse(store.isFollowing("nueva"))
-        assertEquals("Dejaste de seguir a @nueva.", store.toast?.text)
+        assertEquals("Dejaste de seguir a @nueva", store.toast?.text)
         store.tapToast()
         assertTrue(store.isFollowing("nueva"))
         runCurrent()
@@ -138,7 +138,7 @@ class ReactionsSocialTest {
         runCurrent()
         assertFalse(store.isFollowing("nueva"))
         assertEquals(count, store.me.followingCount)
-        assertEquals("No se pudo seguir a @nueva.", store.toast?.text)
+        assertEquals("No se pudo seguir a @nueva", store.toast?.text)
         assertEquals(ToastModel.Kind.Retry, store.toast?.kind)
         store.tapToast()
         assertTrue(store.isFollowing("nueva"))
@@ -158,6 +158,6 @@ class ReactionsSocialTest {
         assertTrue(store.block("qa_persona_06"))
         assertFalse(store.isFollowing("qa_persona_06"))
         assertTrue(store.isBlocked("qa_persona_06"))
-        assertEquals("Bloqueaste a @qa_persona_06.", store.toast?.text)
+        assertEquals("Bloqueaste a @qa_persona_06", store.toast?.text)
     }
 }

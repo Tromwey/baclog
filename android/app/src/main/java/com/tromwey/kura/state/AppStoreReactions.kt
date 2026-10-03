@@ -105,11 +105,11 @@ fun AppStore.setMark(titleId: String, mark: Mark?, haptic: Boolean = true, previ
             // A mark on an unsaved title CREATES your state, so a 404 means the title itself is gone.
             e == KuraApiError.NotFound -> showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
             e == KuraApiError.Unauthorized -> Unit
-            e == KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se pudo guardar tu reacción."), ToastModel.Kind.Info))
+            e == KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se pudo guardar tu reacción"), ToastModel.Kind.Info))
             e is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
             // Offline, 5xx, 429: Reintentar (and the network coming back) puts the mark back and sends it.
             // (Already confirmed when it deletes the review: the same action, asked once.)
-            else -> retryToast(e.toast("No se pudo guardar tu reacción."), key) {
+            else -> retryToast(e.toast("No se pudo guardar tu reacción"), key) {
                 dismissToast()
                 setMark(titleId, mark, haptic = false, preview = preview, confirmed = true)
             }
@@ -168,7 +168,7 @@ fun AppStore.suggestSaving(titleId: String) {
 
 /** An `ext:` result has no catalog id to mark yet: save it first (the membership PUT materializes it). */
 private fun AppStore.askToSaveFirst(titleId: String) {
-    showToast(ToastModel("Primero guarda este título en una colección.", ToastModel.Kind.Info))
+    showToast(ToastModel("Primero guarda este título en una colección", ToastModel.Kind.Info))
     // After the caller's own dismiss (the complete sheet closes right after calling setMark).
     scope.launch { present(SheetRoute.SaveTo(titleId)) }
 }
@@ -300,9 +300,9 @@ fun AppStore.publishReview(titleId: String, text: String, spoiler: Boolean) {
             e == KuraApiError.Unauthorized -> Unit
             // Put back above; the title is gone on the server (404) or reviews aren't there (501).
             e == KuraApiError.NotFound -> showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
-            e == KuraApiError.Unsupported -> showToast(ToastModel("No se pudo guardar tu reseña.", ToastModel.Kind.Info))
+            e == KuraApiError.Unsupported -> showToast(ToastModel("No se pudo guardar tu reseña", ToastModel.Kind.Info))
             e is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se pudo guardar tu reseña."), key) {
+            else -> retryToast(e.toast("No se pudo guardar tu reseña"), key) {
                 dismissToast()
                 publishReview(titleId, trimmed, spoiler)
             }
@@ -344,8 +344,8 @@ fun AppStore.deleteReview(titleId: String) {
         if (newer) return@err true // a newer write of this review decides
         when (e) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.Unsupported -> showToast(ToastModel("No se borró tu reseña.", ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se borró tu reseña."), key) {
+            KuraApiError.Unsupported -> showToast(ToastModel("No se borró tu reseña", ToastModel.Kind.Info))
+            else -> retryToast(e.toast("No se borró tu reseña"), key) {
                 dismissToast()
                 deleteReview(titleId)
             }

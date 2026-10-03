@@ -90,7 +90,7 @@ export function GenteFlow({
               </div>
             )}
             <h1 className="font-brand text-[32px] font-normal leading-[1.08] text-text text-balance">
-              gente con tus obsesiones.
+              gente con tus obsesiones
             </h1>
             <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
               {people.length > 0

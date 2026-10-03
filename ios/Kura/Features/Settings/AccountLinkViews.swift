@@ -115,7 +115,7 @@ struct UnlinkIdentitySheet: View {
     var body: some View {
         let email = store.identities?.email ?? store.account?.email ?? ""
         VStack(alignment: .leading, spacing: 6) {
-            Text(lastWayIn ? "apple es tu única entrada." : "¿desconectar \(provider.label)?")
+            Text(lastWayIn ? "apple es tu única entrada" : "¿desconectar \(provider.label)?")
                 .font(.kura.news(26))
                 .foregroundStyle(KColor.text)
                 .accessibilityAddTraits(.isHeader)
@@ -260,7 +260,7 @@ struct MergeCodeView: View {
         ZStack(alignment: .top) {
             KColor.bg.ignoresSafeArea()
             VStack(spacing: 12) {
-                Text("su código.")
+                Text("su código")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .frame(maxWidth: .infinity, alignment: .leading)

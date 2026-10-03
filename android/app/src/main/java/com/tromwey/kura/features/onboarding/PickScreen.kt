@@ -99,7 +99,7 @@ fun PickScreen(store: AppStore) {
                 Spacer(Modifier.weight(1f))
                 KuraTextButton("Volver", onClick = back, color = KColor.text2)
             }
-            BasicText("elige 3 que te obsesionan.", modifier = Modifier.semantics { heading() }, style = KuraType.news(32f))
+            BasicText("elige 3 que te obsesionan", modifier = Modifier.semantics { heading() }, style = KuraType.news(32f))
             BasicText(
                 "Las tres tiñen tu perfil. Con las tres encontramos a tu gente.",
                 style = KuraType.ui(15f).copy(color = KColor.text2, lineHeight = 22.sp),

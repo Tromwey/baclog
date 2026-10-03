@@ -202,7 +202,7 @@ class AuditRound8Test {
         store.setMark(yhlq, Mark.Obsessed)
         runCurrent()
         assertNull(store.mark(yhlq))
-        assertEquals("uno solo en la cola: su propio texto", "Sin conexión.", store.toast?.text)
+        assertEquals("uno solo en la cola: su propio texto", "Sin conexión", store.toast?.text)
 
         store.connectivityChanged(true)
         advanceUntilIdle()

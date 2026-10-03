@@ -118,13 +118,13 @@ class StateFixesTest {
     @Test fun googleFailuresInTheVoice() = storeTest { h ->
         val s = h.store
         assertNull(s.googleFailureText("android.credentials.GetCredentialException.TYPE_USER_CANCELED", null))
-        assertEquals("No hay una cuenta de Google en este teléfono.",
+        assertEquals("No hay una cuenta de Google en este teléfono",
             s.googleFailureText("android.credentials.GetCredentialException.TYPE_NO_CREDENTIAL", null))
-        assertEquals("Google no está configurado para esta versión de la app.",
+        assertEquals("Google no está configurado para esta versión de la app",
             s.googleFailureText("androidx.credentials.TYPE_GET_CREDENTIAL_PROVIDER_CONFIGURATION_EXCEPTION", null))
-        assertEquals("Google no está configurado para esta versión de la app.",
+        assertEquals("Google no está configurado para esta versión de la app",
             s.googleFailureText("androidx.credentials.TYPE_UNKNOWN", "Account reauth failed. [16]"))
-        assertEquals("No se pudo entrar con Google.", s.googleFailureText("androidx.credentials.TYPE_UNKNOWN", "algo"))
+        assertEquals("No se pudo entrar con Google", s.googleFailureText("androidx.credentials.TYPE_UNKNOWN", "algo"))
     }
 
     // K

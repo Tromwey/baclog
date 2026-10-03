@@ -316,7 +316,7 @@ export function ItemReactionProvider({
         await removeFromLibraryAction(catalogItemId);
       } catch {
         restore();
-        showToast("No se pudo quitar de tus colecciones.", {
+        showToast("No se pudo quitar de tus colecciones", {
           label: "Reintentar",
           failure: true,
           run: () => removeFromLibraryRef.current(),
@@ -327,7 +327,7 @@ export function ItemReactionProvider({
     const entry = { commit };
     pendingRemoval.current = entry;
     // With a review, say it goes too — Deshacer brings both back.
-    showToast(snapshot.ownReview ? "Quitado de tus colecciones, con tu reseña." : "Ya no está en tus colecciones.", {
+    showToast(snapshot.ownReview ? "Quitado de tus colecciones, con tu reseña" : "Ya no está en tus colecciones", {
       label: "Deshacer",
       run: () => {
         // Already flushed by another membership write: nothing to take back.

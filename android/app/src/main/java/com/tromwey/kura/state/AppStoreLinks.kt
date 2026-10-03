@@ -100,7 +100,7 @@ fun AppStore.openLink(link: DeepLink) {
             else show(Route.PublicCollection(link.handle, link.id))
         is DeepLink.OwnCollection ->
             if (collection(link.id) != null) openOwnCollection(link.id)
-            else showToast(ToastModel("Esa colección ya no existe.", ToastModel.Kind.Info))
+            else showToast(ToastModel("Esa colección ya no existe", ToastModel.Kind.Info))
         DeepLink.Recap -> show(Route.Recap())
         is DeepLink.Party -> show(Route.PartyRoute(link.id))
         is DeepLink.Invite, is DeepLink.Entrance -> Unit // handled above

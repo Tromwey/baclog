@@ -209,7 +209,7 @@ extension AppStore {
             else { show(.publicCollection(handle: h, id: id)) }
         case .ownCollection(let id):
             if collection(id) != nil { openOwnCollection(id) }
-            else { showToast(ToastModel(text: "Esa colección ya no existe.", kind: .info)) }
+            else { showToast(ToastModel(text: "Esa colección ya no existe", kind: .info)) }
         case .recap:
             show(.recap())
         case .invite(let token):

@@ -10,7 +10,7 @@ Abreviatura usada solo en la Tabla A: `AND/` = `android/app/src/main/java/com/tr
 
 ## Reglas de voz
 
-1. Títulos de pantalla, secciones y frases de vacío o de error en Newsreader, **siempre en minúscula y con punto final** («tus colecciones», «no pudimos traer esta ficha.»). Fuente: `sistema-de-diseno.dc.html` §voz · títulos.
+1. **Punto final (founder, 2026-10-03; reemplaza «siempre con punto»).** Títulos de pantalla, de sección y de hoja en Newsreader: **siempre en minúscula y SIN punto final** («tus colecciones», «entra a kura», «guardar en»). Las frases de vacío o de error, que son oraciones, **sí** lo llevan («no pudimos traer esta ficha.»). **Avisos (toasts): sin punto final** si son una sola frase («Link copiado», «Quitaste {x}»); con dos oraciones conservan su puntuación («Sin conexión. La foto no se subió.»). Botones, chips, labels y placeholders: sin punto. `sistema-de-diseno.dc.html` §voz · títulos todavía muestra el punto: manda esta regla.
 2. **Errores sin guiño: dicen qué pasó y qué hacer, en ese orden.** El guiño va solo en los vacíos, y ahí en el título; el botón es literal. §voz · errores y vacíos; §patrones · error («es un fallo nuestro»).
 3. Fallo de **lectura** a pantalla completa: primera persona del plural, «no pudimos {cargar/traer} …». Fallo de **escritura** en aviso: impersonal, «No se pudo guardar», con Reintentar. §patrones · error y el aviso de §componentes («No se pudo guardar · Reintentar»).
 4. Sin conexión es un estado, no un error: «Sin conexión. Ves lo guardado en tu teléfono.» §patrones · sin conexión.

@@ -20,7 +20,7 @@ struct PartyWelcomeSheet: View {
                 FanView(covers: p.songs.prefix(3).map(\.art), lead: 56)
                     .padding(.bottom, 18)
             }
-            PartySheetTitle(text: returning && !store.me.handle.isEmpty ? "ya estás dentro, @\(store.me.handle)." : "ya estás dentro.")
+            PartySheetTitle(text: returning && !store.me.handle.isEmpty ? "ya estás dentro, @\(store.me.handle)" : "ya estás dentro")
             PartySheetBody(text: message(host: host, limit: limit)).padding(.top, 10)
             if limit != 0 {
                 SolidButton(title: "Buscar mi primera canción", height: 56, honey: true) {
@@ -61,7 +61,7 @@ struct PartyCapSheet: View {
         let mine = p?.mySongs ?? []
         let limit = max(1, p?.perGuestLimit ?? mine.count)
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: limit == 1 ? "ya agregaste tu canción." : "ya agregaste tus \(limit).")
+            PartySheetTitle(text: limit == 1 ? "ya agregaste tu canción" : "ya agregaste tus \(limit)")
             PartySheetBody(text: "Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.")
                 .padding(.top, 10)
             VStack(spacing: 2) {
@@ -181,7 +181,7 @@ struct PartySongSheet: View {
     }
 }
 
-/// "invita a la fiesta." (design `share`): the link with Copiar, Compartir link (the system share
+/// "invita a la fiesta" (design `share`): the link with Copiar, Compartir link (the system share
 /// sheet with `get-kura.app/f/{token}`), Gestionar link. A dead link offers a new one instead.
 struct PartyShareSheet: View {
     @Environment(AppStore.self) private var store
@@ -192,7 +192,7 @@ struct PartyShareSheet: View {
         let p = store.party(partyID)
         let invite = p?.invite
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: "invita a la fiesta.")
+            PartySheetTitle(text: "invita a la fiesta")
             PartySheetBody(text: note(p?.perGuestLimit)).padding(.top, 10)
             if let invite, invite.active, let url = invite.url {
                 HStack {
@@ -343,7 +343,7 @@ struct PartyLeaveSheet: View {
     }
 }
 
-/// "el link." (design `link` · `link-revoked`).
+/// "el link" (design `link` · `link-revoked`).
 struct PartyLinkSheet: View {
     @Environment(AppStore.self) private var store
     let partyID: String
@@ -360,7 +360,7 @@ struct PartyLinkSheet: View {
         let invite = store.party(partyID)?.invite
         let active = invite?.active == true
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: "el link.")
+            PartySheetTitle(text: "el link")
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Circle().fill(active ? KColor.completed : KColor.text3).frame(width: 7, height: 7)
@@ -415,7 +415,7 @@ struct PartyLinkSheet: View {
     }
 }
 
-/// "llévala a otra app." (design `shExport`): Apple Music · TIDAL, for the host AND the guests
+/// "llévala a otra app" (design `shExport`): Apple Music · TIDAL, for the host AND the guests
 /// (founder), each into their own account. `GET /music/services` decides each button: `available:
 /// false` (or the 503 of `MIGRATION_0034_LIVE`) → dimmed with "Próximamente", never a flow that
 /// fails half-way. A linked TIDAL can be unlinked here.
@@ -427,7 +427,7 @@ struct PartyExportSheet: View {
         let n = store.party(partyID)?.songs.count ?? 0
         let sv = store.musicServices
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: "llévala a otra app.")
+            PartySheetTitle(text: "llévala a otra app")
             PartySheetBody(text: n == 0
                            ? "La fiesta todavía no tiene canciones. Cuando tenga, la pasas a tu cuenta."
                            : "Creamos una playlist con \(n == 1 ? "la canción" : "las \(n) canciones") en tu cuenta. La colección sigue viva en kura.")
@@ -489,7 +489,7 @@ struct PartyEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: "editar fiesta.")
+            PartySheetTitle(text: "editar fiesta")
             Text("Nombre").font(.kura.ui(14, .semibold)).foregroundStyle(KColor.text).padding(.top, 20)
             GlassField(placeholder: "la fiesta de…", text: $name, serif: true)
                 .padding(.top, 8)
@@ -530,7 +530,7 @@ struct PartyBlockedSheet: View {
     var body: some View {
         let list = store.party(partyID)?.blockedGuests ?? []
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: "bloqueados.")
+            PartySheetTitle(text: "bloqueados")
             PartySheetBody(text: "Siguen viendo la colección y pueden quitar las suyas, pero ya no agregan canciones.").padding(.top, 10)
             VStack(spacing: 2) {
                 ForEach(list, id: \.guestRef) { g in

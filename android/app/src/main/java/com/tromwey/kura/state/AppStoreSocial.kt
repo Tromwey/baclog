@@ -329,7 +329,7 @@ fun AppStore.followFromProfile(id: String) {
     when {
         id in following -> {
             setFollow(id, false)
-            undoToast("Dejaste de seguir a @${p.handle}.") { setFollow(id, true) }
+            undoToast("Dejaste de seguir a @${p.handle}") { setFollow(id, true) }
         }
         p.isPrivate -> {
             s.requested = if (id in s.requested) s.requested - id else s.requested + id
@@ -365,10 +365,10 @@ private fun AppStore.setFollow(id: String, on: Boolean) {
         if (confirmed == on) return@err true
         when (e) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado.", ToastModel.Kind.Info))
+            KuraApiError.NotFound -> showToast(ToastModel("Ese perfil no existe o es privado", ToastModel.Kind.Info))
             else -> {
                 val who = person(id)?.let { "@${it.handle}" } ?: "este perfil"
-                val text = e.toast(if (on) "No se pudo seguir a $who." else "No se pudo dejar de seguir a $who.")
+                val text = e.toast(if (on) "No se pudo seguir a $who" else "No se pudo dejar de seguir a $who")
                 retryToast(text, key) {
                     dismissToast()
                     setFollow(id, on)

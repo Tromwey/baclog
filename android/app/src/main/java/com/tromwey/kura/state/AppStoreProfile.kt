@@ -67,10 +67,10 @@ private fun AppStore.claimHandle(newHandle: String, oldHandle: String) {
         val text = when (e) {
             KuraApiError.Unauthorized -> return@err true
             is KuraApiError.Conflict -> "@$newHandle ya está tomado"
-            is KuraApiError.Invalid -> e.fields["username"] ?: e.message.ifEmpty { "Ese @ no se puede usar." }
+            is KuraApiError.Invalid -> e.fields["username"] ?: e.message.ifEmpty { "Ese @ no se puede usar" }
             KuraApiError.NotFound, KuraApiError.Unsupported -> e.toast
             else -> {
-                retryToast(e.toast("No se pudo cambiar tu @."), AppStore.WriteKey.USERNAME) {
+                retryToast(e.toast("No se pudo cambiar tu @"), AppStore.WriteKey.USERNAME) {
                     if (me.handle != oldHandle) return@retryToast
                     dismissToast()
                     applyHandle(newHandle, oldHandle)
@@ -135,7 +135,7 @@ suspend fun AppStore.uploadAvatar(jpeg: ByteArray?) {
                 val text = when {
                     e is KuraApiError.Invalid && e.message.isNotEmpty() -> e.message
                     e == KuraApiError.Offline -> "Sin conexión. La foto no se subió."
-                    else -> "No se pudo subir la foto."
+                    else -> "No se pudo subir la foto"
                 }
                 showToast(ToastModel(text, ToastModel.Kind.Retry) { scope.launch { uploadAvatar(jpeg) } })
             }
@@ -166,7 +166,7 @@ suspend fun AppStore.removeAvatar() {
             }
             is BoundWrite.Failed -> {
                 if (r.error == KuraApiError.Unauthorized) return
-                showToast(ToastModel(r.error.toast("No se pudo quitar la foto."), ToastModel.Kind.Retry) {
+                showToast(ToastModel(r.error.toast("No se pudo quitar la foto"), ToastModel.Kind.Retry) {
                     scope.launch { removeAvatar() }
                 })
             }
@@ -193,7 +193,7 @@ fun AppStore.deleteAccount() {
                 }
                 else -> {
                     if (e == KuraApiError.Offline) offline = true
-                    val text = if (e == KuraApiError.Offline) "Sin conexión. Tu cuenta sigue aquí." else "No se pudo borrar tu cuenta."
+                    val text = if (e == KuraApiError.Offline) "Sin conexión. Tu cuenta sigue aquí." else "No se pudo borrar tu cuenta"
                     showToast(ToastModel(text, ToastModel.Kind.Retry) { deleteAccount() })
                 }
             }

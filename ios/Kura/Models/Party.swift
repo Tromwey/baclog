@@ -463,8 +463,10 @@ enum PartyCopy {
 
     /// The toast / search copy for the same 503 (a write or a search while parties are off).
     static let unavailable = "Las fiestas llegan muy pronto."
+    /// The same sentence as a toast: one sentence, no final period (`unavailable` stays a body line in search).
+    static let unavailableToast = "Las fiestas llegan muy pronto"
     /// A party that answered 404 after we had it (deleted, you left, a block with the host).
-    static let gone = "Esa fiesta ya no está disponible."
+    static let gone = "Esa fiesta ya no está disponible"
     /// 409 `too_many_parties` when the server sends no message of its own.
     static let tooManyParties = "Ya tienes 20 fiestas. Borra alguna para crear otra."
     /// 429 on "Crear link nuevo".
@@ -473,7 +475,7 @@ enum PartyCopy {
     static let rateLimited = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
     /// "Entrar a la fiesta" (`POST /invites/{token}/join`) that failed for no reason of its own.
     static let joinFailed = "No se pudo entrar a la fiesta. Vuelve a intentarlo."
-    static let left = "Saliste de la fiesta."
+    static let left = "Saliste de la fiesta"
 
     static let deadTitle = "este link ya no funciona."
     static let deadNote = "Lo desactivaron o ya venció. Pide uno nuevo a quien te invitó y vuelve a abrirlo."

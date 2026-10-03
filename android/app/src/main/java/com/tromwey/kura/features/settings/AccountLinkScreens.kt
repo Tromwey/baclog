@@ -198,7 +198,7 @@ fun KuraSheetScope.UnlinkIdentitySheet(store: AppStore, sheet: SheetRoute.Unlink
     val lastWayIn = p == IdentityProvider.Apple && store.identities?.appleIsLastWayIn == true
     val email = store.identities?.email ?: store.account?.email ?: ""
     BasicText(
-        if (lastWayIn) "apple es tu única entrada." else "¿desconectar ${p.label}?",
+        if (lastWayIn) "apple es tu única entrada" else "¿desconectar ${p.label}?",
         Modifier.padding(horizontal = 10.dp).semantics { heading() },
         style = KuraType.news(26f),
     )
@@ -370,7 +370,7 @@ fun MergeCodeScreen(store: AppStore) {
 
     MergePage(store) {
         Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            BasicText("su código.", Modifier.semantics { heading() }, style = KuraType.news(40f))
+            BasicText("su código", Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
                     append("Lo enviamos a ")

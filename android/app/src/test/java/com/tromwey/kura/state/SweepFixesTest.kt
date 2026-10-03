@@ -178,7 +178,7 @@ class SweepFixesTest {
 
     @Test fun anInstantCancelIsNoAccountAndASlowOneIsTheUserClosingTheSheet() = storeTest { h ->
         val type = "android.credentials.GetCredentialException.TYPE_USER_CANCELED"
-        assertEquals("No hay una cuenta de Google en este teléfono.", h.store.googleFailureText(type, null, 90))
+        assertEquals("No hay una cuenta de Google en este teléfono", h.store.googleFailureText(type, null, 90))
         assertNull(h.store.googleFailureText(type, null, 2_400))
         assertNull(h.store.googleFailureText(type, null))
     }

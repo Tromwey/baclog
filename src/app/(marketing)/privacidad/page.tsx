@@ -36,7 +36,7 @@ export default function PrivacidadPage() {
 
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-          aviso de privacidad.
+          aviso de privacidad
         </h1>
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">
           vigente desde el {PRIVACY_EFFECTIVE_DATE}

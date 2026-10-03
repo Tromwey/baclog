@@ -72,10 +72,10 @@ suspend fun AppStore.disconnectTidal() {
     when (val r = boundWrite { api.disconnectTidal() }) {
         is BoundWrite.Ok -> {
             s.party.musicServices = s.party.musicServices?.let { it.copy(tidal = it.tidal.copy(connected = false)) }
-            showToast(ToastModel("Desconectaste TIDAL.", ToastModel.Kind.Info))
+            showToast(ToastModel("Desconectaste TIDAL", ToastModel.Kind.Info))
         }
         is BoundWrite.Failed -> showToast(
-            ToastModel(if (r.error == KuraApiError.Unavailable) MusicExportCopy.UNAVAILABLE else r.error.toast("No se pudo desconectar TIDAL."), ToastModel.Kind.Info),
+            ToastModel(if (r.error == KuraApiError.Unavailable) MusicExportCopy.UNAVAILABLE else r.error.toast("No se pudo desconectar TIDAL"), ToastModel.Kind.Info),
         )
         BoundWrite.Stale -> Unit
     }

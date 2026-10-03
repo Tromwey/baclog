@@ -146,7 +146,7 @@ class AccountLinkTest {
     @Test fun noGoogleAccountOnThePhoneIsAToast() = linkTest { h ->
         h.store.loadIdentities()
         h.store.connectGoogle { GoogleCredential.NoAccount }
-        assertEquals("No hay una cuenta de Google en este teléfono.", h.store.toast?.text)
+        assertEquals("No hay una cuenta de Google en este teléfono", h.store.toast?.text)
     }
 
     @Test fun aGoogleOfAnotherAccountGoesToTheMergeConfirmation() = linkTest { h ->

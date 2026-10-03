@@ -245,7 +245,7 @@ export function PicksStep({
         <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-5 pb-[calc(150px+env(safe-area-inset-bottom))] pt-[calc(72px+env(safe-area-inset-top))]">
           <StepMark n={1} of={SEED_STEPS} />
           <h1 className="font-brand text-[32px] font-normal leading-[1.08] text-text text-balance">
-            elige 3 que te obsesionan.
+            elige 3 que te obsesionan
           </h1>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             Las tres tiñen tu perfil. Con las tres encontramos a tu gente.

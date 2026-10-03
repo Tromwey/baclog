@@ -175,19 +175,19 @@ extension AppStore {
     // MARK: Writes
 
     /// The toast for a party write that failed (the server's `message` when it wrote the copy).
-    static func partyText(_ e: KuraAPIError, or fallback: String = "No se pudo guardar.", rotating: Bool = false) -> String {
+    static func partyText(_ e: KuraAPIError, or fallback: String = "No se pudo guardar", rotating: Bool = false) -> String {
         switch e {
-        case .unavailable: return PartyCopy.unavailable
+        case .unavailable: return PartyCopy.unavailableToast
         // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
         case .conflict(_, let m) where !m.isEmpty: return m
         case .conflict(let code, _) where code == "too_many_parties": return PartyCopy.tooManyParties
         case .rateLimited: return rotating ? PartyCopy.rotateLimited : PartyCopy.rateLimited
         case .forbidden(let code):
             switch code {
-            case "blocked": return "Ya no puedes agregar canciones a esta fiesta."
-            case "view_only": return "En esta fiesta solo se puede ver la colección."
-            case "not_yours": return "Solo puedes quitar las canciones que agregaste tú."
-            default: return "No tienes permiso para hacer eso."
+            case "blocked": return "Ya no puedes agregar canciones a esta fiesta"
+            case "view_only": return "En esta fiesta solo se puede ver la colección"
+            case "not_yours": return "Solo puedes quitar las canciones que agregaste tú"
+            default: return "No tienes permiso para hacer eso"
             }
         case .notFound: return "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella."
         // A code this build doesn't know: the `message` of the server's envelope, and only that
@@ -208,7 +208,7 @@ extension AppStore {
         if s.parties[partyID] != nil { showToast(ToastModel(text: stale, kind: .info)) }
     }
 
-    private func partyToast(_ e: KuraAPIError, or fallback: String = "No se pudo guardar.", rotating: Bool = false) {
+    private func partyToast(_ e: KuraAPIError, or fallback: String = "No se pudo guardar", rotating: Bool = false) {
         // `onboarding_required` was already said (and is being routed) by `noteError`.
         guard e != .cancelled, e != .unauthorized, !e.isOnboardingRequired else { return }
         showToast(ToastModel(text: Self.partyText(e, or: fallback, rotating: rotating), kind: .info))
@@ -231,7 +231,7 @@ extension AppStore {
             return true
         case .failed(let e):
             if case .invalid(let fields, let m) = e {
-                showToast(ToastModel(text: fields["name"] ?? (m.isEmpty ? "Revisa el nombre." : m), kind: .info))
+                showToast(ToastModel(text: fields["name"] ?? (m.isEmpty ? "Revisa el nombre" : m), kind: .info))
             } else if e == .unavailable {
                 s.partiesUnavailable = true
                 partyToast(e)
@@ -258,7 +258,7 @@ extension AppStore {
         case .ok:
             dismissSheet()
             dropParty(id)
-            showToast(ToastModel(text: "Borraste la fiesta.", kind: .info))
+            showToast(ToastModel(text: "Borraste la fiesta", kind: .info))
         case .failed(let e): await partyWriteFailed(id, e)
         case .stale: break
         }
@@ -339,7 +339,7 @@ extension AppStore {
                 dismissToast()
                 present(.partyCap(partyID))
             } else {
-                showToast(ToastModel(text: "Agregaste \(hit.title).", kind: .info))
+                showToast(ToastModel(text: "Agregaste \(hit.title)", kind: .info))
             }
             return .added
         case .failed(let e):
@@ -367,7 +367,7 @@ extension AppStore {
         switch await boundWrite({ try await api.removePartySong(id: partyID, titleID: song.titleID) }) {
         case .ok(let p):
             applyParty(p)
-            showToast(ToastModel(text: "Quitaste \(song.title).", kind: .info))
+            showToast(ToastModel(text: "Quitaste \(song.title)", kind: .info))
             return true
         case .failed(let e):
             await partyWriteFailed(partyID, e)
@@ -384,7 +384,7 @@ extension AppStore {
         switch await boundWrite({ try await api.removeAndBlockPartyGuest(id: partyID, titleID: song.titleID) }) {
         case .ok(let p):
             applyParty(p)
-            showToast(ToastModel(text: "Quitaste \(song.title) y bloqueaste a \(song.addedBy.atOrSomeone).", kind: .info))
+            showToast(ToastModel(text: "Quitaste \(song.title) y bloqueaste a \(song.addedBy.atOrSomeone)", kind: .info))
             return true
         case .failed(let e):
             await partyWriteFailed(partyID, e)
@@ -399,7 +399,7 @@ extension AppStore {
         switch await boundWrite({ try await api.unblockPartyGuest(id: partyID, guestRef: guest.guestRef) }) {
         case .ok(let p):
             applyParty(p)
-            showToast(ToastModel(text: "Desbloqueaste a \(guest.person.atOrSomeone).", kind: .info))
+            showToast(ToastModel(text: "Desbloqueaste a \(guest.person.atOrSomeone)", kind: .info))
         case .failed(let e): await partyWriteFailed(partyID, e, stale: "Esa persona ya no estaba bloqueada.")
         case .stale: break
         }
@@ -433,7 +433,7 @@ extension AppStore {
                 // account to what it's missing; the landing steps aside for it.
                 DeepLinkInbox.pending = .invite(token)
                 inviteLanding = nil
-                showToast(ToastModel(text: "Termina tu registro para entrar a la fiesta.", kind: .info))
+                showToast(ToastModel(text: "Termina tu registro para entrar a la fiesta", kind: .info))
                 return
             }
             switch e {

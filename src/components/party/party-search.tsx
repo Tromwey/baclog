@@ -143,7 +143,7 @@ export function PartySearch({
       mark(hit.titleId, { mine: true, addedBy: null });
       const v = res.party.viewer;
       if (v.role === "guest" && v.remaining === 0) onCap();
-      else toast.show({ message: `Agregaste ${hit.title}.` });
+      else toast.show({ message: `Agregaste ${hit.title}` });
       return;
     }
     if (res && "error" in res) {
@@ -157,10 +157,10 @@ export function PartySearch({
           onCap();
           return;
         case "blocked":
-          toast.show({ message: "Ya no puedes agregar canciones." });
+          toast.show({ message: "Ya no puedes agregar canciones" });
           return;
         case "view_only":
-          toast.show({ message: "En esta fiesta solo se puede ver la colección." });
+          toast.show({ message: "En esta fiesta solo se puede ver la colección" });
           return;
         case "not_found":
           onGone();

@@ -21,7 +21,7 @@ export default function WaitlistPage() {
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
         <h1 className="font-brand text-[40px] leading-none text-text text-balance">
-          guarda lo que más vale.
+          guarda lo que más vale
         </h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Películas, series y álbumes en colecciones, y lo que obsesiona a tu

@@ -211,7 +211,7 @@ export function UsernameStep({
         className="mt-[62px] flex flex-col gap-3.5"
       >
         <h1 className="font-brand text-[40px] font-normal leading-none text-text">
-          {resume ? "solo falta tu fecha de nacimiento." : "elige tu usuario."}
+          {resume ? "solo falta tu fecha de nacimiento" : "elige tu usuario"}
         </h1>
         {resume ? (
           <p className="text-[14px] leading-[1.5] text-text-2 text-pretty">

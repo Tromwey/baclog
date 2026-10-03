@@ -333,7 +333,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
       }
       settleFromComplete({ verdict, obsessed, completed: false });
       dismiss();
-      showToast("Quitaste el completado.", {
+      showToast("Quitaste el completado", {
         label: "Deshacer",
         run: async () => {
           const r = await attempt(() => setStatusAction(catalogItemId, "completed"));
@@ -356,7 +356,7 @@ function CompleteBody({ allowSpoiler }: { allowSpoiler: boolean }) {
       <div className="flex flex-col gap-1">
         <div className="flex flex-col gap-2 px-2.5 pb-4 pt-1">
           <h2 className="font-brand text-[22px] leading-[1.1] text-text text-balance">
-            tu reseña se borra con la reacción.
+            tu reseña se borra con la reacción
           </h2>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             Si quitas la reacción, tu reseña se borra y no se puede recuperar.

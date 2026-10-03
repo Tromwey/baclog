@@ -481,7 +481,7 @@ fun PartySearchScreen(store: AppStore, route: Route.PartySearch) {
                                 if (inParty != null) {
                                     store.showToast(
                                         com.tromwey.kura.state.ToastModel(
-                                            if (inParty.mine) "Ya la agregaste tú." else "Ya está, la agregó ${inParty.addedBy.atOrSomeone}",
+                                            if (inParty.mine) "Ya la agregaste tú" else "Ya está, la agregó ${inParty.addedBy.atOrSomeone}",
                                             com.tromwey.kura.state.ToastModel.Kind.Info,
                                         ),
                                     )

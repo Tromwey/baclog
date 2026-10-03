@@ -43,10 +43,10 @@ extension AppStore {
             case .forbidden where e.isOnboardingRequired:
                 break // said and routed by `noteError`; a retry could only fail again
             case .notFound:
-                showToast(ToastModel(text: target.isReview ? "Esa reseña ya no existe." : "Ese perfil no existe o es privado.", kind: .info))
+                showToast(ToastModel(text: target.isReview ? "Esa reseña ya no existe" : "Ese perfil no existe o es privado", kind: .info))
             default:
                 let text = e == .offline ? "Sin conexión. No se envió tu reporte."
-                    : (e.isRateLimit ? e.toast : "No se envió tu reporte.")
+                    : (e.isRateLimit ? e.toast : "No se envió tu reporte")
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.report(target, reason: reason, details: details) }
@@ -66,16 +66,16 @@ extension AppStore {
         case .ok:
             applyBlock(handle)
             KHaptic.play(.success)
-            showToast(ToastModel(text: "Bloqueaste a @\(handle).", kind: .info))
+            showToast(ToastModel(text: "Bloqueaste a @\(handle)", kind: .info))
             return true
         case .failed(let e):
             switch e {
             case .cancelled, .unauthorized:
                 break
             case .notFound:
-                showToast(ToastModel(text: "Ese perfil no existe o es privado.", kind: .info))
+                showToast(ToastModel(text: "Ese perfil no existe o es privado", kind: .info))
             default:
-                let text = e == .offline ? "Sin conexión. No se bloqueó a @\(handle)." : "No se pudo bloquear a @\(handle)."
+                let text = e == .offline ? "Sin conexión. No se bloqueó a @\(handle)." : "No se pudo bloquear a @\(handle)"
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.block(handle) }
@@ -132,7 +132,7 @@ extension AppStore {
             feedDirty = true
             loadedTitles.removeAll() // fichas re-read their reviews on the next visit
             KHaptic.play(.success)
-            showToast(ToastModel(text: "Desbloqueaste a \(shown).", kind: .info))
+            showToast(ToastModel(text: "Desbloqueaste a \(shown)", kind: .info))
             if let handle, people[handle] != nil { await loadPerson(handle, force: true) }
             return true
         case .failed(let e):
@@ -144,7 +144,7 @@ extension AppStore {
                 if let handle { blocked.remove(handle) }
                 blockedAccounts?.removeAll { $0.key == key || $0.id == key }
             default:
-                let text = e == .offline ? "Sin conexión. No se desbloqueó a \(shown)." : "No se pudo desbloquear a \(shown)."
+                let text = e == .offline ? "Sin conexión. No se desbloqueó a \(shown)." : "No se pudo desbloquear a \(shown)"
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.unblock(key, handle: handle) }

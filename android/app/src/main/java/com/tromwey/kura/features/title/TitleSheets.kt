@@ -272,9 +272,9 @@ private fun saveComplete(
             failure == KuraApiError.NotFound && ExternalRef.parse(t.id) != null -> Unit
             failure == KuraApiError.NotFound ->
                 if (stillOpen) onError(AppStore.UNKNOWN_TITLE_NOTE) else store.showToast(ToastModel(AppStore.UNKNOWN_TITLE_NOTE, ToastModel.Kind.Info))
-            stillOpen -> onError(failure.toast)
+            stillOpen -> onError(failure.toast.let { if (it.endsWith(".") || it.endsWith("!") || it.endsWith("?")) it else "$it." }) // inline error keeps its period; the toast text has none
             else -> store.showToast(ToastModel(
-                if (failure == KuraApiError.Offline) "Sin conexión. No se guardó tu reseña." else "No se pudo guardar tu reseña.",
+                if (failure == KuraApiError.Offline) "Sin conexión. No se guardó tu reseña." else "No se pudo guardar tu reseña",
                 ToastModel.Kind.Info,
             ))
         }
@@ -292,7 +292,7 @@ private fun saveComplete(
 fun KuraSheetScope.DropReviewSheet(store: AppStore, sheet: SheetRoute.DropReview) {
     val dismiss: () -> Unit = this::close
     Column(Modifier.padding(horizontal = 4.dp).padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        BasicText("tu reseña se borra con la reacción.", Modifier.padding(horizontal = 8.dp).semantics { heading() }, style = KuraType.news(26f))
+        BasicText("tu reseña se borra con la reacción", Modifier.padding(horizontal = 8.dp).semantics { heading() }, style = KuraType.news(26f))
         BasicText(
             "Si quitas la reacción, tu reseña se borra y no se puede recuperar.",
             Modifier.padding(horizontal = 8.dp).padding(top = 4.dp, bottom = 14.dp),
@@ -337,7 +337,7 @@ fun KuraSheetScope.SaveToSheet(store: AppStore, sheet: SheetRoute.SaveTo) {
             Cover(t.art, width = 44.dp, radius = KRadius.coverS, shadow = false)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 BasicText(
-                    "guardar en.",
+                    "guardar en",
                     Modifier.semantics { heading() },
                     style = KuraType.sheetTitle,
                 )

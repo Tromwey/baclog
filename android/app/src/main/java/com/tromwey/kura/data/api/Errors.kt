@@ -53,11 +53,11 @@ sealed class KuraApiError(detail: String) : Exception(detail), CopyableThrowable
     val isRateLimit: Boolean get() = this is RateLimited
 
     /** Text for the toast, in the Kura voice (what happened, what to do). */
-    val toast: String get() = toast("No se pudo guardar.")
+    val toast: String get() = toast("No se pudo guardar")
 
     /** The toast with the caller's own verb for the generic failure ("No se pudo seguir a @x."). */
     fun toast(fallback: String): String = when {
-        this is Offline -> "Sin conexión."
+        this is Offline -> "Sin conexión"
         this is RateLimited -> "Demasiados intentos seguidos. Espera un momento."
         this is Unavailable -> "El catálogo no responde. Vuelve a intentarlo en unos minutos."
         this is Conflict && code == "not_released" -> "Todavía no sale. Usa La vi en preestreno."
@@ -69,7 +69,7 @@ sealed class KuraApiError(detail: String) : Exception(detail), CopyableThrowable
 }
 
 /** The server unlocks reviews only with a reaction (`obsessed || verdict != null`). */
-const val REACTION_REQUIRED_TEXT = "Para reseñar, elige Me gusta o Me obsesiona."
+const val REACTION_REQUIRED_TEXT = "Para reseñar, elige Me gusta o Me obsesiona"
 
 /**
  * When a failed `GET` is tried again (writes never are — the store's "Reintentar" toast is the

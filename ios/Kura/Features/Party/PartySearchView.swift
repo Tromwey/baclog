@@ -226,7 +226,7 @@ struct PartySearchView: View {
     /// "Ya está": say who put it (design toast); otherwise add.
     private func add(_ h: PartySongHit) async {
         if let inParty = h.inParty {
-            store.showToast(ToastModel(text: inParty.mine ? "Ya la agregaste tú." : "Ya está, la agregó \(inParty.addedBy.atOrSomeone).", kind: .info))
+            store.showToast(ToastModel(text: inParty.mine ? "Ya la agregaste tú" : "Ya está, la agregó \(inParty.addedBy.atOrSomeone)", kind: .info))
             return
         }
         adding.insert(h.id)

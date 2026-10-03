@@ -154,7 +154,7 @@ extension AppStore {
             setLinked(p, true)
             KHaptic.play(.success)
             showToast(ToastModel(text: fromMerge
-                ? "Ese \(p.label) no tenía otra cuenta en kura: quedó conectado a esta."
+                ? "Ese \(p.label) no tenía otra cuenta en kura: quedó conectado a esta"
                 : "\(p.label) conectada. Ya puedes entrar con \(p.label).", kind: .info))
         case .mergeable(let proof):
             mergeProof = proof
@@ -227,7 +227,7 @@ extension AppStore {
                 showToast(ToastModel(text: Self.lastWayInText, kind: .info))
                 return false
             default:
-                let text = e == .offline ? "Sin conexión. \(p.label) sigue conectada." : "No se pudo desconectar \(p.label)."
+                let text = e == .offline ? "Sin conexión. \(p.label) sigue conectada." : "No se pudo desconectar \(p.label)"
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.disconnect(p) }
@@ -435,7 +435,7 @@ extension AppStore {
         case .ok:
             withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == device.id } }
             KHaptic.play(.success)
-            showToast(ToastModel(text: "Cerraste la sesión en \(device.title).", kind: .info))
+            showToast(ToastModel(text: "Cerraste la sesión en \(device.title)", kind: .info))
             return true
         case .failed(let e):
             switch e {
@@ -446,7 +446,7 @@ extension AppStore {
                 withAnimation(KMotion.fade) { deviceSessions?.removeAll { $0.id == device.id } }
                 return true
             default:
-                let text = e == .offline ? "Sin conexión. La sesión sigue abierta." : "No se pudo cerrar esa sesión."
+                let text = e == .offline ? "Sin conexión. La sesión sigue abierta." : "No se pudo cerrar esa sesión"
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.revokeSession(device) }

@@ -141,7 +141,7 @@ class ApiClientTest {
         val (a2, _) = harness { status(409, """{"error":{"code":"conflict","message":"Reacciona primero","reason":"reaction_required"}}""") }
         val c = expect<KuraApiError.Conflict> { a2.saveReview("t", "hola", false) }
         assertEquals("reaction_required", c.code)
-        assertEquals("Para reseñar, elige Me gusta o Me obsesiona.", c.toast)
+        assertEquals("Para reseñar, elige Me gusta o Me obsesiona", c.toast)
         val (a3, _) = harness { status(503, """{"error":{"code":"unavailable","message":"TIDAL no está configurado","reason":"not_configured"}}""") }
         val su = expect<KuraApiError.ServiceUnavailable> { a3.startPartyExport("p", com.tromwey.kura.data.models.MusicProvider.Tidal) }
         assertEquals("not_configured", su.reason)

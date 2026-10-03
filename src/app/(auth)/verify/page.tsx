@@ -98,7 +98,7 @@ function VerifyForm() {
       </header>
 
       <div className="mt-[62px] flex flex-col gap-3">
-        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo.</h1>
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Te enviamos un código a{" "}
           <span className="text-text">{known || "tu correo"}</span>.
@@ -192,7 +192,7 @@ function VerifyFallback() {
       </header>
 
       <div className="mt-[62px] flex flex-col gap-3">
-        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo.</h1>
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">revisa tu correo</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
           Te enviamos un código a{" "}
           <span

@@ -89,7 +89,7 @@ function OptionsBody({
   async function share() {
     dismiss();
     if (!publicUrl) {
-      showToast("Elige tu @ y haz público tu perfil en Ajustes para compartir.");
+      showToast("Elige tu @ y haz público tu perfil en Ajustes para compartir");
       return;
     }
     // F3.4 — fire-and-forget share signal (keepalive survives navigation).
@@ -110,9 +110,9 @@ function OptionsBody({
     }
     try {
       await navigator.clipboard.writeText(publicUrl);
-      showToast("Link copiado.");
+      showToast("Link copiado");
     } catch {
-      showToast("No se pudo copiar el link.");
+      showToast("No se pudo copiar el link");
     }
   }
 
@@ -153,7 +153,7 @@ function OptionsBody({
             // (the row comes back so it can be tried again).
             void attempt(() => dismissRecoAction(recId)).then((res) => {
               if (res.ok) {
-                showToast("No volverá a aparecer en Descubrir.");
+                showToast("No volverá a aparecer en Descubrir");
                 return;
               }
               setRecoHidden(false);

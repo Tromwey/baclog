@@ -44,9 +44,9 @@ enum Privacy: String, CaseIterable, Identifiable, Hashable {
     /// The undo toast after a visibility change: it says who sees it now, without ambiguity.
     var changedToast: String {
         switch self {
-        case .publicAccess: return "Ahora la ven todos."
-        case .onlyMe: return "Ahora solo tú la ves."
-        case .link, .followers: return "Ahora la ve quien tenga el link."
+        case .publicAccess: return "Ahora la ven todos"
+        case .onlyMe: return "Ahora solo tú la ves"
+        case .link, .followers: return "Ahora la ve quien tenga el link"
         }
     }
 

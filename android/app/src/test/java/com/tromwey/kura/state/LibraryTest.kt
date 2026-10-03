@@ -147,7 +147,7 @@ class LibraryTest {
         // The server kept the old name: so does the phone, and it says so with Reintentar.
         assertEquals("Colección de prueba 2", store.collection(recs)!!.name)
         assertEquals(ToastModel.Kind.Retry, store.toast?.kind)
-        assertEquals("No se pudo guardar la colección.", store.toast?.text)
+        assertEquals("No se pudo guardar la colección", store.toast?.text)
         store.tapToast()
         assertEquals("me lo dijeron", store.collection(recs)!!.name)
         runCurrent()

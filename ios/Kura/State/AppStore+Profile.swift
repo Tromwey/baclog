@@ -73,11 +73,11 @@ extension AppStore {
             case .conflict:
                 text = "@\(newHandle) ya está tomado"
             case .invalid(let fields, let m):
-                text = fields["username"] ?? (m.isEmpty ? "Ese @ no se puede usar." : m)
+                text = fields["username"] ?? (m.isEmpty ? "Ese @ no se puede usar" : m)
             case .notFound, .unsupported:
                 text = e.toast
             default:
-                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar tu @."), kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar tu @"), kind: .retry) { [weak self] in
                     // From whatever @ the reverts left on screen (the old one, or the one before a
                     // superseded change that failed too).
                     guard let self, self.s === session, self.me.handle != newHandle else { return }
@@ -145,10 +145,10 @@ extension AppStore {
             // The server refused THIS image (size, type): sending the same bytes again can only
             // fail the same way — a note with its reason, no Reintentar.
             if case .invalid(_, let m) = e {
-                showToast(ToastModel(text: m.isEmpty ? "No se pudo subir la foto." : m, kind: .info))
+                showToast(ToastModel(text: m.isEmpty ? "No se pudo subir la foto" : m, kind: .info))
                 return
             }
-            let text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto."
+            let text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto"
             showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                 Task { await self?.uploadAvatar(picked) }
             })
@@ -176,7 +176,7 @@ extension AppStore {
             showToast(ToastModel(text: "Foto quitada", kind: .info))
         case .failed(let e):
             guard e != .unauthorized, e != .cancelled else { return }
-            showToast(ToastModel(text: e.toast(or: "No se pudo quitar la foto."), kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
+            showToast(ToastModel(text: e.toast(or: "No se pudo quitar la foto"), kind: .retry) { [weak self] in Task { await self?.removeAvatar() } })
         }
     }
 
@@ -194,7 +194,7 @@ extension AppStore {
                 guard s === session else { return }
                 // Only a 204 confirms the deletion. A 401 is a revoked/expired bearer (logout on
                 // another device, token past `exp`) on an account that is still ALIVE: say so and
-                // send them to sign in again — never "Tu cuenta se borró.".
+                // send them to sign in again — never "Tu cuenta se borró".
                 let e = error is CancellationError ? .cancelled : ((error as? KuraAPIError) ?? .server(""))
                 switch e {
                 case .cancelled:
@@ -204,7 +204,7 @@ extension AppStore {
                     sessionExpired(message: "Tu sesión terminó. Entra de nuevo para borrar tu cuenta.")
                 default:
                     if e == .offline { offline = true }
-                    let text = e == .offline ? "Sin conexión. Tu cuenta sigue aquí." : "No se pudo borrar tu cuenta."
+                    let text = e == .offline ? "Sin conexión. Tu cuenta sigue aquí." : "No se pudo borrar tu cuenta"
                     showToast(ToastModel(text: text, kind: .retry) { [weak self] in self?.deleteAccount() })
                 }
                 return
@@ -218,7 +218,7 @@ extension AppStore {
     /// No `POST auth/logout`: the account is gone, there's nothing left to revoke.
     private func leaveDeletedAccount() async {
         api.forgetSession()
-        leaveSession(message: "Tu cuenta se borró.")
+        leaveSession(message: "Tu cuenta se borró")
     }
 
     // MARK: Counters (profile ribbon)

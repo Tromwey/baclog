@@ -294,19 +294,26 @@ enum KuraAPIError: Error, Equatable {
     var isRateLimit: Bool { if case .rateLimited = self { return true }; return false }
 
     /// Text for the toast, in the Kura voice (what happened, what to do).
-    var toast: String { toast(or: "No se pudo guardar.") }
+    var toast: String { toast(or: "No se pudo guardar") }
+
+    /// The same text as an inline error line (a sheet's `saveError`): a single sentence has no
+    /// final period as a toast, but as a line of body copy it keeps it.
+    var inlineText: String {
+        let t = toast
+        return t.hasSuffix(".") ? t : t + "."
+    }
 
     /// The toast with the caller's own verb for the generic failure ("No se pudo seguir a @x."):
     /// a failed Seguir must not read "No se pudo guardar".
     func toast(or fallback: String) -> String {
         switch self {
-        case .offline: return "Sin conexión."
+        case .offline: return "Sin conexión"
         case .rateLimited: return "Demasiados intentos seguidos. Espera un momento."
         case .unavailable: return "El catálogo no responde. Vuelve a intentarlo en unos minutos."
         case .conflict(let code, _) where code == "not_released": return "Todavía no sale. Usa La vi en preestreno."
         // The server unlocks reviews only with a reaction (`obsessed || verdict != null`):
         // "Completo" alone saves `verdict = null`, so it never unlocks them.
-        case .conflict(let code, _) where code == "reaction_required": return "Para reseñar, elige Me gusta o Me obsesiona."
+        case .conflict(let code, _) where code == "reaction_required": return "Para reseñar, elige Me gusta o Me obsesiona"
         case .invalid(_, let m) where !m.isEmpty: return m
         case .serviceUnavailable(_, let m) where !m.isEmpty: return m
         default: return fallback

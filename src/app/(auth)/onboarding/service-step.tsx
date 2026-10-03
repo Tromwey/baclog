@@ -77,7 +77,7 @@ export function ServiceStep({
       <div className="mt-4 flex flex-col gap-7">
         <div className="flex flex-col gap-4 px-2">
           <h1 className="font-brand text-[32px] font-normal leading-[1.08] text-text text-balance">
-            elige dónde escuchas.
+            elige dónde escuchas
           </h1>
           <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
             Cada álbum se abre en esta app. La cambias cuando quieras en Ajustes.

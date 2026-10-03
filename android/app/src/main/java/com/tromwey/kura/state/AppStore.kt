@@ -1159,7 +1159,7 @@ class AppStore(
         const val GONE_COLLECTION_NOTE = "Esa colección ya no existe. No se guardó el cambio."
 
         /** Saving a title answered 404: the collection or the title is gone; it left the collection again. */
-        const val GONE_SAVE_NOTE = "No se pudo guardar: esa colección o ese título ya no existe."
+        const val GONE_SAVE_NOTE = "No se pudo guardar: esa colección o ese título ya no existe"
 
         /** A write the server can't take (404 / 501) and that Reintentar wouldn't fix. */
         const val NOT_SAVED_NOTE = "No se pudo guardar. Lo que ves volvió a como estaba."

@@ -673,7 +673,7 @@ final class AppStore {
                 guard let self, self.s === session else { return true }
                 revert()
                 if e == .cancelled || e == .unauthorized { return true }
-                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar quién ve tus listas."), kind: .info))
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar quién ve tus listas"), kind: .info))
                 return true
             }, revert: revert) { [weak self] api in
                 let store = self
@@ -1124,7 +1124,7 @@ final class AppStore {
     /// so, re-read `me` and let `route(after:)` take the account to what it's missing (O1b, or
     /// "solo falta tu fecha de nacimiento" for an account that has a name and no year). Callers only put their
     /// optimistic change back; none of them offers "Reintentar" (it could only fail again).
-    static let onboardingRequiredNote = "Termina tu registro para continuar."
+    static let onboardingRequiredNote = "Termina tu registro para continuar"
 
     func onboardingRequired() {
         guard phase == .main, !onboardingRecheck else { return }
@@ -1509,7 +1509,7 @@ final class AppStore {
                 // A retry can only fail again: the change goes back and the user is told.
                 revert?()
                 chain()
-                self.showToast(ToastModel(text: e == .notFound ? "Eso ya no existe." : e.toast(or: "Eso todavía no se puede hacer."),
+                self.showToast(ToastModel(text: e == .notFound ? "Eso ya no existe" : e.toast(or: "Eso todavía no se puede hacer"),
                                           kind: .info))
             default:
                 var t = ToastModel(text: e.toast, kind: .retry) { [weak self] in

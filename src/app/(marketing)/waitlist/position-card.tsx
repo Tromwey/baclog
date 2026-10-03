@@ -58,7 +58,7 @@ export function PositionCard({
     <div className="mt-5 flex flex-col gap-3">
       <div className="flex flex-col gap-2 rounded-[var(--r-surface)] bg-surface-1 p-6">
         <span className="font-brand text-[22px] leading-none text-text">
-          {alreadyJoined ? "ya estabas en la fila." : "estás dentro."}
+          {alreadyJoined ? "ya estabas en la fila" : "estás dentro"}
         </span>
         {typeof position === "number" ? (
           <span className="font-mono text-[40px] leading-none text-text">#{position}</span>

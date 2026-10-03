@@ -103,7 +103,7 @@ export function WelcomeSheet({
   const dismiss = useSheetDismiss();
   const host = party.host ? `la fiesta de @${party.host.handle}` : "la fiesta";
   const put = putPhrase(party.perGuestLimit);
-  const title = back && handle ? `ya estás dentro, @${handle}.` : "ya estás dentro.";
+  const title = back && handle ? `ya estás dentro, @${handle}` : "ya estás dentro";
   const body = back
     ? `Entraste con tu cuenta de kura. ${put ? `${put} en ${host}; todos ven quién agregó cuál.` : `Ya ves ${host} en vivo.`}`
     : `Eres parte de ${host}. ${put ? `${put}; todos ven quién agregó cuál y las escuchan esa noche.` : "Aquí ves la colección en vivo."}`;
@@ -154,7 +154,7 @@ export function CapSheet({
     setBusy(null);
     if (res && "ok" in res && res.ok) {
       onParty(res.party);
-      toast.show({ message: `Quitaste ${s.title}.` });
+      toast.show({ message: `Quitaste ${s.title}` });
       onRemoved();
       return;
     }
@@ -162,7 +162,7 @@ export function CapSheet({
   };
   return (
     <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>ya agregaste {yourSongs(party.perGuestLimit)}.</h2>
+      <h2 className={BIG_TITLE}>ya agregaste {yourSongs(party.perGuestLimit)}</h2>
       <p className={BODY}>
         Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.
       </p>
@@ -223,7 +223,7 @@ export function RemoveSheet({
       onParty(res.party);
       dismiss?.();
       toast.show({
-        message: block ? `Quitaste ${song.title} y bloqueaste a ${author}.` : `Quitaste ${song.title}.`,
+        message: block ? `Quitaste ${song.title} y bloqueaste a ${author}` : `Quitaste ${song.title}`,
       });
       return;
     }
@@ -298,7 +298,7 @@ export function ShareSheet({
   const doCopy = async () => {
     if (!url) return;
     if (await copy(url)) setCopied(true);
-    else toast.show({ message: "No pudimos copiar el link.", kind: "error" });
+    else toast.show({ message: "No pudimos copiar el link", kind: "error" });
   };
   const share = async () => {
     if (!url) return;
@@ -313,9 +313,9 @@ export function ShareSheet({
     }
     if (await copy(url)) {
       setCopied(true);
-      toast.show({ message: "Link copiado." });
+      toast.show({ message: "Link copiado" });
     } else {
-      toast.show({ message: "No pudimos copiar el link.", kind: "error" });
+      toast.show({ message: "No pudimos copiar el link", kind: "error" });
     }
   };
   const newLink = async () => {
@@ -331,7 +331,7 @@ export function ShareSheet({
 
   return (
     <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>invita a la fiesta.</h2>
+      <h2 className={BIG_TITLE}>invita a la fiesta</h2>
       <p className={BODY}>{body}</p>
       <div className="mt-[18px] flex h-14 items-center justify-between gap-2 rounded-[16px] bg-[var(--glass-bg)] pl-4 pr-2">
         <span className="min-w-0 truncate font-mono text-[14px] font-medium text-text">
@@ -416,7 +416,7 @@ export function LinkSheet({
 
   return (
     <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>el link.</h2>
+      <h2 className={BIG_TITLE}>el link</h2>
       <div className="mt-4 flex flex-col gap-1 rounded-[18px] bg-[var(--glass-bg)] px-4 py-3.5">
         <span className="flex items-center gap-2 font-sans text-[15px] font-semibold text-text">
           <i
@@ -606,7 +606,7 @@ export function BlockedSheet({
     const res = await logged("unblock guest", party.id, unblockPartyGuestAction(party.id, ref));
     setBusy(null);
     if (res && "ok" in res && res.ok) {
-      toast.show({ message: `Desbloqueaste a ${who}.` });
+      toast.show({ message: `Desbloqueaste a ${who}` });
       onChanged();
       return;
     }
@@ -615,7 +615,7 @@ export function BlockedSheet({
   };
   return (
     <div className="flex flex-col">
-      <h2 className={BIG_TITLE}>bloqueados.</h2>
+      <h2 className={BIG_TITLE}>bloqueados</h2>
       <p className={BODY}>Siguen viendo la fiesta, pero ya no pueden agregar canciones (sí quitar las suyas).</p>
       <ul className="-mx-2 mt-[18px] flex flex-col gap-0.5">
         {party.blockedGuests.map((g) => (

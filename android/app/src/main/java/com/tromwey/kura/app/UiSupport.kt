@@ -118,7 +118,7 @@ internal fun isOpenable(scheme: String?, host: String?, port: Int, debug: Boolea
 /** [openUrl] for a screen: when nothing opened, the person is told (the row would otherwise just not react). */
 fun AppStore.openLink(context: Context, url: String?): Boolean {
     val ok = openUrl(context, url)
-    if (!ok) showToast(ToastModel("No se pudo abrir el enlace.", ToastModel.Kind.Info))
+    if (!ok) showToast(ToastModel("No se pudo abrir el enlace", ToastModel.Kind.Info))
     return ok
 }
 

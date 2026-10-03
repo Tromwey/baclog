@@ -534,7 +534,7 @@ export function CtaCard({ className = "" }: { className?: string }) {
     <div
       className={`flex flex-col items-center gap-3 rounded-[var(--r-screen)] bg-surface-1 px-5 py-7 text-center ${className}`}
     >
-      <span className="font-brand text-[26px] leading-[1.1] text-text text-balance">guarda lo que más vale.</span>
+      <span className="font-brand text-[26px] leading-[1.1] text-text text-balance">guarda lo que más vale</span>
       <span className="text-[15px] leading-[1.5] text-text-2 text-pretty">
         Tus películas, series y álbumes en un solo lugar, y lo que obsesiona a tu gente.
       </span>

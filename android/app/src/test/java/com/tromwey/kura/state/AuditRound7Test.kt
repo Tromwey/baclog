@@ -198,7 +198,7 @@ class AuditRound7Test {
         assertNull("no se pinta", store.myReview(yhlq))
         assertNull(store.userTitles[yhlq]!!.reviewId)
         assertTrue("no se manda", h.api.callsOf("saveReview").isEmpty())
-        assertEquals("Para reseñar, elige Me gusta o Me obsesiona.", store.toast?.text)
+        assertEquals("Para reseñar, elige Me gusta o Me obsesiona", store.toast?.text)
     }
 
     // MARK: A · copy
@@ -222,13 +222,13 @@ class AuditRound7Test {
     }
 
     @Test fun theSharedCasesSayTheCanonicalPhrase() {
-        assertEquals("No se pudo guardar.", KuraApiError.Server("HTTP 500").toast)
-        assertEquals("Sin conexión.", KuraApiError.Offline.toast)
+        assertEquals("No se pudo guardar", KuraApiError.Server("HTTP 500").toast)
+        assertEquals("Sin conexión", KuraApiError.Offline.toast)
         assertEquals("Demasiados intentos seguidos. Espera un momento.", KuraApiError.RateLimited(null).toast)
         assertEquals("El catálogo no responde. Vuelve a intentarlo en unos minutos.", KuraApiError.Unavailable.toast)
         assertEquals("El código es incorrecto o ya venció. Revísalo o pide otro.", KuraApiError.Unauthorized.authText)
         assertEquals("Se intentó demasiadas veces. Pide otro código más tarde.", KuraApiError.CodeLocked.authText)
         assertEquals("Sin conexión. Revisa tu red y vuelve a intentarlo.", KuraApiError.Offline.authText)
-        assertEquals("Termina tu registro para continuar.", ONBOARDING_REQUIRED_NOTE)
+        assertEquals("Termina tu registro para continuar", ONBOARDING_REQUIRED_NOTE)
     }
 }

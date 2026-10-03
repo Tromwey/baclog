@@ -344,10 +344,10 @@ extension AppStore {
             case .cancelled, .unauthorized:
                 break
             case .notFound:
-                self.showToast(ToastModel(text: "Ese perfil no existe o es privado.", kind: .info))
+                self.showToast(ToastModel(text: "Ese perfil no existe o es privado", kind: .info))
             default:
                 let who = self.person(id).map { "@\($0.handle)" } ?? "este perfil"
-                let text = e.toast(or: on ? "No se pudo seguir a \(who)." : "No se pudo dejar de seguir a \(who).")
+                let text = e.toast(or: on ? "No se pudo seguir a \(who)" : "No se pudo dejar de seguir a \(who)")
                 self.showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     self?.setFollow(id, on)

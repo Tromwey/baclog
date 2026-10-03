@@ -93,7 +93,7 @@ fun KuraSheetScope.PartyWelcomeSheet(store: AppStore, sheet: SheetRoute.PartyWel
     val limit = p?.perGuestLimit
     Column(SheetPad) {
         if (p != null && p.songs.isNotEmpty()) FanView(p.songs.take(3).map { it.cover }, 56.dp, Modifier.padding(bottom = 18.dp))
-        PartySheetTitle(if (sheet.returning && store.me.handle.isNotEmpty()) "ya estás dentro, @${store.me.handle}." else "ya estás dentro.")
+        PartySheetTitle(if (sheet.returning && store.me.handle.isNotEmpty()) "ya estás dentro, @${store.me.handle}" else "ya estás dentro")
         PartySheetBody(welcomeMessage(host, limit, sheet.returning), Modifier.padding(top = 10.dp))
         if (limit != 0) {
             HoneyButton("Buscar mi primera canción", {
@@ -133,7 +133,7 @@ fun KuraSheetScope.PartyCapSheet(store: AppStore, sheet: SheetRoute.PartyCap) {
     val limit = maxOf(1, p?.perGuestLimit ?: mine.size)
     val search = Route.PartySearch(sheet.id)
     Column(SheetPad) {
-        PartySheetTitle(if (limit == 1) "ya agregaste tu canción." else "ya agregaste tus $limit.")
+        PartySheetTitle(if (limit == 1) "ya agregaste tu canción" else "ya agregaste tus $limit")
         PartySheetBody("Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             mine.forEach { s ->
@@ -204,7 +204,7 @@ fun KuraSheetScope.PartySongSheet(store: AppStore, sheet: SheetRoute.PartySong) 
     }
 }
 
-/** "invita a la fiesta.": the link with Copiar, Compartir link (the system share sheet), Gestionar link. */
+/** "invita a la fiesta": the link with Copiar, Compartir link (the system share sheet), Gestionar link. */
 @Composable
 fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare) {
     val dismiss: () -> Unit = this::close
@@ -215,7 +215,7 @@ fun KuraSheetScope.PartyShareSheet(store: AppStore, sheet: SheetRoute.PartyShare
     val invite = p?.invite
     val url = invite?.url
     Column(SheetPad) {
-        PartySheetTitle("invita a la fiesta.")
+        PartySheetTitle("invita a la fiesta")
         PartySheetBody(shareNote(p?.perGuestLimit), Modifier.padding(top = 10.dp))
         if (invite != null && invite.active && url != null) {
             Row(
@@ -328,7 +328,7 @@ fun KuraSheetScope.PartyLeaveSheet(store: AppStore, sheet: SheetRoute.PartyLeave
 
 private val dayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", KCalendar.locale)
 
-/** "el link." (design `link` · `link-revoked`). */
+/** "el link" (design `link` · `link-revoked`). */
 @Composable
 fun KuraSheetScope.PartyLinkSheet(store: AppStore, sheet: SheetRoute.PartyLink) {
     val dismiss: () -> Unit = this::close
@@ -340,7 +340,7 @@ fun KuraSheetScope.PartyLinkSheet(store: AppStore, sheet: SheetRoute.PartyLink) 
         if (!busy) store.sheetWrite { op(); false }
     }
     Column(SheetPad) {
-        PartySheetTitle("el link.")
+        PartySheetTitle("el link")
         Column(
             Modifier.padding(top = 16.dp).fillMaxWidth()
                 .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(KRadius.surface))
@@ -394,7 +394,7 @@ fun KuraSheetScope.PartyEditSheet(store: AppStore, sheet: SheetRoute.PartyEdit) 
     val busy = store.sheetLocked
     val limit = PartyCopy.limits[limitIndex]
     Column(SheetPad) {
-        PartySheetTitle("editar fiesta.")
+        PartySheetTitle("editar fiesta")
         BasicText("Nombre", Modifier.padding(top = 20.dp), style = KuraType.ui(14f, UiWeight.SemiBold))
         KuraTextField(name, { name = it.take(60) }, "la fiesta de…", Modifier.padding(top = 8.dp), serif = true, fill = KColor.glassBg)
         BasicText("Canciones por invitado", Modifier.padding(top = 22.dp), style = KuraType.ui(14f, UiWeight.SemiBold))
@@ -421,7 +421,7 @@ fun KuraSheetScope.PartyBlockedSheet(store: AppStore, sheet: SheetRoute.PartyBlo
     val dismiss: () -> Unit = this::close
     val list = store.party(sheet.id)?.blockedGuests.orEmpty()
     Column(SheetPad) {
-        PartySheetTitle("bloqueados.")
+        PartySheetTitle("bloqueados")
         PartySheetBody("Siguen viendo la colección y pueden quitar las suyas, pero ya no agregan canciones.", Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             list.forEach { g ->

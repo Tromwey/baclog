@@ -24,7 +24,7 @@ fun AppStore.route(m: Me): Boolean {
     return true
 }
 
-const val ONBOARDING_REQUIRED_NOTE = "Termina tu registro para continuar."
+const val ONBOARDING_REQUIRED_NOTE = "Termina tu registro para continuar"
 
 /**
  * THE one place a `403 onboarding_required` is handled (`PATCH /me`, follow, review, report, parties):

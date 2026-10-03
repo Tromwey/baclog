@@ -117,7 +117,7 @@ class AppStoreLinksTest {
         assertEquals(Tab.Collections, store.tab)
         assertEquals(listOf<Route>(Route.Collection(own)), store.path(Tab.Collections))
         store.openWebLink("https://get-kura.app/backlogs/no-existe")
-        assertEquals("Esa colección ya no existe.", store.toast?.text)
+        assertEquals("Esa colección ya no existe", store.toast?.text)
     }
 
     @Test fun aLinkBeforeTheTabsWaitsForThem() = storeTest { h ->

@@ -36,9 +36,9 @@ enum class Privacy {
 
     /** The undo toast after a visibility change. */
     val changedToast: String get() = when (this) {
-        PublicAccess -> "Ahora la ven todos."
-        OnlyMe -> "Ahora solo tú la ves."
-        Link -> "Ahora la ve quien tenga el link."
+        PublicAccess -> "Ahora la ven todos"
+        OnlyMe -> "Ahora solo tú la ves"
+        Link -> "Ahora la ve quien tenga el link"
     }
 
     val wire: String get() = when (this) {

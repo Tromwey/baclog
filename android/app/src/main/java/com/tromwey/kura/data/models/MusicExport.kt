@@ -172,9 +172,9 @@ data class PartyExportFlow(
  *  iOS's MusicKit-only copy (`appleToken`, permission/subscription lines) isn't ported: no MusicKit here. */
 object MusicExportCopy {
     fun title(step: PartyExportFlow.Step, p: MusicProvider): String = when (step) {
-        PartyExportFlow.Step.Connect -> "conecta ${p.label.lowercase()}."
-        PartyExportFlow.Step.Progress -> "pasando la colección."
-        PartyExportFlow.Step.Done -> "lista."
+        PartyExportFlow.Step.Connect -> "conecta ${p.label.lowercase()}"
+        PartyExportFlow.Step.Progress -> "pasando la colección"
+        PartyExportFlow.Step.Done -> "lista"
         PartyExportFlow.Step.Failed -> "no se pudo exportar."
     }
 

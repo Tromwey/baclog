@@ -97,7 +97,7 @@ extension AppStore {
                 self.collections.removeAll { $0.id == localID }
                 if let titleID { self.gcUserState(titleID) }
                 guard e != .cancelled, e != .unauthorized else { return }
-                self.showToast(ToastModel(text: e.toast(or: "No se pudo crear la colección."), kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo crear la colección"), kind: .retry) { [weak self] in
                     self?.createCollection(name: finalName, privacy: privacy, adding: titleID)
                 })
             }
@@ -133,7 +133,7 @@ extension AppStore {
             case .invalid:
                 self.showToast(ToastModel(text: e.toast, kind: .info))
             default:
-                self.showToast(ToastModel(text: e.toast(or: "No se pudo guardar la colección."), kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo guardar la colección"), kind: .retry) { [weak self] in
                     guard let self, self.collection(id) != nil else { return }
                     self.dismissToast()
                     self.update(id) { c in

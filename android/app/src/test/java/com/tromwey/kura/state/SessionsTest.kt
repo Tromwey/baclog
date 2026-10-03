@@ -50,7 +50,7 @@ class SessionsTest {
         assertEquals(listOf("revokeSession ${other.id}"), h.api.callsOf("revokeSession"))
         assertFalse(store.deviceSessions!!.any { it.id == other.id })
         assertEquals(9, store.deviceSessions!!.size)
-        assertEquals("Cerraste la sesión en ${other.title}.", store.toast?.text)
+        assertEquals("Cerraste la sesión en ${other.title}", store.toast?.text)
     }
 
     @Test fun aGoneSessionJustCatchesTheListUp() = storeTest { h ->

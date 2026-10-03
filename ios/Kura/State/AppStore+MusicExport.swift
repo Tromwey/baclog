@@ -67,9 +67,9 @@ extension AppStore {
         switch await boundWrite({ try await api.disconnectTidal() }) {
         case .ok:
             s.musicServices?.tidal.connected = false
-            showToast(ToastModel(text: "Desconectaste TIDAL.", kind: .info))
+            showToast(ToastModel(text: "Desconectaste TIDAL", kind: .info))
         case .failed(let e):
-            showToast(ToastModel(text: e == .unavailable ? MusicExportCopy.unavailable : e.toast(or: "No se pudo desconectar TIDAL."), kind: .info))
+            showToast(ToastModel(text: e == .unavailable ? MusicExportCopy.unavailable : e.toast(or: "No se pudo desconectar TIDAL"), kind: .info))
         case .stale:
             break
         }

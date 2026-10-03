@@ -115,7 +115,7 @@ struct WelcomeView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("la bodega donde guardas lo que más vale.")
+                Text("la bodega donde guardas lo que más vale")
                     .font(.kura.news(36))
                     .lineSpacing(-4)
                     .foregroundStyle(KColor.text)
@@ -166,7 +166,7 @@ struct SignUpView: View {
                             .lineSpacing(3)
                     }
                 }
-                Text("entra a kura.")
+                Text("entra a kura")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .padding(.top, 14)
@@ -431,7 +431,7 @@ struct UsernameView: View {
     @ViewBuilder private var yearOnlyForm: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("solo falta tu fecha de nacimiento.")
+                Text("solo falta tu fecha de nacimiento")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -464,7 +464,7 @@ struct UsernameView: View {
     @ViewBuilder private var fullForm: some View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("elige tu usuario.")
+                    Text("elige tu usuario")
                         .font(.kura.news(40))
                         .foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
@@ -555,7 +555,7 @@ struct PickThreeView: View {
                         .font(.kura.ui(14, .semibold))
                         .foregroundStyle(KColor.text2)
                     }
-                    Text("elige 3 que te obsesionan.")
+                    Text("elige 3 que te obsesionan")
                         .font(.kura.news(32))
                         .foregroundStyle(KColor.text)
                         .accessibilityAddTraits(.isHeader)
@@ -818,7 +818,7 @@ struct YourPeopleView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
             .padding(.bottom, 4)
-            Text("gente con tus obsesiones.")
+            Text("gente con tus obsesiones")
                 .font(.kura.news(32))
                 .foregroundStyle(KColor.text)
                 .accessibilityAddTraits(.isHeader)
@@ -877,7 +877,7 @@ struct CodeView: View {
             OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = .signup }
 
             VStack(spacing: 12) {
-                Text("tu código.")
+                Text("tu código")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .frame(maxWidth: .infinity, alignment: .leading)

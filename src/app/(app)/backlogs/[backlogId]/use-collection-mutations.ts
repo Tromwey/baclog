@@ -95,7 +95,7 @@ export function useCollectionMutations({
         unhide(it.backlogItemId);
         show({
           kind: "error",
-          message: "No se pudo quitar.",
+          message: "No se pudo quitar",
           actionLabel: "Reintentar",
           onAction: () => remove(it),
         });
@@ -140,7 +140,7 @@ export function useCollectionMutations({
               for (const id of created) await removeMembershipAction(id);
               router.refresh();
             } catch {
-              show({ kind: "error", message: "No se pudo deshacer." });
+              show({ kind: "error", message: "No se pudo deshacer" });
             }
           })();
         },
@@ -151,7 +151,7 @@ export function useCollectionMutations({
       unhide(it.backlogItemId);
       show({
         kind: "error",
-        message: "No se pudo mover.",
+        message: "No se pudo mover",
         actionLabel: "Reintentar",
         onAction: () => void move(it, targets),
       });
@@ -161,7 +161,7 @@ export function useCollectionMutations({
   async function setCover(it: CollectionItem | null) {
     const res = await attempt(() => setBacklogCoverAction(backlog.id, it?.catalogItemId ?? null));
     if (!res.ok) {
-      show({ kind: "error", message: "No se pudo cambiar la portada." });
+      show({ kind: "error", message: "No se pudo cambiar la portada" });
       return;
     }
     router.refresh();
@@ -200,7 +200,7 @@ export function useCollectionMutations({
         if (all) restore?.();
         show({
           kind: "error",
-          message: "No se pudo guardar el orden.",
+          message: "No se pudo guardar el orden",
           actionLabel: "Reintentar",
           onAction: () => saveOrder(order, all),
         });
@@ -208,7 +208,7 @@ export function useCollectionMutations({
       }
       if (clearCover) {
         const c = await attempt(() => setBacklogCoverAction(backlog.id, null));
-        if (!c.ok) show({ kind: "error", message: "No se pudo cambiar la portada." });
+        if (!c.ok) show({ kind: "error", message: "No se pudo cambiar la portada" });
       }
       // The painted list has no cursor: re-read it now that the order landed.
       if (all) restore?.();
@@ -220,7 +220,7 @@ export function useCollectionMutations({
     const pinned = !backlog.pinned;
     const res = await attempt(() => setBacklogPinnedAction(backlog.id, pinned));
     if (!res.ok) {
-      show({ kind: "error", message: "No se pudo guardar." });
+      show({ kind: "error", message: "No se pudo guardar" });
       return;
     }
     router.refresh();

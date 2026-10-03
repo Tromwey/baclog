@@ -179,7 +179,7 @@ export function ExportSheet({
   return (
     <div className="flex flex-col">
       <h2 className="font-brand text-[34px] font-normal leading-[1.02] tracking-[-0.015em] text-text">
-        llévala a otra app.
+        llévala a otra app
       </h2>
       <p className="mt-2.5 font-sans text-[15px] leading-[1.45] text-text-2 [text-wrap:pretty]">
         {n === 0
@@ -426,7 +426,7 @@ export function ExportScreen({
       () => void runApple(mk),
       (err: unknown) => {
         console.warn("[party] apple music authorize refused", err);
-        toast.show({ message: "No diste permiso en Apple Music." });
+        toast.show({ message: "No diste permiso en Apple Music" });
       },
     );
   };

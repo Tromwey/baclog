@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
 import com.tromwey.kura.state.showToast
 
 /**
- * 03 · O1a "entra a kura." — ONE door for new and returning people (iOS since f31effe; flujos-v2
+ * 03 · O1a "entra a kura" — ONE door for new and returning people (iOS since f31effe; flujos-v2
  * still draws the old "crea tu cuenta." + "¿Ya tienes cuenta? Entrar"). Google only when
  * `GET /auth/providers` announces a client id (never a button that doesn't work); Apple never exists
  * on Android; correo always. The code goes to O1c.
@@ -94,7 +94,7 @@ fun SignupScreen(store: AppStore) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             BasicText(
-                "entra a kura.",
+                "entra a kura",
                 modifier = Modifier.padding(top = 14.dp).semantics { heading() },
                 style = KuraType.news(40f),
             )

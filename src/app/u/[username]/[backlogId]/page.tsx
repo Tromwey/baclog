@@ -214,7 +214,7 @@ export default async function PublicBacklogPage({
           // The card says what to do (critique 2026-09-27): a glass "Crear
           // cuenta" — not honey, "Guardar una copia" already is.
           <div className="mx-5 flex flex-col items-start gap-2 rounded-[var(--r-screen)] bg-white/[0.05] p-[22px]">
-            <span className="font-brand text-[24px] leading-[1.1] text-text">arma la tuya.</span>
+            <span className="font-brand text-[24px] leading-[1.1] text-text">arma la tuya</span>
             <span className="text-[14px] leading-[1.5] text-text-2">
               Películas, series y álbumes en colecciones que se comparten como tarjeta.
             </span>

@@ -241,9 +241,9 @@ struct PartyExportFlow: Equatable {
 enum MusicExportCopy {
     static func title(_ step: PartyExportFlow.Step, _ p: MusicProvider) -> String {
         switch step {
-        case .connect: return "conecta \(p.label.lowercased())."
-        case .progress: return "pasando la colección."
-        case .done: return "lista."
+        case .connect: return "conecta \(p.label.lowercased())"
+        case .progress: return "pasando la colección"
+        case .done: return "lista"
         case .failed: return "no se pudo exportar."
         }
     }
@@ -284,7 +284,7 @@ enum MusicExportCopy {
 
     static let offline = "Sin conexión. Tu colección sigue intacta en kura; al reintentar no se duplican canciones."
     static func pause(_ p: MusicProvider) -> String { "\(p.label) pidió una pausa. Seguimos en unos segundos." }
-    static func notConfigured(_ p: MusicProvider) -> String { "\(p.label) todavía no está disponible en kura." }
+    static func notConfigured(_ p: MusicProvider) -> String { "\(p.label) todavía no está disponible en kura" }
     /// `assertMusicExportLive` (503 `migration`).
     static let unavailable = "Exportar a otras apps todavía no está disponible. Vuelve a intentarlo más tarde."
     static let description = { (name: String) in "La colección de fiesta «\(name)», desde kura." }

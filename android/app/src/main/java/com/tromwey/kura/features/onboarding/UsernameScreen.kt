@@ -102,7 +102,7 @@ fun UsernameScreen(store: AppStore) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             BasicText(
-                if (returning) "solo falta tu fecha de nacimiento." else "elige tu usuario.",
+                if (returning) "solo falta tu fecha de nacimiento" else "elige tu usuario",
                 modifier = Modifier.semantics { heading() },
                 style = KuraType.news(40f),
             )

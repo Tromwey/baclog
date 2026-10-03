@@ -23,7 +23,7 @@ export default function CreditosPage() {
         <Wordmark />
       </header>
       <div className="mt-[62px] flex flex-col gap-3">
-        <h1 className="font-brand text-[40px] leading-none text-text">créditos.</h1>
+        <h1 className="font-brand text-[40px] leading-none text-text">créditos</h1>
         <p className="text-[15px] leading-[1.5] text-text-2">
           Kura usa datos e imágenes de los siguientes servicios.
         </p>

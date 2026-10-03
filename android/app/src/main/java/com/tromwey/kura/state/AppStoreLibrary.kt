@@ -276,7 +276,7 @@ private fun AppStore.syncCollection(id: String, name: String? = null, vibe: Stri
             KuraApiError.NotFound -> showToast(ToastModel(AppStore.GONE_COLLECTION_NOTE, ToastModel.Kind.Info))
             KuraApiError.Unsupported -> showToast(ToastModel(AppStore.NOT_SAVED_NOTE, ToastModel.Kind.Info))
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se pudo guardar la colección."), collectionRetryKey(canonicalCollectionId(id), left)) {
+            else -> retryToast(e.toast("No se pudo guardar la colección"), collectionRetryKey(canonicalCollectionId(id), left)) {
                 val cur = collection(id) ?: return@retryToast
                 dismissToast()
                 // What it shows NOW (the reverted, confirmed values) is what this resend replaces.
@@ -557,8 +557,8 @@ fun AppStore.deleteCollection(id: String, purge: Boolean = false) {
         }
         when (e) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se borró la colección."), ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se borró la colección."), session.canonicalWriteKey(key)) {
+            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se borró la colección"), ToastModel.Kind.Info))
+            else -> retryToast(e.toast("No se borró la colección"), session.canonicalWriteKey(key)) {
                 dismissToast()
                 deleteCollection(cid, purge)
             }
@@ -658,7 +658,7 @@ internal fun AppStore.syncAdd(titleId: String, collectionId: String) {
             KuraApiError.NotFound -> showToast(ToastModel(AppStore.GONE_SAVE_NOTE, ToastModel.Kind.Info))
             KuraApiError.Unsupported -> showToast(ToastModel(AppStore.NOT_SAVED_NOTE, ToastModel.Kind.Info))
             is KuraApiError.Invalid -> showToast(ToastModel(e.toast, ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se pudo guardar en ${collection(cid)?.name ?: "la colección"}."), key) {
+            else -> retryToast(e.toast("No se pudo guardar en ${collection(cid)?.name ?: "la colección"}"), key) {
                 if (collection(cid) == null) return@retryToast
                 dismissToast()
                 add(titleId, cid, toast = false)
@@ -700,8 +700,8 @@ private fun AppStore.syncRemove(titleId: String, collectionId: String, state: Us
             }
             when (e) {
                 KuraApiError.Unauthorized -> Unit
-                KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}."), ToastModel.Kind.Info))
-                else -> retryToast(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}."), key) {
+                KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}"), ToastModel.Kind.Info))
+                else -> retryToast(e.toast("No se quitó de ${collection(cid)?.name ?: "la colección"}"), key) {
                     if (collection(cid)?.titleIds?.contains(titleId) != true) return@retryToast
                     dismissToast()
                     val before = s.userTitles[titleId]
@@ -975,8 +975,8 @@ private fun AppStore.sendLibraryRemoval(titleId: String): Job {
         if (titleId !in libraryIds && session.writeChains[session.canonicalWriteKey(key)] == null) putBack?.invoke()
         when (e) {
             KuraApiError.Unauthorized -> Unit
-            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de tus colecciones."), ToastModel.Kind.Info))
-            else -> retryToast(e.toast("No se quitó de tus colecciones."), key) {
+            KuraApiError.Unsupported -> showToast(ToastModel(e.toast("No se quitó de tus colecciones"), ToastModel.Kind.Info))
+            else -> retryToast(e.toast("No se quitó de tus colecciones"), key) {
                 dismissToast()
                 removeFromLibrary(titleId)
             }

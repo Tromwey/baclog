@@ -262,9 +262,9 @@ struct CompleteSheet: View {
                     }
                 default:
                     if stillOpen {
-                        withAnimation(KMotion.short) { saveError = failure.toast }
+                        withAnimation(KMotion.short) { saveError = failure.inlineText }
                     } else {
-                        store.showToast(ToastModel(text: failure == .offline ? "Sin conexión. No se pudo guardar tu reseña." : "No se pudo guardar tu reseña.", kind: .info))
+                        store.showToast(ToastModel(text: failure == .offline ? "Sin conexión. No se pudo guardar tu reseña." : "No se pudo guardar tu reseña", kind: .info))
                     }
                 }
                 return
@@ -288,7 +288,7 @@ struct ReviewLossSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("tu reseña se borra con la reacción.")
+            Text("tu reseña se borra con la reacción")
                 .font(.kura.news(26))
                 .foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)

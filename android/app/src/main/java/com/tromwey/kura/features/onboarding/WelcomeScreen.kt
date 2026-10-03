@@ -34,7 +34,7 @@ private val welcomeFan = listOf(Triple("chihiro", -9f, -0.62f), Triple("odyssey"
 
 /**
  * 02 · Onboarding (13, bienvenida): §marca · C (蔵 kura — the first contact, before the account, is
- * brand material), three covers fanned out, "la bodega donde guardas lo que más vale." and Empezar in
+ * brand material), three covers fanned out, "la bodega donde guardas lo que más vale" and Empezar in
  * glass. A first-launch screen: once passed (`welcomeSeen`) the entrance starts at "entra a kura.".
  */
 @Composable
@@ -61,7 +61,7 @@ fun WelcomeScreen(store: AppStore) {
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             BasicText(
-                "la bodega donde guardas lo que más vale.",
+                "la bodega donde guardas lo que más vale",
                 modifier = Modifier.semantics { heading() },
                 style = KuraType.news(36f).copy(lineHeight = 38.sp), // 1.05 (flujos-v2 13)
             )
