@@ -16,8 +16,10 @@ extension AppStore {
         defer { session.feedLoading = false }
         do {
             async let page = api.feed(cursor: nil)
-            async let sug = api.feedSuggestion()
-            let (first, suggestion) = try await (page, sug)
+            // The suggestion card is an extra: its failure never takes the feed down with it.
+            async let sug: FeedEvent? = try? await api.feedSuggestion()
+            let first = try await page
+            let suggestion = await sug
             try check(session)
             var events: [FeedEvent] = []
             FeedBursts.append(first.items.map(ingest), to: &events)
@@ -155,17 +157,24 @@ extension AppStore {
 
     /// Every page of one of YOUR lists (`GET /me/following` · `/me/followers`), until `nextCursor`
     /// is nil. `following` needs all of it: it decides Seguir/Siguiendo on every row of the app.
-    func allPeople(_ kind: PeopleKind) async throws -> [Person] {
+    ///
+    /// `partial`: a page came with elements and none readable (`PeoplePage.unreadable` — a later
+    /// page reads as empty instead of failing, `PageContract`). What was read is real but NOT the
+    /// whole list: the caller marks it stale so the next visit / launch reads it again, instead
+    /// of keeping for the session a `following` that misses people (their rows would say "Seguir").
+    func allPeople(_ kind: PeopleKind) async throws -> (people: [Person], partial: Bool) {
         var out: [Person] = []
         var seen: Set<String> = []
         var cursor: String?
+        var partial = false
         for _ in 0..<Self.maxPeoplePages {
             let page = try await api.people(kind: kind, cursor: cursor)
+            if page.unreadable { partial = true }
             for p in page.items where seen.insert(p.id).inserted { out.append(p) }
             guard let next = page.nextCursor, next != cursor else { break }
             cursor = next
         }
-        return out
+        return (out, partial)
     }
 
     /// Followers / following of someone. YOUR lists come whole (every page of `me/followers|
@@ -177,7 +186,10 @@ extension AppStore {
     /// block) says the list isn't available — identical for every cause, like the route.
     func loadPeopleList(of personID: String, following: Bool) async {
         let key = AppStore.peopleListKey(of: personID, following: following)
-        guard peopleLists[key] == nil else { return }
+        // Kept for the session — until something this account did made it old (`stalePeopleLists`:
+        // a follow / unfollow). Then the next visit re-reads it, with the old rows on screen meanwhile.
+        guard peopleLists[key] == nil || s.stalePeopleLists.contains(key) else { return }
+        s.stalePeopleLists.remove(key)
         let session = s
         let theirs = personID != me.id
         if theirs, let p = person(personID), p.canSeeFollowLists == false || isBlocked(personID) {
@@ -193,8 +205,11 @@ extension AppStore {
                 items = page.items
                 peopleListMeta[key] = PeopleListMeta(nextCursor: page.nextCursor, anonymous: page.anonymousCount)
             } else {
-                items = try await allPeople(following ? .following : .followers)
+                let all = try await allPeople(following ? .following : .followers)
                 try check(session)
+                items = all.people
+                // Not the whole list: shown, and read again on the next visit.
+                if all.partial { session.stalePeopleLists.insert(key) }
                 if following { self.following.formUnion(items.map(\.id)) }
             }
             loaded(.peopleList(key))
@@ -218,25 +233,58 @@ extension AppStore {
         }
     }
 
-    /// The next page of someone else's list (the rows' end reached it). One at a time.
-    func loadMorePeople(of personID: String, following: Bool) async {
+    /// The next page of someone else's list (the rows' end reached it). One at a time. A failure
+    /// doesn't retry on its own (the row appearing again would hammer the API): the end of the
+    /// list offers Reintentar (`moreError`), like the feed's `feedMore`.
+    func loadMorePeople(of personID: String, following: Bool, retry: Bool = false) async {
         let key = AppStore.peopleListKey(of: personID, following: following)
-        guard let meta = peopleListMeta[key], let cursor = meta.nextCursor, !meta.loadingMore else { return }
+        guard let meta = peopleListMeta[key], let cursor = meta.nextCursor, !meta.loadingMore,
+              retry || meta.moreError == nil else { return }
         let session = s
         peopleListMeta[key]?.loadingMore = true
+        peopleListMeta[key]?.moreError = nil
+        if retry { peopleListMeta[key]?.emptyPages = 0 }
         do {
             let page = try await api.people(kind: following ? .followingOf(personID) : .followersOf(personID), cursor: cursor)
             try check(session)
+            // The list started over while this page was in flight (a follow made it stale, an
+            // error reset it): this page continues a list that is no longer the one on screen.
+            guard peopleListMeta[key]?.nextCursor == cursor, peopleLists[key] != nil else { return }
             for p in page.items { register(p) }
             let seen = Set((peopleLists[key] ?? []).map(\.id))
-            peopleLists[key, default: []] += page.items.filter { !seen.contains($0.id) }
+            let fresh = page.items.filter { !seen.contains($0.id) }
+            peopleLists[key, default: []] += fresh
             // A server that hands back the same cursor would loop: stop there.
-            peopleListMeta[key]?.nextCursor = page.nextCursor == cursor ? nil : page.nextCursor
+            let next = page.nextCursor == cursor ? nil : page.nextCursor
+            peopleListMeta[key]?.nextCursor = next
             peopleListMeta[key]?.loadingMore = false
+            // A page that adds nothing re-makes the sentinel (it is keyed by cursor), which asks
+            // for the next one: after a few in a row it stops and the end offers Reintentar.
+            let run = PageContract.emptyRun(peopleListMeta[key]?.emptyPages ?? 0, added: fresh.count)
+            peopleListMeta[key]?.emptyPages = run
+            if PageContract.stalled(emptyRun: run, hasNext: next != nil) {
+                peopleListMeta[key]?.moreError = .server("")
+            }
+            online()
         } catch {
             guard s === session else { return }
+            let e = noteError(error)
+            // Same rule for a failure: it belongs to the list that asked.
+            guard peopleListMeta[key]?.nextCursor == cursor else { return }
             peopleListMeta[key]?.loadingMore = false
-            noteError(error)
+            switch e {
+            case .cancelled, .unauthorized:
+                break
+            case .forbidden, .notFound, .invalid:
+                // The list isn't what it was (their setting changed, they went private, a block,
+                // a cursor the server no longer takes): what's cached is no longer the truth.
+                // Start over — the first page says which shape it is now.
+                peopleLists[key] = nil
+                peopleListMeta[key] = nil
+                await loadPeopleList(of: personID, following: following)
+            default:
+                peopleListMeta[key]?.moreError = e
+            }
         }
     }
 
@@ -284,15 +332,19 @@ extension AppStore {
     private func setFollow(_ id: String, _ on: Bool) {
         guard following.contains(id) != on else { return }
         applyFollow(id, on)
-        sync(key: WriteKey.follow(id), onError: { [weak self] e in
+        let revert: @MainActor () -> Void = { [weak self] in
+            guard let self, self.following.contains(id) == on else { return }
+            self.applyFollow(id, !on)
+        }
+        sync(key: WriteKey.follow(id), gen: WriteKey.follow(id), onError: { [weak self] e in
             guard let self else { return true }
             guard self.following.contains(id) == on else { return true }
-            self.applyFollow(id, !on)
+            revert()
             switch e {
             case .cancelled, .unauthorized:
                 break
             case .notFound:
-                self.showToast(ToastModel(text: "Ese perfil ya no está disponible.", kind: .info))
+                self.showToast(ToastModel(text: "Ese perfil no existe o es privado.", kind: .info))
             default:
                 let who = self.person(id).map { "@\($0.handle)" } ?? "este perfil"
                 let text = e.toast(or: on ? "No se pudo seguir a \(who)." : "No se pudo dejar de seguir a \(who).")
@@ -302,7 +354,7 @@ extension AppStore {
                 })
             }
             return true
-        }) { api in try await api.setFollowing(handle: id, following: on) }
+        }, revert: revert) { api in try await api.setFollowing(handle: id, following: on) }
     }
 
     private func applyFollow(_ id: String, _ on: Bool) {
@@ -315,6 +367,9 @@ extension AppStore {
             people[id] = p
         }
         me.followingCount = max(0, me.followingCount + (on ? 1 : -1))
+        // "A quién sigues" and their "seguidores" changed: re-read on the next visit.
+        s.stalePeopleLists.insert(AppStore.peopleListKey(of: me.id, following: true))
+        s.stalePeopleLists.insert(AppStore.peopleListKey(of: id, following: false))
     }
 
     func toggleMute(_ id: String) {
@@ -372,4 +427,8 @@ struct PeopleListMeta: Equatable {
     var anonymous = 0
     var denied: String? = nil
     var loadingMore = false
+    /// Later pages in a row that added no row (`PageContract.maxEmptyPages`).
+    var emptyPages = 0
+    /// The next page failed: the end of the list offers Reintentar (no auto-retry on scroll).
+    var moreError: KuraAPIError? = nil
 }

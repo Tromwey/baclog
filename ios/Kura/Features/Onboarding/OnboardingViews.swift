@@ -196,14 +196,23 @@ struct SignUpView: View {
                     .submitLabel(.send)
                     .onSubmit(send)
                 // Solid while correo is the only way in; glass next to Apple's white button.
-                if store.hasSocialSignIn {
-                    GlassButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", height: 52, fontSize: 16, fullWidth: true, action: send)
-                        .disabled(store.authBusy)
-                } else {
-                    SolidButton(title: store.authBusy ? "Enviando…" : "Enviarme un código", enabled: !store.authBusy, action: send)
+                // After a 429 that sent NO code (hourly cap, network limit) the button waits out
+                // the server's `retryAfterSeconds`, counting down.
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let wait = store.otpBlockedWait(for: email, at: ctx.date)
+                    let title = store.authBusy ? "Enviando…"
+                        : (wait > 0 ? "Enviarme un código en \(KuraAPIError.waitLabel(Int(wait.rounded(.up))))" : "Enviarme un código")
+                    if store.hasSocialSignIn {
+                        GlassButton(title: title, height: 52, fontSize: 16, fullWidth: true, action: send)
+                            .disabled(store.authBusy || wait > 0)
+                            .opacity(wait > 0 ? 0.6 : 1)
+                    } else {
+                        SolidButton(title: title, enabled: !store.authBusy && wait <= 0, action: send)
+                    }
                 }
+                .monospacedDigit()
                 InlineError(text: store.authError)
-                Text("Sin contraseña: te mandamos un código de seis dígitos.")
+                Text("Sin contraseña: te enviamos un código de seis dígitos.")
                     .font(.kura.ui(13))
                     .foregroundStyle(KColor.text2)
                     .multilineTextAlignment(.center)
@@ -217,7 +226,7 @@ struct SignUpView: View {
     }
 
     private func send() {
-        guard !store.authBusy else { return }
+        guard !store.authBusy, store.otpBlockedWait(for: email) <= 0 else { return }
         focused = false
         Task {
             if await store.requestCode(email: email) {
@@ -302,7 +311,7 @@ struct SocialSignInButtons: View {
         switch result {
         case .success(let auth):
             guard let credential = AppleCredential(authorization: auth, rawNonce: nonce) else {
-                store.showToast(ToastModel(text: "No se pudo entrar con Apple. Inténtalo de nuevo.", kind: .info))
+                store.showToast(ToastModel(text: "No se pudo entrar con Apple. Vuelve a intentarlo.", kind: .info))
                 return
             }
             nonce = ""
@@ -311,7 +320,7 @@ struct SocialSignInButtons: View {
             nonce = ""
             // Closing Apple's sheet is not an error.
             if let e = error as? ASAuthorizationError, e.code == .canceled { return }
-            store.showToast(ToastModel(text: "No se pudo entrar con Apple. Inténtalo de nuevo.", kind: .info))
+            store.showToast(ToastModel(text: "No se pudo entrar con Apple. Vuelve a intentarlo.", kind: .info))
         }
     }
 }
@@ -322,21 +331,28 @@ struct UsernameView: View {
     @Environment(AppStore.self) private var store
     @State private var handle = MockPrefill.handle
     @State private var name = MockPrefill.name
+    @State private var day = MockPrefill.birthDay
+    @State private var month = MockPrefill.birthMonth
     @State private var year = MockPrefill.birthYear
+    @FocusState private var dayFocus: Bool
+    @FocusState private var monthFocus: Bool
+    @FocusState private var yearFocus: Bool
     @State private var status: UsernameStatus?
     @State private var seeded = false
 
     private var clean: String {
         handle.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
     }
-    private var birthYear: Int? {
-        guard let y = Int(year.filter(\.isNumber)), y >= 1900, y <= 2100 else { return nil }
-        return y
-    }
+    /// `YYYY-MM-DD` once the three fields are a real date that isn't in the future (`BirthDate`).
+    private var birthDate: String? { BirthDate.wire(day: day, month: month, year: year) }
+    /// The three fields are filled in and they aren't a date: said under the fields, before sending.
+    private var dateInvalid: Bool { BirthDate.isComplete(day: day, month: month, year: year) && birthDate == nil }
     private var needsYear: Bool { !(store.account?.onboarded ?? false) }
+    /// An old account (it has its @ and its name): only the birth date is asked.
+    private var yearOnly: Bool { store.onlyYearMissing }
     private var canSubmit: Bool {
         clean.count >= 3 && status == .free && !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && (!needsYear || birthYear != nil) && !store.authBusy
+            && (!needsYear || birthDate != nil) && !store.authBusy
     }
 
     var body: some View {
@@ -347,6 +363,105 @@ struct UsernameView: View {
                 if store.account == nil { store.onboardingStep = .signup } else { store.signOut(global: false) }
             }
 
+            if yearOnly { yearOnlyForm } else { fullForm }
+        }
+        .ignoresSafeArea(.container, edges: .top)
+        .onAppear {
+            guard !seeded else { return }
+            seeded = true
+            if let h = store.account?.handle, !h.isEmpty { handle = h }
+            if let n = store.account?.name, !n.isEmpty { name = n } else if name.isEmpty, let n = store.suggestedName { name = n }
+        }
+        .task(id: clean) {
+            status = nil
+            guard !yearOnly, clean.count >= 3 else { return }
+            try? await Task.sleep(for: .milliseconds(KuraRuntime.usesMock ? 0 : 350))
+            guard !Task.isCancelled else { return }
+            let s = await store.checkUsername(clean)
+            // No answer, or one this build can't read: don't block — the server decides on submit.
+            if !Task.isCancelled { status = s.flatMap { $0 == .unknown ? nil : $0 } ?? .free }
+        }
+    }
+
+    /// Día / mes / año: three numeric fields in the form's own style (a wheel `DatePicker` breaks
+    /// the O1b frame). The server gets the whole date and keeps only the year.
+    @ViewBuilder private var birthFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tu fecha de nacimiento")
+                .font(.kura.ui(13, .medium))
+                .foregroundStyle(KColor.text2)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 10) {
+                GlassField(placeholder: "día", text: $day, focus: $dayFocus)
+                    .keyboardType(.numberPad)
+                    .textContentType(.birthdateDay)
+                GlassField(placeholder: "mes", text: $month, focus: $monthFocus)
+                    .keyboardType(.numberPad)
+                    .textContentType(.birthdateMonth)
+                GlassField(placeholder: "año", text: $year, focus: $yearFocus)
+                    .keyboardType(.numberPad)
+                    .textContentType(.birthdateYear)
+                    .frame(minWidth: 108)
+            }
+            if dateInvalid {
+                Text("Esa fecha no es válida.")
+                    .font(.kura.ui(13))
+                    .foregroundStyle(KColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        // Digits only, capped; a full day or month moves on to the next field.
+        .onChange(of: day) { _, new in
+            let d = String(new.filter { $0.isASCII && $0.isNumber }.prefix(2))
+            if d != new { day = d }
+            if d.count == 2, dayFocus { monthFocus = true }
+        }
+        .onChange(of: month) { _, new in
+            let m = String(new.filter { $0.isASCII && $0.isNumber }.prefix(2))
+            if m != new { month = m }
+            if m.count == 2, monthFocus { yearFocus = true }
+        }
+        .onChange(of: year) { _, new in
+            let y = String(new.filter { $0.isASCII && $0.isNumber }.prefix(4))
+            if y != new { year = y }
+        }
+    }
+
+    /// "Solo falta tu fecha de nacimiento": the account keeps its @ and its name exactly as they are.
+    @ViewBuilder private var yearOnlyForm: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("solo falta tu fecha de nacimiento.")
+                    .font(.kura.news(40))
+                    .foregroundStyle(KColor.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Tu cuenta sigue como la dejaste. Solo confirma que tienes 13 o más. Guardamos únicamente el año y no se muestra a nadie.")
+                    .font(.kura.ui(14))
+                    .foregroundStyle(KColor.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+                birthFields
+                    .padding(.top, 14)
+                InlineError(text: store.authError)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 170)
+            .padding(.bottom, 120)
+        }
+        .scrollDismissesKeyboard(.interactively)
+
+        VStack {
+            Spacer()
+            SolidButton(title: store.authBusy ? "Un momento…" : "Continuar", enabled: birthDate != nil && !store.authBusy) {
+                guard let birthDate else { return }
+                Task { await store.submitBirthDate(birthDate) }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 10)
+    }
+
+    @ViewBuilder private var fullForm: some View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("elige tu usuario.")
@@ -362,12 +477,9 @@ struct UsernameView: View {
                             set: { handle = String($0.drop(while: { $0 == "@" })) }
                         ), trailing: AnyView(availability))
                         GlassField(placeholder: "tu nombre", text: $name)
-                        if needsYear {
-                            GlassField(placeholder: "año de nacimiento", text: $year)
-                                .keyboardType(.numberPad)
-                        }
                     }
                     .padding(.top, 14)
+                    if needsYear { birthFields.padding(.top, 6) }
                     // "no válido" is short on purpose (a mono tag in the field): the rule goes here.
                     if status == .invalid {
                         Text("Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados.")
@@ -375,7 +487,7 @@ struct UsernameView: View {
                             .foregroundStyle(KColor.text)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. El año solo confirma que tienes 13 o más. No se muestra a nadie."
+                    Text(needsYear ? "Tu nombre se puede cambiar después en Editar perfil. Solo confirma que tienes 13 o más. Guardamos únicamente el año y no se muestra a nadie."
                                    : "Tu nombre se puede cambiar después en Editar perfil.")
                         .font(.kura.ui(13))
                         .foregroundStyle(KColor.text2)
@@ -391,27 +503,11 @@ struct UsernameView: View {
             VStack {
                 Spacer()
                 SolidButton(title: store.authBusy ? "Un momento…" : "Crear cuenta", enabled: canSubmit) {
-                    Task { await store.submitUsername(handle: clean, name: name, birthYear: birthYear) }
+                    Task { await store.submitUsername(handle: clean, name: name, birthDate: birthDate) }
                 }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 10)
-        }
-        .ignoresSafeArea(.container, edges: .top)
-        .onAppear {
-            guard !seeded else { return }
-            seeded = true
-            if let h = store.account?.handle, !h.isEmpty { handle = h }
-            if let n = store.account?.name, !n.isEmpty { name = n } else if name.isEmpty, let n = store.suggestedName { name = n }
-        }
-        .task(id: clean) {
-            status = nil
-            guard clean.count >= 3 else { return }
-            try? await Task.sleep(for: .milliseconds(KuraRuntime.usesMock ? 0 : 350))
-            guard !Task.isCancelled else { return }
-            let s = await store.checkUsername(clean)
-            if !Task.isCancelled { status = s ?? .free }
-        }
     }
 
     @ViewBuilder private var availability: some View {
@@ -473,7 +569,7 @@ struct PickThreeView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text(e == .offline ? "sin conexión." : "el catálogo no responde.")
                                     .font(.kura.news(24)).foregroundStyle(KColor.text)
-                                Text("Inténtalo de nuevo en un momento; también puedes buscar arriba.")
+                                Text("Vuelve a intentarlo en unos minutos; también puedes buscar arriba.")
                                     .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                                 GlassButton(title: "Reintentar", systemImage: "arrow.clockwise") { Task { await store.loadOnboardingGrid() } }
                             }
@@ -786,7 +882,7 @@ struct CodeView: View {
                     .foregroundStyle(KColor.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
-                (Text("Lo mandamos a ").foregroundColor(KColor.text2)
+                (Text("Lo enviamos a ").foregroundColor(KColor.text2)
                  + Text(store.authEmail).foregroundColor(KColor.text))
                     .font(.kura.ui(15))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -801,16 +897,22 @@ struct CodeView: View {
                     }
                 SolidButton(title: store.authBusy ? "Entrando…" : "Entrar", enabled: digits.count == 6 && !store.authBusy, action: verify)
                 InlineError(text: store.authError)
-                Button {
-                    Task { _ = await store.requestCode(email: store.authEmail); code = "" }
-                } label: {
-                    Text("Enviar otro código")
-                        .font(.kura.ui(15, .medium))
-                        .foregroundStyle(KColor.text2)
-                        .frame(minHeight: 44)
+                // After a 429 the button waits out `retryAfterSeconds` (a minute for the cooldown,
+                // up to an hour for the cap), counting down — like "fusionar" does.
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let wait = store.otpWait(for: store.authEmail, at: ctx.date)
+                    Button {
+                        Task { _ = await store.requestCode(email: store.authEmail); code = "" }
+                    } label: {
+                        Text(wait > 0 ? "Enviar otro código en \(KuraAPIError.waitLabel(Int(wait.rounded(.up))))" : "Enviar otro código")
+                            .font(.kura.ui(15, .medium))
+                            .foregroundStyle(wait > 0 ? KColor.text3 : KColor.text2)
+                            .monospacedDigit()
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.authBusy || wait > 0)
                 }
-                .buttonStyle(.plain)
-                .disabled(store.authBusy)
             }
             .padding(.horizontal, 24)
             .padding(.top, 170)
@@ -839,7 +941,7 @@ struct UnderageView: View {
                 .foregroundStyle(KColor.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            Text("Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13.")
+            Text("Todavía no podemos abrirte una cuenta. Vuelve cuando cumplas 13. No guardamos nada más de ti.")
                 .font(.kura.ui(15))
                 .lineSpacing(4)
                 .foregroundStyle(KColor.text2)

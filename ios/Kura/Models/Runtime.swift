@@ -180,3 +180,110 @@ enum PublicLinks {
         return h.isEmpty ? nil : String(h)
     }
 }
+
+// MARK: - Tolerant lists
+
+/// `[T]` decoded element by element: one the app can't read (a format, an event type or a field
+/// shape a newer server sends) is DROPPED and counted in the log, instead of failing the whole
+/// list — and with it the screen. Titles and feed events go through here; the rest of the payload
+/// stays strict (a missing envelope is still a contract error).
+///
+/// Two strengths, by where the list sits:
+/// - `Lossy` — a list NESTED in a payload (Descubrir's `recommended`, a title's `tracks` / `watch`,
+///   a collection's embedded titles): always tolerant. Unreadable elements go, a list that isn't
+///   a list at all reads as empty; the payload around it survives.
+/// - `LossyPage` — the list a page IS (feed, titles, people, reviews, collections): tolerant per
+///   element, but when TWO OR MORE elements were dropped and none survived, the contract changed —
+///   it throws, so the screen shows an error instead of "no tienes nada" over data that exists.
+///   A single unknown element is one thing this build doesn't know yet, not a contract change.
+///   Only the FIRST page throws (`PageContract`): a later page (the request carried a `cursor`,
+///   `LossyContext.laterPage`) reads as empty and keeps its `nextCursor`.
+struct Lossy<T: Decodable>: Decodable {
+    var items: [T]
+    init(from decoder: Decoder) throws {
+        do {
+            items = try LossyList.decode(T.self, from: decoder, strict: false)
+        } catch {
+            // Not a list at all (an object, a string): logged, empty, and the payload goes on.
+            LossyList.log(T.self, decoder, dropped: 0, kept: 0, first: error)
+            items = []
+        }
+    }
+}
+
+struct LossyPage<T: Decodable>: Decodable {
+    var items: [T]
+    init(from decoder: Decoder) throws { items = try LossyList.decode(T.self, from: decoder, strict: true) }
+}
+
+enum LossyList {
+    private struct Skip: Decodable {}
+
+    /// The contract rule of a page: nothing readable out of two or more elements, on a first
+    /// page (`PageContract`; `APIClient.decode` says whether this request carried a cursor).
+    static func isContractBreak(kept: Int, dropped: Int) -> Bool {
+        PageContract.isBreak(kept: kept, dropped: dropped, firstPage: !LossyContext.laterPage)
+    }
+
+    static func decode<T: Decodable>(_ type: T.Type, from decoder: Decoder, strict: Bool) throws -> [T] {
+        var c = try decoder.unkeyedContainer()
+        var out: [T] = []
+        var dropped = 0
+        var first: Error?
+        while !c.isAtEnd {
+            do {
+                out.append(try c.decode(T.self))
+            } catch {
+                if first == nil { first = error }
+                // A failed decode leaves the container on the same element: step over it.
+                guard (try? c.decode(Skip.self)) != nil else { break }
+                dropped += 1
+            }
+        }
+        if let first {
+            log(T.self, decoder, dropped: dropped, kept: out.count, first: first)
+            if strict, isContractBreak(kept: out.count, dropped: dropped) { throw first }
+        }
+        return out
+    }
+
+    /// Where (endpoint + key path), how many, and WHY the first one failed — never the payload.
+    static func log<T>(_ type: T.Type, _ decoder: Decoder, dropped: Int, kept: Int, first: Error) {
+        let at = decoder.codingPath.map(\.stringValue).joined(separator: ".")
+        KuraLog.api.error("lossy list of \(String(describing: T.self), privacy: .public) in \(LossyContext.endpoint ?? "-", privacy: .public) at \(at.isEmpty ? "/" : at, privacy: .public): dropped \(dropped, privacy: .public) of \(dropped + kept, privacy: .public); first: \(LossyContext.describe(first), privacy: .public)")
+    }
+}
+
+/// What `Lossy` says in the log about where it is (`APIClient.decode` sets the endpoint).
+/// `@TaskLocal`, bound with `withValue` around ONE synchronous decode: each request's task sees
+/// its own value — it is not state shared between concurrent requests.
+enum LossyContext {
+    @TaskLocal static var endpoint: String?
+    /// The request being decoded carried a `cursor`: its list continues one already on screen.
+    @TaskLocal static var laterPage = false
+
+    /// Type + key path of a `DecodingError`, never a value.
+    static func describe(_ error: Error) -> String {
+        func path(_ c: DecodingError.Context) -> String { c.codingPath.map(\.stringValue).joined(separator: ".") }
+        switch error {
+        case DecodingError.keyNotFound(let k, let c): return "keyNotFound \(k.stringValue) at \(path(c))"
+        case DecodingError.typeMismatch(let t, let c): return "typeMismatch \(t) at \(path(c))"
+        case DecodingError.valueNotFound(let t, let c): return "valueNotFound \(t) at \(path(c))"
+        case DecodingError.dataCorrupted(let c): return "dataCorrupted at \(path(c))"
+        default: return String(describing: type(of: error))
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A nested, optional list: drops the elements it can't read and never fails the payload
+    /// (`Lossy`). `throws` only so call sites read like any other decode.
+    func lossy<T: Decodable>(_ type: [T].Type, forKey key: Key) throws -> [T]? {
+        (try? decodeIfPresent(Lossy<T>.self, forKey: key))?.items
+    }
+
+    /// The list a page IS: per-element tolerant, a contract error when nothing survives (`LossyPage`).
+    func lossyPage<T: Decodable>(_ type: [T].Type, forKey key: Key) throws -> [T]? {
+        try decodeIfPresent(LossyPage<T>.self, forKey: key)?.items
+    }
+}

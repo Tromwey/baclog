@@ -90,11 +90,12 @@ enum Mark: String, CaseIterable, Hashable, Codable {
         }
     }
 
-    /// `PublicMark` (feed, reviews, "gente que sigues") adds `disliked`, which
-    /// Kura has no glyph for: it reads as completed. Unknown strings → nil.
+    /// `PublicMark` (feed, reviews, "gente que sigues") adds `disliked` ("No me gustó", which the
+    /// server only sends in someone's OWN review). Kura has no glyph for it and it is NOT
+    /// "completed" — painting it as one would say something the person didn't: it reads as no
+    /// mark, like any string this build doesn't know.
     static func lenient(_ raw: String?) -> Mark? {
         guard let raw else { return nil }
-        if raw == "disliked" { return .completed }
         return Mark(rawValue: raw)
     }
 }
@@ -285,7 +286,12 @@ struct Title: Identifiable, Hashable, Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         externalRef = try c.decodeIfPresent(ExternalRef.self, forKey: .externalRef)
-        id = try c.decodeIfPresent(String.self, forKey: .id) ?? externalRef?.localID ?? UUID().uuidString
+        // No id and no external ref = not a title the app can save, mark or open: this ELEMENT is
+        // unreadable (`Lossy` drops it). Never an invented id the server has never seen.
+        guard let tid = try c.decodeIfPresent(String.self, forKey: .id) ?? externalRef?.localID, !tid.isEmpty else {
+            throw DecodingError.keyNotFound(CodingKeys.id, .init(codingPath: c.codingPath, debugDescription: "title without id"))
+        }
+        id = tid
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? c.decodeIfPresent(String.self, forKey: .title) ?? ""
         format = try c.decodeIfPresent(MediaFormat.self, forKey: .format) ?? .film
         year = try c.decodeIfPresent(Int.self, forKey: .year)
@@ -297,15 +303,15 @@ struct Title: Identifiable, Hashable, Decodable {
         synopsis = try c.decodeIfPresent(String.self, forKey: .synopsis) ?? c.decodeIfPresent(String.self, forKey: .overview)
         release = try c.decodeIfPresent(Release.self, forKey: .release)
         upcomingSeason = try c.decodeIfPresent(Int.self, forKey: .upcomingSeason)
-        tracks = try c.decodeIfPresent([Track].self, forKey: .tracks) ?? []
+        tracks = try c.lossy([Track].self, forKey: .tracks) ?? []
         trackCount = try c.decodeIfPresent(Int.self, forKey: .trackCount)
-        seasons = try c.decodeIfPresent([Season].self, forKey: .seasons) ?? []
+        seasons = try c.lossy([Season].self, forKey: .seasons) ?? []
         counts = try c.decodeIfPresent(TitleCounts.self, forKey: .counts)
         // `watch` is "one JustWatch option" — accept a single object or an array.
         if let one = try? c.decodeIfPresent(WatchOption.self, forKey: .watch) {
             watch = [one]
         } else {
-            watch = try c.decodeIfPresent([WatchOption].self, forKey: .watch) ?? []
+            watch = try c.lossy([WatchOption].self, forKey: .watch) ?? []
         }
         musicLink = try c.decodeIfPresent(String.self, forKey: .musicLink)
         watchNote = try c.decodeIfPresent(String.self, forKey: .watchNote)
@@ -396,7 +402,9 @@ struct Review: Identifiable, Hashable, Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let a = try c.decodeIfPresent(Person.self, forKey: .author)
-        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        // No id = unreadable (never an invented `UUID()`: it would change on every read and the
+        // list could neither dedupe nor report it). In a list, the element is dropped.
+        id = try c.decode(String.self, forKey: .id)
         authorID = try c.decodeIfPresent(String.self, forKey: .authorHandle) ?? a?.handle ?? ""
         titleID = try c.decodeIfPresent(String.self, forKey: .titleId) ?? c.decodeIfPresent(String.self, forKey: .catalogItemId) ?? ""
         text = try c.decodeIfPresent(String.self, forKey: .body) ?? c.decodeIfPresent(String.self, forKey: .text) ?? ""
@@ -438,12 +446,26 @@ struct ReviewPage: Decodable {
     var nextCursor: String?
     init(items: [Review], nextCursor: String? = nil) { self.items = items; self.nextCursor = nextCursor }
     init(from decoder: Decoder) throws {
-        if let list = try? decoder.singleValueContainer().decode([Review].self) { items = list; nextCursor = nil; return }
+        // The list IS the page (`LossyPage`): a review this build can't read is dropped.
+        if (try? decoder.unkeyedContainer()) != nil { items = try LossyPage<Review>(from: decoder).items; nextCursor = nil; return }
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        items = try c.decode([Review].self, forKey: .items)
+        items = try c.decode(LossyPage<Review>.self, forKey: .items).items
         nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
     }
-    private enum CodingKeys: String, CodingKey { case items, nextCursor }
+    fileprivate enum CodingKeys: String, CodingKey { case items, nextCursor }
+
+    /// The reviews block NESTED in `GET /titles/{id}`: never fails the ficha. Unreadable reviews
+    /// go (`Lossy`), a block of an unknown shape reads as no reviews; the title survives.
+    fileprivate struct Embedded: Decodable {
+        var items: [Review] = []
+        var nextCursor: String?
+        init(from decoder: Decoder) throws {
+            if (try? decoder.unkeyedContainer()) != nil { items = try Lossy<Review>(from: decoder).items; return }
+            guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+            items = (try c.lossy([Review].self, forKey: .items)) ?? []
+            nextCursor = try? c.decodeIfPresent(String.self, forKey: .nextCursor)
+        }
+    }
 }
 
 /// `GET /titles/{id}`.
@@ -470,7 +492,7 @@ struct TitleDetail: Decodable {
         }
         state = try c.decodeIfPresent(UserTitleState.self, forKey: .state)
         following = try c.decodeIfPresent([PeopleMark].self, forKey: .following) ?? []
-        let page = try c.decodeIfPresent(ReviewPage.self, forKey: .reviews)
+        let page = try? c.decodeIfPresent(ReviewPage.Embedded.self, forKey: .reviews)
         reviews = page?.items ?? []
         reviewsCursor = page?.nextCursor
         collections = try c.decodeIfPresent([String].self, forKey: .collections) ?? []

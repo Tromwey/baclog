@@ -31,10 +31,7 @@ extension AppStore {
             deferredWrites[k] = nil
             deferredWrites[String(k.dropLast(suffix.count)) + "|\(serverID)"] = t
         }
-        for (k, c) in s.writeChains where k.hasSuffix(suffix) {
-            s.writeChains[k] = nil
-            s.writeChains[String(k.dropLast(suffix.count)) + "|\(serverID)"] = c
-        }
+        s.rekeyWrites(suffix: suffix, serverID: serverID)
         if let i = collections.firstIndex(where: { $0.id == localID }) {
             let c = collections[i]
             var moved = KCollection(id: serverID, name: c.name, vibe: c.vibe, titleIDs: c.titleIDs, privacy: c.privacy,
@@ -136,7 +133,7 @@ extension AppStore {
             case .invalid:
                 self.showToast(ToastModel(text: e.toast, kind: .info))
             default:
-                self.showToast(ToastModel(text: e.toast(or: "No se guardaron los cambios de la colección."), kind: .retry) { [weak self] in
+                self.showToast(ToastModel(text: e.toast(or: "No se pudo guardar la colección."), kind: .retry) { [weak self] in
                     guard let self, self.collection(id) != nil else { return }
                     self.dismissToast()
                     self.update(id) { c in
@@ -338,8 +335,14 @@ extension AppStore {
         setLayout(id, c.layout == .list ? .covers : .list)
     }
 
-    func deleteCollection(_ id: String) {
+    /// `purge` ("Borrar también sus títulos"): the titles that were ONLY in this collection lose
+    /// their state, your reaction and your review (`DELETE /collections/{id}?purge=1`). Off, they
+    /// keep all of it and stay in your library in no collection.
+    func deleteCollection(_ id: String, purge: Bool = false) {
         let id = canonicalCollectionID(id)
+        let index = collections.firstIndex { $0.id == id } ?? collections.count
+        let gone = collections.first { $0.id == id }
+        let purge = purge && !(gone?.titleIDs.isEmpty ?? true)
         collections.removeAll { $0.id == id }
         for tab in Tab.allCases {
             paths[tab]?.removeAll { r in
@@ -348,9 +351,47 @@ extension AppStore {
             }
         }
         for (key, task) in deferredWrites where key.hasSuffix("|\(id)") { task.cancel(); deferredWrites[key] = nil }
-        sync(key: WriteKey.collection(id)) { [weak self] api in
+        // With `purge`, the titles in no other collection leave the library with it: mark, your
+        // review, the profile counts, "no puedo esperar" and `libraryIDs` all read `userTitles`.
+        let mine = me.id
+        var taken: CollectionPurge<UserTitleState, Review>?
+        var events: [(index: Int, event: FeedEvent)] = []
+        var lostReviews = 0
+        if purge, let gone {
+            var states = userTitles
+            let p = CollectionPurge<UserTitleState, Review>(
+                deleted: gone.titleIDs, others: collections.map(\.titleIDs), states: &states,
+                ownReviews: { [unowned self] t in self.reviewList(t).filter { $0.authorID == mine } })
+            userTitles = states
+            for t in p.titleIDs {
+                removeReviews(of: t) { $0.authorID == mine }
+                events += takeOwnReviewEvents(t)
+            }
+            // A review known only by its id (`GET /me/titles`) counts too.
+            lostReviews = p.titleIDs.filter { p.reviews[$0] != nil || p.states[$0]?.reviewID != nil }.count
+            if let n = account?.stats.reviews { account?.stats.reviews = max(0, n - lostReviews) }
+            taken = p
+        }
+        // The collection is gone from the screen at once; if the server never deleted it, it comes
+        // back (a retry that nobody tapped, or a failure a retry can't fix) with everything the
+        // purge took. A 404 is the outcome asked for: nothing to say, nothing to put back.
+        sync(key: WriteKey.collection(id), revert: { [weak self] in
+            guard let self, let gone, self.collection(gone.id) == nil else { return }
+            self.collections.insert(gone, at: min(index, self.collections.count))
+            if let taken {
+                var states = self.userTitles
+                taken.restore(into: &states)
+                self.userTitles = states
+                for (t, list) in taken.reviews where self.myReview(t) == nil {
+                    self.setReviews(t, list.filter { self.review($0.id) == nil } + self.reviewList(t))
+                }
+                self.putBackOwnReviewEvents(events)
+                if let n = self.account?.stats.reviews { self.account?.stats.reviews = n + lostReviews }
+            }
+            self.saveLocal()
+        }, notFoundLands: true) { [weak self] api in
             let sid = try await self?.resolveCollectionID(id) ?? id
-            try await api.deleteCollection(id: sid)
+            try await api.deleteCollection(id: sid, purge: purge)
         }
         saveLocal()
         showToast(ToastModel(text: "Colección borrada", kind: .info))
@@ -411,7 +452,16 @@ extension AppStore {
 
     private func syncAdd(_ titleID: String, to collectionID: String) {
         let session = s
-        sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
+        // Never reached the server: the title leaves the collection it had just entered (unless
+        // it was taken out again meanwhile), and a state that only existed because of this save
+        // goes with it.
+        let revert: @MainActor () -> Void = { [weak self] in
+            guard let self, self.collection(collectionID)?.titleIDs.contains(titleID) == true else { return }
+            self.update(collectionID) { $0.titleIDs.removeAll { $0 == titleID }; $0.addedAt[titleID] = nil }
+            if self.userTitles[titleID]?.mark == nil { self.gcUserState(titleID) }
+        }
+        let key = WriteKey.membership(titleID, canonicalCollectionID(collectionID))
+        sync(key: key, gen: key, titleID: titleID, revert: revert) { [weak self] api in
             let store = self
             let cid = try await store?.resolveCollectionID(collectionID) ?? collectionID
             let palette = await MainActor.run { store?.unsentPalettes[titleID] }
@@ -425,7 +475,18 @@ extension AppStore {
     }
 
     private func syncRemove(_ titleID: String, from collectionID: String) {
-        sync(key: WriteKey.membership(titleID, canonicalCollectionID(collectionID)), titleID: titleID) { [weak self] api in
+        // A 404 is the outcome asked for (already out). Anything else that never reached the
+        // server puts the title back, and the collection is re-read for its place and your state
+        // (the local copy dropped both when it left its last collection).
+        let key = WriteKey.membership(titleID, canonicalCollectionID(collectionID))
+        sync(key: key, gen: key, titleID: titleID,
+             revert: { [weak self] in
+                 guard let self, let c = self.collection(collectionID), !c.titleIDs.contains(titleID),
+                       !self.pendingRemovals(in: collectionID).contains(titleID) else { return }
+                 self.update(collectionID) { $0.titleIDs.insert(titleID, at: 0) }
+                 self.ensureUserState(titleID)
+                 if !self.offline { Task { await self.loadCollection(collectionID, force: true) } }
+             }, notFoundLands: true) { [weak self] api in
             let cid = try await self?.resolveCollectionID(collectionID) ?? collectionID
             try await api.removeTitleMembership(collectionID: cid, titleID: titleID)
         }
@@ -447,6 +508,42 @@ extension AppStore {
                 self.syncRemove(titleID, from: collectionID)
             }
         }
+    }
+
+    /// Sends NOW every removal still waiting for its Deshacer window, and returns the writes so
+    /// the caller can wait for them. For the moments the timer can't be trusted to fire: the app
+    /// going to the background (iOS suspends it; killed there, the removal was never sent and the
+    /// title came back on the next launch) and signing out (the session's timers are cancelled).
+    /// After this a Deshacer has nothing to cancel — it re-adds (`undoRemoval`), so callers that
+    /// stay in the foreground must not call it while the window is open.
+    @discardableResult
+    func flushDeferredRemovals() -> [Task<Void, Never>] {
+        var writes: [Task<Void, Never>] = []
+        for (key, task) in deferredWrites {
+            task.cancel()
+            deferredWrites[key] = nil
+            guard let bar = key.lastIndex(of: "|") else { continue }
+            let titleID = String(key[..<bar]), collectionID = String(key[key.index(after: bar)...])
+            syncRemove(titleID, from: collectionID)
+            let chain = s.canonicalWriteKey(WriteKey.membership(titleID, canonicalCollectionID(collectionID)))
+            if let t = s.writeChains[chain]?.task { writes.append(t) }
+        }
+        return writes
+    }
+
+    /// The Deshacer of a removal: cancels it while it's still waiting; if it already went out
+    /// (flushed on the way to the background), the title is added back on the server.
+    private func undoRemoval(_ titleID: String, from collectionID: String) {
+        if !cancelRemove(titleID, from: collectionID) || membershipUnconfirmed(titleID, collectionID) {
+            syncAdd(titleID, to: collectionID)
+        }
+    }
+
+    /// The last write of this membership failed: the server may never have had it. Cancelling a
+    /// pending removal is then NOT enough to put the title back (add fails → Quitar → Deshacer
+    /// would leave it on screen and nowhere else): the add goes out again (it's idempotent).
+    private func membershipUnconfirmed(_ titleID: String, _ collectionID: String) -> Bool {
+        s.lastWriteFailed(WriteKey.membership(titleID, canonicalCollectionID(collectionID)))
     }
 
     /// `deferredWrites` key: title + the collection's CURRENT id (see `adopt`).
@@ -476,7 +573,9 @@ extension AppStore {
         ensureUserState(titleID)
         update(collectionID) { $0.titleIDs.insert(titleID, at: 0); $0.addedAt[titleID] = Date() }
         lastUsedCollectionID = collectionID
-        if !cancelRemove(titleID, from: collectionID) { syncAdd(titleID, to: collectionID) }
+        if !cancelRemove(titleID, from: collectionID) || membershipUnconfirmed(titleID, collectionID) {
+            syncAdd(titleID, to: collectionID)
+        }
         KHaptic.play(.tap)
         if toast {
             undoToast("Agregado a \(c.name)") { [weak self] in
@@ -505,8 +604,8 @@ extension AppStore {
         deferRemove(titleID, from: collectionID)
         undoToast("Quitado de \(c.name)") { [weak self] in
             guard let self else { return }
-            self.cancelRemove(titleID, from: collectionID)
             self.update(collectionID) { $0.titleIDs.insert(titleID, at: min(idx, $0.titleIDs.count)) }
+            self.undoRemoval(titleID, from: collectionID)
             if self.userTitles[titleID] == nil { self.userTitles[titleID] = state }
             let back = myReviews.filter { self.review($0.id) == nil }
             if !back.isEmpty { self.setReviews(titleID, self.reviewList(titleID) + back) }
@@ -521,19 +620,19 @@ extension AppStore {
         update(fromID) { $0.titleIDs.remove(at: idx) }
         if !alreadyThere {
             update(toID) { $0.titleIDs.insert(titleID, at: 0); $0.addedAt[titleID] = Date() }
-            if !cancelRemove(titleID, from: toID) { syncAdd(titleID, to: toID) }
+            if !cancelRemove(titleID, from: toID) || membershipUnconfirmed(titleID, toID) { syncAdd(titleID, to: toID) }
         }
         deferRemove(titleID, from: fromID)
         lastUsedCollectionID = toID
         KHaptic.play(.tap)
         undoToast("Movido a \(to.name)") { [weak self] in
             guard let self else { return }
-            self.cancelRemove(titleID, from: fromID)
             if !alreadyThere {
                 self.update(toID) { $0.titleIDs.removeAll { $0 == titleID } }
                 self.syncRemove(titleID, from: toID)
             }
             self.update(fromID) { $0.titleIDs.insert(titleID, at: min(idx, $0.titleIDs.count)) }
+            self.undoRemoval(titleID, from: fromID)
         }
     }
 
@@ -548,7 +647,7 @@ extension AppStore {
         let removed = before.subtracting(ids)
         for id in added {
             update(id) { $0.titleIDs.insert(titleID, at: 0); $0.addedAt[titleID] = Date() }
-            if !cancelRemove(titleID, from: id) { syncAdd(titleID, to: id) }
+            if !cancelRemove(titleID, from: id) || membershipUnconfirmed(titleID, id) { syncAdd(titleID, to: id) }
         }
         for id in removed {
             update(id) { $0.titleIDs.removeAll { $0 == titleID } }
@@ -575,8 +674,8 @@ extension AppStore {
                 self.syncRemove(titleID, from: id)
             }
             for id in removed {
-                self.cancelRemove(titleID, from: id)
                 self.update(id) { $0.titleIDs.insert(titleID, at: 0) }
+                self.undoRemoval(titleID, from: id)
             }
             self.userTitles[titleID] = hadState
         }

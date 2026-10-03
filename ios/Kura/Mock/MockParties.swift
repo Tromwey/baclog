@@ -228,11 +228,11 @@ final class MockPartyServer: @unchecked Sendable {
         if r.blocked.contains(me) { throw KuraAPIError.forbidden(code: "blocked") }
         if r.limit == 0 && !host { throw KuraAPIError.forbidden(code: "view_only") }
         if let dup = r.songs.first(where: { $0.id == titleID }) {
-            if dup.by == me { throw KuraAPIError.conflict(code: "duplicate_mine", message: "Ya la pusiste tú.") }
-            throw KuraAPIError.conflict(code: "duplicate_other", message: "Ya está, la puso \(person(dup.by).atOrSomeone)")
+            if dup.by == me { throw KuraAPIError.conflict(code: "duplicate_mine", message: "Ya la agregaste tú.") }
+            throw KuraAPIError.conflict(code: "duplicate_other", message: "Ya está, la agregó \(person(dup.by).atOrSomeone).")
         }
         if !host, let l = r.limit, r.songs.filter({ $0.by == me }).count >= l {
-            throw KuraAPIError.conflict(code: "cap_reached", message: "Ya pusiste tus \(l).")
+            throw KuraAPIError.conflict(code: "cap_reached", message: "Ya agregaste tus \(l).")
         }
         mutate(id) { var n = s; n.by = me; $0.songs.append(n) }
         return try get(id)

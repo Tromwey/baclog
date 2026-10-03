@@ -315,7 +315,7 @@ struct RecapShareView: View {
                 // The handoff URL carries a signed-in session: open it only on our own origin
                 // (scheme + host + port of the API). The mock serves a fixed get-kura.app URL.
                 guard KuraRuntime.usesMock || AvatarStore.isAPIOrigin(url) else {
-                    store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Inténtalo de nuevo.", kind: .info))
+                    store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Vuelve a intentarlo.", kind: .info))
                     return
                 }
                 webCard = WebCardURL(url: url)
@@ -323,7 +323,7 @@ struct RecapShareView: View {
                 // Through `noteError`: a 401 ends the session (entrance), offline lights the strip.
                 let e = store.noteError(error)
                 guard e != .unauthorized, e != .cancelled else { return }
-                store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Inténtalo de nuevo.", kind: .info))
+                store.showToast(ToastModel(text: "No pudimos abrir la tarjeta. Vuelve a intentarlo.", kind: .info))
             }
         }
     }

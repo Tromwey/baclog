@@ -160,9 +160,9 @@ extension KuraAPIError {
     var loadCopy: (title: String, note: String) {
         switch self {
         case .offline: return ("sin conexión.", "Revisa tu red y vuelve a intentarlo.")
-        case .unavailable: return ("no disponible por ahora.", "El catálogo no responde. Inténtalo de nuevo en un momento.")
-        case .rateLimited: return ("un momento.", "Fueron muchas acciones seguidas. Espera unos segundos y vuelve a intentarlo.")
-        default: return ("no se pudo cargar.", "Algo falló de nuestro lado. Vuelve a intentarlo.")
+        case .unavailable: return ("el catálogo no responde.", "Vuelve a intentarlo en unos minutos.")
+        case .rateLimited: return ("un momento.", "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo.")
+        default: return ("no pudimos cargar esto.", "Algo falló de nuestro lado. Vuelve a intentarlo.")
         }
     }
 }

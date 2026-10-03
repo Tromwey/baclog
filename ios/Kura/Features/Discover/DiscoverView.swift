@@ -596,7 +596,7 @@ private struct SearchMode: View {
         if let e = store.searchError, e == .unavailable || e == .offline {
             VStack(alignment: .leading, spacing: 16) {
                 Text(e == .offline ? "sin conexión." : "el catálogo no responde.").font(.kura.news(32)).foregroundStyle(KColor.text)
-                Text(e == .offline ? "Revisa tu red y vuelve a buscar." : "Inténtalo de nuevo en un momento.")
+                Text(e == .offline ? "Revisa tu red y vuelve a buscar." : "Vuelve a intentarlo en unos minutos.")
                     .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                 GlassButton(title: "Reintentar", systemImage: "arrow.clockwise", flat: true) { submit(q) }
                 Spacer()
@@ -896,6 +896,9 @@ private struct DiscoverFormatPage: View {
     private var timeParam: Int? { format == .film ? time : nil }
     private var payload: DiscoverFormatPayload? { store.discoverFormats[AppStore.formatKey(format, time: timeParam)] }
     private func fresh(_ t: Title) -> Title { store.title(t.id) ?? t }
+    /// No shelf to show yet: nothing read, or the server said its source failed
+    /// (`titlesUnavailable` — the Kuradas below are real, the empty `titles` is not).
+    private var shelfMissing: Bool { payload?.titlesUnavailable ?? true }
 
     /// Cine: the humor's items (all without one). Series: what fits the lens. Música: the moment's.
     private var shown: [DiscoverFormatPayload.Item] {
@@ -937,10 +940,24 @@ private struct DiscoverFormatPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 DiscoverTop(tab: $tab, onSearch: openSearch)
 
-                switch format {
-                case .film: cine
-                case .series: series
-                case .album: music
+                if shelfMissing, let e = store.loadError(.discoverFormat(AppStore.formatKey(format, time: timeParam))) {
+                    // The read failed (the route can answer 503), or it came without its shelf
+                    // (`titlesUnavailable`): say so, never an empty shelf. The Kuradas still show.
+                    // Cine keeps its duration choice above: each duration is its own request, and
+                    // the others may well load.
+                    if format == .film { cineTime }
+                    LoadErrorBlock(error: e) {
+                        Task { await store.loadDiscoverFormat(format, time: timeParam, retry: true) }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 28)
+                    .padding(.bottom, 28)
+                } else {
+                    switch format {
+                    case .film: cine
+                    case .series: series
+                    case .album: music
+                    }
                 }
 
                 kuradas
@@ -960,18 +977,23 @@ private struct DiscoverFormatPage: View {
 
     // MARK: 2a
 
-    @ViewBuilder private var cine: some View {
+    /// "¿cuánto tiempo tienes?" + its choices: also shown over a failed shelf.
+    @ViewBuilder private var cineTime: some View {
         Text("¿cuánto tiempo tienes?").font(.kura.news(34)).foregroundStyle(KColor.text)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 16)
         FlowChoices(choices: payload?.times ?? Self.fallbackTimes, selection: $time)
+    }
+
+    @ViewBuilder private var cine: some View {
+        cineTime
         Text("¿y de qué humor?").font(.kura.news(22)).foregroundStyle(KColor.text)
             .padding(.horizontal, 20).padding(.top, 30).padding(.bottom, 14)
         MoodRow(moods: payload?.moods ?? [], selection: mood) { i in
             withAnimation(KMotion.short) { mood = mood == i ? nil : i }
         }
         grid(empty: payload?.titles.isEmpty == true
-             ? "No pudimos traer películas ahora. Prueba en un rato."
+             ? "No pudimos traer películas. Vuelve a intentarlo más tarde."
              : "Nada con ese humor en ese tiempo. Prueba otra duración o quita el humor.") { item in
             let t = fresh(item.title)
             tile(t, pill: item.runtimeMinutes.map { "\($0) min" }) {
@@ -995,15 +1017,11 @@ private struct DiscoverFormatPage: View {
     // MARK: 2b
 
     @ViewBuilder private var series: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("para maratonear").font(.kura.news(34)).foregroundStyle(KColor.text)
-            Text("Miniseries completas, sin temporadas por venir.").font(.kura.ui(15)).foregroundStyle(KColor.text2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 18)
+        Text("para maratonear").font(.kura.news(34)).foregroundStyle(KColor.text)
+            .padding(.horizontal, 20).padding(.top, 32).padding(.bottom, 18)
         FlowChoices(choices: payload?.lenses ?? [], selection: $lens)
         grid(empty: payload?.titles.isEmpty == true
-             ? "No pudimos traer series ahora. Prueba en un rato."
+             ? "No pudimos traer series. Vuelve a intentarlo más tarde."
              : "Nada tan corto por ahora. Prueba con un fin de semana.") { item in
             let t = fresh(item.title)
             tile(t, pill: item.minutes.map(Self.hours), save: true) {
@@ -1030,7 +1048,7 @@ private struct DiscoverFormatPage: View {
             withAnimation(KMotion.short) { mood = i }
         }
         grid(empty: payload?.titles.isEmpty == true
-             ? "No pudimos traer discos ahora. Prueba en un rato."
+             ? "No pudimos traer discos. Vuelve a intentarlo más tarde."
              : "Nada para ese momento en lo que más suena hoy. Prueba otro.") { item in
             let t = fresh(item.title)
             tile(t, pill: nil) {
@@ -1077,10 +1095,21 @@ private struct DiscoverFormatPage: View {
 
     // MARK: pieces
 
-    @ViewBuilder
+    /// A new pick swaps the whole grid in one fade, like every other content change in the app.
+    /// Without the identity, SwiftUI diffs the tiles one by one: the ones that stay fly across the
+    /// grid to their new slot while the rest pop in.
     private func grid<Cell: View>(empty: String, @ViewBuilder cell: @escaping (DiscoverFormatPayload.Item) -> Cell) -> some View {
+        let key = shelfMissing ? ["·"] : shown.map(\.id)
+        return gridBody(empty: empty, cell: cell)
+            .id(key)
+            .transition(.opacity)
+            .animation(KMotion.fade, value: key)
+    }
+
+    @ViewBuilder
+    private func gridBody<Cell: View>(empty: String, @ViewBuilder cell: @escaping (DiscoverFormatPayload.Item) -> Cell) -> some View {
         let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-        if payload == nil {
+        if shelfMissing {
             LazyVGrid(columns: columns, spacing: 24) {
                 ForEach(0..<4, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 14, style: .continuous).fill(KColor.glassBg)

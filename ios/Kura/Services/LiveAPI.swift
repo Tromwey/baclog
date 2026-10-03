@@ -413,9 +413,18 @@ final class APIClient: @unchecked Sendable {
         }
         let retryAfterHeader = http.value(forHTTPHeaderField: "Retry-After")
         let err = APIClient.map(status: http.statusCode, envelope: env?.error, retryAfterHeader: retryAfterHeader)
+        // `POST /auth/otp/verify`: 401 + `reason: "locked"` = the guess budget is spent (this code
+        // is burned), not a wrong code. Only on a request WITHOUT a bearer, so it can never stand
+        // in for the 401 that ends a session.
+        if case .unauthorized = err, !e.auth, env?.error.reason == KuraAPIError.lockedReason {
+            throw AttemptFailure(error: KuraAPIError.rateLimited(retryAfter: nil, reason: KuraAPIError.lockedReason), kind: .final)
+        }
         if case .unauthorized = err {
-            if e.auth, !e.suppressExpiry {
-                session.clear()
+            // Only the bearer that is STILL the session's ends it: the late 401 of a request sent
+            // with an older token (before a refresh, or before signing in as someone else) says
+            // nothing about the one in the Keychain now.
+            if e.auth, !e.suppressExpiry, e.explicitBearer == nil,
+               session.clear(ifBearerHeaderIs: req.value(forHTTPHeaderField: "Authorization")) {
                 await MainActor.run { NotificationCenter.default.post(name: .kuraSessionExpired, object: nil) }
             }
             throw AttemptFailure(error: err, kind: .final)
@@ -427,7 +436,12 @@ final class APIClient: @unchecked Sendable {
     func decode<T: Decodable>(_ e: Endpoint) async throws -> T {
         let (data, rid) = try await fetch(e)
         do {
-            return try KuraJSON.decoder.decode(T.self, from: data)
+            let later = PageContract.isLaterPage(cursor: e.query.first { $0.name == "cursor" }?.value)
+            return try LossyContext.$endpoint.withValue("\(e.method.rawValue) \(e.path.template)") {
+                try LossyContext.$laterPage.withValue(later) {
+                    try KuraJSON.decoder.decode(T.self, from: data)
+                }
+            }
         } catch {
             // A contract change must leave a trace outside DEBUG too: where it broke (type + key
             // path), never the payload.
@@ -479,7 +493,7 @@ final class APIClient: @unchecked Sendable {
         case "invalid" where envelope?.reason == "invalid_proof": return .forbidden(code: "proof_rejected")
         case "invalid": return .invalid(fields: envelope?.fields ?? [:], message: message)
         case "conflict": return .conflict(code: envelope?.reason, message: message)
-        case "rate_limited": return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init))
+        case "rate_limited": return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init), reason: envelope?.reason)
         case "unsupported": return .unsupported
         // The music export's 503s that mean something else than "not live yet" (`migration`).
         case "unavailable" where ["not_configured", "service_failed"].contains(envelope?.reason ?? ""):
@@ -495,10 +509,10 @@ final class APIClient: @unchecked Sendable {
         case 404: return .notFound
         case 400, 422: return .invalid(fields: envelope?.fields ?? [:], message: message)
         case 409: return .conflict(code: code.isEmpty ? nil : code, message: message)
-        case 429: return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init))
+        case 429: return .rateLimited(retryAfter: envelope?.retryAfterSeconds ?? retryAfterHeader.flatMap(Int.init), reason: envelope?.reason)
         case 501: return .unsupported
         case 503: return .unavailable
-        default: return .server(message.isEmpty ? "HTTP \(status)" : message)
+        default: return message.isEmpty ? .server("HTTP \(status)") : .serverMessage(message)
         }
     }
 }
@@ -544,8 +558,11 @@ struct LiveAPI: KuraAPI {
 
     func refresh() async throws -> Me {
         // The optional `device` keeps this install's row in Sesiones activas named and versioned.
+        // The new bearer only replaces the one that asked for it: a refresh answering after a
+        // sign-out (or after someone else signed in) must not put the old account back.
+        let sent = session.token
         let s: AuthSession = try await client.decode(try .post("auth/refresh", RefreshBody(device: Device(name: deviceName, appVersion: appVersion))))
-        session.store(s.token)
+        guard session.store(s.token, replacing: sent) else { throw KuraAPIError.cancelled }
         return s.user
     }
 
@@ -640,7 +657,7 @@ struct LiveAPI: KuraAPI {
     // MARK: Account
 
     private struct Username: Encodable { let username: String }
-    private struct Onboarding: Encodable { let name: String; let birthYear: Int }
+    private struct Onboarding: Encodable { let name: String; let birthDate: String }
     private struct Picks: Encodable { let titles: [TitleRef] }
     private struct PicksResponse: Decodable { let collection: KCollection }
     private struct UsernameCheck: Decodable { let status: UsernameStatus }
@@ -658,8 +675,8 @@ struct LiveAPI: KuraAPI {
         try await client.decode(try .put("me/username", Username(username: username)))
     }
 
-    func completeOnboarding(name: String, birthYear: Int) async throws -> Me {
-        try await client.decode(try .post("me/onboarding", Onboarding(name: name, birthYear: birthYear)))
+    func completeOnboarding(name: String, birthDate: String) async throws -> Me {
+        try await client.decode(try .post("me/onboarding", Onboarding(name: name, birthDate: birthDate)))
     }
 
     private struct Pool: Decodable {
@@ -668,7 +685,7 @@ struct LiveAPI: KuraAPI {
         private enum CodingKeys: String, CodingKey { case items, nextPage }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decode([Title].self, forKey: .items)
+            items = try c.decode(LossyPage<Title>.self, forKey: .items).items
             nextPage = try c.decodeIfPresent(Int.self, forKey: .nextPage)
         }
     }
@@ -710,9 +727,12 @@ struct LiveAPI: KuraAPI {
         // `-kuraDelete401 YES`: send a bearer the server rejects, to see the honest 401 path.
         if UserDefaults.standard.bool(forKey: "kuraDelete401") { e.explicitBearer = "debug.invalid.bearer" }
         #endif
-        // Best effort, before the account (and this bearer) is gone.
-        await unregisterPush(bearer: session.token)
+        // Nothing is unregistered BEFORE the 204: a DELETE that fails (offline, 401, 5xx) leaves a
+        // live account, and it must keep its push. After it, the server already dropped this
+        // account's device rows with the account (and the bearer can't ask for anything anymore):
+        // only the local flag goes, so release notices fall back to local ones.
         try await client.send(e)
+        PushRegistration.markUnregistered()
         session.clear()
     }
 
@@ -788,13 +808,16 @@ struct LiveAPI: KuraAPI {
 
     // MARK: Collections
 
-    /// `{ items: [T] }` (or a bare array). A body without `items` is a decoding error, not an empty list.
-    private struct Items<T: Decodable>: Decodable {
+    /// `{ items: [T] }` (or a bare array). A body without `items` is a decoding error, not an empty
+    /// list; an ELEMENT the app can't read is dropped (`LossyPage`), never the whole list. Shared by
+    /// every list endpoint (`LiveAPI+Parties` included).
+    struct Items<T: Decodable>: Decodable {
         let items: [T]
         init(from decoder: Decoder) throws {
-            if let list = try? decoder.singleValueContainer().decode([T].self) { items = list; return }
+            // A bare array is the page itself: its contract error must surface, not be retried as `{ items }`.
+            if (try? decoder.unkeyedContainer()) != nil { items = try LossyPage<T>(from: decoder).items; return }
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decode([T].self, forKey: .items)
+            items = try c.decode(LossyPage<T>.self, forKey: .items).items
         }
         private enum CodingKeys: String, CodingKey { case items }
     }
@@ -821,8 +844,10 @@ struct LiveAPI: KuraAPI {
         try await client.decode(try .patch("collections/\(id)", CollectionPatch(name: name, vibe: vibe, visibility: privacy?.wire)))
     }
 
-    func deleteCollection(id: String) async throws {
-        try await client.send(.delete("collections/\(id)"))
+    func deleteCollection(id: String, purge: Bool) async throws {
+        var e = Endpoint.delete("collections/\(id)")
+        if purge { e.query = [URLQueryItem(name: "purge", value: "1")] }
+        try await client.send(e)
     }
 
     private struct PinPatch: Encodable { let pinned: Bool }

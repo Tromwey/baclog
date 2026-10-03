@@ -41,41 +41,14 @@ protocol TidalAuthorizer {
 }
 
 @MainActor
-final class LiveTidalAuthorizer: NSObject, TidalAuthorizer, ASWebAuthenticationPresentationContextProviding {
-    private var session: ASWebAuthenticationSession?
-
+final class LiveTidalAuthorizer: TidalAuthorizer {
     func authorize(_ url: URL) async throws -> URL {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
-            let handler: ASWebAuthenticationSession.CompletionHandler = { [weak self] url, error in
-                self?.session = nil
-                if let url { cont.resume(returning: url); return }
-                if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin {
-                    cont.resume(throwing: CancellationError())
-                } else {
-                    cont.resume(throwing: KuraAPIError.server("TIDAL"))
-                }
-            }
-            let s: ASWebAuthenticationSession
-            if #available(iOS 17.4, *) {
-                s = ASWebAuthenticationSession(url: url, callback: .customScheme("kura"), completionHandler: handler)
-            } else {
-                s = ASWebAuthenticationSession(url: url, callbackURLScheme: "kura", completionHandler: handler)
-            }
-            s.presentationContextProvider = self
-            // Shared Safari cookies: someone already signed in to TIDAL just says yes.
-            s.prefersEphemeralWebBrowserSession = false
-            session = s
-            if !s.start() {
-                session = nil
-                cont.resume(throwing: KuraAPIError.server("TIDAL"))
-            }
-        }
-    }
-
-    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        MainActor.assumeIsolated {
-            let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-            return windows.first { $0.isKeyWindow } ?? windows.first ?? ASPresentationAnchor()
+        do {
+            return try await WebAuthSession.run(url: url, scheme: "kura")
+        } catch WebAuthSession.Failure.cancelled {
+            throw CancellationError()
+        } catch {
+            throw KuraAPIError.server("TIDAL")
         }
     }
 }

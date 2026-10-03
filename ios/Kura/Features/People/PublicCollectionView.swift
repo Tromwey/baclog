@@ -18,7 +18,7 @@ struct PublicCollectionView: View {
                        missing: store.missingPublicCollections.contains(key),
                        error: store.loadError(.publicCollection(key)),
                        retry: { Task { await store.loadPublicCollection(handle: handle, id: collectionID, force: true) } },
-                       gone: ("esta colección no está disponible.", "Es privada o ya no existe."),
+                       gone: ("esta colección no existe o es privada.", "Revisa que el link esté completo."),
                        skeleton: .collection) { d in
             content(d)
         }

@@ -51,7 +51,7 @@ struct PartySong: Identifiable, Hashable, Decodable {
     var appleMusicURL: URL?
     var palette: [String]
     var addedAt: Date?
-    /// nil → "Puso alguien".
+    /// nil → "Agregó alguien".
     var addedBy: PartyPerson?
     /// → "Pusiste".
     var mine: Bool
@@ -92,10 +92,10 @@ struct PartySong: Identifiable, Hashable, Decodable {
         canBlockAuthor = try c.decodeIfPresent(Bool.self, forKey: .canBlockAuthor) ?? false
     }
 
-    /// "Pusiste tú" · "Puso @ana" · "Puso alguien" (the list's line under the artist).
-    var byShort: String { mine ? "Pusiste tú" : addedBy.map { "Puso \($0.at)" } ?? "Puso alguien" }
-    /// "Pusiste" · "Puso @ana" · "Puso alguien" (the remove sheet).
-    var byLong: String { mine ? "Pusiste" : addedBy.map { "Puso \($0.at)" } ?? "Puso alguien" }
+    /// "Agregaste tú" · "Puso @ana" · "Agregó alguien" (the list's line under the artist).
+    var byShort: String { mine ? "Agregaste tú" : addedBy.map { "Agregó \($0.at)" } ?? "Agregó alguien" }
+    /// "Pusiste" · "Puso @ana" · "Agregó alguien" (the remove sheet).
+    var byLong: String { mine ? "Agregaste" : addedBy.map { "Agregó \($0.at)" } ?? "Agregó alguien" }
 
     /// The song drawn with the shared cover components (`FanView`, `CoverView`): a record, 1:1.
     /// Never registered in `AppStore.titles` (a song is not a `Title`); the id carries a prefix so
@@ -400,7 +400,7 @@ struct PartySongHit: Identifiable, Hashable, Decodable {
     /// The third line when it's already in: "Ya la pusiste" · "Ya está · la puso @ana".
     var dupLine: String? {
         guard let inParty else { return nil }
-        return inParty.mine ? "Ya la pusiste" : "Ya está · la puso \(inParty.addedBy.atOrSomeone)"
+        return inParty.mine ? "Ya la agregaste" : "Ya está · la agregó \(inParty.addedBy.atOrSomeone)"
     }
 }
 
@@ -409,6 +409,19 @@ struct PartyJoin: Decodable {
     enum Joined: String, Decodable { case new, already, host }
     var party: Party
     var joined: Joined
+
+    private enum CodingKeys: String, CodingKey { case party, joined }
+
+    init(party: Party, joined: Joined) { self.party = party; self.joined = joined }
+
+    /// The join ALREADY happened on the server when this is decoded: a `joined` value this build
+    /// doesn't know (or none) must not turn it into an error — it opens the party without the
+    /// welcome sheet, like `already`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        party = try c.decode(Party.self, forKey: .party)
+        joined = (try? c.decode(Joined.self, forKey: .joined)) ?? .already
+    }
 }
 
 /// The copy the screens share (design `fiesta-app-v2`).
@@ -427,9 +440,9 @@ enum PartyCopy {
 
     /// "cada invitado pone 3 canciones" (the hero's italic line).
     static func heroLine(_ l: Int?) -> String {
-        guard let l else { return "cada invitado pone las canciones que quiera" }
+        guard let l else { return "cada invitado agrega las canciones que quiera" }
         if l == 0 { return "solo para ver y escuchar" }
-        return "cada invitado pone \(songs(l))"
+        return "cada invitado agrega \(songs(l))"
     }
 
     /// "tus 3" / "tu canción" / "tus canciones".
@@ -451,11 +464,15 @@ enum PartyCopy {
     /// The toast / search copy for the same 503 (a write or a search while parties are off).
     static let unavailable = "Las fiestas llegan muy pronto."
     /// A party that answered 404 after we had it (deleted, you left, a block with the host).
-    static let gone = "Esa fiesta ya no está."
+    static let gone = "Esa fiesta ya no está disponible."
     /// 409 `too_many_parties` when the server sends no message of its own.
     static let tooManyParties = "Ya tienes 20 fiestas. Borra alguna para crear otra."
     /// 429 on "Crear link nuevo".
-    static let rotateLimited = "Creaste varios links seguidos. Espera un momento y vuelve a intentarlo."
+    static let rotateLimited = "Creaste varios links seguidos. Espera un momento para crear otro."
+    /// 429 on any other party write or read.
+    static let rateLimited = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
+    /// "Entrar a la fiesta" (`POST /invites/{token}/join`) that failed for no reason of its own.
+    static let joinFailed = "No se pudo entrar a la fiesta. Vuelve a intentarlo."
     static let left = "Saliste de la fiesta."
 
     static let deadTitle = "este link ya no funciona."

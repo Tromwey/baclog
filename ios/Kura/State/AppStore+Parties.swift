@@ -175,24 +175,25 @@ extension AppStore {
     // MARK: Writes
 
     /// The toast for a party write that failed (the server's `message` when it wrote the copy).
-    static func partyText(_ e: KuraAPIError) -> String {
+    static func partyText(_ e: KuraAPIError, or fallback: String = "No se pudo guardar.", rotating: Bool = false) -> String {
         switch e {
         case .unavailable: return PartyCopy.unavailable
         // The server writes the copy of every 409 (`duplicate_*`, `too_many_parties`, `conflict`…).
         case .conflict(_, let m) where !m.isEmpty: return m
         case .conflict(let code, _) where code == "too_many_parties": return PartyCopy.tooManyParties
-        case .rateLimited: return PartyCopy.rotateLimited
+        case .rateLimited: return rotating ? PartyCopy.rotateLimited : PartyCopy.rateLimited
         case .forbidden(let code):
             switch code {
             case "blocked": return "Ya no puedes agregar canciones a esta fiesta."
             case "view_only": return "En esta fiesta solo se puede ver la colección."
-            case "not_yours": return "Solo puedes quitar las canciones que pusiste tú."
+            case "not_yours": return "Solo puedes quitar las canciones que agregaste tú."
             default: return "No tienes permiso para hacer eso."
             }
         case .notFound: return "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella."
-        // A code this build doesn't know: the server's own `message` (never "HTTP 500").
-        case .server(let m) where !m.isEmpty && !m.hasPrefix("HTTP ") && m != "mock": return m
-        default: return e.toast
+        // A code this build doesn't know: the `message` of the server's envelope, and only that
+        // (`.server` is the app's own text — a decode failure, a URL, a transport error: never shown).
+        case .serverMessage(let m) where !m.isEmpty: return m
+        default: return e.toast(or: fallback)
         }
     }
 
@@ -200,15 +201,17 @@ extension AppStore {
     /// (with "Esa fiesta ya no está.") when it's really gone; when the party is still there the
     /// 404 was about the song, and `stale` says so. Everything else is the toast.
     private func partyWriteFailed(_ partyID: String, _ e: KuraAPIError,
-                                  stale: String = "Eso ya no está en la fiesta. La actualizamos.") async {
-        guard e == .notFound else { partyToast(e); return }
+                                  stale: String = "Eso ya no está en la fiesta. La actualizamos.",
+                                  rotating: Bool = false) async {
+        guard e == .notFound else { partyToast(e, rotating: rotating); return }
         await loadParty(partyID, force: true)
         if s.parties[partyID] != nil { showToast(ToastModel(text: stale, kind: .info)) }
     }
 
-    private func partyToast(_ e: KuraAPIError) {
-        guard e != .cancelled, e != .unauthorized else { return }
-        showToast(ToastModel(text: Self.partyText(e), kind: .info))
+    private func partyToast(_ e: KuraAPIError, or fallback: String = "No se pudo guardar.", rotating: Bool = false) {
+        // `onboarding_required` was already said (and is being routed) by `noteError`.
+        guard e != .cancelled, e != .unauthorized, !e.isOnboardingRequired else { return }
+        showToast(ToastModel(text: Self.partyText(e, or: fallback, rotating: rotating), kind: .info))
     }
 
     /// "Crear fiesta": `POST /parties`, then the party opens with the share sheet up (design:
@@ -286,7 +289,7 @@ extension AppStore {
             applyParty(p)
             dismissSheet()
             showToast(ToastModel(text: "Link nuevo listo. El anterior ya no funciona.", kind: .info))
-        case .failed(let e): await partyWriteFailed(id, e)
+        case .failed(let e): await partyWriteFailed(id, e, rotating: true)
         case .stale: break
         }
     }
@@ -336,7 +339,7 @@ extension AppStore {
                 dismissToast()
                 present(.partyCap(partyID))
             } else {
-                showToast(ToastModel(text: "Pusiste \(hit.title).", kind: .info))
+                showToast(ToastModel(text: "Agregaste \(hit.title).", kind: .info))
             }
             return .added
         case .failed(let e):
@@ -404,7 +407,8 @@ extension AppStore {
 
     // MARK: Invites (universal link `get-kura.app/f/{token}`)
 
-    /// Signed in: join at once (idempotent) and open the party — "ya estás dentro." the first time
+    /// The landing's "Entrar a la fiesta" (signed in — the ONLY caller: a link alone never joins,
+    /// see `open(.invite)`): join (idempotent) and open the party — "ya estás dentro." the first time
     /// (the "returning" variant when the account already existed), no sheet for the host or a
     /// member coming back. A dead link opens the landing in its dead shape.
     func openInvite(_ token: String) async {
@@ -424,9 +428,12 @@ extension AppStore {
         case .failed(let e):
             if case .forbidden(let code) = e, code == "onboarding_required" {
                 // The link waits for the account to be ready (and survives a relaunch for an hour,
-                // `DeepLinkInbox`): finishing the onboarding opens it again, which joins.
+                // `DeepLinkInbox`): finishing the onboarding opens its landing again ("Entrar a la fiesta").
+                // `noteError` (inside `boundWrite`) is already re-reading `me` and taking the
+                // account to what it's missing; the landing steps aside for it.
                 DeepLinkInbox.pending = .invite(token)
-                showToast(ToastModel(text: "Termina de crear tu cuenta para entrar a la fiesta.", kind: .info))
+                inviteLanding = nil
+                showToast(ToastModel(text: "Termina tu registro para entrar a la fiesta.", kind: .info))
                 return
             }
             switch e {
@@ -442,7 +449,8 @@ extension AppStore {
                 // Offline, a 5xx, a rate limit: never lose the link. The landing shows it with
                 // the error and Reintentar (a preview that loads brings back "Entrar a la fiesta").
                 loadErrors[.invite(token)] = e
-                partyToast(e)
+                // Never "No se pudo guardar": nothing was being saved, the join didn't happen.
+                partyToast(e, or: PartyCopy.joinFailed)
             }
             withAnimation(KMotion.fade) { inviteLanding = token }
         case .stale:
@@ -452,7 +460,8 @@ extension AppStore {
 
     /// The landing's "Entrar" / "Entra a kura para poner tus 3 canciones" (signed out): off to the
     /// entrance, and the link waits in `DeepLinkInbox` — after the sign-in (and O1b for a new
-    /// account, which then skips the picks) `startIfNeeded` opens it, which joins.
+    /// account, which then skips the picks) `startIfNeeded` opens it: the landing again, now with
+    /// "Entrar a la fiesta" (the join is always that tap, never the link).
     func signInForInvite(_ token: String) {
         DeepLinkInbox.pending = .invite(token)
         withAnimation(KMotion.fade) { inviteLanding = nil }

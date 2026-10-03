@@ -382,7 +382,15 @@ extension View {
     func kFeedSurface(_ hexes: [String], span: CGFloat) -> some View {
         // On a hero page (a collection opening from the profile) the gradient is the backdrop:
         // it comes in over the first 60 % of the progress. Identity anywhere else.
-        background(alignment: .top) { FeedSurface(hexes: hexes, span: span).heroBackdrop() }
+        // A short page (a collection with one title) ends before the gradient reaches tone 2:
+        // the surface still runs its whole course past the content's bottom (backgrounds aren't
+        // clipped), so the tail under it continues tone 2 instead of cutting mid-gradient. At
+        // 168° the left edge reaches `span` along the line at span / cos 12°.
+        background(alignment: .top) {
+            FeedSurface(hexes: hexes, span: span)
+                .frame(minHeight: (span / cos(12 * .pi / 180)).rounded(.up), alignment: .top)
+                .heroBackdrop()
+        }
             .background(alignment: .top) {
                 Tint.feedTop(hexes).frame(height: 1200).offset(y: -1200).allowsHitTesting(false).heroBackdrop()
             }

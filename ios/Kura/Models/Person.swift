@@ -338,6 +338,10 @@ struct PeoplePage: Decodable {
     /// `GET /people/{handle}/followers|following`: the rest of the list (private, no handle, a
     /// block with you) as a number, never as identities. Page 1 only (0 after). 0 elsewhere.
     var anonymousCount = 0
+    /// The page had elements and this build could read none of them (a later page reads as empty
+    /// instead of failing, `PageContract`): the list is NOT complete (`AppStore.allPeople`).
+    var unreadable = false
+    private struct Blank: Decodable {}
     init(items: [Person], nextCursor: String? = nil, anonymousCount: Int = 0) {
         self.items = items; self.nextCursor = nextCursor; self.anonymousCount = anonymousCount
     }
@@ -345,13 +349,16 @@ struct PeoplePage: Decodable {
     init(from decoder: Decoder) throws {
         // `GET /people/suggestions` and `/people/search` return a bare array; the
         // owner lists return `{ items, nextCursor }`. Accept both.
-        if let list = try? decoder.singleValueContainer().decode([Person].self) {
-            items = list; nextCursor = nil
+        // Either way the list IS the page (`LossyPage`): a person this build can't read is
+        // dropped, never the whole list.
+        if (try? decoder.unkeyedContainer()) != nil {
+            items = try LossyPage<Person>(from: decoder).items; nextCursor = nil
         } else {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            items = try c.decodeIfPresent([Person].self, forKey: .items) ?? []
+            items = try c.lossyPage([Person].self, forKey: .items) ?? []
             nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
             anonymousCount = try c.decodeIfPresent(Int.self, forKey: .anonymousCount) ?? 0
+            if items.isEmpty, let raw = try? c.decodeIfPresent([Blank].self, forKey: .items), !raw.isEmpty { unreadable = true }
         }
     }
 }

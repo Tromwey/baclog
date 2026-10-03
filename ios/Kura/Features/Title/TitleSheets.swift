@@ -20,8 +20,9 @@ struct CompleteSheet: View {
     private var stop: Int { min(2, max(0, Int(value.rounded()))) }
 
     /// The server unlocks reviews only with a reaction (`obsessed || verdict != null`): "Completo"
-    /// saves `verdict = null`, so a NEW or edited review can't go out with it. An unchanged review
-    /// you already had stays as it is (only the mark changes).
+    /// saves `verdict = null`, so a NEW or edited review can't go out with it — and the review you
+    /// already had is DELETED with the reaction (server, same transaction): that asks first
+    /// (`ReviewLossSheet`).
     private static let reactionNeeded = "Para reseñar, elige Me gusta o Me obsesiona."
 
     private var trimmedReview: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -134,8 +135,11 @@ struct CompleteSheet: View {
 
                 if store.mark(titleID) != nil {
                     Button {
-                        withAnimation(KMotion.spring) { store.setMark(titleID, nil) }
-                        store.dismissSheet()
+                        // Without a reaction the server deletes your review: ask first.
+                        askBeforeLosingReview(nil) {
+                            withAnimation(KMotion.spring) { store.setMark(titleID, nil) }
+                            store.dismissSheet()
+                        }
                     } label: {
                         Text("Quitar completado")
                             .font(.kura.ui(15, .medium))
@@ -164,6 +168,40 @@ struct CompleteSheet: View {
                 }
                 if focusReview { focused = true }
             }
+            // The ficha says whether you have a review (and brings its text) when the library
+            // state alone doesn't: the question before a mark that deletes it depends on that.
+            .task { await store.loadTitle(titleID) }
+            .onChange(of: store.myReview(titleID)?.id) { old, _ in
+                // It arrived after the sheet opened and nothing was typed: show it, so saving an
+                // empty field doesn't delete a review you never saw.
+                guard old == nil, !saving, text.isEmpty, let r = store.myReview(titleID) else { return }
+                text = r.text
+                spoiler = r.spoiler
+            }
+        }
+    }
+
+    /// "tu reseña se borra con la reacción." needs to KNOW whether you have a review. Usually it
+    /// does (`GET /me/titles` carries `reviewId`; the sheet also reads the ficha as it opens). If
+    /// neither has answered yet, a mark that would delete one waits for the ficha (the button
+    /// spins) instead of going out unasked. Only a read that FAILED lets the mark through without
+    /// the question: there is nothing to ask about, and offline the mark won't land either.
+    private func askBeforeLosingReview(_ mark: Mark?, send: @escaping @MainActor () -> Void) {
+        let decide: @MainActor () -> Void = {
+            if ReviewHold<Review>.needsConfirmation(hasReview: store.hasOwnReview(titleID), mark: mark?.rawValue) {
+                store.present(.reviewLoss(titleID: titleID, mark: mark))
+            } else {
+                send()
+            }
+        }
+        guard ReviewHold<Review>.leavesNoReaction(mark?.rawValue), !store.ownReviewKnown(titleID) else { decide(); return }
+        saving = true
+        Task {
+            await store.ensureOwnReviewKnown(titleID)
+            saving = false
+            // Closed meanwhile: nothing was sent, nothing to ask.
+            guard case .complete(let id, _)? = store.sheet, id == titleID else { return }
+            decide()
         }
     }
 
@@ -185,11 +223,15 @@ struct CompleteSheet: View {
         // reverts/retries on its own, and once the server confirms it suggests "Guardar en…" for
         // a title in no collection — the mark stands either way).
         guard !review.isEmpty, choice != .completed else {
-            withAnimation(KMotion.spring) { store.setMark(t.id, choice, haptic: false, preview: preview) }
-            // Emptying an existing review and saving deletes it (with its own Deshacer);
-            // saving only the mark would leave the old text published.
-            if review.isEmpty, store.myReview(t.id) != nil { store.deleteReview(titleID: t.id) }
-            done()
+            // "Completo" leaves the title without a reaction, and the review goes with it (no
+            // undo on the server): the confirmation sheet takes over and sends the mark itself.
+            askBeforeLosingReview(choice) {
+                withAnimation(KMotion.spring) { store.setMark(t.id, choice, haptic: false, preview: preview) }
+                // Emptying an existing review and saving deletes it (with its own Deshacer);
+                // saving only the mark would leave the old text published.
+                if review.isEmpty, store.myReview(t.id) != nil { store.deleteReview(titleID: t.id) }
+                done()
+            }
             return
         }
         // With a review: the server needs the reaction first (`409 reaction_required`), so the
@@ -222,7 +264,7 @@ struct CompleteSheet: View {
                     if stillOpen {
                         withAnimation(KMotion.short) { saveError = failure.toast }
                     } else {
-                        store.showToast(ToastModel(text: failure == .offline ? "Sin conexión. Tu reseña no se guardó." : "Tu reseña no se guardó.", kind: .info))
+                        store.showToast(ToastModel(text: failure == .offline ? "Sin conexión. No se pudo guardar tu reseña." : "No se pudo guardar tu reseña.", kind: .info))
                     }
                 }
                 return
@@ -231,6 +273,50 @@ struct CompleteSheet: View {
             done()
             store.suggestSaving(t.id)
         }
+    }
+}
+
+// MARK: - La reseña se borra con la reacción
+
+/// Asked before a mark that leaves the title without a reaction ("Completo", "Quitar completado")
+/// when you have a review of it: the server deletes the review in the same write and there is no
+/// undo. Same copy on web and Android. No destructive role (Kura has no red).
+struct ReviewLossSheet: View {
+    @Environment(AppStore.self) private var store
+    let titleID: String
+    let mark: Mark?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("tu reseña se borra con la reacción.")
+                .font(.kura.news(26))
+                .foregroundStyle(KColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, 8)
+            Text("Si quitas la reacción, tu reseña se borra y no se puede recuperar.")
+                .font(.kura.ui(15)).foregroundStyle(KColor.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 8)
+                .padding(.top, 4).padding(.bottom, 16)
+            SolidButton(title: "Quitar y borrar reseña") { confirm() }
+            Button { store.dismissSheet() } label: {
+                Text("Conservar")
+                    .font(.kura.ui(16, .medium))
+                    .foregroundStyle(KColor.text)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func confirm() {
+        // Same release rule as `CompleteSheet.save` (`preview` only lifts the server's gate).
+        let preview = mark != nil && (store.title(titleID).map { store.isUnreleased($0) || store.isReleaseDay($0) } ?? false)
+        withAnimation(KMotion.spring) { store.setMark(titleID, mark, haptic: mark != nil, preview: preview) }
+        store.dismissSheet()
     }
 }
 

@@ -127,8 +127,7 @@ final class AppleAuthorization: NSObject, ASAuthorizationControllerDelegate, ASA
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-        return windows.first { $0.isKeyWindow } ?? windows.first ?? ASPresentationAnchor()
+        KeyWindow.anchor
     }
 }
 
@@ -141,7 +140,7 @@ final class AppleAuthorization: NSObject, ASAuthorizationControllerDelegate, ASA
 /// `ASWebAuthenticationSession` catches it through `callbackURLScheme` on its own: nothing needs
 /// to be registered in `CFBundleURLTypes`.
 @MainActor
-final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class GoogleOAuth {
     enum Failure: Error, Equatable {
         /// Closed the sheet or said no on Google's consent screen: silent.
         case cancelled
@@ -152,9 +151,6 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
 
     private static let authorizeURL = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
     private static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
-
-    /// Kept alive while the sheet is up (the session is otherwise deallocated mid-flow).
-    private var session: ASWebAuthenticationSession?
 
     /// Runs the whole browser round trip and returns Google's `id_token`.
     static func idToken(clientID: String) async throws -> String {
@@ -211,30 +207,12 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
     }
 
     private func present(url: URL, scheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
-            let handler: ASWebAuthenticationSession.CompletionHandler = { [weak self] url, error in
-                self?.session = nil
-                if let url { cont.resume(returning: url); return }
-                if let e = error as? ASWebAuthenticationSessionError, e.code == .canceledLogin {
-                    cont.resume(throwing: Failure.cancelled)
-                } else {
-                    cont.resume(throwing: Failure.rejected)
-                }
-            }
-            let s: ASWebAuthenticationSession
-            if #available(iOS 17.4, *) {
-                s = ASWebAuthenticationSession(url: url, callback: .customScheme(scheme), completionHandler: handler)
-            } else {
-                s = ASWebAuthenticationSession(url: url, callbackURLScheme: scheme, completionHandler: handler)
-            }
-            s.presentationContextProvider = self
-            // Shared Safari cookies: someone already signed in to Google just picks the account.
-            s.prefersEphemeralWebBrowserSession = false
-            session = s
-            if !s.start() {
-                session = nil
-                cont.resume(throwing: Failure.rejected)
-            }
+        do {
+            return try await WebAuthSession.run(url: url, scheme: scheme)
+        } catch WebAuthSession.Failure.cancelled {
+            throw Failure.cancelled
+        } catch {
+            throw Failure.rejected
         }
     }
 
@@ -268,13 +246,6 @@ final class GoogleOAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
             throw Failure.rejected
         }
         return token
-    }
-
-    // MARK: ASWebAuthenticationPresentationContextProviding
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
-        return windows.first { $0.isKeyWindow } ?? windows.first ?? ASPresentationAnchor()
     }
 
     // MARK: Helpers

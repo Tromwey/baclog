@@ -285,7 +285,7 @@ struct EditProfileView: View {
                     Seal(person: preview(palette), size: 104)
                         .opacity(store.avatarBusy ? 0.5 : 1)
                         .overlay { if store.avatarBusy { ProgressView().tint(KColor.text) } }
-                    let photoLabel = store.avatarBusy ? "Subiendo…" : (store.me.avatarURL == nil ? "Poner foto" : "Cambiar foto")
+                    let photoLabel = store.avatarBusy ? "Subiendo…" : (store.me.avatarURL == nil ? "Agregar foto" : "Cambiar foto")
                     HStack(spacing: 20) {
                         PhotosPicker(selection: $photo, matching: .images, photoLibrary: .shared()) {
                             Text(photoLabel)
@@ -315,7 +315,7 @@ struct EditProfileView: View {
                                 return
                             }
                             guard let data, let img = UIImage(data: data) else {
-                                store.showToast(ToastModel(text: "Esa imagen no se pudo leer. Prueba con otra.", kind: .info))
+                                store.showToast(ToastModel(text: "No se pudo usar esa foto. Prueba con otra.", kind: .info))
                                 return
                             }
                             await store.uploadAvatar(img)

@@ -78,7 +78,7 @@ struct ExportSong: Identifiable, Hashable, Decodable, Sendable {
     var appleMusicID: String?
     var isrc: String?
     var state: State
-    /// nil → "Puso alguien".
+    /// nil → "Agregó alguien".
     var addedBy: PartyPerson?
     /// → "Pusiste".
     var mine: Bool
@@ -105,13 +105,15 @@ struct ExportSong: Identifiable, Hashable, Decodable, Sendable {
         durationMs = try c.decodeIfPresent(Int.self, forKey: .durationMs)
         appleMusicID = try c.decodeIfPresent(String.self, forKey: .appleMusicId).flatMap { $0.isEmpty ? nil : $0 }
         isrc = try c.decodeIfPresent(String.self, forKey: .isrc).flatMap { $0.isEmpty ? nil : $0 }
-        state = (try? c.decode(State.self, forKey: .state)) ?? .pending
+        // A state this build doesn't know is NOT "pending" (that would offer to export the song
+        // again): it fails the decode, and the export says it couldn't read its state.
+        state = try c.decodeIfPresent(State.self, forKey: .state) ?? .pending
         addedBy = try c.decodeIfPresent(PartyPerson.self, forKey: .addedBy)
         mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
     }
 
-    /// "Pusiste" · "Puso @ana" · "Puso alguien" (the "No están en…" rows).
-    var byLine: String { mine ? "Pusiste" : addedBy.map { "Puso \($0.at)" } ?? "Puso alguien" }
+    /// "Pusiste" · "Puso @ana" · "Agregó alguien" (the "No están en…" rows).
+    var byLine: String { mine ? "Agregaste" : addedBy.map { "Agregó \($0.at)" } ?? "Agregó alguien" }
 }
 
 /// `ExportState`: where one (party, you, service) export stands.
@@ -145,6 +147,10 @@ struct ExportState: Hashable, Decodable, Sendable {
         }
     }
 
+    /// The provider of the request being decoded (`@TaskLocal`, like `LossyContext.endpoint`:
+    /// bound with `withValue` around one request, never shared between concurrent ones).
+    @TaskLocal static var requested: MusicProvider?
+
     var provider: MusicProvider
     var playlistName: String
     var status: Status
@@ -175,9 +181,15 @@ struct ExportState: Hashable, Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        provider = try c.decode(MusicProvider.self, forKey: .provider)
+        // The app always knows which provider it asked about: a provider name this build can't
+        // read must not fail the whole state, and falls back to the one REQUESTED
+        // (`ExportState.requested`, bound by `LiveAPI.exportState` around the decode) — never to
+        // Apple Music over a TIDAL export.
+        provider = (try? c.decode(MusicProvider.self, forKey: .provider)) ?? Self.requested ?? .appleMusic
         playlistName = try c.decodeIfPresent(String.self, forKey: .playlistName) ?? ""
-        status = (try? c.decode(Status.self, forKey: .status)) ?? .idle
+        // Same rule: an unknown status read as `idle` would offer "Exportar" over an export
+        // that may be running or done. Absent = idle; unknown = a decoding error.
+        status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .idle
         total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
         exported = try c.decodeIfPresent(Int.self, forKey: .exported) ?? 0
         processed = try c.decodeIfPresent(Int.self, forKey: .processed) ?? 0
@@ -263,7 +275,7 @@ enum MusicExportCopy {
     /// MusicKit had no token, so Apple Music never saw the request.
     static func appleToken(_ issue: AppleMusicTokenIssue) -> String {
         switch issue {
-        case .developer: return "Apple Music todavía no autoriza a kura en este iPhone. Suele tardar unos minutos después de activarlo; vuelve a intentarlo en un rato."
+        case .developer: return "Apple Music todavía no autoriza a kura en este iPhone. Suele tardar unos minutos después de activarlo; vuelve a intentarlo más tarde."
         case .signedOut: return "Inicia sesión en Apple Music (app Música) con tu Apple ID y vuelve a intentarlo."
         case .privacy: return "Abre la app Música una vez, acepta su aviso de privacidad y vuelve a intentarlo."
         case .user: return "Apple Music no confirmó tu cuenta. Abre la app Música, revisa tu sesión y vuelve a intentarlo."
@@ -274,7 +286,7 @@ enum MusicExportCopy {
     static func pause(_ p: MusicProvider) -> String { "\(p.label) pidió una pausa. Seguimos en unos segundos." }
     static func notConfigured(_ p: MusicProvider) -> String { "\(p.label) todavía no está disponible en kura." }
     /// `assertMusicExportLive` (503 `migration`).
-    static let unavailable = "Exportar a otras apps todavía no está disponible. Inténtalo más tarde."
+    static let unavailable = "Exportar a otras apps todavía no está disponible. Vuelve a intentarlo más tarde."
     static let description = { (name: String) in "La colección de fiesta «\(name)», desde kura." }
 
     /// `kura://music/tidal/connected?ok=0&reason=…` and `complete`'s 409 (contract §4.1 copy).
@@ -282,7 +294,7 @@ enum MusicExportCopy {
         switch reason {
         case "denied": return "No diste permiso en TIDAL."
         case "unavailable": return "TIDAL todavía no está disponible en kura."
-        case "rate_limited": return "Demasiados intentos. Espera un momento."
+        case "rate_limited": return "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         default: return "La conexión con TIDAL caducó. Vuelve a intentarlo."
         }
     }

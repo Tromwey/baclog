@@ -215,12 +215,12 @@ extension AppStore {
     /// A failure on the connect step stays on it, with a line saying why.
     private func connectFailed(_ error: Error, _ p: MusicProvider) {
         if error is CancellationError { return }
-        let e = (error as? KuraAPIError) ?? .server(String(describing: error))
+        let e = (error as? KuraAPIError) ?? .server("")
         switch e {
         case .cancelled, .unauthorized: return
         case .conflict(let code, _) where code == "auth_expired": updateExport { $0.note = MusicExportCopy.tidalReason("expired") }
         case .rateLimited: updateExport { $0.note = MusicExportCopy.tidalReason("rate_limited") }
-        case .offline: updateExport { $0.note = "Sin conexión. Vuelve a intentarlo." }
+        case .offline: updateExport { $0.note = "Sin conexión. Revisa tu red y vuelve a intentarlo." }
         case .unavailable, .serviceUnavailable("not_configured", _), .notFound: exportFailed(e, p)
         case .serviceUnavailable(_, let m) where !m.isEmpty: updateExport { $0.note = m }
         default: updateExport { $0.note = MusicExportCopy.tidalReason(nil) }
@@ -242,7 +242,7 @@ extension AppStore {
                     st = try await exportCall { try await api.stepTidalExport(id: partyID) }
                     updateExport { $0.pause = nil }
                     applyExportState(st)
-                } catch let KuraAPIError.rateLimited(retryAfter) {
+                } catch let KuraAPIError.rateLimited(retryAfter, _) {
                     // `service_rate_limited` (TIDAL) or ours: wait and call the same step again.
                     updateExport { $0.pause = MusicExportCopy.pause(.tidal) }
                     try await Task.sleep(for: .seconds(Double(min(max(retryAfter ?? 3, 1), 120))))
@@ -365,7 +365,7 @@ extension AppStore {
             }
             return
         }
-        let e = (error as? KuraAPIError) ?? .server(String(describing: error))
+        let e = (error as? KuraAPIError) ?? .server("")
         switch e {
         case .cancelled, .unauthorized:
             return
@@ -391,7 +391,7 @@ extension AppStore {
         case .offline:
             updateExport { $0.step = .failed; $0.failure = MusicExportCopy.offline }
         case .rateLimited:
-            updateExport { $0.step = .failed; $0.failure = "Demasiados intentos. Espera un momento y vuelve a intentarlo." }
+            updateExport { $0.step = .failed; $0.failure = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo." }
         default:
             KuraLog.party.error("export \(p.rawValue, privacy: .public) failed: \(String(describing: e), privacy: .public)")
             updateExport { $0.step = .failed; $0.failure = MusicExportCopy.serviceFailed(p) }

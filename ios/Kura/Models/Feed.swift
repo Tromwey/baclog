@@ -62,7 +62,8 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        // An event without its id can't be deduped across pages: unreadable, not an invented id.
+        id = try c.decode(String.self, forKey: .id)
         let author = try c.decodeIfPresent(Person.self, forKey: .author)
         embeddedAuthor = author
         authorID = author?.handle ?? ""
@@ -89,7 +90,10 @@ struct FeedEvent: Identifiable, Hashable, Decodable {
         case "suggest":
             let s = try c.decodeIfPresent(Suggest.self, forKey: .suggest)
             kind = .suggestion(personID: authorID, reason: s?.reason ?? "", social: s?.common ?? "", titleIDs: s?.titleIds ?? [])
-        default: kind = .added(collection: "")
+        default:
+            // A type this build doesn't know (a newer server): unreadable, so the list drops it
+            // (`Lossy`) — never painted as an "agregó" it isn't.
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "unknown feed event kind")
         }
     }
 }
@@ -146,7 +150,7 @@ struct FeedPage: Decodable {
     private enum CodingKeys: String, CodingKey { case items, nextCursor }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        items = try c.decodeIfPresent([FeedEvent].self, forKey: .items) ?? []
+        items = try c.lossyPage([FeedEvent].self, forKey: .items) ?? []
         nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
     }
 }
@@ -201,7 +205,7 @@ struct DiscoverPayload: Decodable {
         }
     }
     /// "colecciones para ti · de gente que sigues" (Todo 3a): a followed person's showcased collection.
-    struct FollowedCollection: Decodable, Hashable, Identifiable {
+    struct FollowedCollection: Hashable, Identifiable {
         let id: String
         let name: String
         let owner: String
@@ -209,7 +213,7 @@ struct DiscoverPayload: Decodable {
         let avatarUrl: String?
         let count: Int
         let palette: [String]
-        /// The fan, front first (≤ 3).
+        /// The fan, front first (≤ 3). Tolerant: a cover this build can't read leaves the fan.
         let covers: [Title]
     }
 
@@ -231,16 +235,32 @@ struct DiscoverPayload: Decodable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        recommended = try c.decodeIfPresent([Recommended].self, forKey: .recommended) ?? []
-        trending = try c.decodeIfPresent([Trending].self, forKey: .trending) ?? []
-        upcoming = try c.decodeIfPresent([Upcoming].self, forKey: .upcoming) ?? []
-        upcomingAlbums = try c.decodeIfPresent([Upcoming].self, forKey: .upcomingAlbums) ?? []
-        collections = try c.decodeIfPresent([FollowedCollection].self, forKey: .collections) ?? []
+        recommended = try c.lossy([Recommended].self, forKey: .recommended) ?? []
+        trending = try c.lossy([Trending].self, forKey: .trending) ?? []
+        upcoming = try c.lossy([Upcoming].self, forKey: .upcoming) ?? []
+        upcomingAlbums = try c.lossy([Upcoming].self, forKey: .upcomingAlbums) ?? []
+        collections = try c.lossy([FollowedCollection].self, forKey: .collections) ?? []
     }
 
     var allTitles: [Title] {
         recommended.map(\.title) + recommended.compactMap(\.seed) + trending.map(\.title)
             + upcoming.map(\.title) + upcomingAlbums.map(\.title) + collections.flatMap(\.covers)
+    }
+}
+
+// In an extension so the memberwise init stays (the mock builds these).
+extension DiscoverPayload.FollowedCollection: Decodable {
+    private enum CodingKeys: String, CodingKey { case id, name, owner, handle, avatarUrl, count, palette, covers }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        owner = try c.decode(String.self, forKey: .owner)
+        handle = try c.decode(String.self, forKey: .handle)
+        avatarUrl = try c.decodeIfPresent(String.self, forKey: .avatarUrl)
+        count = try c.decode(Int.self, forKey: .count)
+        palette = try c.decode([String].self, forKey: .palette)
+        covers = try c.lossy([Title].self, forKey: .covers) ?? []
     }
 }
 
@@ -277,7 +297,7 @@ struct DiscoverCreatorsPayload: Decodable {
     private enum CodingKeys: String, CodingKey { case items }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        items = try c.decodeIfPresent([Item].self, forKey: .items) ?? []
+        items = try c.lossy([Item].self, forKey: .items) ?? []
     }
 }
 
@@ -332,14 +352,14 @@ struct DiscoverFormatPayload: Decodable {
         }
     }
     /// Colecciones Kuradas: a team account's public collection, opened as `publicCollection`.
-    struct Kurada: Decodable, Hashable, Identifiable {
+    struct Kurada: Hashable, Identifiable {
         let id: String
         let name: String
         let curator: String
         let handle: String
         let count: Int
         let palette: [String]
-        /// The fan, front first (≤ 3).
+        /// The fan, front first (≤ 3). Tolerant: a cover this build can't read leaves the fan.
         let covers: [Title]
     }
 
@@ -350,14 +370,18 @@ struct DiscoverFormatPayload: Decodable {
     var moods: [Mood] = []
     var titles: [Item] = []
     var kuradas: [Kurada] = []
+    /// `titlesUnavailable: true` (additive, normally absent): the shelf's source failed but the
+    /// Kuradas came. `titles` is NOT an empty shelf then — the page offers Reintentar over it
+    /// (`AppStore.loadDiscoverFormat`) and still shows the Kuradas.
+    var titlesUnavailable = false
 
     init(format: MediaFormat, time: Int? = nil, times: [Choice] = [], lenses: [Choice] = [], moods: [Mood] = [],
-         titles: [Item] = [], kuradas: [Kurada] = []) {
+         titles: [Item] = [], kuradas: [Kurada] = [], titlesUnavailable: Bool = false) {
         self.format = format; self.time = time; self.times = times; self.lenses = lenses
-        self.moods = moods; self.titles = titles; self.kuradas = kuradas
+        self.moods = moods; self.titles = titles; self.kuradas = kuradas; self.titlesUnavailable = titlesUnavailable
     }
 
-    private enum CodingKeys: String, CodingKey { case format, time, times, lenses, moods, titles, kuradas }
+    private enum CodingKeys: String, CodingKey { case format, time, times, lenses, moods, titles, kuradas, titlesUnavailable }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         format = try c.decode(MediaFormat.self, forKey: .format)
@@ -365,11 +389,26 @@ struct DiscoverFormatPayload: Decodable {
         times = try c.decodeIfPresent([Choice].self, forKey: .times) ?? []
         lenses = try c.decodeIfPresent([Choice].self, forKey: .lenses) ?? []
         moods = try c.decodeIfPresent([Mood].self, forKey: .moods) ?? []
-        titles = try c.decodeIfPresent([Item].self, forKey: .titles) ?? []
-        kuradas = try c.decodeIfPresent([Kurada].self, forKey: .kuradas) ?? []
+        titles = try c.lossyPage([Item].self, forKey: .titles) ?? []
+        kuradas = try c.lossy([Kurada].self, forKey: .kuradas) ?? []
+        titlesUnavailable = (try? c.decodeIfPresent(Bool.self, forKey: .titlesUnavailable)) ?? false
     }
 
     var allTitles: [Title] { titles.map(\.title) + kuradas.flatMap(\.covers) }
+}
+
+extension DiscoverFormatPayload.Kurada: Decodable {
+    private enum CodingKeys: String, CodingKey { case id, name, curator, handle, count, palette, covers }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        curator = try c.decode(String.self, forKey: .curator)
+        handle = try c.decode(String.self, forKey: .handle)
+        count = try c.decode(Int.self, forKey: .count)
+        palette = try c.decode([String].self, forKey: .palette)
+        covers = try c.lossy([Title].self, forKey: .covers) ?? []
+    }
 }
 
 /// `GET /recap/months` item.
@@ -441,7 +480,7 @@ struct RecapPayload: Hashable, Decodable {
         year = 0
         stats = try c.decodeIfPresent(Stats.self, forKey: .stats) ?? Stats()
         top = try c.decodeIfPresent(Title.self, forKey: .top)
-        also = try c.decodeIfPresent([Title].self, forKey: .also) ?? []
+        also = try c.lossy([Title].self, forKey: .also) ?? []
         if let e = try c.decodeIfPresent(String.self, forKey: .era) {
             adopt(era: e, label: try c.decodeIfPresent(String.self, forKey: .label))
         }

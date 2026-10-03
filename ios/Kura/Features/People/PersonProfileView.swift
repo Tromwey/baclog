@@ -20,7 +20,7 @@ struct PersonProfileView: View {
                            missing: store.missingPeople.contains(personID),
                            error: store.loadError(.person(personID)),
                            retry: { Task { await store.loadPerson(personID, force: true) } },
-                           gone: ("@\(personID) no está disponible.", "El perfil es privado o ya no existe."),
+                           gone: ("este perfil no existe o es privado.", "Revisa que el @ esté completo."),
                            square: true) { p in
                 content(p)
             }
@@ -43,7 +43,7 @@ struct PersonProfileView: View {
                     header(p, following: following, locked: locked, blocked: blocked)
                     if !isPreview, let e = store.loadError(.person(p.id)) {
                         // What's on screen came from a list (counts 0, no collections): say it's partial.
-                        RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar todo el perfil.") {
+                        RetryStrip(error: e, text: e == .offline ? "Sin conexión. No se cargó el resto." : "No se cargó el resto.") {
                             Task { await store.loadPerson(p.id, force: true) }
                         }
                         .padding(.horizontal, 12)
@@ -436,7 +436,13 @@ struct FollowersView: View {
                         Text("Todos").monoLabel(11, tracking: 0.1, color: KColor.text3).padding(.top, 16).padding(.bottom, 4)
                         ForEach(rest) { row($0) }
                     }
-                    if let meta, meta.nextCursor != nil, q.isEmpty {
+                    if let meta, meta.nextCursor != nil, q.isEmpty, let e = meta.moreError {
+                        // The next page failed: no auto-retry on scroll, the end of the list offers it.
+                        RetryStrip(error: e, text: e == .offline ? "Sin conexión. No se cargó el resto." : "No se cargó el resto.") {
+                            Task { await store.loadMorePeople(of: personID, following: showFollowing, retry: true) }
+                        }
+                        .padding(.top, 12)
+                    } else if let meta, meta.nextCursor != nil, q.isEmpty {
                         // The end of the rows asks for the next page (one at a time).
                         HStack(spacing: 14) {
                             Skeleton(radius: 999).frame(width: 48, height: 48)
@@ -445,6 +451,9 @@ struct FollowersView: View {
                         }
                         .frame(minHeight: 68)
                         .onAppear { Task { await store.loadMorePeople(of: personID, following: showFollowing) } }
+                        // Re-made per cursor: a page that adds no row (all already listed) leaves
+                        // this row on screen, and it has to ask for the next one.
+                        .id(meta.nextCursor)
                     } else if let n = meta?.anonymous, n > 0, q.isEmpty {
                         // Private accounts, no handle, a block with you: a number, never who.
                         Text(n == 1 ? "y 1 persona más" : "y \(n) personas más")

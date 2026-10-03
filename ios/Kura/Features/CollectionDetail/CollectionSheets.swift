@@ -260,7 +260,7 @@ struct EditCollectionSheet: View {
                 // which; the frase wraps up to 3 lines with its count (critica 2026-09-27 #7).
                 VStack(alignment: .leading, spacing: 6) {
                     Text("nombre").monoLabel(11).padding(.horizontal, 4).accessibilityHidden(true)
-                    GlassField(placeholder: "ponle nombre", text: $name, serif: true, clearable: true,
+                    GlassField(placeholder: "nombre de la colección", text: $name, serif: true, clearable: true,
                                focus: $nameFocused)
                         .submitLabel(.next)
                         .onSubmit { vibeFocused = true }
@@ -415,7 +415,7 @@ struct ShareCollectionSheet: View {
     private func unshareableNote(_ c: KCollection) -> String {
         if store.profilePrivate { return AppStore.privateProfileShareNote }
         if c.privacy == .onlyMe { return "Está en \(Privacy.onlyMe.label): nadie más la puede abrir. Cambia quién la ve para compartirla." }
-        return "Todavía se está guardando. Inténtalo en un momento."
+        return "Todavía se está guardando. Vuelve a intentarlo en un momento."
     }
 
     private func shareAction(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
@@ -486,6 +486,8 @@ struct SharePreviewCard: View {
 struct DeleteCollectionSheet: View {
     @Environment(AppStore.self) private var store
     let collectionID: String
+    /// "Borrar también sus títulos": off by default (founder, 2026-10-01). Same copy on web and Android.
+    @State private var purge = false
 
     var body: some View {
         if let c = store.collection(collectionID) {
@@ -495,20 +497,33 @@ struct DeleteCollectionSheet: View {
                     .font(.kura.news(26))
                     .foregroundStyle(KColor.text)
                     .padding(.horizontal, 8)
-                Text(n == 0
-                     ? "Está vacía. Solo se borra esta colección. No se puede deshacer."
-                     : "\(n == 1 ? "El título conserva su estado" : "Los \(n) títulos conservan su estado") y siguen en tus otras colecciones. Solo se borra esta. No se puede deshacer.")
-                    .font(.kura.ui(15))
-                    .lineSpacing(4)
-                    .foregroundStyle(KColor.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 4)
-                    .padding(.bottom, 14)
+                // With the option on, the row's own note says what happens: "conservan su estado"
+                // above it would say the opposite.
+                if !purge {
+                    Text(n == 0
+                         ? "Está vacía. Solo se borra esta colección. No se puede deshacer."
+                         : "\(n == 1 ? "El título conserva su estado" : "Los \(n) títulos conservan su estado") y siguen en tus otras colecciones. Solo se borra esta. No se puede deshacer.")
+                        .font(.kura.ui(15))
+                        .lineSpacing(4)
+                        .foregroundStyle(KColor.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                }
+                if n > 0 {
+                    SettingsRow(title: "Borrar también sus títulos",
+                                note: "Los que solo están en esta colección pierden su estado, tu reacción y tu reseña. No se puede deshacer.") {
+                        KuraSwitch(label: "Borrar también sus títulos", isOn: $purge.animation(KMotion.short))
+                    }
+                    .background(KColor.s1, in: RoundedRectangle(cornerRadius: KRadius.surface, style: .continuous))
+                    .padding(.top, 8)
+                }
                 SolidButton(title: "Borrar colección") {
                     store.dismissSheet()
-                    store.deleteCollection(c.id)
+                    store.deleteCollection(c.id, purge: purge)
                 }
+                .padding(.top, 14)
                 Button { store.dismissSheet() } label: {
                     Text("Cancelar")
                         .font(.kura.ui(16, .medium))

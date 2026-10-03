@@ -29,6 +29,19 @@ enum DeepLink: Equatable, Codable {
     /// `/c/{uuid}`: a party page (host + members; anyone else gets the same 404).
     case party(String)
 
+    /// The case alone, for the log (no token, handle or id).
+    var shape: String {
+        switch self {
+        case .title: return "title"
+        case .profile: return "profile"
+        case .collection: return "collection"
+        case .ownCollection: return "ownCollection"
+        case .recap: return "recap"
+        case .invite: return "invite"
+        case .party: return "party"
+        }
+    }
+
     static let hosts: Set<String> = ["get-kura.app", "www.get-kura.app", "baclog.app", "www.baclog.app"]
 
     /// Nil = not ours or not a shape the app opens. Every path piece is validated as ONE segment
@@ -157,7 +170,8 @@ extension AppStore {
         if let last = DeepLinkInbox.last, last.url == url, now.timeIntervalSince(last.at) < 1 { return }
         DeepLinkInbox.last = (url, now)
         // A party invite signed out: the landing (public preview + "Entra a kura…") instead of
-        // waiting for a sign-in the person doesn't know they need yet.
+        // waiting for a sign-in the person doesn't know they need yet. (Signed in it's the landing
+        // too — `open(.invite)` — once the tabs are up.)
         if case .invite(let token)? = DeepLink.parse(url), !api.hasSession {
             withAnimation(KMotion.fade) { inviteLanding = token }
             return
@@ -167,7 +181,8 @@ extension AppStore {
             // to the web later) is still a real page — show it there rather than drop the tap.
             // Only https links of our own host get here, and iOS opens an app's OWN universal
             // link in Safari when the app itself asks (no bounce back into Kura).
-            KuraLog.links.info("universal link not handled in-app: \(url.path, privacy: .public)")
+            // The path can carry an invite token or a handle: never in the clear.
+            KuraLog.links.info("universal link not handled in-app: \(url.path, privacy: .private)")
             if url.scheme == "https", let host = url.host?.lowercased(), DeepLink.hosts.contains(host) {
                 UIApplication.shared.open(url)
             }
@@ -194,15 +209,19 @@ extension AppStore {
             else { show(.publicCollection(handle: h, id: id)) }
         case .ownCollection(let id):
             if collection(id) != nil { openOwnCollection(id) }
-            else { showToast(ToastModel(text: "No encontramos esa colección.", kind: .info)) }
+            else { showToast(ToastModel(text: "Esa colección ya no existe.", kind: .info)) }
         case .recap:
             show(.recap())
         case .invite(let token):
-            Task { await openInvite(token) }
+            // Opening a link never joins (founder, 2026-10-01): the landing shows the party and
+            // "Entrar a la fiesta"; only that tap calls `openInvite`.
+            withAnimation(KMotion.fade) { inviteLanding = token }
         case .party(let id):
             show(.party(id))
         }
-        KuraLog.links.info("universal link → \(String(describing: link), privacy: .public) on \(self.tab.rawValue, privacy: .public)")
+        // Only the SHAPE is public: the value (an invite token is a credential; handles and ids
+        // say who looked at what) stays private.
+        KuraLog.links.info("universal link → \(link.shape, privacy: .public) on \(self.tab.rawValue, privacy: .public) \(String(describing: link), privacy: .private)")
     }
 
     /// Called once the tabs are up (`startIfNeeded`).

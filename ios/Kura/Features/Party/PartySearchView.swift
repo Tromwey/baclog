@@ -174,7 +174,7 @@ struct PartySearchView: View {
     private func errorCopy(_ e: KuraAPIError) -> (title: String, note: String) {
         switch e {
         case .rateLimited:
-            return ("un momento.", "Fueron muchas búsquedas seguidas. Espera unos segundos y vuelve a intentarlo.")
+            return ("un momento.", "Demasiadas búsquedas seguidas. Espera un momento y vuelve a buscar.")
         // A 503 is iTunes down — or the server without parties at all (its reads said so too).
         case .unavailable where store.partiesUnavailable:
             return (PartyCopy.unavailableTitle, PartyCopy.unavailable)
@@ -187,11 +187,11 @@ struct PartySearchView: View {
 
     private var remainLabel: String {
         guard let p = party else { return " " }
-        if p.isHost || p.perGuestLimit == nil { return "Pon las que quieras" }
+        if p.isHost || p.perGuestLimit == nil { return "Agrega las que quieras" }
         let limit = p.perGuestLimit ?? 0
         let r = p.viewer.remaining ?? 0
         if limit == 0 { return "Solo para escuchar" }
-        if r == 0 { return limit == 1 ? "Ya pusiste tu canción" : "Ya pusiste tus \(limit)" }
+        if r == 0 { return limit == 1 ? "Ya agregaste tu canción" : "Ya agregaste tus \(limit)" }
         return "Te \(r == 1 ? "queda" : "quedan") \(r) de \(limit)"
     }
 
@@ -226,7 +226,7 @@ struct PartySearchView: View {
     /// "Ya está": say who put it (design toast); otherwise add.
     private func add(_ h: PartySongHit) async {
         if let inParty = h.inParty {
-            store.showToast(ToastModel(text: inParty.mine ? "Ya la pusiste tú." : "Ya está, la puso \(inParty.addedBy.atOrSomeone)", kind: .info))
+            store.showToast(ToastModel(text: inParty.mine ? "Ya la agregaste tú." : "Ya está, la agregó \(inParty.addedBy.atOrSomeone).", kind: .info))
             return
         }
         adding.insert(h.id)

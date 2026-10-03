@@ -41,12 +41,12 @@ struct PartyWelcomeSheet: View {
 
     private func message(host: String, limit: Int?) -> String {
         let put: String = {
-            guard let limit else { return "Pon las canciones que quieras" }
-            return limit == 1 ? "Pon tu canción" : "Pon hasta \(limit) canciones"
+            guard let limit else { return "Agrega las canciones que quieras" }
+            return limit == 1 ? "Agrega tu canción" : "Agrega hasta \(limit) canciones"
         }()
-        if limit == 0 { return "Eres parte de la fiesta de \(host). Aquí se escucha la playlist que armó; todos ven quién puso cuál." }
-        if returning { return "Entraste con tu cuenta de kura. \(put) en la fiesta de \(host); todos ven quién puso cuál." }
-        return "Eres parte de la fiesta de \(host). \(put); todos ven quién puso cuál y las escuchan esa noche."
+        if limit == 0 { return "Eres parte de la fiesta de \(host). Aquí se escucha la playlist que creó; todos ven quién agregó cuál." }
+        if returning { return "Entraste con tu cuenta de kura. \(put) en la fiesta de \(host); todos ven quién agregó cuál." }
+        return "Eres parte de la fiesta de \(host). \(put); todos ven quién agregó cuál y las escuchan esa noche."
     }
 }
 
@@ -61,7 +61,7 @@ struct PartyCapSheet: View {
         let mine = p?.mySongs ?? []
         let limit = max(1, p?.perGuestLimit ?? mine.count)
         VStack(alignment: .leading, spacing: 0) {
-            PartySheetTitle(text: limit == 1 ? "ya pusiste tu canción." : "ya pusiste tus \(limit).")
+            PartySheetTitle(text: limit == 1 ? "ya agregaste tu canción." : "ya agregaste tus \(limit).")
             PartySheetBody(text: "Si quieres cambiar una, quítala aquí y busca otra. Las demás siguen en la colección.")
                 .padding(.top, 10)
             VStack(spacing: 2) {
@@ -221,7 +221,7 @@ struct PartyShareSheet: View {
                 .frame(height: 56)
                 .background(KColor.glassBg, in: RoundedRectangle(cornerRadius: KRadius.field, style: .continuous))
                 .padding(.top, 18)
-                ShareLink(item: url, message: Text("Pon tus canciones en \(p?.name ?? "la fiesta")")) {
+                ShareLink(item: url, message: Text("Agrega tus canciones en \(p?.name ?? "la fiesta")")) {
                     Text("Compartir link")
                         .font(.kura.ui(16, .semibold))
                         .foregroundStyle(KColor.onAccent)
@@ -251,9 +251,9 @@ struct PartyShareSheet: View {
 
     private func note(_ l: Int?) -> String {
         let tail: String = {
-            guard let l else { return "Con cuenta en kura, pone las canciones que quiera." }
+            guard let l else { return "Con cuenta en kura, agrega las canciones que quiera." }
             if l == 0 { return "Es solo para escuchar: nadie más agrega canciones." }
-            return l == 1 ? "Con cuenta en kura, pone 1 canción." : "Con cuenta en kura, pone hasta \(l) canciones."
+            return l == 1 ? "Con cuenta en kura, agrega 1 canción." : "Con cuenta en kura, agrega hasta \(l) canciones."
         }()
         return "Quien abra el link ve la colección en vivo. \(tail)"
     }
@@ -338,7 +338,7 @@ struct PartyLeaveSheet: View {
     }
 
     private func note(host: String, mine: Int) -> String {
-        let songs = mine == 0 ? "" : mine == 1 ? " La canción que pusiste se queda." : " Las \(mine) canciones que pusiste se quedan."
+        let songs = mine == 0 ? "" : mine == 1 ? " La canción que agregaste se queda." : " Las \(mine) canciones que agregaste se quedan."
         return "Deja de aparecer en tus colecciones.\(songs) Para volver, pídele el link a \(host)."
     }
 }
@@ -564,7 +564,7 @@ struct PartyDeleteSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PartySheetTitle(text: "¿borrar la fiesta?")
-            PartySheetBody(text: "Se borra para todos: las canciones y quién puso cuál. El link deja de funcionar.").padding(.top, 10)
+            PartySheetBody(text: "Se borra para todos: las canciones y quién agregó cuál. El link deja de funcionar.").padding(.top, 10)
             VStack(spacing: 8) {
                 PartyFlatButton(title: "Borrar fiesta") {
                     busy = true

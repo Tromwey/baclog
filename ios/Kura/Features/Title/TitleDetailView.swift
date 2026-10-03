@@ -13,7 +13,7 @@ struct TitleDetailView: View {
                        missing: store.missingTitles.contains(titleID),
                        error: store.loadError(.title(titleID)),
                        retry: { Task { await store.loadTitle(titleID, force: true) } },
-                       gone: ("este título ya no está.", "Se quitó del catálogo o dejó de estar disponible.")) { t in
+                       gone: ("este título ya no está disponible.", "Se quitó del catálogo.")) { t in
             detail(t)
         }
         .task(id: titleID) { await store.loadTitle(titleID) }
@@ -30,7 +30,7 @@ struct TitleDetailView: View {
                         TitleHeader(title: t)
                         Group {
                             if let e = store.loadError(.title(t.id)) {
-                                RetryStrip(error: e, text: e == .offline ? nil : "No se pudo cargar toda la ficha.") {
+                                RetryStrip(error: e, text: e == .offline ? "Sin conexión. No se cargó el resto." : "No se cargó el resto.") {
                                     Task { await store.loadTitle(t.id, force: true) }
                                 }
                                 .padding(.horizontal, 12)
@@ -471,7 +471,7 @@ private struct TitleSections: View {
                 }
                 .disabled(busy)
                 if let e = store.loadError(.moreReviews(t.id)), !busy {
-                    Text(e == .offline ? "Sin conexión. Inténtalo de nuevo." : "No se pudieron cargar. Inténtalo de nuevo.")
+                    Text(e == .offline ? "Sin conexión. Revisa tu red y vuelve a intentarlo." : "No se pudieron cargar. Vuelve a intentarlo.")
                         .font(.kura.ui(13)).foregroundStyle(KColor.text2)
                 }
             }
@@ -866,12 +866,25 @@ private struct AlbumSections: View {
         // TIME, and the title stays cached after the user switches app in Ajustes — so re-pin
         // `service` to the CURRENT choice, or the label says Apple Music while the link opens Tidal.
         if let u = t.watch.first?.url { return repinnedService(u) }
-        let q = [t.name, t.creator].compactMap { $0 }.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        // Built with `URLQueryItem` (and ONE encoded path segment for Spotify): a name with `&`,
+        // `#`, `+` or `/` ("AC/DC", "Love & Rockets") used to cut the query or — with a character
+        // `URL(string:)` rejects — crash on the force-unwrap.
+        let q = [t.name, t.creator].compactMap { $0 }.joined(separator: " ")
+        func search(_ base: String, _ name: String) -> URL {
+            var c = URLComponents(string: base)
+            c?.queryItems = [URLQueryItem(name: name, value: q)]
+            // `URLQueryItem` leaves "+" as is, and a server reads it as a space.
+            let encoded = c?.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+            c?.percentEncodedQuery = encoded
+            return c?.url ?? URL(string: base) ?? URL(fileURLWithPath: "/")
+        }
         switch store.musicApp {
-        case "Spotify": return URL(string: "https://open.spotify.com/search/\(q)")!
-        case "YouTube Music": return URL(string: "https://music.youtube.com/search?q=\(q)")!
-        case "Tidal": return URL(string: "https://listen.tidal.com/search?q=\(q)")!
-        default: return URL(string: "https://music.apple.com/mx/search?term=\(q)")!
+        case "Spotify":
+            let home = "https://open.spotify.com/search"
+            return PathSegment.encode(q).flatMap { URL(string: "\(home)/\($0)") } ?? URL(string: home) ?? URL(fileURLWithPath: "/")
+        case "YouTube Music": return search("https://music.youtube.com/search", "q")
+        case "Tidal": return search("https://listen.tidal.com/search", "q")
+        default: return search("https://music.apple.com/mx/search", "term")
         }
     }
 

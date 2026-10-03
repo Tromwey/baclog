@@ -13,17 +13,24 @@ extension AppStore {
         loadState = .loading
         loadErrors[.library] = nil
         let session = s
+        let readStamp = session.readStamp
         do {
             async let m = api.me()
             async let cols = api.collections()
             async let states = api.myTitles()
-            async let fol = allPeople(.following)
-            let (account, library, myStates, followed) = try await (m, cols, states, fol)
+            // Secondary: without it the rows say "Seguir" until the list is read again (the next
+            // launch, or opening Siguiendo — `loadPeopleList`); it never blocks the library.
+            async let fol: (people: [Person], partial: Bool)? = try? await allPeople(.following)
+            let (account, library, myStates) = try await (m, cols, states)
+            let followedOrNil = await fol
             try check(session)
+            let followed = followedOrNil?.people ?? []
+            let followingPartial = followedOrNil?.partial ?? false
+            if followedOrNil == nil { KuraLog.api.error("bootstrap: me/following failed; starting with what is known") }
             // The splash couldn't ask (offline launch): an account that never finished O1b goes
             // there now, not to tabs with an empty "@".
             if !route(after: account) {
-                applyMe(account)
+                applyMe(account, readAt: readStamp)
                 return
             }
             loaded(.library)
@@ -43,7 +50,10 @@ extension AppStore {
             }
             s.libraryLoaded = true
             if !emptyLibrary { migrateLegacyCuration() }
-            applyMe(account)
+            applyMe(account, readAt: readStamp)
+            // `me/following` came short (a page this build couldn't read): opening Siguiendo reads
+            // it again instead of taking this for the whole list.
+            if followingPartial, !me.id.isEmpty { session.stalePeopleLists.insert(AppStore.peopleListKey(of: me.id, following: true)) }
             // Still AWAITED before `.loaded`: the collection cards and "no puedo esperar" draw only
             // the titles they know (`titles(in:)` drops the missing ones), so flipping to `.loaded`
             // first would paint half-empty cards and the "Faltan títulos" strip for a beat.
@@ -254,25 +264,34 @@ extension AppStore {
     }
 
     /// Descubrir por formato (2a–2c): `GET /discover/formats/{format}`, once per key per session.
-    /// Fail-open like the web: an error leaves an EMPTY shelf (the page words it), never a block.
-    func loadDiscoverFormat(_ format: MediaFormat, time: Int? = nil) async {
+    /// A failure (the route can answer `503 unavailable`) is NOT cached as an empty shelf: it is
+    /// recorded on `.discoverFormat(key)` and the page offers Reintentar.
+    /// `titlesUnavailable: true` (the shelf's source failed, the Kuradas came) is the same failure
+    /// for the shelf: the payload is kept ONLY for its Kuradas, the key stays unread (the next
+    /// call asks again) and `.discoverFormat(key)` carries the error behind Reintentar.
+    func loadDiscoverFormat(_ format: MediaFormat, time: Int? = nil, retry: Bool = false) async {
         let key = Self.formatKey(format, time: time)
-        guard discoverFormats[key] == nil else { return }
+        guard discoverFormats[key]?.titlesUnavailable ?? true,
+              retry || loadErrors[.discoverFormat(key)] == nil else { return }
+        loadErrors[.discoverFormat(key)] = nil
         let session = s
         var payload: DiscoverFormatPayload
         do {
             payload = try await api.discoverFormat(format, time: time)
+            try check(session)
+            loaded(.discoverFormat(key))
         } catch {
-            guard s === session, !(error is CancellationError), (error as? KuraAPIError) != .cancelled else { return }
-            payload = DiscoverFormatPayload(format: format, time: time)
+            guard s === session else { return }
+            fail(.discoverFormat(key), error)
+            return
         }
-        guard s === session else { return }
         for t in payload.allTitles { register(t) }
         // Nothing already in your library (the shelves are charts, the server doesn't know you):
         // filtered once on load, so a title saved from the page stays until the next visit.
         let mine = libraryIDs
         payload.titles.removeAll { mine.contains($0.title.id) }
         discoverFormats[key] = payload
+        if payload.titlesUnavailable { loadErrors[.discoverFormat(key)] = .unavailable }
     }
 
     /// `GET /search` + `GET /people/search`, in parallel. Stale answers are dropped.
@@ -286,15 +305,17 @@ extension AppStore {
         defer { if session.searchQuery == query { session.searchLoading = false } }
         do {
             async let t = api.search(query, kind: kind)
-            async let p = api.people(kind: .search(query), cursor: nil)
-            let (results, page) = try await (t, p)
+            // People are the secondary half: their failure must not lose the titles.
+            async let p: [Person] = ((try? await api.people(kind: .search(query), cursor: nil))?.items) ?? []
+            let results = try await t
+            let foundPeople = await p
             try check(session)
             guard searchQuery == query else { return }
             online()
             for r in results { registerPartial(r.title) }
-            for person in page.items { register(person) }
+            for person in foundPeople { register(person) }
             searchResults = results
-            searchPeople = page.items
+            searchPeople = foundPeople
         } catch {
             guard s === session, searchQuery == query else { return }
             searchError = noteError(error)

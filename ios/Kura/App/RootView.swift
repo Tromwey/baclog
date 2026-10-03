@@ -28,7 +28,8 @@ struct RootView: View {
             // A sheet is modal: VoiceOver never wanders into what's behind it.
             .accessibilityHidden(store.sheet != nil || store.inviteLanding != nil || store.partyExport != nil)
 
-            // A party link (`get-kura.app/f/{token}`) signed out, or a dead one: over every phase.
+            // A party link (`get-kura.app/f/{token}`), signed in or out, live or dead: over every
+            // phase. Signed in it's where "Entrar a la fiesta" is (a link never joins by itself).
             if let token = store.inviteLanding {
                 InviteLandingView(token: token)
                     .transition(.opacity)
@@ -64,8 +65,10 @@ struct RootView: View {
                 store.sceneBecameActive()
                 // Coming back from the iPhone's Ajustes (where a "no" to notifications is undone).
                 if store.phase == .main { Task { await store.refreshNotificationStatus() } }
-            case .inactive, .background:
+            case .inactive:
                 store.sceneWentInactive()
+            case .background:
+                store.sceneWentInactive(background: true)
             @unknown default:
                 break
             }
@@ -169,6 +172,8 @@ private struct TabStack: View {
         NavigationStack(path: Binding(get: { store.path(tab) }, set: { store.paths[tab] = $0 })) {
             root
                 .toolbar(.hidden, for: .navigationBar)
+                // The edge swipe back survives the hidden bar — for THIS stack only.
+                .background(PopGestureKeeper().frame(width: 0, height: 0).accessibilityHidden(true))
                 .navigationDestination(for: Route.self) { route in
                     RouteView(route: route)
                         .toolbar(.hidden, for: .navigationBar)
@@ -239,6 +244,7 @@ struct SheetContent: View {
         case .titleActions(let t, let c): TitleActionsSheet(titleID: t, collectionID: c)
         case .moveTo(let t, let from): MoveToSheet(titleID: t, fromID: from)
         case .complete(let t, let focus): CompleteSheet(titleID: t, focusReview: focus)
+        case .reviewLoss(let t, let mark): ReviewLossSheet(titleID: t, mark: mark)
         case .saveTo(let t): SaveToSheet(titleID: t)
         case .titleMore(let t): TitleMoreSheet(titleID: t)
         case .personOptions(let p): PersonOptionsSheet(personID: p)

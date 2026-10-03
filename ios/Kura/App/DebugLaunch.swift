@@ -375,6 +375,8 @@ enum MockPrefill {
     static var email: String { pick("mariel@correo.com") }
     static var handle: String { pick(MockData.me.handle) }
     static var name: String { pick(MockData.me.name) }
+    static var birthDay: String { pick("14") }
+    static var birthMonth: String { pick("3") }
     static var birthYear: String { pick("1998") }
 
     private static func pick(_ value: @autoclosure () -> String) -> String { KuraRuntime.usesMock ? value() : "" }
@@ -382,6 +384,8 @@ enum MockPrefill {
     static let email = ""
     static let handle = ""
     static let name = ""
+    static let birthDay = ""
+    static let birthMonth = ""
     static let birthYear = ""
     #endif
 }

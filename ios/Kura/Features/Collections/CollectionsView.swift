@@ -873,7 +873,7 @@ struct NewCollectionSheet: View {
                 if addingTitleID == nil {
                     kindPicker
                 }
-                GlassField(placeholder: party ? "la fiesta de…" : "ponle nombre", text: $name, serif: true, focus: $focused)
+                GlassField(placeholder: party ? "la fiesta de…" : "nombre de la colección", text: $name, serif: true, focus: $focused)
                     .submitLabel(.done)
                     .onSubmit(create)
                     .onChange(of: name) { _, v in

@@ -216,7 +216,7 @@ struct MergeAccountView: View {
                             .disabled(busy)
                     }
                     InlineError(text: store.mergeError).padding(.horizontal, 8)
-                    Text("Te mandamos un código de seis dígitos a ese correo.")
+                    Text("Te enviamos un código de seis dígitos a ese correo.")
                         .font(.kura.ui(13)).foregroundStyle(KColor.text2)
                         .frame(maxWidth: .infinity)
                         .multilineTextAlignment(.center)
@@ -265,7 +265,7 @@ struct MergeCodeView: View {
                     .foregroundStyle(KColor.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
-                (Text("Lo mandamos a ").foregroundColor(KColor.text2)
+                (Text("Lo enviamos a ").foregroundColor(KColor.text2)
                  + Text(store.mergeEmail).foregroundColor(KColor.text))
                     .font(.kura.ui(15))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -284,7 +284,7 @@ struct MergeCodeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 // After a 429 the button waits out `retryAfterSeconds` (up to an hour), counting down.
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    let wait = store.mergeRetryAt.map { max(0, $0.timeIntervalSince(ctx.date)) } ?? 0
+                    let wait = store.mergeWait(for: store.mergeEmail, at: ctx.date)
                     Button {
                         Task { _ = await store.requestMergeCode(email: store.mergeEmail); code = "" }
                     } label: {
@@ -304,7 +304,9 @@ struct MergeCodeView: View {
         }
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
-            store.mergeError = nil
+            // The cooldown note is what brought you here ("the code already sent still works"):
+            // it stays. Anything else is from another screen.
+            if store.mergeError != AppStore.mergeCooldownNote { store.mergeError = nil }
             focused = true
         }
     }

@@ -30,6 +30,9 @@ enum SheetRoute: Identifiable, Hashable {
     case titleActions(titleID: String, collectionID: String?)
     case moveTo(titleID: String, fromID: String)
     case complete(titleID: String, focusReview: Bool)
+    /// "tu reseña se borra con la reacción." — asked before a mark that leaves the title without
+    /// a reaction (`completed` / nil) when you have a review of it (`ReviewLossSheet`).
+    case reviewLoss(titleID: String, mark: Mark?)
     case saveTo(String)
     case titleMore(String)
     case personOptions(String)
@@ -102,6 +105,16 @@ struct ToastModel: Identifiable, Equatable {
     var text: String
     var kind: Kind
     var action: (() -> Void)?
+    /// Runs once when the toast leaves WITHOUT its action having been used (time, another toast
+    /// taking its place, a dismissal): what a "Reintentar" nobody tapped has to put back. Owned by
+    /// `AppStore.showToast`; set after `init` (kept out of it so the trailing closure stays `action`).
+    var onExpire: (() -> Void)?
+
+    init(text: String, kind: Kind, action: (() -> Void)? = nil) {
+        self.text = text
+        self.kind = kind
+        self.action = action
+    }
 
     static func == (a: ToastModel, b: ToastModel) -> Bool { a.id == b.id }
 }
@@ -126,6 +139,8 @@ enum LoadKey: Hashable {
     case feed
     case feedMore
     case discover
+    /// `GET /discover/formats/{format}` (`AppStore.formatKey`).
+    case discoverFormat(String)
     case person(String)
     case peopleList(String)
     case recap
@@ -178,6 +193,11 @@ final class SessionData {
     var following: Set<String> = []
     /// Reviews by title id, in display order (`reviewTitleIndex` finds one by its own id).
     var reviewsByTitle: [String: [Review]] = [:]
+    /// Your review a mark without a reaction took off the screen, until the server answers
+    /// (`ReviewHold`, `AppStore+Reactions`).
+    var reviewHold = ReviewHold<Review>()
+    /// The "Reseñaste" events a held review took off your feed, by title (they go back with it).
+    @ObservationIgnored var heldReviewEvents: [String: [(index: Int, event: FeedEvent)]] = [:]
     var feed: [FeedEvent] = []
     var revealedSpoilers: Set<String> = []
     var lastUsedCollectionID: String?
@@ -200,6 +220,8 @@ final class SessionData {
     var peopleLists: [String: [Person]] = [:]
     /// Paging, the anonymous rest and a "not for you" answer of someone else's lists, by the same key.
     var peopleListMeta: [String: PeopleListMeta] = [:]
+    /// Lists a follow / unfollow of this account made old: `loadPeopleList` re-reads them.
+    @ObservationIgnored var stalePeopleLists: Set<String> = []
     var feedLoaded = false
     var feedLoading = false
     var feedCursor: String?
@@ -238,7 +260,8 @@ final class SessionData {
     var mergeProof: MergeProof?
     var mergeBusy = false
     var mergeError: String?
-    var mergeRetryAt: Date?
+    /// After a 429 of `me/merge/otp/request`: no new code for THAT address until `until`.
+    var mergeRetry: (email: String, until: Date)?
     var reportedReviews: Set<String> = []
 
     // Colecciones de fiesta (`AppStore+Parties`): never `collections` — their own maps.
@@ -287,6 +310,34 @@ final class SessionData {
     @ObservationIgnored var inflight: [String: Int] = [:]
     /// The last write queued per key (`AppStore.WriteKey`): the next one for the same key waits for it.
     @ObservationIgnored var writeChains: [String: (token: UUID, task: Task<Void, Never>)] = [:]
+    /// Generations, superseded reverts and unconfirmed keys of the optimistic writes
+    /// (`sync(gen:)`), keyed by canonical write key. The rules live in `WriteGenerations`.
+    @ObservationIgnored let gens = WriteGenerations()
+
+    func beginWrite(_ key: String) -> Int { gens.begin(canonicalWriteKey(key)) }
+    func isCurrentWrite(_ key: String, _ gen: Int) -> Bool { gens.isCurrent(canonicalWriteKey(key), gen) }
+    func writePending(_ key: String) -> Bool { gens.isPending(canonicalWriteKey(key)) }
+    /// Taken when a read of `me` LEAVES; `applyMe(_:readAt:)` checks it against the landings.
+    var readStamp: Int { gens.stamp }
+    func writeLandedSince(_ key: String, _ stamp: Int) -> Bool { gens.landedSince(canonicalWriteKey(key), stamp) }
+    func writeLanded(_ key: String, _ gen: Int) { gens.landed(canonicalWriteKey(key), gen) }
+    /// A failed write was answered; false = a newer write superseded it (its `revert` now waits).
+    func writeFailed(_ key: String, _ gen: Int, revert: WriteGenerations.Revert?) -> Bool {
+        gens.failure(canonicalWriteKey(key), gen, revert: revert)
+    }
+    func lastWriteFailed(_ key: String) -> Bool { gens.lastFailed(canonicalWriteKey(key)) }
+    func pushStaleRevert(_ key: String, _ revert: @escaping WriteGenerations.Revert) {
+        gens.pushStale(canonicalWriteKey(key), revert)
+    }
+    func settleFailedWrite(_ key: String, _ gen: Int) { gens.settleFailure(canonicalWriteKey(key), gen) }
+    func settleWrite(_ key: String, _ gen: Int) { gens.settle(canonicalWriteKey(key), gen) }
+    /// `adopt`: everything keyed by a collection's local id follows it to the server id.
+    func rekeyWrites(suffix: String, serverID: String) {
+        func moved(_ k: String) -> String { String(k.dropLast(suffix.count)) + "|\(serverID)" }
+        for (k, c) in writeChains where k.hasSuffix(suffix) { writeChains[k] = nil; writeChains[moved(k)] = c }
+        gens.rekey(suffix: suffix, serverID: serverID)
+    }
+
     /// What `LocalPrefs` holds for THIS account; `localDirty` = memory is ahead of it.
     @ObservationIgnored var local = LocalPrefs.Payload()
     @ObservationIgnored var localDirty = false
@@ -330,6 +381,9 @@ final class SessionData {
         partyExportTask = nil
         deferredWrites = [:]
         writeChains = [:]
+        gens.reset()
+        reviewHold.reset()
+        heldReviewEvents = [:]
         pendingCollections = [:]
     }
 }
@@ -362,6 +416,7 @@ final class AppStore {
     private var clock: Date
     @ObservationIgnored private var clockTask: Task<Void, Never>?
     @ObservationIgnored var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var sessionRefreshing = false
 
     // MARK: Phase / navigation
     var phase: AppPhase = .splash
@@ -390,6 +445,22 @@ final class AppStore {
     /// Entrance flow (O1c/O1a): the email the code was sent to, busy flag, inline error.
     var authEmail: String { get { s.authEmail } set { s.authEmail = newValue } }
     var authBusy = false
+    /// After a 429 of `POST /auth/otp/request`: no new code until `until`. `email` nil = whoever
+    /// asks from here (`ip_limit`); else only that address (`cooldown`, `hourly_cap`).
+    var otpRetry: (email: String?, until: Date, cooldown: Bool)?
+    /// The wait that blocks ASKING from the entrance: only when no code went out. During a
+    /// `cooldown` the button stays live — tapping it lands on "tu código", where the one already
+    /// sent still works.
+    func otpBlockedWait(for email: String, at now: Date = Date()) -> TimeInterval {
+        otpRetry?.cooldown == true ? 0 : otpWait(for: email, at: now)
+    }
+    /// Seconds left before `email` can ask for another code (0 = now).
+    func otpWait(for email: String, at now: Date = Date()) -> TimeInterval {
+        guard let r = otpRetry else { return 0 }
+        let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard r.email == nil || r.email == e else { return 0 }
+        return max(0, r.until.timeIntervalSince(now))
+    }
     var authError: String? { get { s.authError } set { s.authError = newValue } }
     /// `GET /auth/providers`: which buttons the entrance paints. nil = not asked yet; a failure is
     /// `.emailOnly` (correo only, never a button that doesn't work) and is asked again next time.
@@ -500,7 +571,13 @@ final class AppStore {
     var mergeBusy: Bool { get { s.mergeBusy } set { s.mergeBusy = newValue } }
     var mergeError: String? { get { s.mergeError } set { s.mergeError = newValue } }
     /// A 429 on `merge/otp/request` (60 s cooldown or 3 codes/hour per email): no new code before this.
-    var mergeRetryAt: Date? { get { s.mergeRetryAt } set { s.mergeRetryAt = newValue } }
+    var mergeRetry: (email: String, until: Date)? { get { s.mergeRetry } set { s.mergeRetry = newValue } }
+    /// Seconds left before `email` can ask for another merge code (0 = now). Keyed by address:
+    /// the wait of one email never blocks asking for another.
+    func mergeWait(for email: String, at now: Date = Date()) -> TimeInterval {
+        guard let r = mergeRetry, r.email == email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() else { return 0 }
+        return max(0, r.until.timeIntervalSince(now))
+    }
     /// Reviews you reported this session: the card folds to "Gracias. La revisamos." (like the web).
     var reportedReviews: Set<String> { get { s.reportedReviews } _modify { yield &s.reportedReviews } set { s.reportedReviews = newValue } }
     /// ⚠️ Solo mock / no-op en live: la campana del feed (31a). En live siempre está vacía — la API
@@ -542,7 +619,10 @@ final class AppStore {
         set {
             guard _profilePrivate != newValue else { return }
             _profilePrivate = newValue
-            patchMe(MePatch(isPublic: !newValue))
+            patchMe(MePatch(isPublic: !newValue), field: "isPublic") { [weak self] in
+                // Only this write's own value goes back (a newer choice already replaced it).
+                if self?._profilePrivate == newValue { self?._profilePrivate = !newValue }
+            }
         }
     }
 
@@ -551,7 +631,10 @@ final class AppStore {
         set {
             guard _notifyReleases != newValue else { return }
             _notifyReleases = newValue
-            patchMe(MePatch(notifyReleases: newValue))
+            patchMe(MePatch(notifyReleases: newValue), field: "notifyReleases") { [weak self] in
+                // Only this write's own value goes back (a newer choice already replaced it).
+                if self?._notifyReleases == newValue { self?._notifyReleases = !newValue }
+            }
             if newValue { askNotificationsIfNeeded() }
         }
     }
@@ -563,7 +646,10 @@ final class AppStore {
         set {
             guard _notifyFollowers != newValue else { return }
             _notifyFollowers = newValue
-            patchMe(MePatch(notifyFollowers: newValue))
+            patchMe(MePatch(notifyFollowers: newValue), field: "notifyFollowers") { [weak self] in
+                // Only this write's own value goes back (a newer choice already replaced it).
+                if self?._notifyFollowers == newValue { self?._notifyFollowers = !newValue }
+            }
             if newValue { askNotificationsIfNeeded() }
         }
     }
@@ -577,14 +663,19 @@ final class AppStore {
             guard old != newValue else { return }
             _followListsVisibility = newValue
             let session = s
-            sync(key: WriteKey.mePatch, onError: { [weak self] e in
+            // Only this write's own value goes back (a newer choice already replaced it). Passed
+            // as `revert` too: superseded by a newer choice that ALSO fails, it still has to run.
+            let revert: @MainActor () -> Void = { [weak self] in
+                guard let self, self.s === session, self._followListsVisibility == newValue else { return }
+                self._followListsVisibility = old
+            }
+            sync(key: WriteKey.mePatch, gen: WriteKey.meField("followListsVisibility"), onError: { [weak self] e in
                 guard let self, self.s === session else { return true }
-                // Only this write's own value goes back (a newer choice already replaced it).
-                if self._followListsVisibility == newValue { self._followListsVisibility = old }
+                revert()
                 if e == .cancelled || e == .unauthorized { return true }
                 self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar quién ve tus listas."), kind: .info))
                 return true
-            }) { [weak self] api in
+            }, revert: revert) { [weak self] api in
                 let store = self
                 let m = try await api.updateMe(MePatch(followListsVisibility: newValue.rawValue))
                 await MainActor.run { store?.on(session) { store?.account = m } }
@@ -598,16 +689,22 @@ final class AppStore {
         set {
             guard _notifyRecap != newValue else { return }
             _notifyRecap = newValue
-            patchMe(MePatch(notifyRecap: newValue))
+            patchMe(MePatch(notifyRecap: newValue), field: "notifyRecap") { [weak self] in
+                // Only this write's own value goes back (a newer choice already replaced it).
+                if self?._notifyRecap == newValue { self?._notifyRecap = !newValue }
+            }
         }
     }
 
     var musicApp: String {
         get { _musicApp }
         set {
-            guard _musicApp != newValue else { return }
+            let old = _musicApp
+            guard old != newValue else { return }
             _musicApp = newValue
-            patchMe(MePatch(preferredService: AppStore.serviceWire(newValue)))
+            patchMe(MePatch(preferredService: AppStore.serviceWire(newValue)), field: "preferredService") { [weak self] in
+                if self?._musicApp == newValue { self?._musicApp = old }
+            }
         }
     }
 
@@ -670,6 +767,12 @@ final class AppStore {
     @ObservationIgnored var debugFeedAnchor: String?
 
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    /// The `onExpire` of the toast on screen, until its action is used or it runs (`expireToast`).
+    @ObservationIgnored private var toastExpiry: (id: UUID, run: () -> Void)?
+    /// The "Reintentar" on screen and the write key it would resend (`sync(gen:)`).
+    @ObservationIgnored private var retryToast: (id: UUID, key: String)?
+    /// `onboardingRequired` is re-reading `me` (one at a time).
+    @ObservationIgnored private var onboardingRecheck = false
     /// Collections created optimistically: local id → the server id once it exists.
     var pendingCollections: [String: Task<String, Error>] { get { s.pendingCollections } _modify { yield &s.pendingCollections } set { s.pendingCollections = newValue } }
     /// Removals waiting for the Deshacer window to close (5 s).
@@ -724,13 +827,44 @@ final class AppStore {
     func sceneBecameActive() {
         tickClock()
         startClock()
+        refreshSessionIfNeeded()
+    }
+
+    /// The bearer is only renewed when it has < 7 days left (`needsRefresh`); the splash asks
+    /// once per launch, and an app that lives for weeks in the background never sees a splash
+    /// again. So every return to the foreground asks too. Quiet: only a 401 has consequences
+    /// (the session really ended); offline or a 5xx just waits for the next time.
+    private func refreshSessionIfNeeded() {
+        guard phase == .main, !signingOut, !sessionRefreshing, api.hasSession, api.needsRefresh else { return }
+        sessionRefreshing = true
+        let session = s
+        let api = self.api
+        Task { [weak self] in
+            var failure: Error?
+            var fresh: Me?
+            do { fresh = try await api.refresh() } catch { failure = error }
+            guard let self else { return }
+            self.sessionRefreshing = false
+            guard self.s === session else { return }
+            if let fresh { self.account = fresh }
+            if let failure, (failure as? KuraAPIError) == .unauthorized { self.noteError(failure) }
+        }
     }
 
     /// The scene left the foreground: stop the minute timer and write what's pending to disk.
-    func sceneWentInactive() {
+    /// `background` (not the passing `.inactive` of Control Center, the app switcher or a system
+    /// prompt — the Deshacer is still on screen there and must keep working): the removals waiting
+    /// for their Deshacer window go out now, inside a background task, because a suspended app's
+    /// timers don't run and a killed one never sends them. The Deshacer that promised to cancel
+    /// them leaves with them.
+    func sceneWentInactive(background: Bool = false) {
         clockTask?.cancel()
         clockTask = nil
         flushLocal()
+        guard background, !deferredWrites.isEmpty else { return }
+        let writes = flushDeferredRemovals()
+        if toast?.kind == .undo { dismissToast() }
+        BackgroundGrace.run("kura.removals") { for w in writes { await w.value } }
     }
 
     /// Live only — the mock's clock is fixed (captures) or set by `DebugLaunch`.
@@ -855,19 +989,37 @@ final class AppStore {
         }
     }
 
-    func applyMe(_ m: Me) {
+    /// A read of `me` never paints over a field whose `PATCH /me` is still out
+    /// (`WriteGenerations.isPending` on its `WriteKey.meField`): the read left before that write
+    /// and carries the old value; the write's own answer (or its revert) settles the field.
+    ///
+    /// `readAt` (a READ of `me` passes `SessionData.readStamp` taken when it left; a write's own
+    /// answer passes nothing): the same holds for a field whose write LANDED after the read left
+    /// — the read raced it and may carry the value from before, with nothing pending to hold it
+    /// off (`WriteGenerations.landedSince`). The @ (`WriteKey.username`) follows both rules.
+    func applyMe(_ m: Me, readAt stamp: Int? = nil) {
+        let session = s
+        func held(_ key: String) -> Bool {
+            session.writePending(key) || (stamp.map { session.writeLandedSince(key, $0) } ?? false)
+        }
+        func pending(_ field: String) -> Bool { held(WriteKey.meField(field)) }
         account = m
         welcomeSeen = true
         var p = m.person
         if p.hexes.isEmpty, let id = p.featuredTitleID, let t = titles[id] { p.hexes = t.palette }
+        if pending("name"), !me.name.isEmpty { p.name = me.name; p.initials = me.initials }
+        // The screen's @ wins while its write is out (or landed after this read left).
+        if held(WriteKey.username), !me.handle.isEmpty, me.handle != p.handle {
+            p = Self.rehandled(p, me.handle)
+        }
         me = p
         if !p.id.isEmpty { people[p.id] = p }
-        _profilePrivate = !m.isPublic
-        _notifyReleases = m.notifyReleases
-        _notifyRecap = m.notifyRecap
-        _notifyFollowers = m.notifyFollowers
-        _followListsVisibility = m.followListsVisibility
-        if let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
+        if !pending("isPublic") { _profilePrivate = !m.isPublic }
+        if !pending("notifyReleases") { _notifyReleases = m.notifyReleases }
+        if !pending("notifyRecap") { _notifyRecap = m.notifyRecap }
+        if !pending("notifyFollowers") { _notifyFollowers = m.notifyFollowers }
+        if !pending("followListsVisibility") { _followListsVisibility = m.followListsVisibility }
+        if !pending("preferredService"), let s = m.preferredService { _musicApp = AppStore.serviceName(s) }
     }
 
     // MARK: Reads bound to their session
@@ -951,13 +1103,47 @@ final class AppStore {
     @discardableResult
     func noteError(_ error: Error) -> KuraAPIError {
         if error is CancellationError { return .cancelled }
-        let e = (error as? KuraAPIError) ?? .server(String(describing: error))
+        // Anything that isn't the API's own error is internal text: it never carries a message.
+        let e = (error as? KuraAPIError) ?? .server("")
         switch e {
-        case .unauthorized: sessionExpired()
+        case .unauthorized:
+            // The session ended only if the token is gone (`APIClient` forgets it when the 401
+            // answered the CURRENT bearer). A 401 for a bearer that a refresh already replaced is
+            // a failed request, not a dead session: it comes back as a retryable error, so no
+            // caller mistakes it for "already at the entrance".
+            if api.hasSession { return .staleBearer }
+            sessionExpired()
         case .offline: offline = true
+        case .forbidden where e.isOnboardingRequired: onboardingRequired()
         default: break
         }
         return e
+    }
+
+    /// `403 forbidden / onboarding_required` on ANY request — the one place that answers it: say
+    /// so, re-read `me` and let `route(after:)` take the account to what it's missing (O1b, or
+    /// "solo falta tu fecha de nacimiento" for an account that has a name and no year). Callers only put their
+    /// optimistic change back; none of them offers "Reintentar" (it could only fail again).
+    static let onboardingRequiredNote = "Termina tu registro para continuar."
+
+    func onboardingRequired() {
+        guard phase == .main, !onboardingRecheck else { return }
+        onboardingRecheck = true
+        showToast(ToastModel(text: Self.onboardingRequiredNote, kind: .info))
+        let session = s
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.onboardingRecheck = false }
+            let stamp = session.readStamp
+            guard let m = try? await self.api.me(), self.s === session, self.phase == .main else { return }
+            self.applyMe(m, readAt: stamp)
+            guard m.handle == nil || !m.onboarded else { return }
+            // Out of the tabs: nothing of them stays over the onboarding.
+            self.sheet = nil
+            self.inviteLanding = nil
+            self.authError = nil
+            self.route(after: m)
+        }
     }
 
     func online() { if offline { offline = false } }
@@ -1171,14 +1357,27 @@ final class AppStore {
 
     func showToast(_ t: ToastModel) {
         toastTask?.cancel()
+        // The toast this one replaces leaves without its action.
+        expireToast()
+        var t = t
+        let id = t.id
+        if let onExpire = t.onExpire {
+            toastExpiry = (id, onExpire)
+            t.onExpire = nil
+            if let act = t.action {
+                t.action = { [weak self] in
+                    if self?.toastExpiry?.id == id { self?.toastExpiry = nil }
+                    act()
+                }
+            }
+        }
         // A failed write (every Reintentar toast) is the app's one `error` haptic: fired here, once.
         if t.kind == .retry { KHaptic.play(.error) }
         withAnimation(KMotion.short) { toast = t }
         // VoiceOver doesn't see a view slide in: say it.
-        var said = AttributedString(t.action == nil ? t.text : "\(t.text). \(t.kind == .retry ? "Reintentar" : "Deshacer") disponible")
+        var said = AttributedString(t.action == nil ? t.text : "\(t.text.hasSuffix(".") ? String(t.text.dropLast()) : t.text). \(t.kind == .retry ? "Reintentar" : "Deshacer") disponible")
         said.accessibilitySpeechAnnouncementPriority = .high
         AccessibilityNotification.Announcement(said).post()
-        let id = t.id
         let window = Self.undoWindow
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: window)
@@ -1186,8 +1385,16 @@ final class AppStore {
             await MainActor.run {
                 guard let self, self.toast?.id == id else { return }
                 withAnimation(KMotion.short) { self.toast = nil }
+                self.expireToast()
             }
         }
+    }
+
+    /// Runs the pending `onExpire` (once). A toast whose action was used has none left.
+    private func expireToast() {
+        guard let expiry = toastExpiry else { return }
+        toastExpiry = nil
+        expiry.run()
     }
 
     func undoToast(_ text: String, undo: @escaping () -> Void) {
@@ -1197,7 +1404,10 @@ final class AppStore {
         })
     }
 
-    func dismissToast() { withAnimation(KMotion.short) { toast = nil } }
+    func dismissToast() {
+        withAnimation(KMotion.short) { toast = nil }
+        expireToast()
+    }
 
     /// Runs an API write; on failure offers "Reintentar" (with the error's own
     /// text when it says what to do). `onError` lets a caller revert its
@@ -1211,13 +1421,36 @@ final class AppStore {
     /// Everything is bound to the session that queued it: once the account changes (sign-out, 401),
     /// its late failures and "Reintentar" never surface — a retry would run the old account's write
     /// with the new account's token.
+    ///
+    /// `revert` puts the caller's optimistic change back (only while it still shows what this write
+    /// set). It runs when the failure can't be retried (404 / 501, with a note) and when the
+    /// "Reintentar" toast leaves without having been tapped — the screen never keeps showing a
+    /// change the server doesn't have. A retry applies nothing again: it only resends, so `revert`
+    /// must not have run by then (it hasn't: the action clears the toast's expiry first).
+    ///
+    /// An `onError` that handles the failure itself (returns true) must STILL pass its undo as
+    /// `revert`: that is the only copy `sync` can keep for a failure a newer write superseded.
+    /// `notFoundLands`: a removal, where a 404 is the outcome asked for (never for a mark or an add).
     func sync(key: String? = nil,
+                      gen genKey: String? = nil,
                       titleID: String? = nil,
                       onError: (@MainActor (KuraAPIError) -> Bool)? = nil,
+                      revert: (@MainActor () -> Void)? = nil,
+                      notFoundLands: Bool = false,
                       _ op: @escaping @Sendable (KuraAPI) async throws -> Void) {
         let api = self.api
         let session = s
         let key = key.map(session.canonicalWriteKey)
+        // `gen`: what this write is the newest version OF (the mark of a title, a membership, one
+        // field of `PATCH /me`). Usually the chain key; `nil` = no generation (always current).
+        let gen = genKey.map(session.beginWrite)
+        let isCurrent: @MainActor () -> Bool = {
+            guard let genKey, let gen else { return true }
+            return session.isCurrentWrite(genKey, gen)
+        }
+        // A "Reintentar" still on screen for an older write of the same thing would resend a value
+        // this write just replaced: it leaves (its revert is stale by now, see `onExpire`).
+        if let genKey { supersedeRetryToast(genKey) }
         if let titleID { session.inflight[titleID, default: 0] += 1 }
         let previous = key.flatMap { session.writeChains[$0]?.task }
         let token = UUID()
@@ -1238,19 +1471,74 @@ final class AppStore {
                 }
             }
             guard let self, self.s === session else { return }
-            guard let failure else { self.online(); return }
-            let e = self.noteError(failure)
-            if let onError, onError(e) { return }
-            switch e {
-            case .unauthorized, .notFound, .unsupported, .cancelled:
+            guard let failure else {
+                if let genKey, let gen { session.writeLanded(genKey, gen) }
+                self.online()
                 return
+            }
+            let e = self.noteError(failure)
+            // `noteError` may have ended the session right here (a 401 → `sessionExpired`): what
+            // follows would run over the NEXT account's data.
+            guard self.s === session else { return }
+            if e == .cancelled || e == .unauthorized {
+                _ = onError?(e)
+                if let genKey, let gen { session.settleWrite(genKey, gen) }
+                return
+            }
+            // A removal answered 404: already out, which is what was asked for. It landed.
+            if notFoundLands, e == .notFound {
+                if let genKey, let gen { session.writeLanded(genKey, gen) }
+                return
+            }
+            // Superseded: a newer write of the same thing owns the screen. Nothing goes back and
+            // nothing is offered; the revert waits in case that newer write fails too (a 404
+            // included: a mark or an add the catalog refused never reached the server either).
+            if let genKey, let gen, !session.writeFailed(genKey, gen, revert: revert) { return }
+            // The superseded failures put theirs back after this one, and the key settles.
+            let chain: @MainActor () -> Void = { if let genKey, let gen { session.settleFailedWrite(genKey, gen) } }
+            // The account isn't finished (`noteError` already said so and is routing): the change
+            // goes back, and no "Reintentar" — it could only fail again.
+            if e.isOnboardingRequired {
+                revert?()
+                chain()
+                return
+            }
+            if let onError, onError(e) { chain(); return }
+            switch e {
+            case .notFound, .unsupported:
+                // A retry can only fail again: the change goes back and the user is told.
+                revert?()
+                chain()
+                self.showToast(ToastModel(text: e == .notFound ? "Eso ya no existe." : e.toast(or: "Eso todavía no se puede hacer."),
+                                          kind: .info))
             default:
-                self.showToast(ToastModel(text: e.toast, kind: .retry) { [weak self] in
-                    self?.sync(key: key, titleID: titleID, onError: onError, op)
-                })
+                var t = ToastModel(text: e.toast, kind: .retry) { [weak self] in
+                    guard let self, self.s === session else { return }
+                    self.dismissToast()
+                    guard isCurrent() else { return }
+                    self.sync(key: key, gen: genKey, titleID: titleID, onError: onError, revert: revert, notFoundLands: notFoundLands, op)
+                }
+                t.onExpire = { [weak self] in
+                    guard let self, self.s === session else { return }
+                    if isCurrent() {
+                        revert?()
+                        chain()
+                    } else if let genKey, let revert {
+                        session.pushStaleRevert(genKey, revert)
+                    }
+                }
+                self.showToast(t)
+                if let genKey { self.retryToast = (t.id, session.canonicalWriteKey(genKey)) }
             }
         }
         if let key { session.writeChains[key] = (token, task) }
+    }
+
+    /// Takes down the "Reintentar" of an older write of `genKey` (a newer one is going out).
+    func supersedeRetryToast(_ genKey: String) {
+        guard let r = retryToast, r.key == s.canonicalWriteKey(genKey) else { return }
+        retryToast = nil
+        if toast?.id == r.id { dismissToast() }
     }
 
     /// Keys for `sync(key:)` — writes that contradict each other share one.
@@ -1264,11 +1552,14 @@ final class AppStore {
         static func follow(_ handle: String) -> String { "follow|\(handle)" }
         static let username = "me|username"
         static let mePatch = "me|patch"
+        /// The generation of ONE field of `PATCH /me` (they share the chain, not the generation:
+        /// a newer `notifyRecap` must not supersede a failed `isPublic`).
+        static func meField(_ field: String) -> String { "me|field|\(field)" }
     }
 
-    func patchMe(_ patch: MePatch) {
+    func patchMe(_ patch: MePatch, field: String, revert: (@MainActor () -> Void)? = nil) {
         let session = s
-        sync(key: WriteKey.mePatch) { [weak self] api in
+        sync(key: WriteKey.mePatch, gen: WriteKey.meField(field), revert: revert) { [weak self] api in
             let store = self
             let m = try await api.updateMe(patch)
             await MainActor.run { store?.on(session) { store?.account = m } }
@@ -1388,14 +1679,20 @@ final class AppStore {
         }
         signingOut = true
         let api = self.api
+        // What "Quitar" still owed the server goes out with THIS bearer, before it's revoked
+        // (`cancelAll` would drop it and the title would be back at the next sign-in).
+        let removals = flushDeferredRemovals()
+        // A Deshacer still up would re-add (or re-remove) with the bearer this is about to revoke.
+        if toast?.kind == .undo { dismissToast() }
         Task { [weak self] in
+            for r in removals { await r.value }
             var confirmed = true
             do { try await api.logout() } catch { confirmed = false }
             guard let self else { return }
             self.signingOut = false
             self.leaveSession(message: confirmed
                 ? message
-                : "No pudimos cerrar tu sesión en otros dispositivos. Vuelve a entrar y prueba de nuevo.")
+                : "No pudimos cerrar tu sesión en otros dispositivos. Entra de nuevo y vuelve a intentarlo.")
         }
     }
 
@@ -1424,7 +1721,10 @@ final class AppStore {
     func sessionExpired(message: String = "Tu sesión terminó. Entra de nuevo.") {
         // A sign-out in flight already cleared the token: the 401s it causes aren't news.
         guard !signingOut else { return }
-        guard phase != .onboarding || didBootstrap else { return }
+        // At the entrance with nobody signed in (a wrong code answers 401 too) there is nothing
+        // to end. With an account — O1b / elige 3 after a sign-in — the session did end: back to
+        // the door with the real reason, never the code's message.
+        guard phase != .onboarding || didBootstrap || account != nil else { return }
         endSession()
         withAnimation(KMotion.short) { phase = .onboarding }
         showToast(ToastModel(text: message, kind: .info))
@@ -1450,6 +1750,7 @@ final class AppStore {
         s = SessionData()
         // A "Reintentar" of the old account must not survive into the next one.
         toastTask?.cancel()
+        toastExpiry = nil
         toast = nil
         #if DEBUG
         if KuraRuntime.usesMock { seedMock() }
@@ -1462,19 +1763,45 @@ final class AppStore {
 
 }
 
+/// The time iOS grants an app on its way to the background (~30 s), held while `work` runs.
+@MainActor
+enum BackgroundGrace {
+    static func run(_ name: String, _ work: @escaping @MainActor () async -> Void) {
+        let grant = Grant()
+        grant.id = UIApplication.shared.beginBackgroundTask(withName: name) { grant.end() }
+        Task { @MainActor in
+            await work()
+            grant.end()
+        }
+    }
+
+    @MainActor
+    private final class Grant {
+        var id = UIBackgroundTaskIdentifier.invalid
+        func end() {
+            guard id != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(id)
+            id = .invalid
+        }
+    }
+}
+
 extension KuraAPIError {
     /// Inline text for the entrance screens.
     var authText: String {
         switch self {
-        case .offline: return "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        case .rateLimited(let s):
-            if let s { return "Espera \(s) s antes de pedir otro código." }
-            return "Espera un momento antes de pedir otro código."
+        case .offline: return "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        // Too many guesses at the code (the web's `/verify` says the same).
+        case .rateLimited(_, let reason) where reason == KuraAPIError.lockedReason:
+            return "Se intentó demasiadas veces. Pide otro código más tarde."
+        case .rateLimited(let s, _):
+            if let s, s > 0 { return "Demasiados intentos seguidos. Espera \(KuraAPIError.waitLabel(s)) y vuelve a intentarlo." }
+            return "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         case .invalid(let fields, let m):
             return fields["code"] ?? fields["email"] ?? (m.isEmpty ? "Revisa el código." : m)
-        case .unauthorized, .notFound: return "El código no coincide o ya caducó."
-        case .conflict(_, let m): return m.isEmpty ? "No se pudo entrar. Inténtalo de nuevo." : m
-        default: return "No se pudo entrar. Inténtalo de nuevo."
+        case .unauthorized, .notFound: return "El código es incorrecto o ya venció. Revísalo o pide otro."
+        case .conflict(_, let m): return m.isEmpty ? "No se pudo entrar. Vuelve a intentarlo." : m
+        default: return "No se pudo entrar. Vuelve a intentarlo."
         }
     }
 }

@@ -73,7 +73,7 @@ struct MockAPI: KuraAPI {
     func requestMergeCode(email: String) async throws {
         try await write()
         // `-kuraMergeLimit YES`: the 3-codes-per-hour cap on the target email (40 min left).
-        if UserDefaults.standard.bool(forKey: "kuraMergeLimit") { throw KuraAPIError.rateLimited(retryAfter: 2400) }
+        if UserDefaults.standard.bool(forKey: "kuraMergeLimit") { throw KuraAPIError.rateLimited(retryAfter: 2400, reason: "hourly_cap") }
     }
     func verifyMergeCode(email: String, code: String) async throws -> MergeProof {
         try await write()
@@ -131,9 +131,12 @@ struct MockAPI: KuraAPI {
         // A fresh mock account: name/year still pending so the flow continues to "elige 3".
         return Me(person: claimed, onboarded: false)
     }
-    func completeOnboarding(name: String, birthYear: Int) async throws -> Me {
+    func completeOnboarding(name: String, birthDate: String) async throws -> Me {
         try await write()
-        if birthYear > MockData.calendar.component(.year, from: MockData.now) - 13 { throw KuraAPIError.forbidden(code: "underage") }
+        guard let age = BirthDate.age(wire: birthDate, today: MockData.now) else {
+            throw KuraAPIError.invalid(fields: ["birthDate": "Esa fecha no es válida."], message: "")
+        }
+        if age < 13 { throw KuraAPIError.forbidden(code: "underage") }
         return Me(person: MockData.me)
     }
     func onboardingGrid() async throws -> [Title] { MockData.onboardingGrid.compactMap { id in MockData.titles.first { $0.id == id } } }
@@ -173,7 +176,7 @@ struct MockAPI: KuraAPI {
         if let privacy { c.privacy = privacy }
         return c
     }
-    func deleteCollection(id: String) async throws { try await write() }
+    func deleteCollection(id: String, purge: Bool) async throws { try await write() }
     private func mockCollection(_ id: String) -> KCollection {
         MockData.collections.first { $0.id == id } ?? KCollection(id: id, name: "", titleIDs: [], privacy: .onlyMe, createdAt: Date())
     }
@@ -226,6 +229,8 @@ struct MockAPI: KuraAPI {
         try await write()
         var s = MockData.userTitles[titleID] ?? UserTitleState(savedAt: Date())
         s.mark = mark
+        // The review goes with the reaction (API.md §4): `reviewId: null` is the signal.
+        if ReviewHold<Review>.leavesNoReaction(mark?.rawValue) { s.reviewID = nil }
         return s
     }
     func saveReview(titleID: String, body: String, hasSpoiler: Bool) async throws -> Review {

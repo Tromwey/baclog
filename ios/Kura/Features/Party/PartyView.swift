@@ -9,7 +9,7 @@ import SwiftUI
 ///  - a guest: the slots card ("Pusiste 1 de 3 · Te quedan 2"), or "Ya no puedes agregar canciones"
 ///    once the host blocked them; a host: nothing (no cap);
 ///  - "las canciones", in playlist order, each with who put it ("Pusiste tú" · "Puso @ana" ·
-///    "Puso alguien"); the host's "…" (and a tap) opens Quitar / Quitar y bloquear, a guest's tap on
+///    "Agregó alguien"); the host's "…" (and a tap) opens Quitar / Quitar y bloquear, a guest's tap on
 ///    their own song opens Quitar — blocked too (they can't add, but can take theirs out);
 ///  - the bar at the bottom (over the page's own tail): "Buscar canción" (honey) → "Cambiar una
 ///    canción" once full; the host's "Invitar a la fiesta" (honey) + a search chip.
@@ -25,10 +25,10 @@ struct PartyView: View {
             if let p = store.party(partyID) {
                 PartyPage(party: p)
             } else if store.partiesUnavailable {
-                GoneView(title: PartyCopy.unavailableTitle, note: "Todavía no están listas en el servidor. Vuelve en unos días.")
+                GoneView(title: PartyCopy.unavailableTitle, note: "Todavía no están listas en kura. Vuelve en unos días.")
             } else if store.partyIsMissing(partyID) {
-                GoneView(title: "esta fiesta ya no está.",
-                         note: "No encontramos esa fiesta. Puede que ya no exista o que no seas parte de ella.")
+                GoneView(title: "esta fiesta ya no está disponible.",
+                         note: "Puede que ya no exista o que ya no seas parte de ella.")
             } else if let e = store.loadError(.party(partyID)) {
                 LoadErrorScreen(error: e) { Task { await store.loadParty(partyID, force: true) } }
             } else {
@@ -127,7 +127,7 @@ private struct PartyPage: View {
                     Text("Ya no puedes agregar canciones").font(.kura.ui(15, .semibold)).foregroundStyle(KColor.text)
                     Text(mine.isEmpty
                          ? "\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección."
-                         : "\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección y quitar las que pusiste.")
+                         : "\(p.host.atOrSomeone) te quitó de los colaboradores. Puedes seguir viendo la colección y quitar las que agregaste.")
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -137,7 +137,7 @@ private struct PartyPage: View {
             card {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Esta fiesta es para escuchar").font(.kura.ui(15, .semibold)).foregroundStyle(KColor.text)
-                    Text("\(p.host.atOrSomeone) armó la playlist; aquí no se agregan canciones.")
+                    Text("\(p.host.atOrSomeone) creó la playlist; aquí no se agregan canciones.")
                         .font(.kura.ui(14)).foregroundStyle(KColor.text2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -173,17 +173,17 @@ private struct PartyPage: View {
 
     private var slotsTitle: String {
         let n = mine.count
-        guard let limit else { return n == 0 ? "Tus canciones" : "Pusiste \(PartyCopy.songs(n))" }
+        guard let limit else { return n == 0 ? "Tus canciones" : "Agregaste \(PartyCopy.songs(n))" }
         if n == 0 { return limit == 1 ? "Tu canción" : "Tus \(limit) canciones" }
-        if n >= limit { return limit == 1 ? "Pusiste tu canción" : "Pusiste tus \(limit)" }
-        return "Pusiste \(n) de \(limit)"
+        if n >= limit { return limit == 1 ? "Agregaste tu canción" : "Agregaste tus \(limit)" }
+        return "Agregaste \(n) de \(limit)"
     }
 
     private var slotsSub: String {
         let n = mine.count
-        guard limit != nil else { return n == 0 ? "Todavía no pones ninguna" : "Sin límite" }
+        guard limit != nil else { return n == 0 ? "Todavía no agregas ninguna" : "Sin límite" }
         let r = p.viewer.remaining ?? 0
-        if n == 0 { return "Todavía no pones ninguna" }
+        if n == 0 { return "Todavía no agregas ninguna" }
         if r == 0 { return "Quita una para cambiarla" }
         return "Te \(r == 1 ? "queda" : "quedan") \(r)"
     }
@@ -225,8 +225,8 @@ private struct PartyPage: View {
         VStack(spacing: 10) {
             Text("la pista está vacía.").font(.kura.news(28)).foregroundStyle(KColor.text)
             Text(p.isHost
-                 ? "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga \(PartyCopy.theirs(limit))."
-                 : "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.")
+                 ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue \(PartyCopy.theirs(limit))."
+                 : "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.")
                 .font(.kura.ui(15))
                 .lineSpacing(3)
                 .foregroundStyle(KColor.text2)

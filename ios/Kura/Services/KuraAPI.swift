@@ -73,7 +73,7 @@ protocol KuraAPI: Sendable {
     func updateMe(_ patch: MePatch) async throws -> Me
     func checkUsername(_ username: String) async throws -> UsernameStatus
     func claimUsername(_ username: String) async throws -> Me
-    func completeOnboarding(name: String, birthYear: Int) async throws -> Me
+    func completeOnboarding(name: String, birthDate: String) async throws -> Me
     /// Titles offered on "elige 3" before typing (`GET /onboarding/pool?page=1` on live).
     func onboardingGrid() async throws -> [Title]
     func onboardingPicks(_ refs: [TitleRef]) async throws -> KCollection
@@ -90,7 +90,8 @@ protocol KuraAPI: Sendable {
     func createCollection(name: String, privacy: Privacy) async throws -> KCollection
     /// `PATCH /collections/{id}` — each field `nil` = untouched; `vibe: ""` clears the frase.
     func updateCollection(id: String, name: String?, vibe: String?, privacy: Privacy?) async throws -> KCollection
-    func deleteCollection(id: String) async throws
+    /// `purge`: `?purge=1` — the titles that were only in this collection lose state, reaction and review.
+    func deleteCollection(id: String, purge: Bool) async throws
     /// `PATCH /collections/{id}` `{ pinned }` → Collection. One pinned per account: the server
     /// unpins the rest (the store already did, optimistically).
     func setCollectionPinned(id: String, pinned: Bool) async throws -> KCollection
@@ -255,7 +256,10 @@ enum KuraAPIError: Error, Equatable {
     case notFound
     case invalid(fields: [String: String], message: String)
     case conflict(code: String?, message: String)
-    case rateLimited(retryAfter: Int?)
+    /// `reason` (only `POST /auth/otp/request` sends one): `cooldown` = the code already sent
+    /// still works; `hourly_cap` / `ip_limit` = no code went out, wait `retryAfter`.
+    /// `locked` (`POST /auth/otp/verify`, a 401): too many guesses, the code is burned.
+    case rateLimited(retryAfter: Int?, reason: String? = nil)
     case unsupported
     case unavailable
     /// A `503 unavailable` WITH a reason this client acts on (`not_configured`, `service_failed` —
@@ -264,20 +268,41 @@ enum KuraAPIError: Error, Equatable {
     case offline
     /// The task was cancelled (a view went away): never retried, never shown.
     case cancelled
+    /// A 401 that answered a bearer a refresh had already replaced: the session is alive, the
+    /// request failed. Retryable; says nothing of its own (`AppStore.noteError`).
+    case staleBearer
+    /// A status this build has no case for, WITH the `message` of the server's error envelope:
+    /// the only free text of an error that may reach the user.
+    case serverMessage(String)
+    /// Anything else. The text is the app's own (for logs and DEBUG): never shown.
     case server(String)
+
+    /// `403 forbidden` + `reason: "onboarding_required"`: the account has no name or no birth
+    /// year yet. Handled in ONE place (`AppStore.noteError` → `onboardingRequired`).
+    static let lockedReason = "locked"
+
+    var isOnboardingRequired: Bool {
+        if case .forbidden(let code) = self { return code == "onboarding_required" }
+        return false
+    }
+
+    /// "40 min" over a minute and a half, else "45 s".
+    static func waitLabel(_ seconds: Int) -> String {
+        seconds >= 90 ? "\(Int((Double(seconds) / 60).rounded(.up))) min" : "\(max(seconds, 1)) s"
+    }
 
     var isRateLimit: Bool { if case .rateLimited = self { return true }; return false }
 
     /// Text for the toast, in the Kura voice (what happened, what to do).
-    var toast: String { toast(or: "No se pudo guardar") }
+    var toast: String { toast(or: "No se pudo guardar.") }
 
     /// The toast with the caller's own verb for the generic failure ("No se pudo seguir a @x."):
     /// a failed Seguir must not read "No se pudo guardar".
     func toast(or fallback: String) -> String {
         switch self {
-        case .offline: return "Sin conexión"
-        case .rateLimited: return "Demasiado rápido. Espera un momento"
-        case .unavailable: return "El catálogo no responde"
+        case .offline: return "Sin conexión."
+        case .rateLimited: return "Demasiados intentos seguidos. Espera un momento."
+        case .unavailable: return "El catálogo no responde. Vuelve a intentarlo en unos minutos."
         case .conflict(let code, _) where code == "not_released": return "Todavía no sale. Usa La vi en preestreno."
         // The server unlocks reviews only with a reaction (`obsessed || verdict != null`):
         // "Completo" alone saves `verdict = null`, so it never unlocks them.

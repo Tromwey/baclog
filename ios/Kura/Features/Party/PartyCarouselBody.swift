@@ -145,8 +145,8 @@ struct PartyCarouselBody: View {
                 .foregroundStyle(KColor.text2)
                 .multilineTextAlignment(.center)
             Text(p.isHost
-                 ? "Nadie ha puesto nada todavía. Comparte el link y que cada quien ponga \(PartyCopy.theirs(p.perGuestLimit))."
-                 : "Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.")
+                 ? "Nadie ha agregado canciones todavía. Comparte el link y que cada quien agregue \(PartyCopy.theirs(p.perGuestLimit))."
+                 : "Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.")
                 .font(.kura.ui(15))
                 .lineSpacing(3)
                 .foregroundStyle(KColor.text2)

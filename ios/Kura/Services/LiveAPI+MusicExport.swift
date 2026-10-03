@@ -31,18 +31,25 @@ extension LiveAPI {
     }
 
     func partyExport(id: String, provider: MusicProvider) async throws -> ExportState {
-        try await client.decode(.get("parties/\(id)/exports/\(provider.rawValue)"))
+        try await exportState(.get("parties/\(id)/exports/\(provider.rawValue)"), provider)
+    }
+
+    /// The state of the provider that was ASKED about (its own `provider` field is read leniently).
+    private func exportState(_ e: Endpoint, _ provider: MusicProvider) async throws -> ExportState {
+        var state: ExportState = try await ExportState.$requested.withValue(provider) { try await client.decode(e) }
+        state.provider = provider
+        return state
     }
 
     func startPartyExport(id: String, provider: MusicProvider) async throws -> ExportState {
-        try await client.decode(.post("parties/\(id)/exports/\(provider.rawValue)"))
+        try await exportState(.post("parties/\(id)/exports/\(provider.rawValue)"), provider)
     }
 
     func stepTidalExport(id: String) async throws -> ExportState {
-        try await client.decode(.post("parties/\(id)/exports/tidal/step"))
+        try await exportState(.post("parties/\(id)/exports/tidal/step"), .tidal)
     }
 
     func reportAppleMusicExport(id: String, report: AppleMusicReport) async throws -> ExportState {
-        try await client.decode(try .put("parties/\(id)/exports/apple_music", report))
+        try await exportState(try .put("parties/\(id)/exports/apple_music", report), .appleMusic)
     }
 }

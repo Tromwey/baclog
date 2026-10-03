@@ -102,11 +102,33 @@ targets:
           CODE_SIGN_ENTITLEMENTS: Kura/Kura.entitlements
           KURA_API_SCHEME: https
           KURA_API_HOST: get-kura.app
+  # Logic tests with NO host app: they compile the pure files they cover (today the write
+  # generations of `AppStore.sync`) straight into the bundle, so they never launch Kura.
+  # `xcodebuild test -scheme Kura -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`.
+  KuraTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: KuraTests
+      - path: Kura/State/WriteGenerations.swift
+      - path: Kura/Models/PageContract.swift
+      - path: Kura/Models/BirthDate.swift
+      - path: Kura/State/ReviewHold.swift
+      - path: Kura/State/CollectionPurge.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.tromwey.kura.tests
 schemes:
   Kura:
     build:
       targets:
         Kura: all
+    test:
+      config: Debug
+      targets:
+        - KuraTests
     run:
       config: Debug
     profile:

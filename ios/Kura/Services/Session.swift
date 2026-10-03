@@ -23,9 +23,25 @@ final class Session: @unchecked Sendable {
 
     func store(_ token: String) {
         lock.lock(); defer { lock.unlock() }
+        write(token)
+    }
+
+    /// `store`, but only while the session still holds `old` (the bearer a refresh was sent with).
+    func store(_ token: String, replacing old: String?) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if !loaded { cached = keychain.read(); loaded = true }
+        guard cached == old else { return false }
+        write(token)
+        return true
+    }
+
+    /// Call with `lock` held.
+    private func write(_ token: String) {
         cached = token
         loaded = true
-        keychain.write(token)
+        // In memory the session works until the app dies; on disk it didn't land, so the next
+        // launch starts signed out. Never silent.
+        if !keychain.write(token) { KuraLog.api.error("keychain: the bearer could not be written; this session won't survive a relaunch") }
         // A bearer on disk always comes with the marker (see `InstallMarker`).
         InstallMarker.markPresent()
     }
@@ -34,7 +50,18 @@ final class Session: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         cached = nil
         loaded = true
-        keychain.delete()
+        if !keychain.delete() { KuraLog.api.error("keychain: the bearer could not be deleted") }
+    }
+
+    /// Clears the session only when `header` ("Bearer …", as sent) carries the token it holds NOW.
+    /// True when it cleared. One lock: a sign-in landing in between is never wiped.
+    func clear(ifBearerHeaderIs header: String?) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if !loaded { cached = keychain.read(); loaded = true }
+        guard let cached, header == "Bearer \(cached)" else { return false }
+        self.cached = nil
+        if !keychain.delete() { KuraLog.api.error("keychain: the bearer could not be deleted") }
+        return true
     }
 
     var hasToken: Bool { token != nil }

@@ -169,7 +169,7 @@ extension AppStore {
 
     private func identityFailed(_ error: Error, provider p: IdentityProvider) {
         if let a = error as? AppleAuthorization.Failure {
-            if a == .rejected { showToast(ToastModel(text: "Apple no respondió. Inténtalo de nuevo.", kind: .info)) }
+            if a == .rejected { showToast(ToastModel(text: "Apple no respondió. Vuelve a intentarlo.", kind: .info)) }
             return
         }
         if let g = error as? GoogleOAuth.Failure {
@@ -177,9 +177,9 @@ extension AppStore {
             case .cancelled: return
             case .offline:
                 offline = true
-                showToast(ToastModel(text: "Sin conexión. Revisa tu red e inténtalo de nuevo.", kind: .info))
+                showToast(ToastModel(text: "Sin conexión. Revisa tu red y vuelve a intentarlo.", kind: .info))
             case .rejected:
-                showToast(ToastModel(text: "Google no respondió. Inténtalo de nuevo.", kind: .info))
+                showToast(ToastModel(text: "Google no respondió. Vuelve a intentarlo.", kind: .info))
             }
             return
         }
@@ -190,11 +190,11 @@ extension AppStore {
         case .conflict(let code, _) where code == "provider_already_linked":
             text = "Ya tienes otra cuenta de \(p.label) conectada. Desconéctala primero."
         case .forbidden(let code) where code == "proof_rejected":
-            text = "\(p.label) no confirmó esa cuenta. Inténtalo de nuevo."
-        case .unavailable: text = "\(p.label) no responde ahora. Prueba en un rato."
-        case .offline: text = "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        case .rateLimited: text = "Demasiados intentos. Espera un momento."
-        default: text = "No se pudo conectar \(p.label). Inténtalo de nuevo."
+            text = "\(p.label) no confirmó esa cuenta. Vuelve a intentarlo."
+        case .unavailable: text = "\(p.label) no responde ahora. Vuelve a intentarlo más tarde."
+        case .offline: text = "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        case .rateLimited: text = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
+        default: text = "No se pudo conectar \(p.label). Vuelve a intentarlo."
         }
         showToast(ToastModel(text: text, kind: .info))
     }
@@ -238,6 +238,12 @@ extension AppStore {
     }
 
     /// Fusionar › correo: `POST /me/merge/otp/request` (204 whether or not the account exists).
+    /// Its 429 says why (API.md §2.5, same names as `auth/otp/request`): `cooldown` = a code for
+    /// that address went out less than a minute ago and STILL WORKS (on to "su código");
+    /// `hourly_cap` = no code went out, wait the real time; no `reason` = the bearer's write
+    /// limiter, which says nothing about codes.
+    static let mergeCooldownNote = "Ya enviamos un código a ese correo hace poco y sigue siendo válido. Revísalo."
+
     func requestMergeCode(email: String) async -> Bool {
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard e.contains("@"), e.contains(".") else { mergeError = "Ese correo no parece válido. Revísalo."; return false }
@@ -253,12 +259,31 @@ extension AppStore {
             return false
         case .ok:
             mergeEmail = e
-            mergeRetryAt = nil
+            mergeRetry = nil
             return true
         case .failed(let err):
-            if case .rateLimited(let s) = err { mergeRetryAt = Date().addingTimeInterval(TimeInterval(max(s ?? 60, 1))) }
-            mergeError = mergeText(err)
-            return false
+            guard case .rateLimited(let retryAfter, let reason) = err else {
+                mergeError = mergeText(err)
+                return false
+            }
+            switch reason {
+            case "cooldown":
+                let wait = max(retryAfter ?? 60, 1)
+                mergeRetry = (e, Date().addingTimeInterval(TimeInterval(wait)))
+                mergeEmail = e
+                mergeError = Self.mergeCooldownNote
+                return true
+            case "hourly_cap":
+                let wait = max(retryAfter ?? 3600, 1)
+                mergeRetry = (e, Date().addingTimeInterval(TimeInterval(wait)))
+                mergeError = "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitLabel(wait))."
+                return false
+            default:
+                // Not about this address: the resend button only waits what the server said.
+                if let retryAfter, retryAfter > 0 { mergeRetry = (e, Date().addingTimeInterval(TimeInterval(retryAfter))) }
+                mergeError = mergeText(err)
+                return false
+            }
         }
     }
 
@@ -278,7 +303,7 @@ extension AppStore {
             push(.mergeConfirm)
         case .failed(let e):
             if case .forbidden(let c) = e, c == "proof_rejected" {
-                mergeError = "Ese código no sirve. Revísalo o pide otro."
+                mergeError = "El código es incorrecto o ya venció. Revísalo o pide otro."
             } else {
                 mergeError = mergeText(e)
             }
@@ -288,15 +313,12 @@ extension AppStore {
     private func mergeText(_ e: KuraAPIError) -> String? {
         switch e {
         case .cancelled, .unauthorized: return nil
-        case .offline: return "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        case .rateLimited(let s):
-            guard let s, s > 0 else { return "Demasiados intentos. Espera un momento." }
-            if s < 90 { return "Espera \(s) s para pedir otro código." }
-            let min = Int((Double(s) / 60).rounded(.up))
-            return "Ya pediste varios códigos para ese correo. Intenta en \(min) min."
+        case .offline: return "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        // The generic limiter (no `reason`): it never says a code exists or how many were asked.
+        case .rateLimited: return "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         case .invalid(_, let m) where !m.isEmpty: return m
         case .invalid: return "Ese correo no parece válido. Revísalo."
-        default: return "Algo falló de nuestro lado. Inténtalo de nuevo."
+        default: return "Algo falló de nuestro lado. Vuelve a intentarlo."
         }
     }
 
@@ -321,7 +343,7 @@ extension AppStore {
             case .forbidden(let c) where c == "underage":
                 mergeProof = nil
                 popToSettings()
-                showToast(ToastModel(text: "Una de las dos cuentas es de alguien menor de 13. No se pueden juntar.", kind: .info))
+                showToast(ToastModel(text: "Una de las dos cuentas es de alguien menor de 13 años. No se pueden fusionar.", kind: .info))
             case .conflict(let c, _) where c == "merge_token_invalid":
                 mergeProof = nil
                 popToSettings(keeping: .mergeAccount)
@@ -332,6 +354,9 @@ extension AppStore {
                     Task { await self?.confirmMerge() }
                 })
             default:
+                // A 500 (or any transient failure) does NOT burn the `mergeToken` (API.md §2.5):
+                // `mergeProof` stays, and Reintentar sends the SAME token — no new code. Only
+                // `merge_token_invalid` / `underage` above send the user back to prove it again.
                 showToast(ToastModel(text: "No se pudo fusionar. No se movió nada.", kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.confirmMerge() }

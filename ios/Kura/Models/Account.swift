@@ -25,7 +25,8 @@ struct Me: Hashable, Decodable {
     var followListsVisibility: FollowListsVisibility = .private
     var avatarURL: URL?
     var isFounder: Bool
-    /// `onboardingComplete` — `name` is set; the app skips the onboarding. Absent → assumed done.
+    /// `onboardingComplete` — name AND birth year are set; the app skips the onboarding. Absent →
+    /// assumed from the name. With a name and `false` only the year is missing (`onlyYearMissing`).
     var onboarded: Bool
 
     var person: Person {
@@ -80,6 +81,12 @@ struct Me: Hashable, Decodable {
 
 enum UsernameStatus: String, Decodable {
     case free, taken, invalid
+    /// A status this build doesn't know: the field says nothing and `PUT /me/username` decides.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        self = UsernameStatus(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
 }
 
 /// `POST auth/otp/verify` / `POST auth/refresh` / `POST auth/apple` / `POST auth/google` → `{ token, user }`.

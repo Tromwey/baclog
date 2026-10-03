@@ -5,8 +5,6 @@ import Foundation
 // token goes through `APIPath` like the rest of the client.
 
 extension LiveAPI {
-    private struct PartyItems<T: Decodable>: Decodable { let items: [T] }
-
     /// `perGuestLimit` always goes on the wire: `null` is "ilimitadas", not "the default 3".
     private struct NewParty: Encodable {
         let name: String
@@ -34,7 +32,7 @@ extension LiveAPI {
     private struct SongPalette: Encodable { let paletteHex: [String]? }
 
     func parties() async throws -> [PartyCard] {
-        let r: PartyItems<PartyCard> = try await client.decode(.get("parties"))
+        let r: Items<PartyCard> = try await client.decode(.get("parties"))
         return r.items
     }
 
@@ -63,7 +61,7 @@ extension LiveAPI {
     }
 
     func searchPartySongs(id: String, query: String) async throws -> [PartySongHit] {
-        let r: PartyItems<PartySongHit> = try await client.decode(.get("parties/\(id)/songs", [URLQueryItem(name: "q", value: query)]))
+        let r: Items<PartySongHit> = try await client.decode(.get("parties/\(id)/songs", [URLQueryItem(name: "q", value: query)]))
         return r.items
     }
 

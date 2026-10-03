@@ -5,12 +5,13 @@ import SwiftUI
 ///  - signed out: the public preview (`GET /invites/{token}` without a bearer) — the fan, the name,
 ///    who's in, the songs — with "Entrar" up top and the honey "Entra a kura para poner tus 3
 ///    canciones". Both go to the entrance; the link waits in `DeepLinkInbox` and, once the account
-///    is ready, joins and opens the party with "ya estás dentro." (`AppStore.signInForInvite`);
+///    is ready, this landing comes back signed in (`AppStore.signInForInvite`);
+///  - signed in: the same preview with the honey "Entrar a la fiesta" and a close. Opening a link
+///    NEVER joins by itself (founder, 2026-10-01): only that tap does (`AppStore.openInvite`), and
+///    then the party opens with "ya estás dentro.";
 ///  - a dead link (revoked, unknown, malformed — or a block with the host: the server never says
 ///    which) → "este link ya no funciona.";
 ///  - the server without parties yet (`503`, `MIGRATION_0033_LIVE`) → "las fiestas llegan muy pronto.".
-///
-/// Signed in, a live link never shows this: it joins at once (`AppStore.openInvite`).
 struct InviteLandingView: View {
     @Environment(AppStore.self) private var store
     let token: String
@@ -137,6 +138,9 @@ private struct InvitePreviewPage: View {
     let preview: InvitePreview
     let token: String
 
+    /// "Entrar a la fiesta" in flight: one join per tap.
+    @State private var joining = false
+
     private var p: InvitePreview.Summary { preview.party }
 
     var body: some View {
@@ -166,7 +170,7 @@ private struct InvitePreviewPage: View {
                     if p.songs.isEmpty {
                         VStack(spacing: 10) {
                             Text("la pista está vacía.").font(.kura.news(28)).foregroundStyle(KColor.text)
-                            Text("Nadie ha puesto nada todavía. Alguien tiene que abrir la pista.")
+                            Text("Nadie ha agregado canciones todavía. Alguien tiene que abrir la pista.")
                                 .font(.kura.ui(15)).foregroundStyle(KColor.text2)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: 290)
@@ -199,7 +203,13 @@ private struct InvitePreviewPage: View {
         let signedIn = store.api.hasSession
         VStack(spacing: 10) {
             SolidButton(title: signedIn ? "Entrar a la fiesta" : ctaTitle, height: 56, honey: true) {
-                if signedIn { Task { await store.openInvite(token) } } else { store.signInForInvite(token) }
+                guard signedIn else { store.signInForInvite(token); return }
+                guard !joining else { return }
+                joining = true
+                Task {
+                    await store.openInvite(token)
+                    joining = false
+                }
             }
             if !signedIn {
                 Text("Con correo, Apple o Google · 1 minuto")
@@ -219,8 +229,8 @@ private struct InvitePreviewPage: View {
     }
 
     private var ctaTitle: String {
-        guard let l = p.perGuestLimit else { return "Entra a kura para poner tus canciones" }
+        guard let l = p.perGuestLimit else { return "Entra a kura para agregar tus canciones" }
         if l == 0 { return "Entra a kura para ver la fiesta" }
-        return l == 1 ? "Entra a kura para poner tu canción" : "Entra a kura para poner tus \(l) canciones"
+        return l == 1 ? "Entra a kura para agregar tu canción" : "Entra a kura para agregar tus \(l) canciones"
     }
 }

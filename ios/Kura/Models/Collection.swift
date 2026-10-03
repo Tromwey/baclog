@@ -160,7 +160,7 @@ struct KCollection: Identifiable, Hashable, Decodable {
         chosenCoverTitleID = try c.decodeIfPresent(String.self, forKey: .chosenCoverTitleId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         addedAt = try c.decodeIfPresent([String: Date].self, forKey: .addedAt) ?? [:]
-        embeddedTitles = try c.decodeIfPresent([Title].self, forKey: .titles) ?? []
+        embeddedTitles = try c.lossy([Title].self, forKey: .titles) ?? []
         embeddedStates = try c.decodeIfPresent([String: UserTitleState].self, forKey: .states) ?? [:]
         let ids = try c.decodeIfPresent([String].self, forKey: .titleIds)
         titleIDs = ids ?? embeddedTitles.map(\.id)
@@ -209,7 +209,7 @@ struct CollectionDetail: Decodable {
         } else {
             collection = try KCollection(from: decoder)
         }
-        titles = try c.decodeIfPresent([Title].self, forKey: .titles) ?? collection.embeddedTitles
+        titles = try c.lossyPage([Title].self, forKey: .titles) ?? collection.embeddedTitles
         states = try c.decodeIfPresent([String: UserTitleState].self, forKey: .states) ?? collection.embeddedStates
     }
 }

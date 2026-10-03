@@ -31,15 +31,23 @@ extension AppStore {
         // half-way through the onboarding (no handle, no name/year) must land back on O1b, never
         // on tabs with an empty "@".
         let result: Result<Me, Error>
+        let readStamp = s.readStamp
         do { result = .success(try await api.needsRefresh ? api.refresh() : api.me()) } catch { result = .failure(error) }
         await hold()
         switch result {
         case .success(let m):
-            applyMe(m)
+            applyMe(m, readAt: readStamp)
             if !route(after: m) { return }
         case .failure(let error):
             let e = noteError(error)
-            if e == .unauthorized { return }
+            // `.unauthorized` here always means the token is gone (`noteError`): the entrance.
+            if e == .unauthorized {
+                if phase == .splash {
+                    onboardingStep = entryStep
+                    withAnimation(KMotion.fade) { phase = .onboarding }
+                }
+                return
+            }
             // Transport trouble: keep the token, try the library anyway (`bootstrap` routes
             // once `GET /me` answers).
         }
@@ -56,9 +64,28 @@ extension AppStore {
         do {
             try await api.requestCode(email: e)
             authEmail = e
+            otpRetry = nil
             return true
         } catch {
-            authError = noteError(error).authText
+            let err = noteError(error)
+            guard case .rateLimited(let retryAfter, let reason) = err else {
+                authError = err.authText
+                return false
+            }
+            // API.md §2: `cooldown` = a code for this address went out less than a minute ago and
+            // STILL WORKS; anything else (`hourly_cap`, `ip_limit`) = no code, wait the real time.
+            // Without a `reason` (older server) a wait of a minute or less is the cooldown.
+            let wait = max(retryAfter ?? 60, 1)
+            let cooldown = reason == "cooldown" || (reason == nil && wait <= 60)
+            otpRetry = (reason == "ip_limit" ? nil : e, Date().addingTimeInterval(TimeInterval(wait)), cooldown)
+            if cooldown {
+                authEmail = e
+                authError = "Ya te enviamos un código hace poco y sigue siendo válido. Revisa tu correo."
+                return true
+            }
+            authError = reason == "ip_limit"
+                ? "Demasiados intentos desde esta red. Podrás pedir un código en \(KuraAPIError.waitLabel(wait))."
+                : "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitLabel(wait))."
             return false
         }
     }
@@ -147,9 +174,9 @@ extension AppStore {
             case .cancelled: return
             case .offline:
                 offline = true
-                showToast(ToastModel(text: "Sin conexión. Revisa tu red e inténtalo de nuevo.", kind: .info))
+                showToast(ToastModel(text: "Sin conexión. Revisa tu red y vuelve a intentarlo.", kind: .info))
             case .rejected:
-                showToast(ToastModel(text: "No se pudo entrar con Google. Inténtalo de nuevo.", kind: .info))
+                showToast(ToastModel(text: "No se pudo entrar con Google. Vuelve a intentarlo.", kind: .info))
             }
             return
         }
@@ -160,12 +187,12 @@ extension AppStore {
         case .forbidden(let code) where code == "underage":
             onboardingStep = .underage
             return
-        case .unavailable: text = "\(provider) no responde ahora. Entra con tu correo o prueba en un rato."
-        case .offline: text = "Sin conexión. Revisa tu red e inténtalo de nuevo."
-        case .rateLimited: text = "Demasiados intentos. Espera un momento."
+        case .unavailable: text = "\(provider) no responde ahora. Entra con tu correo o vuelve a intentarlo más tarde."
+        case .offline: text = "Sin conexión. Revisa tu red y vuelve a intentarlo."
+        case .rateLimited: text = "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         case .conflict(_, let m) where !m.isEmpty: text = m
         case .invalid(_, let m) where !m.isEmpty: text = m
-        default: text = "No se pudo entrar con \(provider). Inténtalo de nuevo."
+        default: text = "No se pudo entrar con \(provider). Vuelve a intentarlo."
         }
         showToast(ToastModel(text: text, kind: .info))
     }

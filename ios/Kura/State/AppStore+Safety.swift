@@ -40,11 +40,13 @@ extension AppStore {
             switch e {
             case .cancelled, .unauthorized:
                 break
+            case .forbidden where e.isOnboardingRequired:
+                break // said and routed by `noteError`; a retry could only fail again
             case .notFound:
-                showToast(ToastModel(text: target.isReview ? "Esa reseña ya no existe." : "Ese perfil ya no existe.", kind: .info))
+                showToast(ToastModel(text: target.isReview ? "Esa reseña ya no existe." : "Ese perfil no existe o es privado.", kind: .info))
             default:
                 let text = e == .offline ? "Sin conexión. No se envió tu reporte."
-                    : (e.isRateLimit ? e.toast : "No se pudo enviar tu reporte.")
+                    : (e.isRateLimit ? e.toast : "No se envió tu reporte.")
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                     self?.dismissToast()
                     Task { await self?.report(target, reason: reason, details: details) }
@@ -71,7 +73,7 @@ extension AppStore {
             case .cancelled, .unauthorized:
                 break
             case .notFound:
-                showToast(ToastModel(text: "@\(handle) ya no existe.", kind: .info))
+                showToast(ToastModel(text: "Ese perfil no existe o es privado.", kind: .info))
             default:
                 let text = e == .offline ? "Sin conexión. No se bloqueó a @\(handle)." : "No se pudo bloquear a @\(handle)."
                 showToast(ToastModel(text: text, kind: .retry) { [weak self] in

@@ -61,15 +61,48 @@ struct KuraApp: App {
     }
 }
 
-// Keep the edge-swipe back gesture even though the nav bar is hidden (custom chrome).
-extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
-    override open func viewDidLoad() {
-        super.viewDidLoad()
-        interactivePopGestureRecognizer?.delegate = self
-    }
+/// Keeps the edge-swipe back gesture even though the nav bar is hidden (custom chrome): UIKit
+/// turns it off with the bar, so the stack's pop recognizer gets a delegate that allows it
+/// whenever there is something to pop.
+///
+/// Scoped on purpose: it sits in the root of each of OUR `NavigationStack`s (`TabStack`) and only
+/// touches the `UINavigationController` it finds itself in. It used to be an
+/// `extension UINavigationController` overriding `viewDidLoad` — which rewired EVERY navigation
+/// controller in the process (the photo picker, Safari, the system share and mail sheets) and
+/// overrode a UIKit method from an extension, which Apple leaves undefined.
+struct PopGestureKeeper: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Probe { Probe() }
+    func updateUIViewController(_ probe: Probe, context: Context) { probe.attach() }
 
-    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        viewControllers.count > 1
+    final class Probe: UIViewController, UIGestureRecognizerDelegate {
+        private weak var stack: UINavigationController?
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            attach()
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            attach()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            attach()
+        }
+
+        /// Idempotent: called from every moment the hierarchy may have just been built.
+        func attach() {
+            guard let nav = navigationController, let pop = nav.interactivePopGestureRecognizer else { return }
+            stack = nav
+            if pop.delegate !== self { pop.delegate = self }
+            pop.isEnabled = true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            (stack?.viewControllers.count ?? 0) > 1
+        }
     }
 }
 

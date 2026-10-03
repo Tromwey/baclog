@@ -39,7 +39,14 @@ extension AppStore {
         profilePrivate = isPrivate
         self.showCommon = showCommon
         saveLocal()
-        if !cleanName.isEmpty, cleanName != oldName { patchMe(MePatch(name: cleanName)) }
+        if !cleanName.isEmpty, cleanName != oldName {
+            patchMe(MePatch(name: cleanName), field: "name") { [weak self] in
+                guard let self, self.me.name == cleanName else { return }
+                self.me.name = oldName
+                self.me.initials = Person.initials(of: oldName)
+                if !self.me.id.isEmpty { self.people[self.me.id] = self.me }
+            }
+        }
         if handleChanged { claimHandle(newHandle, from: oldHandle) }
         showToast(ToastModel(text: "Perfil actualizado", kind: .info))
     }
@@ -50,9 +57,15 @@ extension AppStore {
     /// again.
     private func claimHandle(_ newHandle: String, from oldHandle: String) {
         let session = s
-        sync(key: WriteKey.username, onError: { [weak self] e in
-            guard let self else { return true }
+        // Passed as `revert` too: superseded by a newer @ that ALSO fails, it still has to run
+        // (it only acts while `me` still shows this write's handle).
+        let revert: @MainActor () -> Void = { [weak self] in
+            guard let self, self.s === session else { return }
             self.revertHandle(from: newHandle, to: oldHandle)
+        }
+        sync(key: WriteKey.username, gen: WriteKey.username, onError: { [weak self] e in
+            guard let self else { return true }
+            revert()
             let text: String
             switch e {
             case .cancelled, .unauthorized:
@@ -65,16 +78,19 @@ extension AppStore {
                 text = e.toast
             default:
                 self.showToast(ToastModel(text: e.toast(or: "No se pudo cambiar tu @."), kind: .retry) { [weak self] in
-                    guard let self, self.me.handle == oldHandle else { return }
+                    // From whatever @ the reverts left on screen (the old one, or the one before a
+                    // superseded change that failed too).
+                    guard let self, self.s === session, self.me.handle != newHandle else { return }
+                    let from = self.me.handle
                     self.dismissToast()
-                    self.applyHandle(newHandle, from: oldHandle)
-                    self.claimHandle(newHandle, from: oldHandle)
+                    self.applyHandle(newHandle, from: from)
+                    self.claimHandle(newHandle, from: from)
                 })
                 return true
             }
             self.showToast(ToastModel(text: text, kind: .info))
             return true
-        }) { [weak self] api in
+        }, revert: revert) { [weak self] api in
             let store = self
             let m = try await api.claimUsername(newHandle)
             await MainActor.run { store?.on(session) { store?.account = m } }
@@ -89,7 +105,7 @@ extension AppStore {
     }
 
     /// The same person under another handle (`Person.handle` is its identity, so it's rebuilt).
-    private static func rehandled(_ p: Person, _ handle: String) -> Person {
+    static func rehandled(_ p: Person, _ handle: String) -> Person {
         var out = Person(handle: handle, name: p.name, initials: p.initials, hexes: p.hexes,
                          featuredTitleID: p.featuredTitleID, isPrivate: p.isPrivate,
                          followers: p.followers, followingCount: p.followingCount, stats: p.stats)
@@ -111,7 +127,7 @@ extension AppStore {
     func uploadAvatar(_ picked: UIImage) async {
         guard !avatarBusy else { return }
         guard let (data, preview) = AvatarEncoder.encode(picked) else {
-            showToast(ToastModel(text: "Esa imagen no se pudo leer. Prueba con otra.", kind: .info))
+            showToast(ToastModel(text: "No se pudo usar esa foto. Prueba con otra.", kind: .info))
             return
         }
         let session = s
@@ -126,8 +142,13 @@ extension AppStore {
             showToast(ToastModel(text: "Foto actualizada", kind: .info))
         case .failed(let e):
             guard e != .unauthorized, e != .cancelled else { return }
-            let text: String
-            if case .invalid(_, let m) = e, !m.isEmpty { text = m } else { text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto" }
+            // The server refused THIS image (size, type): sending the same bytes again can only
+            // fail the same way — a note with its reason, no Reintentar.
+            if case .invalid(_, let m) = e {
+                showToast(ToastModel(text: m.isEmpty ? "No se pudo subir la foto." : m, kind: .info))
+                return
+            }
+            let text = e == .offline ? "Sin conexión. La foto no se subió." : "No se pudo subir la foto."
             showToast(ToastModel(text: text, kind: .retry) { [weak self] in
                 Task { await self?.uploadAvatar(picked) }
             })
@@ -174,7 +195,7 @@ extension AppStore {
                 // Only a 204 confirms the deletion. A 401 is a revoked/expired bearer (logout on
                 // another device, token past `exp`) on an account that is still ALIVE: say so and
                 // send them to sign in again — never "Tu cuenta se borró.".
-                let e = error is CancellationError ? .cancelled : ((error as? KuraAPIError) ?? .server(String(describing: error)))
+                let e = error is CancellationError ? .cancelled : ((error as? KuraAPIError) ?? .server(""))
                 switch e {
                 case .cancelled:
                     return
