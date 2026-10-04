@@ -24,8 +24,15 @@ export interface WatchServiceIds {
   appleTv?: string;
   /** Netflix numeric title id (P1874). */
   netflix?: string;
-  /** HBO Max `show/{uuid}` | `movie/{uuid}` (P8298, live format only). */
+  /** HBO Max `show/{uuid}` | `movie/{uuid}` — the live format, either straight
+   *  from Wikidata (P8298) or converted from `hboMaxLegacy` by HBO itself. The
+   *  only HBO id a link is ever built from. */
   hboMax?: string;
+  /** HBO Max's pre-2023 id (`feature/urn:hbo:feature:{id}` |
+   *  `series/urn:hbo:series:{id}`), kept ONLY when P8298 has no live one. It is
+   *  never put in a link the user gets (the app doesn't open it): the server
+   *  asks HBO to convert it (`hboLegacyResolveUrls` → `parseHboRedirectLocation`). */
+  hboMaxLegacy?: string;
 }
 
 interface WatchService {
@@ -80,15 +87,19 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const ID_SHAPE = {
   appleTv: /^umc\.cmc\.[a-z0-9]{8,40}$/,
   netflix: /^[0-9]{4,12}$/,
-  // Only the live format. `feature/urn:…` / `series/urn:…` are dead links.
+  // Only the live format; the old one is `HBO_LEGACY_ID` below.
   hboMax: new RegExp(`^(?:show|movie)/${UUID}$`),
 } as const;
+
+/** HBO's old id, exactly as Wikidata stores it: the kind twice and an opaque
+ *  base64url-ish token. Nothing else may reach HBO's hosts as a path. */
+const HBO_LEGACY_ID = /^(?:feature\/urn:hbo:feature|series\/urn:hbo:series):[A-Za-z0-9_-]{16,32}$/;
 
 /** A TMDB id as we may interpolate it into a SPARQL string literal. */
 const TMDB_ID = /^[0-9]{1,10}$/;
 
 /** Wikidata property → which id it carries, per media type. */
-function propertyMap(mediaType: VideoMediaType): Record<string, keyof WatchServiceIds> {
+function propertyMap(mediaType: VideoMediaType): Record<string, keyof typeof ID_SHAPE> {
   return {
     [mediaType === "series" ? "P9751" : "P9586"]: "appleTv",
     P1874: "netflix",
@@ -112,9 +123,10 @@ export function wikidataIdsQuery(tmdbId: string, mediaType: VideoMediaType): str
 
 /**
  * The SPARQL JSON answer → validated ids. A value that doesn't match its
- * service's shape is dropped (so HBO's dead `feature/urn:…` ids simply don't
- * exist for us); with several valid values the smallest wins, so the answer
- * doesn't depend on the order Wikidata returned them in.
+ * service's shape is dropped; with several valid values the smallest wins, so
+ * the answer doesn't depend on the order Wikidata returned them in. HBO's
+ * P8298 mixes two formats: the live one lands in `hboMax`, the old one in
+ * `hboMaxLegacy` (only when there is no live one).
  */
 export function parseWikidataIds(body: unknown, mediaType: VideoMediaType): WatchServiceIds {
   const bindings = (body as { results?: { bindings?: unknown } } | null)?.results?.bindings;
@@ -126,12 +138,68 @@ export function parseWikidataIds(body: unknown, mediaType: VideoMediaType): Watc
     const p = row?.p?.value;
     const v = row?.v?.value;
     if (typeof p !== "string" || typeof v !== "string") continue;
-    const field = props[p.slice(p.lastIndexOf("/") + 1)];
-    if (!field || !ID_SHAPE[field].test(v)) continue;
+    const prop = props[p.slice(p.lastIndexOf("/") + 1)];
+    if (!prop) continue;
+    let field: keyof WatchServiceIds = prop;
+    if (prop === "hboMax" && HBO_LEGACY_ID.test(v)) field = "hboMaxLegacy";
+    else if (!ID_SHAPE[prop].test(v)) continue;
     const current = ids[field];
     if (current === undefined || v < current) ids[field] = v;
   }
+  // A live id needs no conversion: the old one is only carried when it is all
+  // there is.
+  if (ids.hboMax) delete ids.hboMaxLegacy;
   return ids;
+}
+
+// ── HBO Max: old id → live id ──────────────────────────────────────────────
+
+/**
+ * The HBO hosts that still answer an old id with a 301 to the live page, in
+ * the order they are asked. BOTH are needed (verified 2026-10-03): each one
+ * converts ids the other sends to the home page — `redirector` knows
+ * `series/…GVU2cggagzYNJjhsJATwo` and `feature/…GXdu2ZAglVJuAuwEAADbA`, `www`
+ * knows `feature/…GZDaHTAHoeJfDVQEAABSi` and not `…GXdu2…`. Requests leave for
+ * these two literals and nowhere else.
+ */
+export const HBO_RESOLVE_HOSTS = ["redirector.hbomax.com", "www.hbomax.com"] as const;
+
+/** The hosts a conversion's `Location` may name. */
+const HBO_LOCATION = new RegExp(`^https://(?:www|play)\\.hbomax\\.com/((show|movie)/${UUID})$`);
+
+/**
+ * Where to ask HBO for an old id's live page: one https URL per
+ * `HBO_RESOLVE_HOSTS`, or `[]` when the id isn't exactly the old shape. The
+ * id is the path as is (HBO's own form) and each URL is re-parsed against its
+ * host, like every link built here.
+ */
+export function hboLegacyResolveUrls(legacyId: string): string[] {
+  if (!HBO_LEGACY_ID.test(legacyId)) return [];
+  const urls: string[] = [];
+  for (const host of HBO_RESOLVE_HOSTS) {
+    const url = onHost(`https://${host}/${legacyId}`, host);
+    if (url && new URL(url).pathname === `/${legacyId}`) urls.push(url);
+  }
+  return urls;
+}
+
+/**
+ * The `Location` HBO answered a conversion with → the live id
+ * (`show/{uuid}` | `movie/{uuid}`), or null. The header is matched as a whole
+ * string, BEFORE any URL parsing could normalize it: https, host exactly
+ * `www.hbomax.com` or `play.hbomax.com`, path exactly `/(show|movie)/{uuid}`,
+ * nothing after. The kind must also be the one the old id announced
+ * (`series` → `show`, `feature` → `movie`). The home page (HBO's "I don't know
+ * that id"), another host, a `..`, a query, a relative path: all null. Only
+ * the returned id is ever used — the `Location` itself is never linked to nor
+ * followed.
+ */
+export function parseHboRedirectLocation(legacyId: string, location: unknown): string | null {
+  if (typeof location !== "string" || !HBO_LEGACY_ID.test(legacyId)) return null;
+  const match = HBO_LOCATION.exec(location);
+  if (!match) return null;
+  const expected = legacyId.startsWith("series/") ? "show" : "movie";
+  return match[2] === expected ? match[1] : null;
 }
 
 // ── links ──────────────────────────────────────────────────────────────────
@@ -157,7 +225,8 @@ export interface WatchLinkInput {
 /**
  * The link a service's row opens: exact when a (re-validated) id exists, else
  * the service's own search — except HBO Max, whose search doesn't take the
- * title: no id, no row (JustWatch covers it). Null = no row.
+ * title: no LIVE id, no row (JustWatch covers it; `hboMaxLegacy` alone is not
+ * a link). Null = no row.
  */
 export function watchServiceUrl(key: WatchServiceKey, input: WatchLinkInput): string | null {
   const service = WATCH_SERVICES.find((s) => s.key === key);

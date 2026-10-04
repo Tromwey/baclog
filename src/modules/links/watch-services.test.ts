@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildServiceRows,
+  HBO_RESOLVE_HOSTS,
+  hboLegacyResolveUrls,
+  parseHboRedirectLocation,
   parseWikidataIds,
   streamingServices,
   watchServiceUrl,
@@ -18,6 +21,10 @@ const sparql = (...bindings: unknown[]) => ({ results: { bindings } });
 
 const SEVERANCE_APPLE = "umc.cmc.1srk2goyh2q2zdxcx605w8vtx";
 const TLOU_HBO = "show/93ba22b1-833e-47ba-ae94-8ee7b9eefa9a";
+const GOT_LEGACY = "series/urn:hbo:series:GVU2cggagzYNJjhsJATwo";
+const GOT_HBO = "show/4f6b4985-2dc9-4ab6-ac79-d60f0860b0ac";
+const FILM_LEGACY = "feature/urn:hbo:feature:GZDaHTAHoeJfDVQEAABSi";
+const FILM_HBO = "movie/482e78d8-d00e-41d4-a709-ca4fb341dd47";
 const base = { title: "Severance", mediaType: "series" as const, region: "MX", ids: {} };
 
 test("streamingServices: solo servicios conocidos, por id, en el orden de la tabla", () => {
@@ -90,8 +97,9 @@ test("parseWikidataIds: descarta todo id que no tenga la forma exacta", () => {
     binding("P1874", "80057281?x=1"),
     binding("P1874", "80057281/../login"),
     binding("P1874", "abc"),
-    binding("P8298", "feature/urn:hbo:feature:GXdu2ZAglVJuAuwEAADbA"),
-    binding("P8298", "series/urn:hbo:series:GYyofRQHeuJ6fiQEAAAEy"),
+    binding("P8298", "feature/urn:hbo:series:GXdu2ZAglVJuAuwEAADbA"),
+    binding("P8298", "series/urn:hbo:series:GYyofRQHeuJ6fiQEAAAEy/../x"),
+    binding("P8298", "series/urn:hbo:series:short"),
     binding("P8298", "show/93ba22b1-833e-47ba-ae94-8ee7b9eefa9a/../x"),
     binding("P8298", "//evil.example/show/93ba22b1-833e-47ba-ae94-8ee7b9eefa9a"),
     binding("P8055", "0ABCDEF"),
@@ -99,10 +107,11 @@ test("parseWikidataIds: descarta todo id que no tenga la forma exacta", () => {
   assert.deepEqual(parseWikidataIds(sparql(...bad), "series"), {});
 });
 
-test("parseWikidataIds: un id muerto de HBO no tapa al vivo, y el resultado no depende del orden", () => {
+test("parseWikidataIds: un id antiguo de HBO no tapa al vivo, y el resultado no depende del orden", () => {
   const dead = binding("P8298", "series/urn:hbo:series:GYyofRQHeuJ6fiQEAAAEy");
   const live = binding("P8298", TLOU_HBO);
-  assert.equal(parseWikidataIds(sparql(dead, live), "series").hboMax, TLOU_HBO);
+  assert.deepEqual(parseWikidataIds(sparql(dead, live), "series"), { hboMax: TLOU_HBO });
+  assert.deepEqual(parseWikidataIds(sparql(live, dead), "series"), { hboMax: TLOU_HBO });
   const a = binding("P1874", "80057281");
   const b = binding("P1874", "70131314");
   assert.deepEqual(parseWikidataIds(sparql(a, b), "series"), parseWikidataIds(sparql(b, a), "series"));
@@ -163,6 +172,7 @@ test("watchServiceUrl: un id inválido que se cuele NO se interpola (cae al piso
     "https://tv.apple.com/mx/search?term=Severance",
   );
   assert.equal(watchServiceUrl("hbo_max", { ...base, ids: { hboMax: "feature/urn:hbo:feature:X" } }), null);
+  assert.equal(watchServiceUrl("hbo_max", { ...base, ids: { hboMax: GOT_LEGACY } }), null);
 });
 
 test("watchServiceUrl: el host siempre es el del servicio, con cualquier título", () => {
@@ -205,4 +215,137 @@ test("buildServiceRows: sin Wikidata quedan los pisos y HBO Max desaparece", () 
 test("buildServiceRows: sin proveedores conocidos no hay filas", () => {
   assert.deepEqual(buildServiceRows([], base), []);
   assert.deepEqual(buildServiceRows([p(1825), p(337)], base), []);
+});
+
+// ── HBO Max: id antiguo → id actual ────────────────────────────────────────
+
+test("parseWikidataIds: el id antiguo de HBO se conserva aparte, solo si no hay uno actual", () => {
+  assert.deepEqual(parseWikidataIds(sparql(binding("P8298", GOT_LEGACY)), "series"), { hboMaxLegacy: GOT_LEGACY });
+  assert.deepEqual(parseWikidataIds(sparql(binding("P8298", FILM_LEGACY)), "film"), { hboMaxLegacy: FILM_LEGACY });
+  // Varios antiguos: gana el menor, sin importar el orden.
+  const other = binding("P8298", "series/urn:hbo:series:GYyofRQHeuJ6fiQEAAAEy");
+  const got = binding("P8298", GOT_LEGACY);
+  assert.deepEqual(parseWikidataIds(sparql(other, got), "series"), parseWikidataIds(sparql(got, other), "series"));
+});
+
+test("un id antiguo solo NO es un link: sin conversión, HBO Max no tiene fila", () => {
+  assert.equal(watchServiceUrl("hbo_max", { ...base, ids: { hboMaxLegacy: GOT_LEGACY } }), null);
+  assert.deepEqual(buildServiceRows([p(1899)], { ...base, ids: { hboMaxLegacy: GOT_LEGACY } }), []);
+});
+
+test("hboLegacyResolveUrls: solo los dos hosts fijos de HBO, con el id tal cual", () => {
+  assert.deepEqual([...HBO_RESOLVE_HOSTS], ["redirector.hbomax.com", "www.hbomax.com"]);
+  assert.deepEqual(hboLegacyResolveUrls(GOT_LEGACY), [
+    `https://redirector.hbomax.com/${GOT_LEGACY}`,
+    `https://www.hbomax.com/${GOT_LEGACY}`,
+  ]);
+  for (const url of hboLegacyResolveUrls(FILM_LEGACY)) {
+    const u = new URL(url);
+    assert.equal(u.protocol, "https:");
+    assert.ok((HBO_RESOLVE_HOSTS as readonly string[]).includes(u.hostname));
+    assert.equal(u.pathname, `/${FILM_LEGACY}`);
+    assert.equal(u.search + u.hash + u.username + u.password + u.port, "");
+  }
+});
+
+test("hboLegacyResolveUrls: lo que no es exactamente un id antiguo no sale a la red", () => {
+  const bad = [
+    "",
+    GOT_HBO,
+    "series/urn:hbo:series:",
+    "series/urn:hbo:series:short",
+    "series/urn:hbo:feature:GVU2cggagzYNJjhsJATwo",
+    "feature/urn:hbo:series:GVU2cggagzYNJjhsJATwo",
+    "episode/urn:hbo:episode:GVU2cggagzYNJjhsJATwo",
+    `${GOT_LEGACY}/../../x`,
+    `${GOT_LEGACY}?next=https://evil.example`,
+    `${GOT_LEGACY}#x`,
+    `${GOT_LEGACY}\n`,
+    ` ${GOT_LEGACY}`,
+    `/${GOT_LEGACY}`,
+    `//evil.example/${GOT_LEGACY}`,
+    `@evil.example/${GOT_LEGACY}`,
+    "series/urn:hbo:series:GVU2cggagzYN%2F..%2Fx",
+    "series/urn:hbo:series:GVU2cggagzYNJjhs.ATwo",
+    `series/urn:hbo:series:${"A".repeat(33)}`,
+    "SERIES/urn:hbo:series:GVU2cggagzYNJjhsJATwo",
+  ];
+  for (const id of bad) assert.deepEqual(hboLegacyResolveUrls(id), [], JSON.stringify(id));
+});
+
+test("parseHboRedirectLocation: el Location de HBO → id actual, por cualquiera de sus dos hosts", () => {
+  assert.equal(parseHboRedirectLocation(GOT_LEGACY, `https://www.hbomax.com/${GOT_HBO}`), GOT_HBO);
+  assert.equal(parseHboRedirectLocation(GOT_LEGACY, `https://play.hbomax.com/${GOT_HBO}`), GOT_HBO);
+  assert.equal(parseHboRedirectLocation(FILM_LEGACY, `https://www.hbomax.com/${FILM_HBO}`), FILM_HBO);
+});
+
+test("parseHboRedirectLocation: de punta a punta el link final es play.hbomax.com/{show|movie}/{uuid}", () => {
+  const hboMax = parseHboRedirectLocation(GOT_LEGACY, `https://www.hbomax.com/${GOT_HBO}`)!;
+  const rows = buildServiceRows([p(1899)], { title: "Juego de Tronos", mediaType: "series", region: "MX", ids: { hboMax } });
+  assert.deepEqual(rows, [
+    { short: "ver", name: "HBO Max", kind: "streaming", url: "https://play.hbomax.com/show/4f6b4985-2dc9-4ab6-ac79-d60f0860b0ac" },
+  ]);
+  const film = parseHboRedirectLocation(FILM_LEGACY, `https://www.hbomax.com/${FILM_HBO}`)!;
+  assert.equal(
+    watchServiceUrl("hbo_max", { ...base, mediaType: "film", ids: { hboMax: film } }),
+    "https://play.hbomax.com/movie/482e78d8-d00e-41d4-a709-ca4fb341dd47",
+  );
+});
+
+test("parseHboRedirectLocation: cualquier otro Location = sin id", () => {
+  const uuid = "4f6b4985-2dc9-4ab6-ac79-d60f0860b0ac";
+  const bad: unknown[] = [
+    null,
+    undefined,
+    42,
+    "",
+    // HBO's "no conozco ese id": la portada.
+    "https://www.hbomax.com",
+    "https://www.hbomax.com/",
+    // otro host
+    `https://evil.example/show/${uuid}`,
+    `https://www.hbomax.com.evil.example/show/${uuid}`,
+    `https://evil.example/www.hbomax.com/show/${uuid}`,
+    `https://www.hbomax.com@evil.example/show/${uuid}`,
+    `https://user:pw@www.hbomax.com/show/${uuid}`,
+    `https://redirector.hbomax.com/show/${uuid}`,
+    `https://auth.hbomax.com/show/${uuid}`,
+    `https://www.hbomax.com:8443/show/${uuid}`,
+    `https://WWW.HBOMAX.COM/show/${uuid}`,
+    // otro esquema / relativo
+    `http://www.hbomax.com/show/${uuid}`,
+    `//www.hbomax.com/show/${uuid}`,
+    `/show/${uuid}`,
+    `javascript:alert(1)//www.hbomax.com/show/${uuid}`,
+    // path que no es exactamente /(show|movie)/{uuid}
+    `https://www.hbomax.com/show/../show/${uuid}`,
+    `https://www.hbomax.com/x/../show/${uuid}`,
+    `https://www.hbomax.com/show/${uuid}/..`,
+    `https://www.hbomax.com/show/${uuid}/`,
+    `https://www.hbomax.com/show/${uuid}/extra`,
+    `https://www.hbomax.com/show/${uuid}?next=https://evil.example`,
+    `https://www.hbomax.com/show/${uuid}#x`,
+    `https://www.hbomax.com/mx/es/show/${uuid}`,
+    `https://www.hbomax.com/episode/${uuid}`,
+    `https://www.hbomax.com/show/%2e%2e/show/${uuid}`,
+    `https://www.hbomax.com/show/${uuid}\n`,
+    ` https://www.hbomax.com/show/${uuid}`,
+    // uuid mal formado
+    "https://www.hbomax.com/show/4f6b4985-2dc9-4ab6-ac79-d60f0860b0a",
+    "https://www.hbomax.com/show/4f6b4985-2dc9-4ab6-ac79-d60f0860b0acc",
+    "https://www.hbomax.com/show/4F6B4985-2DC9-4AB6-AC79-D60F0860B0AC",
+    "https://www.hbomax.com/show/4f6b49852dc94ab6ac79d60f0860b0ac",
+    "https://www.hbomax.com/show/zf6b4985-2dc9-4ab6-ac79-d60f0860b0ac",
+    "https://www.hbomax.com/show/urn:hbo:series:GVU2cggagzYNJjhsJATwo",
+  ];
+  for (const location of bad) {
+    assert.equal(parseHboRedirectLocation(GOT_LEGACY, location), null, JSON.stringify(location));
+  }
+});
+
+test("parseHboRedirectLocation: el tipo debe ser el que anunciaba el id antiguo", () => {
+  assert.equal(parseHboRedirectLocation(GOT_LEGACY, `https://www.hbomax.com/${FILM_HBO}`), null);
+  assert.equal(parseHboRedirectLocation(FILM_LEGACY, `https://www.hbomax.com/${GOT_HBO}`), null);
+  // Y sin un id antiguo válido no hay nada que convertir.
+  assert.equal(parseHboRedirectLocation("x", `https://www.hbomax.com/${GOT_HBO}`), null);
 });
