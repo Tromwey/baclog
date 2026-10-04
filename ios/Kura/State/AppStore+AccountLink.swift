@@ -276,7 +276,7 @@ extension AppStore {
             case "hourly_cap":
                 let wait = max(retryAfter ?? 3600, 1)
                 mergeRetry = (e, Date().addingTimeInterval(TimeInterval(wait)))
-                mergeError = "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitLabel(wait))."
+                mergeError = "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitWords(wait))."
                 return false
             default:
                 // Not about this address: the resend button only waits what the server said.

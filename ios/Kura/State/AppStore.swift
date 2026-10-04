@@ -1807,13 +1807,13 @@ extension KuraAPIError {
         case .rateLimited(_, let reason) where reason == KuraAPIError.lockedReason:
             return "Se intentó demasiadas veces. Pide otro código más tarde."
         case .rateLimited(let s, _):
-            if let s, s > 0 { return "Demasiados intentos seguidos. Espera \(KuraAPIError.waitLabel(s)) y vuelve a intentarlo." }
+            if let s, s > 0 { return "Demasiados intentos seguidos. Espera \(KuraAPIError.waitWords(s)) y vuelve a intentarlo." }
             return "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         case .invalid(let fields, let m):
             return fields["code"] ?? fields["email"] ?? (m.isEmpty ? "Revisa el código." : m)
         case .unauthorized, .notFound: return "El código es incorrecto o ya venció. Revísalo o pide otro."
-        case .conflict(_, let m): return m.isEmpty ? "No se pudo entrar. Vuelve a intentarlo." : m
-        default: return "No se pudo entrar. Vuelve a intentarlo."
+        case .conflict(_, let m): return m.isEmpty ? KuraAPIError.genericEntryText : m
+        default: return KuraAPIError.genericEntryText
         }
     }
 }

@@ -89,10 +89,10 @@ fun CodeScreen(store: AppStore) {
             Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 170.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            BasicText("tu código", modifier = Modifier.semantics { heading() }, style = KuraType.news(40f))
+            BasicText("revisa tu correo", modifier = Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
-                    withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Lo enviamos a ") }
+                    withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text2)) { append("Te enviamos un código a ") }
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text)) { append(store.authEmail) }
                 },
                 modifier = Modifier.padding(bottom = if (store.codeAlreadySent) 0.dp else 20.dp),
@@ -115,7 +115,7 @@ fun CodeScreen(store: AppStore) {
                         scope.launch { store.verifyCode(d) }
                     }
                 },
-                placeholder = "seis dígitos",
+                placeholder = "000000",
                 keyboardType = KeyboardType.NumberPassword,
                 imeAction = ImeAction.Done,
                 focusRequester = requester,

@@ -143,7 +143,7 @@ fun UsernameScreen(store: AppStore) {
                 .padding(start = 24.dp, end = 24.dp, bottom = 10.dp),
         ) {
             SolidButton(
-                if (store.authBusy) "Un momento…" else if (returning) "Continuar" else "Crear cuenta",
+                if (store.authBusy) "Creando…" else if (returning) "Continuar" else "Crear cuenta",
                 onClick = { scope.launch { store.submitUsername(if (returning) account.handle.orEmpty() else clean, name, birthDate) } },
                 enabled = canSubmit,
             )

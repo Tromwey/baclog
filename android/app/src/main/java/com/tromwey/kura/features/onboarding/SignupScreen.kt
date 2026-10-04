@@ -115,7 +115,7 @@ fun SignupScreen(store: AppStore) {
             KuraTextField(
                 value = email,
                 onValueChange = { email = it },
-                placeholder = "tu correo",
+                placeholder = "tu@correo.com",
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Send,
                 keyboardActions = KeyboardActions(onSend = { send() }),
@@ -130,7 +130,7 @@ fun SignupScreen(store: AppStore) {
             InlineError(store.authError)
             AnimatedVisibility(visible = !imeUp, enter = fadeIn(), exit = fadeOut()) {
                 BasicText(
-                    "Sin contraseña: te enviamos un código de seis dígitos.",
+                    "Sin contraseña: te enviamos un código de 6 dígitos.",
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                     style = KuraType.ui(13f).copy(color = KColor.text2, textAlign = TextAlign.Center),
                 )

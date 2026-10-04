@@ -224,13 +224,13 @@ class AccountLinkTest {
         store.loadIdentities()
         h.api.failNext("requestMergeCode", KuraApiError.RateLimited(2400, "hourly_cap"))
         assertFalse(store.requestMergeCode("vieja@example.com"))
-        assertEquals("Se pidieron demasiados códigos para ese correo. Podrás pedir otro en 40 min.", store.mergeError)
+        assertEquals("Se pidieron demasiados códigos para ese correo. Podrás pedir otro en 40 minutos.", store.mergeError)
         assertNotNull(store.mergeRetryAt)
         assertEquals("sin código prometido, no avanza", "", store.mergeEmail)
         // No `reason` (an older server, the per-IP limiter): just too fast.
         h.api.failNext("requestMergeCode", KuraApiError.RateLimited(45))
         assertFalse(store.requestMergeCode("vieja@example.com"))
-        assertEquals("Demasiados intentos seguidos. Espera 45 s y vuelve a intentarlo.", store.mergeError)
+        assertEquals("Demasiados intentos seguidos. Espera 45 segundos y vuelve a intentarlo.", store.mergeError)
     }
 
     /** 429 `cooldown`: the code already sent still works — on to the code screen, nothing failed. */

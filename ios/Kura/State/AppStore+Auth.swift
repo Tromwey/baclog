@@ -69,7 +69,9 @@ extension AppStore {
         } catch {
             let err = noteError(error)
             guard case .rateLimited(let retryAfter, let reason) = err else {
-                authError = err.authText
+                // Generic failure (not offline, not a limit) while ASKING for the code: say what
+                // failed, not the generic "No se pudo entrar" (which stays for verifying).
+                authError = err.authText == KuraAPIError.genericEntryText ? "No pudimos enviar el código. Revisa el correo y vuelve a intentarlo." : err.authText
                 return false
             }
             // API.md §2: `cooldown` = a code for this address went out less than a minute ago and
@@ -84,8 +86,8 @@ extension AppStore {
                 return true
             }
             authError = reason == "ip_limit"
-                ? "Demasiados intentos desde esta red. Podrás pedir un código en \(KuraAPIError.waitLabel(wait))."
-                : "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitLabel(wait))."
+                ? "Demasiados intentos desde esta red. Podrás pedir un código en \(KuraAPIError.waitWords(wait))."
+                : "Se pidieron demasiados códigos para este correo. Podrás pedir otro en \(KuraAPIError.waitWords(wait))."
             return false
         }
     }

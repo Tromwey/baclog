@@ -291,6 +291,18 @@ enum KuraAPIError: Error, Equatable {
         seconds >= 90 ? "\(Int((Double(seconds) / 60).rounded(.up))) min" : "\(max(seconds, 1)) s"
     }
 
+    /// The same wait inside a SENTENCE, in words: "40 segundos" · "1 minuto" · "12 minutos"
+    /// (minutes, rounded up, once past 60 s). Same rule as the web's login form.
+    static func waitWords(_ seconds: Int) -> String {
+        if seconds > 60 { return "\(Int((Double(seconds) / 60).rounded(.up))) minutos" }
+        if seconds == 60 { return "1 minuto" }
+        let s = max(seconds, 1)
+        return s == 1 ? "1 segundo" : "\(s) segundos"
+    }
+
+    /// The generic entrance failure (verifying the code, other steps).
+    static let genericEntryText = "No se pudo entrar. Vuelve a intentarlo."
+
     var isRateLimit: Bool { if case .rateLimited = self { return true }; return false }
 
     /// Text for the toast, in the Kura voice (what happened, what to do).

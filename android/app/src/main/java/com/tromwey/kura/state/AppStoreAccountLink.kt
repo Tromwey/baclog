@@ -327,7 +327,7 @@ fun mergeWaitLabel(seconds: Long): String =
 /** A plain `rate_limited` (no code was promised or denied): the wait when the server sent one. */
 private fun tooFastText(wait: Int?): String =
     if (wait == null) "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
-    else "Demasiados intentos seguidos. Espera ${waitText(wait)} y vuelve a intentarlo."
+    else "Demasiados intentos seguidos. Espera ${waitWords(wait)} y vuelve a intentarlo."
 
 private fun mergeText(e: KuraApiError): String? = when {
     e == KuraApiError.Unauthorized -> null

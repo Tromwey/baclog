@@ -1202,7 +1202,7 @@ val KuraApiError.authText: String
     get() = when (this) {
         KuraApiError.Offline -> "Sin conexión. Revisa tu red y vuelve a intentarlo."
         is KuraApiError.RateLimited ->
-            retryAfter?.takeIf { it > 0 }?.let { "Demasiados intentos seguidos. Espera ${waitText(it)} y vuelve a intentarlo." }
+            retryAfter?.takeIf { it > 0 }?.let { "Demasiados intentos seguidos. Espera ${waitWords(it)} y vuelve a intentarlo." }
                 ?: "Demasiados intentos seguidos. Espera un momento y vuelve a intentarlo."
         is KuraApiError.Invalid -> fields["code"] ?: fields["email"] ?: message.ifEmpty { "Revisa el código." }
         KuraApiError.CodeLocked -> "Se intentó demasiadas veces. Pide otro código más tarde."

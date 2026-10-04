@@ -190,7 +190,7 @@ struct SignUpView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                GlassField(placeholder: "tu correo", text: $email, focus: $focused)
+                GlassField(placeholder: "tu@correo.com", text: $email, focus: $focused)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
                     .submitLabel(.send)
@@ -212,7 +212,7 @@ struct SignUpView: View {
                 }
                 .monospacedDigit()
                 InlineError(text: store.authError)
-                Text("Sin contraseña: te enviamos un código de seis dígitos.")
+                Text("Sin contraseña: te enviamos un código de 6 dígitos.")
                     .font(.kura.ui(13))
                     .foregroundStyle(KColor.text2)
                     .multilineTextAlignment(.center)
@@ -502,7 +502,7 @@ struct UsernameView: View {
 
             VStack {
                 Spacer()
-                SolidButton(title: store.authBusy ? "Un momento…" : "Crear cuenta", enabled: canSubmit) {
+                SolidButton(title: store.authBusy ? "Creando…" : "Crear cuenta", enabled: canSubmit) {
                     Task { await store.submitUsername(handle: clean, name: name, birthDate: birthDate) }
                 }
             }
@@ -877,17 +877,18 @@ struct CodeView: View {
             OnboardingChrome(step: nil) { store.authError = nil; store.onboardingStep = .signup }
 
             VStack(spacing: 12) {
-                Text("tu código")
+                Text("revisa tu correo")
                     .font(.kura.news(40))
                     .foregroundStyle(KColor.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityAddTraits(.isHeader)
-                (Text("Lo enviamos a ").foregroundColor(KColor.text2)
-                 + Text(store.authEmail).foregroundColor(KColor.text))
+                (Text("Te enviamos un código a ").foregroundColor(KColor.text2)
+                 + Text(store.authEmail).foregroundColor(KColor.text)
+                 + Text(".").foregroundColor(KColor.text2))
                     .font(.kura.ui(15))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 20)
-                GlassField(placeholder: "seis dígitos", text: $code, focus: $focused)
+                GlassField(placeholder: "000000", text: $code, focus: $focused)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
                     .onChange(of: code) { _, new in

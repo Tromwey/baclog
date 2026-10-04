@@ -208,14 +208,14 @@ class AuditRound7Test {
         h.api.hasSession = false
         h.api.failNext("requestCode", KuraApiError.RateLimited(3000, "ip_limit"))
         assertFalse(store.requestCode("qa@baclog.dev"))
-        assertEquals("Demasiados intentos desde esta red. Podrás pedir un código en 50 min.", store.authError)
+        assertEquals("Demasiados intentos desde esta red. Podrás pedir un código en 50 minutos.", store.authError)
         h.api.failNext("requestCode", KuraApiError.RateLimited(null, "ip_limit"))
         assertFalse(store.requestCode("qa@baclog.dev"))
         assertEquals("Demasiados intentos desde esta red. Pide un código más tarde.", store.authError)
         // The hourly cap is about the email, with the real wait or none — never an invented one.
         h.api.failNext("requestCode", KuraApiError.RateLimited(2400, "hourly_cap"))
         assertFalse(store.requestCode("qa@baclog.dev"))
-        assertEquals("Se pidieron demasiados códigos para este correo. Podrás pedir otro en 40 min.", store.authError)
+        assertEquals("Se pidieron demasiados códigos para este correo. Podrás pedir otro en 40 minutos.", store.authError)
         h.api.failNext("requestCode", KuraApiError.RateLimited(null, "hourly_cap"))
         assertFalse(store.requestCode("qa@baclog.dev"))
         assertEquals("Se pidieron demasiados códigos para este correo. Pide otro más tarde.", store.authError)

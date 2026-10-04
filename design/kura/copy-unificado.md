@@ -316,6 +316,28 @@ Mecánica: «Inténtalo de nuevo», «Inténtalo otra vez», «intenta de nuevo�
 | `android/app/src/main/java/com/tromwey/kura/state/AppStoreAccountLink.kt:177` | ${p.label} no confirmó esa cuenta. Inténtalo de nuevo. | ${p.label} no confirmó esa cuenta. Vuelve a intentarlo. |
 | `android/app/src/main/java/com/tromwey/kura/state/AppStoreAccountLink.kt:181` | No se pudo conectar ${p.label}. Inténtalo de nuevo. | No se pudo conectar ${p.label}. Vuelve a intentarlo. |
 
+## Tabla D · acceso, texto canónico (founder, 2026-10-03)
+
+Web, iOS y Android dicen exactamente esto en entrar, código y onboarding. Titulares sin punto final; cuerpo con punto. Lo que solo existe en una plataforma (pie de privacidad y «Ya tengo el código» en web, contador en el botón de las apps) se queda.
+
+| # | Elemento | Texto canónico |
+|---|---|---|
+| 1 | Entrada · título | «entra a kura» |
+| 2 | Entrada · subtítulo | «Si es tu primera vez, tu cuenta se crea al entrar.» |
+| 3 | Correo · placeholder | «tu@correo.com» |
+| 4 | Entrada · nota | «Sin contraseña: te enviamos un código de 6 dígitos.» |
+| 5 | Error al PEDIR el código (fallo genérico, no conexión ni límites) | «No pudimos enviar el código. Revisa el correo y vuelve a intentarlo.» |
+| 6 | Error de Apple | «No se pudo entrar con Apple. Vuelve a intentarlo.» |
+| 7 | Espera `{t}` | Dentro de una ORACIÓN, con palabras: «40 segundos», «1 minuto», «12 minutos» («Podrás pedir otro en 12 minutos.»). En un contador de BOTÓN, abreviado: «Enviar otro código en 45 s». |
+| 8 | Código · título | «revisa tu correo» |
+| 9 | Código · instrucción | «Te enviamos un código a {correo}.» |
+| 10 | Código · placeholder | «000000» |
+| 11 | Usuario · placeholder | «@usuario» |
+| 12 | Usuario · reglas | «Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados.» |
+| 13 | Nombre · nota | Se queda como está en cada plataforma (nombra el lugar real donde se cambia). |
+| 14 | Crear cuenta · estado ocupado | «Creando…» |
+| 15 | Picks · sin resultados | titular «nada con “{q}”» (como en las apps, mismo cuerpo si lo tienen) |
+
 ## Dudas para el founder
 
 1. **Fórmula de reintento.** Hoy conviven «Vuelve a intentarlo» (63 veces), «Inténtalo de nuevo» (61), «Inténtalo otra vez» (28) e «intenta de nuevo» (6); la guía no elige. Opciones: «Vuelve a intentarlo.» o «Inténtalo de nuevo.» Recomiendo **«Vuelve a intentarlo.»**: es la que usa el diseño de fiesta y la más frecuente en web. La Tabla C ya está escrita así.

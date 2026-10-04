@@ -104,13 +104,13 @@ class AuditRound2Test {
             h.api.failNext("requestCode", KuraApiError.RateLimited(2400, "hourly_cap"))
             assertFalse(store.requestCode("qa@baclog.dev"))
             assertFalse(store.codeAlreadySent)
-            assertTrue(store.authError!!.contains("40 min"))
+            assertTrue(store.authError!!.contains("40 minutos"))
 
             // No `reason` and a wait longer than the cooldown: same thing.
             h.api.failNext("requestCode", KuraApiError.RateLimited(900))
             assertFalse(store.requestCode("qa@baclog.dev"))
             assertFalse(store.codeAlreadySent)
-            assertTrue(store.authError!!.contains("15 min"))
+            assertTrue(store.authError!!.contains("15 minutos"))
 
             // `cooldown`: the code sent before still works.
             h.api.failNext("requestCode", KuraApiError.RateLimited(42, "cooldown"))
@@ -124,6 +124,21 @@ class AuditRound2Test {
             assertFalse(store.codeAlreadySent)
             assertEquals(3000, store.codeResendWait())
         }
+    }
+
+    @Test fun aWaitInASentenceReadsInWords() {
+        assertEquals("40 segundos", waitWords(40))
+        assertEquals("1 minuto", waitWords(60))
+        assertEquals("2 minutos", waitWords(61))
+        assertEquals("12 minutos", waitWords(700))
+    }
+
+    @Test fun aFailedCodeRequestHasItsOwnGenericText() {
+        assertEquals("No pudimos enviar el código. Revisa el correo y vuelve a intentarlo.", codeRequestErrorText(KuraApiError.Unavailable))
+        assertEquals("No pudimos enviar el código. Revisa el correo y vuelve a intentarlo.", codeRequestErrorText(null))
+        assertEquals("Sin conexión. Revisa tu red y vuelve a intentarlo.", codeRequestErrorText(KuraApiError.Offline))
+        // The generic fallback everywhere else is untouched.
+        assertEquals("No se pudo entrar. Vuelve a intentarlo.", KuraApiError.Unavailable.authText)
     }
 
     @Test fun aWaitReadsInMinutesPastAMinuteAndAHalf() {

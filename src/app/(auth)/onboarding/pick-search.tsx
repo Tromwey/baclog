@@ -91,8 +91,8 @@ export function PickSearch({
 
   if (answer.results.length === 0) {
     return (
-      <p className="py-8 text-center text-[15px] leading-[1.5] text-text-2">
-        Nada con ese nombre. Prueba con otro.
+      <p className="py-8 font-brand text-[24px] leading-[1.2] text-text">
+        nada con “{answer.q}”
       </p>
     );
   }

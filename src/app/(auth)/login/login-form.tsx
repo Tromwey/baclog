@@ -109,10 +109,9 @@ export function LoginForm({
       </header>
 
       <div className="mt-[62px] flex flex-col gap-3">
-        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">entrar</h1>
+        <h1 className="mb-1 font-brand text-[40px] leading-none text-text">entra a kura</h1>
         <p className="text-[15px] leading-[1.5] text-text-2 text-pretty">
-          Guarda películas, series y álbumes en colecciones, y mira lo que
-          obsesiona a tu gente.
+          Si es tu primera vez, tu cuenta se crea al entrar.
         </p>
 
         {appleEnabled && (
@@ -124,7 +123,7 @@ export function LoginForm({
             </button>
             {error && (
               <p className="text-center text-[13px] leading-[1.5] text-text">
-                No pudimos confirmar tu cuenta de Apple. Vuelve a intentarlo o entra con tu correo.
+                No se pudo entrar con Apple. Vuelve a intentarlo.
               </p>
             )}
           </form>
@@ -191,8 +190,7 @@ export function LoginForm({
             </p>
           )}
           <p className="text-center text-[13px] leading-[1.5] text-text-2 text-pretty">
-            Sin contraseña: te enviamos un código de 6 dígitos. Si es tu
-            primera vez, ese mismo correo crea tu cuenta.
+            Sin contraseña: te enviamos un código de 6 dígitos.
           </p>
         </form>
       </div>

@@ -94,7 +94,7 @@ suspend fun AppStore.requestCode(email: String): Boolean {
             authError = codeLimitText(k.reason, wait)
             return false
         }
-        authError = k?.authText
+        authError = codeRequestErrorText(k)
         return false
     } finally {
         authBusy = false
@@ -108,10 +108,31 @@ suspend fun AppStore.requestCode(email: String): Boolean {
  * entrance, "ese correo" when it is another account's (Fusionar).
  */
 fun codeLimitText(reason: String?, wait: Int?, email: String = "este correo"): String = when {
-    reason == "ip_limit" && wait != null -> "Demasiados intentos desde esta red. Podrás pedir un código en ${waitText(wait)}."
+    reason == "ip_limit" && wait != null -> "Demasiados intentos desde esta red. Podrás pedir un código en ${waitWords(wait)}."
     reason == "ip_limit" -> "Demasiados intentos desde esta red. Pide un código más tarde."
-    wait != null -> "Se pidieron demasiados códigos para $email. Podrás pedir otro en ${waitText(wait)}."
+    wait != null -> "Se pidieron demasiados códigos para $email. Podrás pedir otro en ${waitWords(wait)}."
     else -> "Se pidieron demasiados códigos para $email. Pide otro más tarde."
+}
+
+/**
+ * A wait inside a SENTENCE, in words ("40 segundos", "1 minuto", "12 minutos"): minutes (rounded up)
+ * once it passes 60 s. Same rule as the web's `waitLabel`. Button counters keep [waitText].
+ */
+fun waitWords(seconds: Int): String = when {
+    seconds > 60 -> "${(seconds + 59) / 60} minutos"
+    seconds == 60 -> "1 minuto"
+    else -> seconds.coerceAtLeast(1).let { if (it == 1) "1 segundo" else "$it segundos" }
+}
+
+/** Row 5 of the access copy: a generic failure when ASKING for the code (not offline, not a limit). */
+const val CODE_REQUEST_FAILED_TEXT = "No pudimos enviar el código. Revisa el correo y vuelve a intentarlo."
+
+/** The inline error for a failed `auth/otp/request`: the generic one gets its own sentence. */
+fun codeRequestErrorText(e: KuraApiError?): String = when {
+    e == null -> CODE_REQUEST_FAILED_TEXT
+    e == KuraApiError.Offline || e is KuraApiError.RateLimited || e is KuraApiError.Invalid || e == KuraApiError.CodeLocked -> e.authText
+    e is KuraApiError.Conflict && e.message.isNotEmpty() -> e.authText
+    else -> CODE_REQUEST_FAILED_TEXT
 }
 
 /** A wait as people read it: seconds up to a minute and a half, whole minutes (rounded up) after. */

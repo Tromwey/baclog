@@ -352,7 +352,7 @@ export function UsernameStep({
             {handleState === "taken"
               ? "Ese usuario ya es de alguien. Prueba con otro."
               : handleState === "invalid" || handleShort
-                ? "De 3 a 30 caracteres: letras, números, punto y guion bajo."
+                ? "Usa de 3 a 30 letras sin acento, números, punto o guion bajo. Algunos nombres están reservados."
                 : "Con usuario, tu perfil es público y lo apagas en Ajustes. Sin él, queda privado."}
           </p>
           <p>Tu nombre se puede cambiar después en Ajustes.</p>

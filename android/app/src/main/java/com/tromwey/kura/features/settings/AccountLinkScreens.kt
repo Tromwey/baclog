@@ -313,7 +313,7 @@ fun MergeAccountScreen(store: AppStore) {
         }
         MergeError(store.mergeError, Modifier.padding(horizontal = 8.dp))
         BasicText(
-            "Te enviamos un código de seis dígitos a ese correo.",
+            "Te enviamos un código de 6 dígitos a ese correo.",
             Modifier.fillMaxWidth().padding(top = 2.dp),
             style = KuraType.ui(13f).copy(color = KColor.text2, textAlign = TextAlign.Center),
         )
@@ -373,8 +373,9 @@ fun MergeCodeScreen(store: AppStore) {
             BasicText("su código", Modifier.semantics { heading() }, style = KuraType.news(40f))
             BasicText(
                 buildAnnotatedString {
-                    append("Lo enviamos a ")
+                    append("Te enviamos un código a ")
                     withStyle(KuraType.ui(15f).toSpanStyle().copy(color = KColor.text)) { append(store.mergeEmail) }
+                    append(".")
                 },
                 style = KuraType.ui(15f).copy(color = KColor.text2),
             )
@@ -389,7 +390,7 @@ fun MergeCodeScreen(store: AppStore) {
                     scope.launch { store.verifyMergeCode(d) }
                 }
             },
-            placeholder = "seis dígitos",
+            placeholder = "000000",
             keyboardType = KeyboardType.NumberPassword,
             imeAction = ImeAction.Done,
             focusRequester = requester,
