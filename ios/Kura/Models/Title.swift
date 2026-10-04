@@ -174,32 +174,6 @@ struct SeriesStatus: Hashable, Decodable {
     }
 }
 
-struct WatchOption: Hashable, Identifiable, Decodable {
-    var id: String { name }
-    let short: String
-    let name: String
-    let kind: String
-    /// Deep link from JustWatch / the preferred music service, when the API has one.
-    var url: URL? = nil
-    /// Theatrical row ("En cines"): its label is computed from the release date.
-    var isCinema: Bool { short == "cine" }
-
-    init(short: String, name: String, kind: String, url: URL? = nil) {
-        self.short = short; self.name = name; self.kind = kind; self.url = url
-    }
-
-    private enum CodingKeys: String, CodingKey { case short, name, provider, kind, url }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let n = try c.decodeIfPresent(String.self, forKey: .name) ?? c.decodeIfPresent(String.self, forKey: .provider) ?? ""
-        name = n
-        short = try c.decodeIfPresent(String.self, forKey: .short) ?? String(n.lowercased().prefix(3))
-        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
-        url = try c.decodeIfPresent(String.self, forKey: .url).flatMap(URL.init(string:))
-    }
-}
-
 /// Ribbon counts. Strings because the frames show "12,4 k"; anything the API
 /// doesn't have (`liked`, `saved`, `waiting`) is "—" / nil and the ribbon skips it.
 struct TitleCounts: Hashable, Decodable {

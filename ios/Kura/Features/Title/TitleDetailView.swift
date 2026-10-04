@@ -341,7 +341,7 @@ private struct TitleSections: View {
                         Group {
                             if w.isCinema {
                                 Image(systemName: "ticket").font(.system(size: 16))
-                            } else if w.kind == "justwatch" {
+                            } else if w.kind == "justwatch" || w.isService {
                                 // A glyph, not the word "ver": the section title already says it.
                                 Image(systemName: "play.fill").font(.system(size: 14))
                             } else {
@@ -356,6 +356,9 @@ private struct TitleSections: View {
                         if w.isCinema {
                             let when = label == "hoy" ? "desde hoy" : (unreleased ? (label ?? "") : cinemaSince(t))
                             Text(when).monoLabel(11, color: label == "hoy" ? KColor.waiting : KColor.text2)
+                        } else if w.isService {
+                            // `service` is a wire value, not copy: the action is the word.
+                            Text("Abrir").monoLabel()
                         } else {
                             Text(w.kind).monoLabel()
                         }
@@ -366,7 +369,7 @@ private struct TitleSections: View {
                     .frame(minHeight: 56)
                     .contentShape(Rectangle())
                 }
-                .accessibilityLabel("\(w.name), \(w.kind)")
+                .accessibilityLabel(w.isService ? "Abrir en \(w.name)" : "\(w.name), \(w.kind)")
             }
             if unreleased, let sentence = store.releaseLabel(t) {
                 Text({ if case .day = t.release { return "Te avisamos el \(sentence) y cuando llegue a streaming." }

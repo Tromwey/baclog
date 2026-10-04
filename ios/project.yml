@@ -116,6 +116,7 @@ targets:
       - path: Kura/Models/BirthDate.swift
       - path: Kura/State/ReviewHold.swift
       - path: Kura/State/CollectionPurge.swift
+      - path: Kura/Models/WatchOption.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

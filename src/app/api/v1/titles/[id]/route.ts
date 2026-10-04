@@ -4,6 +4,7 @@ import { getUserCatalogEntry } from "@/modules/backlog/queries";
 import { getTitleStats } from "@/modules/backlog/title-stats";
 import { getCatalogItem, type CatalogItemRow } from "@/modules/catalog/cache";
 import { getItemDisplayMedia } from "@/modules/catalog/display-media";
+import { getServiceWatchRows, viewerRegion } from "@/modules/links/watch-options";
 import { getItemReviewContext } from "@/modules/reviews/queries";
 import {
   getTitleActivityAmongFollowed,
@@ -57,26 +58,45 @@ const ACTIVITY_MARK: Record<ActivityState, PublicMark> = {
 };
 
 /**
- * ONE link-out, unresolved: `/api/links/resolve` answers a 302 without a
- * session and takes `?service=`, so the app just opens the URL. The service
- * is pinned explicitly because the app has no cookie for the route to read
- * the preference from (its default is Spotify, same as the route's).
+ * The link-outs of the ficha.
+ *
+ * Film/series («dónde ver» por servicio, 2026-10-03): one row per known
+ * service the title streams on in the viewer's country (`kind: "streaming"`,
+ * `url` = the service's own https link, DIRECT — iOS only hands a tap to
+ * another app when the tap goes to that app's host), then ALWAYS the JustWatch
+ * row, last and unchanged (TMDB requires the attribution whenever this data is
+ * shown). `services` is `[]` when nothing is known or the upstreams didn't
+ * answer in time (`modules/links/watch-options.ts`).
+ *
+ * The last row (and an album's only row) is unresolved: `/api/links/resolve`
+ * answers a 302 without a session and takes `?service=`, so the app just opens
+ * the URL. The service is pinned explicitly because the app has no cookie for
+ * the route to read the preference from (its default is Spotify, same as the
+ * route's).
+ *
+ * Installed apps (before this change) already decode an array and draw every
+ * row: a `service` row shows `short` in the tile and `kind` as the trailing
+ * mono label.
  */
 function watchOf(
   origin: string,
   item: CatalogItemRow,
   preferredService: keyof typeof SERVICE_LABEL | null,
-): WatchOption {
+  services: WatchOption[],
+): WatchOption[] {
   const url = new URL("/api/links/resolve", origin);
   url.searchParams.set("catalogItemId", item.id);
   if (item.mediaType === "album") {
     const service = preferredService ?? "spotify";
     url.searchParams.set("service", service);
-    return { short: "escuchar", name: SERVICE_LABEL[service], kind: service, url: url.toString() };
+    return [{ short: "escuchar", name: SERVICE_LABEL[service], kind: service, url: url.toString() }];
   }
   // The section is already "dónde ver": the row says what's behind the link, not "ver" again
   // (founder, 2026-09-30). Clients draw a play glyph for `justwatch` instead of `short`.
-  return { short: "ver", name: "Streaming, renta o compra", kind: "justwatch", url: url.toString() };
+  return [
+    ...services,
+    { short: "ver", name: "Streaming, renta o compra", kind: "justwatch", url: url.toString() },
+  ];
 }
 
 export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
@@ -91,12 +111,15 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
   ]);
   if (!item) throw new ApiError("not_found");
 
-  const [media, activity] = await Promise.all([
+  // The service rows ride the same wave as the display media: in parallel,
+  // each upstream on a 1.5 s deadline, never a throw (`[]` on any trouble).
+  const [media, activity, services] = await Promise.all([
     getItemDisplayMedia(item),
     getTitleActivityAmongFollowed(user.id, item.id, {
       limit: 4,
       mediaType: item.mediaType,
     }),
+    getServiceWatchRows(item, viewerRegion(req.headers)),
   ]);
   if (item.mediaType === "album" && media.mediaUnavailable && media.tracks.length === 0) {
     throw new ApiError("unavailable");
@@ -117,7 +140,7 @@ export const GET = withApi<{ id: string }>(async (req, { user, params }) => {
     trackCount: item.mediaType === "album" ? media.trackCount : null,
     seriesStatus: media.seriesStatus,
     counts: stats,
-    watch: [watchOf(new URL(req.url).origin, item, user.preferredService)],
+    watch: watchOf(new URL(req.url).origin, item, user.preferredService, services),
   };
 
   const own = reviewCtx.own;
